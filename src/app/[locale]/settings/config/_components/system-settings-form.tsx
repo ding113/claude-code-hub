@@ -41,7 +41,11 @@ import {
   shouldWarnQuotaLeaseCapZero,
   shouldWarnQuotaLeasePercentZero,
 } from "@/lib/utils/validation/quota-lease-warnings";
-import type { BillingModelSource, SystemSettings } from "@/types/system-config";
+import type {
+  BillingModelSource,
+  CodexPriorityBillingSource,
+  SystemSettings,
+} from "@/types/system-config";
 
 interface SystemSettingsFormProps {
   initialSettings: Pick<
@@ -50,6 +54,7 @@ interface SystemSettingsFormProps {
     | "allowGlobalUsageView"
     | "currencyDisplay"
     | "billingModelSource"
+    | "codexPriorityBillingSource"
     | "timezone"
     | "verboseProviderError"
     | "enableHttp2"
@@ -92,6 +97,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [billingModelSource, setBillingModelSource] = useState<BillingModelSource>(
     initialSettings.billingModelSource
   );
+  const [codexPriorityBillingSource, setCodexPriorityBillingSource] =
+    useState<CodexPriorityBillingSource>(initialSettings.codexPriorityBillingSource);
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
@@ -170,6 +177,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         allowGlobalUsageView,
         currencyDisplay,
         billingModelSource,
+        codexPriorityBillingSource,
         timezone,
         verboseProviderError,
         enableHttp2,
@@ -200,6 +208,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setAllowGlobalUsageView(result.data.allowGlobalUsageView);
         setCurrencyDisplay(result.data.currencyDisplay);
         setBillingModelSource(result.data.billingModelSource);
+        setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setEnableHttp2(result.data.enableHttp2);
@@ -299,6 +308,33 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">{t("billingModelSourceDesc")}</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label
+          htmlFor="codex-priority-billing-source"
+          className="text-sm font-medium text-foreground"
+        >
+          {t("codexPriorityBillingSource")}
+        </Label>
+        <Select
+          value={codexPriorityBillingSource}
+          onValueChange={(value) =>
+            setCodexPriorityBillingSource(value as CodexPriorityBillingSource)
+          }
+          disabled={isPending}
+        >
+          <SelectTrigger id="codex-priority-billing-source" className={selectTriggerClassName}>
+            <SelectValue placeholder={t("codexPriorityBillingSourcePlaceholder")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="requested">
+              {t("codexPriorityBillingSourceOptions.requested")}
+            </SelectItem>
+            <SelectItem value="actual">{t("codexPriorityBillingSourceOptions.actual")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">{t("codexPriorityBillingSourceDesc")}</p>
       </div>
 
       {/* Timezone Select */}

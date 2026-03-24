@@ -12,21 +12,25 @@ let mockIsError = false;
 let mockError: unknown = null;
 let mockHasNextPage = false;
 let mockIsFetchingNextPage = false;
+const useInfiniteQuerySpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
 vi.mock("@tanstack/react-query", () => ({
-  useInfiniteQuery: () => ({
-    data: { pages: [{ logs: mockLogs, nextCursor: null, hasMore: false }] },
-    fetchNextPage: vi.fn(),
-    hasNextPage: mockHasNextPage,
-    isFetchingNextPage: mockIsFetchingNextPage,
-    isLoading: mockIsLoading,
-    isError: mockIsError,
-    error: mockError,
-  }),
+  useInfiniteQuery: (options: unknown) => {
+    useInfiniteQuerySpy(options);
+    return {
+      data: { pages: [{ logs: mockLogs, nextCursor: null, hasMore: false }] },
+      fetchNextPage: vi.fn(),
+      hasNextPage: mockHasNextPage,
+      isFetchingNextPage: mockIsFetchingNextPage,
+      isLoading: mockIsLoading,
+      isError: mockIsError,
+      error: mockError,
+    };
+  },
 }));
 
 vi.mock("@/hooks/use-virtualizer", () => ({
@@ -144,6 +148,22 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
 }
 
 describe("virtualized-logs-table multiplier badge", () => {
+  test("does not cap cached pages so deep scroll can return to the latest rows", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = true;
+    mockIsFetchingNextPage = false;
+    mockLogs = [makeLog({ id: 1 })];
+    useInfiniteQuerySpy.mockClear();
+
+    renderToStaticMarkup(<VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />);
+
+    const options = useInfiniteQuerySpy.mock.calls[0]?.[0] as { maxPages?: number } | undefined;
+    expect(options).toBeDefined();
+    expect(options?.maxPages).toBeUndefined();
+  });
+
   test("renders loading/error/empty states", () => {
     mockIsError = false;
     mockError = null;

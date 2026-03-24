@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 
 export interface ProviderBatchToolbarProps {
@@ -59,10 +60,7 @@ export function ProviderBatchToolbar({
     const groupMap = new Map<string, number>();
     for (const p of providers) {
       if (p.groupTag) {
-        const tags = p.groupTag
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean);
+        const tags = parseProviderGroups(p.groupTag);
         for (const tag of tags) {
           groupMap.set(tag, (groupMap.get(tag) ?? 0) + 1);
         }

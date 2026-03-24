@@ -39,7 +39,10 @@ import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
-import type { ClaudeMetadataUserIdInjectionSpecialSetting } from "@/types/special-settings";
+import type {
+  ClaudeMetadataUserIdInjectionSpecialSetting,
+  SpecialSetting,
+} from "@/types/special-settings";
 
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
@@ -93,17 +96,42 @@ type ProxySessionWithAttemptRuntime = ProxySession & {
 type StreamingHedgeAttempt = {
   provider: Provider;
   session: ProxySession;
+  baseUrl: string;
   endpointAudit: { endpointId: number | null; endpointUrl: string };
   responseController: AbortController | null;
   clearResponseTimeout: (() => void) | null;
   firstByteTimeoutMs: number;
   sequence: number;
+  requestAttemptCount: number;
+  reactiveRectifierRetryState: ReactiveRectifierRetryState;
   settled: boolean;
   thresholdTriggered: boolean;
   thresholdTimer: NodeJS.Timeout | null;
   reader: ReadableStreamDefaultReader<Uint8Array> | null;
   response: Response | null;
 };
+
+type ReactiveRectifierRetryState = {
+  thinkingSignatureRetried: boolean;
+  thinkingBudgetRetried: boolean;
+};
+
+type ReactiveRectifierResult =
+  | { matched: false }
+  | {
+      matched: true;
+      applied: false;
+      reason: "already_retried" | "not_applicable";
+      rectifierType: "thinking_signature_rectifier" | "thinking_budget_rectifier";
+      trigger: string;
+    }
+  | {
+      matched: true;
+      applied: true;
+      rectifierType: "thinking_signature_rectifier" | "thinking_budget_rectifier";
+      trigger: string;
+      requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>;
+    };
 
 // 非流式响应体检查的上限（字节）：避免上游在 2xx 场景返回超大内容导致内存占用失控。
 // 说明：
@@ -351,6 +379,218 @@ async function persistSpecialSettings(session: ProxySession): Promise<void> {
   }
 }
 
+function addSpecialSettingForPersistence(
+  ownerSession: ProxySession,
+  persistSession: ProxySession,
+  setting: SpecialSetting
+): void {
+  ownerSession.addSpecialSetting(setting);
+  if (persistSession !== ownerSession) {
+    persistSession.addSpecialSetting(setting);
+  }
+}
+
+function buildRetryFailedChainEntry(
+  provider: Provider,
+  endpointAudit: { endpointId: number | null; endpointUrl: string },
+  attemptNumber: number,
+  error: Error,
+  errorMessage: string,
+  requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>
+): NonNullable<Parameters<ProxySession["addProviderToChain"]>[1]> {
+  if (error instanceof ProxyError) {
+    return {
+      ...endpointAudit,
+      reason: "retry_failed",
+      circuitState: getCircuitState(provider.id),
+      attemptNumber,
+      errorMessage,
+      statusCode: error.statusCode,
+      statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+      errorDetails: {
+        provider: {
+          id: provider.id,
+          name: provider.name,
+          statusCode: error.statusCode,
+          statusText: error.message,
+          upstreamBody: error.upstreamError?.body,
+          upstreamParsed: error.upstreamError?.parsed,
+        },
+        request: requestDetailsBeforeRectify,
+      },
+    };
+  }
+
+  return {
+    ...endpointAudit,
+    reason: "retry_failed",
+    circuitState: getCircuitState(provider.id),
+    attemptNumber,
+    errorMessage,
+    errorDetails: {
+      system: {
+        errorType: error.constructor.name,
+        errorName: error.name,
+        errorMessage: error.message || error.name || "Unknown error",
+        errorStack: error.stack?.split("\n").slice(0, 3).join("\n"),
+      },
+      request: requestDetailsBeforeRectify,
+    },
+  };
+}
+
+function getReactiveRectifierDisplayName(
+  rectifierType: "thinking_signature_rectifier" | "thinking_budget_rectifier"
+): string {
+  return rectifierType === "thinking_signature_rectifier"
+    ? "Thinking signature rectifier"
+    : "Thinking budget rectifier";
+}
+
+async function tryApplyReactiveAnthropicRectifier(params: {
+  provider: Provider;
+  requestSession: ProxySession;
+  persistSession: ProxySession;
+  errorMessage: string;
+  attemptNumber: number;
+  retryAttemptNumber: number;
+  retryState: ReactiveRectifierRetryState;
+}): Promise<ReactiveRectifierResult> {
+  const {
+    provider,
+    requestSession,
+    persistSession,
+    errorMessage,
+    attemptNumber,
+    retryAttemptNumber,
+  } = params;
+  const isAnthropicProvider =
+    provider.providerType === "claude" || provider.providerType === "claude-auth";
+
+  if (!isAnthropicProvider) {
+    return { matched: false };
+  }
+
+  const signatureTrigger = detectThinkingSignatureRectifierTrigger(errorMessage);
+  if (signatureTrigger) {
+    const settings = await getCachedSystemSettings();
+    const enabled = settings.enableThinkingSignatureRectifier ?? true;
+
+    if (!enabled) {
+      return { matched: false };
+    }
+
+    if (params.retryState.thinkingSignatureRetried) {
+      return {
+        matched: true,
+        applied: false,
+        reason: "already_retried",
+        rectifierType: "thinking_signature_rectifier",
+        trigger: signatureTrigger,
+      };
+    }
+
+    const requestDetailsBeforeRectify = buildRequestDetails(requestSession);
+    const rectified = rectifyAnthropicRequestMessage(
+      requestSession.request.message as Record<string, unknown>
+    );
+
+    addSpecialSettingForPersistence(requestSession, persistSession, {
+      type: "thinking_signature_rectifier",
+      scope: "request",
+      hit: rectified.applied,
+      providerId: provider.id,
+      providerName: provider.name,
+      trigger: signatureTrigger,
+      attemptNumber,
+      retryAttemptNumber,
+      removedThinkingBlocks: rectified.removedThinkingBlocks,
+      removedRedactedThinkingBlocks: rectified.removedRedactedThinkingBlocks,
+      removedSignatureFields: rectified.removedSignatureFields,
+    });
+    await persistSpecialSettings(persistSession);
+
+    if (!rectified.applied) {
+      return {
+        matched: true,
+        applied: false,
+        reason: "not_applicable",
+        rectifierType: "thinking_signature_rectifier",
+        trigger: signatureTrigger,
+      };
+    }
+
+    params.retryState.thinkingSignatureRetried = true;
+    return {
+      matched: true,
+      applied: true,
+      rectifierType: "thinking_signature_rectifier",
+      trigger: signatureTrigger,
+      requestDetailsBeforeRectify,
+    };
+  }
+
+  const budgetTrigger = detectThinkingBudgetRectifierTrigger(errorMessage);
+  if (!budgetTrigger) {
+    return { matched: false };
+  }
+
+  const settings = await getCachedSystemSettings();
+  const enabled = settings.enableThinkingBudgetRectifier ?? true;
+
+  if (!enabled) {
+    return { matched: false };
+  }
+
+  if (params.retryState.thinkingBudgetRetried) {
+    return {
+      matched: true,
+      applied: false,
+      reason: "already_retried",
+      rectifierType: "thinking_budget_rectifier",
+      trigger: budgetTrigger,
+    };
+  }
+
+  const requestDetailsBeforeRectify = buildRequestDetails(requestSession);
+  const rectified = rectifyThinkingBudget(
+    requestSession.request.message as Record<string, unknown>
+  );
+
+  addSpecialSettingForPersistence(requestSession, persistSession, {
+    type: "thinking_budget_rectifier",
+    scope: "request",
+    hit: rectified.applied,
+    providerId: provider.id,
+    providerName: provider.name,
+    trigger: budgetTrigger,
+    attemptNumber,
+    retryAttemptNumber,
+    before: rectified.before,
+    after: rectified.after,
+  });
+  await persistSpecialSettings(persistSession);
+
+  if (!rectified.applied) {
+    return {
+      matched: true,
+      applied: false,
+      reason: "not_applicable",
+      rectifierType: "thinking_budget_rectifier",
+      trigger: budgetTrigger,
+    };
+  }
+
+  params.retryState.thinkingBudgetRetried = true;
+  return {
+    matched: true,
+    applied: true,
+    rectifierType: "thinking_budget_rectifier",
+    trigger: budgetTrigger,
+    requestDetailsBeforeRectify,
+  };
+}
+
 /**
  * 为 Claude 请求注入 metadata.user_id
  *
@@ -521,8 +761,10 @@ export class ProxyForwarder {
         currentProvider,
         envDefaultMaxAttempts
       );
-      let thinkingSignatureRectifierRetried = false;
-      let thinkingBudgetRectifierRetried = false;
+      const reactiveRectifierRetryState: ReactiveRectifierRetryState = {
+        thinkingSignatureRetried: false,
+        thinkingBudgetRetried: false,
+      };
 
       const requestPath = session.requestUrl.pathname;
       const providerVendorId = currentProvider.providerVendorId ?? 0;
@@ -1046,280 +1288,63 @@ export class ProxyForwarder {
             throw lastError;
           }
 
-          // 2.5 Thinking signature 整流器：命中后对同供应商“整流 + 重试一次”
-          // 目标：解决 Anthropic 与非 Anthropic 渠道切换导致的 thinking 签名不兼容问题
-          // 约束：
-          // - 仅对 Anthropic 类型供应商生效
-          // - 不依赖 error rules 开关（用户可能关闭规则，但仍希望整流生效）
-          // - 不计入熔断器、不触发供应商切换
-          const isAnthropicProvider =
-            currentProvider.providerType === "claude" ||
-            currentProvider.providerType === "claude-auth";
-          const rectifierTrigger = isAnthropicProvider
-            ? detectThinkingSignatureRectifierTrigger(errorMessage)
-            : null;
+          // 2.5 Reactive rectifier：命中后对同供应商“整流 + 重试一次”
+          const reactiveRectifierResult = await tryApplyReactiveAnthropicRectifier({
+            provider: currentProvider,
+            requestSession: session,
+            persistSession: session,
+            errorMessage,
+            attemptNumber: attemptCount,
+            retryAttemptNumber: attemptCount + 1,
+            retryState: reactiveRectifierRetryState,
+          });
 
-          if (rectifierTrigger) {
-            const settings = await getCachedSystemSettings();
-            const enabled = settings.enableThinkingSignatureRectifier ?? true;
-
-            if (enabled) {
-              // 已重试过仍失败：强制按“不可重试的客户端错误”处理，避免污染熔断器/触发供应商切换
-              if (thinkingSignatureRectifierRetried) {
-                errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
-              } else {
-                const requestDetailsBeforeRectify = buildRequestDetails(session);
-
-                // 整流请求体（原地修改 session.request.message）
-                const rectified = rectifyAnthropicRequestMessage(
-                  session.request.message as Record<string, unknown>
-                );
-
-                // 写入审计字段（specialSettings）
-                session.addSpecialSetting({
-                  type: "thinking_signature_rectifier",
-                  scope: "request",
-                  hit: rectified.applied,
-                  providerId: currentProvider.id,
-                  providerName: currentProvider.name,
-                  trigger: rectifierTrigger,
-                  attemptNumber: attemptCount,
-                  retryAttemptNumber: attemptCount + 1,
-                  removedThinkingBlocks: rectified.removedThinkingBlocks,
-                  removedRedactedThinkingBlocks: rectified.removedRedactedThinkingBlocks,
-                  removedSignatureFields: rectified.removedSignatureFields,
-                });
-
-                const specialSettings = session.getSpecialSettings();
-                if (specialSettings && session.sessionId) {
-                  try {
-                    await SessionManager.storeSessionSpecialSettings(
-                      session.sessionId,
-                      specialSettings,
-                      session.requestSequence
-                    );
-                  } catch (persistError) {
-                    logger.error("[ProxyForwarder] Failed to store special settings", {
-                      error: persistError,
-                      sessionId: session.sessionId,
-                    });
-                  }
-                }
-
-                if (specialSettings && session.messageContext?.id) {
-                  try {
-                    await updateMessageRequestDetails(session.messageContext.id, {
-                      specialSettings,
-                    });
-                  } catch (persistError) {
-                    logger.error("[ProxyForwarder] Failed to persist special settings", {
-                      error: persistError,
-                      messageRequestId: session.messageContext.id,
-                    });
-                  }
-                }
-
-                // 无任何可整流内容：不做无意义重试，直接走既有“不可重试客户端错误”分支
-                if (!rectified.applied) {
-                  logger.info(
-                    "ProxyForwarder: Thinking signature rectifier not applicable, skipping retry",
-                    {
-                      providerId: currentProvider.id,
-                      providerName: currentProvider.name,
-                      trigger: rectifierTrigger,
-                      attemptNumber: attemptCount,
-                    }
-                  );
-                  errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
-                } else {
-                  logger.info("ProxyForwarder: Thinking signature rectifier applied, retrying", {
+          if (reactiveRectifierResult.matched) {
+            if (!reactiveRectifierResult.applied) {
+              if (reactiveRectifierResult.reason === "not_applicable") {
+                logger.info(
+                  `ProxyForwarder: ${getReactiveRectifierDisplayName(
+                    reactiveRectifierResult.rectifierType
+                  )} not applicable, skipping retry`,
+                  {
                     providerId: currentProvider.id,
                     providerName: currentProvider.name,
-                    trigger: rectifierTrigger,
+                    trigger: reactiveRectifierResult.trigger,
                     attemptNumber: attemptCount,
-                    willRetryAttemptNumber: attemptCount + 1,
-                  });
-
-                  thinkingSignatureRectifierRetried = true;
-
-                  // 记录失败的第一次请求（以 retry_failed 体现“发生过一次重试”）
-                  if (lastError instanceof ProxyError) {
-                    session.addProviderToChain(currentProvider, {
-                      ...endpointAudit,
-                      reason: "retry_failed",
-                      circuitState: getCircuitState(currentProvider.id),
-                      attemptNumber: attemptCount,
-                      errorMessage,
-                      statusCode: lastError.statusCode,
-                      statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
-                      errorDetails: {
-                        provider: {
-                          id: currentProvider.id,
-                          name: currentProvider.name,
-                          statusCode: lastError.statusCode,
-                          statusText: lastError.message,
-                          upstreamBody: lastError.upstreamError?.body,
-                          upstreamParsed: lastError.upstreamError?.parsed,
-                        },
-                        request: requestDetailsBeforeRectify,
-                      },
-                    });
-                  } else {
-                    session.addProviderToChain(currentProvider, {
-                      ...endpointAudit,
-                      reason: "retry_failed",
-                      circuitState: getCircuitState(currentProvider.id),
-                      attemptNumber: attemptCount,
-                      errorMessage,
-                      errorDetails: {
-                        system: {
-                          errorType: lastError.constructor.name,
-                          errorName: lastError.name,
-                          errorMessage: lastError.message || lastError.name || "Unknown error",
-                          errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
-                        },
-                        request: requestDetailsBeforeRectify,
-                      },
-                    });
                   }
-
-                  // 确保即使 maxAttemptsPerProvider=1 也能完成一次额外重试
-                  maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
-                  continue;
-                }
-              }
-            }
-          }
-
-          // 2.6 Thinking budget rectifier: fix budget_tokens < 1024 errors and retry once
-          const budgetRectifierTrigger = isAnthropicProvider
-            ? detectThinkingBudgetRectifierTrigger(errorMessage)
-            : null;
-
-          if (budgetRectifierTrigger) {
-            const settings = await getCachedSystemSettings();
-            const budgetRectifierEnabled = settings.enableThinkingBudgetRectifier ?? true;
-
-            if (budgetRectifierEnabled) {
-              if (thinkingBudgetRectifierRetried) {
-                errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
-              } else {
-                const requestDetailsBeforeRectify = buildRequestDetails(session);
-
-                const budgetRectified = rectifyThinkingBudget(
-                  session.request.message as Record<string, unknown>
                 );
+              }
 
-                session.addSpecialSetting({
-                  type: "thinking_budget_rectifier",
-                  scope: "request",
-                  hit: budgetRectified.applied,
+              errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+            } else {
+              logger.info(
+                `ProxyForwarder: ${getReactiveRectifierDisplayName(
+                  reactiveRectifierResult.rectifierType
+                )} applied, retrying`,
+                {
                   providerId: currentProvider.id,
                   providerName: currentProvider.name,
-                  trigger: budgetRectifierTrigger,
+                  trigger: reactiveRectifierResult.trigger,
                   attemptNumber: attemptCount,
-                  retryAttemptNumber: attemptCount + 1,
-                  before: budgetRectified.before,
-                  after: budgetRectified.after,
-                });
-
-                const specialSettings = session.getSpecialSettings();
-                if (specialSettings && session.sessionId) {
-                  try {
-                    await SessionManager.storeSessionSpecialSettings(
-                      session.sessionId,
-                      specialSettings,
-                      session.requestSequence
-                    );
-                  } catch (persistError) {
-                    logger.error("[ProxyForwarder] Failed to store special settings", {
-                      error: persistError,
-                      sessionId: session.sessionId,
-                    });
-                  }
+                  willRetryAttemptNumber: attemptCount + 1,
                 }
+              );
 
-                if (specialSettings && session.messageContext?.id) {
-                  try {
-                    await updateMessageRequestDetails(session.messageContext.id, {
-                      specialSettings,
-                    });
-                  } catch (persistError) {
-                    logger.error("[ProxyForwarder] Failed to persist special settings", {
-                      error: persistError,
-                      messageRequestId: session.messageContext.id,
-                    });
-                  }
-                }
+              session.addProviderToChain(
+                currentProvider,
+                buildRetryFailedChainEntry(
+                  currentProvider,
+                  endpointAudit,
+                  attemptCount,
+                  lastError,
+                  errorMessage,
+                  reactiveRectifierResult.requestDetailsBeforeRectify
+                )
+              );
 
-                if (!budgetRectified.applied) {
-                  logger.info(
-                    "ProxyForwarder: Thinking budget rectifier not applicable, skipping retry",
-                    {
-                      providerId: currentProvider.id,
-                      providerName: currentProvider.name,
-                      trigger: budgetRectifierTrigger,
-                      attemptNumber: attemptCount,
-                    }
-                  );
-                  errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
-                } else {
-                  logger.info("ProxyForwarder: Thinking budget rectifier applied, retrying", {
-                    providerId: currentProvider.id,
-                    providerName: currentProvider.name,
-                    trigger: budgetRectifierTrigger,
-                    attemptNumber: attemptCount,
-                    willRetryAttemptNumber: attemptCount + 1,
-                    before: budgetRectified.before,
-                    after: budgetRectified.after,
-                  });
-
-                  thinkingBudgetRectifierRetried = true;
-
-                  if (lastError instanceof ProxyError) {
-                    session.addProviderToChain(currentProvider, {
-                      ...endpointAudit,
-                      reason: "retry_failed",
-                      circuitState: getCircuitState(currentProvider.id),
-                      attemptNumber: attemptCount,
-                      errorMessage,
-                      statusCode: lastError.statusCode,
-                      statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
-                      errorDetails: {
-                        provider: {
-                          id: currentProvider.id,
-                          name: currentProvider.name,
-                          statusCode: lastError.statusCode,
-                          statusText: lastError.message,
-                          upstreamBody: lastError.upstreamError?.body,
-                          upstreamParsed: lastError.upstreamError?.parsed,
-                        },
-                        request: requestDetailsBeforeRectify,
-                      },
-                    });
-                  } else {
-                    session.addProviderToChain(currentProvider, {
-                      ...endpointAudit,
-                      reason: "retry_failed",
-                      circuitState: getCircuitState(currentProvider.id),
-                      attemptNumber: attemptCount,
-                      errorMessage,
-                      errorDetails: {
-                        system: {
-                          errorType: lastError.constructor.name,
-                          errorName: lastError.name,
-                          errorMessage: lastError.message || lastError.name || "Unknown error",
-                          errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
-                        },
-                        request: requestDetailsBeforeRectify,
-                      },
-                    });
-                  }
-
-                  maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
-                  continue;
-                }
-              }
+              // 确保即使 maxAttemptsPerProvider=1 也能完成一次额外重试
+              maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
+              continue;
             }
           }
 
@@ -2976,7 +3001,7 @@ export class ProxyForwarder {
       }
       attempts.delete(attempt);
       if (reason === "hedge_loser") {
-        attempt.session.addProviderToChain(attempt.provider, {
+        session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
           reason: "hedge_loser_cancelled",
           attemptNumber: attempt.sequence,
@@ -2984,13 +3009,47 @@ export class ProxyForwarder {
       }
       try {
         attempt.responseController?.abort(new Error(reason));
-      } catch {
-        // ignore
+      } catch (abortError) {
+        logger.debug("ProxyForwarder: hedge attempt abort failed", {
+          error: abortError instanceof Error ? abortError.message : String(abortError),
+          reason,
+          sessionId: attempt.session.sessionId ?? null,
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+        });
       }
       const readerCancel = attempt.reader?.cancel();
-      readerCancel?.catch(() => {
-        // ignore
+      readerCancel?.catch((cancelError) => {
+        logger.debug("ProxyForwarder: hedge attempt reader cancel failed", {
+          error: cancelError instanceof Error ? cancelError.message : String(cancelError),
+          reason,
+          sessionId: attempt.session.sessionId ?? null,
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+        });
       });
+    };
+
+    const armAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      if (attempt.thresholdTimer) {
+        clearTimeout(attempt.thresholdTimer);
+        attempt.thresholdTimer = null;
+      }
+      attempt.thresholdTriggered = false;
+
+      if (attempt.firstByteTimeoutMs <= 0) return;
+
+      attempt.thresholdTimer = setTimeout(() => {
+        if (settled || attempt.settled || attempt.thresholdTriggered) return;
+        attempt.thresholdTriggered = true;
+        session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "hedge_triggered",
+          attemptNumber: attempt.sequence,
+          circuitState: getCircuitState(attempt.provider.id),
+        });
+        void launchAlternative();
+      }, attempt.firstByteTimeoutMs);
     };
 
     const abortAllAttempts = (winner?: StreamingHedgeAttempt, reason: string = "hedge_loser") => {
@@ -3053,20 +3112,98 @@ export class ProxyForwarder {
       await launchingAlternative;
     };
 
+    const runAttempt = (attempt: StreamingHedgeAttempt) => {
+      const providerForRequest =
+        attempt.firstByteTimeoutMs > 0
+          ? { ...attempt.provider, firstByteTimeoutStreamingMs: 0 }
+          : attempt.provider;
+
+      void ProxyForwarder.doForward(
+        attempt.session,
+        providerForRequest,
+        attempt.baseUrl,
+        attempt.endpointAudit,
+        attempt.requestAttemptCount
+      )
+        .then(async (response) => {
+          if (settled || winnerCommitted || attempt.settled) {
+            const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
+            try {
+              attemptRuntime.responseController?.abort(new Error("hedge_loser"));
+            } catch (abortError) {
+              logger.debug("ProxyForwarder: hedge loser abort failed", {
+                error: abortError instanceof Error ? abortError.message : String(abortError),
+                sessionId: attempt.session.sessionId ?? null,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+              });
+            }
+            const cancelPromise = response.body?.cancel("hedge_loser");
+            cancelPromise?.catch((cancelError) => {
+              logger.debug("ProxyForwarder: hedge loser body cancel failed", {
+                error: cancelError instanceof Error ? cancelError.message : String(cancelError),
+                sessionId: attempt.session.sessionId ?? null,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+              });
+            });
+            return;
+          }
+
+          const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
+          attempt.responseController = attemptRuntime.responseController ?? null;
+          attempt.clearResponseTimeout = attemptRuntime.clearResponseTimeout ?? null;
+          attempt.clearResponseTimeout?.();
+          attempt.response = response;
+
+          if (!response.body) {
+            await handleAttemptFailure(
+              attempt,
+              new EmptyResponseError(attempt.provider.id, attempt.provider.name, "empty_body")
+            );
+            return;
+          }
+
+          attempt.reader = response.body.getReader();
+
+          try {
+            const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
+            if (firstChunk.done) {
+              await handleAttemptFailure(
+                attempt,
+                new EmptyResponseError(attempt.provider.id, attempt.provider.name, "empty_body")
+              );
+              return;
+            }
+
+            await commitWinner(attempt, firstChunk.value);
+          } catch (firstChunkError) {
+            const normalizedError =
+              firstChunkError instanceof Error
+                ? firstChunkError
+                : new Error(String(firstChunkError));
+            if (settled || winnerCommitted) return;
+            await handleAttemptFailure(attempt, normalizedError);
+          }
+        })
+        .catch(async (attemptError) => {
+          const normalizedError =
+            attemptError instanceof Error ? attemptError : new Error(String(attemptError));
+          if (settled || winnerCommitted) return;
+          await handleAttemptFailure(attempt, normalizedError);
+        });
+    };
+
     const handleAttemptFailure = async (attempt: StreamingHedgeAttempt, error: Error) => {
       if (settled || winnerCommitted || attempt.settled) return;
 
-      attempt.settled = true;
-      if (attempt.thresholdTimer) {
-        clearTimeout(attempt.thresholdTimer);
-        attempt.thresholdTimer = null;
-      }
-      attempts.delete(attempt);
       lastError = error;
 
-      const errorCategory = await categorizeErrorAsync(error);
+      let errorCategory = await categorizeErrorAsync(error);
       lastErrorCategory = errorCategory;
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
+      const errorMessage =
+        error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message;
 
       if (attempt.endpointAudit.endpointId != null) {
         const isTimeoutError = error instanceof ProxyError && error.statusCode === 524;
@@ -3076,6 +3213,13 @@ export class ProxyForwarder {
       }
 
       if (errorCategory === ErrorCategory.CLIENT_ABORT) {
+        attempt.settled = true;
+        if (attempt.thresholdTimer) {
+          clearTimeout(attempt.thresholdTimer);
+          attempt.thresholdTimer = null;
+        }
+        attempts.delete(attempt);
+
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
           reason: "client_abort",
@@ -3092,6 +3236,80 @@ export class ProxyForwarder {
         return;
       }
 
+      const reactiveRectifierResult = await tryApplyReactiveAnthropicRectifier({
+        provider: attempt.provider,
+        requestSession: attempt.session,
+        persistSession: session,
+        errorMessage,
+        attemptNumber: attempt.requestAttemptCount,
+        retryAttemptNumber: attempt.requestAttemptCount + 1,
+        retryState: attempt.reactiveRectifierRetryState,
+      });
+
+      if (reactiveRectifierResult.matched) {
+        if (!reactiveRectifierResult.applied) {
+          if (reactiveRectifierResult.reason === "not_applicable") {
+            logger.info(
+              `ProxyForwarder: ${getReactiveRectifierDisplayName(
+                reactiveRectifierResult.rectifierType
+              )} not applicable in hedge, skipping retry`,
+              {
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+                trigger: reactiveRectifierResult.trigger,
+                participantSequence: attempt.sequence,
+                attemptNumber: attempt.requestAttemptCount,
+              }
+            );
+          }
+
+          errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+          lastErrorCategory = errorCategory;
+        } else {
+          logger.info(
+            `ProxyForwarder: ${getReactiveRectifierDisplayName(
+              reactiveRectifierResult.rectifierType
+            )} applied in hedge, retrying same provider`,
+            {
+              providerId: attempt.provider.id,
+              providerName: attempt.provider.name,
+              trigger: reactiveRectifierResult.trigger,
+              participantSequence: attempt.sequence,
+              attemptNumber: attempt.requestAttemptCount,
+              willRetryAttemptNumber: attempt.requestAttemptCount + 1,
+            }
+          );
+
+          session.addProviderToChain(
+            attempt.provider,
+            buildRetryFailedChainEntry(
+              attempt.provider,
+              attempt.endpointAudit,
+              attempt.requestAttemptCount,
+              error,
+              errorMessage,
+              reactiveRectifierResult.requestDetailsBeforeRectify
+            )
+          );
+
+          if (attempt.thresholdTimer) {
+            clearTimeout(attempt.thresholdTimer);
+            attempt.thresholdTimer = null;
+          }
+          attempt.requestAttemptCount += 1;
+          armAttemptThreshold(attempt);
+          runAttempt(attempt);
+          return;
+        }
+      }
+
+      attempt.settled = true;
+      if (attempt.thresholdTimer) {
+        clearTimeout(attempt.thresholdTimer);
+        attempt.thresholdTimer = null;
+      }
+      attempts.delete(attempt);
+
       if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
         await recordFailure(attempt.provider.id, error);
       }
@@ -3106,7 +3324,7 @@ export class ProxyForwarder {
               : "retry_failed",
         attemptNumber: attempt.sequence,
         statusCode,
-        errorMessage: error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message,
+        errorMessage,
         circuitState: getCircuitState(attempt.provider.id),
       });
 
@@ -3240,6 +3458,7 @@ export class ProxyForwarder {
       const attempt: StreamingHedgeAttempt = {
         provider,
         session: attemptSession,
+        baseUrl: endpointSelection.baseUrl,
         endpointAudit: {
           endpointId: endpointSelection.endpointId,
           endpointUrl: endpointSelection.endpointUrl,
@@ -3249,6 +3468,11 @@ export class ProxyForwarder {
         firstByteTimeoutMs:
           provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
         sequence: launchedProviderCount,
+        requestAttemptCount: 1,
+        reactiveRectifierRetryState: {
+          thinkingSignatureRetried: false,
+          thinkingBudgetRetried: false,
+        },
         settled: false,
         thresholdTriggered: false,
         thresholdTimer: null,
@@ -3269,89 +3493,9 @@ export class ProxyForwarder {
         });
       }
 
-      if (attempt.firstByteTimeoutMs > 0) {
-        attempt.thresholdTimer = setTimeout(() => {
-          if (settled || attempt.settled || attempt.thresholdTriggered) return;
-          attempt.thresholdTriggered = true;
-          attempt.session.addProviderToChain(attempt.provider, {
-            ...attempt.endpointAudit,
-            reason: "hedge_triggered",
-            attemptNumber: attempt.sequence,
-            circuitState: getCircuitState(attempt.provider.id),
-          });
-          void launchAlternative();
-        }, attempt.firstByteTimeoutMs);
-      }
+      armAttemptThreshold(attempt);
 
-      const providerForRequest =
-        provider.firstByteTimeoutStreamingMs > 0
-          ? { ...provider, firstByteTimeoutStreamingMs: 0 }
-          : provider;
-
-      void ProxyForwarder.doForward(
-        attemptSession,
-        providerForRequest,
-        endpointSelection.baseUrl,
-        attempt.endpointAudit,
-        1
-      )
-        .then(async (response) => {
-          if (settled || winnerCommitted) {
-            const attemptRuntime = attemptSession as ProxySessionWithAttemptRuntime;
-            try {
-              attemptRuntime.responseController?.abort(new Error("hedge_loser"));
-            } catch {
-              // ignore
-            }
-            const cancelPromise = response.body?.cancel("hedge_loser");
-            cancelPromise?.catch(() => {
-              // ignore
-            });
-            return;
-          }
-
-          const attemptRuntime = attemptSession as ProxySessionWithAttemptRuntime;
-          attempt.responseController = attemptRuntime.responseController ?? null;
-          attempt.clearResponseTimeout = attemptRuntime.clearResponseTimeout ?? null;
-          attempt.clearResponseTimeout?.();
-          attempt.response = response;
-
-          if (!response.body) {
-            await handleAttemptFailure(
-              attempt,
-              new EmptyResponseError(provider.id, provider.name, "empty_body")
-            );
-            return;
-          }
-
-          attempt.reader = response.body.getReader();
-
-          try {
-            const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
-            if (firstChunk.done) {
-              await handleAttemptFailure(
-                attempt,
-                new EmptyResponseError(provider.id, provider.name, "empty_body")
-              );
-              return;
-            }
-
-            await commitWinner(attempt, firstChunk.value);
-          } catch (firstChunkError) {
-            const normalizedError =
-              firstChunkError instanceof Error
-                ? firstChunkError
-                : new Error(String(firstChunkError));
-            if (settled || winnerCommitted) return;
-            await handleAttemptFailure(attempt, normalizedError);
-          }
-        })
-        .catch(async (attemptError) => {
-          const normalizedError =
-            attemptError instanceof Error ? attemptError : new Error(String(attemptError));
-          if (settled || winnerCommitted) return;
-          await handleAttemptFailure(attempt, normalizedError);
-        });
+      runAttempt(attempt);
     };
 
     if (session.clientAbortSignal) {
@@ -3563,7 +3707,15 @@ export class ProxyForwarder {
       }
     }
     targetState.providerChain = mergedProviderChain;
-    targetState.specialSettings = [...sourceState.specialSettings];
+    // 合并 specialSettings，避免覆盖已有的 rectifier audit 记录
+    const existingKeys = new Set(targetState.specialSettings.map((s) => JSON.stringify(s)));
+    const merged = [...targetState.specialSettings];
+    for (const setting of sourceState.specialSettings) {
+      if (!existingKeys.has(JSON.stringify(setting))) {
+        merged.push(setting);
+      }
+    }
+    targetState.specialSettings = merged;
     targetState.originalModelName = sourceState.originalModelName;
     targetState.originalUrlPathname = sourceState.originalUrlPathname;
     targetState.clearResponseTimeout = sourceRuntime.clearResponseTimeout;

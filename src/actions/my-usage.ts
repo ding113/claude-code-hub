@@ -16,9 +16,11 @@ import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
+  findUsageLogsForKeyBatch,
   findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
+  type UsageLogSlimBatchResult,
   type UsageLogSummary,
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
@@ -166,6 +168,27 @@ export interface MyUsageLogEntry {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+}
+
+export interface MyUsageLogsBatchResult {
+  logs: MyUsageLogEntry[];
+  nextCursor: { createdAt: string; id: number } | null;
+  hasMore: boolean;
+  currencyCode: CurrencyCode;
+  billingModelSource: BillingModelSource;
+}
+
+export interface MyUsageLogsFilters {
+  startDate?: string;
+  endDate?: string;
+  sessionId?: string;
+  model?: string;
+  statusCode?: number;
+  excludeStatusCode200?: boolean;
+  endpoint?: string;
+  minRetryCount?: number;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface MyUsageLogsResult {
@@ -469,7 +492,7 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
   }
 }
 
-export interface MyUsageLogsFilters {
+export interface MyUsageLogsBatchFilters {
   startDate?: string;
   endDate?: string;
   /** Session ID（精确匹配；空字符串/空白视为不筛选） */
@@ -479,8 +502,43 @@ export interface MyUsageLogsFilters {
   excludeStatusCode200?: boolean;
   endpoint?: string;
   minRetryCount?: number;
-  page?: number;
-  pageSize?: number;
+  cursor?: { createdAt: string; id: number };
+  limit?: number;
+}
+
+function mapMyUsageLogEntries(
+  result: Pick<UsageLogSlimBatchResult, "logs">,
+  billingModelSource: BillingModelSource
+): MyUsageLogEntry[] {
+  return result.logs.map((log) => {
+    const modelRedirect =
+      log.originalModel && log.model && log.originalModel !== log.model
+        ? `${log.originalModel} → ${log.model}`
+        : null;
+
+    const billingModel =
+      (billingModelSource === "original" ? log.originalModel : log.model) ?? null;
+
+    return {
+      id: log.id,
+      createdAt: log.createdAt,
+      model: log.model,
+      billingModel,
+      anthropicEffort: log.anthropicEffort ?? null,
+      modelRedirect,
+      inputTokens: log.inputTokens ?? 0,
+      outputTokens: log.outputTokens ?? 0,
+      cost: log.costUsd ? Number(log.costUsd) : 0,
+      statusCode: log.statusCode,
+      duration: log.durationMs,
+      endpoint: log.endpoint,
+      cacheCreationInputTokens: log.cacheCreationInputTokens ?? null,
+      cacheReadInputTokens: log.cacheReadInputTokens ?? null,
+      cacheCreation5mInputTokens: log.cacheCreation5mInputTokens ?? null,
+      cacheCreation1hInputTokens: log.cacheCreation1hInputTokens ?? null,
+      cacheTtlApplied: log.cacheTtlApplied ?? null,
+    };
+  });
 }
 
 export async function getMyUsageLogs(
@@ -491,17 +549,19 @@ export async function getMyUsageLogs(
     if (!session) return { ok: false, error: "Unauthorized" };
 
     const settings = await getSystemSettings();
-
-    const rawPageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : 20;
-    const pageSize = Math.min(rawPageSize, 100);
-    const page = filters.page && filters.page > 0 ? filters.page : 1;
-
     const timezone = await resolveSystemTimezone();
     const { startTime, endTime } = parseDateRangeInServerTimezone(
       filters.startDate,
       filters.endDate,
       timezone
     );
+    const parsedPageSize = Number(filters.pageSize);
+    const pageSize =
+      Number.isFinite(parsedPageSize) && parsedPageSize > 0
+        ? Math.min(Math.trunc(parsedPageSize), 100)
+        : 20;
+    const parsedPage = Number(filters.page);
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.trunc(parsedPage) : 1;
     const result = await findUsageLogsForKeySlim({
       keyString: session.key.key,
       sessionId: filters.sessionId,
@@ -516,40 +576,10 @@ export async function getMyUsageLogs(
       pageSize,
     });
 
-    const logs: MyUsageLogEntry[] = result.logs.map((log) => {
-      const modelRedirect =
-        log.originalModel && log.model && log.originalModel !== log.model
-          ? `${log.originalModel} → ${log.model}`
-          : null;
-
-      const billingModel =
-        (settings.billingModelSource === "original" ? log.originalModel : log.model) ?? null;
-
-      return {
-        id: log.id,
-        createdAt: log.createdAt,
-        model: log.model,
-        billingModel,
-        anthropicEffort: log.anthropicEffort ?? null,
-        modelRedirect,
-        inputTokens: log.inputTokens ?? 0,
-        outputTokens: log.outputTokens ?? 0,
-        cost: log.costUsd ? Number(log.costUsd) : 0,
-        statusCode: log.statusCode,
-        duration: log.durationMs,
-        endpoint: log.endpoint,
-        cacheCreationInputTokens: log.cacheCreationInputTokens ?? null,
-        cacheReadInputTokens: log.cacheReadInputTokens ?? null,
-        cacheCreation5mInputTokens: log.cacheCreation5mInputTokens ?? null,
-        cacheCreation1hInputTokens: log.cacheCreation1hInputTokens ?? null,
-        cacheTtlApplied: log.cacheTtlApplied ?? null,
-      };
-    });
-
     return {
       ok: true,
       data: {
-        logs,
+        logs: mapMyUsageLogEntries(result, settings.billingModelSource),
         total: result.total,
         page,
         pageSize,
@@ -558,7 +588,52 @@ export async function getMyUsageLogs(
       },
     };
   } catch (error) {
-    logger.error("[my-usage] getMyUsageLogs failed", error);
+    logger.error("[my-usage] getMyUsageLogs failed", { error, filters });
+    return { ok: false, error: "Failed to get usage logs" };
+  }
+}
+
+export async function getMyUsageLogsBatch(
+  filters: MyUsageLogsBatchFilters = {}
+): Promise<ActionResult<MyUsageLogsBatchResult>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const settings = await getSystemSettings();
+    const timezone = await resolveSystemTimezone();
+    const { startTime, endTime } = parseDateRangeInServerTimezone(
+      filters.startDate,
+      filters.endDate,
+      timezone
+    );
+    const limit = filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 20;
+    const result = await findUsageLogsForKeyBatch({
+      keyString: session.key.key,
+      sessionId: filters.sessionId,
+      startTime,
+      endTime,
+      model: filters.model,
+      statusCode: filters.statusCode,
+      excludeStatusCode200: filters.excludeStatusCode200,
+      endpoint: filters.endpoint,
+      minRetryCount: filters.minRetryCount,
+      cursor: filters.cursor,
+      limit,
+    });
+
+    return {
+      ok: true,
+      data: {
+        logs: mapMyUsageLogEntries(result, settings.billingModelSource),
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+        currencyCode: settings.currencyDisplay,
+        billingModelSource: settings.billingModelSource,
+      },
+    };
+  } catch (error) {
+    logger.error("[my-usage] getMyUsageLogsBatch failed", error);
     return { ok: false, error: "Failed to get usage logs" };
   }
 }

@@ -23,11 +23,20 @@ const CACHE_TTL_MS = 60 * 1000;
 let cachedSettings: SystemSettings | null = null;
 let cachedAt: number = 0;
 
+/**
+ * Read the current in-memory settings cache only.
+ * Never triggers a DB refresh.
+ */
+export function getCachedSystemSettingsOnlyCache(): SystemSettings | null {
+  return cachedSettings;
+}
+
 /** Default settings used when cache fetch fails */
 const DEFAULT_SETTINGS: Pick<
   SystemSettings,
   | "enableHttp2"
   | "interceptAnthropicWarmupRequests"
+  | "codexPriorityBillingSource"
   | "enableThinkingSignatureRectifier"
   | "enableThinkingBudgetRectifier"
   | "enableBillingHeaderRectifier"
@@ -39,6 +48,7 @@ const DEFAULT_SETTINGS: Pick<
 > = {
   enableHttp2: false,
   interceptAnthropicWarmupRequests: false,
+  codexPriorityBillingSource: "requested",
   enableThinkingSignatureRectifier: true,
   enableThinkingBudgetRectifier: true,
   enableBillingHeaderRectifier: true,
@@ -104,6 +114,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       allowGlobalUsageView: false,
       currencyDisplay: "USD",
       billingModelSource: "original",
+      codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       timezone: null,
       verboseProviderError: false,
       enableAutoCleanup: false,

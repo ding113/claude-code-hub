@@ -274,7 +274,7 @@ async function findLeaderboardWithTimezone(
   if (normalizedGroups.length > 0) {
     const groupConditions = normalizedGroups.map(
       (group) =>
-        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*,\\s*'))`
+        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*[,，]+\\s*'))`
     );
     groupFilterCondition = sql`(${sql.join(groupConditions, sql` OR `)})`;
   }

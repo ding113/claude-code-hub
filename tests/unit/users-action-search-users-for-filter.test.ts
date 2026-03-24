@@ -65,7 +65,19 @@ describe("searchUsersForFilter (action)", () => {
 
     const result = await searchUsersForFilter("ali");
 
-    expect(searchUsersForFilterRepositoryMock).toHaveBeenCalledWith("ali");
+    expect(searchUsersForFilterRepositoryMock).toHaveBeenCalledWith("ali", undefined);
     expect(result).toEqual({ ok: true, data: [{ id: 1, name: "Alice" }] });
+  });
+
+  test("searchUsers alias delegates to searchUsersForFilter", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    searchUsersForFilterRepositoryMock.mockResolvedValue([{ id: 9, name: "Bob" }]);
+
+    const { searchUsers } = await import("@/actions/users");
+
+    const result = await searchUsers("bob");
+
+    expect(searchUsersForFilterRepositoryMock).toHaveBeenCalledWith("bob", undefined);
+    expect(result).toEqual({ ok: true, data: [{ id: 9, name: "Bob" }] });
   });
 });

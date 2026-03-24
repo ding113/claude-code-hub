@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import { getCurrencySymbol } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { UserDisplay } from "@/types/user";
 import { EditKeyDialog } from "./edit-key-dialog";
 import { KeyRowItem } from "./key-row-item";
@@ -86,10 +87,7 @@ const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72小时
 const MAX_VISIBLE_GROUPS = 2; // 最多显示的分组数量
 
 function splitGroups(value?: string | null): string[] {
-  return (value ?? "")
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+  return parseProviderGroups(value);
 }
 
 function getExpiryStatus(

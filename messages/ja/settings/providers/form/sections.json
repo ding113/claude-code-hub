@@ -101,10 +101,10 @@
     },
     "title": "プロキシ設定",
     "url": {
-      "formats": "対応フォーマット:",
+      "formats": "http://、https://、socks5://、socks4:// プロトコルに対応。認証が必要な場合は http://user:password@host:port 形式を使用してください（パスワード内の特殊文字は URL エンコードが必要です。例: # → %23）",
       "label": "プロキシ URL",
       "optional": "（任意）",
-      "placeholder": "例: http://proxy.example.com:8080 または socks5://127.0.0.1:1080"
+      "placeholder": "例: http://proxy.example.com:8080、http://user:pass@proxy:8080、socks5://proxy.example.com:1080"
     }
   },
   "rateLimit": {

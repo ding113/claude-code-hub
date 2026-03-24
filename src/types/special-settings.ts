@@ -252,6 +252,8 @@ export type CodexServiceTierResultSpecialSetting = {
   hit: boolean;
   requestedServiceTier: string | null;
   actualServiceTier: string | null;
+  billingSourcePreference?: "requested" | "actual" | null;
+  resolvedFrom?: "requested" | "actual" | null;
   effectivePriority: boolean;
 };
 

@@ -34,6 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { KeyDialogUserContext } from "@/types/user";
 
@@ -183,16 +184,12 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   // 选择分组时，自动移除 default（当有多个分组时）
   const handleProviderGroupChange = useCallback(
     (newValue: string) => {
-      const groups = newValue
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
-      if (groups.length > 1 && groups.includes(PROVIDER_GROUP.DEFAULT)) {
-        const withoutDefault = groups.filter((g) => g !== PROVIDER_GROUP.DEFAULT);
-        form.setValue("providerGroup", withoutDefault.join(","));
-      } else {
-        form.setValue("providerGroup", newValue);
-      }
+      const groups = parseProviderGroups(newValue);
+      const normalizedGroups =
+        groups.length > 1 && groups.includes(PROVIDER_GROUP.DEFAULT)
+          ? groups.filter((g) => g !== PROVIDER_GROUP.DEFAULT)
+          : groups;
+      form.setValue("providerGroup", normalizedGroups.join(","));
     },
     [form]
   );
@@ -264,6 +261,8 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             : t("providerGroup.description")
         }
         suggestions={providerGroupSuggestions}
+        // Provider groups intentionally allow shared parser semantics without extra format restrictions.
+        validateTag={() => true}
         onInvalidTag={(_tag, reason) => {
           const messages: Record<string, string> = {
             empty: tUI("emptyTag"),

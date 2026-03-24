@@ -68,39 +68,172 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
 
 // ==================== 用户管理 ====================
 
+const userKeyListItemSchema = z.object({
+  id: z.number().describe("密钥 ID"),
+  name: z.string().describe("密钥名称"),
+  maskedKey: z.string().describe("脱敏后的密钥"),
+  fullKey: z.string().optional().describe("完整密钥（有权限时返回）"),
+  canCopy: z.boolean().describe("是否允许复制完整密钥"),
+  expiresAt: z.string().describe("过期时间展示值"),
+  status: z.enum(["enabled", "disabled"]).describe("密钥状态"),
+  todayUsage: z.number().describe("今日用量（美元）"),
+  todayCallCount: z.number().describe("今日调用次数"),
+  todayTokens: z.number().describe("今日 tokens"),
+  lastUsedAt: z.string().nullable().optional().describe("最后使用时间"),
+  lastProviderName: z.string().nullable().optional().describe("最后使用的供应商"),
+  modelStats: z.array(z.any()).describe("模型统计"),
+  createdAt: z.string().optional().describe("创建时间"),
+  createdAtFormatted: z.string().describe("格式化后的创建时间"),
+  canLoginWebUi: z.boolean().describe("是否允许登录 Web UI"),
+  limit5hUsd: z.number().nullable().describe("5 小时限额"),
+  limitDailyUsd: z.number().nullable().describe("每日限额"),
+  dailyResetMode: z.enum(["fixed", "rolling"]).describe("每日重置模式"),
+  dailyResetTime: z.string().describe("每日重置时间"),
+  limitWeeklyUsd: z.number().nullable().describe("周限额"),
+  limitMonthlyUsd: z.number().nullable().describe("月限额"),
+  limitTotalUsd: z.number().nullable().optional().describe("总限额"),
+  limitConcurrentSessions: z.number().describe("并发 Session 上限"),
+  costResetAt: z.string().nullable().optional().describe("限额重置时间"),
+  providerGroup: z.string().nullable().optional().describe("密钥供应商分组"),
+});
+
+const userListItemSchema = z.object({
+  id: z.number().describe("用户 ID"),
+  name: z.string().describe("用户名"),
+  note: z.string().nullable().optional().describe("备注"),
+  role: z.enum(["admin", "user"]).describe("用户角色"),
+  isEnabled: z.boolean().describe("是否启用"),
+  expiresAt: z.string().nullable().optional().describe("过期时间"),
+  rpm: z.number().nullable().describe("每分钟请求数限制"),
+  dailyQuota: z.number().nullable().describe("每日消费额度（美元）"),
+  providerGroup: z.string().nullable().optional().describe("供应商分组"),
+  tags: z.array(z.string()).optional().describe("用户标签"),
+  limit5hUsd: z.number().nullable().optional().describe("5小时消费上限"),
+  limitWeeklyUsd: z.number().nullable().optional().describe("周消费上限"),
+  limitMonthlyUsd: z.number().nullable().optional().describe("月消费上限"),
+  limitTotalUsd: z.number().nullable().optional().describe("总消费上限"),
+  costResetAt: z.string().nullable().optional().describe("限额重置时间"),
+  limitConcurrentSessions: z.number().nullable().optional().describe("并发Session上限"),
+  dailyResetMode: z.enum(["fixed", "rolling"]).optional().describe("每日重置模式"),
+  dailyResetTime: z.string().optional().describe("每日重置时间"),
+  allowedClients: z.array(z.string()).optional().describe("允许的客户端"),
+  blockedClients: z.array(z.string()).optional().describe("禁止的客户端"),
+  allowedModels: z.array(z.string()).optional().describe("允许的模型"),
+  keys: z.array(userKeyListItemSchema).describe("用户下的密钥列表"),
+});
+
+const getUsersBatchRequestSchema = z
+  .object({
+    cursor: z.string().optional(),
+    limit: z.number().int().positive().optional(),
+    searchTerm: z.string().optional(),
+    query: z.string().optional(),
+    keyword: z.string().optional(),
+    page: z.number().int().min(0).optional(),
+    offset: z.number().int().min(0).optional(),
+    tagFilters: z.array(z.string()).optional(),
+    keyGroupFilters: z.array(z.string()).optional(),
+    statusFilter: z
+      .enum(["all", "active", "expired", "expiringSoon", "enabled", "disabled"])
+      .optional(),
+    sortBy: z
+      .enum([
+        "name",
+        "tags",
+        "expiresAt",
+        "rpm",
+        "limit5hUsd",
+        "limitDailyUsd",
+        "limitWeeklyUsd",
+        "limitMonthlyUsd",
+        "createdAt",
+      ])
+      .optional(),
+    sortOrder: z.enum(["asc", "desc"]).optional(),
+  })
+  .passthrough();
+
+const getUsersBatchResponseSchema = z.object({
+  users: z.array(userListItemSchema),
+  nextCursor: z.string().nullable(),
+  hasMore: z.boolean(),
+});
+
 const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
   "users",
   "getUsers",
   userActions.getUsers,
   {
-    requestSchema: z.object({}).describe("无需请求参数"),
-    responseSchema: z.array(
-      z.object({
-        id: z.number().describe("用户 ID"),
-        name: z.string().describe("用户名"),
-        note: z.string().nullable().describe("备注"),
-        role: z.enum(["admin", "user"]).describe("用户角色"),
-        isEnabled: z.boolean().describe("是否启用"),
-        expiresAt: z.string().nullable().describe("过期时间"),
-        rpm: z.number().describe("每分钟请求数限制"),
-        dailyQuota: z.number().describe("每日消费额度（美元）"),
-        providerGroup: z.string().nullable().describe("供应商分组"),
-        tags: z.array(z.string()).describe("用户标签"),
-        limit5hUsd: z.number().nullable().describe("5小时消费上限"),
-        limitWeeklyUsd: z.number().nullable().describe("周消费上限"),
-        limitMonthlyUsd: z.number().nullable().describe("月消费上限"),
-        limitTotalUsd: z.number().nullable().describe("总消费上限"),
-        limitConcurrentSessions: z.number().nullable().describe("并发Session上限"),
-        createdAt: z.string().describe("创建时间"),
+    requestSchema: z
+      .object({
+        cursor: z.string().optional().describe("游标，兼容旧 offset 游标"),
+        limit: z.number().int().positive().optional().describe("返回条数上限"),
+        searchTerm: z.string().optional().describe("搜索用户名/备注/标签/密钥"),
+        query: z.string().optional().describe("旧版搜索参数别名"),
+        keyword: z.string().optional().describe("旧版搜索参数别名"),
+        page: z.number().int().min(0).optional().describe("旧版页码，从 0 或 1 开始"),
+        offset: z.number().int().min(0).optional().describe("旧版偏移量"),
       })
-    ),
+      .passthrough()
+      .describe("兼容旧客户端的可选分页/搜索参数；不传时返回全部用户"),
+    responseSchema: z.array(userListItemSchema),
     description: "获取用户列表 (管理员获取所有用户，普通用户仅获取自己)",
     summary: "获取用户列表",
     tags: ["用户管理"],
     allowReadOnlyAccess: true,
+    argsMapper: (body) => [body],
   }
 );
 app.openapi(getUsersRoute, getUsersHandler);
+
+const { route: getUsersBatchRoute, handler: getUsersBatchHandler } = createActionRoute(
+  "users",
+  "getUsersBatch",
+  userActions.getUsersBatch,
+  {
+    requestSchema: getUsersBatchRequestSchema,
+    responseSchema: getUsersBatchResponseSchema,
+    description: "分页获取用户列表（兼容旧客户端 page/offset/query/keyword 参数）",
+    summary: "分页获取用户列表",
+    tags: ["用户管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body],
+  }
+);
+app.openapi(getUsersBatchRoute, getUsersBatchHandler);
+
+const { route: searchUsersRoute, handler: searchUsersHandler } = createActionRoute(
+  "users",
+  "searchUsers",
+  userActions.searchUsers,
+  {
+    requestSchema: z
+      .object({
+        searchTerm: z.string().optional(),
+        query: z.string().optional(),
+        keyword: z.string().optional(),
+      })
+      .passthrough(),
+    responseSchema: z.array(
+      z.object({
+        id: z.number(),
+        name: z.string(),
+      })
+    ),
+    description: "搜索用户（兼容旧客户端 searchUsers 接口名）",
+    summary: "搜索用户",
+    tags: ["用户管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => {
+      const searchTerm = [body.searchTerm, body.query, body.keyword]
+        .map((value: string | undefined) => value?.trim())
+        .find((value): value is string => Boolean(value));
+
+      return [searchTerm];
+    },
+  }
+);
+app.openapi(searchUsersRoute, searchUsersHandler);
 
 const { route: addUserRoute, handler: addUserHandler } = createActionRoute(
   "users",
@@ -1048,13 +1181,14 @@ const { route: getMyUsageLogsRoute, handler: getMyUsageLogsHandler } = createAct
     requestSchema: z.object({
       startDate: z.string().optional().describe("开始日期（YYYY-MM-DD，可为空）"),
       endDate: z.string().optional().describe("结束日期（YYYY-MM-DD，可为空）"),
+      sessionId: z.string().optional(),
       model: z.string().optional(),
       endpoint: z.string().optional(),
       statusCode: z.number().optional(),
       excludeStatusCode200: z.boolean().optional(),
       minRetryCount: z.number().int().nonnegative().optional(),
-      pageSize: z.number().int().positive().max(100).default(20).optional(),
       page: z.number().int().positive().default(1).optional(),
+      pageSize: z.number().int().positive().max(100).default(20).optional(),
     }),
     responseSchema: z.object({
       logs: z.array(
@@ -1078,18 +1212,79 @@ const { route: getMyUsageLogsRoute, handler: getMyUsageLogsHandler } = createAct
         })
       ),
       total: z.number(),
-      page: z.number(),
-      pageSize: z.number(),
+      page: z.number().int(),
+      pageSize: z.number().int(),
       currencyCode: z.string(),
       billingModelSource: z.enum(["original", "redirected"]),
     }),
-    description: "获取当前会话的使用日志（仅返回自己的数据）",
-    summary: "获取我的使用日志",
-    tags: ["使用日志"],
+    description: "获取当前用户的使用日志（兼容旧版 page/pageSize 分页接口）",
+    summary: "获取当前用户的使用日志（兼容旧版）",
+    tags: ["使用日志分析"],
     allowReadOnlyAccess: true,
   }
 );
 app.openapi(getMyUsageLogsRoute, getMyUsageLogsHandler);
+
+const { route: getMyUsageLogsBatchRoute, handler: getMyUsageLogsBatchHandler } = createActionRoute(
+  "my-usage",
+  "getMyUsageLogsBatch",
+  myUsageActions.getMyUsageLogsBatch,
+  {
+    requestSchema: z.object({
+      startDate: z.string().optional().describe("开始日期（YYYY-MM-DD，可为空）"),
+      endDate: z.string().optional().describe("结束日期（YYYY-MM-DD，可为空）"),
+      sessionId: z.string().optional(),
+      model: z.string().optional(),
+      endpoint: z.string().optional(),
+      statusCode: z.number().optional(),
+      excludeStatusCode200: z.boolean().optional(),
+      minRetryCount: z.number().int().nonnegative().optional(),
+      cursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number().int(),
+        })
+        .optional(),
+      limit: z.number().int().positive().max(100).default(20).optional(),
+    }),
+    responseSchema: z.object({
+      logs: z.array(
+        z.object({
+          id: z.number(),
+          createdAt: z.string().nullable(),
+          model: z.string().nullable(),
+          billingModel: z.string().nullable(),
+          modelRedirect: z.string().nullable(),
+          inputTokens: z.number(),
+          outputTokens: z.number(),
+          cost: z.number(),
+          statusCode: z.number().nullable(),
+          duration: z.number().nullable(),
+          endpoint: z.string().nullable(),
+          cacheCreationInputTokens: z.number().nullable(),
+          cacheReadInputTokens: z.number().nullable(),
+          cacheCreation5mInputTokens: z.number().nullable(),
+          cacheCreation1hInputTokens: z.number().nullable(),
+          cacheTtlApplied: z.string().nullable(),
+        })
+      ),
+      nextCursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number().int(),
+        })
+        .nullable(),
+      hasMore: z.boolean(),
+      currencyCode: z.string(),
+      billingModelSource: z.enum(["original", "redirected"]),
+    }),
+    description: "获取当前会话的使用日志批量数据（仅返回自己的数据，游标分页）",
+    summary: "批量获取我的使用日志",
+    tags: ["使用日志"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyUsageLogsBatchRoute, getMyUsageLogsBatchHandler);
 
 const { route: getMyAvailableModelsRoute, handler: getMyAvailableModelsHandler } =
   createActionRoute("my-usage", "getMyAvailableModels", myUsageActions.getMyAvailableModels, {

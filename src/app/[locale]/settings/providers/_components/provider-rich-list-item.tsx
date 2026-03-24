@@ -69,6 +69,7 @@ import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import { normalizeProviderGroupTag, parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderStatistics, ProviderVendor } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
@@ -445,16 +446,11 @@ function ProviderRichListItemInner({
   const handleSaveWeight = createSaveHandler("weight");
   const handleSaveCostMultiplier = createSaveHandler("cost_multiplier");
 
-  const providerGroups = provider.groupTag
-    ? provider.groupTag
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
+  const providerGroups = parseProviderGroups(provider.groupTag);
 
   const handleSaveGroups = async (groups: string[]): Promise<boolean> => {
     try {
-      const groupTag = groups.length > 0 ? groups.join(",") : null;
+      const groupTag = normalizeProviderGroupTag(groups.join(","));
       const res = await editProvider(provider.id, { group_tag: groupTag });
       if (res.ok) {
         toast.success(tInline("saveSuccess"));

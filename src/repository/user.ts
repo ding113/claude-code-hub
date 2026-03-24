@@ -4,6 +4,7 @@ import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users } from "@/drizzle/schema";
 import { cacheUser, invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { CreateUserData, UpdateUserData, User } from "@/types/user";
 import { toUser } from "./_shared/transformers";
 
@@ -133,7 +134,8 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
 }
 
 export async function searchUsersForFilter(
-  searchTerm?: string
+  searchTerm?: string,
+  limit = 200
 ): Promise<Array<{ id: number; name: string }>> {
   const conditions = [isNull(users.deletedAt)];
 
@@ -151,7 +153,7 @@ export async function searchUsersForFilter(
     .from(users)
     .where(and(...conditions))
     .orderBy(sql`CASE WHEN ${users.role} = 'admin' THEN 0 ELSE 1 END`, users.id)
-    .limit(200);
+    .limit(Math.max(1, Math.min(limit, 5000)));
 }
 
 /** Sort columns that are NOT NULL and support keyset cursor pagination */
@@ -245,7 +247,7 @@ export async function findUserListBatch(
   if (trimmedGroups.length > 0) {
     const groupConditions = trimmedGroups.map(
       (group) =>
-        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*,\\s*'))`
+        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*[,，\n\r]+\\s*'))`
     );
     keyGroupFilterCondition = sql`(${sql.join(groupConditions, sql` OR `)})`;
   }
@@ -605,10 +607,7 @@ export async function getAllUserProviderGroups(): Promise<string[]> {
 
   const allGroups = new Set<string>();
   for (const row of result) {
-    const groups = row.providerGroup
-      ?.split(",")
-      .map((group) => group.trim())
-      .filter(Boolean);
+    const groups = parseProviderGroups(row.providerGroup);
     if (!groups || groups.length === 0) continue;
     for (const group of groups) {
       allGroups.add(group);

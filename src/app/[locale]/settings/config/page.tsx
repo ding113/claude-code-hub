@@ -44,6 +44,7 @@ async function SettingsConfigContent() {
             allowGlobalUsageView: settings.allowGlobalUsageView,
             currencyDisplay: settings.currencyDisplay,
             billingModelSource: settings.billingModelSource,
+            codexPriorityBillingSource: settings.codexPriorityBillingSource,
             timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
             enableHttp2: settings.enableHttp2,

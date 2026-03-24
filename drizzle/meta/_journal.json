@@ -596,6 +596,13 @@
       "when": 1773809022650,
       "tag": "0084_needy_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1774098220127,
+      "tag": "0085_busy_ken_ellis",
+      "breakpoints": true
     }
   ]
 }

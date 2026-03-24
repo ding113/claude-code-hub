@@ -904,6 +904,9 @@ export const UpdateSystemSettingsSchema = z.object({
   billingModelSource: z
     .enum(["original", "redirected"], { message: "不支持的计费模型来源" })
     .optional(),
+  codexPriorityBillingSource: z
+    .enum(["requested", "actual"], { message: "不支持的 Codex Priority 计费来源" })
+    .optional(),
   // 系统时区配置（可选）
   // 必须是有效的 IANA 时区标识符（如 "Asia/Shanghai", "America/New_York"）
   timezone: z

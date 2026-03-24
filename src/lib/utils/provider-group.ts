@@ -1,5 +1,18 @@
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 
+const PROVIDER_GROUP_SEPARATOR = /[,，\n\r]+/;
+
+function splitProviderGroupValue(value: unknown): string[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(PROVIDER_GROUP_SEPARATOR)
+    .map((group) => group.trim())
+    .filter(Boolean);
+}
+
 /**
  * Normalize provider group value to a consistent format
  * - Returns "default" for null/undefined/empty values
@@ -7,26 +20,29 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
  * - Sorts groups alphabetically for consistency
  */
 export function normalizeProviderGroup(value: unknown): string {
-  if (value === null || value === undefined) return PROVIDER_GROUP.DEFAULT;
-  if (typeof value !== "string") return PROVIDER_GROUP.DEFAULT;
-  const trimmed = value.trim();
-  if (trimmed === "") return PROVIDER_GROUP.DEFAULT;
-
-  const groups = trimmed
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+  const groups = splitProviderGroupValue(value);
   if (groups.length === 0) return PROVIDER_GROUP.DEFAULT;
 
   return Array.from(new Set(groups)).sort().join(",");
 }
 
 /**
- * Parse a comma-separated provider group string into an array
+ * Normalize provider group tag string for provider.groupTag storage.
+ * - Supports English comma, Chinese comma and line breaks as separators
+ * - Trims whitespace and removes duplicates while preserving input order
+ * - Returns null for null/undefined/empty values
  */
-export function parseProviderGroups(value: string): string[] {
-  return value
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+export function normalizeProviderGroupTag(value: unknown): string | null {
+  const groups = splitProviderGroupValue(value);
+  if (groups.length === 0) return null;
+
+  return Array.from(new Set(groups)).join(",");
+}
+
+/**
+ * Parse a provider group / groupTag string into an array.
+ * Supports English comma, Chinese comma and line breaks as separators.
+ */
+export function parseProviderGroups(value: unknown): string[] {
+  return splitProviderGroupValue(value);
 }

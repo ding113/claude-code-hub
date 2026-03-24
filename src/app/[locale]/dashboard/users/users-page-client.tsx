@@ -27,6 +27,7 @@ import { clearUsageCache } from "@/lib/dashboard/user-limit-usage-cache";
 import { loadUserUsagePagesSequentially } from "@/lib/dashboard/user-usage-loader";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { User, UserDisplay } from "@/types/user";
 import { AddKeyDialog } from "../_components/user/add-key-dialog";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
@@ -34,14 +35,10 @@ import { CreateUserDialog } from "../_components/user/create-user-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
 
 /**
- * Split comma-separated tags into an array of trimmed, non-empty strings.
- * This matches the server-side providerGroup handling in provider-selector.ts
+ * Normalize provider-group tags with the shared parser to keep client/server behavior aligned.
  */
 function splitTags(value?: string | null): string[] {
-  return (value ?? "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
+  return parseProviderGroups(value);
 }
 
 interface UsersPageClientProps {

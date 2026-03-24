@@ -3,6 +3,7 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
@@ -47,13 +48,6 @@ async function getVerboseProviderErrorCached(): Promise<boolean> {
  * @param groupString - 逗号分隔的分组字符串
  * @returns 清理后的分组数组（去空格、去空项）
  */
-function parseGroupString(groupString: string): string[] {
-  return groupString
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
-}
-
 /**
  * 获取有效的供应商分组（优先级：key.providerGroup > user.providerGroup）
  *
@@ -82,14 +76,14 @@ function getEffectiveProviderGroup(session?: ProxySession): string | null {
  * @returns 是否存在交集（true = 匹配）
  */
 function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: string): boolean {
-  const groups = parseGroupString(userGroups);
+  const groups = parseProviderGroups(userGroups);
 
   if (groups.includes(PROVIDER_GROUP.ALL)) {
     return true;
   }
 
   const providerTags = providerGroupTag
-    ? parseGroupString(providerGroupTag)
+    ? parseProviderGroups(providerGroupTag)
     : [PROVIDER_GROUP.DEFAULT];
 
   return providerTags.some((tag) => groups.includes(tag));
@@ -1099,7 +1093,7 @@ export class ProxyProviderResolver {
    */
   static resolveEffectivePriority(provider: Provider, userGroup: string | null): number {
     if (userGroup && provider.groupPriorities) {
-      const groups = parseGroupString(userGroup);
+      const groups = parseProviderGroups(userGroup);
       const overrides = groups
         .map((g) => provider.groupPriorities?.[g])
         .filter((v): v is number => v !== undefined);

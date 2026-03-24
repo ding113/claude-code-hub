@@ -10,6 +10,7 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import { analyzeBatchProviderSettings } from "../../batch-edit/analyze-batch-settings";
 import type {
@@ -353,12 +354,7 @@ export function createInitialState(
     },
     routing: {
       providerType: sourceProvider?.providerType ?? preset?.providerType ?? "claude",
-      groupTag: sourceProvider?.groupTag
-        ? sourceProvider.groupTag
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : [],
+      groupTag: parseProviderGroups(sourceProvider?.groupTag),
       preserveClientIp: sourceProvider?.preserveClientIp ?? false,
       modelRedirects: sourceProvider?.modelRedirects ?? {},
       allowedModels: sourceProvider?.allowedModels ?? [],

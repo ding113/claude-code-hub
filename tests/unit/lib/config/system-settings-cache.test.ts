@@ -30,6 +30,7 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",
+    codexPriorityBillingSource: "requested",
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -145,6 +146,7 @@ describe("SystemSettingsCache", () => {
         siteTitle: "Claude Code Hub",
         enableHttp2: false,
         interceptAnthropicWarmupRequests: false,
+        codexPriorityBillingSource: "requested",
       })
     );
     expect(loggerWarnMock).toHaveBeenCalledTimes(1);

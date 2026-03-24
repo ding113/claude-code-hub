@@ -95,6 +95,8 @@
       "exporting": "导出中...",
       "exportSuccess": "导出成功",
       "exportError": "导出失败",
+      "exportPreparing": "正在准备导出...",
+      "exportProgress": "已导出 {current} / {total} 条",
       "quickFilters": {
         "today": "今天",
         "thisWeek": "本周",

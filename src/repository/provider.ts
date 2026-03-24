@@ -7,6 +7,7 @@ import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
   AnthropicAdaptiveThinkingConfig,
@@ -1491,12 +1492,7 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
   const allTags = result
     .map((r) => r.groupTag)
     .filter((tag): tag is string => tag !== null)
-    .flatMap((tag) =>
-      tag
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-    );
+    .flatMap((tag) => parseProviderGroups(tag));
 
   return [...new Set(allTags)].sort();
 }

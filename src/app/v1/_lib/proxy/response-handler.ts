@@ -21,7 +21,6 @@ import {
   matchLongContextPricing,
 } from "@/lib/utils/cost-calculation";
 import { hasValidPriceData } from "@/lib/utils/price-data";
-import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 import {
   detectUpstreamErrorFromSseOrJsonText,
@@ -32,8 +31,6 @@ import {
   updateMessageRequestDetails,
   updateMessageRequestDuration,
 } from "@/repository/message";
-import { findLatestPriceByModel } from "@/repository/model-price";
-import { getSystemSettings } from "@/repository/system-config";
 import type { Provider } from "@/types/provider";
 import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
@@ -214,26 +211,70 @@ export function parseServiceTierFromResponseText(responseText: string): string |
   return lastSeenServiceTier;
 }
 
-function isPriorityServiceTierApplied(
+type CodexPriorityBillingDecision = {
+  requestedServiceTier: string | null;
+  actualServiceTier: string | null;
+  billingSourcePreference: Awaited<ReturnType<ProxySession["getCodexPriorityBillingSource"]>>;
+  resolvedFrom: "requested" | "actual" | null;
+  effectivePriority: boolean;
+};
+
+async function resolveCodexPriorityBillingDecision(
   session: ProxySession,
   actualServiceTier: string | null
-): boolean {
-  if (actualServiceTier != null) {
-    return actualServiceTier === "priority";
+): Promise<CodexPriorityBillingDecision | null> {
+  if (session.provider?.providerType !== "codex") {
+    return null;
   }
-  return getRequestedCodexServiceTier(session) === "priority";
+
+  const requestedServiceTier = getRequestedCodexServiceTier(session);
+  let billingSourcePreference: Awaited<ReturnType<ProxySession["getCodexPriorityBillingSource"]>> =
+    "requested";
+
+  try {
+    billingSourcePreference = await session.getCodexPriorityBillingSource();
+  } catch (error) {
+    logger.warn(
+      "[ResponseHandler] Failed to load codex priority billing source, fallback to requested",
+      {
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
+  }
+
+  let resolvedFrom: "requested" | "actual" | null = null;
+  let effectiveTier: string | null = null;
+
+  if (billingSourcePreference === "actual") {
+    if (actualServiceTier != null) {
+      resolvedFrom = "actual";
+      effectiveTier = actualServiceTier;
+    } else if (requestedServiceTier != null) {
+      resolvedFrom = "requested";
+      effectiveTier = requestedServiceTier;
+    }
+  } else if (requestedServiceTier != null) {
+    resolvedFrom = "requested";
+    effectiveTier = requestedServiceTier;
+  }
+
+  return {
+    requestedServiceTier,
+    actualServiceTier,
+    billingSourcePreference,
+    resolvedFrom,
+    effectivePriority: effectiveTier === "priority",
+  };
 }
 
 function ensureCodexServiceTierResultSpecialSetting(
   session: ProxySession,
-  actualServiceTier: string | null
+  decision: CodexPriorityBillingDecision | null
 ): void {
-  if (session.provider?.providerType !== "codex") {
+  if (!decision) {
     return;
   }
 
-  const requestedServiceTier = getRequestedCodexServiceTier(session);
-  const effectivePriority = isPriorityServiceTierApplied(session, actualServiceTier);
   const existing = session
     .getSpecialSettings()
     ?.find((setting) => setting.type === "codex_service_tier_result");
@@ -245,10 +286,15 @@ function ensureCodexServiceTierResultSpecialSetting(
   session.addSpecialSetting({
     type: "codex_service_tier_result",
     scope: "response",
-    hit: effectivePriority || requestedServiceTier != null || actualServiceTier != null,
-    requestedServiceTier,
-    actualServiceTier,
-    effectivePriority,
+    hit:
+      decision.effectivePriority ||
+      decision.requestedServiceTier != null ||
+      decision.actualServiceTier != null,
+    requestedServiceTier: decision.requestedServiceTier,
+    actualServiceTier: decision.actualServiceTier,
+    billingSourcePreference: decision.billingSourcePreference,
+    resolvedFrom: decision.resolvedFrom,
+    effectivePriority: decision.effectivePriority,
   });
 }
 
@@ -952,8 +998,12 @@ export class ProxyResponseHandler {
         usageRecord = usageResult.usageRecord;
         usageMetrics = usageResult.usageMetrics;
         const actualServiceTier = parseServiceTierFromResponseText(responseText);
-        ensureCodexServiceTierResultSpecialSetting(session, actualServiceTier);
-        const priorityServiceTierApplied = isPriorityServiceTierApplied(session, actualServiceTier);
+        const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
+          session,
+          actualServiceTier
+        );
+        ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
 
         if (usageMetrics) {
           usageMetrics = normalizeUsageWithSwap(
@@ -998,8 +1048,7 @@ export class ProxyResponseHandler {
         if (usageRecord && usageMetrics && messageContext) {
           const costUpdateResult = await updateRequestCostFromUsage(
             messageContext.id,
-            session.getOriginalModel(),
-            session.getCurrentModel(),
+            session,
             usageMetrics,
             provider,
             provider.costMultiplier,
@@ -1965,8 +2014,12 @@ export class ProxyResponseHandler {
         usageForCost = usageResult.usageMetrics;
 
         const actualServiceTier = parseServiceTierFromResponseText(allContent);
-        ensureCodexServiceTierResultSpecialSetting(session, actualServiceTier);
-        const priorityServiceTierApplied = isPriorityServiceTierApplied(session, actualServiceTier);
+        const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
+          session,
+          actualServiceTier
+        );
+        ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
 
         if (usageForCost) {
           usageForCost = normalizeUsageWithSwap(
@@ -2006,8 +2059,7 @@ export class ProxyResponseHandler {
 
         const costUpdateResult = await updateRequestCostFromUsage(
           messageContext.id,
-          session.getOriginalModel(),
-          session.getCurrentModel(),
+          session,
           usageForCost,
           provider,
           provider.costMultiplier,
@@ -3062,8 +3114,7 @@ function normalizeUsageWithSwap(
 
 async function updateRequestCostFromUsage(
   messageId: number,
-  originalModel: string | null,
-  redirectedModel: string | null,
+  session: ProxySession,
   usage: UsageMetrics | null,
   provider: Provider | null,
   costMultiplier: number = 1.0,
@@ -3087,6 +3138,9 @@ async function updateRequestCostFromUsage(
     };
   }
 
+  const originalModel = session.getOriginalModel();
+  const redirectedModel = session.getCurrentModel();
+
   if (!originalModel && !redirectedModel) {
     logger.warn("[CostCalculation] No model name available", { messageId });
     return {
@@ -3098,47 +3152,13 @@ async function updateRequestCostFromUsage(
   }
 
   try {
-    const systemSettings = await getSystemSettings();
-    const billingModelSource = systemSettings.billingModelSource;
-
-    let primaryModel: string | null;
-    let fallbackModel: string | null;
-
-    if (billingModelSource === "original") {
-      primaryModel = originalModel;
-      fallbackModel = redirectedModel;
-    } else {
-      primaryModel = redirectedModel;
-      fallbackModel = originalModel;
-    }
-
-    logger.debug("[CostCalculation] Billing model source config", {
-      messageId,
-      billingModelSource,
-      primaryModel,
-      fallbackModel,
-    });
-
-    const primaryRecord = primaryModel ? await findLatestPriceByModel(primaryModel) : null;
-    const fallbackRecord =
-      fallbackModel && fallbackModel !== primaryModel
-        ? await findLatestPriceByModel(fallbackModel)
-        : null;
-
-    const resolvedPricing = resolvePricingForModelRecords({
-      provider,
-      primaryModelName: primaryModel,
-      fallbackModelName: fallbackModel,
-      primaryRecord,
-      fallbackRecord,
-    });
+    const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
 
     if (!resolvedPricing?.priceData || !hasValidPriceData(resolvedPricing.priceData)) {
       logger.warn("[CostCalculation] No price data found, skipping billing", {
         messageId,
         originalModel,
         redirectedModel,
-        billingModelSource,
       });
 
       requestCloudPriceTableSync({ reason: "missing-model" });
@@ -3237,8 +3257,12 @@ export async function finalizeRequestStats(
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
   const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
   const actualServiceTier = parseServiceTierFromResponseText(responseText);
-  ensureCodexServiceTierResultSpecialSetting(session, actualServiceTier);
-  const priorityServiceTierApplied = isPriorityServiceTierApplied(session, actualServiceTier);
+  const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
+    session,
+    actualServiceTier
+  );
+  ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+  const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
   if (!usageMetrics) {
     await updateMessageRequestDetails(messageContext.id, {
       statusCode: statusCode,
@@ -3267,8 +3291,7 @@ export async function finalizeRequestStats(
 
   const costUpdateResult = await updateRequestCostFromUsage(
     messageContext.id,
-    session.getOriginalModel(),
-    session.getCurrentModel(),
+    session,
     normalizedUsage,
     provider,
     provider.costMultiplier,

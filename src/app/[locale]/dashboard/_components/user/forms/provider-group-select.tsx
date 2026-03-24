@@ -6,6 +6,7 @@ import { getProviderGroupsWithCount } from "@/actions/providers";
 import { TagInputField } from "@/components/form/form-field";
 import type { TagInputSuggestion } from "@/components/ui/tag-input";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 
 export interface ProviderGroupSelectProps {
   /** Comma-separated group tags. */
@@ -107,10 +108,7 @@ export function ProviderGroupSelect({
   // 选择新分组后自动移除 "default"
   const handleChange = useCallback(
     (newValue: string) => {
-      const groupList = newValue
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
+      const groupList = parseProviderGroups(newValue);
       // 如果有多个分组且包含 default，移除 default
       if (groupList.length > 1 && groupList.includes(PROVIDER_GROUP.DEFAULT)) {
         const withoutDefault = groupList.filter((g) => g !== PROVIDER_GROUP.DEFAULT);
@@ -131,6 +129,7 @@ export function ProviderGroupSelect({
       maxTags={20}
       suggestions={suggestions}
       disabled={disabled}
+      validateTag={() => true}
       onInvalidTag={(_tag, reason) => {
         toast.error(getTranslation(translations, `tagInputErrors.${reason}`, reason));
       }}

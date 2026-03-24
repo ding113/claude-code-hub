@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
 import { type LimitRuleDisplayItem, LimitRulesDisplay } from "./limit-rules-display";
 import { ProviderGroupSelect } from "./provider-group-select";
@@ -125,10 +126,7 @@ function formatDateInput(date?: Date | null): string {
 }
 
 function normalizeGroupList(value?: string | null): string {
-  const groups = (value ?? "")
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+  const groups = parseProviderGroups(value);
   if (groups.length === 0) return PROVIDER_GROUP.DEFAULT;
   return Array.from(new Set(groups)).sort().join(",");
 }
@@ -292,7 +290,7 @@ export function KeyEditSection({
     [userProviderGroup]
   );
   const userGroups = useMemo(
-    () => (normalizedUserProviderGroup ? normalizedUserProviderGroup.split(",") : []),
+    () => parseProviderGroups(normalizedUserProviderGroup),
     [normalizedUserProviderGroup]
   );
   const normalizedKeyProviderGroup = useMemo(
@@ -301,7 +299,7 @@ export function KeyEditSection({
   );
   const keyGroupOptions = useMemo(() => {
     if (!normalizedKeyProviderGroup) return [];
-    return normalizedKeyProviderGroup.split(",").filter(Boolean);
+    return parseProviderGroups(normalizedKeyProviderGroup);
   }, [normalizedKeyProviderGroup]);
   const _extraKeyGroupOption = useMemo(() => {
     if (!normalizedKeyProviderGroup) return null;
@@ -313,10 +311,7 @@ export function KeyEditSection({
   // 普通用户选择分组时，自动移除 default
   const handleUserProviderGroupChange = useCallback(
     (newValue: string) => {
-      const groups = newValue
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
+      const groups = parseProviderGroups(newValue);
       // 如果有多个分组且包含 default，移除 default
       if (groups.length > 1 && groups.includes(PROVIDER_GROUP.DEFAULT)) {
         const withoutDefault = groups.filter((g) => g !== PROVIDER_GROUP.DEFAULT);
@@ -507,6 +502,7 @@ export function KeyEditSection({
                 suggestions={userGroups}
                 maxTags={userGroups.length + 1}
                 maxTagLength={50}
+                validateTag={() => true}
                 description={
                   translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"
                 }

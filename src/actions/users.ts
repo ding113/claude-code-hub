@@ -13,7 +13,7 @@ import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions"
 import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
-import { normalizeProviderGroup } from "@/lib/utils/provider-group";
+import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { maskKey } from "@/lib/utils/validation";
 import { formatZodError } from "@/lib/utils/zod-i18n";
@@ -29,7 +29,6 @@ import {
   createUser,
   deleteUser,
   findUserById,
-  findUserList,
   findUserListBatch,
   getAllUserProviderGroups as getAllUserProviderGroupsRepository,
   getAllUserTags as getAllUserTagsRepository,
@@ -47,6 +46,10 @@ export interface GetUsersBatchParams {
   cursor?: string;
   limit?: number;
   searchTerm?: string;
+  query?: string;
+  keyword?: string;
+  page?: number;
+  offset?: number;
   tagFilters?: string[];
   keyGroupFilters?: string[];
   statusFilter?: "all" | "active" | "expired" | "expiringSoon" | "enabled" | "disabled";
@@ -61,6 +64,122 @@ export interface GetUsersBatchParams {
     | "limitMonthlyUsd"
     | "createdAt";
   sortOrder?: "asc" | "desc";
+}
+
+const USER_LIST_DEFAULT_LIMIT = 50;
+const USER_LIST_MAX_LIMIT = 200;
+const SEARCH_USERS_MAX_LIMIT = 5000;
+
+type UserActionSession = {
+  user: { id: number };
+  key: { canLoginWebUi: boolean };
+};
+
+function normalizeLegacySearchTerm(params?: GetUsersBatchParams): string | undefined {
+  for (const candidate of [params?.searchTerm, params?.query, params?.keyword]) {
+    const trimmed = candidate?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeUserListParams(params?: GetUsersBatchParams): GetUsersBatchParams {
+  const limit =
+    typeof params?.limit === "number" && Number.isFinite(params.limit) && params.limit > 0
+      ? Math.min(Math.trunc(params.limit), USER_LIST_MAX_LIMIT)
+      : undefined;
+
+  let cursor = params?.cursor?.trim() || undefined;
+  if (!cursor) {
+    const offset =
+      typeof params?.offset === "number" && Number.isFinite(params.offset)
+        ? Math.max(0, Math.trunc(params.offset))
+        : undefined;
+    const page =
+      typeof params?.page === "number" && Number.isFinite(params.page)
+        ? Math.max(0, Math.trunc(params.page))
+        : undefined;
+
+    if (offset !== undefined) {
+      cursor = String(offset);
+    } else if (page !== undefined) {
+      const effectiveLimit = limit ?? USER_LIST_DEFAULT_LIMIT;
+      cursor = String(Math.max(page - 1, 0) * effectiveLimit);
+    }
+  }
+
+  return {
+    cursor,
+    limit,
+    searchTerm: normalizeLegacySearchTerm(params),
+    tagFilters: params?.tagFilters,
+    keyGroupFilters: params?.keyGroupFilters,
+    statusFilter: params?.statusFilter,
+    sortBy: params?.sortBy,
+    sortOrder: params?.sortOrder,
+  };
+}
+
+function hasExplicitPaginationParams(
+  params?: GetUsersBatchParams,
+  normalizedParams = normalizeUserListParams(params)
+): boolean {
+  return Boolean(
+    normalizedParams.cursor !== undefined ||
+      normalizedParams.limit !== undefined ||
+      params?.page !== undefined ||
+      params?.offset !== undefined
+  );
+}
+
+function hasSearchOrFilterOverrides(normalizedParams: GetUsersBatchParams): boolean {
+  return Boolean(
+    normalizedParams.searchTerm ||
+      (normalizedParams.tagFilters?.length ?? 0) > 0 ||
+      (normalizedParams.keyGroupFilters?.length ?? 0) > 0 ||
+      normalizedParams.statusFilter ||
+      normalizedParams.sortBy ||
+      normalizedParams.sortOrder
+  );
+}
+
+async function loadAllUsersForAdmin(baseParams?: GetUsersBatchParams): Promise<User[]> {
+  const users: User[] = [];
+  const normalizedBaseParams = normalizeUserListParams(baseParams);
+  let cursor = normalizedBaseParams.cursor;
+
+  while (true) {
+    const page = await findUserListBatch({
+      ...normalizedBaseParams,
+      cursor,
+      limit: USER_LIST_MAX_LIMIT,
+    });
+
+    users.push(...page.users);
+
+    if (!page.hasMore || !page.nextCursor) {
+      return users;
+    }
+
+    cursor = page.nextCursor;
+  }
+}
+
+function normalizeSearchUsersLimit(limit?: number): number | undefined {
+  if (limit === undefined) return undefined;
+  if (!Number.isFinite(limit)) return SEARCH_USERS_MAX_LIMIT;
+  return Math.min(Math.max(1, Math.trunc(limit)), SEARCH_USERS_MAX_LIMIT);
+}
+
+function canExposeFullKey(
+  session: UserActionSession,
+  targetUser: Pick<User, "id">,
+  isAdmin: boolean
+): boolean {
+  return session.key.canLoginWebUi && (isAdmin || session.user.id === targetUser.id);
 }
 
 /**
@@ -192,11 +311,7 @@ export async function syncUserProviderGroupFromKeys(userId: number): Promise<voi
     // NOTE(#400): Key.providerGroup is now required (no more null semantics).
     // For backward compatibility, treat null/empty as "default".
     const group = key.providerGroup || PROVIDER_GROUP.DEFAULT;
-    group
-      .split(",")
-      .map((g) => g.trim())
-      .filter(Boolean)
-      .forEach((g) => allGroups.add(g));
+    parseProviderGroups(group).forEach((g) => allGroups.add(g));
   }
 
   const newProviderGroup =
@@ -208,7 +323,7 @@ export async function syncUserProviderGroupFromKeys(userId: number): Promise<voi
 }
 
 // 获取用户数据
-export async function getUsers(): Promise<UserDisplay[]> {
+export async function getUsers(params?: GetUsersBatchParams): Promise<UserDisplay[]> {
   try {
     const session = await getSession();
     if (!session) {
@@ -221,11 +336,18 @@ export async function getUsers(): Promise<UserDisplay[]> {
 
     // Treat any non-admin role as non-admin for safety.
     const isAdmin = session.user.role === "admin";
+    const normalizedParams = normalizeUserListParams(params);
 
     // 非 admin 用户只能看到自己的数据（从 DB 获取完整用户信息）
     let users: User[] = [];
     if (isAdmin) {
-      users = await findUserList(); // 管理员可以看到所有用户
+      if (hasExplicitPaginationParams(params, normalizedParams)) {
+        users = (await findUserListBatch(normalizedParams)).users;
+      } else if (hasSearchOrFilterOverrides(normalizedParams)) {
+        users = await loadAllUsersForAdmin(normalizedParams);
+      } else {
+        users = await loadAllUsersForAdmin();
+      }
     } else {
       const selfUser = await findUserById(session.user.id);
       users = selfUser ? [selfUser] : [];
@@ -285,8 +407,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           allowedModels: user.allowedModels ?? [],
           keys: keys.map((key) => {
             const stats = statisticsLookup.get(key.id);
-            // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
-            const canUserManageKey = isAdmin || session.user.id === user.id;
+            const canUserManageKey = canExposeFullKey(session, user, isAdmin);
             return {
               id: key.id,
               name: key.name,
@@ -365,7 +486,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
 }
 
 export async function searchUsersForFilter(
-  searchTerm?: string
+  searchTerm?: string,
+  limit?: number
 ): Promise<ActionResult<Array<{ id: number; name: string }>>> {
   try {
     const tError = await getTranslations("errors");
@@ -387,13 +509,23 @@ export async function searchUsersForFilter(
       };
     }
 
-    const users = await searchUsersForFilterRepository(searchTerm);
+    const users = await searchUsersForFilterRepository(
+      searchTerm,
+      normalizeSearchUsersLimit(limit)
+    );
     return { ok: true, data: users };
   } catch (error) {
     logger.error("Failed to search users for filter:", error);
     const message = error instanceof Error ? error.message : "Failed to search users for filter";
     return { ok: false, error: message, errorCode: ERROR_CODES.DATABASE_ERROR };
   }
+}
+
+export async function searchUsers(
+  searchTerm?: string,
+  limit?: number
+): Promise<ActionResult<Array<{ id: number; name: string }>>> {
+  return searchUsersForFilter(searchTerm, limit);
 }
 
 /**
@@ -499,16 +631,8 @@ export async function getUsersBatch(
     const locale = await getLocale();
     const t = await getTranslations("users");
 
-    const { users, nextCursor, hasMore } = await findUserListBatch({
-      cursor: params.cursor,
-      limit: params.limit,
-      searchTerm: params.searchTerm,
-      tagFilters: params.tagFilters,
-      keyGroupFilters: params.keyGroupFilters,
-      statusFilter: params.statusFilter,
-      sortBy: params.sortBy,
-      sortOrder: params.sortOrder,
-    });
+    const normalizedParams = normalizeUserListParams(params);
+    const { users, nextCursor, hasMore } = await findUserListBatch(normalizedParams);
 
     if (users.length === 0) {
       return { ok: true, data: { users: [], nextCursor, hasMore } };
@@ -526,6 +650,7 @@ export async function getUsersBatch(
         const keys = keysMap.get(user.id) || [];
         const usageRecords = usageMap.get(user.id) || [];
         const keyStatistics = statisticsMap.get(user.id) || [];
+        const canUserManageKey = canExposeFullKey(session, user, true);
 
         const usageLookup = new Map(
           usageRecords.map((item) => [
@@ -563,8 +688,8 @@ export async function getUsersBatch(
               id: key.id,
               name: key.name,
               maskedKey: maskKey(key.key),
-              fullKey: key.key,
-              canCopy: true,
+              fullKey: canUserManageKey ? key.key : undefined,
+              canCopy: canUserManageKey,
               expiresAt: key.expiresAt
                 ? key.expiresAt.toISOString().split("T")[0]
                 : t("neverExpires"),
@@ -667,16 +792,8 @@ export async function getUsersBatchCore(
     const locale = await getLocale();
     const t = await getTranslations("users");
 
-    const { users, nextCursor, hasMore } = await findUserListBatch({
-      cursor: params.cursor,
-      limit: params.limit,
-      searchTerm: params.searchTerm,
-      tagFilters: params.tagFilters,
-      keyGroupFilters: params.keyGroupFilters,
-      statusFilter: params.statusFilter,
-      sortBy: params.sortBy,
-      sortOrder: params.sortOrder,
-    });
+    const normalizedParams = normalizeUserListParams(params);
+    const { users, nextCursor, hasMore } = await findUserListBatch(normalizedParams);
 
     if (users.length === 0) {
       return { ok: true, data: { users: [], nextCursor, hasMore } };
@@ -687,6 +804,7 @@ export async function getUsersBatchCore(
 
     const userDisplays: UserDisplay[] = users.map((user) => {
       const keys = keysMap.get(user.id) || [];
+      const canUserManageKey = canExposeFullKey(session, user, true);
 
       return {
         id: user.id,
@@ -714,8 +832,8 @@ export async function getUsersBatchCore(
           id: key.id,
           name: key.name,
           maskedKey: maskKey(key.key),
-          fullKey: key.key,
-          canCopy: true,
+          fullKey: canUserManageKey ? key.key : undefined,
+          canCopy: canUserManageKey,
           expiresAt: key.expiresAt ? key.expiresAt.toISOString().split("T")[0] : t("neverExpires"),
           status: key.isEnabled ? "enabled" : ("disabled" as const),
           createdAt: key.createdAt,

@@ -101,10 +101,10 @@
     },
     "title": "Proxy",
     "url": {
-      "formats": "Supported formats:",
+      "formats": "Supports http://, https://, socks5://, socks4:// protocols. For authenticated proxies use http://user:password@host:port (URL-encode special characters in password, e.g. # as %23)",
       "label": "Proxy URL",
       "optional": "(optional)",
-      "placeholder": "e.g. http://proxy.example.com:8080 or socks5://127.0.0.1:1080"
+      "placeholder": "e.g. http://proxy.example.com:8080 or http://user:pass@proxy:8080"
     }
   },
   "rateLimit": {
