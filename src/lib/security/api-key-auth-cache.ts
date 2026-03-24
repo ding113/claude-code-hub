@@ -142,6 +142,7 @@ function hydrateKeyFromCache(keyString: string, payload: CachedKeyPayloadV1): Ke
   const expiresAt = parseOptionalDate(key.expiresAt);
   const deletedAt = parseOptionalDate(key.deletedAt);
   const costResetAt = parseOptionalDate(key.costResetAt);
+  const fiveHourResetAnchor = parseOptionalDate(key.fiveHourResetAnchor);
   if (key.expiresAt != null && !expiresAt) return null;
   if (key.deletedAt != null && !deletedAt) return null;
 
@@ -153,6 +154,7 @@ function hydrateKeyFromCache(keyString: string, payload: CachedKeyPayloadV1): Ke
     expiresAt: expiresAt === undefined ? undefined : expiresAt,
     deletedAt: deletedAt === undefined ? undefined : deletedAt,
     costResetAt: costResetAt === undefined ? undefined : costResetAt,
+    fiveHourResetAnchor: fiveHourResetAnchor === undefined ? undefined : fiveHourResetAnchor,
   } as Key;
 }
 
@@ -172,6 +174,7 @@ function hydrateUserFromCache(payload: CachedUserPayloadV1): User | null {
   const expiresAt = parseOptionalDate(user.expiresAt);
   const deletedAt = parseOptionalDate(user.deletedAt);
   const costResetAt = parseOptionalDate(user.costResetAt);
+  const fiveHourResetAnchor = parseOptionalDate(user.fiveHourResetAnchor);
   if (user.expiresAt != null && !expiresAt) return null;
   if (user.deletedAt != null && !deletedAt) return null;
   // costResetAt: intentional fail-open on invalid date -- affects quota counting window, not access control
@@ -183,6 +186,7 @@ function hydrateUserFromCache(payload: CachedUserPayloadV1): User | null {
     expiresAt: expiresAt === undefined ? undefined : expiresAt,
     deletedAt: deletedAt === undefined ? undefined : deletedAt,
     costResetAt: costResetAt === undefined ? undefined : costResetAt,
+    fiveHourResetAnchor: fiveHourResetAnchor === undefined ? undefined : fiveHourResetAnchor,
   } as User;
 }
 

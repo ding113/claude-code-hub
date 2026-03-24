@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { CreateUserSchema, UpdateUserSchema } from "@/lib/validation/schemas";
+import { CreateUserSchema, KeyFormSchema, UpdateUserSchema } from "@/lib/validation/schemas";
 
 describe("UpdateUserSchema: expiresAt 清除语义", () => {
   test("expiresAt=null 应解析为 null（显式清除）", () => {
@@ -17,6 +17,12 @@ describe("UpdateUserSchema: expiresAt 清除语义", () => {
     expect(parsed.expiresAt).toBeUndefined();
   });
 
+  test("fiveHourReset 字段缺省应保持 undefined（不更新字段）", () => {
+    const parsed = UpdateUserSchema.parse({});
+    expect(parsed.fiveHourResetMode).toBeUndefined();
+    expect(parsed.fiveHourResetAnchor).toBeUndefined();
+  });
+
   test("expiresAt=ISO 字符串应解析为 Date", () => {
     const parsed = UpdateUserSchema.parse({ expiresAt: "2026-01-04T23:59:59.999Z" });
     expect(parsed.expiresAt).toBeInstanceOf(Date);
@@ -24,6 +30,16 @@ describe("UpdateUserSchema: expiresAt 清除语义", () => {
 
   test("expiresAt=非法字符串应校验失败", () => {
     const result = UpdateUserSchema.safeParse({ expiresAt: "not-a-date" });
+    expect(result.success).toBe(false);
+  });
+
+  test("fiveHourResetAnchor=非法字符串应校验失败", () => {
+    const result = UpdateUserSchema.safeParse({ fiveHourResetAnchor: "not-a-date" });
+    expect(result.success).toBe(false);
+  });
+
+  test("fiveHourResetAnchor=不存在的日期应校验失败", () => {
+    const result = UpdateUserSchema.safeParse({ fiveHourResetAnchor: "2026-02-30T12:30" });
     expect(result.success).toBe(false);
   });
 
@@ -90,5 +106,76 @@ describe("CreateUserSchema: expiresAt 兼容性", () => {
   test("CreateUserSchema: expiresAt=非法字符串应校验失败", () => {
     const result = CreateUserSchema.safeParse({ name: "test-user", expiresAt: "not-a-date" });
     expect(result.success).toBe(false);
+  });
+
+  test("CreateUserSchema: fiveHourResetAnchor=非法字符串应校验失败", () => {
+    const result = CreateUserSchema.safeParse({
+      name: "test-user",
+      fiveHourResetAnchor: "not-a-date",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("CreateUserSchema: fiveHourResetAnchor=不存在的日期应校验失败", () => {
+    const result = CreateUserSchema.safeParse({
+      name: "test-user",
+      fiveHourResetAnchor: "2026-02-30T12:30",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("CreateUserSchema 支持 fiveHourResetAnchor=Date", () => {
+    const anchor = new Date("2026-03-23T12:30:00.000Z");
+    const parsed = CreateUserSchema.parse({
+      name: "test-user",
+      fiveHourResetMode: "fixed",
+      fiveHourResetAnchor: anchor,
+    });
+    expect(parsed.fiveHourResetAnchor).toBe(anchor.toISOString());
+  });
+});
+
+describe("KeyFormSchema: fiveHourReset 字段", () => {
+  test("缺省应保持 undefined（不更新字段）", () => {
+    const parsed = KeyFormSchema.parse({ name: "test-key" });
+    expect(parsed.fiveHourResetMode).toBeUndefined();
+    expect(parsed.fiveHourResetAnchor).toBeUndefined();
+  });
+
+  test("fiveHourResetAnchor=非法字符串应校验失败", () => {
+    const result = KeyFormSchema.safeParse({
+      name: "test-key",
+      fiveHourResetAnchor: "not-a-date",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("fiveHourResetAnchor=不存在的日期应校验失败", () => {
+    const result = KeyFormSchema.safeParse({
+      name: "test-key",
+      fiveHourResetAnchor: "2026-02-30T12:30",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("fiveHourResetAnchor=Date 应解析为 ISO 字符串", () => {
+    const anchor = new Date("2026-03-23T12:30:00.000Z");
+    const parsed = KeyFormSchema.parse({
+      name: "test-key",
+      fiveHourResetMode: "fixed",
+      fiveHourResetAnchor: anchor,
+    });
+    expect(parsed.fiveHourResetAnchor).toBe(anchor.toISOString());
+  });
+});
+
+describe("UpdateUserSchema: fiveHourResetAnchor Date 兼容性", () => {
+  test("fiveHourResetAnchor=Date 应解析为 ISO 字符串", () => {
+    const anchor = new Date("2026-03-23T12:30:00.000Z");
+    const parsed = UpdateUserSchema.parse({
+      fiveHourResetMode: "fixed",
+      fiveHourResetAnchor: anchor,
+    });
+    expect(parsed.fiveHourResetAnchor).toBe(anchor.toISOString());
   });
 });

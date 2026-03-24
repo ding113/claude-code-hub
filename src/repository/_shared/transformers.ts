@@ -44,6 +44,8 @@ export function toUser(dbUser: any): User {
     limitMonthlyUsd: parseOptionalNumber(dbUser?.limitMonthlyUsd),
     limitTotalUsd: parseOptionalNumber(dbUser?.limitTotalUsd),
     limitConcurrentSessions: parseOptionalInteger(dbUser?.limitConcurrentSessions),
+    fiveHourResetMode: dbUser?.fiveHourResetMode ?? "rolling",
+    fiveHourResetAnchor: dbUser?.fiveHourResetAnchor ? new Date(dbUser.fiveHourResetAnchor) : null,
     dailyResetMode: dbUser?.dailyResetMode ?? "fixed",
     dailyResetTime: dbUser?.dailyResetTime ?? "00:00",
     isEnabled: dbUser?.isEnabled ?? true,
@@ -64,6 +66,8 @@ export function toKey(dbKey: any): Key {
     isEnabled: dbKey?.isEnabled ?? true,
     canLoginWebUi: dbKey?.canLoginWebUi ?? true,
     limit5hUsd: dbKey?.limit5hUsd ? parseFloat(dbKey.limit5hUsd) : null,
+    fiveHourResetMode: dbKey?.fiveHourResetMode ?? "rolling",
+    fiveHourResetAnchor: dbKey?.fiveHourResetAnchor ? new Date(dbKey.fiveHourResetAnchor) : null,
     limitDailyUsd: dbKey?.limitDailyUsd ? parseFloat(dbKey.limitDailyUsd) : null,
     dailyResetTime: dbKey?.dailyResetTime ?? "00:00",
     limitWeeklyUsd: dbKey?.limitWeeklyUsd ? parseFloat(dbKey.limitWeeklyUsd) : null,
@@ -100,6 +104,10 @@ export function toProvider(dbProvider: any): Provider {
     mcpPassthroughType: dbProvider?.mcpPassthroughType ?? "none",
     mcpPassthroughUrl: dbProvider?.mcpPassthroughUrl ?? null,
     limit5hUsd: dbProvider?.limit5hUsd ? parseFloat(dbProvider.limit5hUsd) : null,
+    fiveHourResetMode: dbProvider?.fiveHourResetMode ?? "rolling",
+    fiveHourResetAnchor: dbProvider?.fiveHourResetAnchor
+      ? new Date(dbProvider.fiveHourResetAnchor)
+      : null,
     limitDailyUsd: dbProvider?.limitDailyUsd ? parseFloat(dbProvider.limitDailyUsd) : null,
     dailyResetTime: dbProvider?.dailyResetTime ?? "00:00",
     limitWeeklyUsd: dbProvider?.limitWeeklyUsd ? parseFloat(dbProvider.limitWeeklyUsd) : null,

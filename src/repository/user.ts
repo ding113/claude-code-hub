@@ -51,6 +51,8 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     providerGroup: userData.providerGroup,
     tags: userData.tags ?? [],
     limit5hUsd: userData.limit5hUsd?.toString(),
+    fiveHourResetMode: userData.fiveHourResetMode ?? "rolling",
+    fiveHourResetAnchor: userData.fiveHourResetAnchor ?? null,
     limitWeeklyUsd: userData.limitWeeklyUsd?.toString(),
     limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
     limitTotalUsd: userData.limitTotalUsd?.toString(),
@@ -77,6 +79,8 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     updatedAt: users.updatedAt,
     deletedAt: users.deletedAt,
     limit5hUsd: users.limit5hUsd,
+    fiveHourResetMode: users.fiveHourResetMode,
+    fiveHourResetAnchor: users.fiveHourResetAnchor,
     limitWeeklyUsd: users.limitWeeklyUsd,
     limitMonthlyUsd: users.limitMonthlyUsd,
     limitTotalUsd: users.limitTotalUsd,
@@ -111,6 +115,8 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
       limit5hUsd: users.limit5hUsd,
+      fiveHourResetMode: users.fiveHourResetMode,
+      fiveHourResetAnchor: users.fiveHourResetAnchor,
       limitWeeklyUsd: users.limitWeeklyUsd,
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
@@ -359,6 +365,8 @@ export async function findUserListBatch(
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
       limit5hUsd: users.limit5hUsd,
+      fiveHourResetMode: users.fiveHourResetMode,
+      fiveHourResetAnchor: users.fiveHourResetAnchor,
       limitWeeklyUsd: users.limitWeeklyUsd,
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
@@ -418,6 +426,8 @@ export async function findUserById(id: number): Promise<User | null> {
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
       limit5hUsd: users.limit5hUsd,
+      fiveHourResetMode: users.fiveHourResetMode,
+      fiveHourResetAnchor: users.fiveHourResetAnchor,
       limitWeeklyUsd: users.limitWeeklyUsd,
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
@@ -453,6 +463,8 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     tags?: string[];
     updatedAt?: Date;
     limit5hUsd?: string | null;
+    fiveHourResetMode?: "fixed" | "rolling";
+    fiveHourResetAnchor?: Date | null;
     limitWeeklyUsd?: string | null;
     limitMonthlyUsd?: string | null;
     limitTotalUsd?: string | null;
@@ -478,6 +490,10 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.tags !== undefined) dbData.tags = userData.tags;
   if (userData.limit5hUsd !== undefined)
     dbData.limit5hUsd = userData.limit5hUsd === null ? null : userData.limit5hUsd.toString();
+  if (userData.fiveHourResetMode !== undefined)
+    dbData.fiveHourResetMode = userData.fiveHourResetMode;
+  if (userData.fiveHourResetAnchor !== undefined)
+    dbData.fiveHourResetAnchor = userData.fiveHourResetAnchor;
   if (userData.limitWeeklyUsd !== undefined)
     dbData.limitWeeklyUsd =
       userData.limitWeeklyUsd === null ? null : userData.limitWeeklyUsd.toString();
@@ -514,6 +530,8 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
       limit5hUsd: users.limit5hUsd,
+      fiveHourResetMode: users.fiveHourResetMode,
+      fiveHourResetAnchor: users.fiveHourResetAnchor,
       limitWeeklyUsd: users.limitWeeklyUsd,
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,

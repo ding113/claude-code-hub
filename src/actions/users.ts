@@ -11,7 +11,7 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
 import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
-import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
+import { isFutureDate, parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -294,6 +294,27 @@ async function validateExpiresAt(
   return null;
 }
 
+function validateFiveHourResetAnchor(
+  anchor: Date,
+  tError: Awaited<ReturnType<typeof getTranslations<"errors">>>
+): { error: string; errorCode: string } | null {
+  if (Number.isNaN(anchor.getTime())) {
+    return {
+      error: tError("INVALID_FORMAT", { field: tError("FIVE_HOUR_RESET_ANCHOR_FIELD") }),
+      errorCode: ERROR_CODES.INVALID_FORMAT,
+    };
+  }
+
+  if (isFutureDate(anchor)) {
+    return {
+      error: tError("FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE"),
+      errorCode: ERROR_CODES.FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE,
+    };
+  }
+
+  return null;
+}
+
 /**
  * 根据用户名下所有 Key 的分组自动同步用户分组
  * 用户分组 = Key 分组的并集
@@ -393,6 +414,8 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          fiveHourResetMode: user.fiveHourResetMode,
+          fiveHourResetAnchor: user.fiveHourResetAnchor ?? null,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -437,6 +460,8 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
               canLoginWebUi: key.canLoginWebUi,
               // 限额配置
               limit5hUsd: key.limit5hUsd,
+              fiveHourResetMode: key.fiveHourResetMode,
+              fiveHourResetAnchor: key.fiveHourResetAnchor ?? null,
               limitDailyUsd: key.limitDailyUsd,
               dailyResetMode: key.dailyResetMode,
               dailyResetTime: key.dailyResetTime,
@@ -461,6 +486,8 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          fiveHourResetMode: user.fiveHourResetMode,
+          fiveHourResetAnchor: user.fiveHourResetAnchor ?? null,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -670,6 +697,8 @@ export async function getUsersBatch(
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          fiveHourResetMode: user.fiveHourResetMode,
+          fiveHourResetAnchor: user.fiveHourResetAnchor ?? null,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -711,6 +740,8 @@ export async function getUsersBatch(
               modelStats: stats?.modelStats ?? [],
               canLoginWebUi: key.canLoginWebUi,
               limit5hUsd: key.limit5hUsd,
+              fiveHourResetMode: key.fiveHourResetMode,
+              fiveHourResetAnchor: key.fiveHourResetAnchor ?? null,
               limitDailyUsd: key.limitDailyUsd,
               dailyResetMode: key.dailyResetMode,
               dailyResetTime: key.dailyResetTime,
@@ -735,6 +766,8 @@ export async function getUsersBatch(
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          fiveHourResetMode: user.fiveHourResetMode,
+          fiveHourResetAnchor: user.fiveHourResetAnchor ?? null,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -816,6 +849,8 @@ export async function getUsersBatchCore(
         providerGroup: user.providerGroup || undefined,
         tags: user.tags || [],
         limit5hUsd: user.limit5hUsd ?? null,
+        fiveHourResetMode: user.fiveHourResetMode,
+        fiveHourResetAnchor: user.fiveHourResetAnchor ?? null,
         limitWeeklyUsd: user.limitWeeklyUsd ?? null,
         limitMonthlyUsd: user.limitMonthlyUsd ?? null,
         limitTotalUsd: user.limitTotalUsd ?? null,
@@ -853,6 +888,8 @@ export async function getUsersBatchCore(
           modelStats: [],
           canLoginWebUi: key.canLoginWebUi,
           limit5hUsd: key.limit5hUsd,
+          fiveHourResetMode: key.fiveHourResetMode,
+          fiveHourResetAnchor: key.fiveHourResetAnchor ?? null,
           limitDailyUsd: key.limitDailyUsd,
           dailyResetMode: key.dailyResetMode,
           dailyResetTime: key.dailyResetTime,
@@ -1105,6 +1142,8 @@ export async function addUser(data: {
   rpm?: number | null;
   dailyQuota?: number | null;
   limit5hUsd?: number | null;
+  fiveHourResetMode?: "fixed" | "rolling";
+  fiveHourResetAnchor?: string | Date | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -1166,6 +1205,8 @@ export async function addUser(data: {
       rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
       limit5hUsd: data.limit5hUsd,
+      fiveHourResetMode: data.fiveHourResetMode,
+      fiveHourResetAnchor: data.fiveHourResetAnchor,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
@@ -1217,6 +1258,17 @@ export async function addUser(data: {
 
     const validatedData = validationResult.data;
     const providerGroup = normalizeProviderGroup(validatedData.providerGroup);
+    const timezone = validatedData.fiveHourResetAnchor ? await resolveSystemTimezone() : null;
+    const fiveHourResetAnchor =
+      validatedData.fiveHourResetAnchor && timezone
+        ? parseDateInputAsTimezone(validatedData.fiveHourResetAnchor, timezone)
+        : null;
+    if (fiveHourResetAnchor) {
+      const anchorValidation = validateFiveHourResetAnchor(fiveHourResetAnchor, tError);
+      if (anchorValidation) {
+        return { ok: false, ...anchorValidation };
+      }
+    }
 
     const newUser = await createUser({
       name: validatedData.name,
@@ -1226,6 +1278,8 @@ export async function addUser(data: {
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      fiveHourResetMode: validatedData.fiveHourResetMode,
+      fiveHourResetAnchor,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
@@ -1300,6 +1354,8 @@ export async function createUserOnly(data: {
   rpm?: number | null;
   dailyQuota?: number | null;
   limit5hUsd?: number | null;
+  fiveHourResetMode?: "fixed" | "rolling";
+  fiveHourResetAnchor?: string | Date | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -1354,6 +1410,8 @@ export async function createUserOnly(data: {
       rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
       limit5hUsd: data.limit5hUsd,
+      fiveHourResetMode: data.fiveHourResetMode,
+      fiveHourResetAnchor: data.fiveHourResetAnchor,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
@@ -1404,6 +1462,17 @@ export async function createUserOnly(data: {
 
     const validatedData = validationResult.data;
     const providerGroup = normalizeProviderGroup(validatedData.providerGroup);
+    const timezone = validatedData.fiveHourResetAnchor ? await resolveSystemTimezone() : null;
+    const fiveHourResetAnchor =
+      validatedData.fiveHourResetAnchor && timezone
+        ? parseDateInputAsTimezone(validatedData.fiveHourResetAnchor, timezone)
+        : null;
+    if (fiveHourResetAnchor) {
+      const anchorValidation = validateFiveHourResetAnchor(fiveHourResetAnchor, tError);
+      if (anchorValidation) {
+        return { ok: false, ...anchorValidation };
+      }
+    }
 
     const newUser = await createUser({
       name: validatedData.name,
@@ -1413,6 +1482,8 @@ export async function createUserOnly(data: {
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      fiveHourResetMode: validatedData.fiveHourResetMode,
+      fiveHourResetAnchor,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
@@ -1472,6 +1543,8 @@ export async function editUser(
     rpm?: number | null;
     dailyQuota?: number | null;
     limit5hUsd?: number | null;
+    fiveHourResetMode?: "fixed" | "rolling";
+    fiveHourResetAnchor?: string | Date | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
@@ -1538,6 +1611,8 @@ export async function editUser(
     }
 
     const validatedData = validationResult.data;
+    const hasFiveHourResetModeField = Object.hasOwn(data, "fiveHourResetMode");
+    const hasFiveHourResetAnchorField = Object.hasOwn(data, "fiveHourResetAnchor");
 
     // Permission check: Get unauthorized fields based on user role
     const unauthorizedFields = getUnauthorizedFields(validatedData, session.user.role);
@@ -1563,6 +1638,17 @@ export async function editUser(
       validatedData.providerGroup === undefined
         ? undefined
         : normalizeProviderGroup(validatedData.providerGroup);
+    const timezone = hasFiveHourResetAnchorField ? await resolveSystemTimezone() : null;
+    const fiveHourResetAnchor =
+      hasFiveHourResetAnchorField && validatedData.fiveHourResetAnchor && timezone
+        ? parseDateInputAsTimezone(validatedData.fiveHourResetAnchor, timezone)
+        : null;
+    if (fiveHourResetAnchor) {
+      const anchorValidation = validateFiveHourResetAnchor(fiveHourResetAnchor, tError);
+      if (anchorValidation) {
+        return { ok: false, ...anchorValidation };
+      }
+    }
 
     // Update user with validated data
     await updateUser(userId, {
@@ -1573,6 +1659,12 @@ export async function editUser(
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
       limit5hUsd: validatedData.limit5hUsd,
+      ...(hasFiveHourResetModeField ? { fiveHourResetMode: validatedData.fiveHourResetMode } : {}),
+      ...(hasFiveHourResetAnchorField
+        ? {
+            fiveHourResetAnchor,
+          }
+        : {}),
       limitWeeklyUsd: validatedData.limitWeeklyUsd,
       limitMonthlyUsd: validatedData.limitMonthlyUsd,
       limitTotalUsd: validatedData.limitTotalUsd,

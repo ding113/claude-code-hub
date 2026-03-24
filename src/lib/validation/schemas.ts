@@ -4,12 +4,40 @@ import {
   PROVIDER_LIMITS,
   PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
+import { isValidDateTimeString } from "@/lib/utils/date-input";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 import { isValidIANATimezone } from "@/lib/utils/timezone";
 
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
+
+const normalizeFiveHourResetAnchorInput = (value: unknown) => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? value : value.toISOString();
+  }
+  return value;
+};
+
+const FIVE_HOUR_RESET_ANCHOR_STRING = z
+  .string()
+  .refine((value) => value === "" || isValidDateTimeString(value), "5小时重置锚点时间格式无效");
+
+const FIVE_HOUR_RESET_ANCHOR_STRING_WITH_DEFAULT = z.preprocess(
+  (value) => normalizeFiveHourResetAnchorInput(value === null ? "" : value),
+  FIVE_HOUR_RESET_ANCHOR_STRING.optional().default("")
+);
+
+const FIVE_HOUR_RESET_ANCHOR_OPTIONAL_STRING = z.preprocess(
+  (value) => normalizeFiveHourResetAnchorInput(value === null ? "" : value),
+  FIVE_HOUR_RESET_ANCHOR_STRING.optional()
+);
+
+const FIVE_HOUR_RESET_ANCHOR_UPDATE_NULLABLE = z.preprocess((val) => {
+  if (val === undefined) return undefined;
+  if (val === null || val === "") return null;
+  return normalizeFiveHourResetAnchorInput(val);
+}, z.string().refine(isValidDateTimeString, "5小时重置锚点时间格式无效").nullable().optional());
 
 // Codex（Responses API）供应商级覆写偏好
 const CODEX_REASONING_EFFORT_PREFERENCE = z.enum([
@@ -126,6 +154,8 @@ export const CreateUserSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  fiveHourResetMode: z.enum(["fixed", "rolling"]).optional().default("rolling"),
+  fiveHourResetAnchor: FIVE_HOUR_RESET_ANCHOR_STRING_WITH_DEFAULT,
   limitWeeklyUsd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -253,6 +283,8 @@ export const UpdateUserSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  fiveHourResetMode: z.enum(["fixed", "rolling"]).optional(),
+  fiveHourResetAnchor: FIVE_HOUR_RESET_ANCHOR_OPTIONAL_STRING,
   limitWeeklyUsd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -377,6 +409,8 @@ export const KeyFormSchema = z.object({
     .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "重置时间格式必须为 HH:mm")
     .optional()
     .default("00:00"),
+  fiveHourResetMode: z.enum(["fixed", "rolling"]).optional(),
+  fiveHourResetAnchor: FIVE_HOUR_RESET_ANCHOR_OPTIONAL_STRING,
   limitWeeklyUsd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -478,6 +512,8 @@ export const CreateProviderSchema = z
       .max(10000, "5小时消费上限不能超过10000美元")
       .nullable()
       .optional(),
+    five_hour_reset_mode: z.enum(["fixed", "rolling"]).optional(),
+    five_hour_reset_anchor: FIVE_HOUR_RESET_ANCHOR_UPDATE_NULLABLE,
     limit_daily_usd: z.coerce
       .number()
       .min(0, "每日消费上限不能为负数")
@@ -714,6 +750,8 @@ export const UpdateProviderSchema = z
       .max(10000, "5小时消费上限不能超过10000美元")
       .nullable()
       .optional(),
+    five_hour_reset_mode: z.enum(["fixed", "rolling"]).optional(),
+    five_hour_reset_anchor: FIVE_HOUR_RESET_ANCHOR_UPDATE_NULLABLE,
     limit_daily_usd: z.coerce
       .number()
       .min(0, "每日消费上限不能为负数")

@@ -1,6 +1,7 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { z } from "zod";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
@@ -44,7 +45,10 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import { SessionManager } from "@/lib/session-manager";
+import { isFutureDate, parseDateInputAsTimezone } from "@/lib/utils/date-input";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroupTag, parseProviderGroups } from "@/lib/utils/provider-group";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -117,6 +121,27 @@ const API_TEST_TIMEOUT_LIMITS = {
   MIN: 5000,
   MAX: 120000,
 } as const;
+
+function validateFiveHourResetAnchor(
+  anchor: Date,
+  tError: Awaited<ReturnType<typeof getTranslations<"errors">>>
+): { error: string; errorCode: string } | null {
+  if (Number.isNaN(anchor.getTime())) {
+    return {
+      error: tError("INVALID_FORMAT", { field: tError("FIVE_HOUR_RESET_ANCHOR_FIELD") }),
+      errorCode: ERROR_CODES.INVALID_FORMAT,
+    };
+  }
+
+  if (isFutureDate(anchor)) {
+    return {
+      error: tError("FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE"),
+      errorCode: ERROR_CODES.FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE,
+    };
+  }
+
+  return null;
+}
 
 function resolveApiTestTimeoutMs(): number {
   const rawValue = process.env.API_TEST_TIMEOUT_MS?.trim();
@@ -306,6 +331,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         mcpPassthroughType: provider.mcpPassthroughType,
         mcpPassthroughUrl: provider.mcpPassthroughUrl,
         limit5hUsd: provider.limit5hUsd,
+        fiveHourResetMode: provider.fiveHourResetMode,
+        fiveHourResetAnchor: provider.fiveHourResetAnchor,
         limitDailyUsd: provider.limitDailyUsd,
         dailyResetMode: provider.dailyResetMode,
         dailyResetTime: provider.dailyResetTime,
@@ -505,6 +532,8 @@ export async function addProvider(data: {
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   limit_5h_usd?: number | null;
+  five_hour_reset_mode?: "fixed" | "rolling";
+  five_hour_reset_anchor?: string | Date | null;
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
@@ -580,10 +609,25 @@ export async function addProvider(data: {
       }
     }
 
+    const timezone = validated.five_hour_reset_anchor ? await resolveSystemTimezone() : null;
+    const fiveHourResetAnchor =
+      validated.five_hour_reset_anchor && timezone
+        ? parseDateInputAsTimezone(validated.five_hour_reset_anchor, timezone)
+        : null;
+    if (fiveHourResetAnchor) {
+      const tError = await getTranslations("errors");
+      const anchorValidation = validateFiveHourResetAnchor(fiveHourResetAnchor, tError);
+      if (anchorValidation) {
+        return { ok: false, ...anchorValidation };
+      }
+    }
+
     const payload = {
       ...validated,
       group_tag: normalizeProviderGroupTag(validated.group_tag),
       limit_5h_usd: validated.limit_5h_usd ?? null,
+      five_hour_reset_mode: validated.five_hour_reset_mode ?? "rolling",
+      five_hour_reset_anchor: fiveHourResetAnchor,
       limit_daily_usd: validated.limit_daily_usd ?? null,
       daily_reset_mode: validated.daily_reset_mode ?? "fixed",
       daily_reset_time: validated.daily_reset_time ?? "00:00",
@@ -683,6 +727,8 @@ export async function editProvider(
     allowed_clients?: string[] | null;
     blocked_clients?: string[] | null;
     limit_5h_usd?: number | null;
+    five_hour_reset_mode?: "fixed" | "rolling";
+    five_hour_reset_anchor?: string | Date | null;
     limit_daily_usd?: number | null;
     daily_reset_time?: string;
     limit_weekly_usd?: number | null;
@@ -758,12 +804,28 @@ export async function editProvider(
       }
     }
 
+    // Extract five_hour_reset_anchor to convert string -> Date before passing to repository
+    const { five_hour_reset_anchor: rawAnchor, ...validatedRest } = validated;
+    const timezone = rawAnchor !== undefined ? await resolveSystemTimezone() : null;
+    const fiveHourResetAnchor =
+      rawAnchor && timezone ? parseDateInputAsTimezone(rawAnchor, timezone) : null;
+    if (fiveHourResetAnchor) {
+      const tError = await getTranslations("errors");
+      const anchorValidation = validateFiveHourResetAnchor(fiveHourResetAnchor, tError);
+      if (anchorValidation) {
+        return { ok: false, ...anchorValidation };
+      }
+    }
+
     const payload = {
-      ...validated,
-      ...(validated.group_tag !== undefined && {
-        group_tag: normalizeProviderGroupTag(validated.group_tag),
+      ...validatedRest,
+      ...(validatedRest.group_tag !== undefined && {
+        group_tag: normalizeProviderGroupTag(validatedRest.group_tag),
       }),
       ...(faviconUrl !== undefined && { favicon_url: faviconUrl }),
+      ...(rawAnchor !== undefined && {
+        five_hour_reset_anchor: fiveHourResetAnchor,
+      }),
     };
 
     const currentProvider = await findProviderById(providerId);
@@ -1309,6 +1371,8 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   allowed_clients: "allowedClients",
   blocked_clients: "blockedClients",
   limit_5h_usd: "limit5hUsd",
+  five_hour_reset_mode: "fiveHourResetMode",
+  five_hour_reset_anchor: "fiveHourResetAnchor",
   limit_daily_usd: "limitDailyUsd",
   daily_reset_mode: "dailyResetMode",
   daily_reset_time: "dailyResetTime",
@@ -1428,10 +1492,11 @@ function buildNoChangesError(): ProviderPatchActionError {
   };
 }
 
-function mapApplyUpdatesToRepositoryFormat(
+async function mapApplyUpdatesToRepositoryFormat(
   applyUpdates: ProviderBatchApplyUpdates
-): BatchProviderUpdates {
+): Promise<BatchProviderUpdates> {
   const result: BatchProviderUpdates = {};
+  const tError = await getTranslations("errors");
   if (applyUpdates.is_enabled !== undefined) {
     result.isEnabled = applyUpdates.is_enabled;
   }
@@ -1510,6 +1575,23 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.limit_5h_usd !== undefined) {
     result.limit5hUsd =
       applyUpdates.limit_5h_usd != null ? applyUpdates.limit_5h_usd.toString() : null;
+  }
+  if (applyUpdates.five_hour_reset_mode !== undefined) {
+    result.fiveHourResetMode = applyUpdates.five_hour_reset_mode;
+  }
+  if (applyUpdates.five_hour_reset_anchor !== undefined) {
+    const timezone = applyUpdates.five_hour_reset_anchor ? await resolveSystemTimezone() : null;
+    const fiveHourResetAnchor =
+      applyUpdates.five_hour_reset_anchor && timezone
+        ? parseDateInputAsTimezone(applyUpdates.five_hour_reset_anchor, timezone)
+        : null;
+    if (fiveHourResetAnchor) {
+      const anchorValidation = validateFiveHourResetAnchor(fiveHourResetAnchor, tError);
+      if (anchorValidation) {
+        throw new Error(anchorValidation.error);
+      }
+    }
+    result.fiveHourResetAnchor = fiveHourResetAnchor;
   }
   if (applyUpdates.limit_daily_usd !== undefined) {
     result.limitDailyUsd =
@@ -1600,6 +1682,8 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
   gemini_google_search_preference: "geminiGoogleSearchPreference",
   limit_5h_usd: "limit5hUsd",
+  five_hour_reset_mode: "fiveHourResetMode",
+  five_hour_reset_anchor: "fiveHourResetAnchor",
   limit_daily_usd: "limitDailyUsd",
   daily_reset_mode: "dailyResetMode",
   daily_reset_time: "dailyResetTime",
@@ -1625,6 +1709,7 @@ const PATCH_FIELD_CLEAR_VALUE: Partial<Record<ProviderBatchPatchField, unknown>>
   blocked_clients: [],
   anthropic_thinking_budget_preference: "inherit",
   cache_ttl_preference: "inherit",
+  five_hour_reset_anchor: null,
   context_1m_preference: "inherit",
   codex_reasoning_effort_preference: "inherit",
   codex_reasoning_summary_preference: "inherit",
@@ -1955,7 +2040,7 @@ export async function applyProviderBatchPatch(
       preimage[provider.id] = fieldValues;
     }
 
-    const repositoryUpdates = mapApplyUpdatesToRepositoryFormat(updatesResult.data);
+    const repositoryUpdates = await mapApplyUpdatesToRepositoryFormat(updatesResult.data);
 
     const hasTypeSpecificFields = changedFields.some(
       (f) => CLAUDE_ONLY_FIELDS.has(f) || CODEX_ONLY_FIELDS.has(f) || GEMINI_ONLY_FIELDS.has(f)

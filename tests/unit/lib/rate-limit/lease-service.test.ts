@@ -85,6 +85,7 @@ describe("LeaseService", () => {
         limitAmount: 100,
         remainingBudget: 2.5,
         ttlSeconds: 60, // 60 seconds TTL
+        windowIdentity: "daily:fixed:00:00",
       };
       mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
 
@@ -1068,6 +1069,7 @@ describe("LeaseService", () => {
         limitAmount: 100,
         remainingBudget: 2.5,
         ttlSeconds: 60,
+        windowIdentity: "daily:fixed:00:00",
       };
       mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
 
@@ -1174,6 +1176,102 @@ describe("LeaseService", () => {
       expect(result?.limitAmount).toBe(50);
       // remainingBudget = min(50 * 0.05, 50 - 80) = min(2.5, -30) = 0 (clamped)
       expect(result?.remainingBudget).toBe(0);
+    });
+
+    it("should force refresh when 5h fixed anchor changes current block", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+      const { buildLeaseWindowIdentity } = await import("@/lib/rate-limit/lease");
+      const { getCachedSystemSettings } = await import("@/lib/config/system-settings-cache");
+      const { sumKeyCostInTimeRange } = await import("@/repository/statistics");
+
+      const previousAnchor = new Date(nowMs - 2 * 60 * 60 * 1000);
+      const nextAnchor = new Date(nowMs - 4 * 60 * 60 * 1000);
+      const cachedLease = {
+        entityType: "key",
+        entityId: 123,
+        window: "5h",
+        resetMode: "fixed",
+        resetTime: "00:00",
+        snapshotAtMs: nowMs - 5000,
+        currentUsage: 50,
+        limitAmount: 100,
+        remainingBudget: 0,
+        ttlSeconds: 60,
+        windowIdentity: buildLeaseWindowIdentity(
+          "5h",
+          "00:00",
+          "fixed",
+          previousAnchor,
+          new Date(nowMs)
+        ),
+      };
+      mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
+
+      vi.mocked(getCachedSystemSettings).mockResolvedValue({
+        quotaDbRefreshIntervalSeconds: 10,
+        quotaLeasePercent5h: 0.1,
+      } as ReturnType<typeof getCachedSystemSettings> extends Promise<infer T> ? T : never);
+      vi.mocked(sumKeyCostInTimeRange).mockResolvedValue(20);
+      mockRedis.setex.mockResolvedValue("OK");
+
+      const result = await LeaseService.getCostLease({
+        entityType: "key",
+        entityId: 123,
+        window: "5h",
+        limitAmount: 100,
+        resetTime: "00:00",
+        resetMode: "fixed",
+        anchor: nextAnchor,
+      });
+
+      expect(sumKeyCostInTimeRange).toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result?.windowIdentity).toBe(
+        buildLeaseWindowIdentity("5h", "00:00", "fixed", nextAnchor, new Date(nowMs))
+      );
+      expect(result?.remainingBudget).toBeGreaterThan(0);
+    });
+
+    it("should force refresh when daily reset mode changes", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+      const { getCachedSystemSettings } = await import("@/lib/config/system-settings-cache");
+      const { sumUserCostInTimeRange } = await import("@/repository/statistics");
+
+      const cachedLease = {
+        entityType: "user",
+        entityId: 456,
+        window: "daily",
+        resetMode: "fixed",
+        resetTime: "00:00",
+        snapshotAtMs: nowMs - 5000,
+        currentUsage: 95,
+        limitAmount: 100,
+        remainingBudget: 0,
+        ttlSeconds: 60,
+        windowIdentity: "daily:fixed:00:00",
+      };
+      mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
+
+      vi.mocked(getCachedSystemSettings).mockResolvedValue({
+        quotaDbRefreshIntervalSeconds: 10,
+        quotaLeasePercentDaily: 0.05,
+      } as ReturnType<typeof getCachedSystemSettings> extends Promise<infer T> ? T : never);
+      vi.mocked(sumUserCostInTimeRange).mockResolvedValue(10);
+      mockRedis.setex.mockResolvedValue("OK");
+
+      const result = await LeaseService.getCostLease({
+        entityType: "user",
+        entityId: 456,
+        window: "daily",
+        limitAmount: 100,
+        resetTime: "00:00",
+        resetMode: "rolling",
+      });
+
+      expect(sumUserCostInTimeRange).toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result?.windowIdentity).toBe("daily:rolling:00:00");
+      expect(result?.remainingBudget).toBeGreaterThan(0);
     });
   });
 });

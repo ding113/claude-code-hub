@@ -194,6 +194,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     mcpPassthroughType: providerData.mcp_passthrough_type ?? "none",
     mcpPassthroughUrl: providerData.mcp_passthrough_url ?? null,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
+    fiveHourResetMode: providerData.five_hour_reset_mode ?? "rolling",
+    fiveHourResetAnchor: providerData.five_hour_reset_anchor ?? null,
     limitDailyUsd:
       providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null,
     dailyResetMode: providerData.daily_reset_mode ?? "fixed",
@@ -279,6 +281,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
+        fiveHourResetMode: providers.fiveHourResetMode,
+        fiveHourResetAnchor: providers.fiveHourResetAnchor,
         limitDailyUsd: providers.limitDailyUsd,
         dailyResetMode: providers.dailyResetMode,
         dailyResetTime: providers.dailyResetTime,
@@ -364,6 +368,8 @@ export async function findProviderList(
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
+      fiveHourResetMode: providers.fiveHourResetMode,
+      fiveHourResetAnchor: providers.fiveHourResetAnchor,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,
       dailyResetTime: providers.dailyResetTime,
@@ -449,6 +455,8 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
+      fiveHourResetMode: providers.fiveHourResetMode,
+      fiveHourResetAnchor: providers.fiveHourResetAnchor,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,
       dailyResetTime: providers.dailyResetTime,
@@ -538,6 +546,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
+      fiveHourResetMode: providers.fiveHourResetMode,
+      fiveHourResetAnchor: providers.fiveHourResetAnchor,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,
       dailyResetTime: providers.dailyResetTime,
@@ -629,6 +639,10 @@ export async function updateProvider(
   if (providerData.limit_5h_usd !== undefined)
     dbData.limit5hUsd =
       providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null;
+  if (providerData.five_hour_reset_mode !== undefined)
+    dbData.fiveHourResetMode = providerData.five_hour_reset_mode;
+  if (providerData.five_hour_reset_anchor !== undefined)
+    dbData.fiveHourResetAnchor = providerData.five_hour_reset_anchor;
   if (providerData.limit_daily_usd !== undefined)
     dbData.limitDailyUsd =
       providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null;
@@ -776,6 +790,8 @@ export async function updateProvider(
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
+        fiveHourResetMode: providers.fiveHourResetMode,
+        fiveHourResetAnchor: providers.fiveHourResetAnchor,
         limitDailyUsd: providers.limitDailyUsd,
         dailyResetMode: providers.dailyResetMode,
         dailyResetTime: providers.dailyResetTime,
@@ -1044,6 +1060,8 @@ export interface BatchProviderUpdates {
   geminiGoogleSearchPreference?: string | null;
   // Rate Limit
   limit5hUsd?: string | null;
+  fiveHourResetMode?: string;
+  fiveHourResetAnchor?: Date | null;
   limitDailyUsd?: string | null;
   dailyResetMode?: string;
   dailyResetTime?: string;
@@ -1158,6 +1176,12 @@ export async function updateProvidersBatch(
   // Rate Limit
   if (updates.limit5hUsd !== undefined) {
     setClauses.limit5hUsd = updates.limit5hUsd;
+  }
+  if (updates.fiveHourResetMode !== undefined) {
+    setClauses.fiveHourResetMode = updates.fiveHourResetMode;
+  }
+  if (updates.fiveHourResetAnchor !== undefined) {
+    setClauses.fiveHourResetAnchor = updates.fiveHourResetAnchor;
   }
   if (updates.limitDailyUsd !== undefined) {
     setClauses.limitDailyUsd = updates.limitDailyUsd;

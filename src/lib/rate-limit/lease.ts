@@ -7,8 +7,11 @@
 
 import {
   type DailyResetMode,
+  get5hFixedBlockKeySuffix,
   getTimeRangeForPeriodWithMode,
   getTTLForPeriodWithMode,
+  normalizeResetTime,
+  resolveEffective5hFixedAnchor,
   type TimePeriod,
 } from "./time-utils";
 
@@ -39,6 +42,7 @@ export interface BudgetLease {
   remainingBudget: number;
   ttlSeconds: number;
   costResetAtMs?: number | null;
+  windowIdentity?: string;
 }
 
 /**
@@ -60,6 +64,29 @@ export function buildLeaseKey(
   return `lease:${entityType}:${entityId}:${window}`;
 }
 
+export function buildLeaseWindowIdentity(
+  window: LeaseWindowType,
+  resetTime = "00:00",
+  mode: DailyResetMode = "fixed",
+  anchor?: Date,
+  now = new Date()
+): string {
+  if (window === "5h") {
+    const effectiveAnchor =
+      mode === "fixed" ? resolveEffective5hFixedAnchor(anchor, undefined, now) : undefined;
+    if (effectiveAnchor) {
+      return `5h:fixed:${get5hFixedBlockKeySuffix(now, effectiveAnchor)}`;
+    }
+    return "5h:rolling";
+  }
+
+  if (window === "daily") {
+    return `daily:${mode}:${normalizeResetTime(resetTime)}`;
+  }
+
+  return window;
+}
+
 /**
  * Get time range for a lease window
  * Delegates to time-utils for consistent behavior
@@ -67,9 +94,10 @@ export function buildLeaseKey(
 export async function getLeaseTimeRange(
   window: LeaseWindowType,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  anchor?: Date
 ): Promise<{ startTime: Date; endTime: Date }> {
-  return getTimeRangeForPeriodWithMode(window as TimePeriod, resetTime, mode);
+  return getTimeRangeForPeriodWithMode(window as TimePeriod, resetTime, mode, anchor);
 }
 
 /**
@@ -79,9 +107,10 @@ export async function getLeaseTimeRange(
 export async function getLeaseTtlSeconds(
   window: LeaseWindowType,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  anchor?: Date
 ): Promise<number> {
-  return getTTLForPeriodWithMode(window as TimePeriod, resetTime, mode);
+  return getTTLForPeriodWithMode(window as TimePeriod, resetTime, mode, anchor);
 }
 
 /**

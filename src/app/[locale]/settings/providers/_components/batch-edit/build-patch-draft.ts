@@ -189,6 +189,16 @@ export function buildPatchDraftFromFormState(
       draft.limit_5h_usd = { set: state.rateLimit.limit5hUsd };
     }
   }
+  if (dirtyFields.has("rateLimit.fiveHourResetMode")) {
+    draft.five_hour_reset_mode = { set: state.rateLimit.fiveHourResetMode };
+  }
+  if (dirtyFields.has("rateLimit.fiveHourResetAnchor")) {
+    if (state.rateLimit.fiveHourResetAnchor === "") {
+      draft.five_hour_reset_anchor = { clear: true };
+    } else {
+      draft.five_hour_reset_anchor = { set: state.rateLimit.fiveHourResetAnchor };
+    }
+  }
   if (dirtyFields.has("rateLimit.limitDailyUsd")) {
     if (state.rateLimit.limitDailyUsd === null) {
       draft.limit_daily_usd = { clear: true };

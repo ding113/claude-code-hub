@@ -3445,6 +3445,10 @@ async function trackCostToRedis(
         keyResetMode: key.dailyResetMode,
         providerResetTime: provider.dailyResetTime,
         providerResetMode: provider.dailyResetMode,
+        key5hResetMode: key.fiveHourResetMode,
+        key5hResetAnchor: key.fiveHourResetAnchor ?? key.createdAt ?? undefined,
+        provider5hResetMode: provider.fiveHourResetMode,
+        provider5hResetAnchor: provider.fiveHourResetAnchor ?? provider.createdAt ?? undefined,
         requestId: messageContext.id,
         createdAtMs: messageContext.createdAt.getTime(),
       }

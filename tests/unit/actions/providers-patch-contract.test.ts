@@ -931,6 +931,28 @@ describe("provider patch contract", () => {
 
       expect(hasProviderBatchPatchChanges(normalized.data)).toBe(true);
     });
+
+    it("detects change on five_hour_reset_mode", () => {
+      const normalized = normalizeProviderBatchPatchDraft({
+        five_hour_reset_mode: { set: "fixed" },
+      });
+
+      expect(normalized.ok).toBe(true);
+      if (!normalized.ok) return;
+
+      expect(hasProviderBatchPatchChanges(normalized.data)).toBe(true);
+    });
+
+    it("detects change on five_hour_reset_anchor", () => {
+      const normalized = normalizeProviderBatchPatchDraft({
+        five_hour_reset_anchor: { set: "2026-03-23T12:30" },
+      });
+
+      expect(normalized.ok).toBe(true);
+      if (!normalized.ok) return;
+
+      expect(hasProviderBatchPatchChanges(normalized.data)).toBe(true);
+    });
   });
 
   describe("active_time_start / active_time_end batch patch", () => {
@@ -1027,6 +1049,77 @@ describe("provider patch contract", () => {
     });
   });
 
+  describe("five_hour_reset_mode / five_hour_reset_anchor batch patch", () => {
+    it("accepts five_hour_reset_mode and maps it to apply payload", () => {
+      const result = prepareProviderBatchApplyUpdates({
+        five_hour_reset_mode: { set: "fixed" },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.five_hour_reset_mode).toBe("fixed");
+    });
+
+    it("accepts five_hour_reset_anchor and preserves raw datetime-local string", () => {
+      const result = prepareProviderBatchApplyUpdates({
+        five_hour_reset_anchor: { set: "2026-03-23T12:30" },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.five_hour_reset_anchor).toBe("2026-03-23T12:30");
+    });
+
+    it("clears five_hour_reset_anchor to null", () => {
+      const result = prepareProviderBatchApplyUpdates({
+        five_hour_reset_anchor: { clear: true },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.five_hour_reset_anchor).toBeNull();
+    });
+
+    it("rejects invalid five_hour_reset_anchor", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        five_hour_reset_anchor: { set: "not-a-date" },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+      expect(result.error.field).toBe("five_hour_reset_anchor");
+    });
+
+    it("rejects five_hour_reset_anchor with timezone designator", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        five_hour_reset_anchor: { set: "2026-03-23T12:30:00.000Z" },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+      expect(result.error.field).toBe("five_hour_reset_anchor");
+    });
+
+    it("rejects impossible calendar dates for five_hour_reset_anchor", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        five_hour_reset_anchor: { set: "2026-02-30T12:30" },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+      expect(result.error.field).toBe("five_hour_reset_anchor");
+    });
+  });
+
   describe("combined set across all categories", () => {
     it("handles a batch patch touching all field categories at once", () => {
       const result = prepareProviderBatchApplyUpdates({
@@ -1040,6 +1133,8 @@ describe("provider patch contract", () => {
         anthropic_max_tokens_preference: { set: "16384" },
         // rate limit
         limit_5h_usd: { set: 50 },
+        five_hour_reset_mode: { set: "fixed" },
+        five_hour_reset_anchor: { set: "2026-03-23T12:30" },
         daily_reset_mode: { set: "rolling" },
         daily_reset_time: { set: "08:00" },
         // circuit breaker
@@ -1067,6 +1162,8 @@ describe("provider patch contract", () => {
       expect(result.data.codex_reasoning_effort_preference).toBe("high");
       expect(result.data.anthropic_max_tokens_preference).toBe("16384");
       expect(result.data.limit_5h_usd).toBe(50);
+      expect(result.data.five_hour_reset_mode).toBe("fixed");
+      expect(result.data.five_hour_reset_anchor).toBe("2026-03-23T12:30");
       expect(result.data.daily_reset_mode).toBe("rolling");
       expect(result.data.daily_reset_time).toBe("08:00");
       expect(result.data.circuit_breaker_failure_threshold).toBe(5);

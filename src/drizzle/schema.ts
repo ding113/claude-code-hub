@@ -63,6 +63,13 @@ export const users = pgTable('users', {
     .default('00:00')
     .notNull(), // HH:mm format, only used in 'fixed' mode
 
+  // 5h quota reset mode (fixed: reset every 5h from anchor, rolling: sliding 5h window)
+  fiveHourResetMode: dailyResetModeEnum('five_hour_reset_mode')
+    .default('rolling')
+    .notNull(),
+  // 5h fixed mode anchor timestamp (null = use createdAt)
+  fiveHourResetAnchor: timestamp('five_hour_reset_anchor', { withTimezone: true }),
+
   // User status and expiry management
   isEnabled: boolean('is_enabled').notNull().default(true),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
@@ -112,6 +119,10 @@ export const keys = pgTable('keys', {
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  fiveHourResetMode: dailyResetModeEnum('five_hour_reset_mode')
+    .default('rolling')
+    .notNull(), // fixed: 每5h固定周期重置, rolling: 滚动窗口（5小时）
+  fiveHourResetAnchor: timestamp('five_hour_reset_anchor', { withTimezone: true }), // fixed 模式锚点（null = 使用 createdAt）
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
   dailyResetMode: dailyResetModeEnum('daily_reset_mode')
     .default('fixed')
@@ -235,6 +246,10 @@ export const providers = pgTable('providers', {
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  fiveHourResetMode: dailyResetModeEnum('five_hour_reset_mode')
+    .default('rolling')
+    .notNull(), // fixed: 每5h固定周期重置, rolling: 滚动窗口（5小时）
+  fiveHourResetAnchor: timestamp('five_hour_reset_anchor', { withTimezone: true }), // fixed 模式锚点（null = 使用 createdAt）
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
   dailyResetMode: dailyResetModeEnum('daily_reset_mode')
     .default('fixed')

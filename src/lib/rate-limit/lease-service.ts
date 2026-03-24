@@ -22,6 +22,7 @@ import {
 import {
   type BudgetLease,
   buildLeaseKey,
+  buildLeaseWindowIdentity,
   calculateLeaseSlice,
   createBudgetLease,
   deserializeLease,
@@ -31,7 +32,7 @@ import {
   type LeaseWindowType,
   serializeLease,
 } from "./lease";
-import type { DailyResetMode } from "./time-utils";
+import { type DailyResetMode, get5hFixedBlockRange } from "./time-utils";
 
 /**
  * Parameters for getting/refreshing a cost lease
@@ -44,6 +45,7 @@ export interface GetCostLeaseParams {
   resetTime?: string;
   resetMode?: DailyResetMode;
   costResetAt?: Date | null;
+  anchor?: Date;
 }
 
 /**
@@ -88,6 +90,12 @@ export class LeaseService {
     try {
       const redis = LeaseService.redis;
       const leaseKey = buildLeaseKey(entityType, entityId, window);
+      const windowIdentity = buildLeaseWindowIdentity(
+        window,
+        params.resetTime,
+        params.resetMode,
+        params.anchor
+      );
 
       // Try Redis cache first
       if (redis && redis.status === "ready") {
@@ -115,6 +123,15 @@ export class LeaseService {
                 key: leaseKey,
                 cachedResetAtMs: lease.costResetAtMs ?? null,
                 newResetAtMs: paramResetAtMs,
+              });
+              return await LeaseService.refreshCostLeaseFromDb(params);
+            }
+
+            if ((lease.windowIdentity ?? null) !== windowIdentity) {
+              logger.debug("[LeaseService] window identity changed, force refresh", {
+                key: leaseKey,
+                cachedWindowIdentity: lease.windowIdentity ?? null,
+                newWindowIdentity: windowIdentity,
               });
               return await LeaseService.refreshCostLeaseFromDb(params);
             }
@@ -165,6 +182,7 @@ export class LeaseService {
       const settings = await getCachedSystemSettings();
       const ttlSeconds = settings.quotaDbRefreshIntervalSeconds ?? 10;
       const capUsd = settings.quotaLeaseCapUsd ?? undefined;
+      const refreshNow = new Date();
 
       // Get percent based on window type
       const leasePercentConfig = {
@@ -176,7 +194,10 @@ export class LeaseService {
       const percent = LeaseService.getLeasePercent(window, leasePercentConfig);
 
       // Calculate time range for DB query
-      const { startTime, endTime } = await getLeaseTimeRange(window, resetTime, resetMode);
+      const { startTime, endTime } =
+        window === "5h" && resetMode === "fixed" && params.anchor
+          ? get5hFixedBlockRange(refreshNow, params.anchor)
+          : await getLeaseTimeRange(window, resetTime, resetMode, params.anchor);
 
       // Clip startTime forward if costResetAt is more recent (limits-only reset)
       const effectiveStartTime =
@@ -214,6 +235,13 @@ export class LeaseService {
         remainingBudget,
         ttlSeconds,
         costResetAtMs: params.costResetAt instanceof Date ? params.costResetAt.getTime() : null,
+        windowIdentity: buildLeaseWindowIdentity(
+          window,
+          resetTime,
+          resetMode,
+          params.anchor,
+          refreshNow
+        ),
       });
 
       // Store in Redis

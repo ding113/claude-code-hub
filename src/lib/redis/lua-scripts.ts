@@ -266,6 +266,26 @@ return tostring(total)
 `;
 
 /**
+ * 5h 固定窗口原子累加
+ *
+ * 功能：原子执行 INCRBYFLOAT + EXPIRE，防止 Redis 崩溃导致 key 无 TTL
+ *
+ * KEYS[1]: 5h 固定窗口 key
+ * ARGV[1]: cost（消费金额）
+ * ARGV[2]: ttl（过期时间，秒）
+ *
+ * 返回值：string - 累加后的总消费
+ */
+export const TRACK_COST_5H_FIXED_WINDOW = `
+local key = KEYS[1]
+local cost = tonumber(ARGV[1])
+local ttl = tonumber(ARGV[2])
+local new_val = redis.call('INCRBYFLOAT', key, cost)
+redis.call('EXPIRE', key, ttl)
+return new_val
+`;
+
+/**
  * 查询 5小时滚动窗口当前消费
  *
  * 功能：

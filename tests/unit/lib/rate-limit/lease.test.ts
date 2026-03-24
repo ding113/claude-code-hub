@@ -95,6 +95,29 @@ describe("lease module", () => {
     });
   });
 
+  describe("buildLeaseWindowIdentity", () => {
+    it("should include current 5h fixed block suffix", async () => {
+      const { buildLeaseWindowIdentity } = await import("@/lib/rate-limit/lease");
+
+      const identity = buildLeaseWindowIdentity(
+        "5h",
+        "00:00",
+        "fixed",
+        new Date("2024-01-27T22:00:00.000Z"),
+        new Date(nowMs)
+      );
+
+      expect(identity).toBe("5h:fixed:1706392800000");
+    });
+
+    it("should distinguish daily reset configurations", async () => {
+      const { buildLeaseWindowIdentity } = await import("@/lib/rate-limit/lease");
+
+      expect(buildLeaseWindowIdentity("daily", "09:30", "fixed")).toBe("daily:fixed:09:30");
+      expect(buildLeaseWindowIdentity("daily", "09:30", "rolling")).toBe("daily:rolling:09:30");
+    });
+  });
+
   describe("getLeaseTimeRange", () => {
     it("should return 5h rolling window range", async () => {
       const { getLeaseTimeRange } = await import("@/lib/rate-limit/lease");

@@ -81,6 +81,8 @@
   "EXPIRES_AT_FIELD": "Дата истечения",
   "EXPIRES_AT_MUST_BE_FUTURE": "Дата истечения должна быть в будущем",
   "EXPIRES_AT_TOO_FAR": "Дата истечения не может превышать 10 лет",
+  "FIVE_HOUR_RESET_ANCHOR_FIELD": "Время якоря сброса 5 часов",
+  "FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE": "Время якоря сброса 5 часов не может быть в будущем",
   "CANNOT_DISABLE_SELF": "Невозможно отключить свой собственный аккаунт",
   "NO_DEFAULT_GROUP_PERMISSION": "Нет разрешения на использование группы default. У вас нет ключа с группой default",
   "NO_GROUP_PERMISSION": "Нет разрешения на использование следующих групп: {groups}"

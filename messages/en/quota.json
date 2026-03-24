@@ -225,6 +225,21 @@
         "label": "Daily Reset Time",
         "placeholder": "HH:mm"
       },
+      "fiveHourResetMode": {
+        "label": "5h Reset Mode",
+        "options": {
+          "fixed": "Fixed Interval Reset",
+          "rolling": "Rolling Window (5h)"
+        },
+        "desc": {
+          "fixed": "Reset quota at fixed 5-hour intervals",
+          "rolling": "Sliding window covering the last 5 hours"
+        }
+      },
+      "fiveHourResetAnchor": {
+        "label": "5h Reset Anchor Time",
+        "description": "Start time for fixed interval mode. Defaults to creation time."
+      },
       "costWeekly": {
         "label": "Weekly Quota (USD)",
         "placeholder": "Unlimited",
@@ -311,6 +326,21 @@
         "label": "Daily Reset Time",
         "placeholder": "HH:mm",
         "description": "When the daily limit resets (uses system timezone)"
+      },
+      "fiveHourResetMode": {
+        "label": "5h Reset Mode",
+        "options": {
+          "fixed": "Fixed Interval Reset",
+          "rolling": "Rolling Window (5h)"
+        },
+        "desc": {
+          "fixed": "Reset quota at fixed 5-hour intervals",
+          "rolling": "Sliding window covering the last 5 hours"
+        }
+      },
+      "fiveHourResetAnchor": {
+        "label": "5h Reset Anchor Time",
+        "description": "Start time for fixed interval mode. Defaults to creation time."
       },
       "limitWeeklyUsd": {
         "label": "Weekly Cost Limit (USD)",

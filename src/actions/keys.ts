@@ -11,7 +11,7 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
-import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
+import { isFutureDate, parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -34,6 +34,27 @@ import type { ActionResult } from "./types";
 import { type BatchUpdateResult, syncUserProviderGroupFromKeys } from "./users";
 
 type TranslationFunction = (key: string, values?: Record<string, string>) => string;
+
+function validateFiveHourResetAnchor(
+  anchor: Date,
+  tError: TranslationFunction
+): { error: string; errorCode: string } | null {
+  if (Number.isNaN(anchor.getTime())) {
+    return {
+      error: tError("INVALID_FORMAT", { field: tError("FIVE_HOUR_RESET_ANCHOR_FIELD") }),
+      errorCode: ERROR_CODES.INVALID_FORMAT,
+    };
+  }
+
+  if (isFutureDate(anchor)) {
+    return {
+      error: tError("FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE"),
+      errorCode: ERROR_CODES.FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE,
+    };
+  }
+
+  return null;
+}
 
 function validateNonAdminProviderGroup(
   userProviderGroup: string,
@@ -67,6 +88,8 @@ export interface BatchUpdateKeysParams {
   updates: {
     providerGroup?: string | null;
     limit5hUsd?: number | null;
+    fiveHourResetMode?: "fixed" | "rolling";
+    fiveHourResetAnchor?: Date | null;
     limitDailyUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -94,6 +117,8 @@ export async function addKey(data: {
   isEnabled?: boolean;
   canLoginWebUi?: boolean;
   limit5hUsd?: number | null;
+  fiveHourResetMode?: "fixed" | "rolling";
+  fiveHourResetAnchor?: string | Date | null;
   limitDailyUsd?: number | null;
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
@@ -167,6 +192,8 @@ export async function addKey(data: {
       expiresAt: data.expiresAt,
       canLoginWebUi: data.canLoginWebUi,
       limit5hUsd: data.limit5hUsd,
+      fiveHourResetMode: data.fiveHourResetMode,
+      fiveHourResetAnchor: data.fiveHourResetAnchor,
       limitDailyUsd: data.limitDailyUsd,
       dailyResetMode: data.dailyResetMode,
       dailyResetTime: data.dailyResetTime,
@@ -292,6 +319,15 @@ export async function addKey(data: {
       validatedData.expiresAt === undefined
         ? null
         : parseDateInputAsTimezone(validatedData.expiresAt, timezone);
+    const fiveHourResetAnchor = validatedData.fiveHourResetAnchor
+      ? parseDateInputAsTimezone(validatedData.fiveHourResetAnchor, timezone)
+      : null;
+    if (fiveHourResetAnchor) {
+      const anchorValidation = validateFiveHourResetAnchor(fiveHourResetAnchor, tError);
+      if (anchorValidation) {
+        return { ok: false, ...anchorValidation };
+      }
+    }
 
     await createKey({
       user_id: data.userId,
@@ -301,6 +337,8 @@ export async function addKey(data: {
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
+      five_hour_reset_mode: validatedData.fiveHourResetMode,
+      five_hour_reset_anchor: fiveHourResetAnchor,
       limit_daily_usd: validatedData.limitDailyUsd,
       daily_reset_mode: validatedData.dailyResetMode,
       daily_reset_time: validatedData.dailyResetTime,
@@ -337,6 +375,8 @@ export async function editKey(
     canLoginWebUi?: boolean;
     isEnabled?: boolean;
     limit5hUsd?: number | null;
+    fiveHourResetMode?: "fixed" | "rolling";
+    fiveHourResetAnchor?: string | Date | null;
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
@@ -397,6 +437,8 @@ export async function editKey(
     // 仅当调用方显式携带 expiresAt 字段时才更新/清除该字段：
     // - 避免像“仅修改限额”这类局部更新把 expiresAt 意外清空
     const hasExpiresAtField = Object.hasOwn(data, "expiresAt");
+    const hasFiveHourResetModeField = Object.hasOwn(data, "fiveHourResetMode");
+    const hasFiveHourResetAnchorField = Object.hasOwn(data, "fiveHourResetAnchor");
 
     const validatedData = KeyFormSchema.parse(data);
 
@@ -511,12 +553,16 @@ export async function editKey(
     // - 携带 expiresAt 但为空：清除（永不过期）
     // - 携带 expiresAt 且为字符串：设置为对应 Date
     let expiresAt: Date | null | undefined;
+    const timezone =
+      hasExpiresAtField || hasFiveHourResetAnchorField ? await resolveSystemTimezone() : null;
     if (hasExpiresAtField) {
       if (validatedData.expiresAt === undefined) {
         expiresAt = null;
       } else {
         try {
-          const timezone = await resolveSystemTimezone();
+          if (!timezone) {
+            throw new Error("Missing timezone for expiresAt parsing");
+          }
           expiresAt = parseDateInputAsTimezone(validatedData.expiresAt, timezone);
         } catch {
           return {
@@ -533,12 +579,31 @@ export async function editKey(
     const nextProviderGroup = isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : null;
     const providerGroupChanged = isAdmin && nextProviderGroup !== prevProviderGroup;
 
+    const fiveHourResetAnchor =
+      hasFiveHourResetAnchorField && validatedData.fiveHourResetAnchor && timezone
+        ? parseDateInputAsTimezone(validatedData.fiveHourResetAnchor, timezone)
+        : null;
+    if (fiveHourResetAnchor) {
+      const anchorValidation = validateFiveHourResetAnchor(fiveHourResetAnchor, tError);
+      if (anchorValidation) {
+        return { ok: false, ...anchorValidation };
+      }
+    }
+
     await updateKey(keyId, {
       name: validatedData.name,
       ...(hasExpiresAtField ? { expires_at: expiresAt } : {}),
       can_login_web_ui: validatedData.canLoginWebUi,
       ...(data.isEnabled !== undefined ? { is_enabled: data.isEnabled } : {}),
       limit_5h_usd: validatedData.limit5hUsd,
+      ...(hasFiveHourResetModeField
+        ? { five_hour_reset_mode: validatedData.fiveHourResetMode }
+        : {}),
+      ...(hasFiveHourResetAnchorField
+        ? {
+            five_hour_reset_anchor: fiveHourResetAnchor,
+          }
+        : {}),
       limit_daily_usd: validatedData.limitDailyUsd,
       daily_reset_mode: validatedData.dailyResetMode,
       daily_reset_time: validatedData.dailyResetTime,
@@ -1087,6 +1152,10 @@ export async function batchUpdateKeys(
       if (normalizedProviderGroup !== undefined) dbUpdates.providerGroup = normalizedProviderGroup;
       if (updates.limit5hUsd !== undefined)
         dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
+      if (updates.fiveHourResetMode !== undefined)
+        dbUpdates.fiveHourResetMode = updates.fiveHourResetMode;
+      if (updates.fiveHourResetAnchor !== undefined)
+        dbUpdates.fiveHourResetAnchor = updates.fiveHourResetAnchor;
       if (updates.limitDailyUsd !== undefined)
         dbUpdates.limitDailyUsd =
           updates.limitDailyUsd === null ? null : updates.limitDailyUsd.toString();

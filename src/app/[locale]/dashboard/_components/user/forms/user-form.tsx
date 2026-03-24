@@ -10,10 +10,20 @@ import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { InlineWarning } from "@/components/ui/inline-warning";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
+import { formatDateToDatetimeLocal } from "@/lib/utils/date";
 import { formatDateToLocalYmd, parseYmdToLocalEndOfDay } from "@/lib/utils/date-input";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { setZodErrorMap } from "@/lib/utils/zod-i18n";
@@ -35,6 +45,8 @@ interface UserFormProps {
     providerGroup?: string | null;
     tags?: string[];
     limit5hUsd?: number | null;
+    fiveHourResetMode?: "fixed" | "rolling";
+    fiveHourResetAnchor?: Date | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
@@ -57,6 +69,9 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
   const router = useRouter();
   const isEdit = Boolean(user?.id);
   const isAdmin = currentUser?.role === "admin";
+  const initialFiveHourResetAnchor = user?.fiveHourResetAnchor
+    ? formatDateToDatetimeLocal(user.fiveHourResetAnchor)
+    : "";
 
   // i18n translations
   const tErrors = useTranslations("errors");
@@ -88,6 +103,10 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       providerGroup: user?.providerGroup || PROVIDER_GROUP.DEFAULT,
       tags: user?.tags || [],
       limit5hUsd: user?.limit5hUsd ?? null,
+      fiveHourResetMode: user?.fiveHourResetMode ?? "rolling",
+      fiveHourResetAnchor: user?.fiveHourResetAnchor
+        ? formatDateToDatetimeLocal(user.fiveHourResetAnchor)
+        : "",
       limitWeeklyUsd: user?.limitWeeklyUsd ?? null,
       limitMonthlyUsd: user?.limitMonthlyUsd ?? null,
       limitTotalUsd: user?.limitTotalUsd ?? null,
@@ -109,6 +128,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
 
           let res;
           if (isEdit && user?.id) {
+            const hasFiveHourResetAnchorChanged =
+              data.fiveHourResetAnchor !== initialFiveHourResetAnchor;
             res = await editUser(user.id, {
               name: data.name,
               note: data.note,
@@ -117,6 +138,12 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
               tags: data.tags,
               limit5hUsd: data.limit5hUsd,
+              fiveHourResetMode: data.fiveHourResetMode,
+              ...(hasFiveHourResetAnchorChanged
+                ? {
+                    fiveHourResetAnchor: data.fiveHourResetAnchor || null,
+                  }
+                : {}),
               limitWeeklyUsd: data.limitWeeklyUsd,
               limitMonthlyUsd: data.limitMonthlyUsd,
               limitTotalUsd: data.limitTotalUsd,
@@ -136,6 +163,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
               tags: data.tags,
               limit5hUsd: data.limit5hUsd,
+              fiveHourResetMode: data.fiveHourResetMode,
+              fiveHourResetAnchor: data.fiveHourResetAnchor || null,
               limitWeeklyUsd: data.limitWeeklyUsd,
               limitMonthlyUsd: data.limitMonthlyUsd,
               limitTotalUsd: data.limitTotalUsd,
@@ -171,6 +200,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
 
   // Use dashboard translations for form
   const tForm = useTranslations("dashboard.userForm");
+  const tUserLimits = useTranslations("dashboard.userForm");
   const tUserEdit = useTranslations("dashboard.userManagement.userEditSection");
 
   const expiresAtPastWarning = useMemo(() => {
@@ -279,57 +309,109 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
 
       {/* Admin-only quota fields */}
       {isAdmin && (
-        <FormGrid columns={2}>
-          <TextField
-            label={tForm("limit5hUsd.label")}
-            type="number"
-            min={0}
-            max={10000}
-            step={0.01}
-            placeholder={tForm("limit5hUsd.placeholder")}
-            {...form.getFieldProps("limit5hUsd")}
-          />
+        <>
+          <FormGrid columns={2}>
+            <TextField
+              label={tForm("limit5hUsd.label")}
+              type="number"
+              min={0}
+              max={10000}
+              step={0.01}
+              placeholder={tForm("limit5hUsd.placeholder")}
+              {...form.getFieldProps("limit5hUsd")}
+            />
 
-          <TextField
-            label={tForm("limitWeeklyUsd.label")}
-            type="number"
-            min={0}
-            max={50000}
-            step={0.01}
-            placeholder={tForm("limitWeeklyUsd.placeholder")}
-            {...form.getFieldProps("limitWeeklyUsd")}
-          />
+            <div className="space-y-2">
+              <Label htmlFor="user-5h-reset-mode">{tUserLimits("fiveHourResetMode.label")}</Label>
+              <Select
+                value={form.values.fiveHourResetMode}
+                onValueChange={(value: "fixed" | "rolling") =>
+                  form.setValue("fiveHourResetMode", value)
+                }
+                disabled={isPending}
+              >
+                <SelectTrigger id="user-5h-reset-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed">
+                    {tUserLimits("fiveHourResetMode.options.fixed")}
+                  </SelectItem>
+                  <SelectItem value="rolling">
+                    {tUserLimits("fiveHourResetMode.options.rolling")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.values.fiveHourResetMode === "fixed"
+                  ? tUserLimits("fiveHourResetMode.desc.fixed")
+                  : tUserLimits("fiveHourResetMode.desc.rolling")}
+              </p>
+            </div>
+          </FormGrid>
 
-          <TextField
-            label={tForm("limitMonthlyUsd.label")}
-            type="number"
-            min={0}
-            max={200000}
-            step={0.01}
-            placeholder={tForm("limitMonthlyUsd.placeholder")}
-            {...form.getFieldProps("limitMonthlyUsd")}
-          />
+          {form.values.fiveHourResetMode === "fixed" && (
+            <FormGrid columns={2}>
+              <div className="space-y-2">
+                <Label htmlFor="user-5h-reset-anchor">
+                  {tUserLimits("fiveHourResetAnchor.label")}
+                </Label>
+                <Input
+                  id="user-5h-reset-anchor"
+                  type="datetime-local"
+                  value={form.values.fiveHourResetAnchor}
+                  onChange={(e) => form.setValue("fiveHourResetAnchor", e.target.value)}
+                  disabled={isPending}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {tUserLimits("fiveHourResetAnchor.description")}
+                </p>
+              </div>
+            </FormGrid>
+          )}
 
-          <TextField
-            label={tForm("limitTotalUsd.label")}
-            type="number"
-            min={0}
-            max={10000000}
-            step={0.01}
-            placeholder={tForm("limitTotalUsd.placeholder")}
-            {...form.getFieldProps("limitTotalUsd")}
-          />
+          <FormGrid columns={2}>
+            <TextField
+              label={tForm("limitWeeklyUsd.label")}
+              type="number"
+              min={0}
+              max={50000}
+              step={0.01}
+              placeholder={tForm("limitWeeklyUsd.placeholder")}
+              {...form.getFieldProps("limitWeeklyUsd")}
+            />
 
-          <TextField
-            label={tForm("limitConcurrentSessions.label")}
-            type="number"
-            min={0}
-            max={1000}
-            step={1}
-            placeholder={tForm("limitConcurrentSessions.placeholder")}
-            {...form.getFieldProps("limitConcurrentSessions")}
-          />
-        </FormGrid>
+            <TextField
+              label={tForm("limitMonthlyUsd.label")}
+              type="number"
+              min={0}
+              max={200000}
+              step={0.01}
+              placeholder={tForm("limitMonthlyUsd.placeholder")}
+              {...form.getFieldProps("limitMonthlyUsd")}
+            />
+
+            <TextField
+              label={tForm("limitTotalUsd.label")}
+              type="number"
+              min={0}
+              max={10000000}
+              step={0.01}
+              placeholder={tForm("limitTotalUsd.placeholder")}
+              {...form.getFieldProps("limitTotalUsd")}
+            />
+
+            <TextField
+              label={tForm("limitConcurrentSessions.label")}
+              type="number"
+              min={0}
+              max={1000}
+              step={1}
+              placeholder={tForm("limitConcurrentSessions.placeholder")}
+              {...form.getFieldProps("limitConcurrentSessions")}
+            />
+          </FormGrid>
+        </>
       )}
 
       {/* Admin-only user status fields */}

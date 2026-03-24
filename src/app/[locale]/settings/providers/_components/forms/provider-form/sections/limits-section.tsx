@@ -225,6 +225,54 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
             </div>
           </FieldGroup>
 
+          {/* 5h Reset Settings */}
+          <FieldGroup label={t("sections.limits.fiveHourReset")}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <SmartInputWrapper
+                label={t("sections.rateLimit.fiveHourResetMode.label")}
+                description={
+                  state.rateLimit.fiveHourResetMode === "fixed"
+                    ? t("sections.rateLimit.fiveHourResetMode.desc.fixed")
+                    : t("sections.rateLimit.fiveHourResetMode.desc.rolling")
+                }
+              >
+                <Select
+                  value={state.rateLimit.fiveHourResetMode}
+                  onValueChange={(value: "fixed" | "rolling") =>
+                    dispatch({ type: "SET_FIVE_HOUR_RESET_MODE", payload: value })
+                  }
+                  disabled={state.ui.isPending}
+                >
+                  <SelectTrigger id={isEdit ? "edit-5h-reset-mode" : "5h-reset-mode"}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">
+                      {t("sections.rateLimit.fiveHourResetMode.options.fixed")}
+                    </SelectItem>
+                    <SelectItem value="rolling">
+                      {t("sections.rateLimit.fiveHourResetMode.options.rolling")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </SmartInputWrapper>
+
+              {state.rateLimit.fiveHourResetMode === "fixed" && (
+                <SmartInputWrapper label={t("sections.rateLimit.fiveHourResetAnchor.label")}>
+                  <Input
+                    id={isEdit ? "edit-5h-reset-anchor" : "5h-reset-anchor"}
+                    type="datetime-local"
+                    value={state.rateLimit.fiveHourResetAnchor}
+                    onChange={(e) =>
+                      dispatch({ type: "SET_FIVE_HOUR_RESET_ANCHOR", payload: e.target.value })
+                    }
+                    disabled={state.ui.isPending}
+                  />
+                </SmartInputWrapper>
+              )}
+            </div>
+          </FieldGroup>
+
           {/* Daily Reset Settings */}
           <FieldGroup label={t("sections.limits.dailyReset")}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

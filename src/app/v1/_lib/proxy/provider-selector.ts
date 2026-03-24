@@ -646,6 +646,8 @@ export class ProxyProviderResolver {
     // 会话复用也必须遵守限额（否则会绕过"达到限额即禁用"的语义）
     const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
       limit_5h_usd: provider.limit5hUsd,
+      five_hour_reset_mode: provider.fiveHourResetMode,
+      five_hour_reset_anchor: provider.fiveHourResetAnchor ?? provider.createdAt ?? undefined,
       limit_daily_usd: provider.limitDailyUsd,
       daily_reset_mode: provider.dailyResetMode,
       daily_reset_time: provider.dailyResetTime,
@@ -1046,6 +1048,8 @@ export class ProxyProviderResolver {
         // 1. 检查金额限制
         const costCheck = await RateLimitService.checkCostLimitsWithLease(p.id, "provider", {
           limit_5h_usd: p.limit5hUsd,
+          five_hour_reset_mode: p.fiveHourResetMode,
+          five_hour_reset_anchor: p.fiveHourResetAnchor ?? p.createdAt ?? undefined,
           limit_daily_usd: p.limitDailyUsd,
           daily_reset_mode: p.dailyResetMode,
           daily_reset_time: p.dailyResetTime,
