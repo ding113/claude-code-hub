@@ -214,6 +214,38 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
+    const selectionWithoutCodexAndHighConcurrency = {
+      id: systemSettings.id,
+      siteTitle: systemSettings.siteTitle,
+      allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+      currencyDisplay: systemSettings.currencyDisplay,
+      billingModelSource: systemSettings.billingModelSource,
+      timezone: systemSettings.timezone,
+      enableAutoCleanup: systemSettings.enableAutoCleanup,
+      cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+      cleanupSchedule: systemSettings.cleanupSchedule,
+      cleanupBatchSize: systemSettings.cleanupBatchSize,
+      enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+      verboseProviderError: systemSettings.verboseProviderError,
+      enableHttp2: systemSettings.enableHttp2,
+      interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+      enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+      enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
+      enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+      enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
+      enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
+      enableResponseFixer: systemSettings.enableResponseFixer,
+      responseFixerConfig: systemSettings.responseFixerConfig,
+      quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
+      quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
+      quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
+      quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
+      quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
+      quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+      createdAt: systemSettings.createdAt,
+      updatedAt: systemSettings.updatedAt,
+    };
     const fullSelection = {
       ...selectionWithoutHighConcurrencyMode,
       enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
@@ -240,23 +272,39 @@ export async function getSystemSettings(): Promise<SystemSettings> {
             throw fallbackError;
           }
 
-          logger.warn("system_settings 表存在多个缺失列，继续使用最小字段集读取。", {
+          logger.warn("system_settings 表存在多个缺失列，继续使用 legacy 字段集读取。", {
             error: fallbackError,
           });
 
-          // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
-          const minimalSelection = {
-            id: systemSettings.id,
-            siteTitle: systemSettings.siteTitle,
-            allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-            currencyDisplay: systemSettings.currencyDisplay,
-            billingModelSource: systemSettings.billingModelSource,
-            createdAt: systemSettings.createdAt,
-            updatedAt: systemSettings.updatedAt,
-          };
+          try {
+            const [row] = await db
+              .select(selectionWithoutCodexAndHighConcurrency)
+              .from(systemSettings)
+              .limit(1);
+            return row ?? null;
+          } catch (legacyFallbackError) {
+            if (!isUndefinedColumnError(legacyFallbackError)) {
+              throw legacyFallbackError;
+            }
 
-          const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
-          return row ?? null;
+            logger.warn("system_settings 表存在更多缺失列，继续使用最小字段集读取。", {
+              error: legacyFallbackError,
+            });
+
+            // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
+            const minimalSelection = {
+              id: systemSettings.id,
+              siteTitle: systemSettings.siteTitle,
+              allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+              currencyDisplay: systemSettings.currencyDisplay,
+              billingModelSource: systemSettings.billingModelSource,
+              createdAt: systemSettings.createdAt,
+              updatedAt: systemSettings.updatedAt,
+            };
+
+            const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
+            return row ?? null;
+          }
         }
       }
 

@@ -20,12 +20,12 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     session = await ProxySession.fromContext(c);
     try {
       const systemSettings = await getCachedSystemSettings();
-      session.setHighConcurrencyModeEnabled?.(systemSettings.enableHighConcurrencyMode ?? false);
+      session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
     } catch (settingsError) {
       logger.warn("[ProxyHandler] Failed to load high concurrency setting, fallback to disabled", {
         error: settingsError,
       });
-      session.setHighConcurrencyModeEnabled?.(false);
+      session.setHighConcurrencyModeEnabled(false);
     }
 
     // 自动检测请求格式（端点优先，请求体补充）

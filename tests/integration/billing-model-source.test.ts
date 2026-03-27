@@ -424,6 +424,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(result.dbCostUsd).toBe("50");
     expect(result.rateLimitCost).toBe(50);
     expect(result.sessionCostUsd).toBe("");
+    expect(vi.mocked(SessionManager.storeSessionResponse)).not.toHaveBeenCalled();
     expect(vi.mocked(SessionManager.updateSessionUsage)).not.toHaveBeenCalled();
     expect(vi.mocked(SessionTracker.refreshSession)).not.toHaveBeenCalled();
   });

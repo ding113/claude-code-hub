@@ -66,6 +66,10 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     getOriginalModel: () => "claude-original",
     getEndpoint: () => "/v1/messages",
     getMessagesLength: () => 1,
+    highConcurrencyModeEnabled: false,
+    shouldPersistSessionDebugArtifacts() {
+      return !this.highConcurrencyModeEnabled;
+    },
   } as unknown as ProxySession;
 
   return { ...base, ...overrides } as ProxySession;
@@ -190,8 +194,11 @@ describe("ProxyWarmupGuard.ensure", () => {
       interceptAnthropicWarmupRequests: true,
       enableHighConcurrencyMode: true,
     });
+    const session = createMockSession();
+    (session as ProxySession & { highConcurrencyModeEnabled: boolean }).highConcurrencyModeEnabled =
+      true;
 
-    const result = await ProxyWarmupGuard.ensure(createMockSession());
+    const result = await ProxyWarmupGuard.ensure(session);
 
     expect(result).not.toBeNull();
     expect(result?.status).toBe(200);

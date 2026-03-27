@@ -426,11 +426,7 @@ export class ProxyErrorHandler {
    * 从 provider chain 中提取最后一次实际请求的状态码
    */
   private static getLastRequestStatusCode(session: ProxySession): number | null {
-    const chain =
-      typeof (session as ProxySession & { getProviderChain?: unknown }).getProviderChain ===
-      "function"
-        ? session.getProviderChain()
-        : null;
+    const chain = session.getProviderChain();
     if (!chain || chain.length === 0) {
       return null;
     }
