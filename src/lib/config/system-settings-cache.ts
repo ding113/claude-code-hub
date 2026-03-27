@@ -35,6 +35,7 @@ export function getCachedSystemSettingsOnlyCache(): SystemSettings | null {
 const DEFAULT_SETTINGS: Pick<
   SystemSettings,
   | "enableHttp2"
+  | "enableHighConcurrencyMode"
   | "interceptAnthropicWarmupRequests"
   | "codexPriorityBillingSource"
   | "enableThinkingSignatureRectifier"
@@ -47,6 +48,7 @@ const DEFAULT_SETTINGS: Pick<
   | "responseFixerConfig"
 > = {
   enableHttp2: false,
+  enableHighConcurrencyMode: false,
   interceptAnthropicWarmupRequests: false,
   codexPriorityBillingSource: "requested",
   enableThinkingSignatureRectifier: true,
@@ -123,6 +125,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       cleanupBatchSize: 10000,
       enableClientVersionCheck: false,
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
+      enableHighConcurrencyMode: DEFAULT_SETTINGS.enableHighConcurrencyMode,
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,

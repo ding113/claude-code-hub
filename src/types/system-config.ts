@@ -46,6 +46,10 @@ export interface SystemSettings {
   // 启用 HTTP/2 连接供应商
   enableHttp2: boolean;
 
+  // 高并发模式（默认关闭）
+  // 目标：关闭部分 Redis 调试快照与实时观测写入，降低高并发下的 CPU 与 IO 开销
+  enableHighConcurrencyMode: boolean;
+
   // 可选拦截 Anthropic Warmup 请求（默认关闭）
   interceptAnthropicWarmupRequests: boolean;
 
@@ -122,6 +126,9 @@ export interface UpdateSystemSettingsInput {
 
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2?: boolean;
+
+  // 高并发模式（可选）
+  enableHighConcurrencyMode?: boolean;
 
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests?: boolean;

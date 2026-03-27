@@ -354,7 +354,7 @@ async function persistSpecialSettings(session: ProxySession): Promise<void> {
     return;
   }
 
-  if (session.sessionId) {
+  if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
     await SessionManager.storeSessionSpecialSettings(
       session.sessionId,
       specialSettings,
@@ -1203,12 +1203,14 @@ export class ProxyForwarder {
             // ⭐ 统一更新两个数据源（确保监控数据一致）
             // session:provider (真实绑定) 已在 updateSessionBindingSmart 中更新
             // session:info (监控信息) 在此更新
-            void SessionManager.updateSessionProvider(session.sessionId, {
-              providerId: currentProvider.id,
-              providerName: currentProvider.name,
-            }).catch((error) => {
-              logger.error("ProxyForwarder: Failed to update session provider info", { error });
-            });
+            if (session.shouldTrackSessionObservability()) {
+              void SessionManager.updateSessionProvider(session.sessionId, {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+              }).catch((error) => {
+                logger.error("ProxyForwarder: Failed to update session provider info", { error });
+              });
+            }
           }
 
           // 记录到决策链
@@ -1877,7 +1879,7 @@ export class ProxyForwarder {
 
           // Persist special settings immediately (same pattern as Anthropic overrides)
           const specialSettings = session.getSpecialSettings();
-          if (session.sessionId) {
+          if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
             await SessionManager.storeSessionSpecialSettings(
               session.sessionId,
               specialSettings,
@@ -1987,7 +1989,7 @@ export class ProxyForwarder {
         }
       }
 
-      if (session.sessionId) {
+      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
         void SessionManager.storeSessionUpstreamRequestMeta(
           session.sessionId,
           { url: proxyUrl, method: session.method },
@@ -2024,7 +2026,7 @@ export class ProxyForwarder {
             session.addSpecialSetting(audit);
             const specialSettings = session.getSpecialSettings();
 
-            if (session.sessionId) {
+            if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
               // 这里用 await：避免后续响应侧写入（ResponseFixer 等）先完成后，被本次旧快照覆写
               await SessionManager.storeSessionSpecialSettings(
                 session.sessionId,
@@ -2092,7 +2094,7 @@ export class ProxyForwarder {
             session.addSpecialSetting(anthropicAudit);
             const specialSettings = session.getSpecialSettings();
 
-            if (session.sessionId) {
+            if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
               await SessionManager.storeSessionSpecialSettings(
                 session.sessionId,
                 specialSettings,
@@ -2134,7 +2136,7 @@ export class ProxyForwarder {
 
       processedHeaders = ProxyForwarder.buildHeaders(session, provider);
 
-      if (session.sessionId) {
+      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
         void SessionManager.storeSessionRequestHeaders(
           session.sessionId,
           processedHeaders,
@@ -2227,7 +2229,7 @@ export class ProxyForwarder {
         usedBaseUrl: effectiveBaseUrl,
       });
 
-      if (session.sessionId) {
+      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
         void SessionManager.storeSessionUpstreamRequestMeta(
           session.sessionId,
           { url: proxyUrl, method: session.method },
@@ -3391,10 +3393,12 @@ export class ProxyForwarder {
             });
           }
 
-          await SessionManager.updateSessionProvider(session.sessionId!, {
-            providerId: attempt.provider.id,
-            providerName: attempt.provider.name,
-          });
+          if (session.shouldTrackSessionObservability()) {
+            await SessionManager.updateSessionProvider(session.sessionId!, {
+              providerId: attempt.provider.id,
+              providerName: attempt.provider.name,
+            });
+          }
         })().catch((bindingError) => {
           logger.error("ProxyForwarder: Failed to update session provider info for hedge winner", {
             error: bindingError,
@@ -4040,7 +4044,7 @@ export class ProxyForwarder {
       }
     }
 
-    if (session?.sessionId) {
+    if (session?.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       void SessionManager.storeSessionResponseHeaders(
         session.sessionId,
         responseHeaders,

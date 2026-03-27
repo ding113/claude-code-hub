@@ -703,6 +703,10 @@ export const systemSettings = pgTable('system_settings', {
   // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
   enableHttp2: boolean('enable_http2').notNull().default(false),
 
+  // 高并发模式（默认关闭）
+  // 开启后：关闭部分 Redis 调试快照与实时观测写入，降低高并发下的 CPU 与 IO 开销
+  enableHighConcurrencyMode: boolean('enable_high_concurrency_mode').notNull().default(false),
+
   // 可选拦截 Anthropic Warmup 请求（默认关闭）
   // 开启后：对 /v1/messages 的 Warmup 请求直接由 CCH 抢答，避免打到上游供应商
   interceptAnthropicWarmupRequests: boolean('intercept_anthropic_warmup_requests')

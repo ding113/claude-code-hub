@@ -122,6 +122,10 @@ export class ProxySession {
   // Cached Codex Priority 计费来源（per-request）
   private cachedCodexPriorityBillingSource?: CodexPriorityBillingSource;
 
+  // 高并发模式（per-request）
+  // 开启后：跳过部分 Redis 调试快照与实时观测写入，降低高并发下的热点开销
+  private highConcurrencyModeEnabled = false;
+
   /**
    * Promise cache for billing-related system settings load (concurrency safe).
    * Ensures the relevant system settings are loaded at most once per request/session.
@@ -290,6 +294,22 @@ export class ProxySession {
 
   getContext1mApplied(): boolean {
     return this.context1mApplied;
+  }
+
+  setHighConcurrencyModeEnabled(enabled: boolean): void {
+    this.highConcurrencyModeEnabled = enabled;
+  }
+
+  isHighConcurrencyModeEnabled(): boolean {
+    return this.highConcurrencyModeEnabled;
+  }
+
+  shouldPersistSessionDebugArtifacts(): boolean {
+    return !this.highConcurrencyModeEnabled;
+  }
+
+  shouldTrackSessionObservability(): boolean {
+    return !this.highConcurrencyModeEnabled;
   }
 
   addSpecialSetting(setting: SpecialSetting): void {
@@ -537,6 +557,7 @@ export class ProxySession {
 
   private persistLiveChain(): void {
     if (!this.sessionId || this.requestSequence == null) return;
+    if (!this.shouldTrackSessionObservability()) return;
     void writeLiveChain(this.sessionId, this.requestSequence, this.providerChain);
   }
 

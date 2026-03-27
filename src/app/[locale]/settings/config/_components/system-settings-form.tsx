@@ -58,6 +58,7 @@ interface SystemSettingsFormProps {
     | "timezone"
     | "verboseProviderError"
     | "enableHttp2"
+    | "enableHighConcurrencyMode"
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
     | "enableBillingHeaderRectifier"
@@ -104,6 +105,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.verboseProviderError
   );
   const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
+  const [enableHighConcurrencyMode, setEnableHighConcurrencyMode] = useState(
+    initialSettings.enableHighConcurrencyMode
+  );
   const [interceptAnthropicWarmupRequests, setInterceptAnthropicWarmupRequests] = useState(
     initialSettings.interceptAnthropicWarmupRequests
   );
@@ -181,6 +185,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         timezone,
         verboseProviderError,
         enableHttp2,
+        enableHighConcurrencyMode,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
         enableBillingHeaderRectifier,
@@ -212,6 +217,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setEnableHttp2(result.data.enableHttp2);
+        setEnableHighConcurrencyMode(result.data.enableHighConcurrencyMode);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableBillingHeaderRectifier(result.data.enableBillingHeaderRectifier);
@@ -422,6 +428,28 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-http2"
             checked={enableHttp2}
             onCheckedChange={(checked) => setEnableHttp2(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 shrink-0">
+              <Network className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("enableHighConcurrencyMode")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableHighConcurrencyModeDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-high-concurrency-mode"
+            checked={enableHighConcurrencyMode}
+            onCheckedChange={(checked) => setEnableHighConcurrencyMode(checked)}
             disabled={isPending}
           />
         </div>

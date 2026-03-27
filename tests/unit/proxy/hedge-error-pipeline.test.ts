@@ -16,7 +16,9 @@ const h = vi.hoisted(() => ({
     getEndpointPolicy() {
       return resolveEndpointPolicy(h.session.requestUrl.pathname);
     },
+    getProviderChain: () => [],
     setOriginalFormat: vi.fn(),
+    setHighConcurrencyModeEnabled: vi.fn(),
     recordForwardStart: vi.fn(),
   } as any,
   forwarderError: null as unknown,
