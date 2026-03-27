@@ -7,11 +7,9 @@ import {
 import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 
 describe("endpoint-policy", () => {
-  test("raw passthrough endpoints resolve to identical strict policy", () => {
+  test("count_tokens resolves to strict raw passthrough policy", () => {
     const countTokensPolicy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS);
-    const compactPolicy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
 
-    expect(countTokensPolicy).toBe(compactPolicy);
     expect(isRawPassthroughEndpointPolicy(countTokensPolicy)).toBe(true);
     expect(countTokensPolicy).toEqual({
       kind: "raw_passthrough",
@@ -28,14 +26,39 @@ describe("endpoint-policy", () => {
     });
   });
 
+  test("responses/compact keeps passthrough forwarding but restores normal guards", () => {
+    const compactPolicy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
+
+    expect(isRawPassthroughEndpointPolicy(compactPolicy)).toBe(false);
+    expect(compactPolicy).toEqual({
+      kind: "guarded_passthrough",
+      guardPreset: "chat",
+      allowRetry: false,
+      allowProviderSwitch: false,
+      allowCircuitBreakerAccounting: true,
+      trackConcurrentRequests: true,
+      bypassRequestFilters: false,
+      bypassForwarderPreprocessing: true,
+      bypassSpecialSettings: true,
+      bypassResponseRectifier: true,
+      endpointPoolStrictness: "strict",
+    });
+  });
+
   test.each([
     "/v1/messages/count_tokens/",
     "/V1/MESSAGES/COUNT_TOKENS",
-    "/v1/responses/compact/",
-    "/V1/RESPONSES/COMPACT",
   ])("raw passthrough endpoints path helper matches variant %s", (pathname) => {
     expect(isRawPassthroughEndpointPath(pathname)).toBe(true);
     expect(isRawPassthroughEndpointPolicy(resolveEndpointPolicy(pathname))).toBe(true);
+  });
+
+  test.each([
+    "/v1/responses/compact/",
+    "/V1/RESPONSES/COMPACT",
+  ])("responses/compact variants no longer resolve as raw passthrough: %s", (pathname) => {
+    expect(isRawPassthroughEndpointPath(pathname)).toBe(false);
+    expect(isRawPassthroughEndpointPolicy(resolveEndpointPolicy(pathname))).toBe(false);
   });
 
   test("default policy stays on non-target endpoints", () => {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { rectifyBillingHeader } from "@/app/v1/_lib/proxy/billing-header-rectifier";
 
 describe("rectifyBillingHeader", () => {
-  test("system array with single billing header block - removes it and returns extractedValues", () => {
+  test("system array with single billing header block - removes it and redacts extractedValues", () => {
     const message: Record<string, unknown> = {
       system: [
         {
@@ -16,9 +16,7 @@ describe("rectifyBillingHeader", () => {
 
     expect(result.applied).toBe(true);
     expect(result.removedCount).toBe(1);
-    expect(result.extractedValues).toEqual([
-      "x-anthropic-billing-header: cc_version=2.1.36; cc_entrypoint=cli; cch=1;",
-    ]);
+    expect(result.extractedValues).toEqual(["x-anthropic-billing-header: [REDACTED]"]);
     expect(message.system).toEqual([]);
   });
 
@@ -74,7 +72,7 @@ describe("rectifyBillingHeader", () => {
     ]);
   });
 
-  test("system as plain string that IS a billing header - deletes system field", () => {
+  test("system as plain string that IS a billing header - deletes system field and redacts audit payload", () => {
     const message: Record<string, unknown> = {
       system: "x-anthropic-billing-header: cc_version=2.1.36;",
     };
@@ -83,7 +81,7 @@ describe("rectifyBillingHeader", () => {
 
     expect(result.applied).toBe(true);
     expect(result.removedCount).toBe(1);
-    expect(result.extractedValues).toEqual(["x-anthropic-billing-header: cc_version=2.1.36;"]);
+    expect(result.extractedValues).toEqual(["x-anthropic-billing-header: [REDACTED]"]);
     expect(message.system).toBeUndefined();
   });
 
@@ -179,6 +177,9 @@ describe("rectifyBillingHeader", () => {
     expect(result.applied).toBe(true);
     expect(result.removedCount).toBe(3);
     expect(result.extractedValues).toHaveLength(3);
+    expect(
+      result.extractedValues.every((value) => value === "x-anthropic-billing-header: [REDACTED]")
+    ).toBe(true);
     expect(message.system).toEqual([]);
   });
 
