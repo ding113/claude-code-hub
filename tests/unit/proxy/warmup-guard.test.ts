@@ -73,7 +73,10 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getCachedSystemSettingsMock.mockResolvedValue({ interceptAnthropicWarmupRequests: true });
+  getCachedSystemSettingsMock.mockResolvedValue({
+    interceptAnthropicWarmupRequests: true,
+    enableHighConcurrencyMode: false,
+  });
   dbInsertValuesMock.mockResolvedValue(undefined);
   storeSessionResponseMock.mockResolvedValue(undefined);
   storeSessionResponseHeadersMock.mockResolvedValue(undefined);
@@ -94,7 +97,10 @@ describe("ProxyWarmupGuard.ensure", () => {
 
   test("开关关闭时不应拦截", async () => {
     const ProxyWarmupGuard = await loadGuard();
-    getCachedSystemSettingsMock.mockResolvedValue({ interceptAnthropicWarmupRequests: false });
+    getCachedSystemSettingsMock.mockResolvedValue({
+      interceptAnthropicWarmupRequests: false,
+      enableHighConcurrencyMode: false,
+    });
 
     const result = await ProxyWarmupGuard.ensure(createMockSession());
     expect(result).toBeNull();
@@ -176,5 +182,24 @@ describe("ProxyWarmupGuard.ensure", () => {
     expect(result).not.toBeNull();
     expect(result?.status).toBe(200);
     expect(loggerErrorMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("高并发模式下仍应记录 warmup 日志，但跳过 Session Redis 调试快照写入", async () => {
+    const ProxyWarmupGuard = await loadGuard();
+    getCachedSystemSettingsMock.mockResolvedValueOnce({
+      interceptAnthropicWarmupRequests: true,
+      enableHighConcurrencyMode: true,
+    });
+
+    const result = await ProxyWarmupGuard.ensure(createMockSession());
+
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(200);
+    expect(storeSessionResponseMock).not.toHaveBeenCalled();
+    expect(storeSessionResponseHeadersMock).not.toHaveBeenCalled();
+    expect(storeSessionUpstreamRequestMetaMock).not.toHaveBeenCalled();
+    expect(storeSessionUpstreamResponseMetaMock).not.toHaveBeenCalled();
+    expect(dbInsertMock).toHaveBeenCalledTimes(1);
+    expect(dbInsertValuesMock).toHaveBeenCalledTimes(1);
   });
 });

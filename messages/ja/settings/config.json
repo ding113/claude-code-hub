@@ -54,6 +54,8 @@
     "enableAutoCleanupDesc": "スケジュールに従って履歴ログを自動的にクリーンアップします",
     "enableHttp2": "HTTP/2 を有効にする",
     "enableHttp2Desc": "有効にすると、プロキシ要求は優先的に HTTP/2 を使用します。HTTP/2 が失敗した場合は自動的に HTTP/1.1 にフォールバックします。",
+    "enableHighConcurrencyMode": "高並行モードを有効化",
+    "enableHighConcurrencyModeDesc": "有効にすると、高 RPM 時の CPU / IO 負荷を下げるため、Redis の一部デバッグスナップショットとリアルタイム Session 観測書き込みを停止します。転送、整流、fake 200 検知、課金、制限処理は維持されますが、Sessions のデバッグ詳細は減少または遅延する場合があります。",
     "enableResponseFixer": "レスポンス整流を有効化",
     "enableResponseFixerDesc": "上流応答の一般的な形式問題（エンコーディング、SSE、途切れた JSON）を自動修復します（既定で有効）。",
     "enableThinkingSignatureRectifier": "thinking 署名整流を有効化",

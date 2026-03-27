@@ -48,7 +48,7 @@ export class ProxyWarmupGuard {
     });
 
     // 尽量把“本地抢答”的响应写入 Session 详情（用于排查/审计）
-    if (session.sessionId) {
+    if (session.sessionId && !settings.enableHighConcurrencyMode) {
       const seq = session.getRequestSequence();
       await Promise.allSettled([
         SessionManager.storeSessionResponse(session.sessionId, responseText, seq),

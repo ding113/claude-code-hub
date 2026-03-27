@@ -183,7 +183,7 @@ function persistSpecialSettings(session: ProxySession): void {
   const specialSettings = session.getSpecialSettings();
   if (!specialSettings || specialSettings.length === 0) return;
 
-  if (session.sessionId) {
+  if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
     void SessionManager.storeSessionSpecialSettings(
       session.sessionId,
       specialSettings,

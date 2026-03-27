@@ -937,6 +937,8 @@ export const UpdateSystemSettingsSchema = z.object({
   verboseProviderError: z.boolean().optional(),
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2: z.boolean().optional(),
+  // 高并发模式（可选）
+  enableHighConcurrencyMode: z.boolean().optional(),
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests: z.boolean().optional(),
   // thinking signature 整流器（可选）

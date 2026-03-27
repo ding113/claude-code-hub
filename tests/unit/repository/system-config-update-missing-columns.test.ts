@@ -340,4 +340,88 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
 
     vi.useRealTimers();
   });
+
+  test("updateSystemSettings 在仅缺 enable_high_concurrency_mode 列时，仍应保留 codexPriorityBillingSource 更新", async () => {
+    vi.resetModules();
+
+    const now = new Date("2026-01-04T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const selectMock = vi.fn().mockReturnValue(
+      createThenableQuery([
+        {
+          id: 1,
+          siteTitle: "Claude Code Hub",
+          allowGlobalUsageView: false,
+          currencyDisplay: "USD",
+          billingModelSource: "original",
+          codexPriorityBillingSource: "requested",
+          enableAutoCleanup: false,
+          cleanupRetentionDays: 30,
+          cleanupSchedule: "0 2 * * *",
+          cleanupBatchSize: 10000,
+          enableClientVersionCheck: false,
+          verboseProviderError: false,
+          enableHttp2: false,
+          interceptAnthropicWarmupRequests: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ])
+    );
+
+    const rejectedUpdateQuery = createThenableQuery([] as unknown[]);
+    rejectedUpdateQuery.returning = vi.fn(() => Promise.reject({ code: "42703" }));
+
+    const downgradedUpdateQuery = createThenableQuery([
+      {
+        id: 1,
+        siteTitle: "Updated Title",
+        allowGlobalUsageView: false,
+        currencyDisplay: "USD",
+        billingModelSource: "original",
+        codexPriorityBillingSource: "actual",
+        enableAutoCleanup: false,
+        cleanupRetentionDays: 30,
+        cleanupSchedule: "0 2 * * *",
+        cleanupBatchSize: 10000,
+        enableClientVersionCheck: false,
+        verboseProviderError: false,
+        enableHttp2: false,
+        interceptAnthropicWarmupRequests: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const updateMock = vi
+      .fn()
+      .mockReturnValueOnce(rejectedUpdateQuery)
+      .mockReturnValueOnce(downgradedUpdateQuery);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        update: updateMock,
+        insert: vi.fn(() => createThenableQuery([])),
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { updateSystemSettings } = await import("@/repository/system-config");
+
+    const result = await updateSystemSettings({
+      siteTitle: "Updated Title",
+      codexPriorityBillingSource: "actual",
+      enableHighConcurrencyMode: true,
+    });
+
+    expect(result.siteTitle).toBe("Updated Title");
+    expect(result.codexPriorityBillingSource).toBe("actual");
+    expect(result.enableHighConcurrencyMode).toBe(false);
+    expect(updateMock).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
 });

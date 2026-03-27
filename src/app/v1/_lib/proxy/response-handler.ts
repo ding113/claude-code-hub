@@ -697,17 +697,19 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       }
 
       // 统一更新两个数据源（确保监控数据一致）
-      void SessionManager.updateSessionProvider(session.sessionId, {
-        providerId: meta.providerId,
-        providerName: meta.providerName,
-      }).catch((err) => {
-        logger.error(
-          "[ResponseHandler] Failed to update session provider info (stream finalized)",
-          {
-            error: err,
-          }
-        );
-      });
+      if (session.shouldTrackSessionObservability()) {
+        void SessionManager.updateSessionProvider(session.sessionId, {
+          providerId: meta.providerId,
+          providerName: meta.providerName,
+        }).catch((err) => {
+          logger.error(
+            "[ResponseHandler] Failed to update session provider info (stream finalized)",
+            {
+              error: err,
+            }
+          );
+        });
+      }
     }
 
     session.addProviderToChain(providerForChain, {
@@ -810,7 +812,7 @@ export class ProxyResponseHandler {
             }
 
             // 存储响应体到 Redis（5分钟过期）
-            if (session.sessionId) {
+            if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
               void SessionManager.storeSessionResponse(
                 session.sessionId,
                 responseText,
@@ -954,11 +956,13 @@ export class ProxyResponseHandler {
             statusCode: finalizedStatusCode,
           };
 
-          void SessionManager.updateSessionUsage(session.sessionId, sessionUsagePayload).catch(
-            (error: unknown) => {
-              logger.error("[ResponseHandler] Failed to update session usage:", error);
-            }
-          );
+          if (session.shouldTrackSessionObservability()) {
+            void SessionManager.updateSessionUsage(session.sessionId, sessionUsagePayload).catch(
+              (error: unknown) => {
+                logger.error("[ResponseHandler] Failed to update session usage:", error);
+              }
+            );
+          }
         }
       };
 
@@ -1035,7 +1039,7 @@ export class ProxyResponseHandler {
         }
 
         // 存储响应体到 Redis（5分钟过期）
-        if (session.sessionId) {
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
           void SessionManager.storeSessionResponse(
             session.sessionId,
             responseText,
@@ -1136,7 +1140,7 @@ export class ProxyResponseHandler {
         }
 
         // 更新 session 使用量到 Redis（用于实时监控）
-        if (session.sessionId && usageMetrics) {
+        if (session.sessionId && usageMetrics && session.shouldTrackSessionObservability()) {
           void SessionManager.updateSessionUsage(session.sessionId, {
             inputTokens: usageMetrics.input_tokens,
             outputTokens: usageMetrics.output_tokens,
@@ -1636,7 +1640,11 @@ export class ProxyResponseHandler {
             const clientAborted = session.clientAbortSignal?.aborted ?? false;
 
             // 存储响应体到 Redis（5分钟过期）
-            if (session.sessionId && !wasTruncated) {
+            if (
+              session.sessionId &&
+              !wasTruncated &&
+              session.shouldPersistSessionDebugArtifacts()
+            ) {
               void SessionManager.storeSessionResponse(
                 session.sessionId,
                 allContent,
@@ -1994,7 +2002,7 @@ export class ProxyResponseHandler {
         const providerIdForPersistence = finalized.providerIdForPersistence;
 
         // 存储响应体到 Redis（5分钟过期）
-        if (session.sessionId) {
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
           void SessionManager.storeSessionResponse(
             session.sessionId,
             allContent,
@@ -2161,11 +2169,13 @@ export class ProxyResponseHandler {
             payload.costUsd = costUsdStr;
           }
 
-          void SessionManager.updateSessionUsage(session.sessionId, payload).catch(
-            (error: unknown) => {
-              logger.error("[ResponseHandler] Failed to update session usage:", error);
-            }
-          );
+          if (session.shouldTrackSessionObservability()) {
+            void SessionManager.updateSessionUsage(session.sessionId, payload).catch(
+              (error: unknown) => {
+                logger.error("[ResponseHandler] Failed to update session usage:", error);
+              }
+            );
+          }
         }
 
         // 保存扩展信息（status code, tokens, provider chain）
@@ -3342,18 +3352,20 @@ export async function finalizeRequestStats(
       });
     }
 
-    void SessionManager.updateSessionUsage(session.sessionId, {
-      inputTokens: normalizedUsage.input_tokens,
-      outputTokens: normalizedUsage.output_tokens,
-      cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
-      cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,
-      costUsd: costUsdStr,
-      status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-      statusCode: statusCode,
-      ...(errorMessage ? { errorMessage } : {}),
-    }).catch((error: unknown) => {
-      logger.error("[ResponseHandler] Failed to update session usage:", error);
-    });
+    if (session.shouldTrackSessionObservability()) {
+      void SessionManager.updateSessionUsage(session.sessionId, {
+        inputTokens: normalizedUsage.input_tokens,
+        outputTokens: normalizedUsage.output_tokens,
+        cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
+        cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,
+        costUsd: costUsdStr,
+        status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
+        statusCode: statusCode,
+        ...(errorMessage ? { errorMessage } : {}),
+      }).catch((error: unknown) => {
+        logger.error("[ResponseHandler] Failed to update session usage:", error);
+      });
+    }
   }
 
   // 7. 更新请求详情
@@ -3377,7 +3389,9 @@ export async function finalizeRequestStats(
   });
 
   if (session.sessionId && session.requestSequence != null) {
-    void deleteLiveChain(session.sessionId, session.requestSequence);
+    if (session.shouldTrackSessionObservability()) {
+      void deleteLiveChain(session.sessionId, session.requestSequence);
+    }
   }
 
   return normalizedUsage;
@@ -3477,11 +3491,13 @@ async function trackCostToRedis(
     });
 
     // 刷新 session 时间戳（滑动窗口）
-    void SessionTracker.refreshSession(session.sessionId, key.id, provider.id, user.id).catch(
-      (error) => {
-        logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
-      }
-    );
+    if (session.shouldTrackSessionObservability()) {
+      void SessionTracker.refreshSession(session.sessionId, key.id, provider.id, user.id).catch(
+        (error) => {
+          logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
+        }
+      );
+    }
   } catch (error) {
     logger.error("[ResponseHandler] Failed to track cost to Redis, skipping", {
       error: error instanceof Error ? error.message : String(error),
@@ -3561,7 +3577,9 @@ async function persistRequestFailure(options: {
     });
 
     if (session.sessionId && session.requestSequence != null) {
-      void deleteLiveChain(session.sessionId, session.requestSequence);
+      if (session.shouldTrackSessionObservability()) {
+        void deleteLiveChain(session.sessionId, session.requestSequence);
+      }
     }
 
     const isAsyncWrite = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "sync";

@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   return {
@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => {
     updateMessageRequestDetails: vi.fn(async () => {}),
     getCachedSystemSettings: vi.fn(async () => ({
       enableResponseFixer: true,
+      enableHighConcurrencyMode: false,
       responseFixerConfig: {
         fixTruncatedJson: true,
         fixSseFormat: true,
@@ -39,15 +40,32 @@ function createSession() {
     messageContext: { id: 123 },
     addSpecialSetting: (s: unknown) => settings.push(s),
     getSpecialSettings: () => (settings.length > 0 ? (settings as any[]) : null),
+    shouldPersistSessionDebugArtifacts: () => true,
   } as any;
 }
 
 describe("ResponseFixer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      enableResponseFixer: true,
+      enableHighConcurrencyMode: false,
+      responseFixerConfig: {
+        fixTruncatedJson: true,
+        fixSseFormat: true,
+        fixEncoding: true,
+        maxJsonDepth: 200,
+        maxFixSize: 1024 * 1024,
+      },
+    });
+  });
+
   test("禁用时应原样透传（不加 header，不写 specialSettings）", async () => {
     const { ResponseFixer } = await import("./index");
 
     mocks.getCachedSystemSettings.mockResolvedValueOnce({
       enableResponseFixer: false,
+      enableHighConcurrencyMode: false,
       responseFixerConfig: {
         fixTruncatedJson: true,
         fixSseFormat: true,
@@ -82,6 +100,36 @@ describe("ResponseFixer", () => {
     expect(fixed.headers.get("x-cch-response-fixer")).toBe("applied");
     expect(session.getSpecialSettings()).not.toBeNull();
     expect(mocks.storeSessionSpecialSettings).toHaveBeenCalledTimes(1);
+    expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
+  });
+
+  test("高并发模式：命中修复时应继续持久化 DB specialSettings，但不写 session Redis specialSettings", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    mocks.getCachedSystemSettings.mockResolvedValueOnce({
+      enableResponseFixer: true,
+      enableHighConcurrencyMode: true,
+      responseFixerConfig: {
+        fixTruncatedJson: true,
+        fixSseFormat: true,
+        fixEncoding: true,
+        maxJsonDepth: 200,
+        maxFixSize: 1024 * 1024,
+      },
+    });
+
+    const session = createSession();
+    session.shouldPersistSessionDebugArtifacts = () => false;
+    const bomJson = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"a":1}')]);
+    const response = new Response(bomJson, {
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+
+    const fixed = await ResponseFixer.process(session, response);
+    expect(await fixed.text()).toBe('{"a":1}');
+    expect(fixed.headers.get("x-cch-response-fixer")).toBe("applied");
+    expect(session.getSpecialSettings()).not.toBeNull();
+    expect(mocks.storeSessionSpecialSettings).not.toHaveBeenCalled();
     expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
   });
 
@@ -138,6 +186,7 @@ describe("ResponseFixer", () => {
 
     mocks.getCachedSystemSettings.mockResolvedValueOnce({
       enableResponseFixer: true,
+      enableHighConcurrencyMode: false,
       responseFixerConfig: {
         fixTruncatedJson: true,
         fixSseFormat: true,

@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_high_concurrency_mode" boolean DEFAULT false NOT NULL;

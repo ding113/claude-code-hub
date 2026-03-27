@@ -70,7 +70,17 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     requestUrl: "http://localhost/v1/messages",
     method: "POST",
     originalFormat: "claude",
+    highConcurrencyModeEnabled: false,
     addSpecialSetting: vi.fn(),
+    setHighConcurrencyModeEnabled(enabled: boolean) {
+      this.highConcurrencyModeEnabled = enabled;
+    },
+    shouldPersistSessionDebugArtifacts() {
+      return !this.highConcurrencyModeEnabled;
+    },
+    shouldTrackSessionObservability() {
+      return !this.highConcurrencyModeEnabled;
+    },
 
     sessionId: null,
     setSessionId(id: string) {
@@ -102,6 +112,7 @@ beforeEach(() => {
   getOrCreateSessionIdMock.mockResolvedValue("session_assigned");
   getNextRequestSequenceMock.mockResolvedValue(1);
   getCachedSystemSettingsMock.mockResolvedValue({
+    enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: true,
     enableClaudeMetadataUserIdInjection: true,
   });
@@ -120,13 +131,37 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
 
   test("当 warmup 但开关关闭时，应正常调用 SessionTracker.trackSession", async () => {
     const ProxySessionGuard = await loadGuard();
-    getCachedSystemSettingsMock.mockResolvedValueOnce({ interceptAnthropicWarmupRequests: false });
+    getCachedSystemSettingsMock.mockResolvedValueOnce({
+      enableHighConcurrencyMode: false,
+      interceptAnthropicWarmupRequests: false,
+    });
     const session = createMockSession({ isWarmupRequest: () => true });
 
     await ProxySessionGuard.ensure(session);
 
     expect(trackSessionMock).toHaveBeenCalledTimes(1);
     expect(trackSessionMock).toHaveBeenCalledWith("session_assigned", 1, 1);
+  });
+
+  test("高并发模式：仍分配 session/requestSequence，但跳过 request 调试快照与 session 观测写入", async () => {
+    const ProxySessionGuard = await loadGuard();
+    getCachedSystemSettingsMock.mockResolvedValueOnce({
+      enableHighConcurrencyMode: true,
+      interceptAnthropicWarmupRequests: false,
+      enableClaudeMetadataUserIdInjection: true,
+    });
+
+    const session = createMockSession({ isWarmupRequest: () => false });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect(session.sessionId).toBe("session_assigned");
+    expect(session.getRequestSequence()).toBe(1);
+    expect(storeSessionRequestBodyMock).not.toHaveBeenCalled();
+    expect(storeSessionClientRequestMetaMock).not.toHaveBeenCalled();
+    expect(storeSessionMessagesMock).not.toHaveBeenCalled();
+    expect(storeSessionInfoMock).not.toHaveBeenCalled();
+    expect(trackSessionMock).not.toHaveBeenCalled();
   });
 
   test("Claude 旧版本请求缺少 user_id 但有 metadata.session_id 时，应使用最终 sessionId 补全 user_id", async () => {

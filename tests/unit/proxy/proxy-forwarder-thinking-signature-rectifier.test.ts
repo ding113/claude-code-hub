@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => {
   return {
     getCachedSystemSettings: vi.fn(async () => ({
       enableThinkingSignatureRectifier: true,
+      enableHighConcurrencyMode: false,
     })),
     recordSuccess: vi.fn(),
     recordFailure: vi.fn(async () => {}),
@@ -13,6 +14,13 @@ const mocks = vi.hoisted(() => {
       config: { failureThreshold: 3 },
     })),
     updateMessageRequestDetails: vi.fn(async () => {}),
+    storeSessionSpecialSettings: vi.fn(async () => {}),
+    updateSessionBindingSmart: vi.fn(async () => ({
+      updated: true,
+      reason: "first_success",
+      details: "mocked",
+    })),
+    updateSessionProvider: vi.fn(async () => {}),
   };
 });
 
@@ -34,6 +42,14 @@ vi.mock("@/lib/circuit-breaker", () => ({
 
 vi.mock("@/repository/message", () => ({
   updateMessageRequestDetails: mocks.updateMessageRequestDetails,
+}));
+
+vi.mock("@/lib/session-manager", () => ({
+  SessionManager: {
+    storeSessionSpecialSettings: mocks.storeSessionSpecialSettings,
+    updateSessionBindingSmart: mocks.updateSessionBindingSmart,
+    updateSessionProvider: mocks.updateSessionProvider,
+  },
 }));
 
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
@@ -88,7 +104,17 @@ function createSession(): ProxySession {
     specialSettings: [],
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
+    highConcurrencyModeEnabled: false,
     isHeaderModified: () => false,
+    setHighConcurrencyModeEnabled(enabled: boolean) {
+      this.highConcurrencyModeEnabled = enabled;
+    },
+    shouldPersistSessionDebugArtifacts() {
+      return !this.highConcurrencyModeEnabled;
+    },
+    shouldTrackSessionObservability() {
+      return !this.highConcurrencyModeEnabled;
+    },
   });
 
   return session as any;
@@ -109,6 +135,10 @@ function createAnthropicProvider(): Provider {
 describe("ProxyForwarder - thinking signature rectifier", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      enableThinkingSignatureRectifier: true,
+      enableHighConcurrencyMode: false,
+    });
   });
 
   test("首次命中特定 400 错误时应整流并对同供应商重试一次（成功后不抛错）", async () => {
@@ -439,5 +469,44 @@ describe("ProxyForwarder - thinking signature rectifier", () => {
     const special = session.getSpecialSettings();
     expect(special).not.toBeNull();
     expect(JSON.stringify(special)).toContain("thinking_signature_rectifier");
+  });
+
+  test("高并发模式：request-side rectifier 应继续写 DB specialSettings，但跳过 session Redis specialSettings", async () => {
+    const session = createSession();
+    session.sessionId = "sess_rectifier";
+    session.setHighConcurrencyModeEnabled(true);
+    session.setProvider(createAnthropicProvider());
+
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+
+    doForward.mockImplementationOnce(async () => {
+      throw new ProxyError("Invalid `signature` in `thinking` block", 400, {
+        body: "",
+        providerId: 1,
+        providerName: "anthropic-1",
+      });
+    });
+
+    doForward.mockImplementationOnce(async () => {
+      const body = JSON.stringify({
+        type: "message",
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(body.length),
+        },
+      });
+    });
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
+    expect(mocks.storeSessionSpecialSettings).not.toHaveBeenCalled();
   });
 });
