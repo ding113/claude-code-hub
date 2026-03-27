@@ -885,7 +885,7 @@ export class ProxyProviderResolver {
           !checkFormatProviderTypeCompatibility(session.originalFormat, p.providerType) &&
           !(
             session.originalFormat === "openai" &&
-            (p.providerType === "claude" || p.providerType === "claude-auth") &&
+            ["claude", "claude-auth", "codex", "gemini", "gemini-cli"].includes(p.providerType) &&
             p.joinOpenAIPool
           )
         ) {
