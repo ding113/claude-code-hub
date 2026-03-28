@@ -195,7 +195,7 @@ function getBodyText() {
 }
 
 function getActiveTimeToggle(container: HTMLDivElement) {
-  return container.querySelectorAll('[data-testid="switch"]')[3] as HTMLButtonElement | null;
+  return container.querySelector("#active-time-toggle") as HTMLButtonElement | null;
 }
 
 describe("OptionsSection", () => {

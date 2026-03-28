@@ -488,6 +488,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                   description={t("sections.routing.activeTime.toggleDescription")}
                 >
                   <Switch
+                    id={isEdit ? "edit-active-time-toggle" : "active-time-toggle"}
                     checked={
                       state.routing.activeTimeStart !== null && state.routing.activeTimeEnd !== null
                     }
