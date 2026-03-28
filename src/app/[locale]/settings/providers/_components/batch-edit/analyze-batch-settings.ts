@@ -29,6 +29,7 @@ export interface BatchSettingsAnalysis {
     costMultiplier: FieldAnalysisResult<number>;
     groupTag: FieldAnalysisResult<string[]>;
     preserveClientIp: FieldAnalysisResult<boolean>;
+    disableSessionReuse: FieldAnalysisResult<boolean>;
     modelRedirects: FieldAnalysisResult<Record<string, string>>;
     allowedModels: FieldAnalysisResult<string[]>;
     allowedClients: FieldAnalysisResult<string[]>;
@@ -119,6 +120,7 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
       costMultiplier: analyzeField(providers, (p) => p.costMultiplier),
       groupTag: analyzeField(providers, (p) => parseProviderGroups(p.groupTag)),
       preserveClientIp: analyzeField(providers, (p) => p.preserveClientIp),
+      disableSessionReuse: analyzeField(providers, (p) => p.disableSessionReuse ?? false),
       modelRedirects: analyzeField(providers, (p) => p.modelRedirects ?? {}),
       allowedModels: analyzeField(providers, (p) => p.allowedModels ?? []),
       allowedClients: analyzeField(providers, (p) => p.allowedClients ?? []),

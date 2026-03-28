@@ -94,6 +94,7 @@ export function toProvider(dbProvider: any): Provider {
     groupTag: dbProvider?.groupTag ?? null,
     providerType: dbProvider?.providerType ?? "claude",
     preserveClientIp: dbProvider?.preserveClientIp ?? false,
+    disableSessionReuse: dbProvider?.disableSessionReuse ?? false,
     modelRedirects: dbProvider?.modelRedirects ?? null,
     activeTimeStart: dbProvider?.activeTimeStart ?? null,
     activeTimeEnd: dbProvider?.activeTimeEnd ?? null,

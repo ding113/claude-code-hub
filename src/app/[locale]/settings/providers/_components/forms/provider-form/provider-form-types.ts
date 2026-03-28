@@ -48,6 +48,7 @@ export interface RoutingState {
   providerType: ProviderType;
   groupTag: string[];
   preserveClientIp: boolean;
+  disableSessionReuse: boolean;
   modelRedirects: Record<string, string>;
   allowedModels: string[];
   allowedClients: string[];
@@ -140,6 +141,7 @@ export type ProviderFormAction =
   | { type: "SET_PROVIDER_TYPE"; payload: ProviderType }
   | { type: "SET_GROUP_TAG"; payload: string[] }
   | { type: "SET_PRESERVE_CLIENT_IP"; payload: boolean }
+  | { type: "SET_DISABLE_SESSION_REUSE"; payload: boolean }
   | { type: "SET_MODEL_REDIRECTS"; payload: Record<string, string> }
   | { type: "SET_ALLOWED_MODELS"; payload: string[] }
   | { type: "SET_ALLOWED_CLIENTS"; payload: string[] }

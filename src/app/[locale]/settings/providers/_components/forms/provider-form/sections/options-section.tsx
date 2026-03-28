@@ -73,6 +73,20 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                 />
               </ToggleRow>
 
+              <ToggleRow
+                label={t("sections.routing.disableSessionReuse.label")}
+                description={t("sections.routing.disableSessionReuse.desc")}
+              >
+                <Switch
+                  id={isEdit ? "edit-disable-session-reuse" : "disable-session-reuse"}
+                  checked={state.routing.disableSessionReuse}
+                  onCheckedChange={(checked) =>
+                    dispatch({ type: "SET_DISABLE_SESSION_REUSE", payload: checked })
+                  }
+                  disabled={state.ui.isPending}
+                />
+              </ToggleRow>
+
               {/* Swap Cache TTL Billing */}
               <ToggleRow
                 label={t("sections.routing.swapCacheTtlBilling.label")}

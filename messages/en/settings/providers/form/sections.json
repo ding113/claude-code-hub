@@ -347,6 +347,10 @@
       "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP.",
       "label": "Forward client IP"
     },
+    "disableSessionReuse": {
+      "label": "Skip session reuse",
+      "desc": "When enabled, the next request will ignore this provider's sticky binding and rerun priority and health checks. Useful when a cheap higher-priority provider should be retried as soon as it recovers."
+    },
     "options": {
       "title": "Options",
       "desc": "Additional provider options and overrides"

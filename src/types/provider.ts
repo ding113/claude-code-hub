@@ -74,6 +74,7 @@ export type ProviderBatchPatchField =
   | "active_time_start"
   | "active_time_end"
   | "preserve_client_ip"
+  | "disable_session_reuse"
   | "group_priorities"
   | "cache_ttl_preference"
   | "swap_cache_ttl_billing"
@@ -126,6 +127,7 @@ export interface ProviderBatchPatchDraft {
   active_time_start?: ProviderPatchDraftInput<string>;
   active_time_end?: ProviderPatchDraftInput<string>;
   preserve_client_ip?: ProviderPatchDraftInput<boolean>;
+  disable_session_reuse?: ProviderPatchDraftInput<boolean>;
   group_priorities?: ProviderPatchDraftInput<Record<string, number>>;
   cache_ttl_preference?: ProviderPatchDraftInput<CacheTtlPreference>;
   swap_cache_ttl_billing?: ProviderPatchDraftInput<boolean>;
@@ -179,6 +181,7 @@ export interface ProviderBatchPatch {
   active_time_start: ProviderPatchOperation<string>;
   active_time_end: ProviderPatchOperation<string>;
   preserve_client_ip: ProviderPatchOperation<boolean>;
+  disable_session_reuse: ProviderPatchOperation<boolean>;
   group_priorities: ProviderPatchOperation<Record<string, number>>;
   cache_ttl_preference: ProviderPatchOperation<CacheTtlPreference>;
   swap_cache_ttl_billing: ProviderPatchOperation<boolean>;
@@ -232,6 +235,7 @@ export interface ProviderBatchApplyUpdates {
   active_time_start?: string | null;
   active_time_end?: string | null;
   preserve_client_ip?: boolean;
+  disable_session_reuse?: boolean;
   group_priorities?: Record<string, number> | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   swap_cache_ttl_billing?: boolean;
@@ -299,6 +303,8 @@ export interface Provider {
   providerType: ProviderType;
   // 是否透传客户端 IP
   preserveClientIp: boolean;
+  // 是否跳过当前供应商的 sticky session 复用
+  disableSessionReuse: boolean;
   modelRedirects: Record<string, string> | null;
 
   // Scheduled active time window (HH:mm format, null = always active)
@@ -415,6 +421,8 @@ export interface ProviderDisplay {
   providerVendorId: number | null;
   // 是否透传客户端 IP
   preserveClientIp: boolean;
+  // 是否跳过当前供应商的 sticky session 复用
+  disableSessionReuse: boolean;
   modelRedirects: Record<string, string> | null;
   // Scheduled active time window
   activeTimeStart: string | null;
@@ -511,6 +519,7 @@ export interface CreateProviderData {
   // 供应商类型和模型配置
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
+  disable_session_reuse?: boolean;
   model_redirects?: Record<string, string> | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
@@ -590,6 +599,7 @@ export interface UpdateProviderData {
   // 供应商类型和模型配置
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
+  disable_session_reuse?: boolean;
   model_redirects?: Record<string, string> | null;
   active_time_start?: string | null;
   active_time_end?: string | null;

@@ -13,6 +13,7 @@ function createBatchState(): ProviderFormState {
       providerType: "claude",
       groupTag: [],
       preserveClientIp: false,
+      disableSessionReuse: false,
       modelRedirects: {},
       allowedModels: [],
       allowedClients: [],
@@ -230,6 +231,16 @@ describe("buildPatchDraftFromFormState", () => {
     const draft = buildPatchDraftFromFormState(state, dirty);
 
     expect(draft.preserve_client_ip).toEqual({ set: true });
+  });
+
+  it("sets disableSessionReuse when dirty", () => {
+    const state = createBatchState();
+    state.routing.disableSessionReuse = true;
+    const dirty = new Set(["routing.disableSessionReuse"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.disable_session_reuse).toEqual({ set: true });
   });
 
   it("sets swapCacheTtlBilling when dirty", () => {

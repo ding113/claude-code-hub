@@ -96,6 +96,7 @@ function createMockState(
       providerType: "claude",
       groupTag: [],
       preserveClientIp: false,
+      disableSessionReuse: false,
       modelRedirects: {},
       allowedModels: [],
       allowedClients: [],
@@ -194,7 +195,7 @@ function getBodyText() {
 }
 
 function getActiveTimeToggle(container: HTMLDivElement) {
-  return container.querySelectorAll('[data-testid="switch"]')[2] as HTMLButtonElement | null;
+  return container.querySelectorAll('[data-testid="switch"]')[3] as HTMLButtonElement | null;
 }
 
 describe("OptionsSection", () => {
@@ -227,6 +228,14 @@ describe("OptionsSection", () => {
       const { unmount } = renderSection();
 
       expect(document.getElementById("swap-cache-ttl-billing")).toBeTruthy();
+
+      unmount();
+    });
+
+    it("renders disableSessionReuse toggle", () => {
+      const { unmount } = renderSection();
+
+      expect(document.getElementById("disable-session-reuse")).toBeTruthy();
 
       unmount();
     });
@@ -371,6 +380,22 @@ describe("OptionsSection", () => {
       unmount();
     });
 
+    it("dispatches SET_DISABLE_SESSION_REUSE on toggle", () => {
+      const { unmount } = renderSection();
+      const toggle = document.getElementById("disable-session-reuse") as HTMLButtonElement;
+
+      act(() => {
+        toggle.click();
+      });
+
+      expect(mockDispatch).toHaveBeenCalledWith({
+        type: "SET_DISABLE_SESSION_REUSE",
+        payload: true,
+      });
+
+      unmount();
+    });
+
     it("dispatches active time start/end when enabling", () => {
       const { container, unmount } = renderSection();
       const toggle = getActiveTimeToggle(container);
@@ -479,7 +504,7 @@ describe("OptionsSection", () => {
         container.querySelectorAll('[data-testid="switch"]')
       ) as HTMLButtonElement[];
 
-      expect(switches).toHaveLength(3);
+      expect(switches).toHaveLength(4);
       for (const toggle of switches) {
         expect(toggle.hasAttribute("disabled")).toBe(true);
       }

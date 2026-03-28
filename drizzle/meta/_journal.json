@@ -610,6 +610,13 @@
       "when": 1774625972691,
       "tag": "0086_perpetual_runaways",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1774678770349,
+      "tag": "0087_nappy_lady_mastermind",
+      "breakpoints": true
     }
   ]
 }

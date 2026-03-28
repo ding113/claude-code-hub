@@ -297,6 +297,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         providerType: provider.providerType,
         providerVendorId: provider.providerVendorId,
         preserveClientIp: provider.preserveClientIp,
+        disableSessionReuse: provider.disableSessionReuse,
         modelRedirects: provider.modelRedirects,
         activeTimeStart: provider.activeTimeStart,
         activeTimeEnd: provider.activeTimeEnd,
@@ -498,6 +499,7 @@ export async function addProvider(data: {
   group_tag?: string | null;
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
+  disable_session_reuse?: boolean;
   model_redirects?: Record<string, string> | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
@@ -676,6 +678,7 @@ export async function editProvider(
     group_priorities?: Record<string, number> | null;
     provider_type?: ProviderType;
     preserve_client_ip?: boolean;
+    disable_session_reuse?: boolean;
     model_redirects?: Record<string, string> | null;
     active_time_start?: string | null;
     active_time_end?: string | null;
@@ -1302,6 +1305,7 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   group_priorities: "groupPriorities",
   provider_type: "providerType",
   preserve_client_ip: "preserveClientIp",
+  disable_session_reuse: "disableSessionReuse",
   active_time_start: "activeTimeStart",
   active_time_end: "activeTimeEnd",
   model_redirects: "modelRedirects",
@@ -1468,6 +1472,9 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.preserve_client_ip !== undefined) {
     result.preserveClientIp = applyUpdates.preserve_client_ip;
   }
+  if (applyUpdates.disable_session_reuse !== undefined) {
+    result.disableSessionReuse = applyUpdates.disable_session_reuse;
+  }
   if (applyUpdates.active_time_start !== undefined) {
     result.activeTimeStart = applyUpdates.active_time_start;
   }
@@ -1586,6 +1593,7 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
   anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
   preserve_client_ip: "preserveClientIp",
+  disable_session_reuse: "disableSessionReuse",
   active_time_start: "activeTimeStart",
   active_time_end: "activeTimeEnd",
   group_priorities: "groupPriorities",

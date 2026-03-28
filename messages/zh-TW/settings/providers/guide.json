@@ -110,7 +110,7 @@
   "sessionLastUsed": "B 可用，直接復用，跳過隨機選擇",
   "sessionExpired": "Session 過期（5 分鐘）後自動釋放",
   "sessionFallback": "從其他可用供應商中選擇",
-  "sessionReuse": "4. Session 復用：連續對話復用同一供應商，節省上下文成本",
+  "sessionReuse": "4. Session 復用：連續對話預設復用同一供應商；若某供應商開啟「不遵循 Session 復用」，下一次請求會重新走優先級與健康檢查",
   "sessionUnavailable": "上次使用的供應商 B 已被停用或熔斷",
   "step": "步驟",
   "title": "核心原則",

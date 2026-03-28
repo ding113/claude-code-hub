@@ -16,9 +16,24 @@ describe("analyzeBatchProviderSettings", () => {
   describe("uniform 值", () => {
     it("应该识别所有供应商有相同的基本类型值", () => {
       const providers: ProviderDisplay[] = [
-        { priority: 10, weight: 5, costMultiplier: 1.5 } as ProviderDisplay,
-        { priority: 10, weight: 5, costMultiplier: 1.5 } as ProviderDisplay,
-        { priority: 10, weight: 5, costMultiplier: 1.5 } as ProviderDisplay,
+        {
+          priority: 10,
+          weight: 5,
+          costMultiplier: 1.5,
+          disableSessionReuse: true,
+        } as ProviderDisplay,
+        {
+          priority: 10,
+          weight: 5,
+          costMultiplier: 1.5,
+          disableSessionReuse: true,
+        } as ProviderDisplay,
+        {
+          priority: 10,
+          weight: 5,
+          costMultiplier: 1.5,
+          disableSessionReuse: true,
+        } as ProviderDisplay,
       ];
 
       const result = analyzeBatchProviderSettings(providers);
@@ -26,6 +41,7 @@ describe("analyzeBatchProviderSettings", () => {
       expect(result.routing.priority).toEqual({ status: "uniform", value: 10 });
       expect(result.routing.weight).toEqual({ status: "uniform", value: 5 });
       expect(result.routing.costMultiplier).toEqual({ status: "uniform", value: 1.5 });
+      expect(result.routing.disableSessionReuse).toEqual({ status: "uniform", value: true });
     });
 
     it("应该识别所有供应商有相同的对象值", () => {
@@ -71,9 +87,9 @@ describe("analyzeBatchProviderSettings", () => {
   describe("mixed 值", () => {
     it("应该识别供应商有不同的基本类型值", () => {
       const providers: ProviderDisplay[] = [
-        { priority: 10 } as ProviderDisplay,
-        { priority: 20 } as ProviderDisplay,
-        { priority: 30 } as ProviderDisplay,
+        { priority: 10, disableSessionReuse: false } as ProviderDisplay,
+        { priority: 20, disableSessionReuse: true } as ProviderDisplay,
+        { priority: 30, disableSessionReuse: false } as ProviderDisplay,
       ];
 
       const result = analyzeBatchProviderSettings(providers);
@@ -81,6 +97,10 @@ describe("analyzeBatchProviderSettings", () => {
       expect(result.routing.priority.status).toBe("mixed");
       if (result.routing.priority.status === "mixed") {
         expect(result.routing.priority.values).toEqual([10, 20, 30]);
+      }
+      expect(result.routing.disableSessionReuse.status).toBe("mixed");
+      if (result.routing.disableSessionReuse.status === "mixed") {
+        expect(result.routing.disableSessionReuse.values).toEqual([false, true]);
       }
     });
 
