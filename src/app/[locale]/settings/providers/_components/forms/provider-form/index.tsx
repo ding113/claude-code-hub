@@ -298,6 +298,7 @@ function ProviderFormContent({
           website_url: state.basic.websiteUrl?.trim() || null,
           provider_type: state.routing.providerType,
           preserve_client_ip: state.routing.preserveClientIp,
+          disable_session_reuse: state.routing.disableSessionReuse,
           model_redirects: state.routing.modelRedirects,
           allowed_models:
             state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,

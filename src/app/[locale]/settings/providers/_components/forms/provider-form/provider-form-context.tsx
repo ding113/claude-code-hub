@@ -28,6 +28,7 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> 
   SET_COST_MULTIPLIER: "routing.costMultiplier",
   SET_GROUP_TAG: "routing.groupTag",
   SET_PRESERVE_CLIENT_IP: "routing.preserveClientIp",
+  SET_DISABLE_SESSION_REUSE: "routing.disableSessionReuse",
   SET_MODEL_REDIRECTS: "routing.modelRedirects",
   SET_ALLOWED_MODELS: "routing.allowedModels",
   SET_ALLOWED_CLIENTS: "routing.allowedClients",
@@ -101,6 +102,10 @@ export function createInitialState(
         preserveClientIp:
           analysis.routing.preserveClientIp.status === "uniform"
             ? analysis.routing.preserveClientIp.value
+            : false,
+        disableSessionReuse:
+          analysis.routing.disableSessionReuse.status === "uniform"
+            ? analysis.routing.disableSessionReuse.value
             : false,
         modelRedirects:
           analysis.routing.modelRedirects.status === "uniform"
@@ -282,6 +287,7 @@ export function createInitialState(
         providerType: "claude",
         groupTag: [],
         preserveClientIp: false,
+        disableSessionReuse: false,
         modelRedirects: {},
         allowedModels: [],
         allowedClients: [],
@@ -356,6 +362,7 @@ export function createInitialState(
       providerType: sourceProvider?.providerType ?? preset?.providerType ?? "claude",
       groupTag: parseProviderGroups(sourceProvider?.groupTag),
       preserveClientIp: sourceProvider?.preserveClientIp ?? false,
+      disableSessionReuse: sourceProvider?.disableSessionReuse ?? false,
       modelRedirects: sourceProvider?.modelRedirects ?? {},
       allowedModels: sourceProvider?.allowedModels ?? [],
       allowedClients: sourceProvider?.allowedClients ?? [],
@@ -454,6 +461,8 @@ export function providerFormReducer(
       return { ...state, routing: { ...state.routing, groupTag: action.payload } };
     case "SET_PRESERVE_CLIENT_IP":
       return { ...state, routing: { ...state.routing, preserveClientIp: action.payload } };
+    case "SET_DISABLE_SESSION_REUSE":
+      return { ...state, routing: { ...state.routing, disableSessionReuse: action.payload } };
     case "SET_MODEL_REDIRECTS":
       return { ...state, routing: { ...state.routing, modelRedirects: action.payload } };
     case "SET_ALLOWED_MODELS":

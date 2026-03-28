@@ -40,6 +40,7 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "active_time_start",
   "active_time_end",
   "preserve_client_ip",
+  "disable_session_reuse",
   "group_priorities",
   "cache_ttl_preference",
   "swap_cache_ttl_billing",
@@ -93,6 +94,7 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   active_time_start: true,
   active_time_end: true,
   preserve_client_ip: false,
+  disable_session_reuse: false,
   group_priorities: true,
   cache_ttl_preference: true,
   swap_cache_ttl_billing: false,
@@ -214,6 +216,7 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
   switch (field) {
     case "is_enabled":
     case "preserve_client_ip":
+    case "disable_session_reuse":
     case "swap_cache_ttl_billing":
     case "proxy_fallback_to_direct":
       return typeof value === "boolean";
@@ -454,6 +457,12 @@ export function normalizeProviderBatchPatchDraft(
   const preserveClientIp = normalizePatchField("preserve_client_ip", typedDraft.preserve_client_ip);
   if (!preserveClientIp.ok) return preserveClientIp;
 
+  const disableSessionReuse = normalizePatchField(
+    "disable_session_reuse",
+    typedDraft.disable_session_reuse
+  );
+  if (!disableSessionReuse.ok) return disableSessionReuse;
+
   const groupPriorities = normalizePatchField("group_priorities", typedDraft.group_priorities);
   if (!groupPriorities.ok) return groupPriorities;
 
@@ -623,6 +632,7 @@ export function normalizeProviderBatchPatchDraft(
       active_time_start: activeTimeStart.data,
       active_time_end: activeTimeEnd.data,
       preserve_client_ip: preserveClientIp.data,
+      disable_session_reuse: disableSessionReuse.data,
       group_priorities: groupPriorities.data,
       cache_ttl_preference: cacheTtlPref.data,
       swap_cache_ttl_billing: swapCacheTtlBilling.data,
@@ -719,6 +729,10 @@ function applyPatchField<T>(
         return { ok: true, data: undefined };
       case "preserve_client_ip":
         updates.preserve_client_ip = patch.value as ProviderBatchApplyUpdates["preserve_client_ip"];
+        return { ok: true, data: undefined };
+      case "disable_session_reuse":
+        updates.disable_session_reuse =
+          patch.value as ProviderBatchApplyUpdates["disable_session_reuse"];
         return { ok: true, data: undefined };
       case "group_priorities":
         updates.group_priorities = patch.value as ProviderBatchApplyUpdates["group_priorities"];
@@ -955,6 +969,7 @@ export function buildProviderBatchApplyUpdates(
     ["active_time_start", patch.active_time_start],
     ["active_time_end", patch.active_time_end],
     ["preserve_client_ip", patch.preserve_client_ip],
+    ["disable_session_reuse", patch.disable_session_reuse],
     ["group_priorities", patch.group_priorities],
     ["cache_ttl_preference", patch.cache_ttl_preference],
     ["swap_cache_ttl_billing", patch.swap_cache_ttl_billing],
@@ -1021,6 +1036,7 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.active_time_start.mode !== "no_change" ||
     patch.active_time_end.mode !== "no_change" ||
     patch.preserve_client_ip.mode !== "no_change" ||
+    patch.disable_session_reuse.mode !== "no_change" ||
     patch.group_priorities.mode !== "no_change" ||
     patch.cache_ttl_preference.mode !== "no_change" ||
     patch.swap_cache_ttl_billing.mode !== "no_change" ||

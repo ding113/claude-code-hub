@@ -53,6 +53,7 @@ function createHaikuOnlyProvider(): Provider {
     weight: 1,
     priority: 1,
     costMultiplier: 1,
+    disableSessionReuse: false,
     allowedModels: ["claude-haiku-4-5-20251001", "claude-haiku-4-5"],
     providerVendorId: null,
     limit5hUsd: null,
@@ -92,6 +93,32 @@ function createOpusProvider(): Provider {
 }
 
 describe("findReusable - model mismatch clears stale binding", () => {
+  test("should clear binding when bound provider disables session reuse", async () => {
+    const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
+
+    sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(78);
+    const provider = createHaikuOnlyProvider();
+    providerRepositoryMocks.findProviderById.mockResolvedValueOnce({
+      ...provider,
+      disableSessionReuse: true,
+    } as Provider);
+
+    const session = {
+      sessionId: "sess_disable_reuse",
+      shouldReuseProvider: () => true,
+      getOriginalModel: () => "claude-haiku-4-5-20251001",
+      authState: null,
+      getCurrentModel: () => null,
+    } as any;
+
+    const result = await (ProxyProviderResolver as any).findReusable(session);
+
+    expect(result).toBeNull();
+    expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
+      "sess_disable_reuse"
+    );
+  });
+
   test("should clear stale binding when bound provider does not support requested model", async () => {
     const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
 

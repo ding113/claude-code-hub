@@ -486,6 +486,16 @@ export class ProxyProviderResolver {
       return null;
     }
 
+    if (provider.disableSessionReuse) {
+      logger.debug("ProviderSelector: Session provider opted out of session reuse", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        providerName: provider.name,
+      });
+      await SessionManager.clearSessionProvider(session.sessionId);
+      return null;
+    }
+
     // 调度时间窗口检查：防止会话复用绕过时间调度
     const systemTimezone = await resolveSystemTimezone();
     if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {

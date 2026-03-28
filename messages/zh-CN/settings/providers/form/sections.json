@@ -40,6 +40,10 @@
       "desc": "向上游转发 x-forwarded-for / x-real-ip，可能暴露真实来源 IP",
       "help": "默认关闭以保护隐私；仅在需要上游感知终端 IP 时开启。"
     },
+    "disableSessionReuse": {
+      "label": "不遵循会话复用",
+      "desc": "开启后，下次请求不会继续复用当前供应商的 sticky 绑定，而是重新走优先级与健康检查。适合高优先级便宜渠道恢复后尽快切回的场景。"
+    },
     "options": {
       "title": "选项",
       "desc": "附加供应商选项和覆写设置"

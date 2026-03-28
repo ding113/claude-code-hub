@@ -191,6 +191,8 @@ export const providers = pgTable('providers', {
     .$type<ProviderType>(),
   // 是否透传客户端 IP（默认关闭，避免暴露真实来源）
   preserveClientIp: boolean('preserve_client_ip').notNull().default(false),
+  // 是否跳过当前供应商的 sticky session 复用
+  disableSessionReuse: boolean('disable_session_reuse').notNull().default(false),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
   modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),
