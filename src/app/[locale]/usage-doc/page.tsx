@@ -139,6 +139,8 @@ interface UsageDocContentProps {
 export function UsageDocContent({ origin }: UsageDocContentProps) {
   const t = useTranslations("usage");
   const resolvedOrigin = origin || t("ui.currentSiteAddress");
+  // 优先使用显式配置的 API 域名，兼容 Web/UI 与 API 分域部署
+  const apiOrigin = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || resolvedOrigin;
   const CLI_CONFIGS = getCLIConfigs(t);
 
   /**
@@ -492,7 +494,7 @@ npm --version`}
             code={`{
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "your-api-key-here",
-    "ANTHROPIC_BASE_URL": "${resolvedOrigin}",
+    "ANTHROPIC_BASE_URL": "${apiOrigin}",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
   "permissions": {
@@ -522,13 +524,13 @@ npm --version`}
               <p>{t("claudeCode.configuration.envVars.windows.temporary")}</p>
               <CodeBlock
                 language="powershell"
-                code={`$env:ANTHROPIC_BASE_URL = "${resolvedOrigin}"
+                code={`$env:ANTHROPIC_BASE_URL = "${apiOrigin}"
 $env:ANTHROPIC_AUTH_TOKEN = "your-api-key-here"`}
               />
               <p>{t("claudeCode.configuration.envVars.windows.permanent")}</p>
               <CodeBlock
                 language="powershell"
-                code={`[System.Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "${resolvedOrigin}", [System.EnvironmentVariableTarget]::User)
+                code={`[System.Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "${apiOrigin}", [System.EnvironmentVariableTarget]::User)
 [System.Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", "your-api-key-here", [System.EnvironmentVariableTarget]::User)`}
               />
               <p className="text-sm text-muted-foreground">
@@ -540,7 +542,7 @@ $env:ANTHROPIC_AUTH_TOKEN = "your-api-key-here"`}
               <p>{t("claudeCode.configuration.envVars.unix.temporary")}</p>
               <CodeBlock
                 language="bash"
-                code={`export ANTHROPIC_BASE_URL="${resolvedOrigin}"
+                code={`export ANTHROPIC_BASE_URL="${apiOrigin}"
 export ANTHROPIC_AUTH_TOKEN="your-api-key-here"`}
               />
               <p>{t("claudeCode.configuration.envVars.unix.permanent")}</p>
@@ -549,7 +551,7 @@ export ANTHROPIC_AUTH_TOKEN="your-api-key-here"`}
               </p>
               <CodeBlock
                 language="bash"
-                code={`echo 'export ANTHROPIC_BASE_URL="${resolvedOrigin}"' >> ${shellConfigFile}
+                code={`echo 'export ANTHROPIC_BASE_URL="${apiOrigin}"' >> ${shellConfigFile}
 echo 'export ANTHROPIC_AUTH_TOKEN="your-api-key-here"' >> ${shellConfigFile}
 source ${shellConfigFile}`}
               />
@@ -585,7 +587,7 @@ echo $ANTHROPIC_AUTH_TOKEN`}
           <p>{t("claudeCode.configuration.verification.expectedOutput")}</p>
           <CodeBlock
             language="text"
-            code={`${resolvedOrigin}
+            code={`${apiOrigin}
 sk_xxxxxxxxxxxxxxxxxx`}
           />
           <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
@@ -676,7 +678,7 @@ rmcp_client = true
 
 [model_providers.cch]
 name = "cch"
-base_url = "${resolvedOrigin}/v1"
+base_url = "${apiOrigin}/v1"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -722,7 +724,7 @@ rmcp_client = true
 
 [model_providers.cch]
 name = "cch"
-base_url = "${resolvedOrigin}/v1"
+base_url = "${apiOrigin}/v1"
 wire_api = "responses"
 env_key = "CCH_API_KEY"
 requires_openai_auth = true
@@ -830,7 +832,7 @@ source ${shellConfigFile}`}
           <p>{t("gemini.configuration.configFile.step2.content")}</p>
           <CodeBlock
             language="bash"
-            code={`GOOGLE_GEMINI_BASE_URL=${resolvedOrigin}
+            code={`GOOGLE_GEMINI_BASE_URL=${apiOrigin}
 GEMINI_API_KEY=your-api-key-here
 GEMINI_MODEL=gemini-3-pro-preview`}
           />
@@ -892,14 +894,14 @@ GEMINI_MODEL=gemini-3-pro-preview`}
               <p>{t("gemini.configuration.envVars.windows.powershell")}</p>
               <CodeBlock
                 language="powershell"
-                code={`$env:GOOGLE_GEMINI_BASE_URL="${resolvedOrigin}"
+                code={`$env:GOOGLE_GEMINI_BASE_URL="${apiOrigin}"
 $env:GEMINI_API_KEY="your-api-key-here"
 $env:GEMINI_MODEL="gemini-2.5-pro"`}
               />
               <p>{t("gemini.configuration.envVars.windows.cmd")}</p>
               <CodeBlock
                 language="cmd"
-                code={`set GOOGLE_GEMINI_BASE_URL=${resolvedOrigin}
+                code={`set GOOGLE_GEMINI_BASE_URL=${apiOrigin}
 set GEMINI_API_KEY=your-api-key-here
 set GEMINI_MODEL=gemini-3-pro-preview`}
               />
@@ -912,7 +914,7 @@ set GEMINI_MODEL=gemini-3-pro-preview`}
               <p>{t("gemini.configuration.envVars.macosLinux.title")}</p>
               <CodeBlock
                 language="bash"
-                code={`export GOOGLE_GEMINI_BASE_URL="${resolvedOrigin}"
+                code={`export GOOGLE_GEMINI_BASE_URL="${apiOrigin}"
 export GEMINI_API_KEY="your-api-key-here"
 export GEMINI_MODEL="gemini-2.5-pro"`}
               />
@@ -1091,7 +1093,7 @@ gemini`}
             npm: "@ai-sdk/anthropic",
             name: "Claude via cch",
             options: {
-              baseURL: `${resolvedOrigin}/v1`,
+              baseURL: `${apiOrigin}/v1`,
               apiKey: "{env:CCH_API_KEY}",
             },
             models: {
@@ -1104,7 +1106,7 @@ gemini`}
             npm: "@ai-sdk/openai",
             name: "GPT via cch",
             options: {
-              baseURL: `${resolvedOrigin}/v1`,
+              baseURL: `${apiOrigin}/v1`,
               apiKey: "{env:CCH_API_KEY}",
               store: false,
               setCacheKey: true,
@@ -1133,7 +1135,7 @@ gemini`}
             npm: "@ai-sdk/google",
             name: "Gemini via cch",
             options: {
-              baseURL: `${resolvedOrigin}/v1beta`,
+              baseURL: `${apiOrigin}/v1beta`,
               apiKey: "{env:CCH_API_KEY}",
             },
             models: {
@@ -1243,14 +1245,14 @@ gemini`}
     {
       "model_display_name": "Sonnet 4.5 [cch]",
       "model": "claude-sonnet-4-5-20250929",
-      "base_url": "${resolvedOrigin}",
+      "base_url": "${apiOrigin}",
       "api_key": "your-api-key-here",
       "provider": "anthropic"
     },
     {
       "model_display_name": "GPT-5.2 [cch]",
       "model": "gpt-5.2",
-      "base_url": "${resolvedOrigin}/v1",
+      "base_url": "${apiOrigin}/v1",
       "api_key": "your-api-key-here",
       "provider": "openai"
     }
@@ -1514,7 +1516,7 @@ Test-NetConnection -ComputerName ${resolvedOrigin.replace("https://", "").replac
 echo $${envKeyName}
 
 ${t("snippets.comments.testNetworkConnection")}
-curl -I ${resolvedOrigin}`}
+curl -i ${apiOrigin}/v1/messages`}
               />
             )}
           </div>
