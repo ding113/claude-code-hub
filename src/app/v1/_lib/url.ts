@@ -75,6 +75,30 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
 
         return baseUrlObj.toString();
       }
+
+      // Case 2b: basePath ends with a different version prefix (e.g., /v4)
+      // When base_url = https://open.bigmodel.cn/api/coding/paas/v4 and request = /v1/chat/completions,
+      // standard concatenation produces /v4/v1/chat/completions (wrong).
+      // Instead, strip the request version and append only the endpoint: /v4/chat/completions.
+      const versionInBaseMatch = basePath.match(/\/(v\d+[a-z0-9]*)$/);
+      if (versionInBaseMatch) {
+        const baseVersion = versionInBaseMatch[1];
+        if (baseVersion !== version) {
+          baseUrlObj.pathname = basePath + endpoint + suffix;
+          baseUrlObj.search = requestUrl.search;
+
+          logger.debug("[buildProxyUrl] Detected different version prefix in baseUrl", {
+            basePath,
+            requestPath,
+            endpoint,
+            baseVersion,
+            requestVersion: version,
+            action: "strip_request_version",
+          });
+
+          return baseUrlObj.toString();
+        }
+      }
     }
 
     // 标准拼接：basePath + requestPath

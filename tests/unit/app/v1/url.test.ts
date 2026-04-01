@@ -92,4 +92,31 @@ describe("buildProxyUrl", () => {
 
     expect(out).toBe("https://example.com/api/models/some-model:action");
   });
+
+  test("basePath 以不同版本前缀结尾时去除请求中的版本前缀（智谱 v4 场景）", () => {
+    const out = buildProxyUrl(
+      "https://open.bigmodel.cn/api/coding/paas/v4",
+      new URL("https://dummy.com/v1/chat/completions")
+    );
+
+    expect(out).toBe("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions");
+  });
+
+  test("basePath 以 v4 结尾 + /v1/embeddings 请求", () => {
+    const out = buildProxyUrl(
+      "https://open.bigmodel.cn/api/coding/paas/v4",
+      new URL("https://dummy.com/v1/embeddings")
+    );
+
+    expect(out).toBe("https://open.bigmodel.cn/api/coding/paas/v4/embeddings");
+  });
+
+  test("basePath 以 v2 结尾 + /v1/chat/completions 请求", () => {
+    const out = buildProxyUrl(
+      "https://example.com/api/v2",
+      new URL("https://dummy.com/v1/chat/completions")
+    );
+
+    expect(out).toBe("https://example.com/api/v2/chat/completions");
+  });
 });
