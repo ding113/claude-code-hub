@@ -21,15 +21,15 @@ vi.mock("@/repository/system-config", () => ({
   getSystemSettings: systemConfigMocks.getSystemSettings,
 }));
 
-vi.mock("./_components/active-sessions-skeleton", () => ({
+vi.mock("@/app/[locale]/dashboard/logs/_components/active-sessions-skeleton", () => ({
   ActiveSessionsSkeleton: () => null,
 }));
 
-vi.mock("./_components/usage-logs-skeleton", () => ({
+vi.mock("@/app/[locale]/dashboard/logs/_components/usage-logs-skeleton", () => ({
   UsageLogsSkeleton: () => null,
 }));
 
-vi.mock("./_components/usage-logs-sections", () => ({
+vi.mock("@/app/[locale]/dashboard/logs/_components/usage-logs-sections", () => ({
   UsageLogsActiveSessionsSection: () => null,
   UsageLogsDataSection: () => null,
 }));
@@ -46,7 +46,7 @@ describe("UsageLogsPage", () => {
       enableHighConcurrencyMode: true,
     });
 
-    const { default: UsageLogsPage } = await import("./page");
+    const { default: UsageLogsPage } = await import("@/app/[locale]/dashboard/logs/page");
     const element = await UsageLogsPage({
       params: Promise.resolve({ locale: "en" }),
       searchParams: Promise.resolve({}),
@@ -70,7 +70,7 @@ describe("UsageLogsPage", () => {
       enableHighConcurrencyMode: false,
     });
 
-    const { default: UsageLogsPage } = await import("./page");
+    const { default: UsageLogsPage } = await import("@/app/[locale]/dashboard/logs/page");
     const element = await UsageLogsPage({
       params: Promise.resolve({ locale: "en" }),
       searchParams: Promise.resolve({}),
