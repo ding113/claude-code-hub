@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { ActiveSessionsList } from "@/components/customs/active-sessions-list";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import type { CurrencyCode } from "@/lib/utils";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SystemSettings } from "@/types/system-config";
@@ -15,14 +16,9 @@ interface UsageLogsDataSectionProps {
   systemSettings?: Pick<SystemSettings, "billingModelSource" | "currencyDisplay">;
 }
 
-export async function UsageLogsActiveSessionsSection() {
-  const systemSettings = await getCachedSystemSettings();
+export function UsageLogsActiveSessionsSection({ currencyCode }: { currencyCode: CurrencyCode }) {
   return (
-    <ActiveSessionsList
-      currencyCode={systemSettings.currencyDisplay}
-      maxHeight="200px"
-      showTokensCost={false}
-    />
+    <ActiveSessionsList currencyCode={currencyCode} maxHeight="200px" showTokensCost={false} />
   );
 }
 

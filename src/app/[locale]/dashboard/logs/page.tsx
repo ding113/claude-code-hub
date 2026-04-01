@@ -32,7 +32,7 @@ export default async function UsageLogsPage({
     <div className="space-y-4">
       {!systemSettings.enableHighConcurrencyMode && (
         <Suspense fallback={<ActiveSessionsSkeleton />}>
-          <UsageLogsActiveSessionsSection />
+          <UsageLogsActiveSessionsSection currencyCode={systemSettings.currencyDisplay} />
         </Suspense>
       )}
 

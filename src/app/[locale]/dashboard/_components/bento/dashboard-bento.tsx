@@ -30,6 +30,8 @@ const StatisticsChartCard = dynamic(
   { ssr: false }
 );
 
+const REFRESH_INTERVAL = 5000;
+
 interface DashboardBentoProps {
   isAdmin: boolean;
   currencyCode: CurrencyCode;
@@ -139,7 +141,7 @@ export function DashboardBento({
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<ActiveSessionInfo[]>({
     queryKey: ["active-sessions"],
     queryFn: fetchActiveSessions,
-    refetchInterval: 5000,
+    refetchInterval: REFRESH_INTERVAL,
     enabled: isAdmin && !enableHighConcurrencyMode,
   });
 
