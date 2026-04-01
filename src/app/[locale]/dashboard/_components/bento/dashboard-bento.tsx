@@ -30,12 +30,11 @@ const StatisticsChartCard = dynamic(
   { ssr: false }
 );
 
-const REFRESH_INTERVAL = 5000;
-
 interface DashboardBentoProps {
   isAdmin: boolean;
   currencyCode: CurrencyCode;
   allowGlobalUsageView: boolean;
+  enableHighConcurrencyMode: boolean;
   initialStatistics?: UserStatisticsData;
   initialOverview?: OverviewData;
 }
@@ -119,6 +118,7 @@ export function DashboardBento({
   isAdmin,
   currencyCode,
   allowGlobalUsageView,
+  enableHighConcurrencyMode,
   initialStatistics,
   initialOverview,
 }: DashboardBentoProps) {
@@ -136,12 +136,11 @@ export function DashboardBento({
     initialData: initialOverview,
   });
 
-  // Active sessions
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<ActiveSessionInfo[]>({
     queryKey: ["active-sessions"],
     queryFn: fetchActiveSessions,
-    refetchInterval: REFRESH_INTERVAL,
-    enabled: isAdmin,
+    refetchInterval: 5000,
+    enabled: isAdmin && !enableHighConcurrencyMode,
   });
 
   // Statistics
@@ -205,13 +204,14 @@ export function DashboardBento({
     metrics.yesterdaySamePeriodAvgResponseTime
   );
 
-  // Sessions with lastActivityAt for LiveSessionsPanel
-  const sessionsWithActivity = useMemo(() => {
-    return sessions.map((s) => ({
-      ...s,
-      lastActivityAt: s.startTime,
-    }));
-  }, [sessions]);
+  const sessionsWithActivity = useMemo(
+    () =>
+      sessions.map((session) => ({
+        ...session,
+        lastActivityAt: session.startTime,
+      })),
+    [sessions]
+  );
 
   const canViewLeaderboard = isAdmin || allowGlobalUsageView;
 
@@ -221,18 +221,24 @@ export function DashboardBento({
       {isAdmin && (
         <BentoGrid>
           <BentoMetricCard
-            title={t("metrics.concurrent")}
-            value={metrics.concurrentSessions}
+            title={enableHighConcurrencyMode ? t("metrics.rpm") : t("metrics.concurrent")}
+            value={
+              enableHighConcurrencyMode ? metrics.recentMinuteRequests : metrics.concurrentSessions
+            }
             icon={Activity}
             accentColor="emerald"
             className="min-h-[120px]"
-            comparisons={[
-              {
-                value: metrics.recentMinuteRequests,
-                label: t("metrics.rpm"),
-                isPercentage: false,
-              },
-            ]}
+            comparisons={
+              enableHighConcurrencyMode
+                ? undefined
+                : [
+                    {
+                      value: metrics.recentMinuteRequests,
+                      label: t("metrics.rpm"),
+                      isPercentage: false,
+                    },
+                  ]
+            }
           />
           <BentoMetricCard
             title={t("metrics.todayRequests")}
@@ -271,13 +277,13 @@ export function DashboardBento({
         />
       )}
 
-      {/* Section 3: Leaderboards + Live Sessions */}
+      {/* Section 3: Leaderboards */}
       {canViewLeaderboard && (
         <div
           data-testid={isAdmin ? "dashboard-home-layout" : undefined}
           className={cn(
             "grid gap-6",
-            isAdmin
+            isAdmin && !enableHighConcurrencyMode
               ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_280px]"
               : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
           )}
@@ -312,13 +318,8 @@ export function DashboardBento({
             maxItems={3}
             accentColor="blue"
           />
-
-          {isAdmin && (
-            <LiveSessionsPanel
-              data-testid="dashboard-home-sidebar"
-              sessions={sessionsWithActivity}
-              isLoading={sessionsLoading}
-            />
+          {isAdmin && !enableHighConcurrencyMode && (
+            <LiveSessionsPanel sessions={sessionsWithActivity} isLoading={sessionsLoading} />
           )}
         </div>
       )}

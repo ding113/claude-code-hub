@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
+import { getSystemSettings } from "@/repository/system-config";
 import { ActiveSessionsSkeleton } from "./_components/active-sessions-skeleton";
 import {
   UsageLogsActiveSessionsSection,
@@ -25,13 +26,15 @@ export default async function UsageLogsPage({
   }
 
   const isAdmin = session.user.role === "admin";
+  const systemSettings = await getSystemSettings();
 
   return (
     <div className="space-y-4">
-      {/* Active Sessions - Horizontal scrolling cards */}
-      <Suspense fallback={<ActiveSessionsSkeleton />}>
-        <UsageLogsActiveSessionsSection />
-      </Suspense>
+      {!systemSettings.enableHighConcurrencyMode && (
+        <Suspense fallback={<ActiveSessionsSkeleton />}>
+          <UsageLogsActiveSessionsSection />
+        </Suspense>
+      )}
 
       {/* Stats + Filters + Logs Table */}
       <Suspense fallback={<UsageLogsSkeleton />}>
@@ -39,6 +42,7 @@ export default async function UsageLogsPage({
           isAdmin={isAdmin}
           userId={session.user.id}
           searchParams={searchParams}
+          systemSettings={systemSettings}
         />
       </Suspense>
     </div>
