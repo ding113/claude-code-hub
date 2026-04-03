@@ -92,6 +92,22 @@ AIGoCode 为 CCH 的用户提供了特别福利，通过此链接注册的用户
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">
+<img src="public/readme/aicodemirror.jpg" alt="AICodeMirror Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 特别优惠</b>：感谢 <a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">AICodeMirror</a> 对本项目的赞助！AICodeMirror 提供 Claude Code / Codex / Gemini CLI 官方高稳定性中转服务，支持企业级并发、快速开票、7×24 小时专属技术支持。<br/>
+Claude Code / Codex / Gemini 官方渠道价格低至原价的 38% / 6% / 9%，充值还有额外折扣！<br/>
+针对 claude-code-hub 用户，AICodeMirror 特别推出福利：通过下方链接注册，首充立享 8 折 优惠；企业客户更可享受最高 7.5 折 折上折。<br/>
+通过此链接注册即可享受优惠 → <a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">立即访问</a>
+</td>
+</tr>
+</table>
+
 ## ✨ 核心功能 Highlights
 
 - 🤖 **智能负载均衡**：权重 + 优先级 + 分组调度，内置熔断保护与最多 3 次故障转移，保障请求稳定。
