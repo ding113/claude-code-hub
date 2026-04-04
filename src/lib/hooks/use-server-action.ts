@@ -4,6 +4,7 @@ import { useCallback, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { ActionResult } from "@/actions/types";
 import { isNetworkError } from "@/lib/utils/error-detection";
+import { getSafeErrorToastMessage } from "@/lib/utils/user-visible-error";
 
 /**
  * Server Action 执行选项
@@ -88,7 +89,7 @@ export function useServerAction() {
 
             if (!result.ok) {
               // Action 返回失败
-              const message = errorMessage || result.error;
+              const message = errorMessage || getSafeErrorToastMessage(result.error, DEFAULT_ERROR);
 
               if (showToast) {
                 toast.error(message);
@@ -166,7 +167,7 @@ export async function withErrorHandling<T>(
     const result = await action();
 
     if (!result.ok) {
-      const message = errorMessage || result.error;
+      const message = errorMessage || getSafeErrorToastMessage(result.error, DEFAULT_ERROR);
 
       if (showToast) {
         toast.error(message);
