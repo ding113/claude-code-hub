@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from "react";
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -106,6 +106,116 @@ describe("ModelMultiSelect: 自定义白名单模型应可在列表中取消选�
 
     expect(onChange).toHaveBeenCalled();
     expect(onChange).toHaveBeenLastCalledWith([]);
+
+    unmount();
+  });
+
+  test("无需展开下拉框也应显示完整已选白名单，并支持直接删除与编辑", async () => {
+    const messages = loadMessages();
+
+    function StatefulHarness() {
+      const [selectedModels, setSelectedModels] = useState([
+        "custom-model-x",
+        "claude-opus-4-5-20251001",
+      ]);
+
+      return (
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <ModelMultiSelect
+            providerType="claude"
+            selectedModels={selectedModels}
+            onChange={setSelectedModels}
+          />
+        </NextIntlClientProvider>
+      );
+    }
+
+    const { unmount } = render(<StatefulHarness />);
+
+    await flushTicks(5);
+
+    expect(document.body.textContent || "").toContain("custom-model-x");
+    expect(document.body.textContent || "").toContain("claude-opus-4-5-20251001");
+
+    const removeButton = document.querySelector(
+      '[data-model-remove="custom-model-x"]'
+    ) as HTMLButtonElement | null;
+    expect(removeButton).toBeTruthy();
+
+    await act(async () => {
+      removeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await flushTicks(2);
+    expect(document.body.textContent || "").not.toContain("custom-model-x");
+    expect(document.body.textContent || "").toContain("claude-opus-4-5-20251001");
+
+    const editButton = document.querySelector(
+      '[data-model-edit="claude-opus-4-5-20251001"]'
+    ) as HTMLButtonElement | null;
+    expect(editButton).toBeTruthy();
+
+    await act(async () => {
+      editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const editInput = document.querySelector(
+      '[data-model-edit-input="claude-opus-4-5-20251001"]'
+    ) as HTMLInputElement | null;
+    expect(editInput).toBeTruthy();
+
+    await act(async () => {
+      if (editInput) {
+        editInput.value = "claude-opus-4-6-latest";
+        editInput.dispatchEvent(new Event("input", { bubbles: true }));
+        editInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    const saveButton = document.querySelector(
+      '[data-model-edit-save="claude-opus-4-5-20251001"]'
+    ) as HTMLButtonElement | null;
+    expect(saveButton).toBeTruthy();
+
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await flushTicks(2);
+    expect(document.body.textContent || "").toContain("claude-opus-4-6-latest");
+    expect(document.body.textContent || "").not.toContain("claude-opus-4-5-20251001");
+
+    unmount();
+  });
+
+  test("下拉框应把已选模型单独置顶显示", async () => {
+    const messages = loadMessages();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ModelMultiSelect
+          providerType="claude"
+          selectedModels={["custom-model-x"]}
+          onChange={vi.fn()}
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(5);
+
+    const trigger = document.querySelector("button[role='combobox']") as HTMLButtonElement | null;
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await flushTicks(5);
+
+    expect(document.body.textContent || "").toContain("Selected Models");
+    expect(document.querySelector('[data-model-group="selected"]')).toBeTruthy();
+    expect(document.querySelector('[data-model-group="available"]')).toBeTruthy();
 
     unmount();
   });

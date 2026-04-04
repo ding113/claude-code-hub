@@ -1,4 +1,5 @@
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
@@ -95,7 +96,7 @@ export function toProvider(dbProvider: any): Provider {
     providerType: dbProvider?.providerType ?? "claude",
     preserveClientIp: dbProvider?.preserveClientIp ?? false,
     disableSessionReuse: dbProvider?.disableSessionReuse ?? false,
-    modelRedirects: dbProvider?.modelRedirects ?? null,
+    modelRedirects: normalizeProviderModelRedirectRules(dbProvider?.modelRedirects),
     activeTimeStart: dbProvider?.activeTimeStart ?? null,
     activeTimeEnd: dbProvider?.activeTimeEnd ?? null,
     mcpPassthroughType: dbProvider?.mcpPassthroughType ?? "none",

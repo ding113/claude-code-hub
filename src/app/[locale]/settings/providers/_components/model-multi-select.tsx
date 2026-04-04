@@ -1,5 +1,15 @@
 "use client";
-import { Check, ChevronsUpDown, Cloud, Database, Loader2, Plus, RefreshCw } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Cloud,
+  Database,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAvailableModelsByProviderType } from "@/actions/model-prices";
@@ -89,6 +99,9 @@ export function ModelMultiSelect({
   const [loading, setLoading] = useState(true);
   const [modelSource, setModelSource] = useState<ModelSource>("loading");
   const [customModel, setCustomModel] = useState("");
+  const [editingModel, setEditingModel] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [managementError, setManagementError] = useState<string | null>(null);
 
   const displayedModels = useMemo(() => {
     const seen = new Set<string>();
@@ -109,6 +122,16 @@ export function ModelMultiSelect({
 
     return merged;
   }, [availableModels, selectedModels]);
+
+  const selectedDisplayedModels = useMemo(
+    () => displayedModels.filter((model) => selectedModels.includes(model)),
+    [displayedModels, selectedModels]
+  );
+
+  const availableDisplayedModels = useMemo(
+    () => displayedModels.filter((model) => !selectedModels.includes(model)),
+    [displayedModels, selectedModels]
+  );
 
   // 供应商类型到显示名称的映射
   const getProviderTypeLabel = (type: string): string => {
@@ -171,6 +194,7 @@ export function ModelMultiSelect({
   }, [loadModels]);
 
   const toggleModel = (model: string) => {
+    setManagementError(null);
     if (selectedModels.includes(model)) {
       onChange(selectedModels.filter((m) => m !== model));
     } else {
@@ -179,11 +203,17 @@ export function ModelMultiSelect({
   };
 
   const selectAll = () => onChange(availableModels);
-  const clearAll = () => onChange([]);
+  const clearAll = () => {
+    setManagementError(null);
+    setEditingModel(null);
+    setEditValue("");
+    onChange([]);
+  };
 
   const handleAddCustomModel = () => {
     const trimmed = customModel.trim();
     if (!trimmed) return;
+    setManagementError(null);
 
     if (selectedModels.includes(trimmed)) {
       setCustomModel("");
@@ -198,161 +228,319 @@ export function ModelMultiSelect({
   const sourceLabel = isUpstream ? t("sourceUpstream") : t("sourceFallback");
   const sourceDescription = isUpstream ? t("sourceUpstreamDesc") : t("sourceFallbackDesc");
 
+  const handleRemoveSelectedModel = (model: string) => {
+    setManagementError(null);
+    if (editingModel === model) {
+      setEditingModel(null);
+      setEditValue("");
+    }
+    onChange(selectedModels.filter((item) => item !== model));
+  };
+
+  const handleStartEditSelectedModel = (model: string) => {
+    setEditingModel(model);
+    setEditValue(model);
+    setManagementError(null);
+  };
+
+  const handleCancelEditSelectedModel = () => {
+    setEditingModel(null);
+    setEditValue("");
+    setManagementError(null);
+  };
+
+  const handleSaveEditSelectedModel = (originalModel: string) => {
+    const trimmed = editValue.trim();
+    if (!trimmed) {
+      setManagementError(t("selectedEditEmpty"));
+      return;
+    }
+
+    if (trimmed !== originalModel && selectedModels.includes(trimmed)) {
+      setManagementError(t("selectedEditExists", { model: trimmed }));
+      return;
+    }
+
+    setManagementError(null);
+    onChange(selectedModels.map((model) => (model === originalModel ? trimmed : model)));
+    setEditingModel(null);
+    setEditValue("");
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className="w-full justify-between"
-        >
-          {selectedModels.length === 0 ? (
-            <span className="text-muted-foreground">
-              {t("allowAllModels", {
-                type: getProviderTypeLabel(providerType),
-              })}
-            </span>
-          ) : (
-            <div className="flex gap-2 items-center">
-              <span className="truncate">
-                {t("selectedCount", { count: selectedModels.length })}
+    <div className="space-y-3">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className="w-full justify-between"
+          >
+            {selectedModels.length === 0 ? (
+              <span className="text-muted-foreground">
+                {t("allowAllModels", {
+                  type: getProviderTypeLabel(providerType),
+                })}
               </span>
-              <Badge variant="secondary" className="ml-auto">
-                {selectedModels.length}
-              </Badge>
-            </div>
-          )}
-          {loading ? (
-            <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
-          ) : (
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-[400px] max-w-[calc(100vw-2rem)] p-0 flex flex-col"
-        align="start"
-        onWheel={(e) => e.stopPropagation()}
-        onTouchMove={(e) => e.stopPropagation()}
-      >
-        <Command shouldFilter={true}>
-          <CommandInput placeholder={t("searchPlaceholder")} />
-          <CommandList className="max-h-[250px] overflow-y-auto">
-            <CommandEmpty>{loading ? t("loading") : t("notFound")}</CommandEmpty>
-
-            {!loading && (
-              <>
-                {/* 数据来源指示 + 快捷操作 */}
-                <CommandGroup>
-                  <div className="flex items-center justify-between gap-2 p-2">
-                    <div className="flex items-center gap-2">
-                      <ModelSourceIndicator
-                        loading={loading}
-                        isUpstream={isUpstream}
-                        label={sourceLabel}
-                        description={sourceDescription}
-                      />
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                loadModels();
-                              }}
-                              type="button"
-                            >
-                              <RefreshCw className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            <p className="text-xs">{t("refresh")}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={selectAll}
-                        className="h-7 text-xs"
-                        type="button"
-                      >
-                        {t("selectAll", { count: availableModels.length })}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={clearAll}
-                        disabled={selectedModels.length === 0}
-                        className="h-7 text-xs"
-                        type="button"
-                      >
-                        {t("clear")}
-                      </Button>
-                    </div>
-                  </div>
-                </CommandGroup>
-
-                {/* 模型列表 */}
-                <CommandGroup>
-                  {displayedModels.map((model) => (
-                    <CommandItem
-                      key={model}
-                      value={model}
-                      onSelect={() => toggleModel(model)}
-                      className="cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={selectedModels.includes(model)}
-                        className="mr-2"
-                        onCheckedChange={() => toggleModel(model)}
-                      />
-                      <span className="font-mono text-sm flex-1">{model}</span>
-                      {selectedModels.includes(model) && <Check className="h-4 w-4 text-primary" />}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </>
+            ) : (
+              <div className="flex gap-2 items-center">
+                <span className="truncate">
+                  {t("selectedCount", { count: selectedModels.length })}
+                </span>
+                <Badge variant="secondary" className="ml-auto">
+                  {selectedModels.length}
+                </Badge>
+              </div>
             )}
-          </CommandList>
-        </Command>
+            {loading ? (
+              <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
+            ) : (
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-[400px] max-w-[calc(100vw-2rem)] p-0 flex flex-col"
+          align="start"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
+          <Command shouldFilter={true}>
+            <CommandInput placeholder={t("searchPlaceholder")} />
+            <CommandList className="max-h-[250px] overflow-y-auto">
+              <CommandEmpty>{loading ? t("loading") : t("notFound")}</CommandEmpty>
 
-        {/* 手动输入区域 */}
-        <div className="border-t p-3 space-y-2">
-          <Label className="text-xs font-medium">{t("manualAdd")}</Label>
-          <div className="flex gap-2">
-            <Input
-              placeholder={t("manualPlaceholder")}
-              value={customModel}
-              onChange={(e) => setCustomModel(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleAddCustomModel();
-                }
-              }}
-              disabled={disabled}
-              className="font-mono text-sm flex-1"
-            />
-            <Button
-              size="sm"
-              onClick={handleAddCustomModel}
-              disabled={disabled || !customModel.trim()}
-              type="button"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+              {!loading && (
+                <>
+                  <CommandGroup>
+                    <div className="flex items-center justify-between gap-2 p-2">
+                      <div className="flex items-center gap-2">
+                        <ModelSourceIndicator
+                          loading={loading}
+                          isUpstream={isUpstream}
+                          label={sourceLabel}
+                          description={sourceDescription}
+                        />
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  loadModels();
+                                }}
+                                type="button"
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <p className="text-xs">{t("refresh")}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={selectAll}
+                          className="h-7 text-xs"
+                          type="button"
+                        >
+                          {t("selectAll", { count: availableModels.length })}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={clearAll}
+                          disabled={selectedModels.length === 0}
+                          className="h-7 text-xs"
+                          type="button"
+                        >
+                          {t("clear")}
+                        </Button>
+                      </div>
+                    </div>
+                  </CommandGroup>
+
+                  {selectedDisplayedModels.length > 0 && (
+                    <div data-model-group="selected">
+                      <CommandGroup heading={t("selectedGroupLabel")}>
+                        {selectedDisplayedModels.map((model) => (
+                          <CommandItem
+                            key={`selected:${model}`}
+                            value={model}
+                            onSelect={() => toggleModel(model)}
+                            className="cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={true}
+                              className="mr-2"
+                              onCheckedChange={() => toggleModel(model)}
+                            />
+                            <span className="font-mono text-sm flex-1">{model}</span>
+                            <Check className="h-4 w-4 text-primary" />
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </div>
+                  )}
+
+                  <div data-model-group="available">
+                    <CommandGroup heading={t("availableGroupLabel")}>
+                      {availableDisplayedModels.map((model) => (
+                        <CommandItem
+                          key={model}
+                          value={model}
+                          onSelect={() => toggleModel(model)}
+                          className="cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={false}
+                            className="mr-2"
+                            onCheckedChange={() => toggleModel(model)}
+                          />
+                          <span className="font-mono text-sm flex-1">{model}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </div>
+                </>
+              )}
+            </CommandList>
+          </Command>
+
+          <div className="border-t p-3 space-y-2">
+            <Label className="text-xs font-medium">{t("manualAdd")}</Label>
+            <div className="flex gap-2">
+              <Input
+                placeholder={t("manualPlaceholder")}
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddCustomModel();
+                  }
+                }}
+                disabled={disabled}
+                className="font-mono text-sm flex-1"
+              />
+              <Button
+                size="sm"
+                onClick={handleAddCustomModel}
+                disabled={disabled || !customModel.trim()}
+                type="button"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">{t("manualDesc")}</p>
           </div>
-          <p className="text-xs text-muted-foreground">{t("manualDesc")}</p>
+        </PopoverContent>
+      </Popover>
+
+      {selectedModels.length > 0 && (
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs font-medium">
+              {t("selectedListLabel", { count: selectedModels.length })}
+            </Label>
+            <span className="text-xs text-muted-foreground">{t("selectedListHint")}</span>
+          </div>
+
+          <div className="space-y-1">
+            {selectedModels.map((model) => {
+              const isEditing = editingModel === model;
+
+              return (
+                <div
+                  key={model}
+                  data-model-row={model}
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-background px-3 py-2"
+                >
+                  {isEditing ? (
+                    <>
+                      <Input
+                        value={editValue}
+                        data-model-edit-input={model}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onInput={(e) => setEditValue((e.target as HTMLInputElement).value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleSaveEditSelectedModel(model);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            handleCancelEditSelectedModel();
+                          }
+                        }}
+                        className="font-mono text-sm h-8 flex-1"
+                        autoFocus
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        data-model-edit-save={model}
+                        onClick={() => handleSaveEditSelectedModel(model)}
+                        disabled={disabled}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Check className="h-3.5 w-3.5 text-green-600" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCancelEditSelectedModel}
+                        disabled={disabled}
+                        className="h-8 w-8 p-0"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-mono text-sm flex-1 break-all">{model}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        data-model-edit={model}
+                        onClick={() => handleStartEditSelectedModel(model)}
+                        disabled={disabled}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        data-model-remove={model}
+                        onClick={() => handleRemoveSelectedModel(model)}
+                        disabled={disabled}
+                        className="h-8 w-8 p-0"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {managementError && <div className="text-xs text-destructive">{managementError}</div>}
         </div>
-      </PopoverContent>
-    </Popover>
+      )}
+    </div>
   );
 }

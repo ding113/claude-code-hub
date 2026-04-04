@@ -14,7 +14,7 @@ function createBatchState(): ProviderFormState {
       groupTag: [],
       preserveClientIp: false,
       disableSessionReuse: false,
-      modelRedirects: {},
+      modelRedirects: [],
       allowedModels: [],
       allowedClients: [],
       blockedClients: [],
@@ -164,7 +164,7 @@ describe("buildPatchDraftFromFormState", () => {
     expect(draft.group_tag).toEqual({ set: "tagA,tagB" });
   });
 
-  it("clears modelRedirects when dirty and empty object", () => {
+  it("clears modelRedirects when dirty and empty list", () => {
     const state = createBatchState();
     const dirty = new Set(["routing.modelRedirects"]);
 
@@ -175,12 +175,14 @@ describe("buildPatchDraftFromFormState", () => {
 
   it("sets modelRedirects when dirty and has entries", () => {
     const state = createBatchState();
-    state.routing.modelRedirects = { "model-a": "model-b" };
+    state.routing.modelRedirects = [{ matchType: "exact", source: "model-a", target: "model-b" }];
     const dirty = new Set(["routing.modelRedirects"]);
 
     const draft = buildPatchDraftFromFormState(state, dirty);
 
-    expect(draft.model_redirects).toEqual({ set: { "model-a": "model-b" } });
+    expect(draft.model_redirects).toEqual({
+      set: [{ matchType: "exact", source: "model-a", target: "model-b" }],
+    });
   });
 
   it("clears allowedModels when dirty and empty array", () => {

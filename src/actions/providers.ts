@@ -20,6 +20,8 @@ import {
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import { PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA } from "@/lib/provider-model-redirect-schema";
+import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import {
   buildProviderBatchApplyUpdates,
   hasProviderBatchPatchChanges,
@@ -85,6 +87,7 @@ import type {
   ProviderBatchPatch,
   ProviderBatchPatchField,
   ProviderDisplay,
+  ProviderModelRedirectRule,
   ProviderPatchOperation,
   ProviderStatisticsMap,
   ProviderType,
@@ -500,7 +503,7 @@ export async function addProvider(data: {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   disable_session_reuse?: boolean;
-  model_redirects?: Record<string, string> | null;
+  model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
   allowed_models?: string[] | null;
@@ -679,7 +682,7 @@ export async function editProvider(
     provider_type?: ProviderType;
     preserve_client_ip?: boolean;
     disable_session_reuse?: boolean;
-    model_redirects?: Record<string, string> | null;
+    model_redirects?: ProviderModelRedirectRule[] | null;
     active_time_start?: string | null;
     active_time_end?: string | null;
     allowed_models?: string[] | null;
@@ -2197,7 +2200,7 @@ export interface BatchUpdateProvidersParams {
     weight?: number;
     cost_multiplier?: number;
     group_tag?: string | null;
-    model_redirects?: Record<string, string> | null;
+    model_redirects?: ProviderModelRedirectRule[] | null;
     allowed_models?: string[] | null;
     allowed_clients?: string[];
     blocked_clients?: string[];
@@ -2244,7 +2247,19 @@ export async function batchUpdateProviders(
       repositoryUpdates.groupTag = normalizeProviderGroupTag(updates.group_tag);
     }
     if (updates.model_redirects !== undefined) {
-      repositoryUpdates.modelRedirects = updates.model_redirects;
+      if (updates.model_redirects === null) {
+        repositoryUpdates.modelRedirects = null;
+      } else {
+        const parsedRedirectRules = PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA.safeParse(
+          updates.model_redirects
+        );
+        if (!parsedRedirectRules.success) {
+          return { ok: false, error: "模型重定向规则格式无效" };
+        }
+        repositoryUpdates.modelRedirects = normalizeProviderModelRedirectRules(
+          parsedRedirectRules.data
+        );
+      }
     }
     if (updates.allowed_models !== undefined) {
       repositoryUpdates.allowedModels =

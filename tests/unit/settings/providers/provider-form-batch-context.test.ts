@@ -23,7 +23,7 @@ describe("createInitialState - batch mode", () => {
     expect(state.routing.costMultiplier).toBe(1.0);
     expect(state.routing.groupTag).toEqual([]);
     expect(state.routing.preserveClientIp).toBe(false);
-    expect(state.routing.modelRedirects).toEqual({});
+    expect(state.routing.modelRedirects).toEqual([]);
     expect(state.routing.allowedModels).toEqual([]);
     expect(state.routing.cacheTtlPreference).toBe("inherit");
     expect(state.routing.swapCacheTtlBilling).toBe(false);

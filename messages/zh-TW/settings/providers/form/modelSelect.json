@@ -10,11 +10,17 @@
   "notFound": "找不到模型",
   "openai": "OpenAI",
   "refresh": "重新整理模型列表",
+  "selectedEditEmpty": "模型名稱不能為空",
+  "selectedEditExists": "模型「{model}」已在白名單中",
+  "selectedGroupLabel": "已選模型",
   "searchPlaceholder": "搜尋模型名稱...",
   "selectAll": "全選 ({count})",
   "selectedCount": "已選擇 {count} 個模型",
+  "selectedListHint": "無需展開下拉框即可直接編輯或刪除",
+  "selectedListLabel": "已選白名單 ({count})",
   "sourceFallback": "本機",
   "sourceFallbackDesc": "使用本地價格表中的模型列表（上游獲取失敗或不支援）",
   "sourceUpstream": "上游來源",
-  "sourceUpstreamDesc": "模型列表來自上游服務商 API"
+  "sourceUpstreamDesc": "模型列表來自上游服務商 API",
+  "availableGroupLabel": "可選模型"
 }

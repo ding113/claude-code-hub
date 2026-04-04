@@ -12,6 +12,7 @@ import type {
   GeminiGoogleSearchPreference,
   McpPassthroughType,
   ProviderDisplay,
+  ProviderModelRedirectRule,
 } from "@/types/provider";
 import { deepEquals } from "./deep-equals";
 
@@ -30,7 +31,7 @@ export interface BatchSettingsAnalysis {
     groupTag: FieldAnalysisResult<string[]>;
     preserveClientIp: FieldAnalysisResult<boolean>;
     disableSessionReuse: FieldAnalysisResult<boolean>;
-    modelRedirects: FieldAnalysisResult<Record<string, string>>;
+    modelRedirects: FieldAnalysisResult<ProviderModelRedirectRule[]>;
     allowedModels: FieldAnalysisResult<string[]>;
     allowedClients: FieldAnalysisResult<string[]>;
     blockedClients: FieldAnalysisResult<string[]>;
@@ -121,7 +122,7 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
       groupTag: analyzeField(providers, (p) => parseProviderGroups(p.groupTag)),
       preserveClientIp: analyzeField(providers, (p) => p.preserveClientIp),
       disableSessionReuse: analyzeField(providers, (p) => p.disableSessionReuse),
-      modelRedirects: analyzeField(providers, (p) => p.modelRedirects ?? {}),
+      modelRedirects: analyzeField(providers, (p) => p.modelRedirects ?? []),
       allowedModels: analyzeField(providers, (p) => p.allowedModels ?? []),
       allowedClients: analyzeField(providers, (p) => p.allowedClients ?? []),
       blockedClients: analyzeField(providers, (p) => p.blockedClients ?? []),

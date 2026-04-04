@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import {
@@ -48,6 +49,7 @@ import type {
   CodexTextVerbosityPreference,
   McpPassthroughType,
   ProviderDisplay,
+  ProviderModelRedirectRule,
   ProviderType,
 } from "@/types/provider";
 import { ModelMultiSelect } from "../model-multi-select";
@@ -168,8 +170,8 @@ export function ProviderForm({
   const [preserveClientIp, setPreserveClientIp] = useState<boolean>(
     sourceProvider?.preserveClientIp ?? false
   );
-  const [modelRedirects, setModelRedirects] = useState<Record<string, string>>(
-    sourceProvider?.modelRedirects ?? {}
+  const [modelRedirects, setModelRedirects] = useState<ProviderModelRedirectRule[]>(
+    normalizeProviderModelRedirectRules(sourceProvider?.modelRedirects) ?? []
   );
   const [priority, setPriority] = useState<number>(sourceProvider?.priority ?? 0);
   const [weight, setWeight] = useState<number>(sourceProvider?.weight ?? 1);
@@ -454,8 +456,8 @@ export function ProviderForm({
 
   // 实际提交逻辑
   const performSubmit = () => {
-    // 处理模型重定向（空对象转为 null）
-    const parsedModelRedirects = Object.keys(modelRedirects).length > 0 ? modelRedirects : null;
+    // 处理模型重定向（空数组转为 null）
+    const parsedModelRedirects = modelRedirects.length > 0 ? modelRedirects : null;
 
     startTransition(async () => {
       try {
@@ -465,7 +467,7 @@ export function ProviderForm({
             url?: string;
             key?: string;
             provider_type?: ProviderType;
-            model_redirects?: Record<string, string> | null;
+            model_redirects?: ProviderModelRedirectRule[] | null;
             allowed_models?: string[] | null;
             priority?: number;
             weight?: number;
@@ -629,7 +631,7 @@ export function ProviderForm({
           setKey("");
           setProviderType("claude");
           setPreserveClientIp(false);
-          setModelRedirects({});
+          setModelRedirects([]);
           setAllowedModels([]);
           setPriority(0);
           setWeight(1);
@@ -805,10 +807,10 @@ export function ProviderForm({
                           count: allowedModels.length,
                         })
                       );
-                    if (Object.keys(modelRedirects).length > 0)
+                    if (modelRedirects.length > 0)
                       parts.push(
                         t("sections.routing.summary.redirects", {
-                          count: Object.keys(modelRedirects).length,
+                          count: modelRedirects.length,
                         })
                       );
                     return parts.length > 0 ? parts.join(", ") : t("sections.routing.summary.none");

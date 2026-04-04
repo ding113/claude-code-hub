@@ -10,11 +10,17 @@
   "notFound": "Model not found",
   "openai": "OpenAI",
   "refresh": "Refresh model list",
+  "selectedEditEmpty": "Model name cannot be empty",
+  "selectedEditExists": "Model \"{model}\" is already selected",
+  "selectedGroupLabel": "Selected Models",
   "searchPlaceholder": "Search model name...",
   "selectAll": "Select All ({count})",
   "selectedCount": "Selected {count} models",
+  "selectedListHint": "Edit or remove without opening the dropdown",
+  "selectedListLabel": "Selected whitelist ({count})",
   "sourceFallback": "Local",
   "sourceFallbackDesc": "Using local price list (upstream unavailable or unsupported)",
   "sourceUpstream": "Upstream",
-  "sourceUpstreamDesc": "Model list from upstream provider API"
+  "sourceUpstreamDesc": "Model list from upstream provider API",
+  "availableGroupLabel": "Available Models"
 }

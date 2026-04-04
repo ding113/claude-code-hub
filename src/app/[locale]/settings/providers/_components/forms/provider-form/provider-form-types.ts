@@ -13,6 +13,7 @@ import type {
   GeminiGoogleSearchPreference,
   McpPassthroughType,
   ProviderDisplay,
+  ProviderModelRedirectRule,
   ProviderType,
 } from "@/types/provider";
 import type { BatchSettingsAnalysis } from "../../batch-edit/analyze-batch-settings";
@@ -49,7 +50,7 @@ export interface RoutingState {
   groupTag: string[];
   preserveClientIp: boolean;
   disableSessionReuse: boolean;
-  modelRedirects: Record<string, string>;
+  modelRedirects: ProviderModelRedirectRule[];
   allowedModels: string[];
   allowedClients: string[];
   blockedClients: string[];
@@ -142,7 +143,7 @@ export type ProviderFormAction =
   | { type: "SET_GROUP_TAG"; payload: string[] }
   | { type: "SET_PRESERVE_CLIENT_IP"; payload: boolean }
   | { type: "SET_DISABLE_SESSION_REUSE"; payload: boolean }
-  | { type: "SET_MODEL_REDIRECTS"; payload: Record<string, string> }
+  | { type: "SET_MODEL_REDIRECTS"; payload: ProviderModelRedirectRule[] }
   | { type: "SET_ALLOWED_MODELS"; payload: string[] }
   | { type: "SET_ALLOWED_CLIENTS"; payload: string[] }
   | { type: "SET_BLOCKED_CLIENTS"; payload: string[] }

@@ -5,6 +5,7 @@ import {
   PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
+import { PROVIDER_MODEL_REDIRECT_RULES_SCHEMA } from "@/lib/provider-model-redirect-schema";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 import { isValidIANATimezone } from "@/lib/utils/timezone";
 
@@ -449,7 +450,7 @@ export const CreateProviderSchema = z
       .default("claude"),
     preserve_client_ip: z.boolean().optional().default(false),
     disable_session_reuse: z.boolean().optional().default(false),
-    model_redirects: z.record(z.string(), z.string()).nullable().optional(),
+    model_redirects: PROVIDER_MODEL_REDIRECT_RULES_SCHEMA,
     // Scheduled active time window (HH:mm format)
     active_time_start: z
       .string()
@@ -687,7 +688,7 @@ export const UpdateProviderSchema = z
       .optional(),
     preserve_client_ip: z.boolean().optional(),
     disable_session_reuse: z.boolean().optional(),
-    model_redirects: z.record(z.string(), z.string()).nullable().optional(),
+    model_redirects: PROVIDER_MODEL_REDIRECT_RULES_SCHEMA,
     active_time_start: z
       .string()
       .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_start must be HH:mm format")

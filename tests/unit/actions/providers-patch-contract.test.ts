@@ -111,17 +111,39 @@ describe("provider patch contract", () => {
     expect(result.error.field).toBe("weight");
   });
 
-  it("rejects model_redirects arrays", () => {
+  it("accepts model_redirects with redirect rule array", () => {
     const result = normalizeProviderBatchPatchDraft({
       model_redirects: {
-        set: ["not-a-record"],
-      } as never,
+        set: [{ matchType: "prefix", source: "claude-opus", target: "glm-4.6" }],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects model_redirects with unsafe regex rule", () => {
+    const result = normalizeProviderBatchPatchDraft({
+      model_redirects: {
+        set: [{ matchType: "regex", source: "(a+)+", target: "glm-4.6" }],
+      },
     });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
 
-    expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+    expect(result.error.field).toBe("model_redirects");
+  });
+
+  it("rejects model_redirects with overlong source", () => {
+    const result = normalizeProviderBatchPatchDraft({
+      model_redirects: {
+        set: [{ matchType: "exact", source: "a".repeat(256), target: "glm-4.6" }],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+
     expect(result.error.field).toBe("model_redirects");
   });
 

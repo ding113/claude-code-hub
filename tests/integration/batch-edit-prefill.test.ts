@@ -11,7 +11,7 @@ describe("批量编辑预填充集成测试", () => {
         priority: 10,
         weight: 5,
         costMultiplier: 1.5,
-        modelRedirects: { "model-a": "model-b" },
+        modelRedirects: [{ matchType: "exact", source: "model-a", target: "model-b" }],
         allowedModels: ["model-1", "model-2"],
         limit5hUsd: 100,
         circuitBreakerFailureThreshold: 5,
@@ -23,7 +23,7 @@ describe("批量编辑预填充集成测试", () => {
         priority: 10,
         weight: 5,
         costMultiplier: 1.5,
-        modelRedirects: { "model-a": "model-b" },
+        modelRedirects: [{ matchType: "exact", source: "model-a", target: "model-b" }],
         allowedModels: ["model-1", "model-2"],
         limit5hUsd: 100,
         circuitBreakerFailureThreshold: 5,
@@ -37,7 +37,9 @@ describe("批量编辑预填充集成测试", () => {
     expect(state.routing.priority).toBe(10);
     expect(state.routing.weight).toBe(5);
     expect(state.routing.costMultiplier).toBe(1.5);
-    expect(state.routing.modelRedirects).toEqual({ "model-a": "model-b" });
+    expect(state.routing.modelRedirects).toEqual([
+      { matchType: "exact", source: "model-a", target: "model-b" },
+    ]);
     expect(state.routing.allowedModels).toEqual(["model-1", "model-2"]);
     expect(state.rateLimit.limit5hUsd).toBe(100);
     expect(state.circuitBreaker.failureThreshold).toBe(5);
@@ -74,7 +76,7 @@ describe("批量编辑预填充集成测试", () => {
     expect(state.routing.priority).toBe(0);
     expect(state.routing.weight).toBe(1);
     expect(state.routing.costMultiplier).toBe(1.0);
-    expect(state.routing.modelRedirects).toEqual({});
+    expect(state.routing.modelRedirects).toEqual([]);
     expect(state.routing.allowedModels).toEqual([]);
     expect(state.rateLimit.limit5hUsd).toBeNull();
     expect(state.circuitBreaker.failureThreshold).toBeUndefined();
