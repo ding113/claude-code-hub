@@ -85,12 +85,15 @@ function sanitizeToastText(message: string, fallbackMessage: string): string {
 type ToastLike<TArgs extends unknown[] = unknown[]> = {
   error: (...args: TArgs) => unknown;
   __cchErrorSanitizerInstalled__?: boolean;
+  __cchErrorSanitizerFallback__?: string;
 };
 
 export function installErrorToastSanitizer<TArgs extends unknown[]>(
   toastApi: ToastLike<TArgs>,
   fallbackMessage: string
 ): void {
+  toastApi.__cchErrorSanitizerFallback__ = fallbackMessage;
+
   if (toastApi.__cchErrorSanitizerInstalled__) {
     return;
   }
@@ -103,8 +106,9 @@ export function installErrorToastSanitizer<TArgs extends unknown[]>(
     }
 
     const [message, ...rest] = args;
+    const currentFallbackMessage = toastApi.__cchErrorSanitizerFallback__ || fallbackMessage;
     const safeMessage =
-      typeof message === "string" ? sanitizeToastText(message, fallbackMessage) : message;
+      typeof message === "string" ? sanitizeToastText(message, currentFallbackMessage) : message;
     const safeRest = rest.map((value, index) => {
       if (
         index === 0 &&
@@ -117,7 +121,7 @@ export function installErrorToastSanitizer<TArgs extends unknown[]>(
           ...value,
           description: sanitizeToastText(
             (value as { description: string }).description,
-            fallbackMessage
+            currentFallbackMessage
           ),
         };
       }

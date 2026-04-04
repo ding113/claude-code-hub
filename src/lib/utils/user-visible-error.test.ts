@@ -4,7 +4,7 @@ import {
   getSafeErrorToastMessage,
   installErrorToastSanitizer,
   sanitizeUserVisibleErrorMessage,
-} from "./user-visible-error";
+} from "@/lib/utils/user-visible-error";
 
 describe("user-visible-error", () => {
   test("preserves ordinary user-safe messages", () => {
@@ -92,5 +92,19 @@ describe("user-visible-error", () => {
     expect(sanitizeUserVisibleErrorMessage("validation failed: password: my secret password")).toBe(
       "validation failed: password: [REDACTED]"
     );
+  });
+
+  test("updates the fallback message when reinstalling for a new locale", () => {
+    const originalError = vi.fn();
+    const toastApi = {
+      error: originalError,
+    };
+
+    installErrorToastSanitizer(toastApi, "Operation failed");
+    installErrorToastSanitizer(toastApi, "操作失败");
+
+    toastApi.error("query: SELECT * FROM keys");
+
+    expect(originalError).toHaveBeenCalledWith("操作失败");
   });
 });

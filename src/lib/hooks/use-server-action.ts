@@ -89,7 +89,8 @@ export function useServerAction() {
 
             if (!result.ok) {
               // Action 返回失败
-              const message = errorMessage || getSafeErrorToastMessage(result.error, DEFAULT_ERROR);
+              const rawMessage = errorMessage ?? result.error;
+              const message = getSafeErrorToastMessage(rawMessage, DEFAULT_ERROR);
 
               if (showToast) {
                 toast.error(message);
@@ -167,7 +168,8 @@ export async function withErrorHandling<T>(
     const result = await action();
 
     if (!result.ok) {
-      const message = errorMessage || getSafeErrorToastMessage(result.error, DEFAULT_ERROR);
+      const rawMessage = errorMessage ?? result.error;
+      const message = getSafeErrorToastMessage(rawMessage, DEFAULT_ERROR);
 
       if (showToast) {
         toast.error(message);
