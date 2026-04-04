@@ -28,15 +28,6 @@ export const PROVIDER_MODEL_REDIRECT_RULE_SCHEMA = z
       return;
     }
 
-    if (!safeRegex(rule.source)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Redirect regex has potential ReDoS risk",
-        path: ["source"],
-      });
-      return;
-    }
-
     try {
       new RegExp(rule.source);
     } catch {
@@ -45,12 +36,45 @@ export const PROVIDER_MODEL_REDIRECT_RULE_SCHEMA = z
         message: "Redirect regex is invalid",
         path: ["source"],
       });
+      return;
+    }
+
+    try {
+      if (!safeRegex(rule.source)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Redirect regex has potential ReDoS risk",
+          path: ["source"],
+        });
+      }
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Redirect regex has potential ReDoS risk",
+        path: ["source"],
+      });
     }
   });
 
 export const PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA = z
   .array(PROVIDER_MODEL_REDIRECT_RULE_SCHEMA)
-  .max(100, "Redirect rules cannot exceed 100 entries");
+  .max(100, "Redirect rules cannot exceed 100 entries")
+  .refine(
+    (rules) => {
+      const keys = new Set<string>();
+      for (const rule of rules) {
+        const key = `${rule.matchType}:${rule.source.trim().toLowerCase()}`;
+        if (keys.has(key)) {
+          return false;
+        }
+        keys.add(key);
+      }
+      return true;
+    },
+    {
+      message: "Duplicate redirect rule for matchType+source",
+    }
+  );
 
 export const PROVIDER_MODEL_REDIRECT_RULES_SCHEMA =
   PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA.nullable().optional();

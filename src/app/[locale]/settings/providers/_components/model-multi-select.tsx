@@ -99,7 +99,7 @@ export function ModelMultiSelect({
   const [loading, setLoading] = useState(true);
   const [modelSource, setModelSource] = useState<ModelSource>("loading");
   const [customModel, setCustomModel] = useState("");
-  const [editingModel, setEditingModel] = useState<string | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [managementError, setManagementError] = useState<string | null>(null);
 
@@ -122,11 +122,6 @@ export function ModelMultiSelect({
 
     return merged;
   }, [availableModels, selectedModels]);
-
-  const selectedDisplayedModels = useMemo(
-    () => displayedModels.filter((model) => selectedModels.includes(model)),
-    [displayedModels, selectedModels]
-  );
 
   const availableDisplayedModels = useMemo(
     () => displayedModels.filter((model) => !selectedModels.includes(model)),
@@ -205,7 +200,7 @@ export function ModelMultiSelect({
   const selectAll = () => onChange(availableModels);
   const clearAll = () => {
     setManagementError(null);
-    setEditingModel(null);
+    setEditingIndex(null);
     setEditValue("");
     onChange([]);
   };
@@ -228,42 +223,44 @@ export function ModelMultiSelect({
   const sourceLabel = isUpstream ? t("sourceUpstream") : t("sourceFallback");
   const sourceDescription = isUpstream ? t("sourceUpstreamDesc") : t("sourceFallbackDesc");
 
-  const handleRemoveSelectedModel = (model: string) => {
+  const handleRemoveSelectedModel = (index: number) => {
     setManagementError(null);
-    if (editingModel === model) {
-      setEditingModel(null);
+    if (editingIndex === index) {
+      setEditingIndex(null);
       setEditValue("");
     }
-    onChange(selectedModels.filter((item) => item !== model));
+    onChange(selectedModels.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const handleStartEditSelectedModel = (model: string) => {
-    setEditingModel(model);
+  const handleStartEditSelectedModel = (index: number, model: string) => {
+    setEditingIndex(index);
     setEditValue(model);
     setManagementError(null);
   };
 
   const handleCancelEditSelectedModel = () => {
-    setEditingModel(null);
+    setEditingIndex(null);
     setEditValue("");
     setManagementError(null);
   };
 
-  const handleSaveEditSelectedModel = (originalModel: string) => {
+  const handleSaveEditSelectedModel = (index: number) => {
     const trimmed = editValue.trim();
     if (!trimmed) {
       setManagementError(t("selectedEditEmpty"));
       return;
     }
 
-    if (trimmed !== originalModel && selectedModels.includes(trimmed)) {
+    if (selectedModels.some((model, currentIndex) => currentIndex !== index && model === trimmed)) {
       setManagementError(t("selectedEditExists", { model: trimmed }));
       return;
     }
 
     setManagementError(null);
-    onChange(selectedModels.map((model) => (model === originalModel ? trimmed : model)));
-    setEditingModel(null);
+    onChange(
+      selectedModels.map((model, currentIndex) => (currentIndex === index ? trimmed : model))
+    );
+    setEditingIndex(null);
     setEditValue("");
   };
 
@@ -369,20 +366,20 @@ export function ModelMultiSelect({
                     </div>
                   </CommandGroup>
 
-                  {selectedDisplayedModels.length > 0 && (
+                  {selectedModels.length > 0 && (
                     <div data-model-group="selected">
                       <CommandGroup heading={t("selectedGroupLabel")}>
-                        {selectedDisplayedModels.map((model) => (
+                        {selectedModels.map((model, index) => (
                           <CommandItem
-                            key={`selected:${model}`}
+                            key={`selected:${index}:${model}`}
                             value={model}
-                            onSelect={() => toggleModel(model)}
+                            onSelect={() => handleRemoveSelectedModel(index)}
                             className="cursor-pointer"
                           >
                             <Checkbox
                               checked={true}
                               className="mr-2"
-                              onCheckedChange={() => toggleModel(model)}
+                              onCheckedChange={() => handleRemoveSelectedModel(index)}
                             />
                             <span className="font-mono text-sm flex-1">{model}</span>
                             <Check className="h-4 w-4 text-primary" />
@@ -456,13 +453,13 @@ export function ModelMultiSelect({
           </div>
 
           <div className="space-y-1">
-            {selectedModels.map((model) => {
-              const isEditing = editingModel === model;
+            {selectedModels.map((model, index) => {
+              const isEditing = editingIndex === index;
 
               return (
                 <div
-                  key={model}
-                  data-model-row={model}
+                  key={`${index}:${model}`}
+                  data-model-row={`${index}:${model}`}
                   className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-background px-3 py-2"
                 >
                   {isEditing ? (
@@ -475,7 +472,7 @@ export function ModelMultiSelect({
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
-                            handleSaveEditSelectedModel(model);
+                            handleSaveEditSelectedModel(index);
                           } else if (e.key === "Escape") {
                             e.preventDefault();
                             handleCancelEditSelectedModel();
@@ -489,7 +486,7 @@ export function ModelMultiSelect({
                         variant="ghost"
                         size="sm"
                         data-model-edit-save={model}
-                        onClick={() => handleSaveEditSelectedModel(model)}
+                        onClick={() => handleSaveEditSelectedModel(index)}
                         disabled={disabled}
                         className="h-8 w-8 p-0"
                       >
@@ -514,7 +511,7 @@ export function ModelMultiSelect({
                         variant="ghost"
                         size="sm"
                         data-model-edit={model}
-                        onClick={() => handleStartEditSelectedModel(model)}
+                        onClick={() => handleStartEditSelectedModel(index, model)}
                         disabled={disabled}
                         className="h-8 w-8 p-0"
                       >
@@ -525,7 +522,7 @@ export function ModelMultiSelect({
                         variant="ghost"
                         size="sm"
                         data-model-remove={model}
-                        onClick={() => handleRemoveSelectedModel(model)}
+                        onClick={() => handleRemoveSelectedModel(index)}
                         disabled={disabled}
                         className="h-8 w-8 p-0"
                       >

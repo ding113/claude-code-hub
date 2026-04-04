@@ -46,7 +46,7 @@ function normalizeRule(rule: ProviderModelRedirectRule): ProviderModelRedirectRu
 }
 
 function getRuleIdentity(rule: Pick<ProviderModelRedirectRule, "matchType" | "source">): string {
-  return `${rule.matchType}:${rule.source.trim()}`;
+  return `${rule.matchType}:${rule.source.trim().toLowerCase()}`;
 }
 
 export function ModelRedirectEditor({
@@ -102,14 +102,18 @@ export function ModelRedirectEditor({
       return t("targetTooLong");
     }
     if (normalized.matchType === "regex") {
-      if (!safeRegex(normalized.source)) {
-        return t("regexUnsafe");
-      }
-
       try {
         new RegExp(normalized.source);
       } catch {
         return t("regexInvalid");
+      }
+
+      try {
+        if (!safeRegex(normalized.source)) {
+          return t("regexUnsafe");
+        }
+      } catch {
+        return t("regexUnsafe");
       }
     }
     if (hasDuplicateRule(normalized, ignoreRuleKey)) {
