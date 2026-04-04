@@ -16,7 +16,6 @@
   "searchPlaceholder": "搜尋模型名稱...",
   "selectAll": "全選 ({count})",
   "selectedCount": "已選擇 {count} 個模型",
-  "selectedListHint": "無需展開下拉框即可直接編輯或刪除",
   "selectedListLabel": "已選白名單 ({count})",
   "sourceFallback": "本機",
   "sourceFallbackDesc": "使用本地價格表中的模型列表（上游獲取失敗或不支援）",

@@ -16,7 +16,6 @@
   "searchPlaceholder": "モデル名を検索...",
   "selectAll": "すべて選択 ({count})",
   "selectedCount": "{count} 個のモデルを選択済み",
-  "selectedListHint": "ドロップダウンを開かずに編集・削除できます",
   "selectedListLabel": "選択済みホワイトリスト ({count})",
   "sourceFallback": "ローカル",
   "sourceFallbackDesc": "ローカル価格表のモデルリストを使用（上流が利用不可または未対応）",
