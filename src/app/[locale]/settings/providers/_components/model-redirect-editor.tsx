@@ -121,6 +121,11 @@ export function ModelRedirectEditor({
   };
 
   const handleAdd = () => {
+    if (redirects.length >= 100) {
+      setError(t("maxRules"));
+      return;
+    }
+
     const nextRule = normalizeRule(newRule);
     const validationError = validateRule(nextRule);
     if (validationError) {
@@ -305,6 +310,8 @@ export function ModelRedirectEditor({
                           onClick={() => handleSaveEdit(ruleKey)}
                           disabled={disabled}
                           className="h-8 w-8 p-0"
+                          aria-label={t("saveRule")}
+                          title={t("saveRule")}
                         >
                           <Check className="h-3.5 w-3.5 text-green-600" />
                         </Button>
@@ -315,6 +322,8 @@ export function ModelRedirectEditor({
                           onClick={handleCancelEdit}
                           disabled={disabled}
                           className="h-8 w-8 p-0"
+                          aria-label={t("cancelEdit")}
+                          title={t("cancelEdit")}
                         >
                           <X className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
@@ -342,6 +351,8 @@ export function ModelRedirectEditor({
                           onClick={() => handleMove(ruleKey, -1)}
                           disabled={disabled || index === 0}
                           className="h-7 w-7 p-0"
+                          aria-label={t("moveRuleUp")}
+                          title={t("moveRuleUp")}
                         >
                           <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
@@ -353,6 +364,8 @@ export function ModelRedirectEditor({
                           onClick={() => handleMove(ruleKey, 1)}
                           disabled={disabled || index === redirects.length - 1}
                           className="h-7 w-7 p-0"
+                          aria-label={t("moveRuleDown")}
+                          title={t("moveRuleDown")}
                         >
                           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
@@ -364,6 +377,8 @@ export function ModelRedirectEditor({
                           onClick={() => handleStartEdit(rule)}
                           disabled={disabled}
                           className="h-7 w-7 p-0"
+                          aria-label={t("editRule")}
+                          title={t("editRule")}
                         >
                           <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
@@ -375,6 +390,8 @@ export function ModelRedirectEditor({
                           onClick={() => handleRemove(ruleKey)}
                           disabled={disabled}
                           className="h-7 w-7 p-0"
+                          aria-label={t("deleteRule")}
+                          title={t("deleteRule")}
                         >
                           <X className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
@@ -467,6 +484,7 @@ export function ModelRedirectEditor({
 
           <Button
             type="button"
+            data-redirect-add
             onClick={handleAdd}
             disabled={disabled || !newRule.source.trim() || !newRule.target.trim()}
             size="default"
@@ -478,7 +496,7 @@ export function ModelRedirectEditor({
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 text-xs text-destructive">
+          <div className="flex items-center gap-2 text-xs text-destructive" data-redirect-error>
             <AlertCircle className="h-3 w-3" />
             <span>{error}</span>
           </div>

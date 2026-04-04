@@ -119,6 +119,12 @@ describe("provider patch contract", () => {
     });
 
     expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.model_redirects.mode).toBe("set");
+    if (result.data.model_redirects.mode !== "set") return;
+    expect(result.data.model_redirects.value).toEqual([
+      { matchType: "prefix", source: "claude-opus", target: "glm-4.6" },
+    ]);
   });
 
   it("rejects model_redirects with unsafe regex rule", () => {

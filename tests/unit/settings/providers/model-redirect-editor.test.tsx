@@ -154,9 +154,7 @@ describe("ModelRedirectEditor", () => {
       }
     });
 
-    const addButton = Array.from(document.querySelectorAll("button")).find((button) =>
-      (button.textContent || "").includes("Add")
-    );
+    const addButton = document.querySelector("[data-redirect-add]") as HTMLButtonElement | null;
     expect(addButton).toBeTruthy();
 
     await act(async () => {
@@ -164,7 +162,9 @@ describe("ModelRedirectEditor", () => {
     });
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(document.body.textContent || "").toContain("Source model name is too long");
+    expect(document.querySelector("[data-redirect-error]")?.textContent || "").toContain(
+      "Source model name is too long"
+    );
 
     unmount();
   });

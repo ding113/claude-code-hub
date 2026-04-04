@@ -57,22 +57,25 @@ describe("provider model redirect rules", () => {
   });
 
   it("normalizes legacy exact redirect maps into exact-match rules", () => {
-    expect(
-      normalizeProviderModelRedirectRules({
-        "claude-opus-4-5": "glm-4.6",
-        "gpt-4": "gpt-4o",
-      })
-    ).toEqual([
-      {
-        matchType: "exact",
-        source: "claude-opus-4-5",
-        target: "glm-4.6",
-      },
-      {
-        matchType: "exact",
-        source: "gpt-4",
-        target: "gpt-4o",
-      },
-    ]);
+    const normalized = normalizeProviderModelRedirectRules({
+      "claude-opus-4-5": "glm-4.6",
+      "gpt-4": "gpt-4o",
+    });
+
+    expect(normalized).toHaveLength(2);
+    expect(normalized).toEqual(
+      expect.arrayContaining([
+        {
+          matchType: "exact",
+          source: "claude-opus-4-5",
+          target: "glm-4.6",
+        },
+        {
+          matchType: "exact",
+          source: "gpt-4",
+          target: "gpt-4o",
+        },
+      ])
+    );
   });
 });
