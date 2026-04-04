@@ -28,6 +28,7 @@ export class ModelRedirector {
 
     // 检查是否配置了模型重定向
     if (!hasProviderModelRedirectRules(provider.modelRedirects)) {
+      session.clearCurrentModelRedirect();
       // 如果新供应商没有重定向配置，且之前发生过重定向，需要重置
       if (session.isModelRedirected() && trueOriginalModel) {
         ModelRedirector.resetToOriginal(session, trueOriginalModel, provider);
@@ -51,6 +52,7 @@ export class ModelRedirector {
       provider.modelRedirects
     );
     if (!matchedRule) {
+      session.clearCurrentModelRedirect();
       // 如果新供应商对此模型没有重定向规则，且之前发生过重定向，需要重置
       if (session.isModelRedirected()) {
         ModelRedirector.resetToOriginal(session, originalModel, provider);
@@ -121,26 +123,27 @@ export class ModelRedirector {
     // 更新日志（记录重定向）
     session.request.note = `[Model Redirected: ${originalModel} → ${redirectedModel}] ${session.request.note || ""}`;
 
-    // 在决策链中记录模型重定向信息
-    const providerChain = session.getProviderChain();
-    if (providerChain.length > 0) {
-      const lastDecision = providerChain[providerChain.length - 1];
-      lastDecision.modelRedirect = {
-        originalModel: originalModel,
-        redirectedModel: redirectedModel,
-        billingModel: originalModel, // 始终使用原始模型计费
-        matchedRule: {
-          matchType: matchedRule.matchType,
-          source: matchedRule.source,
-          target: matchedRule.target,
-        },
-      };
-      logger.debug("[ModelRedirector] Added modelRedirect to provider chain", {
-        providerId: provider.id,
-        originalModel,
-        redirectedModel,
-      });
-    }
+    const redirectInfo = {
+      originalModel,
+      redirectedModel,
+      billingModel: originalModel,
+      matchedRule: {
+        matchType: matchedRule.matchType,
+        source: matchedRule.source,
+        target: matchedRule.target,
+      },
+    } as const;
+
+    // 记录当前 attempt 的 redirect 快照。
+    // 如果最后一条链路项本来就属于当前 provider（例如 initial_selection），顺手更新它；
+    // 否则保留快照，等待后续 hedge_winner / retry_failed 等真正属于该 provider 的链路项来消费。
+    session.setCurrentModelRedirect(provider.id, redirectInfo);
+    session.attachCurrentModelRedirectToLastChainItem(provider.id);
+    logger.debug("[ModelRedirector] Recorded modelRedirect for current provider attempt", {
+      providerId: provider.id,
+      originalModel,
+      redirectedModel,
+    });
 
     return true;
   }
