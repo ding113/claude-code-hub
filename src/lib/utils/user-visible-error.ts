@@ -6,8 +6,7 @@ const STRUCTURED_DETAIL_VALUE = /\b(result|rows?|params?)\s*[:=]\s*[[{(]/i;
 const API_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{8,}\b/g;
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/gi;
 const SECRET_ASSIGNMENT_PATTERN =
-  /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|secret|password|token)\b(\s*[:=]\s*)([^,\s;)}\]]+)/gi;
-const DEFAULT_SAFE_ERROR_MESSAGE = "Operation failed";
+  /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|secret|password|token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|[^,;)}\]\n\r]+)/gi;
 
 function normalizeMessage(message: string): string {
   return message.replace(/\s+/g, " ").trim();
@@ -47,34 +46,40 @@ function stripStructuredDatabasePayload(message: string): string {
     .trim();
 }
 
+function analyzeUserVisibleErrorMessage(message: string): {
+  hasStructuredDatabasePayload: boolean;
+  sanitizedMessage: string;
+} {
+  const redactedMessage = normalizeMessage(redactSecrets(message));
+  const structuredDatabasePayload = hasStructuredDatabasePayload(redactedMessage);
+
+  return {
+    hasStructuredDatabasePayload: structuredDatabasePayload,
+    sanitizedMessage: structuredDatabasePayload
+      ? stripStructuredDatabasePayload(redactedMessage)
+      : redactedMessage,
+  };
+}
+
 export function sanitizeUserVisibleErrorMessage(message: string): string {
-  const sanitized = normalizeMessage(redactSecrets(message));
-
-  if (!sanitized) {
-    return sanitized;
-  }
-
-  if (!hasStructuredDatabasePayload(sanitized)) {
-    return sanitized;
-  }
-
-  return stripStructuredDatabasePayload(sanitized);
+  return analyzeUserVisibleErrorMessage(message).sanitizedMessage;
 }
 
 export function getSafeErrorToastMessage(message: string, fallback: string): string {
-  const sanitized = sanitizeUserVisibleErrorMessage(message);
+  const { hasStructuredDatabasePayload: structuredDatabasePayload, sanitizedMessage } =
+    analyzeUserVisibleErrorMessage(message);
 
-  if (!sanitized) {
+  if (!sanitizedMessage) {
     return fallback;
   }
 
-  return hasStructuredDatabasePayload(message) ? fallback : sanitized;
+  return structuredDatabasePayload ? fallback : sanitizedMessage;
 }
 
-function sanitizeToastText(message: string): string {
-  const sanitized = sanitizeUserVisibleErrorMessage(message);
+function sanitizeToastText(message: string, fallbackMessage: string): string {
+  const sanitized = analyzeUserVisibleErrorMessage(message).sanitizedMessage;
 
-  return sanitized || DEFAULT_SAFE_ERROR_MESSAGE;
+  return sanitized || fallbackMessage;
 }
 
 type ToastLike<TArgs extends unknown[] = unknown[]> = {
@@ -83,7 +88,8 @@ type ToastLike<TArgs extends unknown[] = unknown[]> = {
 };
 
 export function installErrorToastSanitizer<TArgs extends unknown[]>(
-  toastApi: ToastLike<TArgs>
+  toastApi: ToastLike<TArgs>,
+  fallbackMessage: string
 ): void {
   if (toastApi.__cchErrorSanitizerInstalled__) {
     return;
@@ -92,8 +98,13 @@ export function installErrorToastSanitizer<TArgs extends unknown[]>(
   const originalError = toastApi.error.bind(toastApi);
 
   toastApi.error = ((...args: TArgs) => {
+    if (args.length === 0) {
+      return originalError(...args);
+    }
+
     const [message, ...rest] = args;
-    const safeMessage = typeof message === "string" ? sanitizeToastText(message) : message;
+    const safeMessage =
+      typeof message === "string" ? sanitizeToastText(message, fallbackMessage) : message;
     const safeRest = rest.map((value, index) => {
       if (
         index === 0 &&
@@ -104,7 +115,10 @@ export function installErrorToastSanitizer<TArgs extends unknown[]>(
       ) {
         return {
           ...value,
-          description: sanitizeToastText((value as { description: string }).description),
+          description: sanitizeToastText(
+            (value as { description: string }).description,
+            fallbackMessage
+          ),
         };
       }
 

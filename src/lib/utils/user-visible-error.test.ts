@@ -35,7 +35,7 @@ describe("user-visible-error", () => {
       error: originalError,
     };
 
-    installErrorToastSanitizer(toastApi);
+    installErrorToastSanitizer(toastApi, "Operation failed");
 
     toastApi.error(
       'db query error: query: SELECT * FROM keys WHERE key = \'sk-live-secret123456\'; result: [{"key":"sk-live-secret123456"}]'
@@ -50,7 +50,7 @@ describe("user-visible-error", () => {
       error: originalError,
     };
 
-    installErrorToastSanitizer(toastApi);
+    installErrorToastSanitizer(toastApi, "Operation failed");
 
     toastApi.error("query: SELECT * FROM keys WHERE key = 'sk-live-secret123456'");
 
@@ -63,7 +63,7 @@ describe("user-visible-error", () => {
       error: originalError,
     };
 
-    installErrorToastSanitizer(toastApi);
+    installErrorToastSanitizer(toastApi, "Operation failed");
 
     toastApi.error("Save failed", {
       description:
@@ -73,5 +73,24 @@ describe("user-visible-error", () => {
     expect(originalError).toHaveBeenCalledWith("Save failed", {
       description: "db query error",
     });
+  });
+
+  test("keeps zero-argument toast calls unchanged", () => {
+    const originalError = vi.fn();
+    const toastApi = {
+      error: originalError,
+    };
+
+    installErrorToastSanitizer(toastApi, "Operation failed");
+
+    toastApi.error();
+
+    expect(originalError).toHaveBeenCalledWith();
+  });
+
+  test("redacts assignment secrets that contain spaces", () => {
+    expect(sanitizeUserVisibleErrorMessage("validation failed: password: my secret password")).toBe(
+      "validation failed: password: [REDACTED]"
+    );
   });
 });

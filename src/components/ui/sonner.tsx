@@ -1,14 +1,19 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
+import { useEffect } from "react";
 import { Toaster as Sonner, type ToasterProps, toast } from "sonner";
 
 import { installErrorToastSanitizer } from "@/lib/utils/user-visible-error";
 
-installErrorToastSanitizer(toast);
-
 const Toaster = ({ ...props }: ToasterProps) => {
+  const t = useTranslations("errors");
   const { theme = "system" } = useTheme();
+
+  useEffect(() => {
+    installErrorToastSanitizer(toast, t("INTERNAL_ERROR"));
+  }, [t]);
 
   return (
     <Sonner
