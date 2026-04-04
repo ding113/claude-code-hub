@@ -1010,10 +1010,27 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const requestedModel = "claude-haiku-4-5-20251001";
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+        modelRedirects: {
+          [requestedModel]: "accounts/fireworks/routers/kimi-k2p5-turbo",
+        },
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+        modelRedirects: {
+          [requestedModel]: "MiniMax-M2.7-highspeed",
+        },
+      });
       const clientAbortController = new AbortController();
       const session = createSession(clientAbortController.signal);
+      session.request.model = requestedModel;
+      session.request.message.model = requestedModel;
       session.setProvider(provider1);
 
       mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
@@ -1028,10 +1045,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const controller1 = new AbortController();
       const controller2 = new AbortController();
 
-      doForward.mockImplementationOnce(async (attemptSession) => {
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller1;
         runtime.clearResponseTimeout = vi.fn();
+        expect(
+          ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
+        ).toBe(true);
         return createStreamingResponse({
           label: "p1",
           firstChunkDelayMs: 500,
@@ -1039,10 +1059,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         });
       });
 
-      doForward.mockImplementationOnce(async (attemptSession) => {
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller2;
         runtime.clearResponseTimeout = vi.fn();
+        expect(
+          ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
+        ).toBe(true);
         return createStreamingResponse({
           label: "p2",
           firstChunkDelayMs: 500,
@@ -1067,6 +1090,24 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
+
+      const chain = session.getProviderChain();
+      expect(
+        chain.find((item) => item.id === provider1.id && item.reason === "client_abort")
+          ?.modelRedirect
+      ).toMatchObject({
+        originalModel: requestedModel,
+        redirectedModel: "accounts/fireworks/routers/kimi-k2p5-turbo",
+        billingModel: requestedModel,
+      });
+      expect(
+        chain.find((item) => item.id === provider2.id && item.reason === "client_abort")
+          ?.modelRedirect
+      ).toMatchObject({
+        originalModel: requestedModel,
+        redirectedModel: "MiniMax-M2.7-highspeed",
+        billingModel: requestedModel,
+      });
     } finally {
       vi.useRealTimers();
     }

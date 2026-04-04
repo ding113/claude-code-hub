@@ -3539,6 +3539,7 @@ export class ProxyForwarder {
                 reason: "client_abort",
                 attemptNumber: attempt.sequence,
                 errorMessage: "Client aborted request",
+                modelRedirect: getAttemptModelRedirect(attempt),
               });
             }
           }
