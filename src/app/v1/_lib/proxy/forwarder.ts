@@ -98,6 +98,7 @@ type StreamingHedgeAttempt = {
   session: ProxySession;
   baseUrl: string;
   endpointAudit: { endpointId: number | null; endpointUrl: string };
+  modelRedirect?: ProviderChainItem["modelRedirect"];
   responseController: AbortController | null;
   clearResponseTimeout: (() => void) | null;
   firstByteTimeoutMs: number;
@@ -2994,6 +2995,19 @@ export class ProxyForwarder {
       resolveResult?.({ error });
     };
 
+    const getAttemptModelRedirect = (attempt: StreamingHedgeAttempt) => {
+      if (attempt.modelRedirect !== undefined) {
+        return attempt.modelRedirect;
+      }
+
+      const redirect = attempt.session.getCurrentModelRedirect(attempt.provider.id);
+      if (redirect) {
+        attempt.modelRedirect = structuredClone(redirect);
+      }
+
+      return attempt.modelRedirect;
+    };
+
     const abortAttempt = (attempt: StreamingHedgeAttempt, reason: string) => {
       if (attempt.settled) return;
       attempt.settled = true;
@@ -3007,6 +3021,7 @@ export class ProxyForwarder {
           ...attempt.endpointAudit,
           reason: "hedge_loser_cancelled",
           attemptNumber: attempt.sequence,
+          modelRedirect: getAttemptModelRedirect(attempt),
         });
       }
       try {
@@ -3228,6 +3243,7 @@ export class ProxyForwarder {
           attemptNumber: attempt.sequence,
           errorMessage: "Client aborted request",
           circuitState: getCircuitState(attempt.provider.id),
+          modelRedirect: getAttemptModelRedirect(attempt),
         });
         abortAllAttempts(undefined, "client_abort");
         await settleFailure(
@@ -3282,17 +3298,17 @@ export class ProxyForwarder {
             }
           );
 
-          session.addProviderToChain(
-            attempt.provider,
-            buildRetryFailedChainEntry(
+          session.addProviderToChain(attempt.provider, {
+            ...buildRetryFailedChainEntry(
               attempt.provider,
               attempt.endpointAudit,
               attempt.requestAttemptCount,
               error,
               errorMessage,
               reactiveRectifierResult.requestDetailsBeforeRectify
-            )
-          );
+            ),
+            modelRedirect: getAttemptModelRedirect(attempt),
+          });
 
           if (attempt.thresholdTimer) {
             clearTimeout(attempt.thresholdTimer);
@@ -3328,6 +3344,7 @@ export class ProxyForwarder {
         statusCode,
         errorMessage,
         circuitState: getCircuitState(attempt.provider.id),
+        modelRedirect: getAttemptModelRedirect(attempt),
       });
 
       if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
@@ -3354,6 +3371,10 @@ export class ProxyForwarder {
       attempt.settled = true;
       attempts.delete(attempt);
 
+      for (const activeAttempt of attempts) {
+        getAttemptModelRedirect(activeAttempt);
+      }
+
       if (attempt.session !== session) {
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
       }
@@ -3369,6 +3390,7 @@ export class ProxyForwarder {
         reason: isActualHedgeWin ? "hedge_winner" : "request_success",
         attemptNumber: attempt.sequence,
         statusCode: attempt.response.status,
+        modelRedirect: getAttemptModelRedirect(attempt),
       });
 
       abortAllAttempts(attempt, "hedge_loser");
@@ -3634,6 +3656,10 @@ export class ProxyForwarder {
       specialSettings: unknown[];
       originalModelName: string | null;
       originalUrlPathname: string | null;
+      currentModelRedirect: {
+        providerId: number;
+        redirect: NonNullable<ProviderChainItem["modelRedirect"]>;
+      } | null;
       providersSnapshot: Provider[] | null;
     };
     const shadowState = shadow as unknown as {
@@ -3644,6 +3670,10 @@ export class ProxyForwarder {
       specialSettings: unknown[];
       originalModelName: string | null;
       originalUrlPathname: string | null;
+      currentModelRedirect: {
+        providerId: number;
+        redirect: NonNullable<ProviderChainItem["modelRedirect"]>;
+      } | null;
       providersSnapshot: Provider[] | null;
     };
 
@@ -3659,6 +3689,12 @@ export class ProxyForwarder {
     shadowState.specialSettings = [...sourceState.specialSettings];
     shadowState.originalModelName = sourceState.originalModelName;
     shadowState.originalUrlPathname = sourceState.originalUrlPathname;
+    shadowState.currentModelRedirect = sourceState.currentModelRedirect
+      ? {
+          providerId: sourceState.currentModelRedirect.providerId,
+          redirect: structuredClone(sourceState.currentModelRedirect.redirect),
+        }
+      : null;
     shadowState.providersSnapshot = sourceState.providersSnapshot;
     shadow.setCacheTtlResolved(session.getCacheTtlResolved());
     shadow.setContext1mApplied(session.getContext1mApplied());
@@ -3686,12 +3722,20 @@ export class ProxyForwarder {
       specialSettings: unknown[];
       originalModelName: string | null;
       originalUrlPathname: string | null;
+      currentModelRedirect: {
+        providerId: number;
+        redirect: NonNullable<ProviderChainItem["modelRedirect"]>;
+      } | null;
     };
     const targetState = target as unknown as {
       providerChain: ProviderChainItem[];
       specialSettings: unknown[];
       originalModelName: string | null;
       originalUrlPathname: string | null;
+      currentModelRedirect: {
+        providerId: number;
+        redirect: NonNullable<ProviderChainItem["modelRedirect"]>;
+      } | null;
       clearResponseTimeout?: () => void;
       responseController?: AbortController;
     };
@@ -3722,6 +3766,12 @@ export class ProxyForwarder {
     targetState.specialSettings = merged;
     targetState.originalModelName = sourceState.originalModelName;
     targetState.originalUrlPathname = sourceState.originalUrlPathname;
+    targetState.currentModelRedirect = sourceState.currentModelRedirect
+      ? {
+          providerId: sourceState.currentModelRedirect.providerId,
+          redirect: structuredClone(sourceState.currentModelRedirect.redirect),
+        }
+      : null;
     targetState.clearResponseTimeout = sourceRuntime.clearResponseTimeout;
     targetState.responseController = sourceRuntime.responseController;
   }
