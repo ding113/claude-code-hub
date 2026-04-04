@@ -312,9 +312,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: [
-        { matchType: "exact", source: requestedModel, target: fireworksRedirect },
-      ],
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
     });
     const minimax = createProvider({
       id: 206,
@@ -383,9 +381,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: [
-        { matchType: "exact", source: requestedModel, target: fireworksRedirect },
-      ],
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
     });
     const fallback = createProvider({
       id: 206,
@@ -443,9 +439,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: [
-        { matchType: "exact", source: requestedModel, target: fireworksRedirect },
-      ],
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
     });
     const plainProvider = createProvider({
       id: 520,
@@ -493,17 +487,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         id: 383,
         name: "fireworks",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: [
-          { matchType: "exact", source: requestedModel, target: fireworksRedirect },
-        ],
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
       });
       const minimax = createProvider({
         id: 206,
         name: "Minimax Max",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: [
-          { matchType: "exact", source: requestedModel, target: minimaxRedirect },
-        ],
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
       });
       const session = createSession();
       session.request.model = requestedModel;
@@ -593,17 +583,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         id: 383,
         name: "fireworks",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: [
-          { matchType: "exact", source: requestedModel, target: fireworksRedirect },
-        ],
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
       });
       const minimax = createProvider({
         id: 206,
         name: "Minimax Max",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: [
-          { matchType: "exact", source: requestedModel, target: minimaxRedirect },
-        ],
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
       });
       const session = createSession();
       session.request.model = requestedModel;
