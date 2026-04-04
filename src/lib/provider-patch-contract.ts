@@ -7,6 +7,7 @@ import type {
   ProviderPatchDraftInput,
   ProviderPatchOperation,
 } from "@/types/provider";
+import { PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA } from "./provider-model-redirect-schema";
 
 export const PROVIDER_PATCH_ERROR_CODES = {
   INVALID_PATCH_SHAPE: "INVALID_PATCH_SHAPE",
@@ -130,16 +131,6 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   mcp_passthrough_type: false,
   mcp_passthrough_url: true,
 };
-
-function isStringRecord(value: unknown): value is Record<string, string> {
-  if (!isRecord(value) || Array.isArray(value)) {
-    return false;
-  }
-
-  return Object.entries(value).every(
-    ([key, entry]) => typeof key === "string" && typeof entry === "string"
-  );
-}
 
 function isNumberRecord(value: unknown): value is Record<string, number> {
   if (!isRecord(value) || Array.isArray(value)) {
@@ -287,7 +278,7 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "mcp_passthrough_type":
       return value === "none" || value === "minimax" || value === "glm" || value === "custom";
     case "model_redirects":
-      return isStringRecord(value);
+      return PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA.safeParse(value).success;
     case "allowed_models":
       return Array.isArray(value) && value.every((model) => typeof model === "string");
     case "allowed_clients":

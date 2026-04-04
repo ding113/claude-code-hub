@@ -189,9 +189,7 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
             <div className="space-y-2">
               <ModelRedirectEditor
                 value={state.routing.modelRedirects}
-                onChange={(value: Record<string, string>) =>
-                  dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })
-                }
+                onChange={(value) => dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })}
                 disabled={state.ui.isPending}
               />
               {isBatch && batchAnalysis?.routing.modelRedirects.status === "mixed" && (

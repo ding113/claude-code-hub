@@ -312,16 +312,12 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: {
-        [requestedModel]: fireworksRedirect,
-      },
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
     });
     const minimax = createProvider({
       id: 206,
       name: "Minimax Max",
-      modelRedirects: {
-        [requestedModel]: minimaxRedirect,
-      },
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
     });
 
     const session = createSession();
@@ -385,9 +381,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: {
-        [requestedModel]: fireworksRedirect,
-      },
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
     });
     const fallback = createProvider({
       id: 206,
@@ -445,9 +439,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     const fireworks = createProvider({
       id: 383,
       name: "fireworks",
-      modelRedirects: {
-        [requestedModel]: fireworksRedirect,
-      },
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
     });
     const plainProvider = createProvider({
       id: 520,
@@ -495,17 +487,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         id: 383,
         name: "fireworks",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: {
-          [requestedModel]: fireworksRedirect,
-        },
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
       });
       const minimax = createProvider({
         id: 206,
         name: "Minimax Max",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: {
-          [requestedModel]: minimaxRedirect,
-        },
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
       });
       const session = createSession();
       session.request.model = requestedModel;
@@ -595,17 +583,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         id: 383,
         name: "fireworks",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: {
-          [requestedModel]: fireworksRedirect,
-        },
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
       });
       const minimax = createProvider({
         id: 206,
         name: "Minimax Max",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: {
-          [requestedModel]: minimaxRedirect,
-        },
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
       });
       const session = createSession();
       session.request.model = requestedModel;
@@ -1015,17 +999,21 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         id: 1,
         name: "p1",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: {
-          [requestedModel]: "accounts/fireworks/routers/kimi-k2p5-turbo",
-        },
+        modelRedirects: [
+          {
+            matchType: "exact",
+            source: requestedModel,
+            target: "accounts/fireworks/routers/kimi-k2p5-turbo",
+          },
+        ],
       });
       const provider2 = createProvider({
         id: 2,
         name: "p2",
         firstByteTimeoutStreamingMs: 100,
-        modelRedirects: {
-          [requestedModel]: "MiniMax-M2.7-highspeed",
-        },
+        modelRedirects: [
+          { matchType: "exact", source: requestedModel, target: "MiniMax-M2.7-highspeed" },
+        ],
       });
       const clientAbortController = new AbortController();
       const session = createSession(clientAbortController.signal);

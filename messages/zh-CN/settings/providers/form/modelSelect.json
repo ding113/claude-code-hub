@@ -16,5 +16,11 @@
   "sourceUpstreamDesc": "模型列表来自上游服务商 API",
   "sourceFallback": "本地",
   "sourceFallbackDesc": "使用本地价格表中的模型列表（上游获取失败或不支持）",
-  "refresh": "刷新模型列表"
+  "refresh": "刷新模型列表",
+  "selectedEditEmpty": "模型名称不能为空",
+  "selectedEditExists": "模型 \"{model}\" 已在白名单中",
+  "selectedGroupLabel": "已选模型",
+  "selectedListHint": "无需展开下拉框即可直接编辑或删除",
+  "selectedListLabel": "已选白名单 ({count})",
+  "availableGroupLabel": "可选模型"
 }

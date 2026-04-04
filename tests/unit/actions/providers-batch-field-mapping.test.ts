@@ -64,7 +64,10 @@ describe("batchUpdateProviders - advanced field mapping", () => {
   });
 
   it("should map model_redirects to repository modelRedirects", async () => {
-    const redirects = { "claude-3-opus": "claude-3.5-sonnet", "gpt-4": "gpt-4o" };
+    const redirects = [
+      { matchType: "exact", source: "claude-3-opus", target: "claude-3.5-sonnet" },
+      { matchType: "exact", source: "gpt-4", target: "gpt-4o" },
+    ];
 
     const { batchUpdateProviders } = await import("@/actions/providers");
     const result = await batchUpdateProviders({
@@ -89,6 +92,19 @@ describe("batchUpdateProviders - advanced field mapping", () => {
     expect(updateProvidersBatchMock).toHaveBeenCalledWith([5], {
       modelRedirects: null,
     });
+  });
+
+  it("should reject unsafe regex model_redirects in direct batchUpdateProviders", async () => {
+    const { batchUpdateProviders } = await import("@/actions/providers");
+    const result = await batchUpdateProviders({
+      providerIds: [5],
+      updates: {
+        model_redirects: [{ matchType: "regex", source: "(a+)+", target: "glm-4.6" }],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(updateProvidersBatchMock).not.toHaveBeenCalled();
   });
 
   it("should map allowed_models with values correctly", async () => {
@@ -217,7 +233,7 @@ describe("batchUpdateProviders - advanced field mapping", () => {
         weight: 3,
         cost_multiplier: 0.8,
         group_tag: "mixed-batch",
-        model_redirects: { "old-model": "new-model" },
+        model_redirects: [{ matchType: "exact", source: "old-model", target: "new-model" }],
         allowed_models: ["claude-3-opus"],
         anthropic_thinking_budget_preference: "5000",
         anthropic_adaptive_thinking: adaptiveConfig,
@@ -234,7 +250,7 @@ describe("batchUpdateProviders - advanced field mapping", () => {
       weight: 3,
       costMultiplier: "0.8",
       groupTag: "mixed-batch",
-      modelRedirects: { "old-model": "new-model" },
+      modelRedirects: [{ matchType: "exact", source: "old-model", target: "new-model" }],
       allowedModels: ["claude-3-opus"],
       anthropicThinkingBudgetPreference: "5000",
       anthropicAdaptiveThinking: adaptiveConfig,

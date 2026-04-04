@@ -46,6 +46,14 @@ export interface AnthropicAdaptiveThinkingConfig {
   models: string[];
 }
 
+export type ProviderModelRedirectMatchType = "exact" | "prefix" | "suffix" | "contains" | "regex";
+
+export interface ProviderModelRedirectRule {
+  matchType: ProviderModelRedirectMatchType;
+  source: string;
+  target: string;
+}
+
 export type ProviderPatchOperation<T> =
   | { mode: "no_change" }
   | { mode: "set"; value: T }
@@ -117,7 +125,7 @@ export interface ProviderBatchPatchDraft {
   weight?: ProviderPatchDraftInput<number>;
   cost_multiplier?: ProviderPatchDraftInput<number>;
   group_tag?: ProviderPatchDraftInput<string>;
-  model_redirects?: ProviderPatchDraftInput<Record<string, string>>;
+  model_redirects?: ProviderPatchDraftInput<ProviderModelRedirectRule[]>;
   allowed_models?: ProviderPatchDraftInput<string[]>;
   allowed_clients?: ProviderPatchDraftInput<string[]>;
   blocked_clients?: ProviderPatchDraftInput<string[]>;
@@ -171,7 +179,7 @@ export interface ProviderBatchPatch {
   weight: ProviderPatchOperation<number>;
   cost_multiplier: ProviderPatchOperation<number>;
   group_tag: ProviderPatchOperation<string>;
-  model_redirects: ProviderPatchOperation<Record<string, string>>;
+  model_redirects: ProviderPatchOperation<ProviderModelRedirectRule[]>;
   allowed_models: ProviderPatchOperation<string[]>;
   allowed_clients: ProviderPatchOperation<string[]>;
   blocked_clients: ProviderPatchOperation<string[]>;
@@ -225,7 +233,7 @@ export interface ProviderBatchApplyUpdates {
   weight?: number;
   cost_multiplier?: number;
   group_tag?: string | null;
-  model_redirects?: Record<string, string> | null;
+  model_redirects?: ProviderModelRedirectRule[] | null;
   allowed_models?: string[] | null;
   allowed_clients?: string[];
   blocked_clients?: string[];
@@ -305,7 +313,7 @@ export interface Provider {
   preserveClientIp: boolean;
   // 是否跳过当前供应商的 sticky session 复用
   disableSessionReuse: boolean;
-  modelRedirects: Record<string, string> | null;
+  modelRedirects: ProviderModelRedirectRule[] | null;
 
   // Scheduled active time window (HH:mm format, null = always active)
   activeTimeStart: string | null;
@@ -423,7 +431,7 @@ export interface ProviderDisplay {
   preserveClientIp: boolean;
   // 是否跳过当前供应商的 sticky session 复用
   disableSessionReuse: boolean;
-  modelRedirects: Record<string, string> | null;
+  modelRedirects: ProviderModelRedirectRule[] | null;
   // Scheduled active time window
   activeTimeStart: string | null;
   activeTimeEnd: string | null;
@@ -520,7 +528,7 @@ export interface CreateProviderData {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   disable_session_reuse?: boolean;
-  model_redirects?: Record<string, string> | null;
+  model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
   allowed_models?: string[] | null;
@@ -600,7 +608,7 @@ export interface UpdateProviderData {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   disable_session_reuse?: boolean;
-  model_redirects?: Record<string, string> | null;
+  model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
   allowed_models?: string[] | null;

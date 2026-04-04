@@ -223,10 +223,18 @@ describe.skip("供应商管理 - 添加供应商 (addProvider)", () => {
       url: "https://api.anthropic.com",
       key: "sk-test-key",
       provider_type: "claude",
-      model_redirects: {
-        "claude-3-opus": "claude-3-sonnet",
-        "gpt-4": "claude-3-opus",
-      },
+      model_redirects: [
+        {
+          matchType: "prefix",
+          source: "claude-3-opus",
+          target: "claude-3-sonnet",
+        },
+        {
+          matchType: "contains",
+          source: "gpt-4",
+          target: "claude-3-opus",
+        },
+      ],
     });
 
     expect(response.ok).toBe(true);

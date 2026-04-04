@@ -10,11 +10,17 @@
   "notFound": "モデルが見つかりません",
   "openai": "OpenAI",
   "refresh": "モデルリストを更新",
+  "selectedEditEmpty": "モデル名は空にできません",
+  "selectedEditExists": "モデル \"{model}\" はすでに選択されています",
+  "selectedGroupLabel": "選択済みモデル",
   "searchPlaceholder": "モデル名を検索...",
   "selectAll": "すべて選択 ({count})",
   "selectedCount": "{count} 個のモデルを選択済み",
+  "selectedListHint": "ドロップダウンを開かずに編集・削除できます",
+  "selectedListLabel": "選択済みホワイトリスト ({count})",
   "sourceFallback": "ローカル",
   "sourceFallbackDesc": "ローカル価格表のモデルリストを使用（上流が利用不可または未対応）",
   "sourceUpstream": "上流",
-  "sourceUpstreamDesc": "モデルリストは上流プロバイダーAPIから取得"
+  "sourceUpstreamDesc": "モデルリストは上流プロバイダーAPIから取得",
+  "availableGroupLabel": "利用可能なモデル"
 }

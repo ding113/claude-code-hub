@@ -1,4 +1,9 @@
 import { logger } from "@/lib/logger";
+import {
+  findMatchingProviderModelRedirectRule,
+  getProviderModelRedirectTarget,
+  hasProviderModelRedirectRules,
+} from "@/lib/provider-model-redirects";
 import type { Provider } from "@/types/provider";
 import type { ProxySession } from "./session";
 
@@ -22,7 +27,7 @@ export class ModelRedirector {
     const trueOriginalModel = session.getOriginalModel() || session.request.model;
 
     // 检查是否配置了模型重定向
-    if (!provider.modelRedirects || Object.keys(provider.modelRedirects).length === 0) {
+    if (!hasProviderModelRedirectRules(provider.modelRedirects)) {
       session.clearCurrentModelRedirect();
       // 如果新供应商没有重定向配置，且之前发生过重定向，需要重置
       if (session.isModelRedirected() && trueOriginalModel) {
@@ -42,8 +47,11 @@ export class ModelRedirector {
     }
 
     // 检查是否有该模型的重定向配置
-    const redirectedModel = provider.modelRedirects[originalModel];
-    if (!redirectedModel) {
+    const matchedRule = findMatchingProviderModelRedirectRule(
+      originalModel,
+      provider.modelRedirects
+    );
+    if (!matchedRule) {
       session.clearCurrentModelRedirect();
       // 如果新供应商对此模型没有重定向规则，且之前发生过重定向，需要重置
       if (session.isModelRedirected()) {
@@ -58,10 +66,14 @@ export class ModelRedirector {
       return false;
     }
 
+    const redirectedModel = matchedRule.target;
+
     // 执行重定向
     logger.info("[ModelRedirector] Model redirected", {
       originalModel,
       redirectedModel,
+      matchType: matchedRule.matchType,
+      matchedSource: matchedRule.source,
       providerId: provider.id,
       providerName: provider.name,
       providerType: provider.providerType,
@@ -114,7 +126,12 @@ export class ModelRedirector {
     const redirectInfo = {
       originalModel,
       redirectedModel,
-      billingModel: originalModel, // 始终使用原始模型计费
+      billingModel: originalModel,
+      matchedRule: {
+        matchType: matchedRule.matchType,
+        source: matchedRule.source,
+        target: matchedRule.target,
+      },
     } as const;
 
     // 记录当前 attempt 的 redirect 快照。
@@ -143,7 +160,7 @@ export class ModelRedirector {
       return originalModel;
     }
 
-    return provider.modelRedirects[originalModel] || originalModel;
+    return getProviderModelRedirectTarget(originalModel, provider.modelRedirects);
   }
 
   /**
@@ -154,7 +171,7 @@ export class ModelRedirector {
    * @returns 是否配置了重定向
    */
   static hasRedirect(model: string, provider: Provider): boolean {
-    return !!(provider.modelRedirects && model && provider.modelRedirects[model]);
+    return !!findMatchingProviderModelRedirectRule(model, provider.modelRedirects);
   }
 
   /**

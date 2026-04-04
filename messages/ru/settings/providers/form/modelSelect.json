@@ -10,11 +10,17 @@
   "notFound": "Модели не найдены",
   "openai": "OpenAI",
   "refresh": "Обновить список моделей",
+  "selectedEditEmpty": "Имя модели не может быть пустым",
+  "selectedEditExists": "Модель \"{model}\" уже выбрана",
+  "selectedGroupLabel": "Выбранные модели",
   "searchPlaceholder": "Поиск по названию модели...",
   "selectAll": "Выбрать все ({count})",
   "selectedCount": "Выбрано моделей: {count}",
+  "selectedListHint": "Можно редактировать и удалять без открытия списка",
+  "selectedListLabel": "Белый список ({count})",
   "sourceFallback": "Локально",
   "sourceFallbackDesc": "Используется локальный прайс-лист (upstream недоступен или не поддерживается)",
   "sourceUpstream": "Upstream",
-  "sourceUpstreamDesc": "Список моделей из API провайдера"
+  "sourceUpstreamDesc": "Список моделей из API провайдера",
+  "availableGroupLabel": "Доступные модели"
 }

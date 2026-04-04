@@ -35,6 +35,7 @@ import * as userActions from "@/actions/users";
 import * as webhookTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
+import { PROVIDER_MODEL_REDIRECT_RULE_SCHEMA } from "@/lib/provider-model-redirect-schema";
 // 导入 validation schemas
 import {
   CreateProviderSchema,
@@ -538,7 +539,10 @@ const { route: getProvidersRoute, handler: getProvidersHandler } = createActionR
         weight: z.number().describe("权重"),
         priority: z.number().describe("优先级"),
         costMultiplier: z.number().describe("成本系数"),
-        modelRedirects: z.record(z.string(), z.string()).nullable().describe("模型重定向映射"),
+        modelRedirects: z
+          .array(PROVIDER_MODEL_REDIRECT_RULE_SCHEMA)
+          .nullable()
+          .describe("模型重定向规则列表"),
         proxyUrl: z.string().nullable().describe("代理地址"),
         maxConcurrency: z.number().nullable().describe("最大并发数"),
         rpmLimit: z.number().nullable().describe("RPM 限制"),

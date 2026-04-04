@@ -16,7 +16,7 @@ import {
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
 import type { ResponseFixerConfig } from '@/types/system-config';
-import type { ProviderType } from "@/types/provider";
+import type { ProviderModelRedirectRule, ProviderType } from "@/types/provider";
 import type { FilterOperation } from "@/lib/request-filter-types";
 
 // Enums
@@ -195,7 +195,9 @@ export const providers = pgTable('providers', {
   disableSessionReuse: boolean('disable_session_reuse').notNull().default(false),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
-  modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),
+  modelRedirects: jsonb('model_redirects').$type<
+    ProviderModelRedirectRule[] | Record<string, string> | null
+  >(),
 
   // 模型列表：双重语义
   // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
