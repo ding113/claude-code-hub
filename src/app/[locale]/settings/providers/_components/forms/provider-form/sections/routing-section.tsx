@@ -214,22 +214,6 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                 proxyFallbackToDirect={state.network.proxyFallbackToDirect}
                 providerId={isEdit ? provider?.id : undefined}
               />
-              {state.routing.allowedModels.length > 0 && (
-                <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md">
-                  {state.routing.allowedModels.slice(0, 5).map((model) => (
-                    <Badge key={model} variant="outline" className="font-mono text-xs">
-                      {model}
-                    </Badge>
-                  ))}
-                  {state.routing.allowedModels.length > 5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {t("sections.routing.modelWhitelist.moreModels", {
-                        count: state.routing.allowedModels.length - 5,
-                      })}
-                    </Badge>
-                  )}
-                </div>
-              )}
               <p className="text-xs text-muted-foreground">
                 {state.routing.allowedModels.length === 0 ? (
                   <span className="text-green-600">

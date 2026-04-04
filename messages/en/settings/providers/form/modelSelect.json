@@ -16,7 +16,6 @@
   "searchPlaceholder": "Search model name...",
   "selectAll": "Select All ({count})",
   "selectedCount": "Selected {count} models",
-  "selectedListHint": "Edit or remove without opening the dropdown",
   "selectedListLabel": "Selected whitelist ({count})",
   "sourceFallback": "Local",
   "sourceFallbackDesc": "Using local price list (upstream unavailable or unsupported)",

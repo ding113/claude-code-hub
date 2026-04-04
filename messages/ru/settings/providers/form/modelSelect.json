@@ -16,7 +16,6 @@
   "searchPlaceholder": "Поиск по названию модели...",
   "selectAll": "Выбрать все ({count})",
   "selectedCount": "Выбрано моделей: {count}",
-  "selectedListHint": "Можно редактировать и удалять без открытия списка",
   "selectedListLabel": "Белый список ({count})",
   "sourceFallback": "Локально",
   "sourceFallbackDesc": "Используется локальный прайс-лист (upstream недоступен или не поддерживается)",
