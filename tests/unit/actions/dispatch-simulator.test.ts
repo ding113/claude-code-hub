@@ -184,6 +184,8 @@ describe("dispatch simulator", () => {
     expect(result.steps[0].outputCount).toBe(4);
     expect(result.steps[1].outputCount).toBe(3);
     expect(result.steps[5].outputCount).toBe(2);
+    expect(result.steps[7].outputCount).toBe(1);
+    expect(result.steps[8].outputCount).toBe(1);
     expect(result.priorityTiers).toHaveLength(2);
     expect(result.selectedPriority).toBe(0);
     expect(result.finalCandidateCount).toBe(1);
