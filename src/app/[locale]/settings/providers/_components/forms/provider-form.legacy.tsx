@@ -32,6 +32,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
@@ -202,7 +203,11 @@ export function ProviderForm({
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
     sourceProvider?.limitConcurrentSessions ?? null
   );
-  const [allowedModels, setAllowedModels] = useState<string[]>(sourceProvider?.allowedModels ?? []);
+  const [allowedModels, setAllowedModels] = useState<string[]>(() =>
+    (normalizeAllowedModelRules(sourceProvider?.allowedModels) ?? [])
+      .filter((rule) => rule.matchType === "exact")
+      .map((rule) => rule.pattern)
+  );
   const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
     sourceProvider?.cacheTtlPreference ?? "inherit"
   );

@@ -1,0 +1,18 @@
+{
+  "inputPlaceholder": "テストしたいモデル名を入力してください。例: claude-opus-4-1",
+  "testButton": "一致をテスト",
+  "redirectTitle": "モデルリダイレクト一致テスト",
+  "redirectDescription": "このモデル名がどのリダイレクトルールに一致するかを確認します。",
+  "allowedTitle": "モデル許可リスト一致テスト",
+  "allowedDescription": "このモデル名が許可リストで許可されるかを確認します。",
+  "matched": "リダイレクトルールに一致しました",
+  "notMatched": "一致するリダイレクトルールはありません",
+  "allowed": "このモデルは許可されます",
+  "blocked": "このモデルは許可リストで拒否されます",
+  "allAllowed": "許可ルールが設定されていないため、すべてのモデルが許可されます。",
+  "ruleIndex": "ルール順",
+  "matchType": "一致方式",
+  "source": "元モデルパターン",
+  "target": "リダイレクト先",
+  "pattern": "許可パターン"
+}

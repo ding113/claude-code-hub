@@ -1,0 +1,18 @@
+{
+  "inputPlaceholder": "輸入要測試的模型名，例如 claude-opus-4-1",
+  "testButton": "測試匹配",
+  "redirectTitle": "模型重定向匹配測試",
+  "redirectDescription": "預覽這個模型名會命中哪一條重定向規則。",
+  "allowedTitle": "模型白名單匹配測試",
+  "allowedDescription": "預覽這個模型名是否會被白名單放行。",
+  "matched": "已命中一條重定向規則",
+  "notMatched": "沒有命中任何重定向規則",
+  "allowed": "此模型會被允許",
+  "blocked": "此模型會被白名單攔截",
+  "allAllowed": "目前沒有設定白名單規則，因此所有模型都會被允許。",
+  "ruleIndex": "規則順序",
+  "matchType": "匹配方式",
+  "source": "來源模型模式",
+  "target": "重定向目標",
+  "pattern": "白名單模式"
+}

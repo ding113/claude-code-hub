@@ -54,7 +54,7 @@
       "label": "允许的模型",
       "optional": "(可选)",
       "allowAll": "✓ 允许所有模型（推荐）",
-      "selectedOnly": "仅允许选中的 {count} 个模型。其他模型的请求不会调度到此供应商。",
+      "selectedOnly": "仅允许命中这 {count} 条规则的模型。其他模型的请求不会调度到此供应商。",
       "moreModels": "+{count} 更多"
     },
     "clientRestrictions": {

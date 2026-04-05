@@ -305,7 +305,7 @@
       "label": "允許的模型",
       "moreModels": "+{count} 個以上",
       "optional": "（選填）",
-      "selectedOnly": "僅允許所選的 {count} 個模型。其他模型將不會被路由到此供應商。",
+      "selectedOnly": "僅允許命中這 {count} 條規則的模型。其他模型將不會被路由到此供應商。",
       "title": "模型允許清單"
     },
     "clientRestrictions": {

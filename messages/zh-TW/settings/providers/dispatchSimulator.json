@@ -1,0 +1,52 @@
+{
+  "button": "調度測試",
+  "title": "模型調度模擬器",
+  "description": "依入口協議、模型名與供應商分組，模擬完整的供應商決策鏈。",
+  "protocolLabel": "入口協議",
+  "modelLabel": "傳入模型名",
+  "modelPlaceholder": "例如 claude-opus-4-1",
+  "groupsLabel": "供應商分組",
+  "noGroups": "目前沒有可選的供應商分組。",
+  "simulateButton": "開始模擬",
+  "errorTitle": "模擬失敗",
+  "genericError": "執行調度模擬失敗",
+  "surviving": "繼續保留",
+  "filteredOut": "本層淘汰",
+  "none": "無",
+  "finalCandidatesTitle": "最終候選",
+  "finalCandidatesDescription": "選中優先級 {priority} 層後，還剩 {count} 個供應商。",
+  "noCandidatesTitle": "沒有候選供應商",
+  "noCandidatesDescription": "在目前輸入下，沒有供應商能完整通過整條決策鏈。",
+  "selectedTier": "目前選中層",
+  "tierTitle": "優先級 {priority}",
+  "tierProviderCount": "{count} 個供應商",
+  "filteredCount": "淘汰 {count} 個",
+  "priorityBadge": "優先級 {value}",
+  "weightLabel": "權重 {weight}",
+  "redirectPreview": "重定向預覽：{model}",
+  "endpointStats": "端點：總數 {total}，啟用 {enabled}，熔斷開啟 {circuitOpen}，可用 {available}",
+  "formats": {
+    "claude": "Claude",
+    "openai": "OpenAI",
+    "response": "Codex / Responses",
+    "gemini": "Gemini"
+  },
+  "steps": {
+    "groupFilter": "分組過濾",
+    "formatCompatibility": "格式相容性",
+    "enabledCheck": "供應商開關",
+    "activeTime": "生效時間視窗",
+    "modelAllowlist": "模型白名單",
+    "healthAndLimits": "熔斷與限額",
+    "priorityTiers": "優先級分層",
+    "modelRedirect": "模型重定向預覽",
+    "endpointSummary": "端點狀態彙總"
+  },
+  "notes": {
+    "no_group_filter": "目前沒有勾選供應商分組，因此跳過分組過濾。",
+    "model_filter_skipped_for_resource_request": "目前請求沒有模型名，依資源型請求邏輯跳過白名單過濾。",
+    "redirect_preview_skipped_for_resource_request": "目前沒有模型名，因此跳過重定向預覽。",
+    "redirects_apply_after_provider_selection": "模型重定向會在供應商選定之後才生效。",
+    "endpoint_status_does_not_change_provider_preselection": "端點狀態僅作為下游風險提示，目前不會改變供應商預選結果。"
+  }
+}

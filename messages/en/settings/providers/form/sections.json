@@ -304,7 +304,7 @@
       "label": "Allowed Models",
       "moreModels": "+{count} more",
       "optional": "(optional)",
-      "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
+      "selectedOnly": "Only models matching the configured {count} rules are allowed. Other models will not be routed to this provider.",
       "title": "Model Allowlist"
     },
     "clientRestrictions": {

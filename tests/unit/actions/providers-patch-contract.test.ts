@@ -42,7 +42,9 @@ describe("provider patch contract", () => {
 
     expect(setResult.data.group_tag).toBe("primary");
     expect(clearResult.data.group_tag).toBeNull();
-    expect(setResult.data.allowed_models).toEqual(["claude-3-7-sonnet"]);
+    expect(setResult.data.allowed_models).toEqual([
+      { matchType: "exact", pattern: "claude-3-7-sonnet" },
+    ]);
     expect(clearResult.data.allowed_models).toBeNull();
   });
 

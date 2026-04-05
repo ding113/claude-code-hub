@@ -1,0 +1,52 @@
+{
+  "button": "Dispatch Test",
+  "title": "Model Dispatch Simulator",
+  "description": "Simulate the provider decision chain for a protocol, model name, and provider groups.",
+  "protocolLabel": "Protocol",
+  "modelLabel": "Input Model Name",
+  "modelPlaceholder": "e.g. claude-opus-4-1",
+  "groupsLabel": "Provider Groups",
+  "noGroups": "No provider groups are currently configured.",
+  "simulateButton": "Simulate",
+  "errorTitle": "Simulation Failed",
+  "genericError": "Failed to run the dispatch simulator",
+  "surviving": "Still Eligible",
+  "filteredOut": "Filtered Out",
+  "none": "None",
+  "finalCandidatesTitle": "Final Candidates",
+  "finalCandidatesDescription": "{count} provider(s) remain in the selected priority tier {priority}.",
+  "noCandidatesTitle": "No Candidates",
+  "noCandidatesDescription": "No provider survived the full decision chain for this input.",
+  "selectedTier": "Selected Tier",
+  "tierTitle": "Priority {priority}",
+  "tierProviderCount": "{count} provider(s)",
+  "filteredCount": "{count} filtered",
+  "priorityBadge": "Priority {value}",
+  "weightLabel": "Weight {weight}",
+  "redirectPreview": "Redirect preview: {model}",
+  "endpointStats": "Endpoints: total {total}, enabled {enabled}, open {circuitOpen}, available {available}",
+  "formats": {
+    "claude": "Claude",
+    "openai": "OpenAI",
+    "response": "Codex / Responses",
+    "gemini": "Gemini"
+  },
+  "steps": {
+    "groupFilter": "Group Filter",
+    "formatCompatibility": "Format Compatibility",
+    "enabledCheck": "Provider Switch",
+    "activeTime": "Active Time Window",
+    "modelAllowlist": "Model Allowlist",
+    "healthAndLimits": "Circuit And Limits",
+    "priorityTiers": "Priority Tiers",
+    "modelRedirect": "Model Redirect Preview",
+    "endpointSummary": "Endpoint Summary"
+  },
+  "notes": {
+    "no_group_filter": "No provider groups were selected, so the group filter was skipped.",
+    "model_filter_skipped_for_resource_request": "The request has no model name, so allowlist filtering is skipped for resource-style requests.",
+    "redirect_preview_skipped_for_resource_request": "No model name was provided, so redirect preview is skipped.",
+    "redirects_apply_after_provider_selection": "Model redirects are evaluated after provider selection.",
+    "endpoint_status_does_not_change_provider_preselection": "Endpoint status is shown as downstream risk and does not currently change provider pre-selection."
+  }
+}

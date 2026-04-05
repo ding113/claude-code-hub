@@ -1,0 +1,52 @@
+{
+  "button": "调度测试",
+  "title": "模型调度模拟器",
+  "description": "按入口协议、模型名和供应商分组，模拟完整的供应商决策链。",
+  "protocolLabel": "入口协议",
+  "modelLabel": "传入模型名",
+  "modelPlaceholder": "例如 claude-opus-4-1",
+  "groupsLabel": "供应商分组",
+  "noGroups": "当前没有可选的供应商分组。",
+  "simulateButton": "开始模拟",
+  "errorTitle": "模拟失败",
+  "genericError": "执行调度模拟失败",
+  "surviving": "继续保留",
+  "filteredOut": "本层淘汰",
+  "none": "无",
+  "finalCandidatesTitle": "最终候选",
+  "finalCandidatesDescription": "选中优先级 {priority} 层后，还剩 {count} 个供应商。",
+  "noCandidatesTitle": "没有候选供应商",
+  "noCandidatesDescription": "当前输入下，没有供应商能完整通过整条决策链。",
+  "selectedTier": "当前选中层",
+  "tierTitle": "优先级 {priority}",
+  "tierProviderCount": "{count} 个供应商",
+  "filteredCount": "淘汰 {count} 个",
+  "priorityBadge": "优先级 {value}",
+  "weightLabel": "权重 {weight}",
+  "redirectPreview": "重定向预览：{model}",
+  "endpointStats": "端点：总数 {total}，启用 {enabled}，熔断打开 {circuitOpen}，可用 {available}",
+  "formats": {
+    "claude": "Claude",
+    "openai": "OpenAI",
+    "response": "Codex / Responses",
+    "gemini": "Gemini"
+  },
+  "steps": {
+    "groupFilter": "分组过滤",
+    "formatCompatibility": "格式兼容性",
+    "enabledCheck": "供应商开关",
+    "activeTime": "生效时间窗口",
+    "modelAllowlist": "模型白名单",
+    "healthAndLimits": "熔断与限额",
+    "priorityTiers": "优先级分层",
+    "modelRedirect": "模型重定向预览",
+    "endpointSummary": "端点状态汇总"
+  },
+  "notes": {
+    "no_group_filter": "当前没有勾选供应商分组，因此跳过分组过滤。",
+    "model_filter_skipped_for_resource_request": "当前请求没有模型名，按资源类请求逻辑跳过白名单过滤。",
+    "redirect_preview_skipped_for_resource_request": "当前没有模型名，因此跳过重定向预览。",
+    "redirects_apply_after_provider_selection": "模型重定向发生在供应商选定之后。",
+    "endpoint_status_does_not_change_provider_preselection": "端点状态仅作为下游风险提示，目前不会改变供应商预选结果。"
+  }
+}

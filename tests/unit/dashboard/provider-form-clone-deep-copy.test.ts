@@ -76,7 +76,10 @@ describe("createInitialState deep-copy safety", () => {
     it("allowedModels is a distinct array with equal values", () => {
       const source = makeProvider();
       const state = createInitialState("create", undefined, source);
-      expect(state.routing.allowedModels).toEqual(source.allowedModels);
+      expect(state.routing.allowedModels).toEqual([
+        { matchType: "exact", pattern: "claude-3" },
+        { matchType: "exact", pattern: "claude-3.5" },
+      ]);
       expect(state.routing.allowedModels).not.toBe(source.allowedModels);
     });
 

@@ -116,7 +116,10 @@ describe("batchUpdateProviders - advanced field mapping", () => {
 
     expect(result.ok).toBe(true);
     expect(updateProvidersBatchMock).toHaveBeenCalledWith([1, 2], {
-      allowedModels: ["model-a", "model-b"],
+      allowedModels: [
+        { matchType: "exact", pattern: "model-a" },
+        { matchType: "exact", pattern: "model-b" },
+      ],
     });
   });
 
@@ -251,7 +254,7 @@ describe("batchUpdateProviders - advanced field mapping", () => {
       costMultiplier: "0.8",
       groupTag: "mixed-batch",
       modelRedirects: [{ matchType: "exact", source: "old-model", target: "new-model" }],
-      allowedModels: ["claude-3-opus"],
+      allowedModels: [{ matchType: "exact", pattern: "claude-3-opus" }],
       anthropicThinkingBudgetPreference: "5000",
       anthropicAdaptiveThinking: adaptiveConfig,
     });

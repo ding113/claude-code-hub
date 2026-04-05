@@ -40,7 +40,10 @@ describe("批量编辑预填充集成测试", () => {
     expect(state.routing.modelRedirects).toEqual([
       { matchType: "exact", source: "model-a", target: "model-b" },
     ]);
-    expect(state.routing.allowedModels).toEqual(["model-1", "model-2"]);
+    expect(state.routing.allowedModels).toEqual([
+      { matchType: "exact", pattern: "model-1" },
+      { matchType: "exact", pattern: "model-2" },
+    ]);
     expect(state.rateLimit.limit5hUsd).toBe(100);
     expect(state.circuitBreaker.failureThreshold).toBe(5);
     expect(state.circuitBreaker.openDurationMinutes).toBe(5);

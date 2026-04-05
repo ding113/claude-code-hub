@@ -305,7 +305,7 @@
       "label": "許可するモデル",
       "moreModels": "+{count} 件 さらに表示",
       "optional": "（任意）",
-      "selectedOnly": "選択した {count} 件のモデルのみ許可します。他のモデルはこのプロバイダーにルーティングされません。",
+      "selectedOnly": "設定済みの {count} 件のルールに一致したモデルのみ許可します。他のモデルはこのプロバイダーにルーティングされません。",
       "title": "モデル許可リスト"
     },
     "clientRestrictions": {

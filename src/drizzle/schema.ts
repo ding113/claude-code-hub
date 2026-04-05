@@ -16,7 +16,7 @@ import {
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
 import type { ResponseFixerConfig } from '@/types/system-config';
-import type { ProviderModelRedirectRule, ProviderType } from "@/types/provider";
+import type { AllowedModelRuleInput, ProviderModelRedirectRule, ProviderType } from "@/types/provider";
 import type { FilterOperation } from "@/lib/request-filter-types";
 
 // Enums
@@ -203,7 +203,7 @@ export const providers = pgTable('providers', {
   // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
-  allowedModels: jsonb('allowed_models').$type<string[] | null>().default(null),
+  allowedModels: jsonb('allowed_models').$type<AllowedModelRuleInput[] | null>().default(null),
 
   // Client restrictions for this provider
   // allowedClients: empty = no restriction; non-empty = only listed patterns allowed

@@ -19,9 +19,11 @@ import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type { ProviderType } from "@/types/provider";
+import { AllowedModelRuleEditor } from "../../../allowed-model-rule-editor";
+import { AllowedModelTester } from "../../../allowed-model-tester";
 import { MixedValueIndicator } from "../../../batch-edit/mixed-value-indicator";
-import { ModelMultiSelect } from "../../../model-multi-select";
 import { ModelRedirectEditor } from "../../../model-redirect-editor";
+import { ModelRedirectTester } from "../../../model-redirect-tester";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
 
@@ -192,6 +194,9 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                 onChange={(value) => dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })}
                 disabled={state.ui.isPending}
               />
+              {state.routing.modelRedirects.length > 0 ? (
+                <ModelRedirectTester rules={state.routing.modelRedirects} />
+              ) : null}
               {isBatch && batchAnalysis?.routing.modelRedirects.status === "mixed" && (
                 <MixedValueIndicator values={batchAnalysis.routing.modelRedirects.values} />
               )}
@@ -201,12 +206,10 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
           {/* Allowed Models */}
           <FieldGroup label={t("sections.routing.modelWhitelist.label")}>
             <div className="space-y-2">
-              <ModelMultiSelect
+              <AllowedModelRuleEditor
                 providerType={state.routing.providerType}
-                selectedModels={state.routing.allowedModels}
-                onChange={(value: string[]) =>
-                  dispatch({ type: "SET_ALLOWED_MODELS", payload: value })
-                }
+                value={state.routing.allowedModels}
+                onChange={(value) => dispatch({ type: "SET_ALLOWED_MODELS", payload: value })}
                 disabled={state.ui.isPending}
                 providerUrl={state.basic.url}
                 apiKey={state.basic.key}
@@ -214,6 +217,9 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                 proxyFallbackToDirect={state.network.proxyFallbackToDirect}
                 providerId={isEdit ? provider?.id : undefined}
               />
+              {state.routing.allowedModels.length > 0 ? (
+                <AllowedModelTester rules={state.routing.allowedModels} />
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 {state.routing.allowedModels.length === 0 ? (
                   <span className="text-green-600">

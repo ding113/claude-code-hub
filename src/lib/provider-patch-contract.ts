@@ -7,6 +7,7 @@ import type {
   ProviderPatchDraftInput,
   ProviderPatchOperation,
 } from "@/types/provider";
+import { PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA } from "./provider-allowed-model-schema";
 import { PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA } from "./provider-model-redirect-schema";
 
 export const PROVIDER_PATCH_ERROR_CODES = {
@@ -280,7 +281,7 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "model_redirects":
       return PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA.safeParse(value).success;
     case "allowed_models":
-      return Array.isArray(value) && value.every((model) => typeof model === "string");
+      return PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA.safeParse(value).success;
     case "allowed_clients":
     case "blocked_clients":
       return Array.isArray(value) && value.every((v) => typeof v === "string");
@@ -365,6 +366,16 @@ function normalizePatchField<T>(
     if (field === "group_tag") {
       const normalizedGroupTag = normalizeProviderGroupTag(input.set) ?? "";
       return { ok: true, data: { mode: "set", value: normalizedGroupTag as T } };
+    }
+
+    if (field === "allowed_models") {
+      const parsedAllowedModels = PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA.safeParse(
+        input.set
+      );
+      if (!parsedAllowedModels.success) {
+        return createInvalidPatchShapeError(field, "set mode value is invalid for this field");
+      }
+      return { ok: true, data: { mode: "set", value: parsedAllowedModels.data as T } };
     }
 
     return { ok: true, data: { mode: "set", value: input.set as T } };
@@ -692,10 +703,11 @@ function applyPatchField<T>(
         updates.model_redirects = patch.value as ProviderBatchApplyUpdates["model_redirects"];
         return { ok: true, data: undefined };
       case "allowed_models":
-        updates.allowed_models =
-          (patch.value as string[]).length > 0
-            ? (patch.value as ProviderBatchApplyUpdates["allowed_models"])
-            : null;
+        if (!Array.isArray(patch.value) || patch.value.length === 0) {
+          updates.allowed_models = null;
+          return { ok: true, data: undefined };
+        }
+        updates.allowed_models = patch.value as ProviderBatchApplyUpdates["allowed_models"];
         return { ok: true, data: undefined };
       case "allowed_clients":
         updates.allowed_clients = patch.value as ProviderBatchApplyUpdates["allowed_clients"];

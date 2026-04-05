@@ -1,0 +1,18 @@
+{
+  "inputPlaceholder": "Введите имя модели для проверки, например claude-opus-4-1",
+  "testButton": "Проверить совпадение",
+  "redirectTitle": "Проверка совпадения redirect",
+  "redirectDescription": "Показывает, какое правило redirect сработает для этого имени модели.",
+  "allowedTitle": "Проверка allowlist модели",
+  "allowedDescription": "Показывает, будет ли это имя модели разрешено allowlist.",
+  "matched": "Найдено совпадение с правилом redirect",
+  "notMatched": "Ни одно правило redirect не совпало",
+  "allowed": "Эта модель разрешена",
+  "blocked": "Эта модель заблокирована allowlist",
+  "allAllowed": "Правила allowlist не настроены, поэтому разрешены все модели.",
+  "ruleIndex": "Порядок правила",
+  "matchType": "Тип совпадения",
+  "source": "Исходный шаблон",
+  "target": "Целевая модель",
+  "pattern": "Шаблон allowlist"
+}
