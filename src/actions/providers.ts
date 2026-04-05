@@ -2272,7 +2272,12 @@ export async function batchUpdateProviders(
           updates.allowed_models
         );
         if (!parsedAllowedModelRules.success) {
-          return { ok: false, error: "模型白名单规则格式无效" };
+          return {
+            ok: false,
+            error: "INVALID_FORMAT",
+            errorCode: "INVALID_FORMAT",
+            errorParams: { field: "allowed_models" },
+          };
         }
         repositoryUpdates.allowedModels =
           parsedAllowedModelRules.data.length > 0 ? parsedAllowedModelRules.data : null;

@@ -35,6 +35,12 @@ const DispatchSimulatorInputSchema = z.object({
   groupTags: z.array(z.string().trim().min(1).max(255)).max(20).default([]),
 });
 
+const DISPATCH_SIMULATOR_ERROR_CODES = {
+  INVALID_INPUT: "INVALID_FORMAT",
+  OPERATION_FAILED: "OPERATION_FAILED",
+  PERMISSION_DENIED: "PERMISSION_DENIED",
+} as const;
+
 function getGroupFilterValue(groupTags: string[]): string | null {
   if (groupTags.length === 0) {
     return null;
@@ -434,12 +440,21 @@ export async function simulateDispatchAction(
 ): Promise<ActionResult<DispatchSimulatorResult>> {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
-    return { ok: false, error: "无权限执行此操作" };
+    return {
+      ok: false,
+      error: DISPATCH_SIMULATOR_ERROR_CODES.PERMISSION_DENIED,
+      errorCode: DISPATCH_SIMULATOR_ERROR_CODES.PERMISSION_DENIED,
+    };
   }
 
   const parsedInput = DispatchSimulatorInputSchema.safeParse(rawInput);
   if (!parsedInput.success) {
-    return { ok: false, error: "调度测试参数无效" };
+    return {
+      ok: false,
+      error: DISPATCH_SIMULATOR_ERROR_CODES.INVALID_INPUT,
+      errorCode: DISPATCH_SIMULATOR_ERROR_CODES.INVALID_INPUT,
+      errorParams: { field: "dispatch_simulator" },
+    };
   }
 
   try {
@@ -447,7 +462,14 @@ export async function simulateDispatchAction(
     const result = await simulateDispatchDecisionTree(providers, parsedInput.data);
     return { ok: true, data: result };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "调度测试失败";
-    return { ok: false, error: message };
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : DISPATCH_SIMULATOR_ERROR_CODES.OPERATION_FAILED;
+    return {
+      ok: false,
+      error: message,
+      errorCode: DISPATCH_SIMULATOR_ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }

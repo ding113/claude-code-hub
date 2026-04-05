@@ -236,6 +236,6 @@ describe("dispatch simulator", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("无权限");
+    expect(result.errorCode).toBe("PERMISSION_DENIED");
   });
 });
