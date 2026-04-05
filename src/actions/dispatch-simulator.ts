@@ -381,7 +381,9 @@ export async function simulateDispatchDecisionTree(
       ),
   });
 
-  currentProviders = currentProviders.filter((provider) => selectedPriorityProviderIds.has(provider.id));
+  currentProviders = currentProviders.filter((provider) =>
+    selectedPriorityProviderIds.has(provider.id)
+  );
 
   const redirectedProviders = currentProviders.map((provider) =>
     buildProviderSnapshot(provider, groupFilter, {
