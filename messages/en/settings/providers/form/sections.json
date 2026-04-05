@@ -298,13 +298,14 @@
       "label": "Model Redirects",
       "optional": "(optional)"
     },
-    "modelWhitelist": {
-      "allowAll": "✓ Allow all models (recommended)",
-      "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
-      "label": "Allowed Models",
+  "modelWhitelist": {
+    "allowAll": "✓ Allow all models (recommended)",
+    "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
+    "legacyExactOnlyWarning": "This legacy form only shows exact-match allowlist rules. Saving here will discard prefix, suffix, keyword, or regex rules. Use the new provider form to edit advanced rules safely.",
+    "label": "Allowed Models",
       "moreModels": "+{count} more",
       "optional": "(optional)",
-      "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
+      "selectedOnly": "Only models matching the configured {count} rules are allowed. Other models will not be routed to this provider.",
       "title": "Model Allowlist"
     },
     "clientRestrictions": {

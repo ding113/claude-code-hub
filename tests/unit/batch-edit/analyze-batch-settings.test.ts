@@ -72,7 +72,10 @@ describe("analyzeBatchProviderSettings", () => {
 
       expect(result.routing.allowedModels).toEqual({
         status: "uniform",
-        value: ["model-1", "model-2"],
+        value: [
+          { matchType: "exact", pattern: "model-1" },
+          { matchType: "exact", pattern: "model-2" },
+        ],
       });
     });
 

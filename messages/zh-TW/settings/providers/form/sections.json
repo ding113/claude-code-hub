@@ -299,13 +299,14 @@
       "label": "模型重定向設定",
       "optional": "（選填）"
     },
-    "modelWhitelist": {
-      "allowAll": "✓ 允許所有模型（建議）",
-      "desc": "限制此供應商可處理的模型。預設可處理該類型下的所有模型。",
-      "label": "允許的模型",
+  "modelWhitelist": {
+    "allowAll": "✓ 允許所有模型（建議）",
+    "desc": "限制此供應商可處理的模型。預設可處理該類型下的所有模型。",
+    "legacyExactOnlyWarning": "這個舊版表單只會顯示精確匹配的白名單規則。在這裡儲存會遺失前綴、後綴、關鍵字或正則規則，請改用新版供應商表單編輯進階規則。",
+    "label": "允許的模型",
       "moreModels": "+{count} 個以上",
       "optional": "（選填）",
-      "selectedOnly": "僅允許所選的 {count} 個模型。其他模型將不會被路由到此供應商。",
+      "selectedOnly": "僅允許命中這 {count} 條規則的模型。其他模型將不會被路由到此供應商。",
       "title": "模型允許清單"
     },
     "clientRestrictions": {

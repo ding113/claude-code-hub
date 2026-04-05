@@ -7,6 +7,7 @@ import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { buildProxyUrl } from "@/app/v1/_lib/url";
 import { db } from "@/drizzle/db";
 import { providers as providersTable } from "@/drizzle/schema";
+import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA } from "@/lib/provider-model-redirect-schema";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
@@ -74,6 +76,7 @@ import {
 } from "@/repository/provider-endpoints";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
+  AllowedModelRuleInput,
   AnthropicAdaptiveThinkingConfig,
   AnthropicMaxTokensPreference,
   AnthropicThinkingBudgetPreference,
@@ -506,7 +509,7 @@ export async function addProvider(data: {
   model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
-  allowed_models?: string[] | null;
+  allowed_models?: AllowedModelRuleInput[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   limit_5h_usd?: number | null;
@@ -685,7 +688,7 @@ export async function editProvider(
     model_redirects?: ProviderModelRedirectRule[] | null;
     active_time_start?: string | null;
     active_time_end?: string | null;
-    allowed_models?: string[] | null;
+    allowed_models?: AllowedModelRuleInput[] | null;
     allowed_clients?: string[] | null;
     blocked_clients?: string[] | null;
     limit_5h_usd?: number | null;
@@ -2201,7 +2204,7 @@ export interface BatchUpdateProvidersParams {
     cost_multiplier?: number;
     group_tag?: string | null;
     model_redirects?: ProviderModelRedirectRule[] | null;
-    allowed_models?: string[] | null;
+    allowed_models?: AllowedModelRuleInput[] | null;
     allowed_clients?: string[];
     blocked_clients?: string[];
     codex_service_tier_preference?: CodexServiceTierPreference | null;
@@ -2262,10 +2265,23 @@ export async function batchUpdateProviders(
       }
     }
     if (updates.allowed_models !== undefined) {
-      repositoryUpdates.allowedModels =
-        Array.isArray(updates.allowed_models) && updates.allowed_models.length === 0
-          ? null
-          : updates.allowed_models;
+      if (updates.allowed_models === null) {
+        repositoryUpdates.allowedModels = null;
+      } else {
+        const parsedAllowedModelRules = PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA.safeParse(
+          updates.allowed_models
+        );
+        if (!parsedAllowedModelRules.success) {
+          return {
+            ok: false,
+            error: "INVALID_FORMAT",
+            errorCode: "INVALID_FORMAT",
+            errorParams: { field: "allowed_models" },
+          };
+        }
+        repositoryUpdates.allowedModels =
+          parsedAllowedModelRules.data.length > 0 ? parsedAllowedModelRules.data : null;
+      }
     }
     if (updates.allowed_clients !== undefined) {
       repositoryUpdates.allowedClients = updates.allowed_clients;
@@ -2285,6 +2301,17 @@ export async function batchUpdateProviders(
     }
 
     const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
+
+    const shouldInvalidateStickySessions =
+      updates.group_tag !== undefined ||
+      updates.model_redirects !== undefined ||
+      updates.allowed_models !== undefined ||
+      updates.allowed_clients !== undefined ||
+      updates.blocked_clients !== undefined;
+
+    if (shouldInvalidateStickySessions) {
+      await SessionManager.terminateStickySessionsForProviders(providerIds, "batchUpdateProviders");
+    }
 
     await broadcastProviderCacheInvalidation({
       operation: "edit",
@@ -4867,9 +4894,9 @@ export async function getModelSuggestionsByProviderGroup(
       if (checkProviderGroupMatch(provider.groupTag, userGroups)) {
         const models = provider.allowedModels;
         if (models && Array.isArray(models)) {
-          for (const model of models) {
-            if (model) {
-              modelSet.add(model);
+          for (const rule of normalizeAllowedModelRules(models) ?? []) {
+            if (rule.matchType === "exact" && rule.pattern) {
+              modelSet.add(rule.pattern);
             }
           }
         }

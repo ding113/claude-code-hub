@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { request as undiciRequest } from "undici";
+import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
@@ -243,7 +244,9 @@ async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel
     logger.debug(`[AvailableModels] Using configured allowedModels for ${provider.name}`, {
       modelCount: provider.allowedModels.length,
     });
-    return provider.allowedModels.map((id) => ({ id }));
+    return (normalizeAllowedModelRules(provider.allowedModels) ?? [])
+      .filter((rule) => rule.matchType === "exact")
+      .map((rule) => ({ id: rule.pattern }));
   }
 
   const configMap: Record<Provider["providerType"], UpstreamFetchConfig> = {

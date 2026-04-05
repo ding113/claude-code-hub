@@ -1,0 +1,53 @@
+{
+  "button": "Тест маршрутизации",
+  "title": "Симулятор маршрутизации модели",
+  "description": "Воспроизводит полную цепочку выбора провайдера по протоколу, имени модели и группам провайдеров.",
+  "protocolLabel": "Входной протокол",
+  "modelLabel": "Имя входной модели",
+  "modelPlaceholder": "Например: claude-opus-4-1",
+  "groupsLabel": "Группы провайдеров",
+  "noGroups": "Сейчас нет доступных групп провайдеров.",
+  "simulateButton": "Симулировать",
+  "errorTitle": "Ошибка симуляции",
+  "genericError": "Не удалось запустить симулятор маршрутизации",
+  "surviving": "Остались в цепочке",
+  "filteredOut": "Отфильтрованы",
+  "none": "Нет",
+  "finalCandidatesTitle": "Финальные кандидаты",
+  "finalCandidatesDescription": "В выбранном уровне приоритета {priority} осталось {count} провайдеров.",
+  "noCandidatesTitle": "Нет кандидатов",
+  "noCandidatesDescription": "Для этого входа ни один провайдер не прошёл всю цепочку решений.",
+  "selectedTier": "Выбранный уровень",
+  "tierTitle": "Приоритет {priority}",
+  "tierProviderCount": "{count} провайдеров",
+  "filteredCount": "{count} отфильтровано",
+  "priorityBadge": "Приоритет {value}",
+  "weightLabel": "Вес {weight}",
+  "redirectPreview": "Результат redirect: {model}",
+  "endpointStats": "Эндпоинты: всего {total}, включено {enabled}, open {circuitOpen}, доступно {available}",
+  "formats": {
+    "claude": "Claude",
+    "openai": "OpenAI",
+    "response": "Codex / Responses",
+    "gemini": "Gemini",
+    "geminiCli": "Gemini CLI"
+  },
+  "steps": {
+    "groupFilter": "Фильтр групп",
+    "formatCompatibility": "Совместимость формата",
+    "enabledCheck": "Переключатель провайдера",
+    "activeTime": "Активное время",
+    "modelAllowlist": "Allowlist моделей",
+    "healthAndLimits": "Circuit и лимиты",
+    "priorityTiers": "Слои приоритета",
+    "modelRedirect": "Проверка redirect модели",
+    "endpointSummary": "Сводка по эндпоинтам"
+  },
+  "notes": {
+    "no_group_filter": "Группы провайдеров не выбраны, поэтому фильтр групп пропущен.",
+    "model_filter_skipped_for_resource_request": "Имя модели не задано, поэтому allowlist пропускается для resource-подобного запроса.",
+    "redirect_preview_skipped_for_resource_request": "Имя модели не задано, поэтому preview redirect пропущен.",
+    "redirects_apply_after_provider_selection": "Redirect модели применяется после выбора провайдера.",
+    "endpoint_status_does_not_change_provider_preselection": "Статус эндпоинтов показывается как downstream-риск и пока не меняет предварительный выбор провайдера."
+  }
+}

@@ -1,5 +1,6 @@
 import type { Dispatch } from "react";
 import type {
+  AllowedModelRule,
   AnthropicAdaptiveThinkingConfig,
   AnthropicAdaptiveThinkingEffort,
   AnthropicAdaptiveThinkingModelMatchMode,
@@ -51,7 +52,7 @@ export interface RoutingState {
   preserveClientIp: boolean;
   disableSessionReuse: boolean;
   modelRedirects: ProviderModelRedirectRule[];
-  allowedModels: string[];
+  allowedModels: AllowedModelRule[];
   allowedClients: string[];
   blockedClients: string[];
   priority: number;
@@ -144,7 +145,7 @@ export type ProviderFormAction =
   | { type: "SET_PRESERVE_CLIENT_IP"; payload: boolean }
   | { type: "SET_DISABLE_SESSION_REUSE"; payload: boolean }
   | { type: "SET_MODEL_REDIRECTS"; payload: ProviderModelRedirectRule[] }
-  | { type: "SET_ALLOWED_MODELS"; payload: string[] }
+  | { type: "SET_ALLOWED_MODELS"; payload: AllowedModelRule[] }
   | { type: "SET_ALLOWED_CLIENTS"; payload: string[] }
   | { type: "SET_BLOCKED_CLIENTS"; payload: string[] }
   | { type: "SET_PRIORITY"; payload: number }

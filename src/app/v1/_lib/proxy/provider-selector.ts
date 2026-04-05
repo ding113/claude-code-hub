@@ -1,3 +1,4 @@
+import { matchesAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -111,7 +112,7 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
   }
 
   // 2. 设置了 allowedModels：只按原始请求模型做白名单匹配
-  return provider.allowedModels.includes(requestedModel);
+  return matchesAllowedModelRules(requestedModel, provider.allowedModels);
 }
 
 /**
@@ -1320,4 +1321,9 @@ export class ProxyProviderResolver {
 }
 
 // Export for testing
-export { checkProviderGroupMatch, providerSupportsModel };
+export {
+  checkFormatProviderTypeCompatibility,
+  checkProviderGroupMatch,
+  isProviderActiveNow,
+  providerSupportsModel,
+};

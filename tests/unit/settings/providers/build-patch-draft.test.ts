@@ -196,12 +196,14 @@ describe("buildPatchDraftFromFormState", () => {
 
   it("sets allowedModels when dirty and non-empty", () => {
     const state = createBatchState();
-    state.routing.allowedModels = ["claude-opus-4-6"];
+    state.routing.allowedModels = [{ matchType: "exact", pattern: "claude-opus-4-6" }];
     const dirty = new Set(["routing.allowedModels"]);
 
     const draft = buildPatchDraftFromFormState(state, dirty);
 
-    expect(draft.allowed_models).toEqual({ set: ["claude-opus-4-6"] });
+    expect(draft.allowed_models).toEqual({
+      set: [{ matchType: "exact", pattern: "claude-opus-4-6" }],
+    });
   });
 
   // --- inherit/clear pattern fields ---
