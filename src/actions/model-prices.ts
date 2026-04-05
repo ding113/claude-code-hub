@@ -364,15 +364,8 @@ export async function hasPriceTable(): Promise<boolean> {
 }
 
 /**
- * 根据供应商类型获取可选择的模型列表
- * @param providerType - 供应商类型
- * @returns 模型名称列表（已排序）
- *
- * 注意：返回所有聊天模型，不区分 provider。
- * 理由：
- * - 非 Anthropic 提供商允许任意模型（符合业务需求）
- * - 用户可以通过手动输入添加任何模型
- * - 避免维护复杂的 provider 映射关系
+ * 获取可选择的聊天模型名称列表。
+ * 直接复用本地模型目录，返回所有 provider 的聊天模型名。
  */
 export async function getAvailableModelsByProviderType(): Promise<string[]> {
   try {

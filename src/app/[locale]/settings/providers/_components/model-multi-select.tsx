@@ -10,7 +10,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { type AvailableModelCatalogItem, getAvailableModelCatalog } from "@/actions/model-prices";
 import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +112,8 @@ export function ModelMultiSelect({
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
   const [searchValue, setSearchValue] = useState("");
   const [providerFilter, setProviderFilter] = useState("__all__");
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const providerOptions = useMemo(() => {
     const knownProviders = new Map(
@@ -130,10 +132,13 @@ export function ModelMultiSelect({
       }
     }
 
-    const unknownProviders = availableModels
-      .map((model) => model.litellmProvider)
-      .filter((provider): provider is string => !!provider && !seen.has(provider))
-      .sort((left, right) => left.localeCompare(right));
+    const unknownProviders = Array.from(
+      new Set(
+        availableModels
+          .map((model) => model.litellmProvider)
+          .filter((provider): provider is string => !!provider && !seen.has(provider))
+      )
+    ).sort((left, right) => left.localeCompare(right));
 
     for (const provider of unknownProviders) {
       seen.add(provider);
@@ -203,12 +208,16 @@ export function ModelMultiSelect({
   );
 
   const loadModels = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     setLoading(true);
     setModelSource("loading");
+    setFallbackNotice(null);
 
     try {
       let resolvedKey = apiKey?.trim() || "";
-      if (!resolvedKey && providerId) {
+      if ((!resolvedKey || resolvedKey.includes("***")) && providerId) {
         const keyResult = await getUnmaskedProviderKey(providerId);
         if (keyResult.ok && keyResult.data?.key) {
           resolvedKey = keyResult.data.key;
@@ -225,6 +234,10 @@ export function ModelMultiSelect({
         });
 
         if (upstreamResult.ok && upstreamResult.data?.models?.length) {
+          if (requestId !== requestIdRef.current) {
+            return;
+          }
+
           const upstreamModels = upstreamResult.data.models.map((modelName) =>
             buildLocalOption({
               modelName,
@@ -237,20 +250,37 @@ export function ModelMultiSelect({
           setProviderFilter("__all__");
           return;
         }
+
+        if (!upstreamResult.ok && requestId === requestIdRef.current) {
+          setFallbackNotice(t("fallbackNotice"));
+        }
       }
 
       const localCatalog = await getAvailableModelCatalog();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       setAvailableModels(localCatalog.map(buildLocalOption));
       setModelSource("fallback");
       setProviderFilter("__all__");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [apiKey, providerId, providerType, providerUrl, proxyFallbackToDirect, proxyUrl]);
+  }, [apiKey, providerId, providerType, providerUrl, proxyFallbackToDirect, proxyUrl, t]);
+
+  const handleOpenLoad = useEffectEvent(() => {
+    void loadModels();
+  });
 
   useEffect(() => {
-    void loadModels();
-  }, [loadModels]);
+    if (!open) {
+      return;
+    }
+
+    handleOpenLoad();
+  }, [open]);
 
   const sourceLabel = modelSource === "upstream" ? t("sourceUpstream") : t("sourceFallback");
   const sourceDescription =
@@ -428,6 +458,11 @@ export function ModelMultiSelect({
               </div>
 
               <div className="mt-3">
+                {fallbackNotice ? (
+                  <div className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
+                    {fallbackNotice}
+                  </div>
+                ) : null}
                 <CommandInput
                   value={searchValue}
                   onValueChange={setSearchValue}

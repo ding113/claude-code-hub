@@ -168,19 +168,7 @@ describe("ModelMultiSelect", () => {
     vi.clearAllMocks();
   });
 
-  test("falls back to local catalog sorted by newest update first and filters by provider", async () => {
-    const messages = loadMessages();
-    const onChange = vi.fn();
-
-    const { unmount } = render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <ModelMultiSelect providerType="claude" selectedModels={[]} onChange={onChange} />
-      </NextIntlClientProvider>
-    );
-
-    await flushTicks(5);
-    expect(modelPricesActionMocks.getAvailableModelCatalog).toHaveBeenCalledTimes(1);
-
+  async function openPicker() {
     const trigger = document.querySelector(
       "[data-allowed-model-picker-trigger]"
     ) as HTMLButtonElement | null;
@@ -191,6 +179,21 @@ describe("ModelMultiSelect", () => {
       trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushTicks(5);
+  }
+
+  test("falls back to local catalog sorted by newest update first and filters by provider", async () => {
+    const messages = loadMessages();
+    const onChange = vi.fn();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ModelMultiSelect providerType="claude" selectedModels={[]} onChange={onChange} />
+      </NextIntlClientProvider>
+    );
+
+    expect(modelPricesActionMocks.getAvailableModelCatalog).not.toHaveBeenCalled();
+    await openPicker();
+    expect(modelPricesActionMocks.getAvailableModelCatalog).toHaveBeenCalledTimes(1);
 
     const initialItems = Array.from(
       document.querySelectorAll('[data-model-group="available"] [data-slot="command-item"]')
@@ -236,18 +239,7 @@ describe("ModelMultiSelect", () => {
       </NextIntlClientProvider>
     );
 
-    await flushTicks(5);
-
-    const trigger = document.querySelector(
-      "[data-allowed-model-picker-trigger]"
-    ) as HTMLButtonElement | null;
-    expect(trigger).toBeTruthy();
-
-    await act(async () => {
-      trigger?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushTicks(5);
+    await openPicker();
 
     const providerFilter = document.querySelector(
       '[data-testid="provider-filter-select"]'
@@ -273,6 +265,43 @@ describe("ModelMultiSelect", () => {
     await flushTicks(2);
 
     expect(onChange).toHaveBeenLastCalledWith(["anthropic-mid", "openai-new", "openai-old"]);
+
+    unmount();
+  });
+
+  test("prefers upstream models when available", async () => {
+    const messages = loadMessages();
+    providerActionMocks.fetchUpstreamModels.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        models: ["claude-opus-4-1", "claude-sonnet-4-1"],
+        source: "upstream",
+      },
+    });
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ModelMultiSelect
+          providerType="claude"
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          selectedModels={[]}
+          onChange={vi.fn()}
+        />
+      </NextIntlClientProvider>
+    );
+
+    await openPicker();
+
+    expect(providerActionMocks.fetchUpstreamModels).toHaveBeenCalledTimes(1);
+    expect(modelPricesActionMocks.getAvailableModelCatalog).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-testid="provider-filter-select"]')).toBeNull();
+
+    const upstreamItems = Array.from(
+      document.querySelectorAll('[data-model-group="available"] [data-slot="command-item"]')
+    ).map((element) => element.textContent?.trim() || "");
+    expect(upstreamItems.some((text) => text.includes("claude-opus-4-1"))).toBe(true);
+    expect(upstreamItems.some((text) => text.includes("claude-sonnet-4-1"))).toBe(true);
 
     unmount();
   });

@@ -4,6 +4,7 @@
   "clear": "清除",
   "emptyLabel": "從列表新增 {type} 精確模型",
   "exactMatchHint": "這裡選中的模型會以精確匹配規則加入白名單；前綴、後綴、關鍵字與正則規則仍在下方進階編輯區維護。",
+  "fallbackNotice": "目前無法取得上游模型列表，已自動切換到本地價格表目錄。",
   "gemini": "Gemini",
   "invertSelection": "反選",
   "loading": "載入中...",

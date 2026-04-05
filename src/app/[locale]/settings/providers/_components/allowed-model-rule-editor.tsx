@@ -38,6 +38,7 @@ const DEFAULT_RULE: AllowedModelRule = {
   matchType: "exact",
   pattern: "",
 };
+const MAX_ALLOWED_MODEL_RULES = 100;
 
 function normalizeRule(rule: AllowedModelRule): AllowedModelRule {
   return {
@@ -120,7 +121,7 @@ export function AllowedModelRuleEditor({
   };
 
   const handleAdd = () => {
-    if (value.length >= 100) {
+    if (value.length >= MAX_ALLOWED_MODEL_RULES) {
       setError(t("maxRules"));
       return;
     }
@@ -233,6 +234,7 @@ export function AllowedModelRuleEditor({
     const existingExactKeys = new Set(
       nextRules.filter((rule) => rule.matchType === "exact").map((rule) => getRuleIdentity(rule))
     );
+    let hitLimit = false;
 
     for (const model of normalizedSelections) {
       const nextRule = normalizeRule({ matchType: "exact", pattern: model });
@@ -240,10 +242,15 @@ export function AllowedModelRuleEditor({
       if (existingExactKeys.has(ruleKey)) {
         continue;
       }
+      if (nextRules.length >= MAX_ALLOWED_MODEL_RULES) {
+        hitLimit = true;
+        break;
+      }
       nextRules.push(nextRule);
       existingExactKeys.add(ruleKey);
     }
 
+    setError(hitLimit ? t("quickAddReachedLimit") : null);
     onChange(nextRules);
   };
 

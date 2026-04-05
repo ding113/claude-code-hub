@@ -5,6 +5,7 @@ import { Info, Layers, Route, Scale } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { RuleTesterDialogTrigger } from "@/app/[locale]/settings/providers/_components/rule-tester-dialog-trigger";
 import { ClientRestrictionsEditor } from "@/components/form/client-restrictions-editor";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,6 @@ import { AllowedModelTester } from "../../../allowed-model-tester";
 import { MixedValueIndicator } from "../../../batch-edit/mixed-value-indicator";
 import { ModelRedirectEditor } from "../../../model-redirect-editor";
 import { ModelRedirectTester } from "../../../model-redirect-tester";
-import { RuleTesterDialogTrigger } from "../../../rule-tester-dialog-trigger";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
 
@@ -241,7 +241,7 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                 onChange={(value) => dispatch({ type: "SET_ALLOWED_MODELS", payload: value })}
                 disabled={state.ui.isPending}
                 providerId={provider?.id}
-                providerUrl={state.basic.url || provider?.url}
+                providerUrl={state.basic.url ?? provider?.url}
                 apiKey={state.basic.key}
                 proxyUrl={state.network.proxyUrl}
                 proxyFallbackToDirect={state.network.proxyFallbackToDirect}

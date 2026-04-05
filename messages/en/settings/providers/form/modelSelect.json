@@ -4,6 +4,7 @@
   "clear": "Clear",
   "emptyLabel": "Add exact {type} models from list",
   "exactMatchHint": "Models selected here are added as exact-match allowlist rules. Prefix, suffix, contains, and regex rules remain managed below.",
+  "fallbackNotice": "The upstream model list is unavailable right now, so the picker switched to the local price catalog.",
   "gemini": "Gemini",
   "invertSelection": "Invert",
   "loading": "Loading...",
