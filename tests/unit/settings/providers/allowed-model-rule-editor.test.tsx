@@ -15,13 +15,6 @@ import formsMessages from "../../../../messages/en/forms.json";
 import settingsMessages from "../../../../messages/en/settings";
 import uiMessages from "../../../../messages/en/ui.json";
 
-const providerActionMocks = vi.hoisted(() => ({
-  fetchUpstreamModels: vi.fn(),
-  getUnmaskedProviderKey: vi.fn(),
-}));
-
-vi.mock("@/actions/providers", () => providerActionMocks);
-
 function loadMessages() {
   return {
     common: commonMessages,
@@ -157,47 +150,6 @@ describe("AllowedModelRuleEditor", () => {
 
     expect(document.body.textContent || "").toContain("claude-opus-4-2");
     expect(document.body.textContent || "").not.toContain("claude-opus-4-1");
-
-    unmount();
-  });
-
-  test("quick add imports upstream models as exact rules", async () => {
-    const messages = loadMessages();
-    const onChange = vi.fn();
-
-    providerActionMocks.fetchUpstreamModels.mockResolvedValue({
-      ok: true,
-      data: { models: ["claude-opus-4-1", "claude-sonnet-4-1"] },
-    });
-
-    const { unmount } = render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <AllowedModelRuleEditor
-          value={[]}
-          onChange={onChange}
-          providerType="claude"
-          providerUrl="https://api.example.com"
-          apiKey="sk-test"
-        />
-      </NextIntlClientProvider>
-    );
-
-    const quickAddButton = document.querySelector(
-      "[data-allowed-model-quick-add]"
-    ) as HTMLButtonElement | null;
-    expect(quickAddButton).toBeTruthy();
-
-    await act(async () => {
-      quickAddButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    await flushTicks(3);
-
-    expect(providerActionMocks.fetchUpstreamModels).toHaveBeenCalled();
-    expect(onChange).toHaveBeenCalledWith([
-      { matchType: "exact", pattern: "claude-opus-4-1" },
-      { matchType: "exact", pattern: "claude-sonnet-4-1" },
-    ]);
 
     unmount();
   });

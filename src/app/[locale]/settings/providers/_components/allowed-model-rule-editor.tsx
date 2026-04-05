@@ -1,20 +1,9 @@
 "use client";
 
-import {
-  AlertCircle,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { AlertCircle, Check, ChevronDown, ChevronUp, Pencil, Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import safeRegex from "safe-regex";
-import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,11 +26,6 @@ interface AllowedModelRuleEditorProps {
   onChange: (value: AllowedModelRule[]) => void;
   disabled?: boolean;
   providerType: ProviderType;
-  providerUrl?: string;
-  apiKey?: string;
-  proxyUrl?: string | null;
-  proxyFallbackToDirect?: boolean;
-  providerId?: number;
 }
 
 const DEFAULT_RULE: AllowedModelRule = {
@@ -64,19 +48,12 @@ export function AllowedModelRuleEditor({
   value,
   onChange,
   disabled = false,
-  providerType,
-  providerUrl,
-  apiKey,
-  proxyUrl,
-  proxyFallbackToDirect,
-  providerId,
 }: AllowedModelRuleEditorProps) {
   const t = useTranslations("settings.providers.form.allowedModelRules");
   const [newRule, setNewRule] = useState<AllowedModelRule>(DEFAULT_RULE);
   const [editRule, setEditRule] = useState<AllowedModelRule>(DEFAULT_RULE);
   const [editingRuleKey, setEditingRuleKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isQuickAdding, setIsQuickAdding] = useState(false);
 
   const matchTypeOptions: Array<{ value: ProviderModelRedirectMatchType; label: string }> = [
     { value: "exact", label: t("matchTypeExact") },
@@ -218,104 +195,11 @@ export function AllowedModelRuleEditor({
     }
   };
 
-  const handleQuickAdd = async () => {
-    if (!providerUrl) {
-      setError(t("quickAddMissingUrl"));
-      return;
-    }
-
-    setIsQuickAdding(true);
-    setError(null);
-
-    try {
-      let resolvedKey = apiKey?.trim() || "";
-
-      if (!resolvedKey && providerId) {
-        const keyResult = await getUnmaskedProviderKey(providerId);
-        if (keyResult.ok && keyResult.data?.key) {
-          resolvedKey = keyResult.data.key;
-        }
-      }
-
-      if (!resolvedKey) {
-        setError(t("quickAddMissingKey"));
-        return;
-      }
-
-      const upstreamResult = await fetchUpstreamModels({
-        providerUrl,
-        apiKey: resolvedKey,
-        providerType,
-        proxyUrl,
-        proxyFallbackToDirect,
-      });
-
-      if (!upstreamResult.ok) {
-        setError(upstreamResult.error || t("quickAddFailed"));
-        return;
-      }
-
-      if (!upstreamResult.data?.models?.length) {
-        setError(t("quickAddFailed"));
-        return;
-      }
-
-      const existingKeys = new Set(value.map((rule) => getRuleIdentity(rule)));
-      const nextRules = [...value];
-      let addedCount = 0;
-      let hitLimit = false;
-
-      for (const model of upstreamResult.data.models) {
-        const rule = normalizeRule({ matchType: "exact", pattern: model });
-        const key = getRuleIdentity(rule);
-        if (existingKeys.has(key)) {
-          continue;
-        }
-        if (nextRules.length >= 100) {
-          setError(t("quickAddReachedLimit"));
-          hitLimit = true;
-          break;
-        }
-        nextRules.push(rule);
-        existingKeys.add(key);
-        addedCount += 1;
-      }
-
-      if (addedCount === 0 && !hitLimit) {
-        setError(t("quickAddNoNewRules"));
-        return;
-      }
-
-      onChange(nextRules);
-    } finally {
-      setIsQuickAdding(false);
-    }
-  };
-
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium">{t("description")}</p>
-            <p className="text-xs text-muted-foreground">{t("orderHint")}</p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void handleQuickAdd()}
-            disabled={disabled || isQuickAdding}
-            data-allowed-model-quick-add
-          >
-            {isQuickAdding ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            {t("quickAdd")}
-          </Button>
-        </div>
+        <p className="text-sm font-medium">{t("description")}</p>
+        <p className="text-xs text-muted-foreground">{t("orderHint")}</p>
       </div>
 
       <div className="grid gap-2 rounded-lg border border-dashed border-border/70 bg-muted/10 p-3 md:grid-cols-[140px_1fr_auto]">

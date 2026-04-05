@@ -93,6 +93,7 @@
       },
       "nSelected": "已选 {count} 项"
     },
+    "testRule": "测试规则匹配",
     "scheduleParams": {
       "title": "调度参数",
       "priority": {

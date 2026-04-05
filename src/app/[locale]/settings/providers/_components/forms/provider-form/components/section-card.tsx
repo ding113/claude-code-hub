@@ -95,6 +95,7 @@ interface FieldGroupProps {
   children: ReactNode;
   className?: string;
   horizontal?: boolean;
+  badge?: ReactNode;
 }
 
 export function FieldGroup({
@@ -103,12 +104,18 @@ export function FieldGroup({
   children,
   className,
   horizontal = false,
+  badge,
 }: FieldGroupProps) {
   return (
     <div className={cn("space-y-3", className)}>
       {(label || description) && (
         <div className="space-y-1">
-          {label && <div className="text-sm font-medium text-foreground">{label}</div>}
+          {label && (
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium text-foreground">{label}</div>
+              {badge}
+            </div>
+          )}
           {description && <p className="text-xs text-muted-foreground">{description}</p>}
         </div>
       )}

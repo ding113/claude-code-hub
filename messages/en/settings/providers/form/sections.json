@@ -343,6 +343,7 @@
       },
       "nSelected": "{count} selected"
     },
+    "testRule": "Test Rule Matching",
     "preserveClientIp": {
       "desc": "Pass x-forwarded-for / x-real-ip to upstream providers (may expose real client IP)",
       "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP.",

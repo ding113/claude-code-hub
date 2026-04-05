@@ -344,6 +344,7 @@
       },
       "nSelected": "{count} 件選択"
     },
+    "testRule": "ルールマッチをテスト",
     "preserveClientIp": {
       "desc": "x-forwarded-for / x-real-ip を上流に渡します（実際の IP が露出する可能性）",
       "help": "プライバシー保護のためデフォルトはオフ。上流側で端末 IP が必要な場合のみ有効化してください。",

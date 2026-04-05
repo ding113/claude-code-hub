@@ -205,21 +205,30 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
 
           {result ? (
             <div className="space-y-4">
-              <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  {stepSummary.map((step, index) => (
-                    <div key={step.stepName} className="flex items-center gap-3">
-                      <div className="rounded-md border border-border/60 bg-background px-3 py-2 text-center">
-                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                          {t(`steps.${step.stepName}`)}
+              <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {stepSummary.map((step, index) => {
+                    const ratio =
+                      stepSummary[0].outputCount > 0
+                        ? step.outputCount / stepSummary[0].outputCount
+                        : 0;
+                    return (
+                      <div key={step.stepName} className="flex items-center gap-1.5">
+                        <div
+                          className="rounded-md border border-border/60 bg-background px-2.5 py-1.5 text-center"
+                          style={{ opacity: 0.5 + ratio * 0.5 }}
+                        >
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {t(`steps.${step.stepName}`)}
+                          </div>
+                          <div className="text-base font-semibold">{step.outputCount}</div>
                         </div>
-                        <div className="text-lg font-semibold">{step.outputCount}</div>
+                        {index < stepSummary.length - 1 ? (
+                          <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                        ) : null}
                       </div>
-                      {index < stepSummary.length - 1 ? (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      ) : null}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -365,7 +374,7 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
                           key={tier.priority}
                           className={`rounded-lg border p-3 ${
                             tier.isSelected
-                              ? "border-green-500/40 bg-green-500/5"
+                              ? "border-green-500/40 bg-green-500/5 ring-1 ring-green-500/20 shadow-sm shadow-green-500/10"
                               : "border-border/60 bg-background"
                           }`}
                         >
@@ -387,14 +396,14 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
                             {tier.providers.map((provider) => (
                               <div
                                 key={provider.id}
-                                className="rounded-md border border-border/50 px-3 py-3"
+                                className="rounded-md border border-border/50 px-3 py-2"
                               >
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <div>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
                                     <div className="font-medium">{provider.name}</div>
-                                    <div className="text-xs text-muted-foreground">
+                                    <Badge variant="outline" className="text-[10px]">
                                       {provider.providerType}
-                                    </div>
+                                    </Badge>
                                   </div>
                                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                     <span>{t("weightLabel", { weight: provider.weight })}</span>
@@ -403,21 +412,25 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
                                     </Badge>
                                   </div>
                                 </div>
-                                <Progress value={provider.weightPercent} className="mt-3 h-2" />
-                                {provider.redirectedModel ? (
-                                  <p className="mt-2 text-xs text-muted-foreground">
-                                    {t("redirectPreview", { model: provider.redirectedModel })}
-                                  </p>
-                                ) : null}
-                                {provider.endpointStats ? (
-                                  <p className="mt-1 text-xs text-muted-foreground">
-                                    {t("endpointStats", {
-                                      total: provider.endpointStats.total,
-                                      enabled: provider.endpointStats.enabled,
-                                      circuitOpen: provider.endpointStats.circuitOpen,
-                                      available: provider.endpointStats.available,
-                                    })}
-                                  </p>
+                                <Progress value={provider.weightPercent} className="mt-2 h-1.5" />
+                                {provider.redirectedModel || provider.endpointStats ? (
+                                  <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
+                                    {provider.redirectedModel ? (
+                                      <span>
+                                        {t("redirectPreview", { model: provider.redirectedModel })}
+                                      </span>
+                                    ) : null}
+                                    {provider.endpointStats ? (
+                                      <span>
+                                        {t("endpointStats", {
+                                          total: provider.endpointStats.total,
+                                          enabled: provider.endpointStats.enabled,
+                                          circuitOpen: provider.endpointStats.circuitOpen,
+                                          available: provider.endpointStats.available,
+                                        })}
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 ) : null}
                               </div>
                             ))}

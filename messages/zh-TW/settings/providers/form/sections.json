@@ -344,6 +344,7 @@
       },
       "nSelected": "已選 {count} 項"
     },
+    "testRule": "測試規則匹配",
     "preserveClientIp": {
       "desc": "向上游轉發 x-forwarded-for / x-real-ip，可能暴露真實來源 IP",
       "help": "預設關閉以保護隱私；僅在需要上游感知終端 IP 時開啟。",

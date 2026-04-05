@@ -1,12 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Info, Layers, Route, Scale } from "lucide-react";
+import { ChevronDown, Info, Layers, Route, Scale, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ClientRestrictionsEditor } from "@/components/form/client-restrictions-editor";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -18,6 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
+import { cn } from "@/lib/utils";
 import type { ProviderType } from "@/types/provider";
 import { AllowedModelRuleEditor } from "../../../allowed-model-rule-editor";
 import { AllowedModelTester } from "../../../allowed-model-tester";
@@ -38,15 +40,8 @@ interface RoutingSectionProps {
 export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
   const t = useTranslations("settings.providers.form");
   const tUI = useTranslations("ui.tagInput");
-  const {
-    state,
-    dispatch,
-    mode,
-    provider,
-    enableMultiProviderTypes,
-    groupSuggestions,
-    batchAnalysis,
-  } = useProviderForm();
+  const { state, dispatch, mode, enableMultiProviderTypes, groupSuggestions, batchAnalysis } =
+    useProviderForm();
   const isEdit = mode === "edit";
   const isBatch = mode === "batch";
 
@@ -185,54 +180,94 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
         description={t("sections.routing.modelWhitelist.desc")}
         icon={Layers}
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Model Redirects */}
-          <FieldGroup label={t("sections.routing.modelRedirects.label")}>
+          <FieldGroup
+            label={t("sections.routing.modelRedirects.label")}
+            badge={
+              state.routing.modelRedirects.length > 0 ? (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">
+                  {state.routing.modelRedirects.length}
+                </Badge>
+              ) : null
+            }
+          >
             <div className="space-y-2">
               <ModelRedirectEditor
                 value={state.routing.modelRedirects}
                 onChange={(value) => dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })}
                 disabled={state.ui.isPending}
               />
-              {state.routing.modelRedirects.length > 0 ? (
-                <ModelRedirectTester rules={state.routing.modelRedirects} />
-              ) : null}
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "group flex w-full items-center gap-2 rounded-md border border-border/50",
+                      "px-3 py-1.5 text-xs text-muted-foreground transition-colors",
+                      state.routing.modelRedirects.length > 0
+                        ? "hover:bg-muted/40 bg-muted/20"
+                        : "pointer-events-none opacity-40 bg-muted/10"
+                    )}
+                    disabled={state.routing.modelRedirects.length === 0}
+                  >
+                    <Search className="h-3 w-3" />
+                    {t("sections.routing.testRule")}
+                    <ChevronDown className="ml-auto h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <ModelRedirectTester rules={state.routing.modelRedirects} />
+                </CollapsibleContent>
+              </Collapsible>
               {isBatch && batchAnalysis?.routing.modelRedirects.status === "mixed" && (
                 <MixedValueIndicator values={batchAnalysis.routing.modelRedirects.values} />
               )}
             </div>
           </FieldGroup>
 
+          <div className="border-t border-border/30" />
+
           {/* Allowed Models */}
-          <FieldGroup label={t("sections.routing.modelWhitelist.label")}>
+          <FieldGroup
+            label={t("sections.routing.modelWhitelist.label")}
+            badge={
+              state.routing.allowedModels.length > 0 ? (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">
+                  {state.routing.allowedModels.length}
+                </Badge>
+              ) : null
+            }
+          >
             <div className="space-y-2">
               <AllowedModelRuleEditor
                 providerType={state.routing.providerType}
                 value={state.routing.allowedModels}
                 onChange={(value) => dispatch({ type: "SET_ALLOWED_MODELS", payload: value })}
                 disabled={state.ui.isPending}
-                providerUrl={state.basic.url}
-                apiKey={state.basic.key}
-                proxyUrl={state.network.proxyUrl}
-                proxyFallbackToDirect={state.network.proxyFallbackToDirect}
-                providerId={isEdit ? provider?.id : undefined}
               />
-              {state.routing.allowedModels.length > 0 ? (
-                <AllowedModelTester rules={state.routing.allowedModels} />
-              ) : null}
-              <p className="text-xs text-muted-foreground">
-                {state.routing.allowedModels.length === 0 ? (
-                  <span className="text-green-600">
-                    {t("sections.routing.modelWhitelist.allowAll")}
-                  </span>
-                ) : (
-                  <span>
-                    {t("sections.routing.modelWhitelist.selectedOnly", {
-                      count: state.routing.allowedModels.length,
-                    })}
-                  </span>
-                )}
-              </p>
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "group flex w-full items-center gap-2 rounded-md border border-border/50",
+                      "px-3 py-1.5 text-xs text-muted-foreground transition-colors",
+                      state.routing.allowedModels.length > 0
+                        ? "hover:bg-muted/40 bg-muted/20"
+                        : "pointer-events-none opacity-40 bg-muted/10"
+                    )}
+                    disabled={state.routing.allowedModels.length === 0}
+                  >
+                    <Search className="h-3 w-3" />
+                    {t("sections.routing.testRule")}
+                    <ChevronDown className="ml-auto h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <AllowedModelTester rules={state.routing.allowedModels} />
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </FieldGroup>
 
@@ -250,12 +285,9 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
 
           {clientRestrictionsEnabled && (
             <div className="space-y-3">
-              <div className="space-y-1 rounded-md border bg-muted/30 p-3">
+              <div className="rounded-md border border-border/40 bg-muted/20 px-3 py-2">
                 <p className="text-xs text-muted-foreground">
                   {t("sections.routing.clientRestrictions.priorityNote")}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {t("sections.routing.clientRestrictions.customHelp")}
                 </p>
               </div>
 
