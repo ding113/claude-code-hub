@@ -10,6 +10,7 @@ import {
 } from "@/app/v1/_lib/proxy/provider-selector";
 import { getSession } from "@/lib/auth";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { logger } from "@/lib/logger";
 import { getEndpointFilterStats } from "@/lib/provider-endpoints/endpoint-selector";
 import { getProviderModelRedirectTarget } from "@/lib/provider-model-redirects";
 import { RateLimitService } from "@/lib/rate-limit";
@@ -30,7 +31,7 @@ import type { Provider } from "@/types/provider";
 import type { ActionResult } from "./types";
 
 const DispatchSimulatorInputSchema = z.object({
-  clientFormat: z.enum(["claude", "openai", "response", "gemini"]),
+  clientFormat: z.enum(["claude", "openai", "response", "gemini", "gemini-cli"]),
   modelName: z.string().trim().max(255).default(""),
   groupTags: z.array(z.string().trim().min(1).max(255)).max(20).default([]),
 });
@@ -304,17 +305,17 @@ export async function simulateDispatchDecisionTree(
       continue;
     }
 
-    const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
+    const costCheck = await RateLimitService.checkCostLimits(provider.id, "provider", {
       limit_5h_usd: provider.limit5hUsd,
       limit_daily_usd: provider.limitDailyUsd,
       daily_reset_mode: provider.dailyResetMode,
       daily_reset_time: provider.dailyResetTime,
       limit_weekly_usd: provider.limitWeeklyUsd,
       limit_monthly_usd: provider.limitMonthlyUsd,
+      cost_reset_at: provider.totalCostResetAt,
     });
 
-    // 这里故意沿用线上 resolver 的 lease 逻辑；模拟器并非完全无副作用，
-    // 可能刷新限额 lease 缓存，优先保证与真实调度结果一致。
+    // 调度模拟使用只读限额检查，避免为了预览而刷新 lease 或写入 Redis。
     if (!costCheck.allowed) {
       healthFiltered.push(
         buildProviderSnapshot(provider, groupFilter, {
@@ -467,13 +468,12 @@ export async function simulateDispatchAction(
     const result = await simulateDispatchDecisionTree(providers, parsedInput.data);
     return { ok: true, data: result };
   } catch (error) {
-    const message =
-      error instanceof Error && error.message
-        ? error.message
-        : DISPATCH_SIMULATOR_ERROR_CODES.OPERATION_FAILED;
+    logger.error("simulateDispatchAction failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return {
       ok: false,
-      error: message,
+      error: DISPATCH_SIMULATOR_ERROR_CODES.OPERATION_FAILED,
       errorCode: DISPATCH_SIMULATOR_ERROR_CODES.OPERATION_FAILED,
     };
   }

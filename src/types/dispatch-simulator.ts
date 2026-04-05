@@ -1,6 +1,11 @@
 import type { ProviderType } from "@/types/provider";
 
-export type DispatchSimulatorClientFormat = "claude" | "openai" | "response" | "gemini";
+export type DispatchSimulatorClientFormat =
+  | "claude"
+  | "openai"
+  | "response"
+  | "gemini"
+  | "gemini-cli";
 
 export type DispatchSimulatorStepName =
   | "groupFilter"

@@ -15,6 +15,7 @@ const vendorCircuitMocks = vi.hoisted(() => ({
 }));
 
 const rateLimitMocks = vi.hoisted(() => ({
+  checkCostLimits: vi.fn(async () => ({ allowed: true })),
   checkCostLimitsWithLease: vi.fn(async () => ({ allowed: true })),
   checkTotalCostLimit: vi.fn(async () => ({ allowed: true })),
 }));
@@ -129,7 +130,7 @@ describe("dispatch simulator", () => {
   test("simulates the decision chain and priority tiers end-to-end", async () => {
     const { simulateDispatchDecisionTree } = await import("@/actions/dispatch-simulator");
 
-    rateLimitMocks.checkCostLimitsWithLease.mockImplementation(async (entityId: number) =>
+    rateLimitMocks.checkCostLimits.mockImplementation(async (entityId: number) =>
       entityId === 3
         ? { allowed: false, reason: "Provider daily cost limit reached" }
         : { allowed: true }
@@ -224,6 +225,29 @@ describe("dispatch simulator", () => {
     expect(result.steps[4].stepName).toBe("modelAllowlist");
     expect(result.steps[4].note).toBe("model_filter_skipped_for_resource_request");
     expect(result.steps[4].outputCount).toBe(1);
+  });
+
+  test("accepts gemini-cli format and keeps gemini-cli providers eligible", async () => {
+    const { simulateDispatchDecisionTree } = await import("@/actions/dispatch-simulator");
+
+    const result = await simulateDispatchDecisionTree(
+      [
+        createProvider(20, {
+          providerType: "gemini-cli",
+          allowedModels: [{ matchType: "exact", pattern: "gemini-2.5-pro" }],
+        }),
+      ],
+      {
+        clientFormat: "gemini-cli",
+        modelName: "",
+        groupTags: [],
+      },
+      { systemTimezone: "UTC" }
+    );
+
+    expect(result.steps[1].stepName).toBe("formatCompatibility");
+    expect(result.steps[1].outputCount).toBe(1);
+    expect(result.finalCandidateCount).toBe(1);
   });
 
   test("server action rejects non-admin callers", async () => {

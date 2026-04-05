@@ -29,7 +29,8 @@
     "claude": "Claude",
     "openai": "OpenAI",
     "response": "Codex / Responses",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "geminiCli": "Gemini CLI"
   },
   "steps": {
     "groupFilter": "グループフィルター",

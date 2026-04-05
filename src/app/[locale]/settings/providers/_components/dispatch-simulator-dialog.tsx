@@ -44,9 +44,9 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
   const t = useTranslations("settings.providers.dispatchSimulator");
 
   const [open, setOpen] = useState(false);
-  const [clientFormat, setClientFormat] = useState<"claude" | "openai" | "response" | "gemini">(
-    "claude"
-  );
+  const [clientFormat, setClientFormat] = useState<
+    "claude" | "openai" | "response" | "gemini" | "gemini-cli"
+  >("claude");
   const [modelName, setModelName] = useState("");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [result, setResult] = useState<DispatchSimulatorResult | null>(null);
@@ -141,6 +141,7 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
                       <SelectItem value="openai">{t("formats.openai")}</SelectItem>
                       <SelectItem value="response">{t("formats.response")}</SelectItem>
                       <SelectItem value="gemini">{t("formats.gemini")}</SelectItem>
+                      <SelectItem value="gemini-cli">{t("formats.geminiCli")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
