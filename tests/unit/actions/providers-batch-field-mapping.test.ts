@@ -5,6 +5,7 @@ const getSessionMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
 
 const publishProviderCacheInvalidationMock = vi.fn();
+const terminateStickySessionsForProvidersMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -16,6 +17,12 @@ vi.mock("@/repository/provider", () => ({
 
 vi.mock("@/lib/cache/provider-cache", () => ({
   publishProviderCacheInvalidation: publishProviderCacheInvalidationMock,
+}));
+
+vi.mock("@/lib/session-manager", () => ({
+  SessionManager: {
+    terminateStickySessionsForProviders: terminateStickySessionsForProvidersMock,
+  },
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -35,6 +42,7 @@ describe("batchUpdateProviders - advanced field mapping", () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     updateProvidersBatchMock.mockResolvedValue(2);
     publishProviderCacheInvalidationMock.mockResolvedValue(undefined);
+    terminateStickySessionsForProvidersMock.mockResolvedValue(undefined);
   });
 
   it("should still map basic fields correctly (backward compat)", async () => {
@@ -121,6 +129,10 @@ describe("batchUpdateProviders - advanced field mapping", () => {
         { matchType: "exact", pattern: "model-b" },
       ],
     });
+    expect(terminateStickySessionsForProvidersMock).toHaveBeenCalledWith(
+      [1, 2],
+      "batchUpdateProviders"
+    );
   });
 
   it("should normalize allowed_models=[] to null (allow-all)", async () => {

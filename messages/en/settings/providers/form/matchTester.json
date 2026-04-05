@@ -1,4 +1,5 @@
 {
+  "inputLabel": "Model name to test",
   "inputPlaceholder": "Enter a model name to test, e.g. claude-opus-4-1",
   "testButton": "Test Match",
   "redirectTitle": "Redirect Match Test",

@@ -1,4 +1,5 @@
 {
+  "inputLabel": "要测试的模型名",
   "inputPlaceholder": "输入要测试的模型名，例如 claude-opus-4-1",
   "testButton": "测试匹配",
   "redirectTitle": "模型重定向匹配测试",

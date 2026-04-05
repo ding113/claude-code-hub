@@ -263,6 +263,7 @@ export function AllowedModelRuleEditor({
       const existingKeys = new Set(value.map((rule) => getRuleIdentity(rule)));
       const nextRules = [...value];
       let addedCount = 0;
+      let hitLimit = false;
 
       for (const model of upstreamResult.data.models) {
         const rule = normalizeRule({ matchType: "exact", pattern: model });
@@ -272,6 +273,7 @@ export function AllowedModelRuleEditor({
         }
         if (nextRules.length >= 100) {
           setError(t("quickAddReachedLimit"));
+          hitLimit = true;
           break;
         }
         nextRules.push(rule);
@@ -279,7 +281,7 @@ export function AllowedModelRuleEditor({
         addedCount += 1;
       }
 
-      if (addedCount === 0 && !error) {
+      if (addedCount === 0 && !hitLimit) {
         setError(t("quickAddNoNewRules"));
         return;
       }

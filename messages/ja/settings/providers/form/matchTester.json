@@ -1,4 +1,5 @@
 {
+  "inputLabel": "テストするモデル名",
   "inputPlaceholder": "テストしたいモデル名を入力してください。例: claude-opus-4-1",
   "testButton": "一致をテスト",
   "redirectTitle": "モデルリダイレクト一致テスト",

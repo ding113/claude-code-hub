@@ -15,6 +15,7 @@ interface ModelRedirectTesterProps {
 
 export function ModelRedirectTester({ rules }: ModelRedirectTesterProps) {
   const t = useTranslations("settings.providers.form.matchTester");
+  const tRedirect = useTranslations("settings.providers.form.modelRedirect");
   const [modelName, setModelName] = useState("");
   const [testedModel, setTestedModel] = useState("");
 
@@ -43,9 +44,11 @@ export function ModelRedirectTester({ rules }: ModelRedirectTesterProps) {
 
         <div className="flex flex-col gap-2 md:flex-row">
           <Input
+            id="model-redirect-tester-input"
             value={modelName}
             onChange={(e) => setModelName(e.target.value)}
             onInput={(e) => setModelName((e.target as HTMLInputElement).value)}
+            aria-label={t("inputLabel")}
             placeholder={t("inputPlaceholder")}
           />
           <Button type="button" variant="outline" onClick={handleTest} disabled={!modelName.trim()}>
@@ -69,7 +72,11 @@ export function ModelRedirectTester({ rules }: ModelRedirectTesterProps) {
                   </div>
                   <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 px-3 py-2">
                     <span>{t("matchType")}</span>
-                    <Badge variant="secondary">{matchedRule.matchType}</Badge>
+                    <Badge variant="secondary">
+                      {tRedirect(
+                        `matchType${matchedRule.matchType.charAt(0).toUpperCase()}${matchedRule.matchType.slice(1)}`
+                      )}
+                    </Badge>
                   </div>
                   <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 px-3 py-2 md:col-span-2">
                     <span>{t("source")}</span>

@@ -1,7 +1,7 @@
 "use client";
 import { ChevronDown, Info } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { addProvider, editProvider, removeProvider } from "@/actions/providers";
 import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
@@ -203,8 +203,15 @@ export function ProviderForm({
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
     sourceProvider?.limitConcurrentSessions ?? null
   );
+  const normalizedSourceAllowedModelRules = useMemo(
+    () => normalizeAllowedModelRules(sourceProvider?.allowedModels) ?? [],
+    [sourceProvider?.allowedModels]
+  );
+  const hasHiddenAllowedModelRules = normalizedSourceAllowedModelRules.some(
+    (rule) => rule.matchType !== "exact"
+  );
   const [allowedModels, setAllowedModels] = useState<string[]>(() =>
-    (normalizeAllowedModelRules(sourceProvider?.allowedModels) ?? [])
+    normalizedSourceAllowedModelRules
       .filter((rule) => rule.matchType === "exact")
       .map((rule) => rule.pattern)
   );
@@ -963,6 +970,12 @@ export function ProviderForm({
                       {t("sections.routing.modelWhitelist.optional")}
                     </span>
                   </Label>
+
+                  {hasHiddenAllowedModelRules ? (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                      {t("sections.routing.modelWhitelist.legacyExactOnlyWarning")}
+                    </div>
+                  ) : null}
 
                   <ModelMultiSelect
                     providerType={

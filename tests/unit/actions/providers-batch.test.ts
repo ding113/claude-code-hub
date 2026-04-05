@@ -9,6 +9,7 @@ const publishProviderCacheInvalidationMock = vi.fn();
 const clearProviderStateMock = vi.fn();
 const clearConfigCacheMock = vi.fn();
 const resetCircuitMock = vi.fn();
+const terminateStickySessionsForProvidersMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -27,6 +28,12 @@ vi.mock("@/lib/circuit-breaker", () => ({
   clearProviderState: clearProviderStateMock,
   clearConfigCache: clearConfigCacheMock,
   resetCircuit: resetCircuitMock,
+}));
+
+vi.mock("@/lib/session-manager", () => ({
+  SessionManager: {
+    terminateStickySessionsForProviders: terminateStickySessionsForProvidersMock,
+  },
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -50,6 +57,7 @@ describe("Provider Batch Actions", () => {
     clearProviderStateMock.mockReturnValue(undefined);
     clearConfigCacheMock.mockReturnValue(undefined);
     resetCircuitMock.mockReturnValue(undefined);
+    terminateStickySessionsForProvidersMock.mockResolvedValue(undefined);
   });
 
   describe("batchUpdateProviders", () => {

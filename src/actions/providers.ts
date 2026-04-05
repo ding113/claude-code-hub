@@ -2302,6 +2302,17 @@ export async function batchUpdateProviders(
 
     const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
 
+    const shouldInvalidateStickySessions =
+      updates.group_tag !== undefined ||
+      updates.model_redirects !== undefined ||
+      updates.allowed_models !== undefined ||
+      updates.allowed_clients !== undefined ||
+      updates.blocked_clients !== undefined;
+
+    if (shouldInvalidateStickySessions) {
+      await SessionManager.terminateStickySessionsForProviders(providerIds, "batchUpdateProviders");
+    }
+
     await broadcastProviderCacheInvalidation({
       operation: "edit",
       providerId: providerIds[0],
