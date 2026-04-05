@@ -7,6 +7,7 @@ import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import { normalizeAllowedModelRules } from "@/lib/provider-allowed-models";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -14,6 +15,7 @@ import type {
   AnthropicAdaptiveThinkingConfig,
   CreateProviderData,
   Provider,
+  ProviderAllowedModelRule,
   ProviderModelRedirectRule,
   UpdateProviderData,
 } from "@/types/provider";
@@ -189,7 +191,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     preserveClientIp: providerData.preserve_client_ip ?? false,
     disableSessionReuse: providerData.disable_session_reuse ?? false,
     modelRedirects: normalizeProviderModelRedirectRules(providerData.model_redirects),
-    allowedModels: providerData.allowed_models,
+    allowedModels: normalizeAllowedModelRules(providerData.allowed_models),
     allowedClients: providerData.allowed_clients ?? [],
     blockedClients: providerData.blocked_clients ?? [],
     activeTimeStart: providerData.active_time_start ?? null,
@@ -1032,7 +1034,7 @@ export interface BatchProviderUpdates {
   costMultiplier?: string;
   groupTag?: string | null;
   modelRedirects?: ProviderModelRedirectRule[] | null;
-  allowedModels?: string[] | null;
+  allowedModels?: ProviderAllowedModelRule[] | null;
   allowedClients?: string[] | null;
   blockedClients?: string[] | null;
   anthropicThinkingBudgetPreference?: string | null;

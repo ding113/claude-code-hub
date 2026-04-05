@@ -10,6 +10,7 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { normalizeAllowedModelRules } from "@/lib/provider-allowed-models";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
@@ -365,7 +366,7 @@ export function createInitialState(
       preserveClientIp: sourceProvider?.preserveClientIp ?? false,
       disableSessionReuse: sourceProvider?.disableSessionReuse ?? false,
       modelRedirects: normalizeProviderModelRedirectRules(sourceProvider?.modelRedirects) ?? [],
-      allowedModels: sourceProvider?.allowedModels ?? [],
+      allowedModels: normalizeAllowedModelRules(sourceProvider?.allowedModels) ?? [],
       allowedClients: sourceProvider?.allowedClients ?? [],
       blockedClients: sourceProvider?.blockedClients ?? [],
       priority: sourceProvider?.priority ?? 0,

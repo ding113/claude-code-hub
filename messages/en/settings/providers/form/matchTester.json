@@ -1,0 +1,19 @@
+{
+  "title": "Match Test",
+  "inputLabel": "Model Name",
+  "inputPlaceholder": "Enter model name to test...",
+  "testButton": "Test",
+  "testing": "Testing...",
+  "resultTitle": "Test Result",
+  "matched": "Matched",
+  "notMatched": "Not Matched",
+  "allowed": "Allowed",
+  "blocked": "Blocked",
+  "allowAll": "Allow All (no rules)",
+  "matchedRule": "Matched Rule",
+  "matchType": "Match Type",
+  "pattern": "Pattern",
+  "source": "Source Pattern",
+  "target": "Redirect Target",
+  "noRulesHint": "Add rules above, then test here"
+}

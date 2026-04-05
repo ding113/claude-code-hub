@@ -18,7 +18,10 @@ function makeProvider(overrides?: Partial<ProviderDisplay>): ProviderDisplay {
     providerVendorId: null,
     preserveClientIp: false,
     modelRedirects: [{ matchType: "exact", source: "claude-3", target: "claude-3.5" }],
-    allowedModels: ["claude-3", "claude-3.5"],
+    allowedModels: [
+      { matchType: "exact", pattern: "claude-3" },
+      { matchType: "exact", pattern: "claude-3.5" },
+    ],
     mcpPassthroughType: "none",
     mcpPassthroughUrl: null,
     limit5hUsd: null,

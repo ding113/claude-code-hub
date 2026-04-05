@@ -26,7 +26,7 @@ describe("ProxyProviderResolver.pickRandomProvider - model redirect", () => {
         weight: 1,
         priority: 0,
         costMultiplier: 1,
-        allowedModels: ["claude-test"],
+        allowedModels: [{ matchType: "exact", pattern: "claude-test" }],
       } as unknown as Provider,
     ];
 

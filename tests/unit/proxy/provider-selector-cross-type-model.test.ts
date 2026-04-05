@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import type { Provider } from "@/types/provider";
+import type { Provider, ProviderAllowedModelRule } from "@/types/provider";
+
+// 测试辅助：将模型名称字符串数组转换为 exact 匹配规则
+function toExactRules(models: string[]): ProviderAllowedModelRule[] {
+  return models.map((m) => ({ matchType: "exact" as const, pattern: m }));
+}
 
 // ── Mocks (shared by findReusable and pickRandomProvider tests) ──
 
@@ -80,7 +85,7 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
   const cases: Array<{
     name: string;
     providerType: string;
-    allowedModels: string[] | null;
+    allowedModels: ProviderAllowedModelRule[] | null;
     modelRedirects?: Record<string, string>;
     requestedModel: string;
     expected: boolean;
@@ -89,7 +94,7 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
     {
       name: "openai-compatible + allowedModels contains claude model -> true",
       providerType: "openai-compatible",
-      allowedModels: ["claude-opus-4-6"],
+      allowedModels: toExactRules(["claude-opus-4-6"]),
       requestedModel: "claude-opus-4-6",
       expected: true,
     },
@@ -110,7 +115,7 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
     {
       name: "openai-compatible + allowedModels NOT containing model -> false",
       providerType: "openai-compatible",
-      allowedModels: ["gpt-4o", "gpt-4o-mini"],
+      allowedModels: toExactRules(["gpt-4o", "gpt-4o-mini"]),
       requestedModel: "claude-opus-4-6",
       expected: false,
     },
@@ -133,14 +138,14 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
     {
       name: "claude + allowedModels contains non-claude model -> true (explicit)",
       providerType: "claude",
-      allowedModels: ["gemini-2.5-pro"],
+      allowedModels: toExactRules(["gemini-2.5-pro"]),
       requestedModel: "gemini-2.5-pro",
       expected: true,
     },
     {
       name: "claude + allowedModels NOT containing model -> false",
       providerType: "claude",
-      allowedModels: ["claude-haiku-4-5"],
+      allowedModels: toExactRules(["claude-haiku-4-5"]),
       requestedModel: "claude-opus-4-6",
       expected: false,
     },
@@ -164,7 +169,7 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
     {
       name: "modelRedirects does not bypass explicit allowedModels mismatch -> false",
       providerType: "claude",
-      allowedModels: ["claude-haiku-4-5-20251001", "glm-4.6"],
+      allowedModels: toExactRules(["claude-haiku-4-5-20251001", "glm-4.6"]),
       modelRedirects: {
         "claude-haiku-4-5-20251001": "glm-4.6",
         "claude-opus-4-5-20251001": "glm-4.6",
@@ -175,7 +180,7 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
     {
       name: "neither allowedModels nor modelRedirects contains model -> false",
       providerType: "openai-compatible",
-      allowedModels: ["gpt-4o"],
+      allowedModels: toExactRules(["gpt-4o"]),
       modelRedirects: { "gpt-4": "gpt-4o" },
       requestedModel: "claude-opus-4-6",
       expected: false,
@@ -192,7 +197,7 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
     {
       name: "gemini + allowedModels match -> true",
       providerType: "gemini",
-      allowedModels: ["gemini-2.0-flash"],
+      allowedModels: toExactRules(["gemini-2.0-flash"]),
       requestedModel: "gemini-2.0-flash",
       expected: true,
     },
@@ -226,7 +231,7 @@ describe("findReusable - cross-type model routing (#832)", () => {
     const provider = createProvider({
       id: 10,
       providerType: "openai-compatible",
-      allowedModels: ["claude-opus-4-6"],
+      allowedModels: toExactRules(["claude-opus-4-6"]),
     });
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(10);
@@ -287,7 +292,7 @@ describe("findReusable - cross-type model routing (#832)", () => {
 
     const provider = createProvider({
       id: 12,
-      allowedModels: ["gpt-4o", "gpt-4o-mini"],
+      allowedModels: toExactRules(["gpt-4o", "gpt-4o-mini"]),
     });
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(12);
@@ -315,7 +320,7 @@ describe("findReusable - cross-type model routing (#832)", () => {
     const provider = createProvider({
       id: 15,
       providerType: "claude",
-      allowedModels: ["claude-haiku-4-5-20251001", "glm-4.6"],
+      allowedModels: toExactRules(["claude-haiku-4-5-20251001", "glm-4.6"]),
       modelRedirects: {
         "claude-haiku-4-5-20251001": "glm-4.6",
         "claude-opus-4-5-20251001": "glm-4.6",
@@ -380,7 +385,7 @@ describe("pickRandomProvider - cross-type model routing (#832)", () => {
     const provider = createProvider({
       id: 20,
       providerType: "openai-compatible",
-      allowedModels: ["claude-opus-4-6"],
+      allowedModels: toExactRules(["claude-opus-4-6"]),
     });
     const session = createPickSession("openai", [provider], "claude-opus-4-6");
 
@@ -415,7 +420,7 @@ describe("pickRandomProvider - cross-type model routing (#832)", () => {
     const provider = createProvider({
       id: 22,
       providerType: "openai-compatible",
-      allowedModels: ["gpt-4o"],
+      allowedModels: toExactRules(["gpt-4o"]),
     });
     const session = createPickSession("openai", [provider], "claude-opus-4-6");
 
@@ -435,19 +440,19 @@ describe("pickRandomProvider - cross-type model routing (#832)", () => {
     const p1 = createProvider({
       id: 30,
       providerType: "claude",
-      allowedModels: ["claude-opus-4-6"],
+      allowedModels: toExactRules(["claude-opus-4-6"]),
     });
     // openai-compatible but wrong model
     const p2 = createProvider({
       id: 31,
       providerType: "openai-compatible",
-      allowedModels: ["gpt-4o"],
+      allowedModels: toExactRules(["gpt-4o"]),
     });
     // openai-compatible with correct model
     const p3 = createProvider({
       id: 32,
       providerType: "openai-compatible",
-      allowedModels: ["claude-opus-4-6"],
+      allowedModels: toExactRules(["claude-opus-4-6"]),
     });
 
     const session = createPickSession("openai", [p1, p2, p3], "claude-opus-4-6");
@@ -473,7 +478,7 @@ describe("pickRandomProvider - cross-type model routing (#832)", () => {
     const provider = createProvider({
       id: 33,
       providerType: "claude",
-      allowedModels: ["claude-haiku-4-5-20251001", "glm-4.6"],
+      allowedModels: toExactRules(["claude-haiku-4-5-20251001", "glm-4.6"]),
       modelRedirects: {
         "claude-haiku-4-5-20251001": "glm-4.6",
         "claude-opus-4-5-20251001": "glm-4.6",
@@ -501,7 +506,7 @@ describe("pickRandomProvider - cross-type model routing (#832)", () => {
       id: 40,
       providerType: "claude",
       priority: 0,
-      allowedModels: ["claude-haiku-4-5-20251001", "glm-4.6"],
+      allowedModels: toExactRules(["claude-haiku-4-5-20251001", "glm-4.6"]),
       modelRedirects: {
         "claude-haiku-4-5-20251001": "glm-4.6",
         "claude-opus-4-5-20251001": "glm-4.6",
@@ -511,7 +516,7 @@ describe("pickRandomProvider - cross-type model routing (#832)", () => {
       id: 41,
       providerType: "claude",
       priority: 1,
-      allowedModels: ["claude-opus-4-5-20251001"],
+      allowedModels: toExactRules(["claude-opus-4-5-20251001"]),
     });
 
     const session = createPickSession(

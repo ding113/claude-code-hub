@@ -27,7 +27,7 @@ describe("provider patch contract", () => {
   it("serializes set and clear with distinct payload shapes", () => {
     const setResult = prepareProviderBatchApplyUpdates({
       group_tag: { set: "primary" },
-      allowed_models: { set: ["claude-3-7-sonnet"] },
+      allowed_models: { set: [{ matchType: "exact", pattern: "claude-3-7-sonnet" }] },
     });
     const clearResult = prepareProviderBatchApplyUpdates({
       group_tag: { clear: true },
@@ -42,7 +42,9 @@ describe("provider patch contract", () => {
 
     expect(setResult.data.group_tag).toBe("primary");
     expect(clearResult.data.group_tag).toBeNull();
-    expect(setResult.data.allowed_models).toEqual(["claude-3-7-sonnet"]);
+    expect(setResult.data.allowed_models).toEqual([
+      { matchType: "exact", pattern: "claude-3-7-sonnet" },
+    ]);
     expect(clearResult.data.allowed_models).toBeNull();
   });
 

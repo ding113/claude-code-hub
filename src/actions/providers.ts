@@ -83,6 +83,7 @@ import type {
   CodexServiceTierPreference,
   CodexTextVerbosityPreference,
   Provider,
+  ProviderAllowedModelRule,
   ProviderBatchApplyUpdates,
   ProviderBatchPatch,
   ProviderBatchPatchField,
@@ -506,7 +507,7 @@ export async function addProvider(data: {
   model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
-  allowed_models?: string[] | null;
+  allowed_models?: ProviderAllowedModelRule[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   limit_5h_usd?: number | null;
@@ -685,7 +686,7 @@ export async function editProvider(
     model_redirects?: ProviderModelRedirectRule[] | null;
     active_time_start?: string | null;
     active_time_end?: string | null;
-    allowed_models?: string[] | null;
+    allowed_models?: ProviderAllowedModelRule[] | null;
     allowed_clients?: string[] | null;
     blocked_clients?: string[] | null;
     limit_5h_usd?: number | null;
@@ -2201,7 +2202,7 @@ export interface BatchUpdateProvidersParams {
     cost_multiplier?: number;
     group_tag?: string | null;
     model_redirects?: ProviderModelRedirectRule[] | null;
-    allowed_models?: string[] | null;
+    allowed_models?: ProviderAllowedModelRule[] | null;
     allowed_clients?: string[];
     blocked_clients?: string[];
     codex_service_tier_preference?: CodexServiceTierPreference | null;
@@ -4867,9 +4868,9 @@ export async function getModelSuggestionsByProviderGroup(
       if (checkProviderGroupMatch(provider.groupTag, userGroups)) {
         const models = provider.allowedModels;
         if (models && Array.isArray(models)) {
-          for (const model of models) {
-            if (model) {
-              modelSet.add(model);
+          for (const rule of models) {
+            if (rule.matchType === "exact" && rule.pattern) {
+              modelSet.add(rule.pattern);
             }
           }
         }

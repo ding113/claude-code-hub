@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { isValidUrl } from "@/lib/utils/validation";
-import type { ProviderType } from "@/types/provider";
+import type { ProviderAllowedModelRule, ProviderType } from "@/types/provider";
 import { TestResultCard, type UnifiedTestResultData } from "./test-result-card";
 
 type ApiFormat = "anthropic-messages" | "openai-chat" | "openai-responses" | "gemini";
@@ -65,7 +65,7 @@ interface ApiTestButtonProps {
   disabled?: boolean;
   providerId?: number;
   providerType?: ProviderType | null;
-  allowedModels?: string[];
+  allowedModels?: ProviderAllowedModelRule[];
   enableMultiProviderTypes: boolean;
 }
 
@@ -92,12 +92,14 @@ export function ApiTestButton({
   const providerTypeT = useTranslations("settings.providers.form.providerTypes");
   const normalizedAllowedModels = useMemo(() => {
     const unique = new Set<string>();
-    allowedModels.forEach((model) => {
-      const trimmed = model.trim();
-      if (trimmed) {
-        unique.add(trimmed);
+    for (const rule of allowedModels) {
+      if (rule.matchType === "exact") {
+        const trimmed = rule.pattern.trim();
+        if (trimmed) {
+          unique.add(trimmed);
+        }
       }
-    });
+    }
     return Array.from(unique);
   }, [allowedModels]);
 

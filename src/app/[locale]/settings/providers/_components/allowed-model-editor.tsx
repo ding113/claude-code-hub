@@ -1,14 +1,6 @@
 "use client";
-import {
-  AlertCircle,
-  ArrowRight,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Pencil,
-  Plus,
-  X,
-} from "lucide-react";
+
+import { AlertCircle, Check, ChevronDown, ChevronUp, Pencil, Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import safeRegex from "safe-regex";
@@ -16,69 +8,47 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { ProviderModelRedirectMatchType, ProviderModelRedirectRule } from "@/types/provider";
+import type { ProviderAllowedModelRule, ProviderModelRedirectMatchType } from "@/types/provider";
+import { getMatchTypeOptions, MatchTypeBadge, MatchTypeSelect } from "./match-rule-shared";
 import { ModelMatchTester } from "./model-match-tester";
 
-interface ModelRedirectEditorProps {
-  value: ProviderModelRedirectRule[];
-  onChange: (value: ProviderModelRedirectRule[]) => void;
+interface AllowedModelEditorProps {
+  value: ProviderAllowedModelRule[];
+  onChange: (value: ProviderAllowedModelRule[]) => void;
   disabled?: boolean;
 }
 
-const DEFAULT_RULE: ProviderModelRedirectRule = {
+const DEFAULT_RULE: ProviderAllowedModelRule = {
   matchType: "exact",
-  source: "",
-  target: "",
+  pattern: "",
 };
 
-function normalizeRule(rule: ProviderModelRedirectRule): ProviderModelRedirectRule {
+function normalizeRule(rule: ProviderAllowedModelRule): ProviderAllowedModelRule {
   return {
     matchType: rule.matchType,
-    source: rule.source.trim(),
-    target: rule.target.trim(),
+    pattern: rule.pattern.trim(),
   };
 }
 
-function getRuleIdentity(rule: Pick<ProviderModelRedirectRule, "matchType" | "source">): string {
-  return `${rule.matchType}:${rule.source.trim().toLowerCase()}`;
+function getRuleIdentity(rule: Pick<ProviderAllowedModelRule, "matchType" | "pattern">): string {
+  return `${rule.matchType}:${rule.pattern.trim().toLowerCase()}`;
 }
 
-export function ModelRedirectEditor({
-  value,
-  onChange,
-  disabled = false,
-}: ModelRedirectEditorProps) {
-  const t = useTranslations("settings.providers.form.modelRedirect");
-  const [newRule, setNewRule] = useState<ProviderModelRedirectRule>(DEFAULT_RULE);
+export function AllowedModelEditor({ value, onChange, disabled = false }: AllowedModelEditorProps) {
+  const t = useTranslations("settings.providers.form.allowedModelRule");
+  const [newRule, setNewRule] = useState<ProviderAllowedModelRule>(DEFAULT_RULE);
   const [error, setError] = useState<string | null>(null);
   const [editingRuleKey, setEditingRuleKey] = useState<string | null>(null);
-  const [editRule, setEditRule] = useState<ProviderModelRedirectRule>(DEFAULT_RULE);
+  const [editRule, setEditRule] = useState<ProviderAllowedModelRule>(DEFAULT_RULE);
 
-  const redirects = value;
+  const rules = value;
+  const matchTypeOptions = getMatchTypeOptions(t);
 
-  const matchTypeOptions: Array<{
-    value: ProviderModelRedirectMatchType;
-    label: string;
-  }> = [
-    { value: "exact", label: t("matchTypeExact") },
-    { value: "prefix", label: t("matchTypePrefix") },
-    { value: "suffix", label: t("matchTypeSuffix") },
-    { value: "contains", label: t("matchTypeContains") },
-    { value: "regex", label: t("matchTypeRegex") },
-  ];
-
-  const hasDuplicateRule = (rule: ProviderModelRedirectRule, ignoreRuleKey?: string): boolean => {
+  const hasDuplicateRule = (rule: ProviderAllowedModelRule, ignoreRuleKey?: string): boolean => {
     const normalized = normalizeRule(rule);
     const nextRuleKey = getRuleIdentity(normalized);
 
-    return redirects.some((item) => {
+    return rules.some((item) => {
       const currentKey = getRuleIdentity(item);
       if (ignoreRuleKey && currentKey === ignoreRuleKey) {
         return false;
@@ -87,30 +57,24 @@ export function ModelRedirectEditor({
     });
   };
 
-  const validateRule = (rule: ProviderModelRedirectRule, ignoreRuleKey?: string): string | null => {
+  const validateRule = (rule: ProviderAllowedModelRule, ignoreRuleKey?: string): string | null => {
     const normalized = normalizeRule(rule);
 
-    if (!normalized.source) {
-      return t("sourceEmpty");
+    if (!normalized.pattern) {
+      return t("patternEmpty");
     }
-    if (!normalized.target) {
-      return t("targetEmpty");
-    }
-    if (normalized.source.length > 255) {
-      return t("sourceTooLong");
-    }
-    if (normalized.target.length > 255) {
-      return t("targetTooLong");
+    if (normalized.pattern.length > 255) {
+      return t("patternTooLong");
     }
     if (normalized.matchType === "regex") {
       try {
-        new RegExp(normalized.source);
+        new RegExp(normalized.pattern);
       } catch {
         return t("regexInvalid");
       }
 
       try {
-        if (!safeRegex(normalized.source)) {
+        if (!safeRegex(normalized.pattern)) {
           return t("regexUnsafe");
         }
       } catch {
@@ -119,14 +83,14 @@ export function ModelRedirectEditor({
     }
     if (hasDuplicateRule(normalized, ignoreRuleKey)) {
       return t("alreadyExists", {
-        model: `${normalized.matchType}:${normalized.source}`,
+        pattern: `${normalized.matchType}:${normalized.pattern}`,
       });
     }
     return null;
   };
 
   const handleAdd = () => {
-    if (redirects.length >= 100) {
+    if (rules.length >= 100) {
       setError(t("maxRules"));
       return;
     }
@@ -139,12 +103,12 @@ export function ModelRedirectEditor({
     }
 
     setError(null);
-    onChange([...redirects, nextRule]);
+    onChange([...rules, nextRule]);
     setNewRule(DEFAULT_RULE);
   };
 
   const handleRemove = (ruleKey: string) => {
-    onChange(redirects.filter((rule) => getRuleIdentity(rule) !== ruleKey));
+    onChange(rules.filter((rule) => getRuleIdentity(rule) !== ruleKey));
     if (editingRuleKey === ruleKey) {
       setEditingRuleKey(null);
       setEditRule(DEFAULT_RULE);
@@ -153,21 +117,21 @@ export function ModelRedirectEditor({
   };
 
   const handleMove = (ruleKey: string, direction: -1 | 1) => {
-    const index = redirects.findIndex((rule) => getRuleIdentity(rule) === ruleKey);
+    const index = rules.findIndex((rule) => getRuleIdentity(rule) === ruleKey);
     if (index < 0) return;
 
     const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= redirects.length) {
+    if (nextIndex < 0 || nextIndex >= rules.length) {
       return;
     }
 
-    const nextRules = [...redirects];
+    const nextRules = [...rules];
     const [item] = nextRules.splice(index, 1);
     nextRules.splice(nextIndex, 0, item);
     onChange(nextRules);
   };
 
-  const handleStartEdit = (rule: ProviderModelRedirectRule) => {
+  const handleStartEdit = (rule: ProviderAllowedModelRule) => {
     setEditingRuleKey(getRuleIdentity(rule));
     setEditRule(normalizeRule(rule));
     setError(null);
@@ -187,14 +151,14 @@ export function ModelRedirectEditor({
       return;
     }
 
-    const currentIndex = redirects.findIndex((rule) => getRuleIdentity(rule) === originalRuleKey);
+    const currentIndex = rules.findIndex((rule) => getRuleIdentity(rule) === originalRuleKey);
     if (currentIndex < 0) {
       setError(t("ruleMoved"));
       return;
     }
 
     setError(null);
-    onChange(redirects.map((rule, index) => (index === currentIndex ? nextRule : rule)));
+    onChange(rules.map((rule, index) => (index === currentIndex ? nextRule : rule)));
     setEditingRuleKey(null);
     setEditRule(DEFAULT_RULE);
   };
@@ -218,61 +182,48 @@ export function ModelRedirectEditor({
 
   return (
     <div className="space-y-3">
-      {redirects.length > 0 && (
+      {rules.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium text-muted-foreground">
-              {t("currentRules", { count: redirects.length })}
+              {t("currentRules", { count: rules.length })}
             </div>
             <div className="text-xs text-muted-foreground">{t("orderHint")}</div>
           </div>
 
           <div className="space-y-1">
-            {redirects.map((rule, index) => {
+            {rules.map((rule, index) => {
               const ruleKey = getRuleIdentity(rule);
               const isEditing = editingRuleKey === ruleKey;
 
               return (
                 <div key={ruleKey} className="group rounded-md border border-border/60 px-3 py-2">
                   {isEditing ? (
-                    <div className="grid gap-2 md:grid-cols-[140px_1fr_24px_1fr_auto] md:items-end">
+                    <div className="grid gap-2 md:grid-cols-[140px_1fr_auto] md:items-end">
                       <div className="space-y-1">
                         <Label className="text-xs">{t("matchTypeLabel")}</Label>
-                        <Select
+                        <MatchTypeSelect
                           value={editRule.matchType}
-                          onValueChange={(matchType) =>
-                            setEditRule((current) => ({
-                              ...current,
-                              matchType: matchType as ProviderModelRedirectMatchType,
-                            }))
+                          onChange={(matchType) =>
+                            setEditRule((current) => ({ ...current, matchType }))
                           }
                           disabled={disabled}
-                        >
-                          <SelectTrigger className="h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {matchTypeOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          options={matchTypeOptions}
+                        />
                       </div>
 
                       <div className="space-y-1">
-                        <Label className="text-xs">{t("sourceModel")}</Label>
+                        <Label className="text-xs">{t("patternLabel")}</Label>
                         <Input
-                          value={editRule.source}
-                          data-redirect-edit-source={ruleKey}
+                          value={editRule.pattern}
+                          data-allowed-edit-pattern={ruleKey}
                           onChange={(e) =>
-                            setEditRule((current) => ({ ...current, source: e.target.value }))
+                            setEditRule((current) => ({ ...current, pattern: e.target.value }))
                           }
                           onInput={(e) =>
                             setEditRule((current) => ({
                               ...current,
-                              source: (e.target as HTMLInputElement).value,
+                              pattern: (e.target as HTMLInputElement).value,
                             }))
                           }
                           onKeyDown={(e) => handleEditKeyDown(e, ruleKey)}
@@ -282,36 +233,12 @@ export function ModelRedirectEditor({
                         />
                       </div>
 
-                      <div className="hidden md:flex items-center justify-center pb-2">
-                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">{t("targetModel")}</Label>
-                        <Input
-                          value={editRule.target}
-                          data-redirect-edit-target={ruleKey}
-                          onChange={(e) =>
-                            setEditRule((current) => ({ ...current, target: e.target.value }))
-                          }
-                          onInput={(e) =>
-                            setEditRule((current) => ({
-                              ...current,
-                              target: (e.target as HTMLInputElement).value,
-                            }))
-                          }
-                          onKeyDown={(e) => handleEditKeyDown(e, ruleKey)}
-                          disabled={disabled}
-                          className="font-mono text-sm h-8 flex-1"
-                        />
-                      </div>
-
                       <div className="flex items-center gap-1 md:pb-0 md:justify-end">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          data-redirect-save={ruleKey}
+                          data-allowed-save={ruleKey}
                           onClick={() => handleSaveEdit(ruleKey)}
                           disabled={disabled}
                           className="h-8 w-8 p-0"
@@ -336,15 +263,9 @@ export function ModelRedirectEditor({
                     </div>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {matchTypeOptions.find((option) => option.value === rule.matchType)?.label}
-                      </Badge>
+                      <MatchTypeBadge matchType={rule.matchType} options={matchTypeOptions} />
                       <Badge variant="outline" className="font-mono text-xs">
-                        {rule.source}
-                      </Badge>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                      <Badge variant="secondary" className="font-mono text-xs">
-                        {rule.target}
+                        {rule.pattern}
                       </Badge>
 
                       <div className="ml-auto flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
@@ -352,7 +273,7 @@ export function ModelRedirectEditor({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          data-redirect-move-up={ruleKey}
+                          data-allowed-move-up={ruleKey}
                           onClick={() => handleMove(ruleKey, -1)}
                           disabled={disabled || index === 0}
                           className="h-7 w-7 p-0"
@@ -365,9 +286,9 @@ export function ModelRedirectEditor({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          data-redirect-move-down={ruleKey}
+                          data-allowed-move-down={ruleKey}
                           onClick={() => handleMove(ruleKey, 1)}
-                          disabled={disabled || index === redirects.length - 1}
+                          disabled={disabled || index === rules.length - 1}
                           className="h-7 w-7 p-0"
                           aria-label={t("moveRuleDown")}
                           title={t("moveRuleDown")}
@@ -378,7 +299,7 @@ export function ModelRedirectEditor({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          data-redirect-edit={ruleKey}
+                          data-allowed-edit={ruleKey}
                           onClick={() => handleStartEdit(rule)}
                           disabled={disabled}
                           className="h-7 w-7 p-0"
@@ -391,7 +312,7 @@ export function ModelRedirectEditor({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          data-redirect-remove={ruleKey}
+                          data-allowed-remove={ruleKey}
                           onClick={() => handleRemove(ruleKey)}
                           disabled={disabled}
                           className="h-7 w-7 p-0"
@@ -413,75 +334,37 @@ export function ModelRedirectEditor({
       <div className="space-y-2">
         <div className="text-xs font-medium text-muted-foreground">{t("addNewRule")}</div>
 
-        <div className="grid gap-2 md:grid-cols-[140px_1fr_24px_1fr_auto] md:items-end">
+        <div className="grid gap-2 md:grid-cols-[140px_1fr_auto] md:items-end">
           <div className="space-y-1">
-            <Label htmlFor="new-match-type" className="text-xs">
+            <Label htmlFor="new-allowed-match-type" className="text-xs">
               {t("matchTypeLabel")}
             </Label>
-            <Select
+            <MatchTypeSelect
               value={newRule.matchType}
-              onValueChange={(matchType) =>
-                setNewRule((current) => ({
-                  ...current,
-                  matchType: matchType as ProviderModelRedirectMatchType,
-                }))
+              onChange={(matchType: ProviderModelRedirectMatchType) =>
+                setNewRule((current) => ({ ...current, matchType }))
               }
               disabled={disabled}
-            >
-              <SelectTrigger id="new-match-type" className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {matchTypeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="new-source" className="text-xs">
-              {t("sourceModel")}
-            </Label>
-            <Input
-              id="new-source"
-              value={newRule.source}
-              onChange={(e) => setNewRule((current) => ({ ...current, source: e.target.value }))}
-              onInput={(e) =>
-                setNewRule((current) => ({
-                  ...current,
-                  source: (e.target as HTMLInputElement).value,
-                }))
-              }
-              onKeyDown={handleCreateKeyDown}
-              placeholder={t("sourcePlaceholder")}
-              disabled={disabled}
-              className="font-mono text-sm"
+              options={matchTypeOptions}
             />
           </div>
 
-          <div className="hidden md:flex items-center justify-center pb-2">
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-          </div>
-
           <div className="space-y-1">
-            <Label htmlFor="new-target" className="text-xs">
-              {t("targetModel")}
+            <Label htmlFor="new-allowed-pattern" className="text-xs">
+              {t("patternLabel")}
             </Label>
             <Input
-              id="new-target"
-              value={newRule.target}
-              onChange={(e) => setNewRule((current) => ({ ...current, target: e.target.value }))}
+              id="new-allowed-pattern"
+              value={newRule.pattern}
+              onChange={(e) => setNewRule((current) => ({ ...current, pattern: e.target.value }))}
               onInput={(e) =>
                 setNewRule((current) => ({
                   ...current,
-                  target: (e.target as HTMLInputElement).value,
+                  pattern: (e.target as HTMLInputElement).value,
                 }))
               }
               onKeyDown={handleCreateKeyDown}
-              placeholder={t("targetPlaceholder")}
+              placeholder={t("patternPlaceholder")}
               disabled={disabled}
               className="font-mono text-sm"
             />
@@ -489,9 +372,9 @@ export function ModelRedirectEditor({
 
           <Button
             type="button"
-            data-redirect-add
+            data-allowed-add
             onClick={handleAdd}
-            disabled={disabled || !newRule.source.trim() || !newRule.target.trim()}
+            disabled={disabled || !newRule.pattern.trim()}
             size="default"
             className="mb-0"
           >
@@ -501,7 +384,7 @@ export function ModelRedirectEditor({
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 text-xs text-destructive" data-redirect-error>
+          <div className="flex items-center gap-2 text-xs text-destructive" data-allowed-error>
             <AlertCircle className="h-3 w-3" />
             <span>{error}</span>
           </div>
@@ -510,13 +393,13 @@ export function ModelRedirectEditor({
         <p className="text-xs text-muted-foreground">{t("description")}</p>
       </div>
 
-      {redirects.length === 0 && (
+      {rules.length === 0 && (
         <div className="text-center py-6 text-sm text-muted-foreground border border-dashed rounded-md">
           {t("emptyState")}
         </div>
       )}
 
-      <ModelMatchTester mode="redirect" redirectRules={redirects} />
+      <ModelMatchTester mode="whitelist" allowedModelRules={rules} />
     </div>
   );
 }

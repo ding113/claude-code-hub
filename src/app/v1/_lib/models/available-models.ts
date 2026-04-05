@@ -243,7 +243,10 @@ async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel
     logger.debug(`[AvailableModels] Using configured allowedModels for ${provider.name}`, {
       modelCount: provider.allowedModels.length,
     });
-    return provider.allowedModels.map((id) => ({ id }));
+    // 只能枚举 exact 匹配规则的模型名；prefix/suffix/contains/regex 规则无法枚举
+    return provider.allowedModels
+      .filter((rule) => rule.matchType === "exact" && rule.pattern)
+      .map((rule) => ({ id: rule.pattern }));
   }
 
   const configMap: Record<Provider["providerType"], UpstreamFetchConfig> = {

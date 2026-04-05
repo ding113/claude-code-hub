@@ -48,6 +48,7 @@ import type {
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
   McpPassthroughType,
+  ProviderAllowedModelRule,
   ProviderDisplay,
   ProviderModelRedirectRule,
   ProviderType,
@@ -202,7 +203,9 @@ export function ProviderForm({
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
     sourceProvider?.limitConcurrentSessions ?? null
   );
-  const [allowedModels, setAllowedModels] = useState<string[]>(sourceProvider?.allowedModels ?? []);
+  const [allowedModels, setAllowedModels] = useState<ProviderAllowedModelRule[]>(
+    sourceProvider?.allowedModels ?? []
+  );
   const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
     sourceProvider?.cacheTtlPreference ?? "inherit"
   );
@@ -468,7 +471,7 @@ export function ProviderForm({
             key?: string;
             provider_type?: ProviderType;
             model_redirects?: ProviderModelRedirectRule[] | null;
-            allowed_models?: string[] | null;
+            allowed_models?: ProviderAllowedModelRule[] | null;
             priority?: number;
             weight?: number;
             cost_multiplier?: number;
@@ -969,8 +972,14 @@ export function ProviderForm({
                         | "gemini-cli"
                         | "openai-compatible"
                     }
-                    selectedModels={allowedModels}
-                    onChange={setAllowedModels}
+                    selectedModels={allowedModels
+                      .filter((r) => r.matchType === "exact")
+                      .map((r) => r.pattern)}
+                    onChange={(models: string[]) =>
+                      setAllowedModels(
+                        models.map((m) => ({ matchType: "exact" as const, pattern: m }))
+                      )
+                    }
                     disabled={isPending}
                     providerUrl={url}
                     apiKey={key}
@@ -981,9 +990,15 @@ export function ProviderForm({
 
                   {allowedModels.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2 p-2 bg-muted/50 rounded-md">
-                      {allowedModels.slice(0, 5).map((model) => (
-                        <Badge key={model} variant="outline" className="font-mono text-xs">
-                          {model}
+                      {allowedModels.slice(0, 5).map((rule) => (
+                        <Badge
+                          key={`${rule.matchType}:${rule.pattern}`}
+                          variant="outline"
+                          className="font-mono text-xs"
+                        >
+                          {rule.matchType === "exact"
+                            ? rule.pattern
+                            : `${rule.matchType}:${rule.pattern}`}
                         </Badge>
                       ))}
                       {allowedModels.length > 5 && (

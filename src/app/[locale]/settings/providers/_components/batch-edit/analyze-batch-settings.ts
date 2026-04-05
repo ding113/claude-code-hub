@@ -11,6 +11,7 @@ import type {
   CodexTextVerbosityPreference,
   GeminiGoogleSearchPreference,
   McpPassthroughType,
+  ProviderAllowedModelRule,
   ProviderDisplay,
   ProviderModelRedirectRule,
 } from "@/types/provider";
@@ -32,7 +33,7 @@ export interface BatchSettingsAnalysis {
     preserveClientIp: FieldAnalysisResult<boolean>;
     disableSessionReuse: FieldAnalysisResult<boolean>;
     modelRedirects: FieldAnalysisResult<ProviderModelRedirectRule[]>;
-    allowedModels: FieldAnalysisResult<string[]>;
+    allowedModels: FieldAnalysisResult<ProviderAllowedModelRule[]>;
     allowedClients: FieldAnalysisResult<string[]>;
     blockedClients: FieldAnalysisResult<string[]>;
     groupPriorities: FieldAnalysisResult<Record<string, number>>;

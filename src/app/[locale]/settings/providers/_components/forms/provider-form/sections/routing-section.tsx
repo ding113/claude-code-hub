@@ -19,8 +19,8 @@ import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type { ProviderType } from "@/types/provider";
+import { AllowedModelEditor } from "../../../allowed-model-editor";
 import { MixedValueIndicator } from "../../../batch-edit/mixed-value-indicator";
-import { ModelMultiSelect } from "../../../model-multi-select";
 import { ModelRedirectEditor } from "../../../model-redirect-editor";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
@@ -201,48 +201,14 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
           {/* Allowed Models */}
           <FieldGroup label={t("sections.routing.modelWhitelist.label")}>
             <div className="space-y-2">
-              <ModelMultiSelect
-                providerType={state.routing.providerType}
-                selectedModels={state.routing.allowedModels}
-                onChange={(value: string[]) =>
-                  dispatch({ type: "SET_ALLOWED_MODELS", payload: value })
-                }
+              <AllowedModelEditor
+                value={state.routing.allowedModels}
+                onChange={(value) => dispatch({ type: "SET_ALLOWED_MODELS", payload: value })}
                 disabled={state.ui.isPending}
-                providerUrl={state.basic.url}
-                apiKey={state.basic.key}
-                proxyUrl={state.network.proxyUrl}
-                proxyFallbackToDirect={state.network.proxyFallbackToDirect}
-                providerId={isEdit ? provider?.id : undefined}
               />
-              {state.routing.allowedModels.length > 0 && (
-                <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md">
-                  {state.routing.allowedModels.slice(0, 5).map((model) => (
-                    <Badge key={model} variant="outline" className="font-mono text-xs">
-                      {model}
-                    </Badge>
-                  ))}
-                  {state.routing.allowedModels.length > 5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {t("sections.routing.modelWhitelist.moreModels", {
-                        count: state.routing.allowedModels.length - 5,
-                      })}
-                    </Badge>
-                  )}
-                </div>
+              {isBatch && batchAnalysis?.routing.allowedModels.status === "mixed" && (
+                <MixedValueIndicator values={batchAnalysis.routing.allowedModels.values} />
               )}
-              <p className="text-xs text-muted-foreground">
-                {state.routing.allowedModels.length === 0 ? (
-                  <span className="text-green-600">
-                    {t("sections.routing.modelWhitelist.allowAll")}
-                  </span>
-                ) : (
-                  <span>
-                    {t("sections.routing.modelWhitelist.selectedOnly", {
-                      count: state.routing.allowedModels.length,
-                    })}
-                  </span>
-                )}
-              </p>
             </div>
           </FieldGroup>
 

@@ -1,6 +1,7 @@
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { modelMatchesAllowedRules } from "@/lib/provider-allowed-models";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
@@ -110,8 +111,8 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
     return true;
   }
 
-  // 2. 设置了 allowedModels：只按原始请求模型做白名单匹配
-  return provider.allowedModels.includes(requestedModel);
+  // 2. 设置了 allowedModels：按规则匹配（支持 exact/prefix/suffix/contains/regex）
+  return modelMatchesAllowedRules(requestedModel, provider.allowedModels);
 }
 
 /**
@@ -1320,4 +1321,4 @@ export class ProxyProviderResolver {
 }
 
 // Export for testing
-export { checkProviderGroupMatch, providerSupportsModel };
+export { checkFormatProviderTypeCompatibility, checkProviderGroupMatch, providerSupportsModel };

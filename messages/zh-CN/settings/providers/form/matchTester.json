@@ -1,0 +1,19 @@
+{
+  "title": "匹配测试",
+  "inputLabel": "模型名称",
+  "inputPlaceholder": "输入模型名称进行测试...",
+  "testButton": "测试",
+  "testing": "测试中...",
+  "resultTitle": "测试结果",
+  "matched": "已匹配",
+  "notMatched": "未匹配",
+  "allowed": "允许",
+  "blocked": "拦截",
+  "allowAll": "允许全部（无规则）",
+  "matchedRule": "命中规则",
+  "matchType": "匹配方式",
+  "pattern": "匹配模式",
+  "source": "源匹配模式",
+  "target": "重定向目标",
+  "noRulesHint": "先在上方添加规则，再到此处测试"
+}

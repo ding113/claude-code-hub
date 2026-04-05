@@ -1,5 +1,6 @@
 import { normalizeProviderGroupTag } from "@/lib/utils/provider-group";
 import type {
+  ProviderAllowedModelRule,
   ProviderBatchApplyUpdates,
   ProviderBatchPatch,
   ProviderBatchPatchDraft,
@@ -280,7 +281,16 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "model_redirects":
       return PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA.safeParse(value).success;
     case "allowed_models":
-      return Array.isArray(value) && value.every((model) => typeof model === "string");
+      return (
+        Array.isArray(value) &&
+        value.every(
+          (rule) =>
+            typeof rule === "object" &&
+            rule !== null &&
+            typeof rule.matchType === "string" &&
+            typeof rule.pattern === "string"
+        )
+      );
     case "allowed_clients":
     case "blocked_clients":
       return Array.isArray(value) && value.every((v) => typeof v === "string");
@@ -693,7 +703,7 @@ function applyPatchField<T>(
         return { ok: true, data: undefined };
       case "allowed_models":
         updates.allowed_models =
-          (patch.value as string[]).length > 0
+          (patch.value as ProviderAllowedModelRule[]).length > 0
             ? (patch.value as ProviderBatchApplyUpdates["allowed_models"])
             : null;
         return { ok: true, data: undefined };

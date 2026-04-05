@@ -581,7 +581,7 @@ describe("Provider Actions - Async Optimization", () => {
 
       const result = await editProvider(1, {
         group_tag: "gpt-load",
-        allowed_models: ["gpt-4.1"],
+        allowed_models: [{ matchType: "exact", pattern: "gpt-4.1" }],
       });
 
       expect(result.ok).toBe(true);
@@ -589,7 +589,7 @@ describe("Provider Actions - Async Optimization", () => {
         1,
         expect.objectContaining({
           group_tag: "gpt-load",
-          allowed_models: ["gpt-4.1"],
+          allowed_models: [{ matchType: "exact", pattern: "gpt-4.1" }],
         })
       );
       expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "editProvider");

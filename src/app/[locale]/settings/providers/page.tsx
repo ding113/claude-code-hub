@@ -9,6 +9,7 @@ import { AutoSortPriorityDialog } from "./_components/auto-sort-priority-dialog"
 import { ProviderManagerLoader } from "./_components/provider-manager-loader";
 import { ReclusterVendorsDialog } from "./_components/recluster-vendors-dialog";
 import { SchedulingRulesDialog } from "./_components/scheduling-rules-dialog";
+import { SchedulingTestDialog } from "./_components/scheduling-test-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function SettingsProvidersPage() {
             <AutoSortPriorityDialog />
             <ReclusterVendorsDialog />
             <SchedulingRulesDialog />
+            <SchedulingTestDialog />
           </>
         }
       >

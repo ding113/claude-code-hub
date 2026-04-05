@@ -1,0 +1,19 @@
+{
+  "title": "比對測試",
+  "inputLabel": "模型名稱",
+  "inputPlaceholder": "輸入模型名稱進行測試...",
+  "testButton": "測試",
+  "testing": "測試中...",
+  "resultTitle": "測試結果",
+  "matched": "已比對",
+  "notMatched": "未比對",
+  "allowed": "允許",
+  "blocked": "攔截",
+  "allowAll": "允許全部（無規則）",
+  "matchedRule": "命中規則",
+  "matchType": "比對方式",
+  "pattern": "比對模式",
+  "source": "來源比對模式",
+  "target": "重新導向目標",
+  "noRulesHint": "先在上方新增規則，再到此處測試"
+}

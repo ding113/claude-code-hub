@@ -54,6 +54,11 @@ export interface ProviderModelRedirectRule {
   target: string;
 }
 
+export interface ProviderAllowedModelRule {
+  matchType: ProviderModelRedirectMatchType;
+  pattern: string;
+}
+
 export type ProviderPatchOperation<T> =
   | { mode: "no_change" }
   | { mode: "set"; value: T }
@@ -126,7 +131,7 @@ export interface ProviderBatchPatchDraft {
   cost_multiplier?: ProviderPatchDraftInput<number>;
   group_tag?: ProviderPatchDraftInput<string>;
   model_redirects?: ProviderPatchDraftInput<ProviderModelRedirectRule[]>;
-  allowed_models?: ProviderPatchDraftInput<string[]>;
+  allowed_models?: ProviderPatchDraftInput<ProviderAllowedModelRule[]>;
   allowed_clients?: ProviderPatchDraftInput<string[]>;
   blocked_clients?: ProviderPatchDraftInput<string[]>;
   anthropic_thinking_budget_preference?: ProviderPatchDraftInput<AnthropicThinkingBudgetPreference>;
@@ -180,7 +185,7 @@ export interface ProviderBatchPatch {
   cost_multiplier: ProviderPatchOperation<number>;
   group_tag: ProviderPatchOperation<string>;
   model_redirects: ProviderPatchOperation<ProviderModelRedirectRule[]>;
-  allowed_models: ProviderPatchOperation<string[]>;
+  allowed_models: ProviderPatchOperation<ProviderAllowedModelRule[]>;
   allowed_clients: ProviderPatchOperation<string[]>;
   blocked_clients: ProviderPatchOperation<string[]>;
   anthropic_thinking_budget_preference: ProviderPatchOperation<AnthropicThinkingBudgetPreference>;
@@ -234,7 +239,7 @@ export interface ProviderBatchApplyUpdates {
   cost_multiplier?: number;
   group_tag?: string | null;
   model_redirects?: ProviderModelRedirectRule[] | null;
-  allowed_models?: string[] | null;
+  allowed_models?: ProviderAllowedModelRule[] | null;
   allowed_clients?: string[];
   blocked_clients?: string[];
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
@@ -323,7 +328,7 @@ export interface Provider {
   // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
-  allowedModels: string[] | null;
+  allowedModels: ProviderAllowedModelRule[] | null;
   allowedClients: string[]; // Allowed client patterns (empty = no restriction)
   blockedClients: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
 
@@ -436,7 +441,7 @@ export interface ProviderDisplay {
   activeTimeStart: string | null;
   activeTimeEnd: string | null;
   // 模型列表（双重语义）
-  allowedModels: string[] | null;
+  allowedModels: ProviderAllowedModelRule[] | null;
   allowedClients: string[]; // Allowed client patterns (empty = no restriction)
   blockedClients: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
   // MCP 透传类型
@@ -531,7 +536,7 @@ export interface CreateProviderData {
   model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
-  allowed_models?: string[] | null;
+  allowed_models?: ProviderAllowedModelRule[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;
@@ -611,7 +616,7 @@ export interface UpdateProviderData {
   model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
-  allowed_models?: string[] | null;
+  allowed_models?: ProviderAllowedModelRule[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;

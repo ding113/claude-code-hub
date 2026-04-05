@@ -1,0 +1,19 @@
+{
+  "title": "マッチテスト",
+  "inputLabel": "モデル名",
+  "inputPlaceholder": "テストするモデル名を入力...",
+  "testButton": "テスト",
+  "testing": "テスト中...",
+  "resultTitle": "テスト結果",
+  "matched": "一致",
+  "notMatched": "不一致",
+  "allowed": "許可",
+  "blocked": "拒否",
+  "allowAll": "すべて許可（ルールなし）",
+  "matchedRule": "一致したルール",
+  "matchType": "一致方法",
+  "pattern": "パターン",
+  "source": "ソースパターン",
+  "target": "リダイレクト先",
+  "noRulesHint": "上でルールを追加してからここでテストしてください"
+}

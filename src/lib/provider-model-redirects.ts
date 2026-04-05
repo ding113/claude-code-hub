@@ -1,4 +1,5 @@
 import type { ProviderModelRedirectMatchType, ProviderModelRedirectRule } from "@/types/provider";
+import { matchPattern } from "./model-pattern-matching";
 
 const PROVIDER_MODEL_REDIRECT_MATCH_TYPES = new Set<ProviderModelRedirectMatchType>([
   "exact",
@@ -93,24 +94,7 @@ export function matchesProviderModelRedirectRule(
   model: string,
   rule: ProviderModelRedirectRule
 ): boolean {
-  switch (rule.matchType) {
-    case "exact":
-      return model === rule.source;
-    case "prefix":
-      return model.startsWith(rule.source);
-    case "suffix":
-      return model.endsWith(rule.source);
-    case "contains":
-      return model.includes(rule.source);
-    case "regex":
-      try {
-        return new RegExp(rule.source).test(model);
-      } catch {
-        return false;
-      }
-    default:
-      return false;
-  }
+  return matchPattern(model, rule.matchType, rule.source);
 }
 
 export function findMatchingProviderModelRedirectRule(
