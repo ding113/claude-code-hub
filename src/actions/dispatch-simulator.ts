@@ -10,6 +10,7 @@ import {
 } from "@/app/v1/_lib/proxy/provider-selector";
 import { getSession } from "@/lib/auth";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { getEndpointFilterStats } from "@/lib/provider-endpoints/endpoint-selector";
 import { getProviderModelRedirectTarget } from "@/lib/provider-model-redirects";
@@ -42,9 +43,9 @@ const DISPATCH_SIMULATOR_ERROR_CODES = {
   PERMISSION_DENIED: "PERMISSION_DENIED",
 } as const;
 
-function getGroupFilterValue(groupTags: string[]): string | null {
+function getGroupFilterValue(groupTags: string[]): string {
   if (groupTags.length === 0) {
-    return null;
+    return PROVIDER_GROUP.DEFAULT;
   }
   return groupTags.join(",");
 }
@@ -171,12 +172,9 @@ export async function simulateDispatchDecisionTree(
 
   let currentProviders = providers;
 
-  const groupFiltered =
-    groupFilter === null
-      ? currentProviders
-      : currentProviders.filter((provider) =>
-          checkProviderGroupMatch(provider.groupTag, groupFilter)
-        );
+  const groupFiltered = currentProviders.filter((provider) =>
+    checkProviderGroupMatch(provider.groupTag, groupFilter)
+  );
   steps.push(
     buildStep(
       "groupFilter",

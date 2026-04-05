@@ -48,14 +48,14 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
     "claude" | "openai" | "response" | "gemini" | "gemini-cli"
   >("claude");
   const [modelName, setModelName] = useState("");
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(["default"]);
   const [result, setResult] = useState<DispatchSimulatorResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openSteps, setOpenSteps] = useState<string[]>(["groupFilter", "priorityTiers"]);
   const [isPending, startTransition] = useTransition();
 
   const groupOptions = useMemo(() => {
-    const groups = new Set<string>();
+    const groups = new Set<string>(["default"]);
     for (const provider of providers) {
       for (const group of parseProviderGroups(provider.groupTag)) {
         groups.add(group);

@@ -1,6 +1,8 @@
 import { BarChart3 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
+import { getProviders } from "@/actions/providers";
 import { AutoSortPriorityDialog } from "@/app/[locale]/settings/providers/_components/auto-sort-priority-dialog";
+import { DispatchSimulatorDialog } from "@/app/[locale]/settings/providers/_components/dispatch-simulator-dialog";
 import { ProviderManagerLoader } from "@/app/[locale]/settings/providers/_components/provider-manager-loader";
 import { ReclusterVendorsDialog } from "@/app/[locale]/settings/providers/_components/recluster-vendors-dialog";
 import { SchedulingRulesDialog } from "@/app/[locale]/settings/providers/_components/scheduling-rules-dialog";
@@ -29,6 +31,7 @@ export default async function DashboardProvidersPage({
   const currentUser = session!.user;
 
   const t = await getTranslations("settings");
+  const providers = await getProviders();
 
   return (
     <div className="space-y-6">
@@ -51,6 +54,7 @@ export default async function DashboardProvidersPage({
             <AutoSortPriorityDialog />
             <ReclusterVendorsDialog />
             <SchedulingRulesDialog />
+            <DispatchSimulatorDialog providers={providers} />
           </>
         }
       >

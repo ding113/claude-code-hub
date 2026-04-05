@@ -235,7 +235,7 @@ describe("DispatchSimulatorDialog", () => {
     expect(dispatchActionMocks.simulateDispatchAction).toHaveBeenCalledWith({
       clientFormat: "claude",
       modelName: "claude-opus-4-1",
-      groupTags: [],
+      groupTags: ["default"],
     });
     expect(document.body.textContent || "").toContain("Priority Tiers");
     expect(document.body.textContent || "").toContain("Provider A");
