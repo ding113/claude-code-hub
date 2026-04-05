@@ -47,6 +47,7 @@ const requestFiltersActionMocks = vi.hoisted(() => ({
 vi.mock("@/actions/request-filters", () => requestFiltersActionMocks);
 
 const modelPricesActionMocks = vi.hoisted(() => ({
+  getAvailableModelCatalog: vi.fn(async () => []),
   getAvailableModelsByProviderType: vi.fn(async () => []),
 }));
 vi.mock("@/actions/model-prices", () => modelPricesActionMocks);

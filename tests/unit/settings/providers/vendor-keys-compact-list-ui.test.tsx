@@ -64,6 +64,7 @@ vi.mock("@/actions/request-filters", () => requestFiltersActionMocks);
 
 // Mock model-prices action which uses cookies
 const modelPricesActionMocks = vi.hoisted(() => ({
+  getAvailableModelCatalog: vi.fn(async () => []),
   getAvailableModelsByProviderType: vi.fn(async () => ({ ok: true, data: [] })),
 }));
 vi.mock("@/actions/model-prices", () => modelPricesActionMocks);

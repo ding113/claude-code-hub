@@ -18,6 +18,8 @@
   "deleteRule": "Delete rule",
   "ruleMoved": "This rule changed while you were editing. Please try again.",
   "description": "Only models matching these rules can be routed to this provider.",
+  "exactPickerTitle": "Add exact models from list",
+  "exactPickerDescription": "Prefer upstream models when available. If not, fall back to the local price list and add them as exact-match rules.",
   "emptyState": "No allowlist rules yet. When empty, all models are allowed.",
   "patternEmpty": "Match pattern cannot be empty",
   "patternTooLong": "Match pattern is too long",

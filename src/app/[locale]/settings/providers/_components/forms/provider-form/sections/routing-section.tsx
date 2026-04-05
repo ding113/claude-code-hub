@@ -1,13 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ChevronDown, Info, Layers, Route, Scale, Search } from "lucide-react";
+import { Info, Layers, Route, Scale } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ClientRestrictionsEditor } from "@/components/form/client-restrictions-editor";
 import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -19,13 +18,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
-import { cn } from "@/lib/utils";
 import type { ProviderType } from "@/types/provider";
 import { AllowedModelRuleEditor } from "../../../allowed-model-rule-editor";
 import { AllowedModelTester } from "../../../allowed-model-tester";
 import { MixedValueIndicator } from "../../../batch-edit/mixed-value-indicator";
 import { ModelRedirectEditor } from "../../../model-redirect-editor";
 import { ModelRedirectTester } from "../../../model-redirect-tester";
+import { RuleTesterDialogTrigger } from "../../../rule-tester-dialog-trigger";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
 
@@ -39,9 +38,17 @@ interface RoutingSectionProps {
 
 export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
   const t = useTranslations("settings.providers.form");
+  const tTester = useTranslations("settings.providers.form.matchTester");
   const tUI = useTranslations("ui.tagInput");
-  const { state, dispatch, mode, enableMultiProviderTypes, groupSuggestions, batchAnalysis } =
-    useProviderForm();
+  const {
+    state,
+    dispatch,
+    mode,
+    provider,
+    enableMultiProviderTypes,
+    groupSuggestions,
+    batchAnalysis,
+  } = useProviderForm();
   const isEdit = mode === "edit";
   const isBatch = mode === "batch";
 
@@ -198,28 +205,16 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                 onChange={(value) => dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })}
                 disabled={state.ui.isPending}
               />
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      "group flex w-full items-center gap-2 rounded-md border border-border/50",
-                      "px-3 py-1.5 text-xs text-muted-foreground transition-colors",
-                      state.routing.modelRedirects.length > 0
-                        ? "hover:bg-muted/40 bg-muted/20"
-                        : "pointer-events-none opacity-40 bg-muted/10"
-                    )}
-                    disabled={state.routing.modelRedirects.length === 0}
-                  >
-                    <Search className="h-3 w-3" />
-                    {t("sections.routing.testRule")}
-                    <ChevronDown className="ml-auto h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-2">
+              <div className="flex justify-end">
+                <RuleTesterDialogTrigger
+                  title={tTester("redirectTitle")}
+                  description={tTester("redirectDescription")}
+                  label={t("sections.routing.testRule")}
+                  tooltip={tTester("redirectDescription")}
+                >
                   <ModelRedirectTester rules={state.routing.modelRedirects} />
-                </CollapsibleContent>
-              </Collapsible>
+                </RuleTesterDialogTrigger>
+              </div>
               {isBatch && batchAnalysis?.routing.modelRedirects.status === "mixed" && (
                 <MixedValueIndicator values={batchAnalysis.routing.modelRedirects.values} />
               )}
@@ -245,29 +240,22 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                 value={state.routing.allowedModels}
                 onChange={(value) => dispatch({ type: "SET_ALLOWED_MODELS", payload: value })}
                 disabled={state.ui.isPending}
+                providerId={provider?.id}
+                providerUrl={state.basic.url || provider?.url}
+                apiKey={state.basic.key}
+                proxyUrl={state.network.proxyUrl}
+                proxyFallbackToDirect={state.network.proxyFallbackToDirect}
               />
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      "group flex w-full items-center gap-2 rounded-md border border-border/50",
-                      "px-3 py-1.5 text-xs text-muted-foreground transition-colors",
-                      state.routing.allowedModels.length > 0
-                        ? "hover:bg-muted/40 bg-muted/20"
-                        : "pointer-events-none opacity-40 bg-muted/10"
-                    )}
-                    disabled={state.routing.allowedModels.length === 0}
-                  >
-                    <Search className="h-3 w-3" />
-                    {t("sections.routing.testRule")}
-                    <ChevronDown className="ml-auto h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-2">
+              <div className="flex justify-end">
+                <RuleTesterDialogTrigger
+                  title={tTester("allowedTitle")}
+                  description={tTester("allowedDescription")}
+                  label={t("sections.routing.testRule")}
+                  tooltip={tTester("allowedDescription")}
+                >
                   <AllowedModelTester rules={state.routing.allowedModels} />
-                </CollapsibleContent>
-              </Collapsible>
+                </RuleTesterDialogTrigger>
+              </div>
             </div>
           </FieldGroup>
 

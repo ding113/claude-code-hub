@@ -272,6 +272,48 @@ export async function getModelPrices(): Promise<ModelPrice[]> {
   }
 }
 
+export interface AvailableModelCatalogItem {
+  modelName: string;
+  litellmProvider: string | null;
+  updatedAt: string;
+}
+
+/**
+ * 获取本地价格表中的聊天模型目录。
+ * 供供应商白名单模型选择器回退使用，按更新时间倒序返回。
+ */
+export async function getAvailableModelCatalog(): Promise<AvailableModelCatalogItem[]> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return [];
+    }
+
+    const allPrices = await findAllLatestPrices();
+
+    return allPrices
+      .filter((price) => price.priceData.mode === "chat")
+      .sort((left, right) => {
+        const timeDelta = right.updatedAt.getTime() - left.updatedAt.getTime();
+        if (timeDelta !== 0) {
+          return timeDelta;
+        }
+        return left.modelName.localeCompare(right.modelName);
+      })
+      .map((price) => ({
+        modelName: price.modelName,
+        litellmProvider:
+          typeof price.priceData.litellm_provider === "string"
+            ? price.priceData.litellm_provider
+            : null,
+        updatedAt: price.updatedAt.toISOString(),
+      }));
+  } catch (error) {
+    logger.error("获取可用模型目录失败:", error);
+    return [];
+  }
+}
+
 /**
  * 分页获取所有模型的最新价格
  */
@@ -334,21 +376,8 @@ export async function hasPriceTable(): Promise<boolean> {
  */
 export async function getAvailableModelsByProviderType(): Promise<string[]> {
   try {
-    // 权限检查：只有管理员可以查看
-    const session = await getSession();
-    if (!session || session.user.role !== "admin") {
-      return [];
-    }
-
-    const allPrices = await findAllLatestPrices();
-
-    // 简化逻辑：返回所有聊天模型
-    // 非 Anthropic 提供商本来就允许任意模型，精确过滤意义不大
-    // 用户可以通过手动输入添加任何模型（见 ModelMultiSelect 组件）
-    return allPrices
-      .filter((price) => price.priceData.mode === "chat") // 仅聊天模型
-      .map((price) => price.modelName)
-      .sort(); // 字母排序
+    const catalog = await getAvailableModelCatalog();
+    return catalog.map((item) => item.modelName);
   } catch (error) {
     logger.error("获取可用模型列表失败:", error);
     return [];
