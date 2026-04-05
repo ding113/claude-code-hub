@@ -30,6 +30,7 @@ describe("allowed-model-rules", () => {
   it("treats null and empty rules as allow-all", () => {
     expect(matchesAllowedModelRules("claude-opus", null)).toBe(true);
     expect(matchesAllowedModelRules("claude-opus", [])).toBe(true);
+    expect(matchesAllowedModelRules("claude-opus", ["", " "])).toBe(true);
     expect(findMatchingAllowedModelRule("claude-opus", null)).toBeNull();
     expect(findMatchingAllowedModelRule("claude-opus", [])).toBeNull();
   });

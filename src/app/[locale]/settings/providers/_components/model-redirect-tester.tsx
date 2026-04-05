@@ -26,7 +26,10 @@ export function ModelRedirectTester({ rules }: ModelRedirectTesterProps) {
 
   const matchedIndex = matchedRule
     ? rules.findIndex(
-        (rule) => rule === matchedRule || JSON.stringify(rule) === JSON.stringify(matchedRule)
+        (rule) =>
+          rule.matchType === matchedRule.matchType &&
+          rule.source.trim() === matchedRule.source &&
+          rule.target.trim() === matchedRule.target
       )
     : -1;
 

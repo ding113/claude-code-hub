@@ -82,7 +82,7 @@ export function matchesAllowedModelRules(
 
   const normalized = normalizeAllowedModelRules(rules);
   if (!normalized || normalized.length === 0) {
-    return false;
+    return true;
   }
 
   return normalized.some((rule) => matchesPattern(model, rule.matchType, rule.pattern));

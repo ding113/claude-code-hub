@@ -29,7 +29,8 @@ export function AllowedModelTester({ rules }: AllowedModelTesterProps) {
   );
   const matchedIndex = matchedRule
     ? rules.findIndex(
-        (rule) => rule === matchedRule || JSON.stringify(rule) === JSON.stringify(matchedRule)
+        (rule) =>
+          rule.matchType === matchedRule.matchType && rule.pattern.trim() === matchedRule.pattern
       )
     : -1;
 

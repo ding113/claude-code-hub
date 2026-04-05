@@ -311,9 +311,10 @@ export async function simulateDispatchDecisionTree(
       daily_reset_time: provider.dailyResetTime,
       limit_weekly_usd: provider.limitWeeklyUsd,
       limit_monthly_usd: provider.limitMonthlyUsd,
-      cost_reset_at: provider.totalCostResetAt,
     });
 
+    // 这里故意沿用线上 resolver 的 lease 逻辑；模拟器并非完全无副作用，
+    // 可能刷新限额 lease 缓存，优先保证与真实调度结果一致。
     if (!costCheck.allowed) {
       healthFiltered.push(
         buildProviderSnapshot(provider, groupFilter, {
