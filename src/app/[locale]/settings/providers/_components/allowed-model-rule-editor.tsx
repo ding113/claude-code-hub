@@ -20,18 +20,25 @@ import type {
   ProviderModelRedirectMatchType,
   ProviderType,
 } from "@/types/provider";
+import { ModelMultiSelect } from "./model-multi-select";
 
 interface AllowedModelRuleEditorProps {
   value: AllowedModelRule[];
   onChange: (value: AllowedModelRule[]) => void;
   disabled?: boolean;
   providerType: ProviderType;
+  providerUrl?: string;
+  apiKey?: string;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+  providerId?: number;
 }
 
 const DEFAULT_RULE: AllowedModelRule = {
   matchType: "exact",
   pattern: "",
 };
+const MAX_ALLOWED_MODEL_RULES = 100;
 
 function normalizeRule(rule: AllowedModelRule): AllowedModelRule {
   return {
@@ -48,6 +55,12 @@ export function AllowedModelRuleEditor({
   value,
   onChange,
   disabled = false,
+  providerType,
+  providerUrl,
+  apiKey,
+  proxyUrl,
+  proxyFallbackToDirect,
+  providerId,
 }: AllowedModelRuleEditorProps) {
   const t = useTranslations("settings.providers.form.allowedModelRules");
   const [newRule, setNewRule] = useState<AllowedModelRule>(DEFAULT_RULE);
@@ -108,7 +121,7 @@ export function AllowedModelRuleEditor({
   };
 
   const handleAdd = () => {
-    if (value.length >= 100) {
+    if (value.length >= MAX_ALLOWED_MODEL_RULES) {
       setError(t("maxRules"));
       return;
     }
@@ -195,11 +208,75 @@ export function AllowedModelRuleEditor({
     }
   };
 
+  const exactModels = value
+    .filter((rule) => rule.matchType === "exact")
+    .map((rule) => normalizeRule(rule).pattern)
+    .filter(Boolean);
+
+  const handleExactModelsChange = (selectedModels: string[]) => {
+    const normalizedSelections = selectedModels.map((model) => model.trim()).filter(Boolean);
+    const selectedKeys = new Set(
+      normalizedSelections.map((model) =>
+        getRuleIdentity({
+          matchType: "exact",
+          pattern: model,
+        })
+      )
+    );
+
+    const nextRules = value.filter((rule) => {
+      if (rule.matchType !== "exact") {
+        return true;
+      }
+      return selectedKeys.has(getRuleIdentity(rule));
+    });
+
+    const existingExactKeys = new Set(
+      nextRules.filter((rule) => rule.matchType === "exact").map((rule) => getRuleIdentity(rule))
+    );
+    let hitLimit = false;
+
+    for (const model of normalizedSelections) {
+      const nextRule = normalizeRule({ matchType: "exact", pattern: model });
+      const ruleKey = getRuleIdentity(nextRule);
+      if (existingExactKeys.has(ruleKey)) {
+        continue;
+      }
+      if (nextRules.length >= MAX_ALLOWED_MODEL_RULES) {
+        hitLimit = true;
+        break;
+      }
+      nextRules.push(nextRule);
+      existingExactKeys.add(ruleKey);
+    }
+
+    setError(hitLimit ? t("quickAddReachedLimit") : null);
+    onChange(nextRules);
+  };
+
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
         <p className="text-sm font-medium">{t("description")}</p>
         <p className="text-xs text-muted-foreground">{t("orderHint")}</p>
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-background/70 p-3">
+        <div className="mb-3 space-y-1">
+          <p className="text-sm font-medium">{t("exactPickerTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("exactPickerDescription")}</p>
+        </div>
+        <ModelMultiSelect
+          providerType={providerType}
+          selectedModels={exactModels}
+          onChange={handleExactModelsChange}
+          disabled={disabled}
+          providerUrl={providerUrl}
+          apiKey={apiKey}
+          proxyUrl={proxyUrl}
+          proxyFallbackToDirect={proxyFallbackToDirect}
+          providerId={providerId}
+        />
       </div>
 
       <div className="grid gap-2 rounded-lg border border-dashed border-border/70 bg-muted/10 p-3 md:grid-cols-[140px_1fr_auto]">

@@ -210,6 +210,7 @@ describe("dispatch simulator", () => {
     const result = await simulateDispatchDecisionTree(
       [
         createProvider(10, {
+          groupTag: "default",
           providerType: "openai-compatible",
           allowedModels: [{ matchType: "exact", pattern: "guarded-model" }],
         }),
@@ -222,6 +223,8 @@ describe("dispatch simulator", () => {
       { systemTimezone: "UTC" }
     );
 
+    expect(result.steps[0].stepName).toBe("groupFilter");
+    expect(result.steps[0].outputCount).toBe(1);
     expect(result.steps[4].stepName).toBe("modelAllowlist");
     expect(result.steps[4].note).toBe("model_filter_skipped_for_resource_request");
     expect(result.steps[4].outputCount).toBe(1);
@@ -233,6 +236,7 @@ describe("dispatch simulator", () => {
     const result = await simulateDispatchDecisionTree(
       [
         createProvider(20, {
+          groupTag: "default",
           providerType: "gemini-cli",
           allowedModels: [{ matchType: "exact", pattern: "gemini-2.5-pro" }],
         }),
@@ -245,6 +249,8 @@ describe("dispatch simulator", () => {
       { systemTimezone: "UTC" }
     );
 
+    expect(result.steps[0].stepName).toBe("groupFilter");
+    expect(result.steps[0].outputCount).toBe(1);
     expect(result.steps[1].stepName).toBe("formatCompatibility");
     expect(result.steps[1].outputCount).toBe(1);
     expect(result.finalCandidateCount).toBe(1);

@@ -18,6 +18,8 @@
   "deleteRule": "删除规则",
   "ruleMoved": "你编辑期间这条规则已发生变化，请重试。",
   "description": "只有命中这些规则的模型，才会被调度到当前供应商。",
+  "exactPickerTitle": "从模型列表添加精确规则",
+  "exactPickerDescription": "优先读取上游模型列表；不可用时回退本地价格表，并按精确匹配规则加入白名单。",
   "emptyState": "当前还没有白名单规则。留空时表示允许所有模型。",
   "patternEmpty": "匹配模式不能为空",
   "patternTooLong": "匹配模式过长",
