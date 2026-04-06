@@ -98,6 +98,7 @@ import {
   ProxyError as UpstreamProxyError,
 } from "@/app/v1/_lib/proxy/errors";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
+import { ModelRedirector } from "@/app/v1/_lib/proxy/model-redirector";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
 
@@ -303,6 +304,356 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.clearAllMocks();
   });
 
+  test("shadow session redirect should not overwrite initial provider redirect and winner should keep its own redirect", () => {
+    const requestedModel = "claude-haiku-4-5-20251001";
+    const fireworksRedirect = "accounts/fireworks/routers/kimi-k2p5-turbo";
+    const minimaxRedirect = "MiniMax-M2.7-highspeed";
+
+    const fireworks = createProvider({
+      id: 383,
+      name: "fireworks",
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+    });
+    const minimax = createProvider({
+      id: 206,
+      name: "Minimax Max",
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
+    });
+
+    const session = createSession();
+    session.request.model = requestedModel;
+    session.request.message.model = requestedModel;
+    session.setProvider(fireworks);
+    session.addProviderToChain(fireworks, { reason: "initial_selection" });
+
+    expect(ModelRedirector.apply(session, fireworks)).toBe(true);
+    expect(session.request.model).toBe(fireworksRedirect);
+    expect(session.getProviderChain()[0].modelRedirect).toMatchObject({
+      originalModel: requestedModel,
+      redirectedModel: fireworksRedirect,
+      billingModel: requestedModel,
+    });
+
+    const shadow = (
+      ProxyForwarder as unknown as {
+        createStreamingShadowSession: (session: ProxySession, provider: Provider) => ProxySession;
+      }
+    ).createStreamingShadowSession(session, minimax);
+
+    expect(shadow.request.model).toBe(fireworksRedirect);
+    expect(ModelRedirector.apply(shadow, minimax)).toBe(true);
+    expect(shadow.request.model).toBe(minimaxRedirect);
+
+    // Hedge 备选供应商的重定向只能影响自己的 attempt，不能污染初始供应商的链路项。
+    expect(session.getProviderChain()[0].modelRedirect).toMatchObject({
+      originalModel: requestedModel,
+      redirectedModel: fireworksRedirect,
+      billingModel: requestedModel,
+    });
+
+    (
+      ProxyForwarder as unknown as {
+        syncWinningAttemptSession: (target: ProxySession, source: ProxySession) => void;
+      }
+    ).syncWinningAttemptSession(session, shadow);
+
+    session.setProvider(minimax);
+    session.addProviderToChain(minimax, {
+      reason: "hedge_winner",
+      attemptNumber: 2,
+      statusCode: 200,
+    });
+
+    const hedgeWinner = session
+      .getProviderChain()
+      .find((item) => item.id === minimax.id && item.reason === "hedge_winner");
+
+    expect(hedgeWinner?.modelRedirect).toMatchObject({
+      originalModel: requestedModel,
+      redirectedModel: minimaxRedirect,
+      billingModel: requestedModel,
+    });
+  });
+
+  test("shadow session should clone current model redirect snapshot instead of sharing it", () => {
+    const requestedModel = "claude-haiku-4-5-20251001";
+    const fireworksRedirect = "accounts/fireworks/routers/kimi-k2p5-turbo";
+    const fireworks = createProvider({
+      id: 383,
+      name: "fireworks",
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+    });
+    const fallback = createProvider({
+      id: 206,
+      name: "Minimax Max",
+    });
+
+    const session = createSession();
+    session.request.model = requestedModel;
+    session.request.message.model = requestedModel;
+    session.setProvider(fireworks);
+    session.addProviderToChain(fireworks, { reason: "initial_selection" });
+    expect(ModelRedirector.apply(session, fireworks)).toBe(true);
+
+    const shadow = (
+      ProxyForwarder as unknown as {
+        createStreamingShadowSession: (session: ProxySession, provider: Provider) => ProxySession;
+      }
+    ).createStreamingShadowSession(session, fallback);
+
+    const sessionState = session as unknown as {
+      currentModelRedirect: {
+        providerId: number;
+        redirect: {
+          originalModel: string;
+          redirectedModel: string;
+          billingModel: string;
+        };
+      } | null;
+    };
+    const shadowState = shadow as unknown as {
+      currentModelRedirect: {
+        providerId: number;
+        redirect: {
+          originalModel: string;
+          redirectedModel: string;
+          billingModel: string;
+        };
+      } | null;
+    };
+
+    expect(shadowState.currentModelRedirect).toEqual(sessionState.currentModelRedirect);
+
+    if (!sessionState.currentModelRedirect || !shadowState.currentModelRedirect) {
+      throw new Error("expected currentModelRedirect to be copied into shadow session");
+    }
+
+    shadowState.currentModelRedirect.redirect.redirectedModel = "shadow-only-model";
+
+    expect(sessionState.currentModelRedirect.redirect.redirectedModel).toBe(fireworksRedirect);
+  });
+
+  test("switching to provider without redirect should clear stale redirect snapshot", () => {
+    const requestedModel = "claude-haiku-4-5-20251001";
+    const fireworksRedirect = "accounts/fireworks/routers/kimi-k2p5-turbo";
+    const fireworks = createProvider({
+      id: 383,
+      name: "fireworks",
+      modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+    });
+    const plainProvider = createProvider({
+      id: 520,
+      name: "plain provider",
+      modelRedirects: null,
+    });
+
+    const session = createSession();
+    session.request.model = requestedModel;
+    session.request.message.model = requestedModel;
+    session.setProvider(fireworks);
+    session.addProviderToChain(fireworks, { reason: "initial_selection" });
+    expect(ModelRedirector.apply(session, fireworks)).toBe(true);
+
+    expect(ModelRedirector.apply(session, plainProvider)).toBe(false);
+    expect(session.request.model).toBe(requestedModel);
+
+    const sessionState = session as unknown as {
+      currentModelRedirect: unknown;
+    };
+    expect(sessionState.currentModelRedirect).toBeNull();
+
+    session.setProvider(plainProvider);
+    session.addProviderToChain(plainProvider, {
+      reason: "retry_success",
+      attemptNumber: 2,
+      statusCode: 200,
+    });
+
+    const plainEntry = session
+      .getProviderChain()
+      .find((item) => item.id === plainProvider.id && item.reason === "retry_success");
+
+    expect(plainEntry?.modelRedirect).toBeUndefined();
+  });
+
+  test("public hedge path should preserve redirect details for winner and loser attempts", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const requestedModel = "claude-haiku-4-5-20251001";
+      const fireworksRedirect = "accounts/fireworks/routers/kimi-k2p5-turbo";
+      const minimaxRedirect = "MiniMax-M2.7-highspeed";
+      const fireworks = createProvider({
+        id: 383,
+        name: "fireworks",
+        firstByteTimeoutStreamingMs: 100,
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+      });
+      const minimax = createProvider({
+        id: 206,
+        name: "Minimax Max",
+        firstByteTimeoutStreamingMs: 100,
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
+      });
+      const session = createSession();
+      session.request.model = requestedModel;
+      session.request.message.model = requestedModel;
+      session.setProvider(fireworks);
+      session.addProviderToChain(fireworks, { reason: "initial_selection" });
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(minimax);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        expect(
+          ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
+        ).toBe(true);
+        return createStreamingResponse({
+          label: "fireworks",
+          firstChunkDelayMs: 220,
+          controller: controller1,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        expect(
+          ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
+        ).toBe(true);
+        return createStreamingResponse({
+          label: "minimax",
+          firstChunkDelayMs: 40,
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(50);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"provider":"minimax"');
+
+      const chain = session.getProviderChain();
+      expect(
+        chain.find((item) => item.id === minimax.id && item.reason === "hedge_winner")
+          ?.modelRedirect
+      ).toMatchObject({
+        originalModel: requestedModel,
+        redirectedModel: minimaxRedirect,
+        billingModel: requestedModel,
+      });
+      expect(
+        chain.find((item) => item.id === fireworks.id && item.reason === "hedge_loser_cancelled")
+          ?.modelRedirect
+      ).toMatchObject({
+        originalModel: requestedModel,
+        redirectedModel: fireworksRedirect,
+        billingModel: requestedModel,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("public hedge path should retain redirect on shadow retry_failed entries", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const requestedModel = "claude-haiku-4-5-20251001";
+      const fireworksRedirect = "accounts/fireworks/routers/kimi-k2p5-turbo";
+      const minimaxRedirect = "MiniMax-M2.7-highspeed";
+      const fireworks = createProvider({
+        id: 383,
+        name: "fireworks",
+        firstByteTimeoutStreamingMs: 100,
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: fireworksRedirect }],
+      });
+      const minimax = createProvider({
+        id: 206,
+        name: "Minimax Max",
+        firstByteTimeoutStreamingMs: 100,
+        modelRedirects: [{ matchType: "exact", source: requestedModel, target: minimaxRedirect }],
+      });
+      const session = createSession();
+      session.request.model = requestedModel;
+      session.request.message.model = requestedModel;
+      session.setProvider(fireworks);
+      session.addProviderToChain(fireworks, { reason: "initial_selection" });
+
+      mocks.pickRandomProviderWithExclusion
+        .mockResolvedValueOnce(minimax)
+        .mockResolvedValueOnce(null);
+      mocks.categorizeErrorAsync.mockResolvedValue(ProxyErrorCategory.PROVIDER_ERROR);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        expect(
+          ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
+        ).toBe(true);
+        return createStreamingResponse({
+          label: "fireworks",
+          firstChunkDelayMs: 220,
+          controller: controller1,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
+        expect(
+          ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
+        ).toBe(true);
+        throw new UpstreamProxyError("minimax upstream failed", 500);
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(150);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"provider":"fireworks"');
+
+      const retryFailed = session
+        .getProviderChain()
+        .find((item) => item.id === minimax.id && item.reason === "retry_failed");
+
+      expect(retryFailed?.modelRedirect).toMatchObject({
+        originalModel: requestedModel,
+        redirectedModel: minimaxRedirect,
+        billingModel: requestedModel,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("first provider exceeds first-byte threshold, second provider starts and wins by first chunk", async () => {
     vi.useFakeTimers();
 
@@ -360,6 +711,63 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(2);
       expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith("sess-hedge", 2, 0, false, true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("高并发模式：hedge winner 成功后不应写 session provider 观测信息", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      session.setHighConcurrencyModeEnabled(true);
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p1",
+          firstChunkDelayMs: 220,
+          controller: controller1,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p2",
+          firstChunkDelayMs: 40,
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(50);
+
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"provider":"p2"');
+      expect(mocks.updateSessionProvider).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -586,10 +994,31 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     vi.useFakeTimers();
 
     try {
-      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
-      const provider2 = createProvider({ id: 2, name: "p2", firstByteTimeoutStreamingMs: 100 });
+      const requestedModel = "claude-haiku-4-5-20251001";
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        firstByteTimeoutStreamingMs: 100,
+        modelRedirects: [
+          {
+            matchType: "exact",
+            source: requestedModel,
+            target: "accounts/fireworks/routers/kimi-k2p5-turbo",
+          },
+        ],
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        firstByteTimeoutStreamingMs: 100,
+        modelRedirects: [
+          { matchType: "exact", source: requestedModel, target: "MiniMax-M2.7-highspeed" },
+        ],
+      });
       const clientAbortController = new AbortController();
       const session = createSession(clientAbortController.signal);
+      session.request.model = requestedModel;
+      session.request.message.model = requestedModel;
       session.setProvider(provider1);
 
       mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
@@ -604,10 +1033,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       const controller1 = new AbortController();
       const controller2 = new AbortController();
 
-      doForward.mockImplementationOnce(async (attemptSession) => {
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller1;
         runtime.clearResponseTimeout = vi.fn();
+        expect(
+          ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
+        ).toBe(true);
         return createStreamingResponse({
           label: "p1",
           firstChunkDelayMs: 500,
@@ -615,10 +1047,13 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         });
       });
 
-      doForward.mockImplementationOnce(async (attemptSession) => {
+      doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller2;
         runtime.clearResponseTimeout = vi.fn();
+        expect(
+          ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
+        ).toBe(true);
         return createStreamingResponse({
           label: "p2",
           firstChunkDelayMs: 500,
@@ -643,6 +1078,24 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.clearSessionProvider).toHaveBeenCalledWith("sess-hedge");
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
+
+      const chain = session.getProviderChain();
+      expect(
+        chain.find((item) => item.id === provider1.id && item.reason === "client_abort")
+          ?.modelRedirect
+      ).toMatchObject({
+        originalModel: requestedModel,
+        redirectedModel: "accounts/fireworks/routers/kimi-k2p5-turbo",
+        billingModel: requestedModel,
+      });
+      expect(
+        chain.find((item) => item.id === provider2.id && item.reason === "client_abort")
+          ?.modelRedirect
+      ).toMatchObject({
+        originalModel: requestedModel,
+        redirectedModel: "MiniMax-M2.7-highspeed",
+        billingModel: requestedModel,
+      });
     } finally {
       vi.useRealTimers();
     }

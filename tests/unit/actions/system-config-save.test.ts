@@ -64,6 +64,7 @@ describe("saveSystemSettings", () => {
       enableClientVersionCheck: false,
       verboseProviderError: false,
       enableHttp2: false,
+      enableHighConcurrencyMode: false,
       interceptAnthropicWarmupRequests: false,
       enableThinkingSignatureRectifier: false,
       enableThinkingBudgetRectifier: false,
@@ -189,6 +190,7 @@ describe("saveSystemSettings", () => {
       enableClientVersionCheck: false,
       verboseProviderError: true,
       enableHttp2: true,
+      enableHighConcurrencyMode: true,
       interceptAnthropicWarmupRequests: false,
       enableThinkingSignatureRectifier: false,
       enableThinkingBudgetRectifier: false,
@@ -223,6 +225,7 @@ describe("saveSystemSettings", () => {
       timezone: "America/New_York",
       verboseProviderError: true,
       enableHttp2: true,
+      enableHighConcurrencyMode: true,
     });
 
     expect(result.ok).toBe(true);
@@ -247,6 +250,19 @@ describe("saveSystemSettings", () => {
     expect(updateSystemSettingsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         codexPriorityBillingSource: "actual",
+      })
+    );
+  });
+
+  it("should pass enableHighConcurrencyMode through validation and save", async () => {
+    const result = await saveSystemSettings({
+      enableHighConcurrencyMode: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enableHighConcurrencyMode: true,
       })
     );
   });

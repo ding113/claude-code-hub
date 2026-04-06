@@ -16,9 +16,24 @@ describe("analyzeBatchProviderSettings", () => {
   describe("uniform 值", () => {
     it("应该识别所有供应商有相同的基本类型值", () => {
       const providers: ProviderDisplay[] = [
-        { priority: 10, weight: 5, costMultiplier: 1.5 } as ProviderDisplay,
-        { priority: 10, weight: 5, costMultiplier: 1.5 } as ProviderDisplay,
-        { priority: 10, weight: 5, costMultiplier: 1.5 } as ProviderDisplay,
+        {
+          priority: 10,
+          weight: 5,
+          costMultiplier: 1.5,
+          disableSessionReuse: true,
+        } as ProviderDisplay,
+        {
+          priority: 10,
+          weight: 5,
+          costMultiplier: 1.5,
+          disableSessionReuse: true,
+        } as ProviderDisplay,
+        {
+          priority: 10,
+          weight: 5,
+          costMultiplier: 1.5,
+          disableSessionReuse: true,
+        } as ProviderDisplay,
       ];
 
       const result = analyzeBatchProviderSettings(providers);
@@ -26,19 +41,24 @@ describe("analyzeBatchProviderSettings", () => {
       expect(result.routing.priority).toEqual({ status: "uniform", value: 10 });
       expect(result.routing.weight).toEqual({ status: "uniform", value: 5 });
       expect(result.routing.costMultiplier).toEqual({ status: "uniform", value: 1.5 });
+      expect(result.routing.disableSessionReuse).toEqual({ status: "uniform", value: true });
     });
 
     it("应该识别所有供应商有相同的对象值", () => {
       const providers: ProviderDisplay[] = [
-        { modelRedirects: { "model-a": "model-b" } } as ProviderDisplay,
-        { modelRedirects: { "model-a": "model-b" } } as ProviderDisplay,
+        {
+          modelRedirects: [{ matchType: "exact", source: "model-a", target: "model-b" }],
+        } as ProviderDisplay,
+        {
+          modelRedirects: [{ matchType: "exact", source: "model-a", target: "model-b" }],
+        } as ProviderDisplay,
       ];
 
       const result = analyzeBatchProviderSettings(providers);
 
       expect(result.routing.modelRedirects).toEqual({
         status: "uniform",
-        value: { "model-a": "model-b" },
+        value: [{ matchType: "exact", source: "model-a", target: "model-b" }],
       });
     });
 
@@ -52,7 +72,10 @@ describe("analyzeBatchProviderSettings", () => {
 
       expect(result.routing.allowedModels).toEqual({
         status: "uniform",
-        value: ["model-1", "model-2"],
+        value: [
+          { matchType: "exact", pattern: "model-1" },
+          { matchType: "exact", pattern: "model-2" },
+        ],
       });
     });
 
@@ -71,9 +94,9 @@ describe("analyzeBatchProviderSettings", () => {
   describe("mixed 值", () => {
     it("应该识别供应商有不同的基本类型值", () => {
       const providers: ProviderDisplay[] = [
-        { priority: 10 } as ProviderDisplay,
-        { priority: 20 } as ProviderDisplay,
-        { priority: 30 } as ProviderDisplay,
+        { priority: 10, disableSessionReuse: false } as ProviderDisplay,
+        { priority: 20, disableSessionReuse: true } as ProviderDisplay,
+        { priority: 30, disableSessionReuse: false } as ProviderDisplay,
       ];
 
       const result = analyzeBatchProviderSettings(providers);
@@ -82,12 +105,20 @@ describe("analyzeBatchProviderSettings", () => {
       if (result.routing.priority.status === "mixed") {
         expect(result.routing.priority.values).toEqual([10, 20, 30]);
       }
+      expect(result.routing.disableSessionReuse.status).toBe("mixed");
+      if (result.routing.disableSessionReuse.status === "mixed") {
+        expect(result.routing.disableSessionReuse.values).toEqual([false, true]);
+      }
     });
 
     it("应该识别供应商有不同的对象值", () => {
       const providers: ProviderDisplay[] = [
-        { modelRedirects: { "model-a": "model-b" } } as ProviderDisplay,
-        { modelRedirects: { "model-c": "model-d" } } as ProviderDisplay,
+        {
+          modelRedirects: [{ matchType: "exact", source: "model-a", target: "model-b" }],
+        } as ProviderDisplay,
+        {
+          modelRedirects: [{ matchType: "exact", source: "model-c", target: "model-d" }],
+        } as ProviderDisplay,
       ];
 
       const result = analyzeBatchProviderSettings(providers);
@@ -95,8 +126,8 @@ describe("analyzeBatchProviderSettings", () => {
       expect(result.routing.modelRedirects.status).toBe("mixed");
       if (result.routing.modelRedirects.status === "mixed") {
         expect(result.routing.modelRedirects.values).toEqual([
-          { "model-a": "model-b" },
-          { "model-c": "model-d" },
+          [{ matchType: "exact", source: "model-a", target: "model-b" }],
+          [{ matchType: "exact", source: "model-c", target: "model-d" }],
         ]);
       }
     });

@@ -98,6 +98,13 @@ export class ProxySession {
   // 原始 URL 路径（用于 Gemini 模型重定向重置）
   private originalUrlPathname: string | null = null;
 
+  // 当前供应商 attempt 的模型重定向快照。
+  // 用于在 hedge shadow session 中延迟把 redirect 归属到真正的 winner/failed 链路项。
+  private currentModelRedirect: {
+    providerId: number;
+    redirect: NonNullable<ProviderChainItem["modelRedirect"]>;
+  } | null = null;
+
   // 上游决策链（记录尝试的供应商列表）
   private providerChain: ProviderChainItem[];
 
@@ -121,6 +128,10 @@ export class ProxySession {
 
   // Cached Codex Priority 计费来源（per-request）
   private cachedCodexPriorityBillingSource?: CodexPriorityBillingSource;
+
+  // 高并发模式（per-request）
+  // 开启后：跳过部分 Redis 调试快照与实时观测写入，降低高并发下的热点开销
+  private highConcurrencyModeEnabled = false;
 
   /**
    * Promise cache for billing-related system settings load (concurrency safe).
@@ -290,6 +301,22 @@ export class ProxySession {
 
   getContext1mApplied(): boolean {
     return this.context1mApplied;
+  }
+
+  setHighConcurrencyModeEnabled(enabled: boolean): void {
+    this.highConcurrencyModeEnabled = enabled;
+  }
+
+  isHighConcurrencyModeEnabled(): boolean {
+    return this.highConcurrencyModeEnabled;
+  }
+
+  shouldPersistSessionDebugArtifacts(): boolean {
+    return !this.highConcurrencyModeEnabled;
+  }
+
+  shouldTrackSessionObservability(): boolean {
+    return !this.highConcurrencyModeEnabled;
   }
 
   addSpecialSetting(setting: SpecialSetting): void {
@@ -489,6 +516,7 @@ export class ProxySession {
       decisionContext?: ProviderChainItem["decisionContext"];
       strictBlockCause?: ProviderChainItem["strictBlockCause"]; // endpoint pool exhaustion cause
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
+      modelRedirect?: ProviderChainItem["modelRedirect"];
     }
   ): void {
     const item: ProviderChainItem = {
@@ -518,6 +546,7 @@ export class ProxySession {
       decisionContext: metadata?.decisionContext,
       strictBlockCause: metadata?.strictBlockCause,
       endpointFilterStats: metadata?.endpointFilterStats,
+      modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
     };
 
     // 避免重复添加同一个供应商
@@ -537,6 +566,7 @@ export class ProxySession {
 
   private persistLiveChain(): void {
     if (!this.sessionId || this.requestSequence == null) return;
+    if (!this.shouldTrackSessionObservability()) return;
     void writeLiveChain(this.sessionId, this.requestSequence, this.providerChain);
   }
 
@@ -545,6 +575,42 @@ export class ProxySession {
    */
   getProviderChain(): ProviderChainItem[] {
     return this.providerChain;
+  }
+
+  setCurrentModelRedirect(
+    providerId: number,
+    redirect: NonNullable<ProviderChainItem["modelRedirect"]>
+  ): void {
+    this.currentModelRedirect = {
+      providerId,
+      redirect,
+    };
+  }
+
+  clearCurrentModelRedirect(): void {
+    this.currentModelRedirect = null;
+  }
+
+  getCurrentModelRedirect(providerId?: number): ProviderChainItem["modelRedirect"] | undefined {
+    if (!this.currentModelRedirect) return undefined;
+    if (providerId !== undefined && this.currentModelRedirect.providerId !== providerId) {
+      return undefined;
+    }
+    return this.currentModelRedirect.redirect;
+  }
+
+  attachCurrentModelRedirectToLastChainItem(providerId: number): boolean {
+    const redirect = this.getCurrentModelRedirect(providerId);
+    if (!redirect) return false;
+
+    const lastItem = this.providerChain[this.providerChain.length - 1];
+    if (!lastItem || lastItem.id !== providerId) {
+      return false;
+    }
+
+    lastItem.modelRedirect = redirect;
+    this.persistLiveChain();
+    return true;
   }
 
   /**

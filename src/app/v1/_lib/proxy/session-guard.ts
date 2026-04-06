@@ -51,6 +51,7 @@ export class ProxySessionGuard {
 
     try {
       const systemSettings = await getCachedSystemSettings();
+      session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
 
       // Codex Session ID 补全：在提取 clientSessionId 之前触发，避免落入不稳定的降级方案
       const codexCompletionEnabled = systemSettings.enableCodexSessionIdCompletion ?? true;
@@ -129,7 +130,7 @@ export class ProxySessionGuard {
 
       // 4.2 存储完整请求体与客户端端点（用于 Session 详情调试）
       // 注意：必须在后续任何格式转换/过滤前触发存储，避免记录被“后处理”污染
-      if (session.sessionId) {
+      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
         void SessionManager.storeSessionRequestBody(
           session.sessionId,
           session.request.message,
@@ -167,7 +168,11 @@ export class ProxySessionGuard {
         session.authState?.user?.limitConcurrentSessions
       );
 
-      if (!warmupMaybeIntercepted && !hasConcurrentSessionLimit) {
+      if (
+        !warmupMaybeIntercepted &&
+        !hasConcurrentSessionLimit &&
+        session.shouldTrackSessionObservability()
+      ) {
         void SessionTracker.trackSession(sessionId, keyId, session.authState?.user?.id).catch(
           (err) => {
             logger.error("[ProxySessionGuard] Failed to track session:", err);
@@ -176,26 +181,28 @@ export class ProxySessionGuard {
       }
 
       // 6. 存储 session 详细信息到 Redis（用于实时监控，带重试机制）
-      void (async () => {
-        try {
-          if (session.authState?.user && session.authState?.key) {
-            // 存储 session info（带重试）
-            await executeWithRetry(async () => {
-              await SessionManager.storeSessionInfo(sessionId, {
-                userName: session.authState!.user!.name,
-                userId: session.authState!.user!.id,
-                keyId: session.authState!.key!.id,
-                keyName: session.authState!.key!.name,
-                model: session.request.model,
-                apiType: session.originalFormat === "openai" ? "codex" : "chat",
+      if (session.shouldTrackSessionObservability()) {
+        void (async () => {
+          try {
+            if (session.authState?.user && session.authState?.key) {
+              // 存储 session info（带重试）
+              await executeWithRetry(async () => {
+                await SessionManager.storeSessionInfo(sessionId, {
+                  userName: session.authState!.user!.name,
+                  userId: session.authState!.user!.id,
+                  keyId: session.authState!.key!.id,
+                  keyName: session.authState!.key!.name,
+                  model: session.request.model,
+                  apiType: session.originalFormat === "openai" ? "codex" : "chat",
+                });
               });
-            });
+            }
+          } catch (error) {
+            // 重试后仍然失败，记录错误但不阻塞请求
+            logger.error("[ProxySessionGuard] Failed to store session info after retries:", error);
           }
-        } catch (error) {
-          // 重试后仍然失败，记录错误但不阻塞请求
-          logger.error("[ProxySessionGuard] Failed to store session info after retries:", error);
-        }
-      })();
+        })();
+      }
 
       logger.debug(
         `[ProxySessionGuard] Session assigned: ${sessionId}:${requestSequence} (key=${keyId}, messagesLength=${session.getMessagesLength()}, clientProvided=${!!clientSessionId})`

@@ -60,6 +60,7 @@ export async function saveSystemSettings(formData: {
   enableClientVersionCheck?: boolean;
   verboseProviderError?: boolean;
   enableHttp2?: boolean;
+  enableHighConcurrencyMode?: boolean;
   interceptAnthropicWarmupRequests?: boolean;
   enableThinkingSignatureRectifier?: boolean;
   enableThinkingBudgetRectifier?: boolean;
@@ -98,6 +99,7 @@ export async function saveSystemSettings(formData: {
       enableClientVersionCheck: validated.enableClientVersionCheck,
       verboseProviderError: validated.verboseProviderError,
       enableHttp2: validated.enableHttp2,
+      enableHighConcurrencyMode: validated.enableHighConcurrencyMode,
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,

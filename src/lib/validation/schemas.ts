@@ -5,6 +5,8 @@ import {
   PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
+import { PROVIDER_ALLOWED_MODEL_RULES_SCHEMA } from "@/lib/provider-allowed-model-schema";
+import { PROVIDER_MODEL_REDIRECT_RULES_SCHEMA } from "@/lib/provider-model-redirect-schema";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 import { isValidIANATimezone } from "@/lib/utils/timezone";
 
@@ -448,7 +450,8 @@ export const CreateProviderSchema = z
       .optional()
       .default("claude"),
     preserve_client_ip: z.boolean().optional().default(false),
-    model_redirects: z.record(z.string(), z.string()).nullable().optional(),
+    disable_session_reuse: z.boolean().optional().default(false),
+    model_redirects: PROVIDER_MODEL_REDIRECT_RULES_SCHEMA,
     // Scheduled active time window (HH:mm format)
     active_time_start: z
       .string()
@@ -460,7 +463,7 @@ export const CreateProviderSchema = z
       .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_end must be HH:mm format")
       .nullable()
       .optional(),
-    allowed_models: z.array(z.string()).nullable().optional(),
+    allowed_models: PROVIDER_ALLOWED_MODEL_RULES_SCHEMA,
     allowed_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
     blocked_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
     // MCP 透传配置
@@ -685,7 +688,8 @@ export const UpdateProviderSchema = z
       .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
       .optional(),
     preserve_client_ip: z.boolean().optional(),
-    model_redirects: z.record(z.string(), z.string()).nullable().optional(),
+    disable_session_reuse: z.boolean().optional(),
+    model_redirects: PROVIDER_MODEL_REDIRECT_RULES_SCHEMA,
     active_time_start: z
       .string()
       .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_start must be HH:mm format")
@@ -696,7 +700,7 @@ export const UpdateProviderSchema = z
       .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_end must be HH:mm format")
       .nullable()
       .optional(),
-    allowed_models: z.array(z.string()).nullable().optional(),
+    allowed_models: PROVIDER_ALLOWED_MODEL_RULES_SCHEMA,
     allowed_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
     blocked_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
     // MCP 透传配置
@@ -937,6 +941,8 @@ export const UpdateSystemSettingsSchema = z.object({
   verboseProviderError: z.boolean().optional(),
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2: z.boolean().optional(),
+  // 高并发模式（可选）
+  enableHighConcurrencyMode: z.boolean().optional(),
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests: z.boolean().optional(),
   // thinking signature 整流器（可选）

@@ -1,4 +1,5 @@
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
@@ -94,7 +95,8 @@ export function toProvider(dbProvider: any): Provider {
     groupTag: dbProvider?.groupTag ?? null,
     providerType: dbProvider?.providerType ?? "claude",
     preserveClientIp: dbProvider?.preserveClientIp ?? false,
-    modelRedirects: dbProvider?.modelRedirects ?? null,
+    disableSessionReuse: dbProvider?.disableSessionReuse ?? false,
+    modelRedirects: normalizeProviderModelRedirectRules(dbProvider?.modelRedirects),
     activeTimeStart: dbProvider?.activeTimeStart ?? null,
     activeTimeEnd: dbProvider?.activeTimeEnd ?? null,
     mcpPassthroughType: dbProvider?.mcpPassthroughType ?? "none",
@@ -210,6 +212,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableClientVersionCheck: dbSettings?.enableClientVersionCheck ?? false,
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
     enableHttp2: dbSettings?.enableHttp2 ?? false,
+    enableHighConcurrencyMode: dbSettings?.enableHighConcurrencyMode ?? false,
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
     enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,

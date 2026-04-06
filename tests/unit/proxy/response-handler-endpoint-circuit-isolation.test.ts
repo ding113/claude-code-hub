@@ -376,6 +376,25 @@ describe("Endpoint circuit breaker isolation", () => {
     ).toBe(true);
   });
 
+  it("高并发模式下，fake-200 流式错误仍应记录核心失败，但跳过 session 观测写入", async () => {
+    const session = createSession();
+    session.setHighConcurrencyModeEnabled(true);
+    setDeferredMeta(session, 42);
+
+    const response = createFake200StreamResponse();
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(mockRecordFailure).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
+    );
+    expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
+    expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
+    expect(SessionTracker.refreshSession).not.toHaveBeenCalled();
+  });
+
   it("fake-200 inferred 404 should NOT call recordFailure and should be marked as resource_not_found", async () => {
     const session = createSession();
     setDeferredMeta(session, 42);

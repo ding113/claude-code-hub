@@ -5,6 +5,7 @@ import { Info, Layers, Route, Scale } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { RuleTesterDialogTrigger } from "@/app/[locale]/settings/providers/_components/rule-tester-dialog-trigger";
 import { ClientRestrictionsEditor } from "@/components/form/client-restrictions-editor";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,9 +20,11 @@ import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type { ProviderType } from "@/types/provider";
+import { AllowedModelRuleEditor } from "../../../allowed-model-rule-editor";
+import { AllowedModelTester } from "../../../allowed-model-tester";
 import { MixedValueIndicator } from "../../../batch-edit/mixed-value-indicator";
-import { ModelMultiSelect } from "../../../model-multi-select";
 import { ModelRedirectEditor } from "../../../model-redirect-editor";
+import { ModelRedirectTester } from "../../../model-redirect-tester";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
 
@@ -35,6 +38,7 @@ interface RoutingSectionProps {
 
 export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
   const t = useTranslations("settings.providers.form");
+  const tTester = useTranslations("settings.providers.form.matchTester");
   const tUI = useTranslations("ui.tagInput");
   const {
     state,
@@ -183,68 +187,75 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
         description={t("sections.routing.modelWhitelist.desc")}
         icon={Layers}
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Model Redirects */}
-          <FieldGroup label={t("sections.routing.modelRedirects.label")}>
+          <FieldGroup
+            label={t("sections.routing.modelRedirects.label")}
+            badge={
+              state.routing.modelRedirects.length > 0 ? (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">
+                  {state.routing.modelRedirects.length}
+                </Badge>
+              ) : null
+            }
+          >
             <div className="space-y-2">
               <ModelRedirectEditor
                 value={state.routing.modelRedirects}
-                onChange={(value: Record<string, string>) =>
-                  dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })
-                }
+                onChange={(value) => dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })}
                 disabled={state.ui.isPending}
               />
+              <div className="flex justify-end">
+                <RuleTesterDialogTrigger
+                  title={tTester("redirectTitle")}
+                  description={tTester("redirectDescription")}
+                  label={t("sections.routing.testRule")}
+                  tooltip={tTester("redirectDescription")}
+                >
+                  <ModelRedirectTester rules={state.routing.modelRedirects} />
+                </RuleTesterDialogTrigger>
+              </div>
               {isBatch && batchAnalysis?.routing.modelRedirects.status === "mixed" && (
                 <MixedValueIndicator values={batchAnalysis.routing.modelRedirects.values} />
               )}
             </div>
           </FieldGroup>
 
+          <div className="border-t border-border/30" />
+
           {/* Allowed Models */}
-          <FieldGroup label={t("sections.routing.modelWhitelist.label")}>
+          <FieldGroup
+            label={t("sections.routing.modelWhitelist.label")}
+            badge={
+              state.routing.allowedModels.length > 0 ? (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">
+                  {state.routing.allowedModels.length}
+                </Badge>
+              ) : null
+            }
+          >
             <div className="space-y-2">
-              <ModelMultiSelect
+              <AllowedModelRuleEditor
                 providerType={state.routing.providerType}
-                selectedModels={state.routing.allowedModels}
-                onChange={(value: string[]) =>
-                  dispatch({ type: "SET_ALLOWED_MODELS", payload: value })
-                }
+                value={state.routing.allowedModels}
+                onChange={(value) => dispatch({ type: "SET_ALLOWED_MODELS", payload: value })}
                 disabled={state.ui.isPending}
-                providerUrl={state.basic.url}
+                providerId={provider?.id}
+                providerUrl={state.basic.url ?? provider?.url}
                 apiKey={state.basic.key}
                 proxyUrl={state.network.proxyUrl}
                 proxyFallbackToDirect={state.network.proxyFallbackToDirect}
-                providerId={isEdit ? provider?.id : undefined}
               />
-              {state.routing.allowedModels.length > 0 && (
-                <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md">
-                  {state.routing.allowedModels.slice(0, 5).map((model) => (
-                    <Badge key={model} variant="outline" className="font-mono text-xs">
-                      {model}
-                    </Badge>
-                  ))}
-                  {state.routing.allowedModels.length > 5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {t("sections.routing.modelWhitelist.moreModels", {
-                        count: state.routing.allowedModels.length - 5,
-                      })}
-                    </Badge>
-                  )}
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {state.routing.allowedModels.length === 0 ? (
-                  <span className="text-green-600">
-                    {t("sections.routing.modelWhitelist.allowAll")}
-                  </span>
-                ) : (
-                  <span>
-                    {t("sections.routing.modelWhitelist.selectedOnly", {
-                      count: state.routing.allowedModels.length,
-                    })}
-                  </span>
-                )}
-              </p>
+              <div className="flex justify-end">
+                <RuleTesterDialogTrigger
+                  title={tTester("allowedTitle")}
+                  description={tTester("allowedDescription")}
+                  label={t("sections.routing.testRule")}
+                  tooltip={tTester("allowedDescription")}
+                >
+                  <AllowedModelTester rules={state.routing.allowedModels} />
+                </RuleTesterDialogTrigger>
+              </div>
             </div>
           </FieldGroup>
 
@@ -262,12 +273,9 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
 
           {clientRestrictionsEnabled && (
             <div className="space-y-3">
-              <div className="space-y-1 rounded-md border bg-muted/30 p-3">
+              <div className="rounded-md border border-border/40 bg-muted/20 px-3 py-2">
                 <p className="text-xs text-muted-foreground">
                   {t("sections.routing.clientRestrictions.priorityNote")}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {t("sections.routing.clientRestrictions.customHelp")}
                 </p>
               </div>
 

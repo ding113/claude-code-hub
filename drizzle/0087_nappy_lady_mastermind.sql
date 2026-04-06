@@ -1,0 +1,1 @@
+ALTER TABLE "providers" ADD COLUMN "disable_session_reuse" boolean DEFAULT false NOT NULL;

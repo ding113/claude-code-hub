@@ -46,6 +46,21 @@ export interface AnthropicAdaptiveThinkingConfig {
   models: string[];
 }
 
+export type ProviderModelRedirectMatchType = "exact" | "prefix" | "suffix" | "contains" | "regex";
+
+export interface ProviderModelRedirectRule {
+  matchType: ProviderModelRedirectMatchType;
+  source: string;
+  target: string;
+}
+
+export interface AllowedModelRule {
+  matchType: ProviderModelRedirectMatchType;
+  pattern: string;
+}
+
+export type AllowedModelRuleInput = string | AllowedModelRule;
+
 export type ProviderPatchOperation<T> =
   | { mode: "no_change" }
   | { mode: "set"; value: T }
@@ -74,6 +89,7 @@ export type ProviderBatchPatchField =
   | "active_time_start"
   | "active_time_end"
   | "preserve_client_ip"
+  | "disable_session_reuse"
   | "group_priorities"
   | "cache_ttl_preference"
   | "swap_cache_ttl_billing"
@@ -116,8 +132,8 @@ export interface ProviderBatchPatchDraft {
   weight?: ProviderPatchDraftInput<number>;
   cost_multiplier?: ProviderPatchDraftInput<number>;
   group_tag?: ProviderPatchDraftInput<string>;
-  model_redirects?: ProviderPatchDraftInput<Record<string, string>>;
-  allowed_models?: ProviderPatchDraftInput<string[]>;
+  model_redirects?: ProviderPatchDraftInput<ProviderModelRedirectRule[]>;
+  allowed_models?: ProviderPatchDraftInput<AllowedModelRuleInput[]>;
   allowed_clients?: ProviderPatchDraftInput<string[]>;
   blocked_clients?: ProviderPatchDraftInput<string[]>;
   anthropic_thinking_budget_preference?: ProviderPatchDraftInput<AnthropicThinkingBudgetPreference>;
@@ -126,6 +142,7 @@ export interface ProviderBatchPatchDraft {
   active_time_start?: ProviderPatchDraftInput<string>;
   active_time_end?: ProviderPatchDraftInput<string>;
   preserve_client_ip?: ProviderPatchDraftInput<boolean>;
+  disable_session_reuse?: ProviderPatchDraftInput<boolean>;
   group_priorities?: ProviderPatchDraftInput<Record<string, number>>;
   cache_ttl_preference?: ProviderPatchDraftInput<CacheTtlPreference>;
   swap_cache_ttl_billing?: ProviderPatchDraftInput<boolean>;
@@ -169,8 +186,8 @@ export interface ProviderBatchPatch {
   weight: ProviderPatchOperation<number>;
   cost_multiplier: ProviderPatchOperation<number>;
   group_tag: ProviderPatchOperation<string>;
-  model_redirects: ProviderPatchOperation<Record<string, string>>;
-  allowed_models: ProviderPatchOperation<string[]>;
+  model_redirects: ProviderPatchOperation<ProviderModelRedirectRule[]>;
+  allowed_models: ProviderPatchOperation<AllowedModelRuleInput[]>;
   allowed_clients: ProviderPatchOperation<string[]>;
   blocked_clients: ProviderPatchOperation<string[]>;
   anthropic_thinking_budget_preference: ProviderPatchOperation<AnthropicThinkingBudgetPreference>;
@@ -179,6 +196,7 @@ export interface ProviderBatchPatch {
   active_time_start: ProviderPatchOperation<string>;
   active_time_end: ProviderPatchOperation<string>;
   preserve_client_ip: ProviderPatchOperation<boolean>;
+  disable_session_reuse: ProviderPatchOperation<boolean>;
   group_priorities: ProviderPatchOperation<Record<string, number>>;
   cache_ttl_preference: ProviderPatchOperation<CacheTtlPreference>;
   swap_cache_ttl_billing: ProviderPatchOperation<boolean>;
@@ -222,8 +240,8 @@ export interface ProviderBatchApplyUpdates {
   weight?: number;
   cost_multiplier?: number;
   group_tag?: string | null;
-  model_redirects?: Record<string, string> | null;
-  allowed_models?: string[] | null;
+  model_redirects?: ProviderModelRedirectRule[] | null;
+  allowed_models?: AllowedModelRuleInput[] | null;
   allowed_clients?: string[];
   blocked_clients?: string[];
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
@@ -232,6 +250,7 @@ export interface ProviderBatchApplyUpdates {
   active_time_start?: string | null;
   active_time_end?: string | null;
   preserve_client_ip?: boolean;
+  disable_session_reuse?: boolean;
   group_priorities?: Record<string, number> | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   swap_cache_ttl_billing?: boolean;
@@ -299,7 +318,9 @@ export interface Provider {
   providerType: ProviderType;
   // 是否透传客户端 IP
   preserveClientIp: boolean;
-  modelRedirects: Record<string, string> | null;
+  // 是否跳过当前供应商的 sticky session 复用
+  disableSessionReuse: boolean;
+  modelRedirects: ProviderModelRedirectRule[] | null;
 
   // Scheduled active time window (HH:mm format, null = always active)
   activeTimeStart: string | null;
@@ -309,7 +330,7 @@ export interface Provider {
   // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
-  allowedModels: string[] | null;
+  allowedModels: AllowedModelRuleInput[] | null;
   allowedClients: string[]; // Allowed client patterns (empty = no restriction)
   blockedClients: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
 
@@ -415,12 +436,14 @@ export interface ProviderDisplay {
   providerVendorId: number | null;
   // 是否透传客户端 IP
   preserveClientIp: boolean;
-  modelRedirects: Record<string, string> | null;
+  // 是否跳过当前供应商的 sticky session 复用
+  disableSessionReuse: boolean;
+  modelRedirects: ProviderModelRedirectRule[] | null;
   // Scheduled active time window
   activeTimeStart: string | null;
   activeTimeEnd: string | null;
   // 模型列表（双重语义）
-  allowedModels: string[] | null;
+  allowedModels: AllowedModelRuleInput[] | null;
   allowedClients: string[]; // Allowed client patterns (empty = no restriction)
   blockedClients: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
   // MCP 透传类型
@@ -511,10 +534,11 @@ export interface CreateProviderData {
   // 供应商类型和模型配置
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
-  model_redirects?: Record<string, string> | null;
+  disable_session_reuse?: boolean;
+  model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
-  allowed_models?: string[] | null;
+  allowed_models?: AllowedModelRuleInput[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;
@@ -590,10 +614,11 @@ export interface UpdateProviderData {
   // 供应商类型和模型配置
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
-  model_redirects?: Record<string, string> | null;
+  disable_session_reuse?: boolean;
+  model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
-  allowed_models?: string[] | null;
+  allowed_models?: AllowedModelRuleInput[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;

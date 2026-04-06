@@ -149,6 +149,7 @@ function createFallbackSettings(): SystemSettings {
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
@@ -180,7 +181,40 @@ function createFallbackSettings(): SystemSettings {
  */
 export async function getSystemSettings(): Promise<SystemSettings> {
   async function selectSettingsRow() {
-    const selectionWithoutCodexPriorityBillingSource = {
+    const selectionWithoutHighConcurrencyMode = {
+      id: systemSettings.id,
+      siteTitle: systemSettings.siteTitle,
+      allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+      currencyDisplay: systemSettings.currencyDisplay,
+      billingModelSource: systemSettings.billingModelSource,
+      timezone: systemSettings.timezone,
+      enableAutoCleanup: systemSettings.enableAutoCleanup,
+      cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+      cleanupSchedule: systemSettings.cleanupSchedule,
+      cleanupBatchSize: systemSettings.cleanupBatchSize,
+      enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+      verboseProviderError: systemSettings.verboseProviderError,
+      enableHttp2: systemSettings.enableHttp2,
+      codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
+      interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+      enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+      enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
+      enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+      enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
+      enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
+      enableResponseFixer: systemSettings.enableResponseFixer,
+      responseFixerConfig: systemSettings.responseFixerConfig,
+      quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
+      quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
+      quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
+      quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
+      quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
+      quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+      createdAt: systemSettings.createdAt,
+      updatedAt: systemSettings.updatedAt,
+    };
+    const selectionWithoutCodexAndHighConcurrency = {
       id: systemSettings.id,
       siteTitle: systemSettings.siteTitle,
       allowGlobalUsageView: systemSettings.allowGlobalUsageView,
@@ -213,8 +247,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       updatedAt: systemSettings.updatedAt,
     };
     const fullSelection = {
-      ...selectionWithoutCodexPriorityBillingSource,
-      codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
+      ...selectionWithoutHighConcurrencyMode,
+      enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
     };
 
     try {
@@ -229,7 +263,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
 
         try {
           const [row] = await db
-            .select(selectionWithoutCodexPriorityBillingSource)
+            .select(selectionWithoutHighConcurrencyMode)
             .from(systemSettings)
             .limit(1);
           return row ?? null;
@@ -238,23 +272,39 @@ export async function getSystemSettings(): Promise<SystemSettings> {
             throw fallbackError;
           }
 
-          logger.warn("system_settings 表存在多个缺失列，继续使用最小字段集读取。", {
+          logger.warn("system_settings 表存在多个缺失列，继续使用 legacy 字段集读取。", {
             error: fallbackError,
           });
 
-          // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
-          const minimalSelection = {
-            id: systemSettings.id,
-            siteTitle: systemSettings.siteTitle,
-            allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-            currencyDisplay: systemSettings.currencyDisplay,
-            billingModelSource: systemSettings.billingModelSource,
-            createdAt: systemSettings.createdAt,
-            updatedAt: systemSettings.updatedAt,
-          };
+          try {
+            const [row] = await db
+              .select(selectionWithoutCodexAndHighConcurrency)
+              .from(systemSettings)
+              .limit(1);
+            return row ?? null;
+          } catch (legacyFallbackError) {
+            if (!isUndefinedColumnError(legacyFallbackError)) {
+              throw legacyFallbackError;
+            }
 
-          const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
-          return row ?? null;
+            logger.warn("system_settings 表存在更多缺失列，继续使用最小字段集读取。", {
+              error: legacyFallbackError,
+            });
+
+            // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
+            const minimalSelection = {
+              id: systemSettings.id,
+              siteTitle: systemSettings.siteTitle,
+              allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+              currencyDisplay: systemSettings.currencyDisplay,
+              billingModelSource: systemSettings.billingModelSource,
+              createdAt: systemSettings.createdAt,
+              updatedAt: systemSettings.updatedAt,
+            };
+
+            const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
+            return row ?? null;
+          }
         }
       }
 
@@ -278,6 +328,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           currencyDisplay: "USD",
           billingModelSource: "original",
           codexPriorityBillingSource: "requested",
+          enableHighConcurrencyMode: false,
         })
         .onConflictDoNothing();
     } catch (error) {
@@ -321,7 +372,40 @@ export async function getSystemSettings(): Promise<SystemSettings> {
 export async function updateSystemSettings(
   payload: UpdateSystemSettingsInput
 ): Promise<SystemSettings> {
-  const returningWithoutCodexPriorityBillingSource = {
+  const returningWithoutHighConcurrencyMode = {
+    id: systemSettings.id,
+    siteTitle: systemSettings.siteTitle,
+    allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+    currencyDisplay: systemSettings.currencyDisplay,
+    billingModelSource: systemSettings.billingModelSource,
+    timezone: systemSettings.timezone,
+    enableAutoCleanup: systemSettings.enableAutoCleanup,
+    cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+    cleanupSchedule: systemSettings.cleanupSchedule,
+    cleanupBatchSize: systemSettings.cleanupBatchSize,
+    enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+    verboseProviderError: systemSettings.verboseProviderError,
+    enableHttp2: systemSettings.enableHttp2,
+    codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
+    interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+    enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+    enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+    enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
+    enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+    enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
+    enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
+    enableResponseFixer: systemSettings.enableResponseFixer,
+    responseFixerConfig: systemSettings.responseFixerConfig,
+    quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
+    quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
+    quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
+    quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
+    quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
+    quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+    createdAt: systemSettings.createdAt,
+    updatedAt: systemSettings.updatedAt,
+  };
+  const returningWithoutCodexAndHighConcurrency = {
     id: systemSettings.id,
     siteTitle: systemSettings.siteTitle,
     allowGlobalUsageView: systemSettings.allowGlobalUsageView,
@@ -354,8 +438,8 @@ export async function updateSystemSettings(
     updatedAt: systemSettings.updatedAt,
   };
   const fullReturning = {
-    ...returningWithoutCodexPriorityBillingSource,
-    codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
+    ...returningWithoutHighConcurrencyMode,
+    enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
   };
 
   try {
@@ -419,6 +503,11 @@ export async function updateSystemSettings(
     // HTTP/2 配置字段（如果提供）
     if (payload.enableHttp2 !== undefined) {
       updates.enableHttp2 = payload.enableHttp2;
+    }
+
+    // 高并发模式开关（如果提供）
+    if (payload.enableHighConcurrencyMode !== undefined) {
+      updates.enableHighConcurrencyMode = payload.enableHighConcurrencyMode;
     }
 
     // Warmup 拦截开关（如果提供）
@@ -506,13 +595,28 @@ export async function updateSystemSettings(
       });
 
       const downgradedUpdates = { ...updates };
-      delete downgradedUpdates.codexPriorityBillingSource;
+      delete downgradedUpdates.enableHighConcurrencyMode;
 
-      [updated] = await db
-        .update(systemSettings)
-        .set(downgradedUpdates)
-        .where(eq(systemSettings.id, current.id))
-        .returning(returningWithoutCodexPriorityBillingSource);
+      try {
+        [updated] = await db
+          .update(systemSettings)
+          .set(downgradedUpdates)
+          .where(eq(systemSettings.id, current.id))
+          .returning(returningWithoutHighConcurrencyMode);
+      } catch (fallbackError) {
+        if (!isUndefinedColumnError(fallbackError)) {
+          throw fallbackError;
+        }
+
+        const legacyUpdates = { ...downgradedUpdates };
+        delete legacyUpdates.codexPriorityBillingSource;
+
+        [updated] = await db
+          .update(systemSettings)
+          .set(legacyUpdates)
+          .where(eq(systemSettings.id, current.id))
+          .returning(returningWithoutCodexAndHighConcurrency);
+      }
     }
 
     if (!updated) {

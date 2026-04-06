@@ -13,7 +13,8 @@ function createBatchState(): ProviderFormState {
       providerType: "claude",
       groupTag: [],
       preserveClientIp: false,
-      modelRedirects: {},
+      disableSessionReuse: false,
+      modelRedirects: [],
       allowedModels: [],
       allowedClients: [],
       blockedClients: [],
@@ -163,7 +164,7 @@ describe("buildPatchDraftFromFormState", () => {
     expect(draft.group_tag).toEqual({ set: "tagA,tagB" });
   });
 
-  it("clears modelRedirects when dirty and empty object", () => {
+  it("clears modelRedirects when dirty and empty list", () => {
     const state = createBatchState();
     const dirty = new Set(["routing.modelRedirects"]);
 
@@ -174,12 +175,14 @@ describe("buildPatchDraftFromFormState", () => {
 
   it("sets modelRedirects when dirty and has entries", () => {
     const state = createBatchState();
-    state.routing.modelRedirects = { "model-a": "model-b" };
+    state.routing.modelRedirects = [{ matchType: "exact", source: "model-a", target: "model-b" }];
     const dirty = new Set(["routing.modelRedirects"]);
 
     const draft = buildPatchDraftFromFormState(state, dirty);
 
-    expect(draft.model_redirects).toEqual({ set: { "model-a": "model-b" } });
+    expect(draft.model_redirects).toEqual({
+      set: [{ matchType: "exact", source: "model-a", target: "model-b" }],
+    });
   });
 
   it("clears allowedModels when dirty and empty array", () => {
@@ -193,12 +196,14 @@ describe("buildPatchDraftFromFormState", () => {
 
   it("sets allowedModels when dirty and non-empty", () => {
     const state = createBatchState();
-    state.routing.allowedModels = ["claude-opus-4-6"];
+    state.routing.allowedModels = [{ matchType: "exact", pattern: "claude-opus-4-6" }];
     const dirty = new Set(["routing.allowedModels"]);
 
     const draft = buildPatchDraftFromFormState(state, dirty);
 
-    expect(draft.allowed_models).toEqual({ set: ["claude-opus-4-6"] });
+    expect(draft.allowed_models).toEqual({
+      set: [{ matchType: "exact", pattern: "claude-opus-4-6" }],
+    });
   });
 
   // --- inherit/clear pattern fields ---
@@ -230,6 +235,16 @@ describe("buildPatchDraftFromFormState", () => {
     const draft = buildPatchDraftFromFormState(state, dirty);
 
     expect(draft.preserve_client_ip).toEqual({ set: true });
+  });
+
+  it("sets disableSessionReuse when dirty", () => {
+    const state = createBatchState();
+    state.routing.disableSessionReuse = true;
+    const dirty = new Set(["routing.disableSessionReuse"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.disable_session_reuse).toEqual({ set: true });
   });
 
   it("sets swapCacheTtlBilling when dirty", () => {

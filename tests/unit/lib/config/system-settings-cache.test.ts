@@ -39,6 +39,7 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
@@ -145,6 +146,7 @@ describe("SystemSettingsCache", () => {
       expect.objectContaining({
         siteTitle: "Claude Code Hub",
         enableHttp2: false,
+        enableHighConcurrencyMode: false,
         interceptAnthropicWarmupRequests: false,
         codexPriorityBillingSource: "requested",
       })

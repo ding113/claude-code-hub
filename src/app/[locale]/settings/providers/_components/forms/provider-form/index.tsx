@@ -298,7 +298,9 @@ function ProviderFormContent({
           website_url: state.basic.websiteUrl?.trim() || null,
           provider_type: state.routing.providerType,
           preserve_client_ip: state.routing.preserveClientIp,
-          model_redirects: state.routing.modelRedirects,
+          disable_session_reuse: state.routing.disableSessionReuse,
+          model_redirects:
+            state.routing.modelRedirects.length > 0 ? state.routing.modelRedirects : null,
           allowed_models:
             state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
           allowed_clients: state.routing.allowedClients,
@@ -487,10 +489,7 @@ function ProviderFormContent({
     }
 
     // Routing - configured if models/redirects set
-    if (
-      state.routing.allowedModels.length > 0 ||
-      Object.keys(state.routing.modelRedirects).length > 0
-    ) {
+    if (state.routing.allowedModels.length > 0 || state.routing.modelRedirects.length > 0) {
       status.routing = "configured";
     }
 

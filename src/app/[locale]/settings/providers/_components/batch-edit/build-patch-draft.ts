@@ -43,6 +43,9 @@ export function buildPatchDraftFromFormState(
   if (dirtyFields.has("routing.preserveClientIp")) {
     draft.preserve_client_ip = { set: state.routing.preserveClientIp };
   }
+  if (dirtyFields.has("routing.disableSessionReuse")) {
+    draft.disable_session_reuse = { set: state.routing.disableSessionReuse };
+  }
   if (dirtyFields.has("routing.activeTimeStart")) {
     if (state.routing.activeTimeStart === null) {
       draft.active_time_start = { clear: true };
@@ -58,8 +61,7 @@ export function buildPatchDraftFromFormState(
     }
   }
   if (dirtyFields.has("routing.modelRedirects")) {
-    const entries = Object.keys(state.routing.modelRedirects);
-    if (entries.length === 0) {
+    if (state.routing.modelRedirects.length === 0) {
       draft.model_redirects = { clear: true };
     } else {
       draft.model_redirects = { set: state.routing.modelRedirects };

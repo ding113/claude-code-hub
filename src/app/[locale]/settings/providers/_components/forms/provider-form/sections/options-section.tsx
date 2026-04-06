@@ -73,6 +73,20 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                 />
               </ToggleRow>
 
+              <ToggleRow
+                label={t("sections.routing.disableSessionReuse.label")}
+                description={t("sections.routing.disableSessionReuse.desc")}
+              >
+                <Switch
+                  id={isEdit ? "edit-disable-session-reuse" : "disable-session-reuse"}
+                  checked={state.routing.disableSessionReuse}
+                  onCheckedChange={(checked) =>
+                    dispatch({ type: "SET_DISABLE_SESSION_REUSE", payload: checked })
+                  }
+                  disabled={state.ui.isPending}
+                />
+              </ToggleRow>
+
               {/* Swap Cache TTL Billing */}
               <ToggleRow
                 label={t("sections.routing.swapCacheTtlBilling.label")}
@@ -474,6 +488,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                   description={t("sections.routing.activeTime.toggleDescription")}
                 >
                   <Switch
+                    id={isEdit ? "edit-active-time-toggle" : "active-time-toggle"}
                     checked={
                       state.routing.activeTimeStart !== null && state.routing.activeTimeEnd !== null
                     }

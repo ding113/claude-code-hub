@@ -1,0 +1,19 @@
+{
+  "inputLabel": "Model name to test",
+  "inputPlaceholder": "Enter a model name to test, e.g. claude-opus-4-1",
+  "testButton": "Test Match",
+  "redirectTitle": "Redirect Match Test",
+  "redirectDescription": "Preview which redirect rule will rewrite this model name.",
+  "allowedTitle": "Allowlist Match Test",
+  "allowedDescription": "Preview whether this model name will be accepted by the allowlist.",
+  "matched": "Matched a redirect rule",
+  "notMatched": "No redirect rule matched this model name",
+  "allowed": "This model is allowed",
+  "blocked": "This model is blocked by the allowlist",
+  "allAllowed": "No allowlist rules are configured, so all models are allowed.",
+  "ruleIndex": "Rule Order",
+  "matchType": "Match Type",
+  "source": "Source Pattern",
+  "target": "Redirect Target",
+  "pattern": "Allowlist Pattern"
+}

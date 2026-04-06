@@ -16,7 +16,7 @@ import {
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
 import type { ResponseFixerConfig } from '@/types/system-config';
-import type { ProviderType } from "@/types/provider";
+import type { AllowedModelRuleInput, ProviderModelRedirectRule, ProviderType } from "@/types/provider";
 import type { FilterOperation } from "@/lib/request-filter-types";
 
 // Enums
@@ -191,15 +191,19 @@ export const providers = pgTable('providers', {
     .$type<ProviderType>(),
   // 是否透传客户端 IP（默认关闭，避免暴露真实来源）
   preserveClientIp: boolean('preserve_client_ip').notNull().default(false),
+  // 是否跳过当前供应商的 sticky session 复用
+  disableSessionReuse: boolean('disable_session_reuse').notNull().default(false),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
-  modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),
+  modelRedirects: jsonb('model_redirects').$type<
+    ProviderModelRedirectRule[] | Record<string, string> | null
+  >(),
 
   // 模型列表：双重语义
   // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
-  allowedModels: jsonb('allowed_models').$type<string[] | null>().default(null),
+  allowedModels: jsonb('allowed_models').$type<AllowedModelRuleInput[] | null>().default(null),
 
   // Client restrictions for this provider
   // allowedClients: empty = no restriction; non-empty = only listed patterns allowed
@@ -702,6 +706,10 @@ export const systemSettings = pgTable('system_settings', {
 
   // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
   enableHttp2: boolean('enable_http2').notNull().default(false),
+
+  // 高并发模式（默认关闭）
+  // 开启后：关闭部分 Redis 调试快照与实时观测写入，降低高并发下的 CPU 与 IO 开销
+  enableHighConcurrencyMode: boolean('enable_high_concurrency_mode').notNull().default(false),
 
   // 可选拦截 Anthropic Warmup 请求（默认关闭）
   // 开启后：对 /v1/messages 的 Warmup 请求直接由 CCH 抢答，避免打到上游供应商

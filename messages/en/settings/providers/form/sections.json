@@ -298,13 +298,14 @@
       "label": "Model Redirects",
       "optional": "(optional)"
     },
-    "modelWhitelist": {
-      "allowAll": "✓ Allow all models (recommended)",
-      "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
-      "label": "Allowed Models",
+  "modelWhitelist": {
+    "allowAll": "✓ Allow all models (recommended)",
+    "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
+    "legacyExactOnlyWarning": "This legacy form only shows exact-match allowlist rules. Saving here will discard prefix, suffix, keyword, or regex rules. Use the new provider form to edit advanced rules safely.",
+    "label": "Allowed Models",
       "moreModels": "+{count} more",
       "optional": "(optional)",
-      "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
+      "selectedOnly": "Only models matching the configured {count} rules are allowed. Other models will not be routed to this provider.",
       "title": "Model Allowlist"
     },
     "clientRestrictions": {
@@ -342,10 +343,15 @@
       },
       "nSelected": "{count} selected"
     },
+    "testRule": "Test Rule Matching",
     "preserveClientIp": {
       "desc": "Pass x-forwarded-for / x-real-ip to upstream providers (may expose real client IP)",
       "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP.",
       "label": "Forward client IP"
+    },
+    "disableSessionReuse": {
+      "label": "Skip session reuse",
+      "desc": "When enabled, the next request will ignore this provider's sticky binding and rerun priority and health checks. Useful when a cheap higher-priority provider should be retried as soon as it recovers."
     },
     "options": {
       "title": "Options",

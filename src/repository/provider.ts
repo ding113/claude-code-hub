@@ -3,16 +3,20 @@ import "server-only";
 import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providerEndpoints, providers } from "@/drizzle/schema";
+import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
+  AllowedModelRuleInput,
   AnthropicAdaptiveThinkingConfig,
   CreateProviderData,
   Provider,
+  ProviderModelRedirectRule,
   UpdateProviderData,
 } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
@@ -27,6 +31,22 @@ type ProviderTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const PROVIDER_RESTORE_MAX_AGE_MS = 60_000;
 const ENDPOINT_RESTORE_TIME_TOLERANCE_MS = 1_000;
+
+function normalizeProviderRuntimeFields<
+  T extends {
+    modelRedirects: ProviderModelRedirectRule[] | Record<string, string> | null;
+    allowedModels: AllowedModelRuleInput[] | null;
+  },
+>(
+  provider: T
+): Omit<T, "modelRedirects" | "allowedModels"> &
+  Pick<Provider, "modelRedirects" | "allowedModels"> {
+  return {
+    ...provider,
+    modelRedirects: normalizeProviderModelRedirectRules(provider.modelRedirects),
+    allowedModels: normalizeAllowedModelRules(provider.allowedModels),
+  };
+}
 
 interface ProviderRestoreCandidate {
   id: number;
@@ -185,8 +205,9 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     groupTag: providerData.group_tag,
     providerType: providerData.provider_type,
     preserveClientIp: providerData.preserve_client_ip ?? false,
-    modelRedirects: providerData.model_redirects,
-    allowedModels: providerData.allowed_models,
+    disableSessionReuse: providerData.disable_session_reuse ?? false,
+    modelRedirects: normalizeProviderModelRedirectRules(providerData.model_redirects),
+    allowedModels: normalizeAllowedModelRules(providerData.allowed_models),
     allowedClients: providerData.allowed_clients ?? [],
     blockedClients: providerData.blocked_clients ?? [],
     activeTimeStart: providerData.active_time_start ?? null,
@@ -270,6 +291,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         groupTag: providers.groupTag,
         providerType: providers.providerType,
         preserveClientIp: providers.preserveClientIp,
+        disableSessionReuse: providers.disableSessionReuse,
         modelRedirects: providers.modelRedirects,
         allowedModels: providers.allowedModels,
         allowedClients: providers.allowedClients,
@@ -319,7 +341,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         deletedAt: providers.deletedAt,
       });
 
-    const created = toProvider(provider);
+    const created = normalizeProviderRuntimeFields(toProvider(provider));
 
     if (created.providerVendorId) {
       await ensureProviderEndpointExistsForUrl(
@@ -355,6 +377,7 @@ export async function findProviderList(
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
+      disableSessionReuse: providers.disableSessionReuse,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
       allowedClients: providers.allowedClients,
@@ -414,7 +437,7 @@ export async function findProviderList(
     ids: result.map((r) => r.id),
   });
 
-  return result.map(toProvider);
+  return result.map((provider) => normalizeProviderRuntimeFields(toProvider(provider)));
 }
 
 /**
@@ -440,6 +463,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
+      disableSessionReuse: providers.disableSessionReuse,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
       allowedClients: providers.allowedClients,
@@ -529,6 +553,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
+      disableSessionReuse: providers.disableSessionReuse,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
       allowedClients: providers.allowedClients,
@@ -581,7 +606,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
     .where(and(eq(providers.id, id), isNull(providers.deletedAt)));
 
   if (!provider) return null;
-  return toProvider(provider);
+  return normalizeProviderRuntimeFields(toProvider(provider));
 }
 
 export async function updateProvider(
@@ -611,9 +636,12 @@ export async function updateProvider(
   if (providerData.provider_type !== undefined) dbData.providerType = providerData.provider_type;
   if (providerData.preserve_client_ip !== undefined)
     dbData.preserveClientIp = providerData.preserve_client_ip;
+  if (providerData.disable_session_reuse !== undefined)
+    dbData.disableSessionReuse = providerData.disable_session_reuse;
   if (providerData.model_redirects !== undefined)
-    dbData.modelRedirects = providerData.model_redirects;
-  if (providerData.allowed_models !== undefined) dbData.allowedModels = providerData.allowed_models;
+    dbData.modelRedirects = normalizeProviderModelRedirectRules(providerData.model_redirects);
+  if (providerData.allowed_models !== undefined)
+    dbData.allowedModels = normalizeAllowedModelRules(providerData.allowed_models);
   if (providerData.allowed_clients !== undefined)
     dbData.allowedClients = providerData.allowed_clients ?? [];
   if (providerData.blocked_clients !== undefined)
@@ -767,6 +795,7 @@ export async function updateProvider(
         groupTag: providers.groupTag,
         providerType: providers.providerType,
         preserveClientIp: providers.preserveClientIp,
+        disableSessionReuse: providers.disableSessionReuse,
         modelRedirects: providers.modelRedirects,
         allowedModels: providers.allowedModels,
         allowedClients: providers.allowedClients,
@@ -817,7 +846,7 @@ export async function updateProvider(
       });
 
     if (!provider) return null;
-    const transformed = toProvider(provider);
+    const transformed = normalizeProviderRuntimeFields(toProvider(provider));
 
     if (shouldSyncEndpoint && transformed.providerVendorId) {
       // 注意：即使 provider 当前处于禁用态，只要 vendor/type/url 发生变化也同步 endpoint pool：
@@ -1021,14 +1050,15 @@ export interface BatchProviderUpdates {
   weight?: number;
   costMultiplier?: string;
   groupTag?: string | null;
-  modelRedirects?: Record<string, string> | null;
-  allowedModels?: string[] | null;
+  modelRedirects?: ProviderModelRedirectRule[] | null;
+  allowedModels?: AllowedModelRuleInput[] | null;
   allowedClients?: string[] | null;
   blockedClients?: string[] | null;
   anthropicThinkingBudgetPreference?: string | null;
   anthropicAdaptiveThinking?: AnthropicAdaptiveThinkingConfig | null;
   // Routing
   preserveClientIp?: boolean;
+  disableSessionReuse?: boolean;
   activeTimeStart?: string | null;
   activeTimeEnd?: string | null;
   groupPriorities?: Record<string, number> | null;
@@ -1115,6 +1145,9 @@ export async function updateProvidersBatch(
   // Routing
   if (updates.preserveClientIp !== undefined) {
     setClauses.preserveClientIp = updates.preserveClientIp;
+  }
+  if (updates.disableSessionReuse !== undefined) {
+    setClauses.disableSessionReuse = updates.disableSessionReuse;
   }
   if (updates.activeTimeStart !== undefined) {
     setClauses.activeTimeStart = updates.activeTimeStart;

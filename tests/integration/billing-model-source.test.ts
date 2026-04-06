@@ -49,6 +49,7 @@ vi.mock("@/repository/message", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     updateSessionUsage: vi.fn(),
+    updateSessionProvider: vi.fn(),
     storeSessionResponse: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
@@ -98,7 +99,8 @@ beforeEach(() => {
 
 function makeSystemSettings(
   billingModelSource: SystemSettings["billingModelSource"],
-  codexPriorityBillingSource: SystemSettings["codexPriorityBillingSource"] = "requested"
+  codexPriorityBillingSource: SystemSettings["codexPriorityBillingSource"] = "requested",
+  enableHighConcurrencyMode: boolean = false
 ): SystemSettings {
   const now = new Date();
   return {
@@ -116,6 +118,7 @@ function makeSystemSettings(
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    enableHighConcurrencyMode,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
@@ -152,6 +155,7 @@ function createSession({
   redirectedModel,
   sessionId,
   messageId,
+  enableHighConcurrencyMode = false,
   providerOverrides,
   requestMessage,
 }: {
@@ -159,6 +163,7 @@ function createSession({
   redirectedModel: string;
   sessionId: string;
   messageId: number;
+  enableHighConcurrencyMode?: boolean;
   providerOverrides?: Record<string, unknown>;
   requestMessage?: Record<string, unknown>;
 }): ProxySession {
@@ -190,6 +195,7 @@ function createSession({
 
   session.setOriginalModel(originalModel);
   session.setSessionId(sessionId);
+  session.setHighConcurrencyModeEnabled(enableHighConcurrencyMode);
 
   const provider = {
     id: 99,
@@ -284,9 +290,11 @@ function captureRateLimitCosts(): number[] {
 async function runScenario({
   billingModelSource,
   isStream,
+  enableHighConcurrencyMode = false,
 }: {
   billingModelSource: SystemSettings["billingModelSource"];
   isStream: boolean;
+  enableHighConcurrencyMode?: boolean;
 }): Promise<{ dbCostUsd: string; sessionCostUsd: string; rateLimitCost: number }> {
   invalidateSystemSettingsCache();
 
@@ -300,7 +308,9 @@ async function runScenario({
     output_cost_per_token: 10,
   };
 
-  vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings(billingModelSource));
+  vi.mocked(getSystemSettings).mockResolvedValue(
+    makeSystemSettings(billingModelSource, "requested", enableHighConcurrencyMode)
+  );
   vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
     if (modelName === originalModel) {
       return makePriceRecord(modelName, originalPriceData);
@@ -343,6 +353,7 @@ async function runScenario({
     redirectedModel,
     sessionId: `sess-${billingModelSource}-${isStream ? "s" : "n"}`,
     messageId: isStream ? 2001 : 2000,
+    enableHighConcurrencyMode,
   });
 
   const response = isStream ? createStreamResponse(usage) : createNonStreamResponse(usage);
@@ -401,6 +412,33 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(original.sessionCostUsd).toBe("5");
     expect(redirected.sessionCostUsd).toBe("50");
     expect(original.sessionCostUsd).not.toBe(redirected.sessionCostUsd);
+  });
+
+  it("高并发模式：仍更新 DB cost 与限流 cost，但跳过 session usage / session refresh 观测写入", async () => {
+    const result = await runScenario({
+      billingModelSource: "redirected",
+      enableHighConcurrencyMode: true,
+      isStream: false,
+    });
+
+    expect(result.dbCostUsd).toBe("50");
+    expect(result.rateLimitCost).toBe(50);
+    expect(result.sessionCostUsd).toBe("");
+    expect(vi.mocked(SessionManager.storeSessionResponse)).not.toHaveBeenCalled();
+    expect(vi.mocked(SessionManager.updateSessionUsage)).not.toHaveBeenCalled();
+    expect(vi.mocked(SessionTracker.refreshSession)).not.toHaveBeenCalled();
+  });
+
+  it("高并发模式：流式成功收尾时不应更新 session provider 观测信息", async () => {
+    const result = await runScenario({
+      billingModelSource: "redirected",
+      enableHighConcurrencyMode: true,
+      isStream: true,
+    });
+
+    expect(result.dbCostUsd).toBe("50");
+    expect(result.rateLimitCost).toBe(50);
+    expect(vi.mocked(SessionManager.updateSessionProvider)).not.toHaveBeenCalled();
   });
 
   it("nested pricing: gpt-5.4 alias model should bill from pricing.openai when provider is chatgpt", async () => {

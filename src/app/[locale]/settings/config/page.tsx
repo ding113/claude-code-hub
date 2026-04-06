@@ -48,6 +48,7 @@ async function SettingsConfigContent() {
             timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
             enableHttp2: settings.enableHttp2,
+            enableHighConcurrencyMode: settings.enableHighConcurrencyMode,
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
             enableThinkingSignatureRectifier: settings.enableThinkingSignatureRectifier,
             enableThinkingBudgetRectifier: settings.enableThinkingBudgetRectifier,

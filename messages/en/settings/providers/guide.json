@@ -110,7 +110,7 @@
   "sessionExpired": "Session automatically released after expiration (5 minutes)",
   "sessionFallback": "Select from other available providers",
   "sessionLastUsed": "B is available, reuse directly, skip random selection",
-  "sessionReuse": "4. Session Reuse: Consecutive chats reuse same provider, saving context costs",
+  "sessionReuse": "4. Session Reuse: Consecutive chats reuse the same provider by default; if a provider opts out of session reuse, the next request reruns priority and health checks",
   "sessionUnavailable": "Last used provider B is disabled or circuit-broken",
   "step": "Step",
   "title": "Core Principles",

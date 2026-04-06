@@ -1,5 +1,6 @@
 import type { Dispatch } from "react";
 import type {
+  AllowedModelRule,
   AnthropicAdaptiveThinkingConfig,
   AnthropicAdaptiveThinkingEffort,
   AnthropicAdaptiveThinkingModelMatchMode,
@@ -13,6 +14,7 @@ import type {
   GeminiGoogleSearchPreference,
   McpPassthroughType,
   ProviderDisplay,
+  ProviderModelRedirectRule,
   ProviderType,
 } from "@/types/provider";
 import type { BatchSettingsAnalysis } from "../../batch-edit/analyze-batch-settings";
@@ -48,8 +50,9 @@ export interface RoutingState {
   providerType: ProviderType;
   groupTag: string[];
   preserveClientIp: boolean;
-  modelRedirects: Record<string, string>;
-  allowedModels: string[];
+  disableSessionReuse: boolean;
+  modelRedirects: ProviderModelRedirectRule[];
+  allowedModels: AllowedModelRule[];
   allowedClients: string[];
   blockedClients: string[];
   priority: number;
@@ -140,8 +143,9 @@ export type ProviderFormAction =
   | { type: "SET_PROVIDER_TYPE"; payload: ProviderType }
   | { type: "SET_GROUP_TAG"; payload: string[] }
   | { type: "SET_PRESERVE_CLIENT_IP"; payload: boolean }
-  | { type: "SET_MODEL_REDIRECTS"; payload: Record<string, string> }
-  | { type: "SET_ALLOWED_MODELS"; payload: string[] }
+  | { type: "SET_DISABLE_SESSION_REUSE"; payload: boolean }
+  | { type: "SET_MODEL_REDIRECTS"; payload: ProviderModelRedirectRule[] }
+  | { type: "SET_ALLOWED_MODELS"; payload: AllowedModelRule[] }
   | { type: "SET_ALLOWED_CLIENTS"; payload: string[] }
   | { type: "SET_BLOCKED_CLIENTS"; payload: string[] }
   | { type: "SET_PRIORITY"; payload: number }
