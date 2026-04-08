@@ -96,7 +96,6 @@ export function ApiTestButton({
   allowedModels = [],
   enableMultiProviderTypes: _enableMultiProviderTypes,
 }: ApiTestButtonProps) {
-
   const t = useTranslations("settings.providers.form.apiTest");
   const normalizedAllowedModels = useMemo(() => {
     const unique = new Set<string>();
