@@ -16,6 +16,12 @@ export const PROVIDER_LIMITS = {
   CONCURRENT_SESSIONS: { MIN: 1, MAX: 150 },
 } as const;
 
+export const PROVIDER_RULE_LIMITS = {
+  // 模型白名单 / 重定向规则保存在 JSONB 中，这里统一放宽到支持大规模路由表
+  MAX_ITEMS: 100_000,
+  MAX_TEXT_LENGTH: 4_096,
+} as const;
+
 export const PROVIDER_DEFAULTS = {
   IS_ENABLED: true,
   WEIGHT: 1,

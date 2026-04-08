@@ -125,7 +125,7 @@ describe("ModelRedirectEditor", () => {
     unmount();
   });
 
-  test("新增规则时应在本地拦截超长 source，避免直到提交 provider 才失败", async () => {
+  test("新增规则时应在本地拦截超出新上限的 source，避免直到提交 provider 才失败", async () => {
     const messages = loadMessages();
     const onChange = vi.fn();
 
@@ -142,7 +142,7 @@ describe("ModelRedirectEditor", () => {
 
     await act(async () => {
       if (sourceInput) {
-        sourceInput.value = "a".repeat(256);
+        sourceInput.value = "a".repeat(4097);
         sourceInput.dispatchEvent(new Event("input", { bubbles: true }));
         sourceInput.dispatchEvent(new Event("change", { bubbles: true }));
       }
@@ -165,6 +165,55 @@ describe("ModelRedirectEditor", () => {
     expect(document.querySelector("[data-redirect-error]")?.textContent || "").toContain(
       "Source model name is too long"
     );
+
+    unmount();
+  });
+
+  test("已有 100 条规则时仍允许继续新增，避免旧的前端上限卡住更大配置", async () => {
+    const messages = loadMessages();
+    const onChange = vi.fn();
+    const existingRules = Array.from({ length: 100 }, (_, index) => ({
+      matchType: "exact" as const,
+      source: `model-${index}`,
+      target: `target-${index}`,
+    }));
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ModelRedirectEditor value={existingRules} onChange={onChange} />
+      </NextIntlClientProvider>
+    );
+
+    const sourceInput = document.querySelector("#new-source") as HTMLInputElement | null;
+    const targetInput = document.querySelector("#new-target") as HTMLInputElement | null;
+    expect(sourceInput).toBeTruthy();
+    expect(targetInput).toBeTruthy();
+
+    await act(async () => {
+      if (sourceInput) {
+        sourceInput.value = "model-100";
+        sourceInput.dispatchEvent(new Event("input", { bubbles: true }));
+        sourceInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      if (targetInput) {
+        targetInput.value = "target-100";
+        targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+        targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    const addButton = document.querySelector("[data-redirect-add]") as HTMLButtonElement | null;
+    expect(addButton).toBeTruthy();
+
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalledWith([
+      ...existingRules,
+      { matchType: "exact", source: "model-100", target: "target-100" },
+    ]);
 
     unmount();
   });
