@@ -143,7 +143,10 @@ function looksLikeAnthropicProxy(providerUrl?: string): boolean {
     if (hostname.endsWith("anthropic.com") || hostname.endsWith("claude.ai")) {
       return false;
     }
-    return /proxy|relay|gateway|router|worker|openrouter|api2d|oaipro|gpt/i.test(hostname);
+    // 只匹配常见 relay/proxy 标识，避免把普通业务域名里的 “gpt” 误识别成代理层。
+    return /(?:^|[.-])(proxy|relay|gateway|router|worker|openrouter|api2d|oaipro)(?:[.-]|$)/i.test(
+      hostname
+    );
   } catch {
     return false;
   }
@@ -165,6 +168,7 @@ function resolveClaudeHeaders(providerType: ProviderType, apiKey: string, provid
     return headers;
   }
 
+  // 对非代理 Anthropic 直连保留双头，兼容只认 x-api-key 或 Bearer 的 Anthropic-compatible 层。
   headers["x-api-key"] = apiKey;
   headers.Authorization = `Bearer ${apiKey}`;
   return headers;
@@ -245,7 +249,6 @@ export function getTestUrl(
   baseUrl: string,
   providerType: ProviderType,
   model?: string,
-  _apiKey?: string,
   pathOverride?: string
 ): string {
   const cleanBaseUrl = baseUrl.replace(/\/$/, "");

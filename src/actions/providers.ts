@@ -2918,30 +2918,34 @@ type ProviderApiTestArgs = {
   timeoutMs?: number; // 自定义超时时间（毫秒）
 };
 
+export type ProviderApiTestSuccessDetails = {
+  responseTime?: number;
+  model?: string;
+  usage?: Record<string, unknown>;
+  content?: string;
+  rawResponse?: string;
+  streamInfo?: {
+    chunksReceived: number;
+    format: "sse" | "ndjson";
+  };
+};
+
+export type ProviderApiTestFailureDetails = {
+  responseTime?: number;
+  error?: string;
+  rawResponse?: string;
+};
+
 type ProviderApiTestResult = ActionResult<
   | {
       success: true;
       message: string;
-      details?: {
-        responseTime?: number;
-        model?: string;
-        usage?: Record<string, unknown>;
-        content?: string;
-        rawResponse?: string;
-        streamInfo?: {
-          chunksReceived: number;
-          format: "sse" | "ndjson";
-        };
-      };
+      details?: ProviderApiTestSuccessDetails;
     }
   | {
       success: false;
       message: string;
-      details?: {
-        responseTime?: number;
-        error?: string;
-        rawResponse?: string;
-      };
+      details?: ProviderApiTestFailureDetails;
     }
 >;
 

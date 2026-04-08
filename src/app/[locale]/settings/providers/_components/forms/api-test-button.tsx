@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   getUnmaskedProviderKey,
+  type ProviderApiTestSuccessDetails,
   testProviderGemini,
   testProviderUnified,
 } from "@/actions/providers";
@@ -93,9 +94,8 @@ export function ApiTestButton({
   providerId,
   providerType,
   allowedModels = [],
-  enableMultiProviderTypes,
+  enableMultiProviderTypes: _enableMultiProviderTypes,
 }: ApiTestButtonProps) {
-  void enableMultiProviderTypes;
 
   const t = useTranslations("settings.providers.form.apiTest");
   const normalizedAllowedModels = useMemo(() => {
@@ -188,17 +188,7 @@ export function ApiTestButton({
         const cleanMessage = rawMessage.replace(" [FALLBACK:URL_PARAM]", "");
         const isSuccess = response.data.success === true;
         const details = (isSuccess ? response.data.details : undefined) as
-          | {
-              responseTime?: number;
-              model?: string;
-              usage?: Record<string, unknown>;
-              content?: string;
-              rawResponse?: string;
-              streamInfo?: {
-                chunksReceived: number;
-                format: "sse" | "ndjson";
-              };
-            }
+          | ProviderApiTestSuccessDetails
           | undefined;
         const latencyMs = response.data.details?.responseTime ?? 0;
 
@@ -400,7 +390,10 @@ export function ApiTestButton({
       </div>
 
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-        <div className="font-medium mb-1">⚠️ {t("disclaimer.title")}</div>
+        <div className="font-medium mb-1 flex items-center gap-1">
+          <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+          {t("disclaimer.title")}
+        </div>
         <div className="space-y-1 text-amber-700 dark:text-amber-300">
           <div>• {t("disclaimer.resultReference")}</div>
           <div>• {t("disclaimer.realRequest")}</div>

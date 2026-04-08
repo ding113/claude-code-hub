@@ -201,7 +201,8 @@ export function getPresetPayload(presetId: string, model?: string): Record<strin
     throw new Error(`Preset not found: ${presetId}`);
   }
 
-  const payload = JSON.parse(JSON.stringify(preset.payload)) as Record<string, unknown>;
+  const payload = structuredClone(preset.payload) as Record<string, unknown>;
+  // Claude / Codex / OpenAI Compatible 会在 body 里带 model，Gemini 走 URL path，不应强塞回 body。
   if (model && "model" in payload) {
     payload.model = model;
   }
@@ -223,8 +224,9 @@ function scorePreset(preset: PresetConfig, context: PresetSelectionContext): num
   let score = preset.score ?? 0;
   const model = context.model?.toLowerCase() ?? "";
   const url = context.providerUrl?.toLowerCase() ?? "";
+  const matchedModelHint = preset.modelHints?.some((hint) => model.includes(hint)) ?? false;
 
-  if (preset.modelHints?.some((hint) => model.includes(hint))) {
+  if (matchedModelHint) {
     score += 50;
   }
 
@@ -236,21 +238,25 @@ function scorePreset(preset: PresetConfig, context: PresetSelectionContext): num
     return score;
   }
 
-  // 让 Codex / Gemini 能根据模型名优先选更贴近的模板。
+  // 命中 modelHints 后就不再额外叠加 provider-specific boost，避免同一信号被重复计分。
   if (context.providerType === "codex") {
-    if (model.includes("codex") && preset.id === "cx_codex_basic") {
+    if (!matchedModelHint && model.includes("codex") && preset.id === "cx_codex_basic") {
       score += 40;
     }
-    if (!model.includes("codex") && preset.id === "cx_gpt_basic") {
+    if (!matchedModelHint && !model.includes("codex") && preset.id === "cx_gpt_basic") {
       score += 40;
     }
   }
 
   if (context.providerType === "gemini" || context.providerType === "gemini-cli") {
-    if (model.includes("flash") && preset.id === "gm_flash_basic") {
+    if (!matchedModelHint && model.includes("flash") && preset.id === "gm_flash_basic") {
       score += 40;
     }
-    if ((model.includes("pro") || model.includes("thinking")) && preset.id === "gm_pro_basic") {
+    if (
+      !matchedModelHint &&
+      (model.includes("pro") || model.includes("thinking")) &&
+      preset.id === "gm_pro_basic"
+    ) {
       score += 40;
     }
   }

@@ -33,9 +33,12 @@ interface AttemptPlan {
   preset?: PresetConfig;
   body: Record<string, unknown>;
   headers: Record<string, string>;
+  model: string | undefined;
   successContains: string;
   url: string;
 }
+
+const RETRYABLE_HTTP_STATUS_CODES = [400, 404, 405, 415, 422] as const;
 
 function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
   const customPayload = config.customPayload?.trim();
@@ -49,6 +52,7 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
             ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl),
             ...(config.customHeaders || {}),
           },
+          model: config.model,
           successContains: config.successContains ?? DEFAULT_SUCCESS_CONTAINS[config.providerType],
           url: getTestUrl(config.providerUrl, config.providerType, config.model),
         },
@@ -58,13 +62,20 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
     }
   }
 
-  const presets = config.preset
-    ? [getPreset(config.preset)].filter((preset): preset is PresetConfig => Boolean(preset))
-    : getExecutionPresetCandidates({
-        providerType: config.providerType,
-        providerUrl: config.providerUrl,
-        model: config.model,
-      });
+  let presets: PresetConfig[];
+  if (config.preset) {
+    const preset = getPreset(config.preset);
+    if (!preset) {
+      throw new Error(`Preset not found: ${config.preset}`);
+    }
+    presets = [preset];
+  } else {
+    presets = getExecutionPresetCandidates({
+      providerType: config.providerType,
+      providerUrl: config.providerUrl,
+      model: config.model,
+    });
+  }
 
   if (presets.length === 0) {
     return [
@@ -74,28 +85,33 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
           ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl),
           ...(config.customHeaders || {}),
         },
+        model: config.model,
         successContains: config.successContains ?? DEFAULT_SUCCESS_CONTAINS[config.providerType],
         url: getTestUrl(config.providerUrl, config.providerType, config.model),
       },
     ];
   }
 
-  return presets.map((preset) => ({
-    preset,
-    body: getPresetPayload(preset.id, config.model),
-    headers: {
-      ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
-        userAgent: preset.userAgent,
-        extraHeaders: preset.extraHeaders,
-      }),
-      ...(config.customHeaders || {}),
-    },
-    successContains:
-      config.successContains ??
-      preset.defaultSuccessContains ??
-      DEFAULT_SUCCESS_CONTAINS[config.providerType],
-    url: getTestUrl(config.providerUrl, config.providerType, config.model, undefined, preset.path),
-  }));
+  return presets.map((preset) => {
+    const effectiveModel = config.model ?? preset.defaultModel;
+    return {
+      preset,
+      body: getPresetPayload(preset.id, effectiveModel),
+      headers: {
+        ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
+          userAgent: preset.userAgent,
+          extraHeaders: preset.extraHeaders,
+        }),
+        ...(config.customHeaders || {}),
+      },
+      model: effectiveModel,
+      successContains:
+        config.successContains ??
+        preset.defaultSuccessContains ??
+        DEFAULT_SUCCESS_CONTAINS[config.providerType],
+      url: getTestUrl(config.providerUrl, config.providerType, effectiveModel, preset.path),
+    };
+  });
 }
 
 function shouldRetryWithNextTemplate(result: ProviderTestResult): boolean {
@@ -103,7 +119,12 @@ function shouldRetryWithNextTemplate(result: ProviderTestResult): boolean {
     return false;
   }
 
-  if (result.httpStatusCode && [400, 404, 405, 415, 422].includes(result.httpStatusCode)) {
+  if (
+    result.httpStatusCode &&
+    RETRYABLE_HTTP_STATUS_CODES.includes(
+      result.httpStatusCode as (typeof RETRYABLE_HTTP_STATUS_CODES)[number]
+    )
+  ) {
     return true;
   }
 
@@ -245,10 +266,12 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
   const timeoutMs = config.timeoutMs ?? TEST_DEFAULTS.TIMEOUT_MS;
   const slowThresholdMs = config.latencyThresholdMs ?? TEST_DEFAULTS.SLOW_LATENCY_MS;
   const plans = buildAttemptPlans(config);
+  const deadline = Date.now() + timeoutMs;
 
   let fallbackResult: ProviderTestResult | null = null;
   for (const plan of plans) {
-    const result = await runSingleAttempt(config, plan, timeoutMs, slowThresholdMs);
+    const remainingTimeoutMs = Math.max(1000, deadline - Date.now());
+    const result = await runSingleAttempt(config, plan, remainingTimeoutMs, slowThresholdMs);
     if (result.success || !shouldRetryWithNextTemplate(result)) {
       return result;
     }

@@ -101,4 +101,50 @@ describe("executeProviderTest", () => {
     expect(result.rawResponse).toBe(responseBody);
     expect(result.rawResponse?.length).toBe(responseBody.length);
   });
+
+  test("指定 preset 但未显式传 model 时，应使用 preset 的默认模型构造 Gemini URL", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({
+        "content-type": "application/json",
+      }),
+      text: async () =>
+        JSON.stringify({
+          modelVersion: "gemini-2.5-pro",
+          candidates: [
+            {
+              content: {
+                parts: [{ text: "pong" }],
+              },
+            },
+          ],
+        }),
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://gemini.example.com",
+      apiKey: "AIza1234567890abcdefghijklmnopqrstuvwxyz",
+      providerType: "gemini",
+      preset: "gm_pro_basic",
+    });
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://gemini.example.com/v1beta/models/gemini-2.5-pro:generateContent",
+      expect.any(Object)
+    );
+  });
+
+  test("传入未知 preset 时，应直接报错而不是悄悄回退到默认模板", async () => {
+    await expect(
+      executeProviderTest({
+        providerUrl: "https://api.example.com",
+        apiKey: "sk-test-openai-compatible",
+        providerType: "openai-compatible",
+        preset: "cx_base",
+      })
+    ).rejects.toThrow("Preset not found: cx_base");
+  });
 });
