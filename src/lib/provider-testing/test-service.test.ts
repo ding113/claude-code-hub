@@ -147,4 +147,57 @@ describe("executeProviderTest", () => {
       })
     ).rejects.toThrow("Preset not found: cx_base");
   });
+
+  test("openai-compatible 在首个模板返回 400 时，应自动回退到下一个模板", async () => {
+    const errorBody = JSON.stringify({
+      error: {
+        message: "bad request",
+      },
+    });
+    const okBody = JSON.stringify({
+      model: "gpt-4.1-mini",
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: "pong",
+          },
+        },
+      ],
+    });
+
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        headers: new Headers({
+          "content-type": "application/json",
+        }),
+        text: async () => errorBody,
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: new Headers({
+          "content-type": "application/json",
+        }),
+        text: async () => okBody,
+      } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test-openai-compatible",
+      providerType: "openai-compatible",
+      model: "gpt-4.1-mini",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.success).toBe(true);
+    expect(result.content).toBe("pong");
+
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { stream?: boolean };
+    expect(secondBody.stream).toBe(true);
+  });
 });
