@@ -1,0 +1,25 @@
+{
+  "model": "gpt-5.4",
+  "instructions": "You are Codex, based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer.",
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "ping"
+        }
+      ]
+    }
+  ],
+  "tools": [],
+  "tool_choice": "auto",
+  "parallel_tool_calls": false,
+  "reasoning": {
+    "effort": "low",
+    "summary": "auto"
+  },
+  "store": false,
+  "stream": true
+}

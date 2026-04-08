@@ -1,15 +1,17 @@
 /**
  * Provider Testing Service
- * Main entry point for unified provider testing
  *
- * Implements three-tier validation from relay-pulse:
- * 1. HTTP Status Code validation
- * 2. Latency threshold validation
- * 3. Content validation (success_contains)
+ * 统一执行模板探测，并在协议不匹配时自动切换到同套件里的下一个模板。
  */
 
 import { createProxyAgentForProvider, type ProviderProxyConfig } from "@/lib/proxy-agent";
-import { getPreset, getPresetPayload } from "./presets";
+import { parseResponse } from "./parsers";
+import {
+  getExecutionPresetCandidates,
+  getPreset,
+  getPresetPayload,
+  type PresetConfig,
+} from "./presets";
 import type {
   ProviderTestConfig,
   ProviderTestResult,
@@ -27,62 +29,116 @@ import {
 import { evaluateContentValidation } from "./validators/content-validator";
 import { classifyHttpStatus } from "./validators/http-validator";
 
-/**
- * Execute a provider test with three-tier validation
- */
-export async function executeProviderTest(config: ProviderTestConfig): Promise<ProviderTestResult> {
-  const startTime = Date.now();
-  let firstByteMs: number | undefined;
+interface AttemptPlan {
+  preset?: PresetConfig;
+  body: Record<string, unknown>;
+  headers: Record<string, string>;
+  successContains: string;
+  url: string;
+}
 
-  // Build test configuration with defaults
-  const timeoutMs = config.timeoutMs ?? TEST_DEFAULTS.TIMEOUT_MS;
-  const slowThresholdMs = config.latencyThresholdMs ?? TEST_DEFAULTS.SLOW_LATENCY_MS;
-
-  // Determine success validation string (priority: config > preset > default)
-  let successContains = config.successContains;
-  if (!successContains && config.preset) {
-    const preset = getPreset(config.preset);
-    successContains = preset?.defaultSuccessContains;
-  }
-  successContains ??= DEFAULT_SUCCESS_CONTAINS[config.providerType];
-
-  // Build request URL
-  const url = getTestUrl(
-    config.providerUrl,
-    config.providerType,
-    config.model,
-    // Only pass API key for Gemini (URL parameter)
-    config.providerType === "gemini" || config.providerType === "gemini-cli"
-      ? config.apiKey
-      : undefined
-  );
-
-  // Build request body (priority: customPayload > preset > default)
-  let body: Record<string, unknown>;
-  if (config.customPayload) {
-    // User-provided custom payload
+function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
+  const customPayload = config.customPayload?.trim();
+  if (customPayload) {
     try {
-      body = JSON.parse(config.customPayload);
+      const parsed = JSON.parse(customPayload) as Record<string, unknown>;
+      return [
+        {
+          body: parsed,
+          headers: {
+            ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl),
+            ...(config.customHeaders || {}),
+          },
+          successContains: config.successContains ?? DEFAULT_SUCCESS_CONTAINS[config.providerType],
+          url: getTestUrl(config.providerUrl, config.providerType, config.model),
+        },
+      ];
     } catch {
       throw new Error("Invalid custom payload JSON");
     }
-  } else if (config.preset) {
-    // Use preset configuration
-    body = getPresetPayload(config.preset, config.model);
-  } else {
-    // Use default test body
-    body = getTestBody(config.providerType, config.model);
   }
 
-  // Build request headers (merge custom headers if provided)
-  const baseHeaders = getTestHeaders(config.providerType, config.apiKey);
-  const headers = config.customHeaders ? { ...baseHeaders, ...config.customHeaders } : baseHeaders;
+  const presets = config.preset
+    ? [getPreset(config.preset)].filter((preset): preset is PresetConfig => Boolean(preset))
+    : getExecutionPresetCandidates({
+        providerType: config.providerType,
+        providerUrl: config.providerUrl,
+        model: config.model,
+      });
 
-  // Track proxy usage (declared outside try for catch block access)
+  if (presets.length === 0) {
+    return [
+      {
+        body: getTestBody(config.providerType, config.model),
+        headers: {
+          ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl),
+          ...(config.customHeaders || {}),
+        },
+        successContains: config.successContains ?? DEFAULT_SUCCESS_CONTAINS[config.providerType],
+        url: getTestUrl(config.providerUrl, config.providerType, config.model),
+      },
+    ];
+  }
+
+  return presets.map((preset) => ({
+    preset,
+    body: getPresetPayload(preset.id, config.model),
+    headers: {
+      ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
+        userAgent: preset.userAgent,
+        extraHeaders: preset.extraHeaders,
+      }),
+      ...(config.customHeaders || {}),
+    },
+    successContains:
+      config.successContains ??
+      preset.defaultSuccessContains ??
+      DEFAULT_SUCCESS_CONTAINS[config.providerType],
+    url: getTestUrl(config.providerUrl, config.providerType, config.model, undefined, preset.path),
+  }));
+}
+
+function shouldRetryWithNextTemplate(result: ProviderTestResult): boolean {
+  if (result.status !== "red") {
+    return false;
+  }
+
+  if (result.httpStatusCode && [400, 404, 405, 415, 422].includes(result.httpStatusCode)) {
+    return true;
+  }
+
+  return ["client_error", "invalid_request", "content_mismatch"].includes(result.subStatus);
+}
+
+function buildValidationDetails(
+  responseStatus: number | undefined,
+  latencyMs: number,
+  slowThresholdMs: number,
+  contentPassed: boolean,
+  successContains: string
+): ValidationDetails {
+  return {
+    httpPassed:
+      responseStatus !== undefined ? responseStatus >= 200 && responseStatus < 300 : false,
+    httpStatusCode: responseStatus,
+    latencyPassed: latencyMs <= slowThresholdMs,
+    latencyMs,
+    contentPassed,
+    contentTarget: successContains,
+  };
+}
+
+async function runSingleAttempt(
+  config: ProviderTestConfig,
+  plan: AttemptPlan,
+  timeoutMs: number,
+  slowThresholdMs: number
+): Promise<ProviderTestResult> {
+  const startTime = Date.now();
+  let firstByteMs: number | undefined;
   let usedProxy = false;
 
   try {
-    // Create proxy agent if proxy URL is configured
     let dispatcher: unknown | undefined;
     if (config.proxyUrl) {
       const tempProvider: ProviderProxyConfig = {
@@ -91,71 +147,43 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
         proxyUrl: config.proxyUrl,
         proxyFallbackToDirect: config.proxyFallbackToDirect ?? false,
       };
-      const proxyConfig = createProxyAgentForProvider(tempProvider, url);
+      const proxyConfig = createProxyAgentForProvider(tempProvider, plan.url);
       if (proxyConfig) {
         dispatcher = proxyConfig.agent;
         usedProxy = true;
       }
     }
 
-    // Create abort controller for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      // Execute request
       const fetchOptions: RequestInit & { dispatcher?: unknown } = {
         method: "POST",
-        headers,
-        body: JSON.stringify(body),
+        headers: plan.headers,
+        body: JSON.stringify(plan.body),
         signal: controller.signal,
       };
       if (dispatcher) {
         fetchOptions.dispatcher = dispatcher;
       }
-      const response = await fetch(url, fetchOptions);
 
+      const response = await fetch(plan.url, fetchOptions);
       firstByteMs = Date.now() - startTime;
 
-      // Read response body
       const responseBody = await response.text();
       const latencyMs = Date.now() - startTime;
-      const _contentType = response.headers.get("content-type") || undefined;
-
-      // Tier 1: HTTP Status validation
+      const contentType = response.headers.get("content-type") || undefined;
+      const parsed = parseResponse(config.providerType, responseBody, contentType);
+      const validationInput = parsed.content ? `${parsed.content}\n${responseBody}` : responseBody;
       const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
-
-      // Tier 2 & 3: Content validation - SIMPLIFIED: directly match raw response body
-      // No SSE/JSON parsing needed - just check if successContains exists in raw response
-      // This is the most reliable approach as relay-pulse also falls back to raw body
       const contentResult = evaluateContentValidation(
         httpResult.status,
         httpResult.subStatus,
-        responseBody, // Use raw response body directly
-        successContains
+        validationInput,
+        plan.successContains
       );
 
-      // Try to extract model from response (simple JSON extraction)
-      let model: string | undefined;
-      try {
-        // Try to parse as JSON for model extraction only
-        const parsed = JSON.parse(responseBody);
-        model = parsed.model;
-      } catch {
-        // Not JSON or parsing failed - that's fine, model is optional
-      }
-
-      // Build validation details
-      const validationDetails: ValidationDetails = {
-        httpPassed: response.ok,
-        httpStatusCode: response.status,
-        latencyPassed: latencyMs <= slowThresholdMs,
-        latencyMs,
-        contentPassed: contentResult.contentPassed,
-        contentTarget: successContains,
-      };
-
-      // Build result with raw response for user inspection
       return {
         success: contentResult.status !== "red",
         status: contentResult.status,
@@ -164,11 +192,24 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
         firstByteMs,
         httpStatusCode: response.status,
         httpStatusText: response.statusText,
-        model,
-        content: responseBody.slice(0, 500), // Preview for quick view
-        rawResponse: responseBody.slice(0, 5000), // Full response for detailed inspection
+        model: parsed.model,
+        content: parsed.content || responseBody,
+        rawResponse: responseBody,
+        usage: parsed.usage,
+        streamInfo: parsed.isStreaming
+          ? {
+              isStreaming: true,
+              chunksReceived: parsed.chunksReceived,
+            }
+          : undefined,
         testedAt: new Date(),
-        validationDetails,
+        validationDetails: buildValidationDetails(
+          response.status,
+          latencyMs,
+          slowThresholdMs,
+          contentResult.contentPassed,
+          plan.successContains
+        ),
         usedProxy,
       };
     } finally {
@@ -176,18 +217,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
     }
   } catch (error) {
     const latencyMs = Date.now() - startTime;
-
-    // Classify error type
     const { subStatus, errorType, errorMessage } = classifyError(error);
-
-    // Build validation details for failure
-    const validationDetails: ValidationDetails = {
-      httpPassed: false,
-      latencyPassed: false,
-      latencyMs,
-      contentPassed: false,
-      contentTarget: successContains,
-    };
 
     return {
       success: false,
@@ -199,15 +229,39 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
       errorType,
       rawError: error,
       testedAt: new Date(),
-      validationDetails,
+      validationDetails: buildValidationDetails(
+        undefined,
+        latencyMs,
+        slowThresholdMs,
+        false,
+        plan.successContains
+      ),
       usedProxy,
     };
   }
 }
 
-/**
- * Classify error into sub-status and message
- */
+export async function executeProviderTest(config: ProviderTestConfig): Promise<ProviderTestResult> {
+  const timeoutMs = config.timeoutMs ?? TEST_DEFAULTS.TIMEOUT_MS;
+  const slowThresholdMs = config.latencyThresholdMs ?? TEST_DEFAULTS.SLOW_LATENCY_MS;
+  const plans = buildAttemptPlans(config);
+
+  let fallbackResult: ProviderTestResult | null = null;
+  for (const plan of plans) {
+    const result = await runSingleAttempt(config, plan, timeoutMs, slowThresholdMs);
+    if (result.success || !shouldRetryWithNextTemplate(result)) {
+      return result;
+    }
+    fallbackResult = result;
+  }
+
+  if (fallbackResult) {
+    return fallbackResult;
+  }
+
+  throw new Error("No provider testing plan could be constructed");
+}
+
 function classifyError(error: unknown): {
   subStatus: TestSubStatus;
   errorType: string;
@@ -216,7 +270,6 @@ function classifyError(error: unknown): {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
 
-    // Timeout errors
     if (error.name === "AbortError" || message.includes("timeout") || message.includes("aborted")) {
       return {
         subStatus: "network_error",
@@ -225,7 +278,6 @@ function classifyError(error: unknown): {
       };
     }
 
-    // DNS/connection errors
     if (
       message.includes("getaddrinfo") ||
       message.includes("enotfound") ||
@@ -238,7 +290,6 @@ function classifyError(error: unknown): {
       };
     }
 
-    // Connection refused
     if (message.includes("econnrefused") || message.includes("connection refused")) {
       return {
         subStatus: "network_error",
@@ -247,7 +298,6 @@ function classifyError(error: unknown): {
       };
     }
 
-    // Connection reset
     if (message.includes("econnreset") || message.includes("connection reset")) {
       return {
         subStatus: "network_error",
@@ -256,7 +306,6 @@ function classifyError(error: unknown): {
       };
     }
 
-    // SSL/TLS errors
     if (message.includes("ssl") || message.includes("tls") || message.includes("certificate")) {
       return {
         subStatus: "network_error",
@@ -265,7 +314,6 @@ function classifyError(error: unknown): {
       };
     }
 
-    // Generic network error
     return {
       subStatus: "network_error",
       errorType: "network_error",
@@ -273,7 +321,6 @@ function classifyError(error: unknown): {
     };
   }
 
-  // Unknown error type
   return {
     subStatus: "network_error",
     errorType: "unknown_error",
@@ -281,10 +328,6 @@ function classifyError(error: unknown): {
   };
 }
 
-/**
- * Get availability weight for a status
- * Used for calculating weighted availability scores
- */
 export function getStatusWeight(
   status: TestStatus,
   degradedWeight: number = TEST_DEFAULTS.DEGRADED_WEIGHT

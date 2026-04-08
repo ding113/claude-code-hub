@@ -1,0 +1,15 @@
+{
+  "model": "gpt-4.1-mini",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an echo bot. Reply with exactly pong."
+    },
+    {
+      "role": "user",
+      "content": "ping"
+    }
+  ],
+  "max_tokens": 20,
+  "stream": true
+}

@@ -2927,6 +2927,7 @@ type ProviderApiTestResult = ActionResult<
         model?: string;
         usage?: Record<string, unknown>;
         content?: string;
+        rawResponse?: string;
         streamInfo?: {
           chunksReceived: number;
           format: "sse" | "ndjson";
@@ -2939,6 +2940,7 @@ type ProviderApiTestResult = ActionResult<
       details?: {
         responseTime?: number;
         error?: string;
+        rawResponse?: string;
       };
     }
 >;
@@ -3013,6 +3015,7 @@ type GeminiResponse = {
     };
     finishReason?: string;
   }>;
+  modelVersion?: string;
   usageMetadata?: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
@@ -3793,6 +3796,7 @@ async function executeProviderApiTest(
             details: {
               responseTime,
               error: finalErrorDetail,
+              rawResponse: errorText,
             },
           },
         };
@@ -3876,6 +3880,7 @@ async function executeProviderApiTest(
               details: {
                 responseTime,
                 ...extracted,
+                rawResponse: responseText,
                 streamInfo: {
                   chunksReceived: streamResult.chunksReceived,
                   format: streamResult.format,
@@ -3923,6 +3928,7 @@ async function executeProviderApiTest(
             details: {
               responseTime,
               error: `JSON 解析失败: ${jsonError instanceof Error ? jsonError.message : "未知错误"}`,
+              rawResponse: responseText,
             },
           },
         };
@@ -3938,6 +3944,7 @@ async function executeProviderApiTest(
           details: {
             responseTime,
             ...extracted,
+            rawResponse: responseText,
           },
         },
       };
@@ -4152,7 +4159,7 @@ export async function testProviderGemini(
     {
       path: (model) => {
         // 不在 URL 中放 key，仅用 header 认证
-        return `/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+        return `/v1beta/models/${model}:generateContent`;
       },
       defaultModel: "gemini-2.5-pro",
       headers: (apiKey) => {
@@ -4170,9 +4177,13 @@ export async function testProviderGemini(
       body: (model) => {
         void model;
         return {
-          contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
+          contents: [{ role: "user", parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
           generationConfig: {
+            temperature: 0,
             maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
           },
         };
       },
@@ -4182,7 +4193,7 @@ export async function testProviderGemini(
       extract: (result) => {
         const geminiResult = result as GeminiResponse;
         return {
-          model: undefined,
+          model: geminiResult.modelVersion,
           usage: geminiResult.usageMetadata as Record<string, unknown>,
           content: extractFirstTextSnippet(geminiResult),
         };
@@ -4226,7 +4237,7 @@ export async function testProviderGemini(
     { ...data, apiKey: processedApiKey },
     {
       path: (model, apiKey) =>
-        `/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
+        `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
       defaultModel: "gemini-2.5-pro",
       headers: (apiKey) => ({
         "Content-Type": "application/json",
@@ -4236,9 +4247,13 @@ export async function testProviderGemini(
       body: (model) => {
         void model;
         return {
-          contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
+          contents: [{ role: "user", parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
           generationConfig: {
+            temperature: 0,
             maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
           },
         };
       },
@@ -4248,7 +4263,7 @@ export async function testProviderGemini(
       extract: (result) => {
         const geminiResult = result as GeminiResponse;
         return {
-          model: undefined,
+          model: geminiResult.modelVersion,
           usage: geminiResult.usageMetadata as Record<string, unknown>,
           content: extractFirstTextSnippet(geminiResult),
         };
@@ -4313,6 +4328,7 @@ export type UnifiedTestResult = ActionResult<{
   httpStatusText?: string;
   model?: string;
   content?: string;
+  rawResponse?: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -4436,6 +4452,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
         httpStatusText: result.httpStatusText,
         model: result.model,
         content: result.content,
+        rawResponse: result.rawResponse,
         usage: result.usage,
         streamInfo: result.streamInfo,
         errorMessage: result.errorMessage,
