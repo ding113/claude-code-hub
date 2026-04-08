@@ -9,7 +9,7 @@
   "matchTypeContains": "Contains",
   "matchTypeRegex": "Regex",
   "orderHint": "Top rules match first",
-  "maxRules": "You can add up to 100 allowlist rules",
+  "maxRules": "You can add up to {max} allowlist rules",
   "saveRule": "Save rule",
   "cancelEdit": "Cancel edit",
   "moveRuleUp": "Move rule up",
@@ -22,7 +22,7 @@
   "exactPickerDescription": "Prefer upstream models when available. If not, fall back to the local price list and add them as exact-match rules.",
   "emptyState": "No allowlist rules yet. When empty, all models are allowed.",
   "patternEmpty": "Match pattern cannot be empty",
-  "patternTooLong": "Match pattern is too long",
+  "patternTooLong": "Match pattern is too long (max {max} characters)",
   "patternLabel": "Model Pattern",
   "patternPlaceholder": "e.g. claude-opus-4-1 or ^claude-.*$",
   "regexInvalid": "Regex pattern is invalid",
@@ -31,6 +31,6 @@
   "quickAddMissingUrl": "Provider URL is required before quick add",
   "quickAddMissingKey": "API key is required before quick add",
   "quickAddFailed": "Failed to fetch upstream models",
-  "quickAddReachedLimit": "Reached the 100-rule limit while importing upstream models",
+  "quickAddReachedLimit": "Reached the {max}-rule limit while importing upstream models",
   "quickAddNoNewRules": "No new upstream models were added"
 }
