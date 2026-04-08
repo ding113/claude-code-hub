@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
 import {
   PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA,
   PROVIDER_MODEL_REDIRECT_RULE_SCHEMA,
 } from "@/lib/provider-model-redirect-schema";
 
-const MAX_PROVIDER_RULES = 100_000;
-const MAX_PROVIDER_RULE_TEXT_LENGTH = 4_096;
+const { MAX_ITEMS: MAX_PROVIDER_RULES, MAX_TEXT_LENGTH: MAX_PROVIDER_RULE_TEXT_LENGTH } =
+  PROVIDER_RULE_LIMITS;
 
 function buildRedirectRules(count: number) {
   return Array.from({ length: count }, (_, index) => ({
