@@ -202,4 +202,54 @@ describe("executeProviderTest", () => {
     };
     expect(secondBody.stream).toBe(true);
   });
+
+  test("内容校验应优先使用解析后的文本，不能被原始 JSON 字段名误判为成功", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({
+        "content-type": "application/json",
+      }),
+      text: async () =>
+        JSON.stringify({
+          model: "gpt-4.1-mini",
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: "no match here",
+              },
+            },
+          ],
+        }),
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test-openai-compatible",
+      providerType: "openai-compatible",
+      model: "gpt-4.1-mini",
+      successContains: "content",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.subStatus).toBe("content_mismatch");
+    expect(result.validationDetails.contentPassed).toBe(false);
+  });
+
+  test("网络错误时 latency 层不能被标记为通过", async () => {
+    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test-openai-compatible",
+      providerType: "openai-compatible",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.subStatus).toBe("network_error");
+    expect(result.validationDetails.httpPassed).toBe(false);
+    expect(result.validationDetails.latencyPassed).toBe(false);
+  });
 });

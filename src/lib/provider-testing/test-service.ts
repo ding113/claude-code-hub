@@ -142,7 +142,7 @@ function buildValidationDetails(
     httpPassed:
       responseStatus !== undefined ? responseStatus >= 200 && responseStatus < 300 : false,
     httpStatusCode: responseStatus,
-    latencyPassed: latencyMs <= slowThresholdMs,
+    latencyPassed: responseStatus !== undefined && latencyMs <= slowThresholdMs,
     latencyMs,
     contentPassed,
     contentTarget: successContains,
@@ -196,7 +196,7 @@ async function runSingleAttempt(
       const latencyMs = Date.now() - startTime;
       const contentType = response.headers.get("content-type") || undefined;
       const parsed = parseResponse(config.providerType, responseBody, contentType);
-      const validationInput = parsed.content ? `${parsed.content}\n${responseBody}` : responseBody;
+      const validationInput = parsed.content || responseBody;
       const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
       const contentResult = evaluateContentValidation(
         httpResult.status,
