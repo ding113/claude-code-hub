@@ -197,7 +197,9 @@ describe("executeProviderTest", () => {
     expect(result.success).toBe(true);
     expect(result.content).toBe("pong");
 
-    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as { stream?: boolean };
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
+      stream?: boolean;
+    };
     expect(secondBody.stream).toBe(true);
   });
 });
