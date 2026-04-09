@@ -131,4 +131,34 @@ describe("ErrorRuleDetector reload queue", () => {
     expect(mocks.getActiveErrorRules).toHaveBeenCalledTimes(2);
     expect(errorRuleDetector.detect("Your session is missing thinking fields").matched).toBe(false);
   });
+
+  test("should avoid hot retry loops when a queued reload hits persistent DB failure", async () => {
+    let rejectFirstLoad: ((reason?: unknown) => void) | undefined;
+
+    mocks.getActiveErrorRules
+      .mockImplementationOnce(
+        () =>
+          new Promise<ReturnType<typeof buildRule>[]>((_, reject) => {
+            rejectFirstLoad = reject;
+          })
+      )
+      .mockResolvedValueOnce([]);
+
+    const { errorRuleDetector } = await import("@/lib/error-rule-detector");
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const initialReload = errorRuleDetector.reload();
+    mocks.eventEmitter.emit("errorRulesUpdated");
+
+    rejectFirstLoad?.(new Error("DSN environment variable is not set"));
+    await initialReload;
+
+    expect(mocks.getActiveErrorRules).toHaveBeenCalledTimes(1);
+    expect(errorRuleDetector.getStats().isLoading).toBe(false);
+
+    await errorRuleDetector.reload();
+
+    expect(mocks.getActiveErrorRules).toHaveBeenCalledTimes(2);
+  });
 });

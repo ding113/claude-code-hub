@@ -198,9 +198,11 @@ class ErrorRuleDetector {
               );
             }
 
-            // 保留现有缓存，下次检测时重试
+            // 保留现有缓存；数据库持续故障时不要在同一轮里热重试，
+            // 让下一次事件/显式 reload 自然触发后续重试，避免日志风暴和无退避打库。
             this.lastReloadTime = Date.now();
-            continue;
+            this.reloadRequestedWhileLoading = false;
+            break;
           }
 
           // 使用局部变量收集新数据，避免 reload 期间 detect() 返回空结果
