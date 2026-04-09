@@ -140,6 +140,13 @@ class ErrorRuleDetector {
    * 操作前缓存已初始化，解决新 worker 进程中缓存为空的问题
    */
   async ensureInitialized(): Promise<void> {
+    // 只要有进行中的 reload（含 queued rerun），普通调用方都应等待它完成，
+    // 否则会在补跑尚未落地时读取到旧快照。
+    if (this.activeReloadPromise) {
+      await this.activeReloadPromise;
+      return;
+    }
+
     // 只有成功从数据库加载过，才跳过初始化
     if (this.dbLoadedSuccessfully && this.isInitialized) {
       return;

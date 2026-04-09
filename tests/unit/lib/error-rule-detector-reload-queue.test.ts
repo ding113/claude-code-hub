@@ -185,4 +185,46 @@ describe("ErrorRuleDetector reload queue", () => {
     expect(mocks.getActiveErrorRules).toHaveBeenCalledTimes(1);
     expect(errorRuleDetector.detect("Your session is missing thinking fields").matched).toBe(true);
   });
+
+  test("should keep ensureInitialized waiting until a queued rerun finishes", async () => {
+    let resolveFirstLoad: ((value: ReturnType<typeof buildRule>[]) => void) | undefined;
+    let resolveSecondLoad: ((value: ReturnType<typeof buildRule>[]) => void) | undefined;
+
+    mocks.getActiveErrorRules
+      .mockImplementationOnce(
+        () =>
+          new Promise<ReturnType<typeof buildRule>[]>((resolve) => {
+            resolveFirstLoad = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<ReturnType<typeof buildRule>[]>((resolve) => {
+            resolveSecondLoad = resolve;
+          })
+      );
+
+    const { errorRuleDetector } = await import("@/lib/error-rule-detector");
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const runningReload = errorRuleDetector.reload();
+    mocks.eventEmitter.emit("errorRulesUpdated");
+
+    resolveFirstLoad?.([buildRule()]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    let waiterSettled = false;
+    const waiter = errorRuleDetector.ensureInitialized().then(() => {
+      waiterSettled = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(waiterSettled).toBe(false);
+
+    resolveSecondLoad?.([]);
+    await Promise.all([runningReload, waiter]);
+
+    expect(errorRuleDetector.detect("Your session is missing thinking fields").matched).toBe(false);
+  });
 });
