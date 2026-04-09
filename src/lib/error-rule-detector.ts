@@ -83,6 +83,8 @@ class ErrorRuleDetector {
   private isInitialized: boolean = false; // 跟踪初始化状态
   private initializationPromise: Promise<void> | null = null; // 防止并发初始化竞态
   private dbLoadedSuccessfully: boolean = false; // 是否成功从数据库加载过
+  private activeReloadPromise: Promise<void> | null = null; // 合并并发 reload
+  private reloadRequestedWhileLoading: boolean = false; // reload 期间收到的补跑请求
 
   constructor() {
     // 延迟初始化事件监听（仅在 Node.js runtime 中）
@@ -161,149 +163,174 @@ class ErrorRuleDetector {
    * - 成功加载后标记 dbLoadedSuccessfully，后续不再重试
    */
   async reload(): Promise<void> {
-    if (this.isLoading) {
-      logger.warn("[ErrorRuleDetector] Reload already in progress, skipping");
-      return;
+    if (this.activeReloadPromise) {
+      this.reloadRequestedWhileLoading = true;
+      logger.info("[ErrorRuleDetector] Reload already in progress, queueing another pass");
+      return this.activeReloadPromise;
     }
 
-    this.isLoading = true;
+    const reloadLoopPromise = (async () => {
+      do {
+        // 关键逻辑：reload 期间如果又收到事件，只做标记；当前轮完成后立刻补跑一轮，
+        // 避免“数据库已禁用，但内存快照仍是旧规则”的窗口被长期保留。
+        this.reloadRequestedWhileLoading = false;
+        this.isLoading = true;
 
-    try {
-      logger.info("[ErrorRuleDetector] Reloading error rules from database...");
+        try {
+          logger.info("[ErrorRuleDetector] Reloading error rules from database...");
 
-      let rules;
-      try {
-        rules = await getActiveErrorRules();
-        this.dbLoadedSuccessfully = true;
-      } catch (dbError) {
-        const errorMessage = (dbError as Error).message || "";
+          let rules;
+          try {
+            rules = await getActiveErrorRules();
+            this.dbLoadedSuccessfully = true;
+          } catch (dbError) {
+            const errorMessage = (dbError as Error).message || "";
 
-        // 记录数据库错误（区分表不存在和其他错误）
-        if (errorMessage.includes("relation") && errorMessage.includes("does not exist")) {
-          logger.warn(
-            "[ErrorRuleDetector] error_rules table does not exist yet (migration pending)"
-          );
-        } else {
-          logger.error("[ErrorRuleDetector] Database error while loading error rules:", dbError);
-        }
+            // 记录数据库错误（区分表不存在和其他错误）
+            if (errorMessage.includes("relation") && errorMessage.includes("does not exist")) {
+              logger.warn(
+                "[ErrorRuleDetector] error_rules table does not exist yet (migration pending)"
+              );
+            } else {
+              logger.error(
+                "[ErrorRuleDetector] Database error while loading error rules:",
+                dbError
+              );
+            }
 
-        // 保留现有缓存，下次检测时重试
-        this.lastReloadTime = Date.now();
-        return;
-      }
-
-      // 使用局部变量收集新数据，避免 reload 期间 detect() 返回空结果
-      const newRegexPatterns: RegexPattern[] = [];
-      const newContainsPatterns: ContainsPattern[] = [];
-      const newExactPatterns = new Map<string, ExactPattern>();
-
-      // 按类型分组加载规则
-      let validRegexCount = 0;
-      let skippedRedosCount = 0;
-      let skippedInvalidResponseCount = 0;
-
-      for (const rule of rules) {
-        // 在加载阶段验证 overrideResponse 格式，过滤畸形数据
-        let validatedOverrideResponse: ErrorOverrideResponse | undefined;
-        if (rule.overrideResponse) {
-          if (isValidErrorOverrideResponse(rule.overrideResponse)) {
-            validatedOverrideResponse = rule.overrideResponse;
-          } else {
-            logger.warn(
-              `[ErrorRuleDetector] Invalid override_response for rule ${rule.id} (pattern: ${rule.pattern}), skipping response override`
-            );
-            skippedInvalidResponseCount++;
-          }
-        }
-
-        switch (rule.matchType) {
-          case "contains": {
-            const lowerText = rule.pattern.toLowerCase();
-            newContainsPatterns.push({
-              ruleId: rule.id,
-              pattern: rule.pattern,
-              text: lowerText,
-              category: rule.category,
-              description: rule.description ?? undefined,
-              overrideResponse: validatedOverrideResponse,
-              overrideStatusCode: rule.overrideStatusCode ?? undefined,
-            });
-            break;
+            // 保留现有缓存，下次检测时重试
+            this.lastReloadTime = Date.now();
+            continue;
           }
 
-          case "exact": {
-            const lowerText = rule.pattern.toLowerCase();
-            newExactPatterns.set(lowerText, {
-              ruleId: rule.id,
-              pattern: rule.pattern,
-              text: lowerText,
-              category: rule.category,
-              description: rule.description ?? undefined,
-              overrideResponse: validatedOverrideResponse,
-              overrideStatusCode: rule.overrideStatusCode ?? undefined,
-            });
-            break;
-          }
+          // 使用局部变量收集新数据，避免 reload 期间 detect() 返回空结果
+          const newRegexPatterns: RegexPattern[] = [];
+          const newContainsPatterns: ContainsPattern[] = [];
+          const newExactPatterns = new Map<string, ExactPattern>();
 
-          case "regex": {
-            // 使用 safe-regex 检测 ReDoS 风险
-            try {
-              if (!safeRegex(rule.pattern)) {
+          // 按类型分组加载规则
+          let validRegexCount = 0;
+          let skippedRedosCount = 0;
+          let skippedInvalidResponseCount = 0;
+
+          for (const rule of rules) {
+            // 在加载阶段验证 overrideResponse 格式，过滤畸形数据
+            let validatedOverrideResponse: ErrorOverrideResponse | undefined;
+            if (rule.overrideResponse) {
+              if (isValidErrorOverrideResponse(rule.overrideResponse)) {
+                validatedOverrideResponse = rule.overrideResponse;
+              } else {
                 logger.warn(
-                  `[ErrorRuleDetector] ReDoS risk detected in pattern: ${rule.pattern}, skipping`
+                  `[ErrorRuleDetector] Invalid override_response for rule ${rule.id} (pattern: ${rule.pattern}), skipping response override`
                 );
-                skippedRedosCount++;
+                skippedInvalidResponseCount++;
+              }
+            }
+
+            switch (rule.matchType) {
+              case "contains": {
+                const lowerText = rule.pattern.toLowerCase();
+                newContainsPatterns.push({
+                  ruleId: rule.id,
+                  pattern: rule.pattern,
+                  text: lowerText,
+                  category: rule.category,
+                  description: rule.description ?? undefined,
+                  overrideResponse: validatedOverrideResponse,
+                  overrideStatusCode: rule.overrideStatusCode ?? undefined,
+                });
                 break;
               }
 
-              const pattern = new RegExp(rule.pattern, "i");
-              newRegexPatterns.push({
-                ruleId: rule.id,
-                rawPattern: rule.pattern,
-                pattern,
-                category: rule.category,
-                description: rule.description ?? undefined,
-                overrideResponse: validatedOverrideResponse,
-                overrideStatusCode: rule.overrideStatusCode ?? undefined,
-              });
-              validRegexCount++;
-            } catch (error) {
-              logger.error(`[ErrorRuleDetector] Invalid regex pattern: ${rule.pattern}`, error);
+              case "exact": {
+                const lowerText = rule.pattern.toLowerCase();
+                newExactPatterns.set(lowerText, {
+                  ruleId: rule.id,
+                  pattern: rule.pattern,
+                  text: lowerText,
+                  category: rule.category,
+                  description: rule.description ?? undefined,
+                  overrideResponse: validatedOverrideResponse,
+                  overrideStatusCode: rule.overrideStatusCode ?? undefined,
+                });
+                break;
+              }
+
+              case "regex": {
+                // 使用 safe-regex 检测 ReDoS 风险
+                try {
+                  if (!safeRegex(rule.pattern)) {
+                    logger.warn(
+                      `[ErrorRuleDetector] ReDoS risk detected in pattern: ${rule.pattern}, skipping`
+                    );
+                    skippedRedosCount++;
+                    break;
+                  }
+
+                  const pattern = new RegExp(rule.pattern, "i");
+                  newRegexPatterns.push({
+                    ruleId: rule.id,
+                    rawPattern: rule.pattern,
+                    pattern,
+                    category: rule.category,
+                    description: rule.description ?? undefined,
+                    overrideResponse: validatedOverrideResponse,
+                    overrideStatusCode: rule.overrideStatusCode ?? undefined,
+                  });
+                  validRegexCount++;
+                } catch (error) {
+                  logger.error(`[ErrorRuleDetector] Invalid regex pattern: ${rule.pattern}`, error);
+                }
+                break;
+              }
+
+              default:
+                logger.warn(`[ErrorRuleDetector] Unknown match type: ${rule.matchType}`);
             }
-            break;
           }
 
-          default:
-            logger.warn(`[ErrorRuleDetector] Unknown match type: ${rule.matchType}`);
+          // 原子替换：确保 detect() 始终看到一致的数据集
+          this.regexPatterns = newRegexPatterns;
+          this.containsPatterns = newContainsPatterns;
+          this.exactPatterns = newExactPatterns;
+
+          this.lastReloadTime = Date.now();
+          this.isInitialized = true; // 标记为已初始化
+
+          const skippedInfo = [
+            skippedRedosCount > 0 ? `${skippedRedosCount} ReDoS` : "",
+            skippedInvalidResponseCount > 0
+              ? `${skippedInvalidResponseCount} invalid response`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(", ");
+
+          logger.info(
+            `[ErrorRuleDetector] Loaded ${rules.length} error rules: ` +
+              `contains=${newContainsPatterns.length}, exact=${newExactPatterns.size}, ` +
+              `regex=${validRegexCount}${skippedInfo ? ` (skipped: ${skippedInfo})` : ""}`
+          );
+        } catch (error) {
+          logger.error("[ErrorRuleDetector] Failed to reload error rules:", error);
+          // 失败时不清空现有缓存，保持降级可用
+        } finally {
+          this.isLoading = false;
         }
+      } while (this.reloadRequestedWhileLoading);
+    })();
+
+    this.activeReloadPromise = reloadLoopPromise.finally(async () => {
+      const shouldRestartAfterSettle = this.reloadRequestedWhileLoading;
+      this.activeReloadPromise = null;
+
+      if (shouldRestartAfterSettle) {
+        logger.info("[ErrorRuleDetector] Processing queued reload after promise settlement");
+        return this.reload();
       }
+    });
 
-      // 原子替换：确保 detect() 始终看到一致的数据集
-      this.regexPatterns = newRegexPatterns;
-      this.containsPatterns = newContainsPatterns;
-      this.exactPatterns = newExactPatterns;
-
-      this.lastReloadTime = Date.now();
-      this.isInitialized = true; // 标记为已初始化
-
-      const skippedInfo = [
-        skippedRedosCount > 0 ? `${skippedRedosCount} ReDoS` : "",
-        skippedInvalidResponseCount > 0 ? `${skippedInvalidResponseCount} invalid response` : "",
-      ]
-        .filter(Boolean)
-        .join(", ");
-
-      logger.info(
-        `[ErrorRuleDetector] Loaded ${rules.length} error rules: ` +
-          `contains=${newContainsPatterns.length}, exact=${newExactPatterns.size}, ` +
-          `regex=${validRegexCount}${skippedInfo ? ` (skipped: ${skippedInfo})` : ""}`
-      );
-    } catch (error) {
-      logger.error("[ErrorRuleDetector] Failed to reload error rules:", error);
-      // 失败时不清空现有缓存，保持降级可用
-    } finally {
-      this.isLoading = false;
-    }
+    return this.activeReloadPromise;
   }
 
   /**

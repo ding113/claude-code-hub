@@ -1370,6 +1370,17 @@ export class ProxyForwarder {
                     hasOverrideStatusCode: detectionResult.overrideStatusCode !== undefined,
                   }
                 : undefined;
+            const matchedRuleLogContext = matchedRule
+              ? {
+                  matchedRuleId: matchedRule.ruleId,
+                  matchedRuleName: matchedRule.description?.trim() || matchedRule.pattern,
+                  matchedRulePattern: matchedRule.pattern,
+                  matchedRuleCategory: matchedRule.category,
+                  matchedRuleMatchType: matchedRule.matchType,
+                  matchedRuleHasOverrideResponse: matchedRule.hasOverrideResponse,
+                  matchedRuleHasOverrideStatusCode: matchedRule.hasOverrideStatusCode,
+                }
+              : {};
 
             if (lastError instanceof ProxyError) {
               // Original path: full ProxyError fields available
@@ -1383,6 +1394,7 @@ export class ProxyForwarder {
                 totalProvidersAttempted,
                 reason:
                   "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
+                ...matchedRuleLogContext,
               });
 
               // 记录到决策链（标记为不可重试的客户端错误）
@@ -1420,6 +1432,7 @@ export class ProxyForwarder {
                   attemptNumber: attemptCount,
                   totalProvidersAttempted,
                   reason: "White-listed client error matched by error rule",
+                  ...matchedRuleLogContext,
                 }
               );
 
