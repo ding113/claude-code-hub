@@ -285,20 +285,6 @@ export class RequestFilterEngine {
   private hasGroupBasedFilters = false;
   private hasGroupBasedFinalFilters = false;
 
-  // Backward-compat accessors used by existing code paths
-  private get globalFilters(): CachedRequestFilter[] {
-    return this.globalGuardFilters;
-  }
-  private set globalFilters(v: CachedRequestFilter[]) {
-    this.globalGuardFilters = v;
-  }
-  private get providerFilters(): CachedRequestFilter[] {
-    return this.providerGuardFilters;
-  }
-  private set providerFilters(v: CachedRequestFilter[]) {
-    this.providerGuardFilters = v;
-  }
-
   constructor() {
     this.setupEventListener();
   }

@@ -244,9 +244,11 @@ export interface CodexTestBody {
   }>;
   tools: unknown[];
   tool_choice: string;
+  parallel_tool_calls?: boolean;
   reasoning?: { effort: string; summary: string };
   store: boolean;
   stream: boolean;
+  prompt_cache_key?: string;
 }
 
 /**
@@ -267,6 +269,7 @@ export interface OpenAITestBody {
  */
 export interface GeminiTestBody {
   contents: Array<{
+    role?: "user" | "model";
     parts: Array<{ text: string }>;
   }>;
   systemInstruction?: {
@@ -274,5 +277,10 @@ export interface GeminiTestBody {
   };
   generationConfig?: {
     maxOutputTokens: number;
+    temperature?: number;
+    thinkingConfig?: {
+      thinkingBudget?: number;
+      includeThoughts?: boolean;
+    };
   };
 }
