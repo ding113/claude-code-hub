@@ -321,6 +321,9 @@ class ErrorRuleDetector {
     })();
 
     this.activeReloadPromise = reloadLoopPromise.finally(async () => {
+      // 这里处理的是极窄窗口：
+      // do/while 已经读到 "无需继续"，但 finally 微任务尚未执行时又收到新的 reload 请求。
+      // 若不在 finally 再检查一次，这个晚到的请求会看到已完成 promise 并被静默吞掉。
       const shouldRestartAfterSettle = this.reloadRequestedWhileLoading;
       this.activeReloadPromise = null;
 

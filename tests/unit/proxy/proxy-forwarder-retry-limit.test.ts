@@ -1344,4 +1344,47 @@ describe("NON_RETRYABLE_CLIENT_ERROR regression tests", () => {
     );
     expect(session.getProviderChain()[0].errorDetails?.matchedRule?.ruleId).toBe(42);
   });
+
+  test("NON_RETRYABLE_CLIENT_ERROR should log matched rule metadata for plain Error branch", async () => {
+    const plainError = new Error("missing thinking fields");
+
+    const doForward = vi.spyOn(ProxyForwarder as unknown as { doForward: unknown }, "doForward");
+    doForward.mockRejectedValue(plainError);
+
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+    vi.mocked(getErrorDetectionResultAsync).mockResolvedValue({
+      matched: true,
+      ruleId: 42,
+      category: "thinking_error",
+      pattern: "missing thinking fields",
+      matchType: "contains",
+      description: "YesCode missing thinking fields",
+      overrideStatusCode: 400,
+    });
+
+    const session = createSession(new URL("https://example.com/v1/messages"));
+    const provider = createProvider({
+      id: 1,
+      name: "YesCode Team Claude",
+      providerType: "claude",
+      providerVendorId: 1,
+    });
+    session.setProvider(provider);
+
+    await expect(ProxyForwarder.send(session)).rejects.toBe(plainError);
+
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      "ProxyForwarder: Non-retryable client error (plain error), stopping immediately",
+      expect.objectContaining({
+        matchedRuleId: 42,
+        matchedRuleName: "YesCode missing thinking fields",
+        matchedRulePattern: "missing thinking fields",
+        matchedRuleCategory: "thinking_error",
+        matchedRuleMatchType: "contains",
+        matchedRuleHasOverrideResponse: false,
+        matchedRuleHasOverrideStatusCode: true,
+      })
+    );
+    expect(session.getProviderChain()[0].errorDetails?.matchedRule?.ruleId).toBe(42);
+  });
 });

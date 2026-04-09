@@ -98,9 +98,6 @@ describe("ErrorRuleDetector reload queue", () => {
     resolveFirstLoad?.([buildRule()]);
     await initialReload;
 
-    // 给事件触发的补跑 reload 一个完成机会
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
     expect(mocks.getActiveErrorRules).toHaveBeenCalledTimes(2);
     expect(errorRuleDetector.detect("Your session is missing thinking fields").matched).toBe(false);
   });
