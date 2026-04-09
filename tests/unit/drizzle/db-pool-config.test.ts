@@ -69,6 +69,8 @@ describe("drizzle/db 连接池配置", () => {
         max: 20,
         idle_timeout: 20,
         connect_timeout: 10,
+        max_lifetime: 1800,
+        prepare: false,
       })
     );
   });
@@ -83,6 +85,8 @@ describe("drizzle/db 连接池配置", () => {
       process.env.DSN,
       expect.objectContaining({
         max: 10,
+        max_lifetime: 1800,
+        prepare: false,
       })
     );
   });
@@ -102,6 +106,8 @@ describe("drizzle/db 连接池配置", () => {
         max: 50,
         idle_timeout: 30,
         connect_timeout: 5,
+        max_lifetime: 1800,
+        prepare: false,
       })
     );
   });
