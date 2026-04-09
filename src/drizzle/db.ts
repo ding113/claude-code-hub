@@ -16,12 +16,18 @@ function createDbInstance(): PostgresJsDatabase<typeof schema> {
   }
 
   // postgres.js 默认 max=10，在高并发下容易出现查询排队
-  // 这里采用“生产环境默认更大、同时可通过 env 覆盖”的策略，兼容单机与 k8s 多副本
+  // 这里采用”生产环境默认更大、同时可通过 env 覆盖”的策略，兼容单机与 k8s 多副本
   const defaultMax = env.NODE_ENV === 'production' ? 20 : 10;
+
+  // 修复连接池僵尸连接问题：
+  // - max_lifetime: 强制连接在 30 分钟后重建，避免网络层静默断开导致的僵尸连接
+  // - prepare: false 禁用 prepared statements，避免连接池复用问题
   const client = postgres(connectionString, {
     max: env.DB_POOL_MAX ?? defaultMax,
     idle_timeout: env.DB_POOL_IDLE_TIMEOUT ?? 20,
     connect_timeout: env.DB_POOL_CONNECT_TIMEOUT ?? 10,
+    max_lifetime: 30 * 60, // 30 分钟，单位秒
+    prepare: false,
   });
   return drizzle(client, { schema });
 }

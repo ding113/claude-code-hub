@@ -1,6 +1,7 @@
 # Ignore git metadata
 .git
 .gitignore
+.worktrees
 
 # Node modules and build artifacts
 node_modules
