@@ -103,7 +103,7 @@ class ErrorRuleDetector {
           // 重置标记，强制下次从数据库重新加载
           this.dbLoadedSuccessfully = false;
           this.isInitialized = false;
-          this.reload().catch((error) => {
+          this.reload({ queueIfRunning: true }).catch((error) => {
             logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
           });
         };
@@ -162,10 +162,12 @@ class ErrorRuleDetector {
    * - 保留现有缓存（如果有），下次检测时重试加载
    * - 成功加载后标记 dbLoadedSuccessfully，后续不再重试
    */
-  async reload(): Promise<void> {
+  async reload(options: { queueIfRunning?: boolean } = {}): Promise<void> {
     if (this.activeReloadPromise) {
-      this.reloadRequestedWhileLoading = true;
-      logger.info("[ErrorRuleDetector] Reload already in progress, queueing another pass");
+      if (options.queueIfRunning) {
+        this.reloadRequestedWhileLoading = true;
+        logger.info("[ErrorRuleDetector] Reload already in progress, queueing another pass");
+      }
       return this.activeReloadPromise;
     }
 

@@ -161,4 +161,28 @@ describe("ErrorRuleDetector reload queue", () => {
 
     expect(mocks.getActiveErrorRules).toHaveBeenCalledTimes(2);
   });
+
+  test("should let ordinary waiters reuse an in-flight reload without forcing an extra pass", async () => {
+    let resolveFirstLoad: ((value: ReturnType<typeof buildRule>[]) => void) | undefined;
+
+    mocks.getActiveErrorRules.mockImplementationOnce(
+      () =>
+        new Promise<ReturnType<typeof buildRule>[]>((resolve) => {
+          resolveFirstLoad = resolve;
+        })
+    );
+
+    const { errorRuleDetector } = await import("@/lib/error-rule-detector");
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const runningReload = errorRuleDetector.reload();
+    const waiter = errorRuleDetector.ensureInitialized();
+
+    resolveFirstLoad?.([buildRule()]);
+    await Promise.all([runningReload, waiter]);
+
+    expect(mocks.getActiveErrorRules).toHaveBeenCalledTimes(1);
+    expect(errorRuleDetector.detect("Your session is missing thinking fields").matched).toBe(true);
+  });
 });
