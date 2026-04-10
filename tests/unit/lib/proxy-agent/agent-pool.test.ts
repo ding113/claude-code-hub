@@ -343,13 +343,16 @@ describe("AgentPool", () => {
         agentTtlMs: 1000, // 1 second TTL
       });
 
-      await shortTtlPool.getAgent({
+      const { cacheKey } = await shortTtlPool.getAgent({
         endpointUrl: "https://api.anthropic.com/v1/messages",
         proxyUrl: null,
         enableHttp2: false,
       });
 
       expect(shortTtlPool.getPoolStats().cacheSize).toBe(1);
+
+      // Release the agent (simulates request completion)
+      shortTtlPool.releaseAgent(cacheKey);
 
       // Advance time past TTL
       vi.advanceTimersByTime(2000);
@@ -425,6 +428,200 @@ describe("AgentPool", () => {
       expect(stats.cacheSize).toBeLessThanOrEqual(2);
 
       await smallPool.shutdown();
+    });
+  });
+
+  describe("reference counting", () => {
+    it("should prevent expiration of agents with active requests", async () => {
+      const shortTtlPool = new AgentPoolImpl({
+        ...defaultConfig,
+        agentTtlMs: 1000,
+      });
+
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      // getAgent increments activeRequests
+      await shortTtlPool.getAgent(params);
+      expect(shortTtlPool.getPoolStats().activeRequests).toBe(1);
+
+      // Advance past TTL
+      vi.advanceTimersByTime(2000);
+
+      // Should NOT be evicted because activeRequests > 0
+      const cleaned = await shortTtlPool.cleanup();
+      expect(cleaned).toBe(0);
+      expect(shortTtlPool.getPoolStats().cacheSize).toBe(1);
+
+      await shortTtlPool.shutdown();
+    });
+
+    it("should allow expiration after all requests are released", async () => {
+      const shortTtlPool = new AgentPoolImpl({
+        ...defaultConfig,
+        agentTtlMs: 1000,
+      });
+
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      const { cacheKey } = await shortTtlPool.getAgent(params);
+      shortTtlPool.releaseAgent(cacheKey);
+      expect(shortTtlPool.getPoolStats().activeRequests).toBe(0);
+
+      // Advance past TTL
+      vi.advanceTimersByTime(2000);
+
+      const cleaned = await shortTtlPool.cleanup();
+      expect(cleaned).toBe(1);
+      expect(shortTtlPool.getPoolStats().cacheSize).toBe(0);
+
+      await shortTtlPool.shutdown();
+    });
+
+    it("should track multiple concurrent requests correctly", async () => {
+      const shortTtlPool = new AgentPoolImpl({
+        ...defaultConfig,
+        agentTtlMs: 1000,
+      });
+
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      // 3 concurrent requests to same agent
+      const r1 = await shortTtlPool.getAgent(params);
+      await shortTtlPool.getAgent(params);
+      await shortTtlPool.getAgent(params);
+      expect(shortTtlPool.getPoolStats().activeRequests).toBe(3);
+
+      // Release 2
+      shortTtlPool.releaseAgent(r1.cacheKey);
+      shortTtlPool.releaseAgent(r1.cacheKey);
+      expect(shortTtlPool.getPoolStats().activeRequests).toBe(1);
+
+      // Advance past TTL - should NOT be evicted
+      vi.advanceTimersByTime(2000);
+      const cleaned1 = await shortTtlPool.cleanup();
+      expect(cleaned1).toBe(0);
+
+      // Release last request
+      shortTtlPool.releaseAgent(r1.cacheKey);
+      expect(shortTtlPool.getPoolStats().activeRequests).toBe(0);
+
+      // Now advance past TTL - should be evicted
+      vi.advanceTimersByTime(2000);
+      const cleaned2 = await shortTtlPool.cleanup();
+      expect(cleaned2).toBe(1);
+
+      await shortTtlPool.shutdown();
+    });
+
+    it("should refresh lastUsedAt on release", async () => {
+      const shortTtlPool = new AgentPoolImpl({
+        ...defaultConfig,
+        agentTtlMs: 1000,
+      });
+
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      const { cacheKey } = await shortTtlPool.getAgent(params);
+
+      // Advance 800ms (close to TTL but not past)
+      vi.advanceTimersByTime(800);
+
+      // Release refreshes lastUsedAt
+      shortTtlPool.releaseAgent(cacheKey);
+
+      // Advance another 500ms (total 1300ms from start, but only 500ms from release)
+      vi.advanceTimersByTime(500);
+
+      // Should NOT be evicted (TTL reset by release)
+      const cleaned = await shortTtlPool.cleanup();
+      expect(cleaned).toBe(0);
+
+      await shortTtlPool.shutdown();
+    });
+
+    it("should force-expire after hard upper bound regardless of active requests", async () => {
+      const pool2 = new AgentPoolImpl({
+        ...defaultConfig,
+        agentTtlMs: 1000,
+      });
+
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      // getAgent increments activeRequests (never released)
+      await pool2.getAgent(params);
+      expect(pool2.getPoolStats().activeRequests).toBe(1);
+
+      // Advance past 30-minute hard upper bound
+      vi.advanceTimersByTime(31 * 60 * 1000);
+
+      const cleaned = await pool2.cleanup();
+      expect(cleaned).toBe(1);
+      expect(pool2.getPoolStats().cacheSize).toBe(0);
+
+      await pool2.shutdown();
+    });
+
+    it("should be a no-op when releasing non-existent key", () => {
+      // Should not throw
+      pool.releaseAgent("nonexistent-key");
+      expect(pool.getPoolStats().activeRequests).toBe(0);
+    });
+
+    it("should not go below zero on over-release", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      const { cacheKey } = await pool.getAgent(params);
+      pool.releaseAgent(cacheKey);
+      // Release again when already at 0
+      pool.releaseAgent(cacheKey);
+
+      expect(pool.getPoolStats().activeRequests).toBe(0);
+    });
+
+    it("should include activeRequests in pool stats", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      expect(pool.getPoolStats().activeRequests).toBe(0);
+
+      await pool.getAgent(params);
+      expect(pool.getPoolStats().activeRequests).toBe(1);
+
+      await pool.getAgent(params);
+      expect(pool.getPoolStats().activeRequests).toBe(2);
+
+      const { cacheKey } = await pool.getAgent(params);
+      expect(pool.getPoolStats().activeRequests).toBe(3);
+
+      pool.releaseAgent(cacheKey);
+      expect(pool.getPoolStats().activeRequests).toBe(2);
     });
   });
 

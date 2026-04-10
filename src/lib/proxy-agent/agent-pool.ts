@@ -36,6 +36,8 @@ interface CachedAgent {
   lastUsedAt: number;
   requestCount: number;
   healthy: boolean;
+  /** Number of in-flight requests using this agent (prevents premature eviction) */
+  activeRequests: number;
 }
 
 /**
@@ -49,6 +51,8 @@ export interface AgentPoolStats {
   hitRate: number;
   unhealthyAgents: number;
   evictedAgents: number;
+  /** Total in-flight requests across all cached agents */
+  activeRequests: number;
 }
 
 /**
@@ -77,6 +81,12 @@ export interface AgentPool {
    * Get or create an Agent for the given parameters
    */
   getAgent(params: GetAgentParams): Promise<GetAgentResult>;
+
+  /**
+   * Release an agent after a request (including streaming body) has completed.
+   * Decrements the in-flight reference count so the agent can be evicted when idle.
+   */
+  releaseAgent(cacheKey: string): void;
 
   /**
    * Mark an Agent as unhealthy (will be replaced on next getAgent call)
@@ -206,6 +216,7 @@ export class AgentPoolImpl implements AgentPool {
     if (cached && !this.isExpired(cached)) {
       cached.lastUsedAt = Date.now();
       cached.requestCount++;
+      cached.activeRequests++;
       this.stats.cacheHits++;
       return { agent: cached.agent, isNew: false, cacheKey };
     }
@@ -261,6 +272,7 @@ export class AgentPoolImpl implements AgentPool {
       lastUsedAt: Date.now(),
       requestCount: 1,
       healthy: true,
+      activeRequests: 1,
     };
 
     this.cache.set(cacheKey, newCached);
@@ -269,6 +281,14 @@ export class AgentPoolImpl implements AgentPool {
     await this.enforceMaxSize();
 
     return { agent, isNew: true, cacheKey };
+  }
+
+  releaseAgent(cacheKey: string): void {
+    const cached = this.cache.get(cacheKey);
+    if (cached && cached.activeRequests > 0) {
+      cached.activeRequests--;
+      cached.lastUsedAt = Date.now(); // refresh TTL from stream completion
+    }
   }
 
   markUnhealthy(cacheKey: string, reason: string): void {
@@ -298,6 +318,11 @@ export class AgentPoolImpl implements AgentPool {
     const hitRate =
       this.stats.totalRequests > 0 ? this.stats.cacheHits / this.stats.totalRequests : 0;
 
+    let activeRequests = 0;
+    for (const cached of this.cache.values()) {
+      activeRequests += cached.activeRequests;
+    }
+
     return {
       cacheSize: this.cache.size,
       totalRequests: this.stats.totalRequests,
@@ -306,6 +331,7 @@ export class AgentPoolImpl implements AgentPool {
       hitRate,
       unhealthyAgents: unhealthyCount,
       evictedAgents: this.stats.evictedAgents,
+      activeRequests,
     };
   }
 
@@ -370,6 +396,14 @@ export class AgentPoolImpl implements AgentPool {
   }
 
   private isExpired(cached: CachedAgent, now: number = Date.now()): boolean {
+    // Hard upper bound: force-expire after 30 minutes regardless of active requests
+    // Prevents permanent pinning if releaseAgent is never called (caller bug)
+    const MAX_AGENT_LIFETIME_MS = 30 * 60 * 1000;
+    if (now - cached.createdAt > MAX_AGENT_LIFETIME_MS) return true;
+
+    // Never expire agents with in-flight requests
+    if (cached.activeRequests > 0) return false;
+
     return now - cached.lastUsedAt > this.config.agentTtlMs;
   }
 

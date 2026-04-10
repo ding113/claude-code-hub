@@ -40,6 +40,22 @@ import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
 
+/**
+ * Idempotent helper to release the agent pool reference count attached to a session.
+ * Prevents double-release by clearing the callback after first invocation.
+ */
+function releaseSessionAgent(session: ProxySession): void {
+  const s = session as ProxySession & { releaseAgent?: () => void };
+  if (s.releaseAgent) {
+    try {
+      s.releaseAgent();
+    } catch {
+      // ignore - agent may already be evicted
+    }
+    s.releaseAgent = undefined;
+  }
+}
+
 export type UsageMetrics = {
   input_tokens?: number;
   output_tokens?: number;
@@ -881,6 +897,7 @@ export class ProxyResponseHandler {
               );
             }
           } finally {
+            releaseSessionAgent(session);
             AsyncTaskManager.cleanup(taskId);
           }
         })();
@@ -1324,6 +1341,7 @@ export class ProxyResponseHandler {
           });
         }
       } finally {
+        releaseSessionAgent(session);
         AsyncTaskManager.cleanup(taskId);
       }
     })();
@@ -1815,6 +1833,7 @@ export class ProxyResponseHandler {
                 error: e instanceof Error ? e.message : String(e),
               });
             }
+            releaseSessionAgent(session);
             AsyncTaskManager.cleanup(taskId);
           }
         })();
@@ -2502,6 +2521,7 @@ export class ProxyResponseHandler {
             releaseError,
           });
         }
+        releaseSessionAgent(session);
         AsyncTaskManager.cleanup(taskId);
       }
     })();

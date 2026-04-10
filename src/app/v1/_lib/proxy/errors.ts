@@ -739,6 +739,8 @@ export function isTransportError(error: Error): boolean {
     "UND_ERR_CONNECT_TIMEOUT",
     "UND_ERR_HEADERS_TIMEOUT",
     "UND_ERR_BODY_TIMEOUT",
+    "UND_ERR_DESTROYED", // agent destroyed while request in flight
+    "UND_ERR_CLOSED", // agent closed while request in flight
     "ECONNREFUSED",
     "ECONNRESET",
     "ETIMEDOUT",
@@ -749,7 +751,12 @@ export function isTransportError(error: Error): boolean {
   const TRANSPORT_MESSAGE_SIGNATURES = ["other side closed", "fetch failed"];
 
   // Check error name
-  if (error.name === "SocketError") return true;
+  if (
+    error.name === "SocketError" ||
+    error.name === "ClientDestroyedError" ||
+    error.name === "ClientClosedError"
+  )
+    return true;
 
   // Check error code on error itself or cause
   const code =
@@ -760,6 +767,9 @@ export function isTransportError(error: Error): boolean {
   // Check message for known transport signatures
   const msg = error.message.toLowerCase();
   if (TRANSPORT_MESSAGE_SIGNATURES.some((sig) => msg.includes(sig))) return true;
+
+  // Check for HTTP/2 protocol errors (stream resets, GOAWAY, etc.)
+  if (isHttp2Error(error)) return true;
 
   return false;
 }

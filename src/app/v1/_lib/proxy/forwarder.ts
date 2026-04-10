@@ -2483,7 +2483,7 @@ export class ProxyForwarder {
     const enableHttp2 = await isHttp2Enabled();
 
     // ⭐ 应用代理配置（如果配置了）- 使用 Agent Pool 缓存连接
-    const proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+    let proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
     // 用于直连场景的 cacheKey（SSL 错误时标记不健康）
     let directConnectionCacheKey: string | null = null;
 
@@ -2553,6 +2553,12 @@ export class ProxyForwarder {
       // ⭐ fetch 失败：清除所有超时定时器
       if (responseTimeoutId) {
         clearTimeout(responseTimeoutId);
+      }
+
+      // Release agent ref count on fetch failure (request never started streaming)
+      const releaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+      if (releaseKey) {
+        getGlobalAgentPool().releaseAgent(releaseKey);
       }
 
       // 捕获 fetch 原始错误（网络错误、DNS 解析失败、连接失败等）
@@ -2737,8 +2743,9 @@ export class ProxyForwarder {
         }
 
         // 如果使用了代理，创建不支持 HTTP/2 的代理 Agent
+        let http1ProxyConfig: typeof proxyConfig = null;
         if (proxyConfig) {
-          const http1ProxyConfig = await getProxyAgentForProvider(provider, proxyUrl, false);
+          http1ProxyConfig = await getProxyAgentForProvider(provider, proxyUrl, false);
           if (http1ProxyConfig) {
             http1FallbackInit.dispatcher = http1ProxyConfig.agent;
           }
@@ -2761,6 +2768,10 @@ export class ProxyForwarder {
             providerName: provider.name,
           });
 
+          // Update tracking to the H1 fallback agent (H2 agent was already released at catch-block top)
+          proxyConfig = http1ProxyConfig;
+          directConnectionCacheKey = null;
+
           // 重新启动响应超时计时器（如果之前有配置超时时间）
           // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
           if (responseTimeoutMs > 0) {
@@ -2776,6 +2787,11 @@ export class ProxyForwarder {
 
           // 成功后跳过 throw，继续执行后续逻辑（不计入熔断器）
         } catch (http1Error) {
+          // Release H1 fallback agent ref count before re-throwing
+          if (http1ProxyConfig?.cacheKey) {
+            getGlobalAgentPool().releaseAgent(http1ProxyConfig.cacheKey);
+          }
+
           // HTTP/1.1 也失败，记录并抛出原始错误
           logger.error("ProxyForwarder: HTTP/1.1 fallback also failed", {
             providerId: provider.id,
@@ -2935,9 +2951,9 @@ export class ProxyForwarder {
     // 注意：用户要求所有 4xx 都重试，包括 401、403、429 等
     if (!response.ok) {
       // ⚠️ HTTP 错误：不要在读取响应体之前清除响应超时定时器
-      // 原因：某些上游会在返回 4xx/5xx 后“卡住不结束 body”，
+      // 原因：某些上游会在返回 4xx/5xx 后”卡住不结束 body”，
       // 若提前 clearTimeout，会导致 ProxyError.fromUpstreamResponse() 的 response.text() 无限等待，
-      // 从而让整条请求链路（含客户端）悬挂，前端表现为一直“请求中”。
+      // 从而让整条请求链路（含客户端）悬挂，前端表现为一直”请求中”。
       //
       // 正确策略：保留 response timeout 继续监控 body 读取，并在 finally 里清理定时器。
       try {
@@ -2949,6 +2965,11 @@ export class ProxyForwarder {
         if (responseTimeoutId) {
           clearTimeout(responseTimeoutId);
         }
+        // Release agent ref count (response-handler will never run for error responses)
+        const errorReleaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+        if (errorReleaseKey) {
+          getGlobalAgentPool().releaseAgent(errorReleaseKey);
+        }
       }
     }
 
@@ -2957,6 +2978,7 @@ export class ProxyForwarder {
     const sessionWithTimeout = session as ProxySession & {
       clearResponseTimeout?: () => void;
       responseController?: AbortController;
+      releaseAgent?: () => void;
     };
 
     sessionWithTimeout.clearResponseTimeout = () => {
@@ -2972,6 +2994,16 @@ export class ProxyForwarder {
 
     // 传递 responseController 引用，让 response-handler 能区分超时和客户端中断
     sessionWithTimeout.responseController = responseController;
+
+    // Attach agent release callback for in-flight reference counting.
+    // response-handler must call this in its finally block after the stream is fully consumed.
+    const agentCacheKeyToRelease = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+    if (agentCacheKeyToRelease) {
+      const pool = getGlobalAgentPool();
+      sessionWithTimeout.releaseAgent = () => {
+        pool.releaseAgent(agentCacheKeyToRelease);
+      };
+    }
 
     return response;
   }
