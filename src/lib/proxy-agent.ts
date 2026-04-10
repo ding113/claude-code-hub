@@ -257,6 +257,8 @@ export {
 export interface ProxyConfigWithCacheKey extends ProxyConfig {
   /** Cache key for marking agent as unhealthy on SSL errors */
   cacheKey: string;
+  /** Dispatcher generation id —— 必须在 releaseAgent 时回传，避免跨代误减 */
+  dispatcherId: string;
 }
 
 /**
@@ -289,7 +291,7 @@ export async function getProxyAgentForProvider(
 
   const pool = getPool();
 
-  const { agent, cacheKey } = await pool.getAgent({
+  const { agent, cacheKey, dispatcherId } = await pool.getAgent({
     endpointUrl: targetUrl,
     proxyUrl,
     enableHttp2,
@@ -306,5 +308,6 @@ export async function getProxyAgentForProvider(
     proxyUrl: maskProxyUrl(proxyUrl),
     http2Enabled: actualHttp2Enabled,
     cacheKey,
+    dispatcherId,
   };
 }
