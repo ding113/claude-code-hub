@@ -391,6 +391,100 @@ function addSpecialSettingForPersistence(
   }
 }
 
+type MatchedRuleDetails = NonNullable<
+  NonNullable<ProviderChainItem["errorDetails"]>["matchedRule"]
+>;
+
+function buildMatchedRuleDetails(
+  detectionResult: Awaited<ReturnType<typeof getErrorDetectionResultAsync>>
+): MatchedRuleDetails | undefined {
+  if (
+    !detectionResult.matched ||
+    detectionResult.ruleId === undefined ||
+    detectionResult.pattern === undefined ||
+    detectionResult.matchType === undefined ||
+    detectionResult.category === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    ruleId: detectionResult.ruleId,
+    pattern: detectionResult.pattern,
+    matchType: detectionResult.matchType,
+    category: detectionResult.category,
+    description: detectionResult.description,
+    hasOverrideResponse: detectionResult.overrideResponse !== undefined,
+    hasOverrideStatusCode: detectionResult.overrideStatusCode !== undefined,
+  };
+}
+
+function buildMatchedRuleLogContext(
+  matchedRule: MatchedRuleDetails | undefined
+): Record<string, unknown> {
+  if (!matchedRule) {
+    return {};
+  }
+
+  return {
+    matchedRuleId: matchedRule.ruleId,
+    matchedRuleName: matchedRule.description?.trim() || matchedRule.pattern,
+    matchedRulePattern: matchedRule.pattern,
+    matchedRuleCategory: matchedRule.category,
+    matchedRuleMatchType: matchedRule.matchType,
+    matchedRuleHasOverrideResponse: matchedRule.hasOverrideResponse,
+    matchedRuleHasOverrideStatusCode: matchedRule.hasOverrideStatusCode,
+  };
+}
+
+function buildClientErrorChainEntry(
+  provider: Provider,
+  endpointAudit: { endpointId: number | null; endpointUrl: string },
+  attemptNumber: number,
+  error: Error,
+  errorMessage: string,
+  requestDetails: ReturnType<typeof buildRequestDetails>,
+  matchedRule: MatchedRuleDetails | undefined
+): NonNullable<Parameters<ProxySession["addProviderToChain"]>[1]> {
+  if (error instanceof ProxyError) {
+    return {
+      ...endpointAudit,
+      reason: "client_error_non_retryable",
+      circuitState: getCircuitState(provider.id),
+      attemptNumber,
+      errorMessage,
+      statusCode: error.statusCode,
+      statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+      errorDetails: {
+        provider: {
+          id: provider.id,
+          name: provider.name,
+          statusCode: error.statusCode,
+          statusText: error.message,
+          upstreamBody: error.upstreamError?.body,
+          upstreamParsed: error.upstreamError?.parsed,
+        },
+        clientError: error.getDetailedErrorMessage(),
+        matchedRule,
+        request: requestDetails,
+      },
+    };
+  }
+
+  return {
+    ...endpointAudit,
+    reason: "client_error_non_retryable",
+    circuitState: getCircuitState(provider.id),
+    attemptNumber,
+    errorMessage,
+    errorDetails: {
+      clientError: error.message,
+      matchedRule,
+      request: requestDetails,
+    },
+  };
+}
+
 function buildRetryFailedChainEntry(
   provider: Provider,
   endpointAudit: { endpointId: number | null; endpointUrl: string },
@@ -1354,22 +1448,17 @@ export class ProxyForwarder {
           // ⭐ 3. 不可重试的客户端输入错误处理（不计入熔断器，不重试，立即返回）
           if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
             const detectionResult = await getErrorDetectionResultAsync(lastError);
-            const matchedRule =
-              detectionResult.matched &&
-              detectionResult.ruleId !== undefined &&
-              detectionResult.pattern !== undefined &&
-              detectionResult.matchType !== undefined &&
-              detectionResult.category !== undefined
-                ? {
-                    ruleId: detectionResult.ruleId,
-                    pattern: detectionResult.pattern,
-                    matchType: detectionResult.matchType,
-                    category: detectionResult.category,
-                    description: detectionResult.description,
-                    hasOverrideResponse: detectionResult.overrideResponse !== undefined,
-                    hasOverrideStatusCode: detectionResult.overrideStatusCode !== undefined,
-                  }
-                : undefined;
+            const matchedRule = buildMatchedRuleDetails(detectionResult);
+            const matchedRuleLogContext = buildMatchedRuleLogContext(matchedRule);
+            const clientErrorChainEntry = buildClientErrorChainEntry(
+              currentProvider,
+              endpointAudit,
+              attemptCount,
+              lastError,
+              errorMessage,
+              buildRequestDetails(session),
+              matchedRule
+            );
 
             if (lastError instanceof ProxyError) {
               // Original path: full ProxyError fields available
@@ -1383,31 +1472,7 @@ export class ProxyForwarder {
                 totalProvidersAttempted,
                 reason:
                   "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
-              });
-
-              // 记录到决策链（标记为不可重试的客户端错误）
-              // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
-              session.addProviderToChain(currentProvider, {
-                ...endpointAudit,
-                reason: "client_error_non_retryable", // 新增的 reason 值
-                circuitState: getCircuitState(currentProvider.id),
-                attemptNumber: attemptCount,
-                errorMessage: errorMessage,
-                statusCode: lastError.statusCode,
-                statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
-                errorDetails: {
-                  provider: {
-                    id: currentProvider.id,
-                    name: currentProvider.name,
-                    statusCode: lastError.statusCode,
-                    statusText: lastError.message,
-                    upstreamBody: lastError.upstreamError?.body,
-                    upstreamParsed: lastError.upstreamError?.parsed,
-                  },
-                  clientError: lastError.getDetailedErrorMessage(),
-                  matchedRule,
-                  request: buildRequestDetails(session),
-                },
+                ...matchedRuleLogContext,
               });
             } else {
               // Plain Error path: omit ProxyError-only fields
@@ -1420,22 +1485,14 @@ export class ProxyForwarder {
                   attemptNumber: attemptCount,
                   totalProvidersAttempted,
                   reason: "White-listed client error matched by error rule",
+                  ...matchedRuleLogContext,
                 }
               );
-
-              session.addProviderToChain(currentProvider, {
-                ...endpointAudit,
-                reason: "client_error_non_retryable",
-                circuitState: getCircuitState(currentProvider.id),
-                attemptNumber: attemptCount,
-                errorMessage: lastError.message,
-                errorDetails: {
-                  clientError: lastError.message,
-                  matchedRule,
-                  request: buildRequestDetails(session),
-                },
-              });
             }
+
+            // 记录到决策链（标记为不可重试的客户端错误）
+            // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
+            session.addProviderToChain(currentProvider, clientErrorChainEntry);
 
             // 立即抛出错误，不重试，不切换供应商
             // 白名单错误不计入熔断器，因为是客户端输入问题，不是供应商故障
@@ -3221,6 +3278,8 @@ export class ProxyForwarder {
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
       const errorMessage =
         error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message;
+      let matchedRule: MatchedRuleDetails | undefined;
+      let matchedRuleLogContext: Record<string, unknown> = {};
 
       if (attempt.endpointAudit.endpointId != null) {
         const isTimeoutError = error instanceof ProxyError && error.statusCode === 524;
@@ -3321,6 +3380,21 @@ export class ProxyForwarder {
         }
       }
 
+      if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
+        matchedRule = buildMatchedRuleDetails(await getErrorDetectionResultAsync(error));
+        matchedRuleLogContext = buildMatchedRuleLogContext(matchedRule);
+
+        logger.warn("ProxyForwarder: Non-retryable client error in hedge, aborting all attempts", {
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+          statusCode,
+          error: errorMessage,
+          participantSequence: attempt.sequence,
+          attemptNumber: attempt.requestAttemptCount,
+          ...matchedRuleLogContext,
+        });
+      }
+
       attempt.settled = true;
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
@@ -3332,20 +3406,34 @@ export class ProxyForwarder {
         await recordFailure(attempt.provider.id, error);
       }
 
-      session.addProviderToChain(attempt.provider, {
-        ...attempt.endpointAudit,
-        reason:
-          errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
-            ? "resource_not_found"
-            : errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
-              ? "client_error_non_retryable"
-              : "retry_failed",
-        attemptNumber: attempt.sequence,
-        statusCode,
-        errorMessage,
-        circuitState: getCircuitState(attempt.provider.id),
-        modelRedirect: getAttemptModelRedirect(attempt),
-      });
+      session.addProviderToChain(
+        attempt.provider,
+        errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
+          ? {
+              ...buildClientErrorChainEntry(
+                attempt.provider,
+                attempt.endpointAudit,
+                attempt.sequence,
+                error,
+                errorMessage,
+                buildRequestDetails(session),
+                matchedRule
+              ),
+              modelRedirect: getAttemptModelRedirect(attempt),
+            }
+          : {
+              ...attempt.endpointAudit,
+              reason:
+                errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+                  ? "resource_not_found"
+                  : "retry_failed",
+              attemptNumber: attempt.sequence,
+              statusCode,
+              errorMessage,
+              circuitState: getCircuitState(attempt.provider.id),
+              modelRedirect: getAttemptModelRedirect(attempt),
+            }
+      );
 
       if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
         abortAllAttempts(undefined, "client_error_non_retryable");

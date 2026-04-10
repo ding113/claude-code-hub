@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   isVendorTypeCircuitOpen: vi.fn(async () => false),
   recordVendorTypeAllEndpointsTimeout: vi.fn(async () => {}),
   categorizeErrorAsync: vi.fn(async () => 0),
+  getErrorDetectionResultAsync: vi.fn(async () => ({ matched: false })),
   getCachedSystemSettings: vi.fn(async () => ({
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
@@ -90,16 +91,19 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
   return {
     ...actual,
     categorizeErrorAsync: mocks.categorizeErrorAsync,
+    getErrorDetectionResultAsync: mocks.getErrorDetectionResultAsync,
   };
 });
 
 import {
   ErrorCategory as ProxyErrorCategory,
   ProxyError as UpstreamProxyError,
+  getErrorDetectionResultAsync,
 } from "@/app/v1/_lib/proxy/errors";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ModelRedirector } from "@/app/v1/_lib/proxy/model-redirector";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
 
 type AttemptRuntime = {
@@ -1288,6 +1292,15 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
     mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
     mocks.categorizeErrorAsync.mockResolvedValueOnce(ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+    vi.mocked(getErrorDetectionResultAsync).mockResolvedValueOnce({
+      matched: true,
+      ruleId: 42,
+      category: "thinking_error",
+      pattern: "prompt too long",
+      matchType: "contains",
+      description: "Prompt too long",
+      overrideStatusCode: 400,
+    });
 
     const doForward = vi.spyOn(
       ProxyForwarder as unknown as {
@@ -1312,8 +1325,25 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         expect.objectContaining({
           reason: "client_error_non_retryable",
           statusCode: 400,
+          errorDetails: expect.objectContaining({
+            matchedRule: expect.objectContaining({
+              ruleId: 42,
+            }),
+          }),
         }),
       ])
+    );
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      "ProxyForwarder: Non-retryable client error in hedge, aborting all attempts",
+      expect.objectContaining({
+        matchedRuleId: 42,
+        matchedRuleName: "Prompt too long",
+        matchedRulePattern: "prompt too long",
+        matchedRuleCategory: "thinking_error",
+        matchedRuleMatchType: "contains",
+        matchedRuleHasOverrideResponse: false,
+        matchedRuleHasOverrideStatusCode: true,
+      })
     );
   });
 
