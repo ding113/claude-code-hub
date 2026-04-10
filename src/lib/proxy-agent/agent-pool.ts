@@ -30,6 +30,14 @@ export interface AgentPoolConfig {
  * Cached Agent entry
  */
 interface CachedAgent {
+  /**
+   * Unique dispatcher identity (generation token).
+   *
+   * 与 cacheKey 不同：cacheKey 只代表"哪个端点 + 代理 + 协议"，同一个 key 在驱逐/硬过期后
+   * 会对应新的 dispatcher 实例。为了避免旧请求的 release 把新实例的 activeRequests 错减，
+   * 每次创建都生成新的 id，release 时必须校验归属。
+   */
+  id: string;
   agent: Dispatcher;
   endpointKey: string;
   createdAt: number;
@@ -71,6 +79,11 @@ export interface GetAgentResult {
   agent: Dispatcher;
   isNew: boolean;
   cacheKey: string;
+  /**
+   * Dispatcher generation id. 必须在 releaseAgent 时回传，防止跨代误减。
+   * 若调用者拿到的 dispatcher 被驱逐后重建，release 会基于 id 校验并忽略无效请求。
+   */
+  dispatcherId: string;
 }
 
 /**
@@ -84,9 +97,12 @@ export interface AgentPool {
 
   /**
    * Release an agent after a request (including streaming body) has completed.
-   * Decrements the in-flight reference count so the agent can be evicted when idle.
+   *
+   * 必须同时传入 dispatcherId —— 仅当当前缓存条目的 id 与传入值完全匹配时才会减 1。
+   * 这样即便 cacheKey 对应的 dispatcher 在驱逐/硬过期后被重建，旧请求的 release
+   * 也不会误减新实例的 activeRequests，从而避免"新连接刚建起就被提前驱逐"。
    */
-  releaseAgent(cacheKey: string): void;
+  releaseAgent(cacheKey: string, dispatcherId: string): void;
 
   /**
    * Mark an Agent as unhealthy (will be replaced on next getAgent call)
@@ -175,6 +191,8 @@ export class AgentPoolImpl implements AgentPool {
   };
   /** Pending agent creation promises to prevent race conditions */
   private pendingCreations: Map<string, Promise<GetAgentResult>> = new Map();
+  /** Monotonic counter for generating unique dispatcher ids per creation */
+  private dispatcherIdCounter = 0;
   /**
    * Pending destroy/close promises (best-effort).
    *
@@ -218,7 +236,7 @@ export class AgentPoolImpl implements AgentPool {
       cached.requestCount++;
       cached.activeRequests++;
       this.stats.cacheHits++;
-      return { agent: cached.agent, isNew: false, cacheKey };
+      return { agent: cached.agent, isNew: false, cacheKey, dispatcherId: cached.id };
     }
 
     // Check if there's a pending creation for this key (race condition prevention)
@@ -226,6 +244,15 @@ export class AgentPoolImpl implements AgentPool {
     if (pending) {
       // Wait for the pending creation and return its result
       const result = await pending;
+      // ⚠️ 关键：等待 pending 创建的调用者也必须计入 activeRequests。
+      // 创建者在 createAgentWithCache 里把 activeRequests 初始化为 1（只代表它自己），
+      // 这里的每个等待者都要再 +1，否则一旦创建者完成并减到 0，cleanup/LRU 会在其它
+      // 仍在飞行中的请求头上把共享 agent 驱逐掉，又会把 STREAM_PROCESSING_ERROR 带回来。
+      const currentCached = this.cache.get(cacheKey);
+      if (currentCached && currentCached.id === result.dispatcherId) {
+        currentCached.activeRequests++;
+        currentCached.lastUsedAt = Date.now();
+      }
       // Count as cache hit - we're reusing the pending result, not creating a new agent
       // Note: Don't decrement cacheMisses here since we never incremented it for this request
       this.stats.cacheHits++;
@@ -264,8 +291,10 @@ export class AgentPoolImpl implements AgentPool {
     // Create new agent
     const agent = await this.createAgent(params);
     const url = new URL(params.endpointUrl);
+    const dispatcherId = `disp-${++this.dispatcherIdCounter}`;
 
     const newCached: CachedAgent = {
+      id: dispatcherId,
       agent,
       endpointKey: url.origin,
       createdAt: Date.now(),
@@ -280,12 +309,15 @@ export class AgentPoolImpl implements AgentPool {
     // Enforce max size (LRU eviction)
     await this.enforceMaxSize();
 
-    return { agent, isNew: true, cacheKey };
+    return { agent, isNew: true, cacheKey, dispatcherId };
   }
 
-  releaseAgent(cacheKey: string): void {
+  releaseAgent(cacheKey: string, dispatcherId: string): void {
     const cached = this.cache.get(cacheKey);
-    if (cached && cached.activeRequests > 0) {
+    // 必须校验 dispatcher 身份：如果 cacheKey 已经指向新生成的 dispatcher，
+    // 说明调用者对应的老 dispatcher 已经被驱逐（30 分钟硬过期 / markUnhealthy / LRU），
+    // 这时候直接忽略，避免把新实例的 activeRequests 错减 1 触发提前驱逐。
+    if (cached && cached.id === dispatcherId && cached.activeRequests > 0) {
       cached.activeRequests--;
       cached.lastUsedAt = Date.now(); // refresh TTL from stream completion
     }

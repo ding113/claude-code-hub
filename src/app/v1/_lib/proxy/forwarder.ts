@@ -2483,38 +2483,12 @@ export class ProxyForwarder {
     const enableHttp2 = await isHttp2Enabled();
 
     // ⭐ 应用代理配置（如果配置了）- 使用 Agent Pool 缓存连接
-    let proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
-    // 用于直连场景的 cacheKey（SSL 错误时标记不健康）
+    // 注意：proxyConfig 与 directConnectionCacheKey 的声明保持在 try 外部，
+    // 以便 catch 块可以根据它们做 fallback / SSL 不健康标记 / ref 释放。
+    let proxyConfig: Awaited<ReturnType<typeof getProxyAgentForProvider>> = null;
+    // 用于直连场景的 cacheKey + dispatcher id（SSL 错误时标记不健康 / release 校验）
     let directConnectionCacheKey: string | null = null;
-
-    if (proxyConfig) {
-      init.dispatcher = proxyConfig.agent;
-      logger.info("ProxyForwarder: Using proxy", {
-        providerId: provider.id,
-        providerName: provider.name,
-        proxyUrl: proxyConfig.proxyUrl,
-        fallbackToDirect: proxyConfig.fallbackToDirect,
-        targetUrl: new URL(proxyUrl).origin,
-        http2Enabled: proxyConfig.http2Enabled,
-      });
-    } else if (enableHttp2) {
-      // 直连场景：使用 Agent Pool 获取缓存的 HTTP/2 Agent（避免内存泄漏）
-      const pool = getGlobalAgentPool();
-      const { agent, cacheKey } = await pool.getAgent({
-        endpointUrl: proxyUrl,
-        proxyUrl: null,
-        enableHttp2: true,
-      });
-      init.dispatcher = agent;
-      directConnectionCacheKey = cacheKey;
-      logger.debug("ProxyForwarder: Using cached HTTP/2 Agent for direct connection", {
-        providerId: provider.id,
-        providerName: provider.name,
-        cacheKey,
-      });
-    }
-
-    (init as Record<string, unknown>).verbose = true;
+    let directConnectionDispatcherId: string | null = null;
 
     // ⭐ 始终使用容错流处理以减少 "TypeError: terminated" 错误
     // 背景：undici fetch 的自动解压在流被提前终止时会抛出 "TypeError: terminated"
@@ -2526,6 +2500,40 @@ export class ProxyForwarder {
     let response: Response;
     const fetchStartTime = Date.now();
     try {
+      // ⭐ 把 agent 获取 & 配置日志放进 try 块，确保获取后到 fetch 之前任何异常
+      // （例如 URL 解析失败）都会走 catch 的统一释放逻辑，避免泄漏 activeRequests。
+      proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+
+      if (proxyConfig) {
+        init.dispatcher = proxyConfig.agent;
+        logger.info("ProxyForwarder: Using proxy", {
+          providerId: provider.id,
+          providerName: provider.name,
+          proxyUrl: proxyConfig.proxyUrl,
+          fallbackToDirect: proxyConfig.fallbackToDirect,
+          targetUrl: new URL(proxyUrl).origin,
+          http2Enabled: proxyConfig.http2Enabled,
+        });
+      } else if (enableHttp2) {
+        // 直连场景：使用 Agent Pool 获取缓存的 HTTP/2 Agent（避免内存泄漏）
+        const pool = getGlobalAgentPool();
+        const { agent, cacheKey, dispatcherId } = await pool.getAgent({
+          endpointUrl: proxyUrl,
+          proxyUrl: null,
+          enableHttp2: true,
+        });
+        init.dispatcher = agent;
+        directConnectionCacheKey = cacheKey;
+        directConnectionDispatcherId = dispatcherId;
+        logger.debug("ProxyForwarder: Using cached HTTP/2 Agent for direct connection", {
+          providerId: provider.id,
+          providerName: provider.name,
+          cacheKey,
+        });
+      }
+
+      (init as Record<string, unknown>).verbose = true;
+
       // ⭐ 所有供应商使用 undici.request 绕过 fetch 的自动解压
       // 原因：undici fetch 无法关闭自动解压，上游可能无视 accept-encoding: identity 返回 gzip
       // 当 gzip 流被提前终止时（如连接关闭），undici Gunzip 会抛出 "TypeError: terminated"
@@ -2557,8 +2565,9 @@ export class ProxyForwarder {
 
       // Release agent ref count on fetch failure (request never started streaming)
       const releaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
-      if (releaseKey) {
-        getGlobalAgentPool().releaseAgent(releaseKey);
+      const releaseDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+      if (releaseKey && releaseDispatcherId) {
+        getGlobalAgentPool().releaseAgent(releaseKey, releaseDispatcherId);
       }
 
       // 捕获 fetch 原始错误（网络错误、DNS 解析失败、连接失败等）
@@ -2771,6 +2780,7 @@ export class ProxyForwarder {
           // Update tracking to the H1 fallback agent (H2 agent was already released at catch-block top)
           proxyConfig = http1ProxyConfig;
           directConnectionCacheKey = null;
+          directConnectionDispatcherId = null;
 
           // 重新启动响应超时计时器（如果之前有配置超时时间）
           // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
@@ -2788,8 +2798,11 @@ export class ProxyForwarder {
           // 成功后跳过 throw，继续执行后续逻辑（不计入熔断器）
         } catch (http1Error) {
           // Release H1 fallback agent ref count before re-throwing
-          if (http1ProxyConfig?.cacheKey) {
-            getGlobalAgentPool().releaseAgent(http1ProxyConfig.cacheKey);
+          if (http1ProxyConfig?.cacheKey && http1ProxyConfig?.dispatcherId) {
+            getGlobalAgentPool().releaseAgent(
+              http1ProxyConfig.cacheKey,
+              http1ProxyConfig.dispatcherId
+            );
           }
 
           // HTTP/1.1 也失败，记录并抛出原始错误
@@ -2844,6 +2857,15 @@ export class ProxyForwarder {
                 providerId: provider.id,
                 providerName: provider.name,
               });
+
+              // ⚠️ 关键：catch 入口已经释放了代理 agent 的 ref count（见本 catch 块顶部），
+              // 而 fallback 后走的是"无 dispatcher 直连"，不再持有 agent pool 的引用。
+              // 如果保留 proxyConfig，后续 session.releaseAgent 会对同一个 cacheKey 再减 1，
+              // 把其他正在共享这个 agent 的请求计数吃掉，导致新连接被提前驱逐。
+              // 此处必须同 H2→H1 fallback 一样清空跟踪信息。
+              proxyConfig = null;
+              directConnectionCacheKey = null;
+              directConnectionDispatcherId = null;
 
               // 重新启动响应超时计时器（如果之前有配置超时时间）
               // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
@@ -2967,8 +2989,9 @@ export class ProxyForwarder {
         }
         // Release agent ref count (response-handler will never run for error responses)
         const errorReleaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
-        if (errorReleaseKey) {
-          getGlobalAgentPool().releaseAgent(errorReleaseKey);
+        const errorReleaseDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+        if (errorReleaseKey && errorReleaseDispatcherId) {
+          getGlobalAgentPool().releaseAgent(errorReleaseKey, errorReleaseDispatcherId);
         }
       }
     }
@@ -2998,10 +3021,11 @@ export class ProxyForwarder {
     // Attach agent release callback for in-flight reference counting.
     // response-handler must call this in its finally block after the stream is fully consumed.
     const agentCacheKeyToRelease = proxyConfig?.cacheKey ?? directConnectionCacheKey;
-    if (agentCacheKeyToRelease) {
+    const agentDispatcherIdToRelease = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+    if (agentCacheKeyToRelease && agentDispatcherIdToRelease) {
       const pool = getGlobalAgentPool();
       sessionWithTimeout.releaseAgent = () => {
-        pool.releaseAgent(agentCacheKeyToRelease);
+        pool.releaseAgent(agentCacheKeyToRelease, agentDispatcherIdToRelease);
       };
     }
 

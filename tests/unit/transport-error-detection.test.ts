@@ -102,6 +102,18 @@ describe("isTransportError", () => {
       (err as Error & { cause: Error }).cause = cause;
       expect(isTransportError(err)).toBe(true);
     });
+
+    it("should detect ERR_HTTP2_STREAM_ERROR on cause", () => {
+      // ⭐ 回归：undici/fetch 会把底层 HTTP/2 错误包在 cause 里
+      // 之前 isTransportError 只看顶层 code，漏检后会把真正的 transport 故障
+      // 误判为供应商错误，直接把 agent 踢掉，反复触发 STREAM_PROCESSING_ERROR。
+      // 注意：外层使用不匹配任何 message/name 签名的描述，确保走 cause.code 路径。
+      const cause = new Error("Stream closed with error code");
+      (cause as NodeJS.ErrnoException).code = "ERR_HTTP2_STREAM_ERROR";
+      const err = new Error("request failed");
+      (err as Error & { cause: Error }).cause = cause;
+      expect(isTransportError(err)).toBe(true);
+    });
   });
 });
 
