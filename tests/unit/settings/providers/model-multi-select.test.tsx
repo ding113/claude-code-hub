@@ -305,4 +305,41 @@ describe("ModelMultiSelect", () => {
 
     unmount();
   });
+
+  test("取消一个 mixed-case exact 模型时不会连带移除另一个", async () => {
+    const messages = loadMessages();
+    const onChange = vi.fn();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ModelMultiSelect
+          providerType="openai"
+          selectedModels={["GLM-5", "glm-5"]}
+          onChange={onChange}
+        />
+      </NextIntlClientProvider>
+    );
+
+    await openPicker();
+
+    const selectedItems = Array.from(
+      document.querySelectorAll('[data-model-group="selected"] [data-slot="command-item"]')
+    );
+    expect(selectedItems).toHaveLength(2);
+    expect(selectedItems.map((item) => item.textContent || "")).toEqual(
+      expect.arrayContaining(["GLM-5", "glm-5"])
+    );
+
+    const upperItem = selectedItems.find((item) => (item.textContent || "").includes("GLM-5"));
+    expect(upperItem).toBeTruthy();
+
+    await act(async () => {
+      upperItem?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(onChange).toHaveBeenLastCalledWith(["glm-5"]);
+
+    unmount();
+  });
 });
