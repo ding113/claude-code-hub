@@ -61,7 +61,7 @@ function normalizeModelName(model: string): string {
 }
 
 function getModelKey(model: string): string {
-  return normalizeModelName(model).toLowerCase();
+  return normalizeModelName(model);
 }
 
 function getProviderTypeLabel(providerType: ProviderType, t: ReturnType<typeof useTranslations>) {

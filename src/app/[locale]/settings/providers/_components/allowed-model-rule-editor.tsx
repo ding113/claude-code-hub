@@ -49,7 +49,8 @@ function normalizeRule(rule: AllowedModelRule): AllowedModelRule {
 }
 
 function getRuleIdentity(rule: Pick<AllowedModelRule, "matchType" | "pattern">): string {
-  return `${rule.matchType}:${rule.pattern.trim().toLowerCase()}`;
+  // exact/prefix/suffix/contains/regex 的运行时匹配都区分大小写，这里去重也必须保持一致。
+  return `${rule.matchType}:${rule.pattern.trim()}`;
 }
 
 export function AllowedModelRuleEditor({

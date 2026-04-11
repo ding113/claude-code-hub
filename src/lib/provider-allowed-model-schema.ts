@@ -72,7 +72,7 @@ export const PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA = z
     (rules) => {
       const keys = new Set<string>();
       for (const rule of rules) {
-        const key = `${rule.matchType}:${rule.pattern.trim().toLowerCase()}`;
+        const key = `${rule.matchType}:${rule.pattern.trim()}`;
         if (keys.has(key)) {
           return false;
         }
@@ -95,7 +95,7 @@ export const PROVIDER_ALLOWED_MODEL_RULE_LIST_SCHEMA = z
     (rules) => {
       const keys = new Set<string>();
       for (const rule of rules) {
-        const key = `${rule.matchType}:${rule.pattern.trim().toLowerCase()}`;
+        const key = `${rule.matchType}:${rule.pattern.trim()}`;
         if (keys.has(key)) {
           return false;
         }

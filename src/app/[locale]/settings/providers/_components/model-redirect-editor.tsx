@@ -47,7 +47,8 @@ function normalizeRule(rule: ProviderModelRedirectRule): ProviderModelRedirectRu
 }
 
 function getRuleIdentity(rule: Pick<ProviderModelRedirectRule, "matchType" | "source">): string {
-  return `${rule.matchType}:${rule.source.trim().toLowerCase()}`;
+  // 重定向规则的匹配层区分大小写，编辑器不能把不同大小写的 source 合并成同一条。
+  return `${rule.matchType}:${rule.source.trim()}`;
 }
 
 export function ModelRedirectEditor({
