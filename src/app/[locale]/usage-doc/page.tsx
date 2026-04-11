@@ -140,7 +140,7 @@ export function UsageDocContent({ origin }: UsageDocContentProps) {
   const t = useTranslations("usage");
   const resolvedOrigin = origin || t("ui.currentSiteAddress");
   // 优先使用显式配置的 API 域名，兼容 Web/UI 与 API 分域部署
-  const apiOrigin = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || resolvedOrigin;
+  const apiOrigin = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ?? "").replace(/\/$/, "") || resolvedOrigin;
   const CLI_CONFIGS = getCLIConfigs(t);
 
   /**
@@ -1507,7 +1507,7 @@ source ~/.${os === "macos" ? "zshrc" : "bashrc"}`}
 echo $env:${envKeyName}
 
 ${t("snippets.comments.testNetworkConnection")}
-Test-NetConnection -ComputerName ${resolvedOrigin.replace("https://", "").replace("http://", "")} -Port 443`}
+Test-NetConnection -ComputerName ${apiOrigin.replace("https://", "").replace("http://", "")} -Port 443`}
               />
             ) : (
               <CodeBlock
