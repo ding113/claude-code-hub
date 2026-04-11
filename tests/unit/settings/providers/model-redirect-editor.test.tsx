@@ -217,4 +217,52 @@ describe("ModelRedirectEditor", () => {
 
     unmount();
   });
+
+  test("允许 exact 重定向同时保留 GLM-5 和 glm-5 两个 source", async () => {
+    const messages = loadMessages();
+    const onChange = vi.fn();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ModelRedirectEditor
+          value={[{ matchType: "exact", source: "GLM-5", target: "GLM-5" }]}
+          onChange={onChange}
+        />
+      </NextIntlClientProvider>
+    );
+
+    const sourceInput = document.querySelector("#new-source") as HTMLInputElement | null;
+    const targetInput = document.querySelector("#new-target") as HTMLInputElement | null;
+    expect(sourceInput).toBeTruthy();
+    expect(targetInput).toBeTruthy();
+
+    await act(async () => {
+      if (sourceInput) {
+        sourceInput.value = "glm-5";
+        sourceInput.dispatchEvent(new Event("input", { bubbles: true }));
+        sourceInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      if (targetInput) {
+        targetInput.value = "GLM-5";
+        targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+        targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    const addButton = document.querySelector("[data-redirect-add]") as HTMLButtonElement | null;
+    expect(addButton).toBeTruthy();
+
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalledWith([
+      { matchType: "exact", source: "GLM-5", target: "GLM-5" },
+      { matchType: "exact", source: "glm-5", target: "GLM-5" },
+    ]);
+    expect(document.querySelector("[data-redirect-error]")?.textContent || "").toBe("");
+
+    unmount();
+  });
 });

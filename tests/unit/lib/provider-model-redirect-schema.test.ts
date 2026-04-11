@@ -42,4 +42,13 @@ describe("provider-model-redirect-schema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("允许 exact redirect 同时包含 GLM-5 和 glm-5 两个 source", () => {
+    const result = PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA.safeParse([
+      { matchType: "exact", source: "GLM-5", target: "GLM-5" },
+      { matchType: "exact", source: "glm-5", target: "GLM-5" },
+    ]);
+
+    expect(result.success).toBe(true);
+  });
 });

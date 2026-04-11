@@ -231,6 +231,53 @@ describe("AllowedModelRuleEditor", () => {
     unmount();
   });
 
+  test("允许 exact 规则同时保留 GLM-5 和 glm-5", async () => {
+    const messages = loadMessages();
+    const onChange = vi.fn();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <AllowedModelRuleEditor
+          value={[{ matchType: "exact", pattern: "GLM-5" }]}
+          onChange={onChange}
+          providerType="openai"
+        />
+      </NextIntlClientProvider>
+    );
+
+    const patternInput = document.querySelector(
+      "#new-allowed-model-pattern"
+    ) as HTMLInputElement | null;
+    expect(patternInput).toBeTruthy();
+
+    await act(async () => {
+      if (patternInput) {
+        patternInput.value = "glm-5";
+        patternInput.dispatchEvent(new Event("input", { bubbles: true }));
+        patternInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await flushTicks(2);
+
+    const addButton = document.querySelector(
+      "[data-allowed-model-add]"
+    ) as HTMLButtonElement | null;
+    expect(addButton).toBeTruthy();
+
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(onChange).toHaveBeenCalledWith([
+      { matchType: "exact", pattern: "GLM-5" },
+      { matchType: "exact", pattern: "glm-5" },
+    ]);
+    expect(document.querySelector("[data-allowed-model-error]")?.textContent || "").toBe("");
+
+    unmount();
+  });
+
   test("adds models from picker as exact rules without changing existing advanced rules", async () => {
     const messages = loadMessages();
     const onChange = vi.fn();

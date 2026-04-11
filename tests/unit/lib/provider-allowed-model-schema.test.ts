@@ -40,4 +40,13 @@ describe("provider-allowed-model-schema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("允许 exact allowlist 同时包含 GLM-5 和 glm-5", () => {
+    const result = PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA.safeParse([
+      { matchType: "exact", pattern: "GLM-5" },
+      { matchType: "exact", pattern: "glm-5" },
+    ]);
+
+    expect(result.success).toBe(true);
+  });
 });

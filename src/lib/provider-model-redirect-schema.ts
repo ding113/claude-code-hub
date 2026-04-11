@@ -73,7 +73,7 @@ export const PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA = z
     (rules) => {
       const keys = new Set<string>();
       for (const rule of rules) {
-        const key = `${rule.matchType}:${rule.source.trim().toLowerCase()}`;
+        const key = `${rule.matchType}:${rule.source.trim()}`;
         if (keys.has(key)) {
           return false;
         }
