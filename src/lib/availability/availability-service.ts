@@ -4,7 +4,7 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
-import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
@@ -151,6 +151,7 @@ export async function queryProviderAvailability(
     gte(messageRequest.createdAt, startDate),
     lte(messageRequest.createdAt, endDate),
     isNull(messageRequest.deletedAt),
+    isNotNull(messageRequest.durationMs),
   ];
 
   const requests = await db
@@ -206,7 +207,7 @@ export async function queryProviderAvailability(
 
   // Process requests
   for (const req of requests) {
-    if (!req.createdAt) continue;
+    if (!req.createdAt || req.durationMs == null) continue;
 
     const bucketStart = new Date(Math.floor(req.createdAt.getTime() / bucketSizeMs) * bucketSizeMs);
     const bucketKey = bucketStart.toISOString();
@@ -381,7 +382,8 @@ export async function getCurrentProviderStatus(): Promise<
       and(
         inArray(messageRequest.providerId, providerIdList),
         gte(messageRequest.createdAt, fifteenMinutesAgo),
-        isNull(messageRequest.deletedAt)
+        isNull(messageRequest.deletedAt),
+        isNotNull(messageRequest.durationMs)
       )
     )
     .orderBy(desc(messageRequest.createdAt));
@@ -405,6 +407,8 @@ export async function getCurrentProviderStatus(): Promise<
   }
 
   for (const req of requests) {
+    if (req.durationMs == null) continue;
+
     const stats = providerStats.get(req.providerId);
     if (!stats) continue;
 
