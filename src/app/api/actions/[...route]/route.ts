@@ -2157,14 +2157,16 @@ app.get(
   })
 );
 
-// 健康检查端点
-app.get("/health", (c) =>
-  c.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    version: "1.0.0",
-  })
-);
+// 健康检查端点 (委托给核心逻辑，支持 K8s 探针)
+app.get("/health", async (c) => {
+  try {
+    const { checkReadiness } = await import("@/lib/health/checker");
+    const health = await checkReadiness();
+    return c.json(health, health.status === "unhealthy" ? 503 : 200);
+  } catch {
+    return c.json({ status: "unhealthy", timestamp: new Date().toISOString() }, 503);
+  }
+});
 
 // 导出处理器 (Vercel Edge Functions 格式)
 export const GET = handle(app);

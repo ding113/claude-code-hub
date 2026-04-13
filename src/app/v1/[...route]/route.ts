@@ -40,8 +40,13 @@ app.post("/chat/completions", handleProxyRequest);
 // Response API 路由（支持 Codex）
 app.post("/responses", handleProxyRequest);
 
+// 内部健康自检端点（不走 proxy，仅验证 Hono 中间件链可用）
+app.get("/_ping", (c) => c.json({ status: "pong" }));
+
 // Claude API 和其他所有请求（fallback）
 app.all("*", handleProxyRequest);
+
+export { app as v1App };
 
 export const GET = handle(app);
 export const POST = handle(app);
