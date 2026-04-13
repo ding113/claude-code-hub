@@ -85,11 +85,11 @@ export interface ProviderAvailabilitySummary {
   isEnabled: boolean;
   /** Current status based on recent requests */
   currentStatus: AvailabilityStatus;
-  /** Current weighted availability (0.0-1.0) */
+  /** Queried-window availability ratio (currently kept equal to successRate for compatibility) */
   currentAvailability: number;
   /** Total request count in period */
   totalRequests: number;
-  /** Success rate (green requests / total) */
+  /** Compatibility alias of currentAvailability (green requests / total) */
   successRate: number;
   /** Average latency in ms */
   avgLatencyMs: number;
