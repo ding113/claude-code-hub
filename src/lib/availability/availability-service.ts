@@ -19,7 +19,6 @@ import type {
 type AggregatedAvailabilityBucketRow = {
   providerId: number;
   bucketStart: Date;
-  totalRequests: number;
   greenCount: number;
   redCount: number;
   latencyCount: number;
@@ -38,6 +37,12 @@ type AggregatedCurrentProviderStatusRow = {
   lastRequestAt: Date | null;
 };
 
+/**
+ * 当前版本把“已终态”收敛为 `statusCode` 已落库。
+ *
+ * 已知限制：如果未来出现 `durationMs` / `errorMessage` 已落库、但 `statusCode` 仍为空且已稳定结束的写路径，
+ * 这些记录会被当前可用性统计排除。届时应引入独立的 finalized 谓词，而不是直接放宽为 `durationMs IS NOT NULL`。
+ */
 function buildAvailabilityFinalizedCondition() {
   return isNotNull(messageRequest.statusCode);
 }
@@ -227,7 +232,6 @@ export async function queryProviderAvailability(
       SELECT
         "providerId",
         "bucketStart",
-        COUNT(*)::int AS "totalRequests",
         COUNT(*) FILTER (WHERE "statusCode" >= 200 AND "statusCode" < 400)::int AS "greenCount",
         COUNT(*) FILTER (WHERE "statusCode" < 200 OR "statusCode" >= 400)::int AS "redCount",
         COUNT("durationMs")::int AS "latencyCount",
@@ -267,7 +271,6 @@ export async function queryProviderAvailability(
         SELECT
           "providerId",
           "bucketStart",
-          "totalRequests",
           "greenCount",
           "redCount",
           "latencyCount",
@@ -286,7 +289,6 @@ export async function queryProviderAvailability(
         SELECT
           "providerId",
           "bucketStart",
-          "totalRequests",
           "greenCount",
           "redCount",
           "latencyCount",
@@ -325,10 +327,16 @@ export async function queryProviderAvailability(
     let lastRequestAtTime = 0;
 
     for (const bucket of bucketRowsForProvider) {
-      totalGreen += toFiniteNumber(bucket.greenCount);
-      totalRed += toFiniteNumber(bucket.redCount);
-      totalLatencyCount += toFiniteNumber(bucket.latencyCount);
-      totalLatencySumMs += toFiniteNumber(bucket.latencySumMs);
+      const greenCount = toFiniteNumber(bucket.greenCount);
+      const redCount = toFiniteNumber(bucket.redCount);
+      const totalRequests = greenCount + redCount;
+      const latencyCount = toFiniteNumber(bucket.latencyCount);
+      const latencySumMs = toFiniteNumber(bucket.latencySumMs);
+
+      totalGreen += greenCount;
+      totalRed += redCount;
+      totalLatencyCount += latencyCount;
+      totalLatencySumMs += latencySumMs;
       lastRequestAtTime = Math.max(lastRequestAtTime, getTimeValue(bucket.lastRequestAt));
 
       const bucketStart = new Date(bucket.bucketStart);
@@ -337,13 +345,10 @@ export async function queryProviderAvailability(
       timeBuckets.push({
         bucketStart: bucketStart.toISOString(),
         bucketEnd: bucketEnd.toISOString(),
-        totalRequests: toFiniteNumber(bucket.totalRequests),
-        greenCount: toFiniteNumber(bucket.greenCount),
-        redCount: toFiniteNumber(bucket.redCount),
-        availabilityScore: calculateAvailabilityScore(
-          toFiniteNumber(bucket.greenCount),
-          toFiniteNumber(bucket.redCount)
-        ),
+        totalRequests,
+        greenCount,
+        redCount,
+        availabilityScore: calculateAvailabilityScore(greenCount, redCount),
         avgLatencyMs: toFiniteNumber(bucket.avgLatencyMs),
         p50LatencyMs: toFiniteNumber(bucket.p50LatencyMs),
         p95LatencyMs: toFiniteNumber(bucket.p95LatencyMs),

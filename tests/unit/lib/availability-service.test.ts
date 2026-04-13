@@ -1,3 +1,5 @@
+import type { SQL } from "drizzle-orm";
+import { CasingCache } from "drizzle-orm/casing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function createThenableQuery<T>(result: T) {
@@ -20,50 +22,28 @@ function createThenableQuery<T>(result: T) {
 }
 
 function sqlToString(sqlObject: unknown): string {
-  const visited = new Set<unknown>();
+  return (sqlObject as SQL).toQuery({
+    escapeName: (name: string) => `"${name}"`,
+    escapeParam: (num: number, _value: unknown) => `$${num}`,
+    escapeString: (value: string) => `'${value}'`,
+    casing: new CasingCache(),
+    paramStartIndex: { value: 1 },
+  }).sql;
+}
 
-  const walk = (node: unknown): string => {
-    if (node === null || node === undefined || visited.has(node)) return "";
+function normalizeSql(sqlObject: unknown): string {
+  return sqlToString(sqlObject).replace(/\s+/g, " ").trim().toLowerCase();
+}
 
-    if (typeof node === "string") return node;
-    if (typeof node === "number" || typeof node === "boolean" || typeof node === "bigint") {
-      return String(node);
-    }
+function extractFinalizedRequestsSql(queryText: string): string {
+  const start = queryText.indexOf("finalized_requests as");
+  const end = queryText.indexOf("provider_bucket_stats as");
 
-    if (typeof node === "object") {
-      visited.add(node);
+  if (start === -1 || end === -1 || end <= start) {
+    return queryText;
+  }
 
-      const anyNode = node as {
-        name?: unknown;
-        value?: unknown;
-        queryChunks?: unknown[];
-      };
-
-      if (Array.isArray(anyNode)) {
-        return anyNode.map(walk).join("");
-      }
-
-      if (typeof anyNode.name === "string") {
-        return anyNode.name;
-      }
-
-      if (Array.isArray(anyNode.value)) {
-        return anyNode.value.map(walk).join("");
-      }
-
-      if (typeof anyNode.value === "string") {
-        return anyNode.value;
-      }
-
-      if (anyNode.queryChunks) {
-        return walk(anyNode.queryChunks);
-      }
-    }
-
-    return "";
-  };
-
-  return walk(sqlObject);
+  return queryText.slice(start, end);
 }
 
 describe("availability-service", () => {
@@ -104,7 +84,6 @@ describe("availability-service", () => {
       {
         providerId: 1,
         bucketStart: new Date("2026-04-13T08:00:00.000Z"),
-        totalRequests: 3,
         greenCount: 2,
         redCount: 1,
         latencyCount: 2,
@@ -155,12 +134,114 @@ describe("availability-service", () => {
       p99LatencyMs: 240,
     });
 
-    const queryText = sqlToString(executeMock.mock.calls[0]?.[0]).toLowerCase();
-    expect(queryText).toContain("statuscode");
-    expect(queryText).toContain("is not null");
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+    const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
+    expect(finalizedRequestsSql).toMatch(/where .*status_?code.*is not null/);
     expect(queryText).toContain("group by");
     expect(queryText).toContain("percentile_cont(0.95)");
     expect(queryText).toContain("row_number() over");
+  });
+
+  it("queryProviderAvailability 会排除进行中请求(statusCode=null 且 durationMs=null)", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    const finalizedRequestsSql = extractFinalizedRequestsSql(
+      normalizeSql(executeMock.mock.calls[0]?.[0])
+    );
+    expect(finalizedRequestsSql).toMatch(/where .*status_?code.*is not null/);
+  });
+
+  it("queryProviderAvailability 会保留 Gemini passthrough 终态(statusCode!=null 且 durationMs=null)", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    const finalizedRequestsSql = extractFinalizedRequestsSql(
+      normalizeSql(executeMock.mock.calls[0]?.[0])
+    );
+    expect(finalizedRequestsSql).not.toMatch(/where .*duration_?ms.*is not null/);
+  });
+
+  it("queryProviderAvailability 当前不会把中间持久化状态(statusCode=null 且 durationMs!=null)误算为 red", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+    const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
+
+    expect(finalizedRequestsSql).toMatch(/where .*status_?code.*is not null/);
+    expect(queryText).toMatch(
+      /count\(\*\) filter \(where .*status_?code.*< 200 .*or .*status_?code.*>= 400\)/
+    );
   });
 
   it("queryProviderAvailability 在无聚合数据时仍返回 unknown 提供商状态", async () => {
@@ -248,9 +329,8 @@ describe("availability-service", () => {
       },
     ]);
 
-    const queryText = sqlToString(executeMock.mock.calls[0]?.[0]).toLowerCase();
-    expect(queryText).toContain("status_code");
-    expect(queryText).toContain("is not null");
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+    expect(queryText).toMatch(/where .*status_?code.*is not null/);
     expect(queryText).toContain("count(*) filter");
     expect(queryText).toContain("max(");
   });
