@@ -84,6 +84,14 @@ describe("availability-service", () => {
           errorMessage: null,
           createdAt: new Date("2026-04-13T08:03:00.000Z"),
         },
+        {
+          id: 104,
+          providerId: 1,
+          statusCode: null,
+          durationMs: 360,
+          errorMessage: "TIMEOUT",
+          createdAt: new Date("2026-04-13T08:04:00.000Z"),
+        },
       ]),
     ];
 
@@ -112,7 +120,7 @@ describe("availability-service", () => {
       currentAvailability: 2 / 3,
       successRate: 2 / 3,
       currentStatus: "green",
-      lastRequestAt: "2026-04-13T09:00:00.000Z",
+      lastRequestAt: "2026-04-13T08:03:00.000Z",
     });
     expect(result.providers[0]?.timeBuckets).toHaveLength(1);
     expect(result.providers[0]?.timeBuckets[0]).toMatchObject({
@@ -149,6 +157,12 @@ describe("availability-service", () => {
           statusCode: 200,
           durationMs: 120,
           createdAt: new Date("2026-04-13T08:01:00.000Z"),
+        },
+        {
+          providerId: 1,
+          statusCode: null,
+          durationMs: 360,
+          createdAt: new Date("2026-04-13T08:04:00.000Z"),
         },
       ]),
     ];

@@ -21,19 +21,10 @@ import type {
 const MAX_REQUESTS_PER_QUERY = 100000;
 
 /**
- * Classify a single request's status
+ * Classify a single finalized request's status
  * Simple: success (2xx/3xx) = green, failure = red
  */
-export function classifyRequestStatus(statusCode: number | null): RequestStatusClassification {
-  // No status code means network error or timeout
-  if (statusCode === null) {
-    return {
-      status: "red",
-      isSuccess: false,
-      isError: true,
-    };
-  }
-
+export function classifyRequestStatus(statusCode: number): RequestStatusClassification {
   // HTTP error (4xx/5xx)
   if (statusCode >= 400) {
     return {
@@ -151,7 +142,9 @@ export async function queryProviderAvailability(
     gte(messageRequest.createdAt, startDate),
     lte(messageRequest.createdAt, endDate),
     isNull(messageRequest.deletedAt),
-    // 终态应以 statusCode 为准；Gemini passthrough 等路径可能已结束但尚未回填 durationMs。
+    // 可用性分类必须等最终 statusCode 落库：
+    // 1. sync 写路径会先写 durationMs，再写 statusCode，durationMs-only 仍属于持久化中间态；
+    // 2. Gemini passthrough 等路径又可能先拿到 statusCode，而 durationMs 暂未回填。
     isNotNull(messageRequest.statusCode),
   ];
 
@@ -200,15 +193,17 @@ export async function queryProviderAvailability(
       }
     >
   >();
+  const providerLastRequestAt = new Map<number, number>();
 
   // Initialize provider buckets
   for (const provider of providerList) {
     providerBuckets.set(provider.id, new Map());
+    providerLastRequestAt.set(provider.id, 0);
   }
 
   // Process requests
   for (const req of requests) {
-    // 防御性兜底：异步写缓冲短暂不一致时，仍跳过尚未写入最终状态码的记录。
+    // 防御性兜底：即使查询条件被未来改动，仍不把仅有 durationMs 的中间态误计为失败。
     if (!req.createdAt || req.statusCode == null) continue;
 
     const bucketStart = new Date(Math.floor(req.createdAt.getTime() / bucketSizeMs) * bucketSizeMs);
@@ -234,6 +229,12 @@ export async function queryProviderAvailability(
       bucket.redCount++;
     }
 
+    const currentLastRequestAt = providerLastRequestAt.get(req.providerId) ?? 0;
+    providerLastRequestAt.set(
+      req.providerId,
+      Math.max(currentLastRequestAt, req.createdAt.getTime())
+    );
+
     if (req.durationMs !== null) {
       bucket.latencies.push(req.durationMs);
     }
@@ -249,8 +250,6 @@ export async function queryProviderAvailability(
     let totalGreen = 0;
     let totalRed = 0;
     const allLatencies: number[] = [];
-    let lastRequestAt: string | null = null;
-
     // Sort buckets by time and limit
     const sortedBucketKeys = Array.from(bucketData.keys()).sort().slice(-maxBuckets);
 
@@ -281,15 +280,11 @@ export async function queryProviderAvailability(
         p95LatencyMs: calculatePercentile(sortedLatencies, 95),
         p99LatencyMs: calculatePercentile(sortedLatencies, 99),
       });
-
-      // Track last request time
-      if (bucket.greenCount + bucket.redCount > 0) {
-        lastRequestAt = bucketEnd.toISOString();
-      }
     }
 
     const totalRequests = totalGreen + totalRed;
     const sortedAllLatencies = allLatencies.sort((a, b) => a - b);
+    const lastRequestAtTime = providerLastRequestAt.get(provider.id) ?? 0;
 
     // Determine current status based on last few buckets
     // IMPORTANT: No data = 'unknown', NOT 'green'! Must be honest.
@@ -316,7 +311,7 @@ export async function queryProviderAvailability(
         sortedAllLatencies.length > 0
           ? sortedAllLatencies.reduce((a, b) => a + b, 0) / sortedAllLatencies.length
           : 0,
-      lastRequestAt,
+      lastRequestAt: lastRequestAtTime > 0 ? new Date(lastRequestAtTime).toISOString() : null,
       timeBuckets,
     });
   }
@@ -385,7 +380,9 @@ export async function getCurrentProviderStatus(): Promise<
         inArray(messageRequest.providerId, providerIdList),
         gte(messageRequest.createdAt, fifteenMinutesAgo),
         isNull(messageRequest.deletedAt),
-        // 终态应以 statusCode 为准；Gemini passthrough 等路径可能已结束但尚未回填 durationMs。
+        // 可用性分类必须等最终 statusCode 落库：
+        // 1. sync 写路径会先写 durationMs，再写 statusCode，durationMs-only 仍属于持久化中间态；
+        // 2. Gemini passthrough 等路径又可能先拿到 statusCode，而 durationMs 暂未回填。
         isNotNull(messageRequest.statusCode)
       )
     )
@@ -410,7 +407,7 @@ export async function getCurrentProviderStatus(): Promise<
   }
 
   for (const req of requests) {
-    // 防御性兜底：异步写缓冲短暂不一致时，仍跳过尚未写入最终状态码的记录。
+    // 防御性兜底：即使查询条件被未来改动，仍不把仅有 durationMs 的中间态误计为失败。
     if (req.statusCode == null) continue;
 
     const stats = providerStats.get(req.providerId);
