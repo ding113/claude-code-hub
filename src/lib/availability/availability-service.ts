@@ -158,8 +158,8 @@ function buildAvailabilitySuccessStatusCondition(statusCodeExpression: SQLWrappe
 }
 
 function buildAvailabilityFailureStatusCondition(statusCodeExpression: SQLWrapper) {
-  return sql`${statusCodeExpression} < ${AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL}
-    OR ${statusCodeExpression} >= ${AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL}`;
+  return sql`(${statusCodeExpression} < ${AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL}
+    OR ${statusCodeExpression} >= ${AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL})`;
 }
 
 /**
