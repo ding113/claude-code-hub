@@ -1,5 +1,6 @@
 import safeRegex from "safe-regex";
 import { z } from "zod";
+import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
 
 export const PROVIDER_MODEL_REDIRECT_MATCH_TYPE_SCHEMA = z.enum([
   "exact",
@@ -16,12 +17,18 @@ export const PROVIDER_MODEL_REDIRECT_RULE_SCHEMA = z
       .string()
       .trim()
       .min(1, "Redirect source cannot be empty")
-      .max(255, "Redirect source is too long"),
+      .max(
+        PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH,
+        `Redirect source is too long (max ${PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH} characters)`
+      ),
     target: z
       .string()
       .trim()
       .min(1, "Redirect target cannot be empty")
-      .max(255, "Redirect target is too long"),
+      .max(
+        PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH,
+        `Redirect target is too long (max ${PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH} characters)`
+      ),
   })
   .superRefine((rule, ctx) => {
     if (rule.matchType !== "regex") {
@@ -58,12 +65,15 @@ export const PROVIDER_MODEL_REDIRECT_RULE_SCHEMA = z
 
 export const PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA = z
   .array(PROVIDER_MODEL_REDIRECT_RULE_SCHEMA)
-  .max(100, "Redirect rules cannot exceed 100 entries")
+  .max(
+    PROVIDER_RULE_LIMITS.MAX_ITEMS,
+    `Redirect rules cannot exceed ${PROVIDER_RULE_LIMITS.MAX_ITEMS} entries`
+  )
   .refine(
     (rules) => {
       const keys = new Set<string>();
       for (const rule of rules) {
-        const key = `${rule.matchType}:${rule.source.trim().toLowerCase()}`;
+        const key = `${rule.matchType}:${rule.source.trim()}`;
         if (keys.has(key)) {
           return false;
         }

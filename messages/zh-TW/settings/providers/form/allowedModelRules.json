@@ -9,7 +9,7 @@
   "matchTypeContains": "關鍵字",
   "matchTypeRegex": "正則",
   "orderHint": "越靠前的規則越先命中",
-  "maxRules": "最多只能新增 100 條白名單規則",
+  "maxRules": "最多只能新增 {max, number} 條白名單規則",
   "saveRule": "儲存規則",
   "cancelEdit": "取消編輯",
   "moveRuleUp": "上移規則",
@@ -22,7 +22,7 @@
   "exactPickerDescription": "優先讀取上游模型列表；不可用時回退到本地價格表，並以精確匹配規則加入白名單。",
   "emptyState": "目前還沒有白名單規則。留空時代表允許所有模型。",
   "patternEmpty": "匹配模式不能為空",
-  "patternTooLong": "匹配模式過長",
+  "patternTooLong": "匹配模式過長（最多 {max} 個字元）",
   "patternLabel": "模型匹配模式",
   "patternPlaceholder": "例如 claude-opus-4-1 或 ^claude-.*$",
   "regexInvalid": "正則表達式無效",
@@ -31,6 +31,6 @@
   "quickAddMissingUrl": "請先填寫供應商 URL 再執行快速匯入",
   "quickAddMissingKey": "請先提供可用的 API Key 再執行快速匯入",
   "quickAddFailed": "取得上游模型失敗",
-  "quickAddReachedLimit": "匯入上游模型時觸及 100 條規則上限",
+  "quickAddReachedLimit": "匯入上游模型時觸及 {max, number} 條規則上限",
   "quickAddNoNewRules": "沒有匯入新的上游模型規則"
 }

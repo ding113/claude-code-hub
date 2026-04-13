@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
 import type {
   AllowedModelRule,
   ProviderModelRedirectMatchType,
@@ -38,7 +39,7 @@ const DEFAULT_RULE: AllowedModelRule = {
   matchType: "exact",
   pattern: "",
 };
-const MAX_ALLOWED_MODEL_RULES = 100;
+const MAX_ALLOWED_MODEL_RULES = PROVIDER_RULE_LIMITS.MAX_ITEMS;
 
 function normalizeRule(rule: AllowedModelRule): AllowedModelRule {
   return {
@@ -48,7 +49,8 @@ function normalizeRule(rule: AllowedModelRule): AllowedModelRule {
 }
 
 function getRuleIdentity(rule: Pick<AllowedModelRule, "matchType" | "pattern">): string {
-  return `${rule.matchType}:${rule.pattern.trim().toLowerCase()}`;
+  // exact/prefix/suffix/contains/regex 的运行时匹配都区分大小写，这里去重也必须保持一致。
+  return `${rule.matchType}:${rule.pattern.trim()}`;
 }
 
 export function AllowedModelRuleEditor({
@@ -95,8 +97,8 @@ export function AllowedModelRuleEditor({
     if (!normalized.pattern) {
       return t("patternEmpty");
     }
-    if (normalized.pattern.length > 255) {
-      return t("patternTooLong");
+    if (normalized.pattern.length > PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH) {
+      return t("patternTooLong", { max: PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH });
     }
     if (normalized.matchType === "regex") {
       try {
@@ -122,7 +124,7 @@ export function AllowedModelRuleEditor({
 
   const handleAdd = () => {
     if (value.length >= MAX_ALLOWED_MODEL_RULES) {
-      setError(t("maxRules"));
+      setError(t("maxRules", { max: MAX_ALLOWED_MODEL_RULES }));
       return;
     }
 
@@ -250,7 +252,7 @@ export function AllowedModelRuleEditor({
       existingExactKeys.add(ruleKey);
     }
 
-    setError(hitLimit ? t("quickAddReachedLimit") : null);
+    setError(hitLimit ? t("quickAddReachedLimit", { max: MAX_ALLOWED_MODEL_RULES }) : null);
     onChange(nextRules);
   };
 

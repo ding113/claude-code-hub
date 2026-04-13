@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
 import {
   buildProviderBatchApplyUpdates,
   hasProviderBatchPatchChanges,
@@ -145,7 +146,13 @@ describe("provider patch contract", () => {
   it("rejects model_redirects with overlong source", () => {
     const result = normalizeProviderBatchPatchDraft({
       model_redirects: {
-        set: [{ matchType: "exact", source: "a".repeat(256), target: "glm-4.6" }],
+        set: [
+          {
+            matchType: "exact",
+            source: "a".repeat(PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH + 1),
+            target: "glm-4.6",
+          },
+        ],
       },
     });
 

@@ -9,7 +9,7 @@
   "matchTypeContains": "キーワード",
   "matchTypeRegex": "正規表現",
   "orderHint": "上のルールほど先に判定されます",
-  "maxRules": "許可ルールは最大 100 件まで追加できます",
+  "maxRules": "許可ルールは最大 {max, number} 件まで追加できます",
   "saveRule": "ルールを保存",
   "cancelEdit": "編集をキャンセル",
   "moveRuleUp": "ルールを上へ",
@@ -22,7 +22,7 @@
   "exactPickerDescription": "利用できる場合は上流モデル一覧を優先し、使えない場合はローカル価格表へフォールバックして完全一致ルールとして追加します。",
   "emptyState": "許可ルールはまだありません。空の場合はすべてのモデルを許可します。",
   "patternEmpty": "一致パターンを空にできません",
-  "patternTooLong": "一致パターンが長すぎます",
+  "patternTooLong": "一致パターンが長すぎます（最大 {max} 文字）",
   "patternLabel": "モデルパターン",
   "patternPlaceholder": "例: claude-opus-4-1 または ^claude-.*$",
   "regexInvalid": "正規表現が無効です",
@@ -31,6 +31,6 @@
   "quickAddMissingUrl": "一括追加の前にプロバイダー URL を入力してください",
   "quickAddMissingKey": "一括追加の前に有効な API Key を入力してください",
   "quickAddFailed": "上流モデルの取得に失敗しました",
-  "quickAddReachedLimit": "上流モデルの取り込み中に 100 件の上限に達しました",
+  "quickAddReachedLimit": "上流モデルの取り込み中に {max, number} 件の上限に達しました",
   "quickAddNoNewRules": "新しく追加できる上流モデルルールはありませんでした"
 }

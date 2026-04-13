@@ -391,6 +391,100 @@ function addSpecialSettingForPersistence(
   }
 }
 
+type MatchedRuleDetails = NonNullable<
+  NonNullable<ProviderChainItem["errorDetails"]>["matchedRule"]
+>;
+
+function buildMatchedRuleDetails(
+  detectionResult: Awaited<ReturnType<typeof getErrorDetectionResultAsync>>
+): MatchedRuleDetails | undefined {
+  if (
+    !detectionResult.matched ||
+    detectionResult.ruleId === undefined ||
+    detectionResult.pattern === undefined ||
+    detectionResult.matchType === undefined ||
+    detectionResult.category === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    ruleId: detectionResult.ruleId,
+    pattern: detectionResult.pattern,
+    matchType: detectionResult.matchType,
+    category: detectionResult.category,
+    description: detectionResult.description,
+    hasOverrideResponse: detectionResult.overrideResponse !== undefined,
+    hasOverrideStatusCode: detectionResult.overrideStatusCode !== undefined,
+  };
+}
+
+function buildMatchedRuleLogContext(
+  matchedRule: MatchedRuleDetails | undefined
+): Record<string, unknown> {
+  if (!matchedRule) {
+    return {};
+  }
+
+  return {
+    matchedRuleId: matchedRule.ruleId,
+    matchedRuleName: matchedRule.description?.trim() || matchedRule.pattern,
+    matchedRulePattern: matchedRule.pattern,
+    matchedRuleCategory: matchedRule.category,
+    matchedRuleMatchType: matchedRule.matchType,
+    matchedRuleHasOverrideResponse: matchedRule.hasOverrideResponse,
+    matchedRuleHasOverrideStatusCode: matchedRule.hasOverrideStatusCode,
+  };
+}
+
+function buildClientErrorChainEntry(
+  provider: Provider,
+  endpointAudit: { endpointId: number | null; endpointUrl: string },
+  attemptNumber: number,
+  error: Error,
+  errorMessage: string,
+  requestDetails: ReturnType<typeof buildRequestDetails>,
+  matchedRule: MatchedRuleDetails | undefined
+): NonNullable<Parameters<ProxySession["addProviderToChain"]>[1]> {
+  if (error instanceof ProxyError) {
+    return {
+      ...endpointAudit,
+      reason: "client_error_non_retryable",
+      circuitState: getCircuitState(provider.id),
+      attemptNumber,
+      errorMessage,
+      statusCode: error.statusCode,
+      statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+      errorDetails: {
+        provider: {
+          id: provider.id,
+          name: provider.name,
+          statusCode: error.statusCode,
+          statusText: error.message,
+          upstreamBody: error.upstreamError?.body,
+          upstreamParsed: error.upstreamError?.parsed,
+        },
+        clientError: error.getDetailedErrorMessage(),
+        matchedRule,
+        request: requestDetails,
+      },
+    };
+  }
+
+  return {
+    ...endpointAudit,
+    reason: "client_error_non_retryable",
+    circuitState: getCircuitState(provider.id),
+    attemptNumber,
+    errorMessage,
+    errorDetails: {
+      clientError: error.message,
+      matchedRule,
+      request: requestDetails,
+    },
+  };
+}
+
 function buildRetryFailedChainEntry(
   provider: Provider,
   endpointAudit: { endpointId: number | null; endpointUrl: string },
@@ -1354,22 +1448,17 @@ export class ProxyForwarder {
           // ⭐ 3. 不可重试的客户端输入错误处理（不计入熔断器，不重试，立即返回）
           if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
             const detectionResult = await getErrorDetectionResultAsync(lastError);
-            const matchedRule =
-              detectionResult.matched &&
-              detectionResult.ruleId !== undefined &&
-              detectionResult.pattern !== undefined &&
-              detectionResult.matchType !== undefined &&
-              detectionResult.category !== undefined
-                ? {
-                    ruleId: detectionResult.ruleId,
-                    pattern: detectionResult.pattern,
-                    matchType: detectionResult.matchType,
-                    category: detectionResult.category,
-                    description: detectionResult.description,
-                    hasOverrideResponse: detectionResult.overrideResponse !== undefined,
-                    hasOverrideStatusCode: detectionResult.overrideStatusCode !== undefined,
-                  }
-                : undefined;
+            const matchedRule = buildMatchedRuleDetails(detectionResult);
+            const matchedRuleLogContext = buildMatchedRuleLogContext(matchedRule);
+            const clientErrorChainEntry = buildClientErrorChainEntry(
+              currentProvider,
+              endpointAudit,
+              attemptCount,
+              lastError,
+              errorMessage,
+              buildRequestDetails(session),
+              matchedRule
+            );
 
             if (lastError instanceof ProxyError) {
               // Original path: full ProxyError fields available
@@ -1383,31 +1472,7 @@ export class ProxyForwarder {
                 totalProvidersAttempted,
                 reason:
                   "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
-              });
-
-              // 记录到决策链（标记为不可重试的客户端错误）
-              // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
-              session.addProviderToChain(currentProvider, {
-                ...endpointAudit,
-                reason: "client_error_non_retryable", // 新增的 reason 值
-                circuitState: getCircuitState(currentProvider.id),
-                attemptNumber: attemptCount,
-                errorMessage: errorMessage,
-                statusCode: lastError.statusCode,
-                statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
-                errorDetails: {
-                  provider: {
-                    id: currentProvider.id,
-                    name: currentProvider.name,
-                    statusCode: lastError.statusCode,
-                    statusText: lastError.message,
-                    upstreamBody: lastError.upstreamError?.body,
-                    upstreamParsed: lastError.upstreamError?.parsed,
-                  },
-                  clientError: lastError.getDetailedErrorMessage(),
-                  matchedRule,
-                  request: buildRequestDetails(session),
-                },
+                ...matchedRuleLogContext,
               });
             } else {
               // Plain Error path: omit ProxyError-only fields
@@ -1420,22 +1485,14 @@ export class ProxyForwarder {
                   attemptNumber: attemptCount,
                   totalProvidersAttempted,
                   reason: "White-listed client error matched by error rule",
+                  ...matchedRuleLogContext,
                 }
               );
-
-              session.addProviderToChain(currentProvider, {
-                ...endpointAudit,
-                reason: "client_error_non_retryable",
-                circuitState: getCircuitState(currentProvider.id),
-                attemptNumber: attemptCount,
-                errorMessage: lastError.message,
-                errorDetails: {
-                  clientError: lastError.message,
-                  matchedRule,
-                  request: buildRequestDetails(session),
-                },
-              });
             }
+
+            // 记录到决策链（标记为不可重试的客户端错误）
+            // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
+            session.addProviderToChain(currentProvider, clientErrorChainEntry);
 
             // 立即抛出错误，不重试，不切换供应商
             // 白名单错误不计入熔断器，因为是客户端输入问题，不是供应商故障
@@ -2426,38 +2483,12 @@ export class ProxyForwarder {
     const enableHttp2 = await isHttp2Enabled();
 
     // ⭐ 应用代理配置（如果配置了）- 使用 Agent Pool 缓存连接
-    const proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
-    // 用于直连场景的 cacheKey（SSL 错误时标记不健康）
+    // 注意：proxyConfig 与 directConnectionCacheKey 的声明保持在 try 外部，
+    // 以便 catch 块可以根据它们做 fallback / SSL 不健康标记 / ref 释放。
+    let proxyConfig: Awaited<ReturnType<typeof getProxyAgentForProvider>> = null;
+    // 用于直连场景的 cacheKey + dispatcher id（SSL 错误时标记不健康 / release 校验）
     let directConnectionCacheKey: string | null = null;
-
-    if (proxyConfig) {
-      init.dispatcher = proxyConfig.agent;
-      logger.info("ProxyForwarder: Using proxy", {
-        providerId: provider.id,
-        providerName: provider.name,
-        proxyUrl: proxyConfig.proxyUrl,
-        fallbackToDirect: proxyConfig.fallbackToDirect,
-        targetUrl: new URL(proxyUrl).origin,
-        http2Enabled: proxyConfig.http2Enabled,
-      });
-    } else if (enableHttp2) {
-      // 直连场景：使用 Agent Pool 获取缓存的 HTTP/2 Agent（避免内存泄漏）
-      const pool = getGlobalAgentPool();
-      const { agent, cacheKey } = await pool.getAgent({
-        endpointUrl: proxyUrl,
-        proxyUrl: null,
-        enableHttp2: true,
-      });
-      init.dispatcher = agent;
-      directConnectionCacheKey = cacheKey;
-      logger.debug("ProxyForwarder: Using cached HTTP/2 Agent for direct connection", {
-        providerId: provider.id,
-        providerName: provider.name,
-        cacheKey,
-      });
-    }
-
-    (init as Record<string, unknown>).verbose = true;
+    let directConnectionDispatcherId: string | null = null;
 
     // ⭐ 始终使用容错流处理以减少 "TypeError: terminated" 错误
     // 背景：undici fetch 的自动解压在流被提前终止时会抛出 "TypeError: terminated"
@@ -2469,6 +2500,40 @@ export class ProxyForwarder {
     let response: Response;
     const fetchStartTime = Date.now();
     try {
+      // ⭐ 把 agent 获取 & 配置日志放进 try 块，确保获取后到 fetch 之前任何异常
+      // （例如 URL 解析失败）都会走 catch 的统一释放逻辑，避免泄漏 activeRequests。
+      proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+
+      if (proxyConfig) {
+        init.dispatcher = proxyConfig.agent;
+        logger.info("ProxyForwarder: Using proxy", {
+          providerId: provider.id,
+          providerName: provider.name,
+          proxyUrl: proxyConfig.proxyUrl,
+          fallbackToDirect: proxyConfig.fallbackToDirect,
+          targetUrl: new URL(proxyUrl).origin,
+          http2Enabled: proxyConfig.http2Enabled,
+        });
+      } else if (enableHttp2) {
+        // 直连场景：使用 Agent Pool 获取缓存的 HTTP/2 Agent（避免内存泄漏）
+        const pool = getGlobalAgentPool();
+        const { agent, cacheKey, dispatcherId } = await pool.getAgent({
+          endpointUrl: proxyUrl,
+          proxyUrl: null,
+          enableHttp2: true,
+        });
+        init.dispatcher = agent;
+        directConnectionCacheKey = cacheKey;
+        directConnectionDispatcherId = dispatcherId;
+        logger.debug("ProxyForwarder: Using cached HTTP/2 Agent for direct connection", {
+          providerId: provider.id,
+          providerName: provider.name,
+          cacheKey,
+        });
+      }
+
+      (init as Record<string, unknown>).verbose = true;
+
       // ⭐ 所有供应商使用 undici.request 绕过 fetch 的自动解压
       // 原因：undici fetch 无法关闭自动解压，上游可能无视 accept-encoding: identity 返回 gzip
       // 当 gzip 流被提前终止时（如连接关闭），undici Gunzip 会抛出 "TypeError: terminated"
@@ -2496,6 +2561,13 @@ export class ProxyForwarder {
       // ⭐ fetch 失败：清除所有超时定时器
       if (responseTimeoutId) {
         clearTimeout(responseTimeoutId);
+      }
+
+      // Release agent ref count on fetch failure (request never started streaming)
+      const releaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+      const releaseDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+      if (releaseKey && releaseDispatcherId) {
+        getGlobalAgentPool().releaseAgent(releaseKey, releaseDispatcherId);
       }
 
       // 捕获 fetch 原始错误（网络错误、DNS 解析失败、连接失败等）
@@ -2680,8 +2752,9 @@ export class ProxyForwarder {
         }
 
         // 如果使用了代理，创建不支持 HTTP/2 的代理 Agent
+        let http1ProxyConfig: typeof proxyConfig = null;
         if (proxyConfig) {
-          const http1ProxyConfig = await getProxyAgentForProvider(provider, proxyUrl, false);
+          http1ProxyConfig = await getProxyAgentForProvider(provider, proxyUrl, false);
           if (http1ProxyConfig) {
             http1FallbackInit.dispatcher = http1ProxyConfig.agent;
           }
@@ -2704,6 +2777,11 @@ export class ProxyForwarder {
             providerName: provider.name,
           });
 
+          // Update tracking to the H1 fallback agent (H2 agent was already released at catch-block top)
+          proxyConfig = http1ProxyConfig;
+          directConnectionCacheKey = null;
+          directConnectionDispatcherId = null;
+
           // 重新启动响应超时计时器（如果之前有配置超时时间）
           // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
           if (responseTimeoutMs > 0) {
@@ -2719,6 +2797,14 @@ export class ProxyForwarder {
 
           // 成功后跳过 throw，继续执行后续逻辑（不计入熔断器）
         } catch (http1Error) {
+          // Release H1 fallback agent ref count before re-throwing
+          if (http1ProxyConfig?.cacheKey && http1ProxyConfig?.dispatcherId) {
+            getGlobalAgentPool().releaseAgent(
+              http1ProxyConfig.cacheKey,
+              http1ProxyConfig.dispatcherId
+            );
+          }
+
           // HTTP/1.1 也失败，记录并抛出原始错误
           logger.error("ProxyForwarder: HTTP/1.1 fallback also failed", {
             providerId: provider.id,
@@ -2771,6 +2857,15 @@ export class ProxyForwarder {
                 providerId: provider.id,
                 providerName: provider.name,
               });
+
+              // ⚠️ 关键：catch 入口已经释放了代理 agent 的 ref count（见本 catch 块顶部），
+              // 而 fallback 后走的是"无 dispatcher 直连"，不再持有 agent pool 的引用。
+              // 如果保留 proxyConfig，后续 session.releaseAgent 会对同一个 cacheKey 再减 1，
+              // 把其他正在共享这个 agent 的请求计数吃掉，导致新连接被提前驱逐。
+              // 此处必须同 H2→H1 fallback 一样清空跟踪信息。
+              proxyConfig = null;
+              directConnectionCacheKey = null;
+              directConnectionDispatcherId = null;
 
               // 重新启动响应超时计时器（如果之前有配置超时时间）
               // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
@@ -2878,9 +2973,9 @@ export class ProxyForwarder {
     // 注意：用户要求所有 4xx 都重试，包括 401、403、429 等
     if (!response.ok) {
       // ⚠️ HTTP 错误：不要在读取响应体之前清除响应超时定时器
-      // 原因：某些上游会在返回 4xx/5xx 后“卡住不结束 body”，
+      // 原因：某些上游会在返回 4xx/5xx 后”卡住不结束 body”，
       // 若提前 clearTimeout，会导致 ProxyError.fromUpstreamResponse() 的 response.text() 无限等待，
-      // 从而让整条请求链路（含客户端）悬挂，前端表现为一直“请求中”。
+      // 从而让整条请求链路（含客户端）悬挂，前端表现为一直”请求中”。
       //
       // 正确策略：保留 response timeout 继续监控 body 读取，并在 finally 里清理定时器。
       try {
@@ -2892,6 +2987,12 @@ export class ProxyForwarder {
         if (responseTimeoutId) {
           clearTimeout(responseTimeoutId);
         }
+        // Release agent ref count (response-handler will never run for error responses)
+        const errorReleaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+        const errorReleaseDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+        if (errorReleaseKey && errorReleaseDispatcherId) {
+          getGlobalAgentPool().releaseAgent(errorReleaseKey, errorReleaseDispatcherId);
+        }
       }
     }
 
@@ -2900,6 +3001,7 @@ export class ProxyForwarder {
     const sessionWithTimeout = session as ProxySession & {
       clearResponseTimeout?: () => void;
       responseController?: AbortController;
+      releaseAgent?: () => void;
     };
 
     sessionWithTimeout.clearResponseTimeout = () => {
@@ -2915,6 +3017,17 @@ export class ProxyForwarder {
 
     // 传递 responseController 引用，让 response-handler 能区分超时和客户端中断
     sessionWithTimeout.responseController = responseController;
+
+    // Attach agent release callback for in-flight reference counting.
+    // response-handler must call this in its finally block after the stream is fully consumed.
+    const agentCacheKeyToRelease = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+    const agentDispatcherIdToRelease = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
+    if (agentCacheKeyToRelease && agentDispatcherIdToRelease) {
+      const pool = getGlobalAgentPool();
+      sessionWithTimeout.releaseAgent = () => {
+        pool.releaseAgent(agentCacheKeyToRelease, agentDispatcherIdToRelease);
+      };
+    }
 
     return response;
   }
@@ -3221,6 +3334,8 @@ export class ProxyForwarder {
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
       const errorMessage =
         error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message;
+      let matchedRule: MatchedRuleDetails | undefined;
+      let matchedRuleLogContext: Record<string, unknown> = {};
 
       if (attempt.endpointAudit.endpointId != null) {
         const isTimeoutError = error instanceof ProxyError && error.statusCode === 524;
@@ -3321,6 +3436,21 @@ export class ProxyForwarder {
         }
       }
 
+      if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
+        matchedRule = buildMatchedRuleDetails(await getErrorDetectionResultAsync(error));
+        matchedRuleLogContext = buildMatchedRuleLogContext(matchedRule);
+
+        logger.warn("ProxyForwarder: Non-retryable client error in hedge, aborting all attempts", {
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+          statusCode,
+          error: errorMessage,
+          participantSequence: attempt.sequence,
+          attemptNumber: attempt.requestAttemptCount,
+          ...matchedRuleLogContext,
+        });
+      }
+
       attempt.settled = true;
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
@@ -3332,20 +3462,34 @@ export class ProxyForwarder {
         await recordFailure(attempt.provider.id, error);
       }
 
-      session.addProviderToChain(attempt.provider, {
-        ...attempt.endpointAudit,
-        reason:
-          errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
-            ? "resource_not_found"
-            : errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
-              ? "client_error_non_retryable"
-              : "retry_failed",
-        attemptNumber: attempt.sequence,
-        statusCode,
-        errorMessage,
-        circuitState: getCircuitState(attempt.provider.id),
-        modelRedirect: getAttemptModelRedirect(attempt),
-      });
+      session.addProviderToChain(
+        attempt.provider,
+        errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
+          ? {
+              ...buildClientErrorChainEntry(
+                attempt.provider,
+                attempt.endpointAudit,
+                attempt.sequence,
+                error,
+                errorMessage,
+                buildRequestDetails(session),
+                matchedRule
+              ),
+              modelRedirect: getAttemptModelRedirect(attempt),
+            }
+          : {
+              ...attempt.endpointAudit,
+              reason:
+                errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+                  ? "resource_not_found"
+                  : "retry_failed",
+              attemptNumber: attempt.sequence,
+              statusCode,
+              errorMessage,
+              circuitState: getCircuitState(attempt.provider.id),
+              modelRedirect: getAttemptModelRedirect(attempt),
+            }
+      );
 
       if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
         abortAllAttempts(undefined, "client_error_non_retryable");

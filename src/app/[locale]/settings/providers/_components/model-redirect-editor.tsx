@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
 import type { ProviderModelRedirectMatchType, ProviderModelRedirectRule } from "@/types/provider";
 
 interface ModelRedirectEditorProps {
@@ -46,7 +47,8 @@ function normalizeRule(rule: ProviderModelRedirectRule): ProviderModelRedirectRu
 }
 
 function getRuleIdentity(rule: Pick<ProviderModelRedirectRule, "matchType" | "source">): string {
-  return `${rule.matchType}:${rule.source.trim().toLowerCase()}`;
+  // 重定向规则的匹配层区分大小写，编辑器不能把不同大小写的 source 合并成同一条。
+  return `${rule.matchType}:${rule.source.trim()}`;
 }
 
 export function ModelRedirectEditor({
@@ -95,11 +97,11 @@ export function ModelRedirectEditor({
     if (!normalized.target) {
       return t("targetEmpty");
     }
-    if (normalized.source.length > 255) {
-      return t("sourceTooLong");
+    if (normalized.source.length > PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH) {
+      return t("sourceTooLong", { max: PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH });
     }
-    if (normalized.target.length > 255) {
-      return t("targetTooLong");
+    if (normalized.target.length > PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH) {
+      return t("targetTooLong", { max: PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH });
     }
     if (normalized.matchType === "regex") {
       try {
@@ -125,8 +127,8 @@ export function ModelRedirectEditor({
   };
 
   const handleAdd = () => {
-    if (redirects.length >= 100) {
-      setError(t("maxRules"));
+    if (redirects.length >= PROVIDER_RULE_LIMITS.MAX_ITEMS) {
+      setError(t("maxRules", { max: PROVIDER_RULE_LIMITS.MAX_ITEMS }));
       return;
     }
 

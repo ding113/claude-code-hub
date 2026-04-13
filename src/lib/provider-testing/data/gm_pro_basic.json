@@ -1,0 +1,19 @@
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "ping"
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0,
+    "maxOutputTokens": 256,
+    "thinkingConfig": {
+      "thinkingBudget": 0
+    }
+  }
+}

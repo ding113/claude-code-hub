@@ -231,6 +231,53 @@ describe("AllowedModelRuleEditor", () => {
     unmount();
   });
 
+  test("允许 exact 规则同时保留 GLM-5 和 glm-5", async () => {
+    const messages = loadMessages();
+    const onChange = vi.fn();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <AllowedModelRuleEditor
+          value={[{ matchType: "exact", pattern: "GLM-5" }]}
+          onChange={onChange}
+          providerType="openai"
+        />
+      </NextIntlClientProvider>
+    );
+
+    const patternInput = document.querySelector(
+      "#new-allowed-model-pattern"
+    ) as HTMLInputElement | null;
+    expect(patternInput).toBeTruthy();
+
+    await act(async () => {
+      if (patternInput) {
+        patternInput.value = "glm-5";
+        patternInput.dispatchEvent(new Event("input", { bubbles: true }));
+        patternInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await flushTicks(2);
+
+    const addButton = document.querySelector(
+      "[data-allowed-model-add]"
+    ) as HTMLButtonElement | null;
+    expect(addButton).toBeTruthy();
+
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(onChange).toHaveBeenCalledWith([
+      { matchType: "exact", pattern: "GLM-5" },
+      { matchType: "exact", pattern: "glm-5" },
+    ]);
+    expect(document.querySelector("[data-allowed-model-error]")?.textContent || "").toBe("");
+
+    unmount();
+  });
+
   test("adds models from picker as exact rules without changing existing advanced rules", async () => {
     const messages = loadMessages();
     const onChange = vi.fn();
@@ -274,6 +321,58 @@ describe("AllowedModelRuleEditor", () => {
     expect(onChange).toHaveBeenCalledWith([
       { matchType: "prefix", pattern: "claude-opus-" },
       { matchType: "exact", pattern: "claude-opus-4-1" },
+    ]);
+
+    unmount();
+  });
+
+  test("已有 100 条白名单规则时仍允许继续新增，避免旧的前端上限阻塞更大配置", async () => {
+    const messages = loadMessages();
+    const onChange = vi.fn();
+    const existingRules: AllowedModelRule[] = Array.from({ length: 100 }, (_, index) => ({
+      matchType: "exact",
+      pattern: `claude-opus-${index}`,
+    }));
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <AllowedModelRuleEditor
+          value={existingRules}
+          onChange={onChange}
+          providerType="claude"
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+        />
+      </NextIntlClientProvider>
+    );
+
+    const patternInput = document.querySelector(
+      "#new-allowed-model-pattern"
+    ) as HTMLInputElement | null;
+    expect(patternInput).toBeTruthy();
+
+    await act(async () => {
+      if (patternInput) {
+        patternInput.value = "claude-opus-100";
+        patternInput.dispatchEvent(new Event("input", { bubbles: true }));
+        patternInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await flushTicks(2);
+
+    const addButton = document.querySelector(
+      "[data-allowed-model-add]"
+    ) as HTMLButtonElement | null;
+    expect(addButton).toBeTruthy();
+
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(onChange).toHaveBeenCalledWith([
+      ...existingRules,
+      { matchType: "exact", pattern: "claude-opus-100" },
     ]);
 
     unmount();

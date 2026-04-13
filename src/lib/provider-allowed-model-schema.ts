@@ -1,6 +1,7 @@
 import safeRegex from "safe-regex";
 import { z } from "zod";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
 import { PROVIDER_MODEL_REDIRECT_MATCH_TYPE_SCHEMA } from "./provider-model-redirect-schema";
 
 export const PROVIDER_ALLOWED_MODEL_RULE_SCHEMA = z
@@ -10,7 +11,10 @@ export const PROVIDER_ALLOWED_MODEL_RULE_SCHEMA = z
       .string()
       .trim()
       .min(1, "Allowed model pattern cannot be empty")
-      .max(255, "Allowed model pattern is too long"),
+      .max(
+        PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH,
+        `Allowed model pattern is too long (max ${PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH} characters)`
+      ),
   })
   .superRefine((rule, ctx) => {
     if (rule.matchType !== "regex") {
@@ -50,19 +54,25 @@ export const PROVIDER_ALLOWED_MODEL_RULE_INPUT_SCHEMA = z.union([
     .string()
     .trim()
     .min(1, "Allowed model pattern cannot be empty")
-    .max(255, "Allowed model pattern is too long"),
+    .max(
+      PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH,
+      `Allowed model pattern is too long (max ${PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH} characters)`
+    ),
   PROVIDER_ALLOWED_MODEL_RULE_SCHEMA,
 ]);
 
 export const PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA = z
   .array(PROVIDER_ALLOWED_MODEL_RULE_INPUT_SCHEMA)
-  .max(100, "Allowed model rules cannot exceed 100 entries")
+  .max(
+    PROVIDER_RULE_LIMITS.MAX_ITEMS,
+    `Allowed model rules cannot exceed ${PROVIDER_RULE_LIMITS.MAX_ITEMS} entries`
+  )
   .transform((rules) => normalizeAllowedModelRules(rules) ?? [])
   .refine(
     (rules) => {
       const keys = new Set<string>();
       for (const rule of rules) {
-        const key = `${rule.matchType}:${rule.pattern.trim().toLowerCase()}`;
+        const key = `${rule.matchType}:${rule.pattern.trim()}`;
         if (keys.has(key)) {
           return false;
         }
@@ -77,12 +87,15 @@ export const PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA = z
 
 export const PROVIDER_ALLOWED_MODEL_RULE_LIST_SCHEMA = z
   .array(PROVIDER_ALLOWED_MODEL_RULE_SCHEMA)
-  .max(100, "Allowed model rules cannot exceed 100 entries")
+  .max(
+    PROVIDER_RULE_LIMITS.MAX_ITEMS,
+    `Allowed model rules cannot exceed ${PROVIDER_RULE_LIMITS.MAX_ITEMS} entries`
+  )
   .refine(
     (rules) => {
       const keys = new Set<string>();
       for (const rule of rules) {
-        const key = `${rule.matchType}:${rule.pattern.trim().toLowerCase()}`;
+        const key = `${rule.matchType}:${rule.pattern.trim()}`;
         if (keys.has(key)) {
           return false;
         }

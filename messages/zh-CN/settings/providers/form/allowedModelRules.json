@@ -9,7 +9,7 @@
   "matchTypeContains": "关键词",
   "matchTypeRegex": "正则",
   "orderHint": "越靠前的规则越先命中",
-  "maxRules": "最多只能添加 100 条白名单规则",
+  "maxRules": "最多只能添加 {max, number} 条白名单规则",
   "saveRule": "保存规则",
   "cancelEdit": "取消编辑",
   "moveRuleUp": "上移规则",
@@ -22,7 +22,7 @@
   "exactPickerDescription": "优先读取上游模型列表；不可用时回退本地价格表，并按精确匹配规则加入白名单。",
   "emptyState": "当前还没有白名单规则。留空时表示允许所有模型。",
   "patternEmpty": "匹配模式不能为空",
-  "patternTooLong": "匹配模式过长",
+  "patternTooLong": "匹配模式过长（最多 {max} 个字符）",
   "patternLabel": "模型匹配模式",
   "patternPlaceholder": "例如 claude-opus-4-1 或 ^claude-.*$",
   "regexInvalid": "正则表达式无效",
@@ -31,6 +31,6 @@
   "quickAddMissingUrl": "请先填写供应商 URL 再执行快速导入",
   "quickAddMissingKey": "请先提供可用的 API Key 再执行快速导入",
   "quickAddFailed": "获取上游模型失败",
-  "quickAddReachedLimit": "导入上游模型时触达 100 条规则上限",
+  "quickAddReachedLimit": "导入上游模型时触达 {max, number} 条规则上限",
   "quickAddNoNewRules": "没有导入到新的上游模型规则"
 }
