@@ -324,3 +324,130 @@ describe("User Leaderboard Model Stats", () => {
     expect(stats[1].model).toBe("cheap-model");
   });
 });
+
+describe("User Cache Hit Rate Leaderboard", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    selectCallIndex = 0;
+    chainMocks = [];
+    mockSelect.mockClear();
+    mocks.resolveSystemTimezone.mockResolvedValue("UTC");
+    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+  });
+
+  it("returns user cache hit rankings with stable ordering and base fields", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          userId: 1,
+          userName: "alice",
+          totalRequests: 30,
+          totalCost: "3.0",
+          cacheReadTokens: 600,
+          cacheCreationCost: "1.0",
+          totalInputTokens: 1000,
+          cacheHitRate: 0.6,
+        },
+        {
+          userId: 2,
+          userName: "bob",
+          totalRequests: 30,
+          totalCost: "2.0",
+          cacheReadTokens: 300,
+          cacheCreationCost: "0.5",
+          totalInputTokens: 1000,
+          cacheHitRate: 0.3,
+        },
+      ]),
+    ];
+
+    const { findDailyUserCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyUserCacheHitRateLeaderboard();
+
+    expect(result).toHaveLength(2);
+    expect(result[0].cacheHitRate).toBeGreaterThanOrEqual(result[1].cacheHitRate);
+    expect(result[0]).toMatchObject({
+      userId: 1,
+      userName: "alice",
+      totalRequests: 30,
+      totalCost: 3,
+      cacheReadTokens: 600,
+      cacheCreationCost: 1,
+      totalInputTokens: 1000,
+      totalTokens: 1000,
+      cacheHitRate: 0.6,
+    });
+  });
+
+  it("includes modelStats when includeModelStats=true and preserves null model rows", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          userId: 1,
+          userName: "alice",
+          totalRequests: 30,
+          totalCost: "3.0",
+          cacheReadTokens: 600,
+          cacheCreationCost: "1.0",
+          totalInputTokens: 1000,
+          cacheHitRate: 0.6,
+        },
+      ]),
+      createChainMock([
+        {
+          userId: 1,
+          model: "claude-sonnet-4",
+          totalRequests: 20,
+          cacheReadTokens: 500,
+          totalInputTokens: 700,
+          cacheHitRate: 0.714,
+        },
+        {
+          userId: 1,
+          model: null,
+          totalRequests: 10,
+          cacheReadTokens: 100,
+          totalInputTokens: 300,
+          cacheHitRate: 0.333,
+        },
+      ]),
+    ];
+
+    const { findDailyUserCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyUserCacheHitRateLeaderboard(undefined, true);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].modelStats).toHaveLength(2);
+    expect(result[0].modelStats?.[0].model).toBe("claude-sonnet-4");
+    expect(result[0].modelStats?.[0].cacheHitRate).toBeCloseTo(0.714, 3);
+
+    const nullModelStat = result[0].modelStats?.find((item) => item.model === null);
+    expect(nullModelStat).toBeDefined();
+    expect(nullModelStat?.totalRequests).toBe(10);
+    expect(nullModelStat?.cacheReadTokens).toBe(100);
+  });
+
+  it("does not query model breakdown when includeModelStats is false", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          userId: 1,
+          userName: "alice",
+          totalRequests: 10,
+          totalCost: "1.0",
+          cacheReadTokens: 100,
+          cacheCreationCost: "0.2",
+          totalInputTokens: 400,
+          cacheHitRate: 0.25,
+        },
+      ]),
+    ];
+
+    const { findDailyUserCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyUserCacheHitRateLeaderboard(undefined, false);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].modelStats).toBeUndefined();
+    expect(mockSelect).toHaveBeenCalledTimes(1);
+  });
+});

@@ -67,6 +67,22 @@ describe("GET /api/leaderboard", () => {
     expect(options.userGroups).toEqual(["a", "b", "c"]);
   });
 
+  it("applies userTags/userGroups to userCacheHitRate scope too", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
+
+    const { GET } = await import("@/app/api/leaderboard/route");
+    const url =
+      "http://localhost/api/leaderboard?scope=userCacheHitRate&period=daily&userTags=vip, beta &userGroups=g1, g2";
+    const response = await GET({ nextUrl: new URL(url) } as any);
+
+    expect(response.status).toBe(200);
+
+    expect(mocks.getLeaderboardWithCache).toHaveBeenCalledTimes(1);
+    const options = mocks.getLeaderboardWithCache.mock.calls[0][4];
+    expect(options.userTags).toEqual(["vip", "beta"]);
+    expect(options.userGroups).toEqual(["g1", "g2"]);
+  });
+
   it("does not apply userTags/userGroups when scope is not user", async () => {
     mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
 
@@ -196,6 +212,51 @@ describe("GET /api/leaderboard", () => {
       expect(entry.modelStats).toHaveLength(2);
       expect(entry.modelStats[0]).toHaveProperty("model", "claude-3-opus");
       expect(entry.modelStats[0]).toHaveProperty("cacheHitRate", 0.53);
+    });
+
+    it("includes modelStats in userCacheHitRate scope response", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
+      mocks.getLeaderboardWithCache.mockResolvedValue([
+        {
+          userId: 7,
+          userName: "cache-user",
+          totalRequests: 50,
+          cacheReadTokens: 10000,
+          totalCost: 2.5,
+          cacheCreationCost: 1.0,
+          totalInputTokens: 20000,
+          totalTokens: 20000,
+          cacheHitRate: 0.5,
+          modelStats: [
+            {
+              model: "claude-3-opus",
+              totalRequests: 30,
+              cacheReadTokens: 8000,
+              totalInputTokens: 15000,
+              cacheHitRate: 0.53,
+            },
+            {
+              model: null,
+              totalRequests: 20,
+              cacheReadTokens: 2000,
+              totalInputTokens: 5000,
+              cacheHitRate: 0.4,
+            },
+          ],
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url = "http://localhost/api/leaderboard?scope=userCacheHitRate&period=daily";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toHaveLength(1);
+      expect(body[0]).toHaveProperty("modelStats");
+      expect(body[0].modelStats).toHaveLength(2);
+      expect(body[0].modelStats[0]).toHaveProperty("model", "claude-3-opus");
+      expect(body[0].modelStats[1]).toHaveProperty("model", null);
     });
 
     it("passes includeModelStats to cache and formats provider modelStats entries", async () => {
@@ -350,6 +411,45 @@ describe("GET /api/leaderboard", () => {
       expect(response.status).toBe(403);
       const body = await response.json();
       expect(body.error).toBe("INCLUDE_USER_MODEL_STATS_ADMIN_REQUIRED");
+    });
+
+    it("admin + userCacheHitRate + includeUserModelStats=1 forwards includeModelStats to cache", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 1, name: "admin", role: "admin" } });
+      mocks.getLeaderboardWithCache.mockResolvedValue([
+        {
+          userId: 1,
+          userName: "cache-user",
+          totalRequests: 20,
+          cacheReadTokens: 500,
+          totalCost: 1.5,
+          cacheCreationCost: 0.4,
+          totalInputTokens: 1000,
+          totalTokens: 1000,
+          cacheHitRate: 0.5,
+          modelStats: [
+            {
+              model: "claude-sonnet",
+              totalRequests: 20,
+              cacheReadTokens: 500,
+              totalInputTokens: 1000,
+              cacheHitRate: 0.5,
+            },
+          ],
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url =
+        "http://localhost/api/leaderboard?scope=userCacheHitRate&period=daily&includeUserModelStats=1";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(mocks.getLeaderboardWithCache).toHaveBeenCalledTimes(1);
+      expect(mocks.getLeaderboardWithCache.mock.calls[0][4].includeModelStats).toBe(true);
+      expect(body[0].modelStats).toHaveLength(1);
+      expect(body[0].modelStats[0]).not.toHaveProperty("totalCostFormatted");
     });
   });
 });

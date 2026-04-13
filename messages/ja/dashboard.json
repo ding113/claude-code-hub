@@ -425,6 +425,7 @@
       "users": "ユーザー ランキング",
       "keys": "キー ランキング",
       "userRanking": "ユーザーランキング",
+      "userCacheHitRateRanking": "ユーザーキャッシュ命中率",
       "providerRanking": "プロバイダーランキング",
       "providerCacheHitRateRanking": "プロバイダーキャッシュ命中率",
       "modelRanking": "モデルランキング",

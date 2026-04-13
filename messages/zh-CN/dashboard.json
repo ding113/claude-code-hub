@@ -425,6 +425,7 @@
       "users": "用户排行",
       "keys": "密钥排行",
       "userRanking": "用户排行",
+      "userCacheHitRateRanking": "用户缓存命中率排行",
       "providerRanking": "供应商排行",
       "providerCacheHitRateRanking": "供应商缓存命中率排行",
       "modelRanking": "模型排行",

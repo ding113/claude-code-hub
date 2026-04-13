@@ -32,8 +32,9 @@ export const runtime = "nodejs";
 
 /**
  * 获取排行榜数据
- * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|provider|providerCacheHitRate|model
+ * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|userCacheHitRate|provider|providerCacheHitRate|model
  * 当 period=custom 时，需要提供 startDate 和 endDate 参数 (YYYY-MM-DD 格式)
+ * 当 scope=userCacheHitRate 时，可选 includeUserModelStats=true|1，返回用户下各模型的缓存命中率拆分数据
  * 当 scope=providerCacheHitRate 时，可选 providerType=claude|claude-auth|codex|gemini|gemini-cli|openai-compatible
  * 当 scope=provider 时，可选 includeModelStats=true|1，返回供应商下各模型的拆分数据
  *
@@ -90,12 +91,16 @@ export async function GET(request: NextRequest) {
 
     if (
       scope !== "user" &&
+      scope !== "userCacheHitRate" &&
       scope !== "provider" &&
       scope !== "providerCacheHitRate" &&
       scope !== "model"
     ) {
       return NextResponse.json(
-        { error: "参数 scope 必须是 'user'、'provider'、'providerCacheHitRate' 或 'model'" },
+        {
+          error:
+            "参数 scope 必须是 'user'、'userCacheHitRate'、'provider'、'providerCacheHitRate' 或 'model'",
+        },
         { status: 400 }
       );
     }
@@ -137,7 +142,7 @@ export async function GET(request: NextRequest) {
         includeModelStatsParam === "yes");
 
     const includeUserModelStats =
-      scope === "user" &&
+      (scope === "user" || scope === "userCacheHitRate") &&
       (includeUserModelStatsParam === "1" ||
         includeUserModelStatsParam === "true" ||
         includeUserModelStatsParam === "yes");
@@ -161,7 +166,7 @@ export async function GET(request: NextRequest) {
 
     let userTags: string[] | undefined;
     let userGroups: string[] | undefined;
-    if (scope === "user") {
+    if (scope === "user" || scope === "userCacheHitRate") {
       userTags = parseListParam(userTagsParam);
       userGroups = parseListParam(userGroupsParam);
     }
@@ -247,15 +252,21 @@ export async function GET(request: NextRequest) {
           : undefined;
 
       const userModelStatsFormatted =
-        scope === "user" && Array.isArray(typedEntry.modelStats)
+        (scope === "user" || scope === "userCacheHitRate") && Array.isArray(typedEntry.modelStats)
           ? typedEntry.modelStats.map((ms) => {
               const stat = ms as {
-                totalCost: number;
                 model: string | null;
               } & Record<string, unknown>;
               return {
                 ...stat,
-                totalCostFormatted: formatCurrency(stat.totalCost, systemSettings.currencyDisplay),
+                ...("totalCost" in stat && typeof stat.totalCost === "number"
+                  ? {
+                      totalCostFormatted: formatCurrency(
+                        stat.totalCost,
+                        systemSettings.currencyDisplay
+                      ),
+                    }
+                  : {}),
               };
             })
           : undefined;
