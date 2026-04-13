@@ -6,7 +6,7 @@
 /**
  * Status values for availability calculation
  * - GREEN (1.0): HTTP 2xx/3xx (all successful requests)
- * - RED (0.0): HTTP 4xx/5xx or error
+ * - RED (0.0): finalized requests with non-2xx/3xx HTTP status codes
  * - UNKNOWN (-1): No data available (must be displayed honestly as "no data")
  */
 export type AvailabilityStatus = "green" | "red" | "unknown";
@@ -57,7 +57,7 @@ export interface TimeBucketMetrics {
   totalRequests: number;
   /** Successful requests (2xx/3xx) */
   greenCount: number;
-  /** Failed requests (4xx/5xx or error) */
+  /** Failed finalized requests (non-2xx/3xx status codes) */
   redCount: number;
   /** Weighted availability score (0.0-1.0) */
   availabilityScore: number;

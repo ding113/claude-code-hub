@@ -40,6 +40,13 @@ type AggregatedCurrentProviderStatusRow = {
 const MIN_BUCKET_SIZE_MINUTES = 0.25;
 const DEFAULT_MAX_BUCKETS = 100;
 
+export class AvailabilityQueryValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AvailabilityQueryValidationError";
+  }
+}
+
 /**
  * 当前版本把“已终态”收敛为 `statusCode` 已落库。
  *
@@ -52,7 +59,9 @@ function buildAvailabilityFinalizedCondition() {
 
 function assertValidDate(date: Date, fieldName: string): Date {
   if (!Number.isFinite(date.getTime())) {
-    throw new Error(`Invalid ${fieldName}: expected a valid Date or ISO timestamp`);
+    throw new AvailabilityQueryValidationError(
+      `Invalid ${fieldName}: expected a valid Date or ISO timestamp`
+    );
   }
 
   return date;
@@ -198,6 +207,14 @@ function sanitizeMaxBuckets(maxBuckets: number | undefined): number {
   return Math.max(1, Math.floor(maxBuckets));
 }
 
+function validateAvailabilityTimeRange(startDate: Date, endDate: Date): void {
+  if (endDate.getTime() < startDate.getTime()) {
+    throw new AvailabilityQueryValidationError(
+      "Invalid time range: endTime must be greater than or equal to startTime"
+    );
+  }
+}
+
 /**
  * Query availability data for providers
  */
@@ -216,6 +233,7 @@ export async function queryProviderAvailability(
 
   const startDate = parseAvailabilityDate(startTime, "startTime");
   const endDate = parseAvailabilityDate(endTime, "endTime");
+  validateAvailabilityTimeRange(startDate, endDate);
   const timeRangeMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60);
   const bucketSizeMinutes = sanitizeBucketSizeMinutes(explicitBucketSize, timeRangeMinutes);
   const bucketSizeMs = bucketSizeMinutes * 60 * 1000;

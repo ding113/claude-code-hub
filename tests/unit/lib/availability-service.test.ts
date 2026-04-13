@@ -102,6 +102,30 @@ describe("availability-service", () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
+  it("queryProviderAvailability 在 endTime 早于 startTime 时抛出明确错误且不访问数据库", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: new Date("2026-04-13T09:00:00.000Z"),
+        endTime: new Date("2026-04-13T07:00:00.000Z"),
+      })
+    ).rejects.toThrow("Invalid time range");
+
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
   it("queryProviderAvailability 改为数据库聚合后仍只统计终态请求", async () => {
     const selectMock = vi.fn(() =>
       createThenableQuery([
