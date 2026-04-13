@@ -278,6 +278,7 @@ export async function queryProviderAvailability(
     maxBuckets = DEFAULT_MAX_BUCKETS,
   } = options;
 
+  // Apply defaults first so both implicit defaults and user-supplied values share the same parse/validation path.
   const startDate = parseAvailabilityDate(startTime, "startTime");
   const endDate = parseAvailabilityDate(endTime, "endTime");
   validateAvailabilityTimeRange(startDate, endDate);
@@ -536,6 +537,7 @@ export async function getCurrentProviderStatus(): Promise<
   const requestConditions = buildAvailabilityRequestConditions({
     providerIds: providerIdList,
     startDate: fifteenMinutesAgo,
+    endDate: now,
   });
 
   const aggregateQuery = sql<AggregatedCurrentProviderStatusRow>`

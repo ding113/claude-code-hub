@@ -150,6 +150,40 @@ describe("availability-service", () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
+  it("queryProviderAvailability 在时间跨度恰好等于 100 天时允许继续执行", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    const startTime = new Date("2026-01-03T00:00:00.000Z");
+    const endTime = new Date(startTime.getTime() + 100 * 24 * 60 * 60 * 1000);
+
+    await expect(
+      queryProviderAvailability({
+        startTime,
+        endTime,
+      })
+    ).resolves.toEqual({
+      queriedAt: expect.any(String),
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      bucketSizeMinutes: 1440,
+      providers: [],
+      systemAvailability: 0,
+    });
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
   it("queryProviderAvailability 改为数据库聚合后仍只统计终态请求", async () => {
     const selectMock = vi.fn(() =>
       createThenableQuery([
@@ -562,6 +596,7 @@ describe("availability-service", () => {
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     expect(queryText).toMatch(/where .*status_?code.*is not null/);
+    expect(queryText).toMatch(/where .*created_?at.*>= .*and .*created_?at.*<=/);
     expect(queryText).toContain("count(*) filter");
     expect(queryText).toContain("max(");
   });
