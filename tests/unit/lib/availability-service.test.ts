@@ -41,6 +41,23 @@ describe("availability-service", () => {
     vi.clearAllMocks();
   });
 
+  it("classifyRequestStatus 不应把 1xx 当成成功", async () => {
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: vi.fn(),
+      },
+    }));
+    mockLogger();
+
+    const { classifyRequestStatus } = await import("@/lib/availability/availability-service");
+
+    expect(classifyRequestStatus(101)).toEqual({
+      status: "red",
+      isSuccess: false,
+      isError: true,
+    });
+  });
+
   it("queryProviderAvailability 只统计已获得最终状态码的请求", async () => {
     const selectQueue = [
       createThenableQuery([

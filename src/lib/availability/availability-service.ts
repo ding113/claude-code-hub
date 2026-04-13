@@ -20,25 +20,34 @@ import type {
 // Maximum requests to load per query to prevent OOM
 const MAX_REQUESTS_PER_QUERY = 100000;
 
+function buildAvailabilityFinalizedCondition() {
+  return isNotNull(messageRequest.statusCode);
+}
+
+function hasAvailabilityFinalizedStatusCode<T extends { statusCode: number | null }>(
+  request: T
+): request is T & { statusCode: number } {
+  return request.statusCode != null;
+}
+
 /**
  * Classify a single finalized request's status
  * Simple: success (2xx/3xx) = green, failure = red
  */
 export function classifyRequestStatus(statusCode: number): RequestStatusClassification {
-  // HTTP error (4xx/5xx)
-  if (statusCode >= 400) {
+  // 仅把 2xx/3xx 视为成功；1xx 不应在可用性里被计为绿色。
+  if (statusCode >= 200 && statusCode < 400) {
     return {
-      status: "red",
-      isSuccess: false,
-      isError: true,
+      status: "green",
+      isSuccess: true,
+      isError: false,
     };
   }
 
-  // HTTP success (2xx/3xx) - all successful requests are green
   return {
-    status: "green",
-    isSuccess: true,
-    isError: false,
+    status: "red",
+    isSuccess: false,
+    isError: true,
   };
 }
 
@@ -145,7 +154,7 @@ export async function queryProviderAvailability(
     // 可用性分类必须等最终 statusCode 落库：
     // 1. sync 写路径会先写 durationMs，再写 statusCode，durationMs-only 仍属于持久化中间态；
     // 2. Gemini passthrough 等路径又可能先拿到 statusCode，而 durationMs 暂未回填。
-    isNotNull(messageRequest.statusCode),
+    buildAvailabilityFinalizedCondition(),
   ];
 
   const requests = await db
@@ -204,7 +213,7 @@ export async function queryProviderAvailability(
   // Process requests
   for (const req of requests) {
     // 防御性兜底：即使查询条件被未来改动，仍不把仅有 durationMs 的中间态误计为失败。
-    if (!req.createdAt || req.statusCode == null) continue;
+    if (!req.createdAt || !hasAvailabilityFinalizedStatusCode(req)) continue;
 
     const bucketStart = new Date(Math.floor(req.createdAt.getTime() / bucketSizeMs) * bucketSizeMs);
     const bucketKey = bucketStart.toISOString();
@@ -383,7 +392,7 @@ export async function getCurrentProviderStatus(): Promise<
         // 可用性分类必须等最终 statusCode 落库：
         // 1. sync 写路径会先写 durationMs，再写 statusCode，durationMs-only 仍属于持久化中间态；
         // 2. Gemini passthrough 等路径又可能先拿到 statusCode，而 durationMs 暂未回填。
-        isNotNull(messageRequest.statusCode)
+        buildAvailabilityFinalizedCondition()
       )
     )
     .orderBy(desc(messageRequest.createdAt));
@@ -408,7 +417,7 @@ export async function getCurrentProviderStatus(): Promise<
 
   for (const req of requests) {
     // 防御性兜底：即使查询条件被未来改动，仍不把仅有 durationMs 的中间态误计为失败。
-    if (req.statusCode == null) continue;
+    if (!hasAvailabilityFinalizedStatusCode(req)) continue;
 
     const stats = providerStats.get(req.providerId);
     if (!stats) continue;
