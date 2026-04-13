@@ -535,7 +535,6 @@ describe("AgentPool", () => {
         agentTtlMs: 60_000,
       });
       try {
-
         const params = {
           endpointUrl: "https://api.anthropic.com/v1/messages",
           proxyUrl: null,
