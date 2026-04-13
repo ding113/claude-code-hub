@@ -113,7 +113,7 @@ export interface AvailabilityQueryOptions {
   bucketSizeMinutes?: number;
   /** Whether to include disabled providers */
   includeDisabled?: boolean;
-  /** Maximum number of time buckets to return */
+  /** Maximum number of time buckets to return (hard capped at 100) */
   maxBuckets?: number;
 }
 

@@ -375,6 +375,44 @@ describe("availability-service", () => {
     expect(query.params.at(-1)).toBe(100);
   });
 
+  it("queryProviderAvailability 在 maxBuckets 为超大有限值时也会收紧到硬上限", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+      maxBuckets: Number.MAX_SAFE_INTEGER,
+    });
+
+    const query = sqlToQuery(executeMock.mock.calls[0]?.[0]);
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(queryText).toContain("row_number() over");
+    expect(queryText).toContain("where rn <=");
+    expect(query.params.at(-1)).toBe(100);
+  });
+
   it("queryProviderAvailability 在无聚合数据时仍返回 unknown 提供商状态", async () => {
     const selectMock = vi.fn(() =>
       createThenableQuery([

@@ -8,7 +8,7 @@
  *   - providerIds: comma-separated provider IDs (default: all)
  *   - bucketSizeMinutes: number, time bucket size (default: auto)
  *   - includeDisabled: boolean, include disabled providers (default: false)
- *   - maxBuckets: number, max time buckets (default: 100)
+ *   - maxBuckets: number, max time buckets (default: 100, hard cap: 100)
  */
 
 import { type NextRequest, NextResponse } from "next/server";
@@ -51,7 +51,7 @@ function parsePositiveNumberQueryParam(value: string, fieldName: string): number
 
 function parseProviderIdsQueryParam(value: string): number[] {
   const tokens = value.split(",").map((token) => token.trim());
-  if (tokens.length === 0 || tokens.some((token) => token.length === 0)) {
+  if (tokens.some((token) => token.length === 0)) {
     throw new AvailabilityQueryValidationError(
       "Invalid providerIds: expected comma-separated positive integers"
     );

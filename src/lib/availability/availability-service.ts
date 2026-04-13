@@ -39,6 +39,8 @@ type AggregatedCurrentProviderStatusRow = {
 
 const MIN_BUCKET_SIZE_MINUTES = 0.25;
 const DEFAULT_MAX_BUCKETS = 100;
+// Keep per-provider bucket result sets bounded even if callers pass a huge finite value.
+const MAX_BUCKETS_HARD_LIMIT = DEFAULT_MAX_BUCKETS;
 
 export class AvailabilityQueryValidationError extends Error {
   constructor(message: string) {
@@ -204,7 +206,7 @@ function sanitizeMaxBuckets(maxBuckets: number | undefined): number {
     return DEFAULT_MAX_BUCKETS;
   }
 
-  return Math.max(1, Math.floor(maxBuckets));
+  return Math.min(MAX_BUCKETS_HARD_LIMIT, Math.max(1, Math.floor(maxBuckets)));
 }
 
 function validateAvailabilityTimeRange(startDate: Date, endDate: Date): void {
