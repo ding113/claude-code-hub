@@ -503,4 +503,39 @@ describe("availability-service", () => {
     expect(queryText).toContain("count(*) filter");
     expect(queryText).toContain("max(");
   });
+
+  it("getCurrentProviderStatus 在提供商无聚合数据时返回 unknown", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { getCurrentProviderStatus } = await import("@/lib/availability/availability-service");
+    const result = await getCurrentProviderStatus();
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      {
+        providerId: 1,
+        providerName: "Provider A",
+        status: "unknown",
+        availability: 0,
+        requestCount: 0,
+        lastRequestAt: null,
+      },
+    ]);
+  });
 });

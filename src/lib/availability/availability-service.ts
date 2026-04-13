@@ -39,8 +39,8 @@ type AggregatedCurrentProviderStatusRow = {
 
 const MIN_BUCKET_SIZE_MINUTES = 0.25;
 const DEFAULT_MAX_BUCKETS = 100;
-// Keep per-provider bucket result sets bounded even if callers pass a huge finite value.
-const MAX_BUCKETS_HARD_LIMIT = DEFAULT_MAX_BUCKETS;
+// Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
+const MAX_BUCKETS_HARD_LIMIT = 100;
 
 export class AvailabilityQueryValidationError extends Error {
   constructor(message: string) {
