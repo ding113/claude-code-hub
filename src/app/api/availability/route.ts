@@ -17,6 +17,7 @@ import {
   type AvailabilityQueryOptions,
   AvailabilityQueryValidationError,
   MAX_BUCKET_SIZE_MINUTES,
+  MAX_BUCKETS_HARD_LIMIT,
   queryProviderAvailability,
 } from "@/lib/availability";
 
@@ -27,7 +28,11 @@ function parseBooleanQueryParam(value: string, fieldName: string): boolean {
   throw new AvailabilityQueryValidationError(`Invalid ${fieldName}: expected true or false`);
 }
 
-function parsePositiveIntegerQueryParam(value: string, fieldName: string): number {
+function parsePositiveIntegerQueryParam(
+  value: string,
+  fieldName: string,
+  maxValue?: number
+): number {
   const normalizedValue = value.trim();
   if (!/^\d+$/.test(normalizedValue)) {
     throw new AvailabilityQueryValidationError(`Invalid ${fieldName}: expected a positive integer`);
@@ -36,6 +41,12 @@ function parsePositiveIntegerQueryParam(value: string, fieldName: string): numbe
   const parsed = Number(normalizedValue);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new AvailabilityQueryValidationError(`Invalid ${fieldName}: expected a positive integer`);
+  }
+
+  if (typeof maxValue === "number" && parsed > maxValue) {
+    throw new AvailabilityQueryValidationError(
+      `Invalid ${fieldName}: expected a positive integer not greater than ${maxValue}`
+    );
   }
 
   return parsed;
@@ -130,7 +141,11 @@ export async function GET(request: NextRequest) {
 
     const maxBuckets = searchParams.get("maxBuckets");
     if (maxBuckets !== null) {
-      options.maxBuckets = parsePositiveIntegerQueryParam(maxBuckets, "maxBuckets");
+      options.maxBuckets = parsePositiveIntegerQueryParam(
+        maxBuckets,
+        "maxBuckets",
+        MAX_BUCKETS_HARD_LIMIT
+      );
     }
 
     const result = await queryProviderAvailability(options);

@@ -87,11 +87,11 @@ export interface ProviderAvailabilitySummary {
   currentStatus: AvailabilityStatus;
   /** Availability ratio over the returned time buckets (currently kept equal to successRate for compatibility) */
   currentAvailability: number;
-  /** Total request count in period */
+  /** Total finalized request count represented by the returned time buckets */
   totalRequests: number;
   /** Compatibility alias of currentAvailability over the returned time buckets (green requests / total) */
   successRate: number;
-  /** Average latency in ms */
+  /** Average latency in ms over the returned time buckets */
   avgLatencyMs: number;
   /** Last request timestamp */
   lastRequestAt: string | null;
