@@ -44,7 +44,7 @@ function extractFinalizedRequestsSql(queryText: string): string {
   const end = queryText.indexOf("provider_bucket_stats as");
 
   if (start === -1 || end === -1 || end <= start) {
-    return queryText;
+    throw new Error("Could not locate finalized_requests CTE in query text");
   }
 
   return queryText.slice(start, end);
