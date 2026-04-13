@@ -204,12 +204,40 @@ describe("DashboardMain layout classes", () => {
 });
 
 describe("DashboardBento admin layout", () => {
-  test("renders four-column layout with LiveSessionsPanel in last column", async () => {
+  test("renders RPM metric and hides live sessions panel in high concurrency mode", async () => {
     const { container, unmount } = renderWithProviders(
       <DashboardBento
         isAdmin={true}
         currencyCode="USD"
         allowGlobalUsageView={false}
+        enableHighConcurrencyMode={true}
+        initialStatistics={mockStatisticsData}
+      />
+    );
+    await flushPromises();
+
+    const grid = findByClassToken(container, "lg:grid-cols-3");
+    expect(grid).toBeTruthy();
+    expect(findByClassToken(container, "lg:grid-cols-[1fr_1fr_1fr_280px]")).toBeFalsy();
+
+    expect(container.querySelector('[data-testid="live-sessions-panel"]')).toBeNull();
+    expect(activeSessionsMocks.getActiveSessions).not.toHaveBeenCalled();
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("RPM");
+    expect(text).toContain("3");
+    expect(text).not.toContain("Active Sessions");
+
+    unmount();
+  });
+
+  test("renders active sessions metric and live sessions panel in normal mode", async () => {
+    const { container, unmount } = renderWithProviders(
+      <DashboardBento
+        isAdmin={true}
+        currencyCode="USD"
+        allowGlobalUsageView={false}
+        enableHighConcurrencyMode={false}
         initialStatistics={mockStatisticsData}
       />
     );
@@ -218,10 +246,11 @@ describe("DashboardBento admin layout", () => {
     const grid = findByClassToken(container, "lg:grid-cols-[1fr_1fr_1fr_280px]");
     expect(grid).toBeTruthy();
 
-    const livePanel = container.querySelector('[data-testid="live-sessions-panel"]');
-    expect(livePanel).toBeTruthy();
+    expect(container.querySelector('[data-testid="live-sessions-panel"]')).toBeTruthy();
+    expect(activeSessionsMocks.getActiveSessions).toHaveBeenCalled();
 
-    expect(grid?.contains(livePanel as HTMLElement)).toBe(true);
+    const text = container.textContent ?? "";
+    expect(text).toContain("Active Sessions");
 
     unmount();
   });

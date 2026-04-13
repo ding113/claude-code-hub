@@ -92,6 +92,11 @@ export interface ProviderChainItem {
     originalModel: string; // 用户请求的模型（计费依据）
     redirectedModel: string; // 实际转发的模型
     billingModel: string; // 计费模型（通常等于 originalModel）
+    matchedRule?: {
+      matchType: "exact" | "prefix" | "suffix" | "contains" | "regex";
+      source: string;
+      target: string;
+    };
   };
 
   // 错误信息（记录失败时的上游报错）

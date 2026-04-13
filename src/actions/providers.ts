@@ -7,6 +7,7 @@ import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { buildProxyUrl } from "@/app/v1/_lib/url";
 import { db } from "@/drizzle/db";
 import { providers as providersTable } from "@/drizzle/schema";
+import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
@@ -19,7 +20,10 @@ import {
 } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import { PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA } from "@/lib/provider-model-redirect-schema";
+import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import {
   buildProviderBatchApplyUpdates,
   hasProviderBatchPatchChanges,
@@ -72,6 +76,7 @@ import {
 } from "@/repository/provider-endpoints";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
+  AllowedModelRuleInput,
   AnthropicAdaptiveThinkingConfig,
   AnthropicMaxTokensPreference,
   AnthropicThinkingBudgetPreference,
@@ -85,6 +90,7 @@ import type {
   ProviderBatchPatch,
   ProviderBatchPatchField,
   ProviderDisplay,
+  ProviderModelRedirectRule,
   ProviderPatchOperation,
   ProviderStatisticsMap,
   ProviderType,
@@ -500,10 +506,10 @@ export async function addProvider(data: {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   disable_session_reuse?: boolean;
-  model_redirects?: Record<string, string> | null;
+  model_redirects?: ProviderModelRedirectRule[] | null;
   active_time_start?: string | null;
   active_time_end?: string | null;
-  allowed_models?: string[] | null;
+  allowed_models?: AllowedModelRuleInput[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   limit_5h_usd?: number | null;
@@ -679,10 +685,10 @@ export async function editProvider(
     provider_type?: ProviderType;
     preserve_client_ip?: boolean;
     disable_session_reuse?: boolean;
-    model_redirects?: Record<string, string> | null;
+    model_redirects?: ProviderModelRedirectRule[] | null;
     active_time_start?: string | null;
     active_time_end?: string | null;
-    allowed_models?: string[] | null;
+    allowed_models?: AllowedModelRuleInput[] | null;
     allowed_clients?: string[] | null;
     blocked_clients?: string[] | null;
     limit_5h_usd?: number | null;
@@ -2197,8 +2203,8 @@ export interface BatchUpdateProvidersParams {
     weight?: number;
     cost_multiplier?: number;
     group_tag?: string | null;
-    model_redirects?: Record<string, string> | null;
-    allowed_models?: string[] | null;
+    model_redirects?: ProviderModelRedirectRule[] | null;
+    allowed_models?: AllowedModelRuleInput[] | null;
     allowed_clients?: string[];
     blocked_clients?: string[];
     codex_service_tier_preference?: CodexServiceTierPreference | null;
@@ -2244,13 +2250,38 @@ export async function batchUpdateProviders(
       repositoryUpdates.groupTag = normalizeProviderGroupTag(updates.group_tag);
     }
     if (updates.model_redirects !== undefined) {
-      repositoryUpdates.modelRedirects = updates.model_redirects;
+      if (updates.model_redirects === null) {
+        repositoryUpdates.modelRedirects = null;
+      } else {
+        const parsedRedirectRules = PROVIDER_MODEL_REDIRECT_RULE_LIST_SCHEMA.safeParse(
+          updates.model_redirects
+        );
+        if (!parsedRedirectRules.success) {
+          return { ok: false, error: "模型重定向规则格式无效" };
+        }
+        repositoryUpdates.modelRedirects = normalizeProviderModelRedirectRules(
+          parsedRedirectRules.data
+        );
+      }
     }
     if (updates.allowed_models !== undefined) {
-      repositoryUpdates.allowedModels =
-        Array.isArray(updates.allowed_models) && updates.allowed_models.length === 0
-          ? null
-          : updates.allowed_models;
+      if (updates.allowed_models === null) {
+        repositoryUpdates.allowedModels = null;
+      } else {
+        const parsedAllowedModelRules = PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA.safeParse(
+          updates.allowed_models
+        );
+        if (!parsedAllowedModelRules.success) {
+          return {
+            ok: false,
+            error: "INVALID_FORMAT",
+            errorCode: "INVALID_FORMAT",
+            errorParams: { field: "allowed_models" },
+          };
+        }
+        repositoryUpdates.allowedModels =
+          parsedAllowedModelRules.data.length > 0 ? parsedAllowedModelRules.data : null;
+      }
     }
     if (updates.allowed_clients !== undefined) {
       repositoryUpdates.allowedClients = updates.allowed_clients;
@@ -2270,6 +2301,17 @@ export async function batchUpdateProviders(
     }
 
     const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
+
+    const shouldInvalidateStickySessions =
+      updates.group_tag !== undefined ||
+      updates.model_redirects !== undefined ||
+      updates.allowed_models !== undefined ||
+      updates.allowed_clients !== undefined ||
+      updates.blocked_clients !== undefined;
+
+    if (shouldInvalidateStickySessions) {
+      await SessionManager.terminateStickySessionsForProviders(providerIds, "batchUpdateProviders");
+    }
 
     await broadcastProviderCacheInvalidation({
       operation: "edit",
@@ -2876,28 +2918,34 @@ type ProviderApiTestArgs = {
   timeoutMs?: number; // 自定义超时时间（毫秒）
 };
 
+export type ProviderApiTestSuccessDetails = {
+  responseTime?: number;
+  model?: string;
+  usage?: Record<string, unknown>;
+  content?: string;
+  rawResponse?: string;
+  streamInfo?: {
+    chunksReceived: number;
+    format: "sse" | "ndjson";
+  };
+};
+
+export type ProviderApiTestFailureDetails = {
+  responseTime?: number;
+  error?: string;
+  rawResponse?: string;
+};
+
 type ProviderApiTestResult = ActionResult<
   | {
       success: true;
       message: string;
-      details?: {
-        responseTime?: number;
-        model?: string;
-        usage?: Record<string, unknown>;
-        content?: string;
-        streamInfo?: {
-          chunksReceived: number;
-          format: "sse" | "ndjson";
-        };
-      };
+      details?: ProviderApiTestSuccessDetails;
     }
   | {
       success: false;
       message: string;
-      details?: {
-        responseTime?: number;
-        error?: string;
-      };
+      details?: ProviderApiTestFailureDetails;
     }
 >;
 
@@ -2971,6 +3019,7 @@ type GeminiResponse = {
     };
     finishReason?: string;
   }>;
+  modelVersion?: string;
   usageMetadata?: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
@@ -3751,6 +3800,7 @@ async function executeProviderApiTest(
             details: {
               responseTime,
               error: finalErrorDetail,
+              rawResponse: errorText,
             },
           },
         };
@@ -3834,6 +3884,7 @@ async function executeProviderApiTest(
               details: {
                 responseTime,
                 ...extracted,
+                rawResponse: responseText,
                 streamInfo: {
                   chunksReceived: streamResult.chunksReceived,
                   format: streamResult.format,
@@ -3881,6 +3932,7 @@ async function executeProviderApiTest(
             details: {
               responseTime,
               error: `JSON 解析失败: ${jsonError instanceof Error ? jsonError.message : "未知错误"}`,
+              rawResponse: responseText,
             },
           },
         };
@@ -3896,6 +3948,7 @@ async function executeProviderApiTest(
           details: {
             responseTime,
             ...extracted,
+            rawResponse: responseText,
           },
         },
       };
@@ -4110,7 +4163,7 @@ export async function testProviderGemini(
     {
       path: (model) => {
         // 不在 URL 中放 key，仅用 header 认证
-        return `/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+        return `/v1beta/models/${model}:generateContent`;
       },
       defaultModel: "gemini-2.5-pro",
       headers: (apiKey) => {
@@ -4128,9 +4181,13 @@ export async function testProviderGemini(
       body: (model) => {
         void model;
         return {
-          contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
+          contents: [{ role: "user", parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
           generationConfig: {
+            temperature: 0,
             maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
           },
         };
       },
@@ -4140,7 +4197,7 @@ export async function testProviderGemini(
       extract: (result) => {
         const geminiResult = result as GeminiResponse;
         return {
-          model: undefined,
+          model: geminiResult.modelVersion,
           usage: geminiResult.usageMetadata as Record<string, unknown>,
           content: extractFirstTextSnippet(geminiResult),
         };
@@ -4184,7 +4241,7 @@ export async function testProviderGemini(
     { ...data, apiKey: processedApiKey },
     {
       path: (model, apiKey) =>
-        `/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
+        `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
       defaultModel: "gemini-2.5-pro",
       headers: (apiKey) => ({
         "Content-Type": "application/json",
@@ -4194,9 +4251,13 @@ export async function testProviderGemini(
       body: (model) => {
         void model;
         return {
-          contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
+          contents: [{ role: "user", parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
           generationConfig: {
+            temperature: 0,
             maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
           },
         };
       },
@@ -4206,7 +4267,7 @@ export async function testProviderGemini(
       extract: (result) => {
         const geminiResult = result as GeminiResponse;
         return {
-          model: undefined,
+          model: geminiResult.modelVersion,
           usage: geminiResult.usageMetadata as Record<string, unknown>,
           content: extractFirstTextSnippet(geminiResult),
         };
@@ -4271,6 +4332,7 @@ export type UnifiedTestResult = ActionResult<{
   httpStatusText?: string;
   model?: string;
   content?: string;
+  rawResponse?: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -4394,6 +4456,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
         httpStatusText: result.httpStatusText,
         model: result.model,
         content: result.content,
+        rawResponse: result.rawResponse,
         usage: result.usage,
         streamInfo: result.streamInfo,
         errorMessage: result.errorMessage,
@@ -4852,9 +4915,9 @@ export async function getModelSuggestionsByProviderGroup(
       if (checkProviderGroupMatch(provider.groupTag, userGroups)) {
         const models = provider.allowedModels;
         if (models && Array.isArray(models)) {
-          for (const model of models) {
-            if (model) {
-              modelSet.add(model);
+          for (const rule of normalizeAllowedModelRules(models) ?? []) {
+            if (rule.matchType === "exact" && rule.pattern) {
+              modelSet.add(rule.pattern);
             }
           }
         }

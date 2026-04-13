@@ -92,6 +92,21 @@ AIGoCode offers a special bonus for CCH users — register via this link and rec
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">
+<img src="public/readme/aicodemirror.jpg" alt="AICodeMirror Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: Thanks to <a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">AICodeMirror</a> for sponsoring this project! AICodeMirror provides official high-stability relay services for Claude Code / Codex / Gemini CLI, with enterprise-grade concurrency, fast invoicing, and 24/7 dedicated technical support.<br/>
+Claude Code / Codex / Gemini official channels at 38% / 6% / 9% of original price, with extra discounts on top-ups!<br/>
+For claude-code-hub users, AICodeMirror offers special benefits: register via this link to enjoy 20% off your first top-up, and enterprise customers can get up to 25% off! → <a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">Visit Now</a>
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.

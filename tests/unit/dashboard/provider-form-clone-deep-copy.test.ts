@@ -17,7 +17,7 @@ function makeProvider(overrides?: Partial<ProviderDisplay>): ProviderDisplay {
     providerType: "claude",
     providerVendorId: null,
     preserveClientIp: false,
-    modelRedirects: { "claude-3": "claude-3.5" },
+    modelRedirects: [{ matchType: "exact", source: "claude-3", target: "claude-3.5" }],
     allowedModels: ["claude-3", "claude-3.5"],
     mcpPassthroughType: "none",
     mcpPassthroughUrl: null,
@@ -66,7 +66,7 @@ function makeProvider(overrides?: Partial<ProviderDisplay>): ProviderDisplay {
 
 describe("createInitialState deep-copy safety", () => {
   describe("clone mode", () => {
-    it("modelRedirects is a distinct object with equal values", () => {
+    it("modelRedirects is a distinct array with equal values", () => {
       const source = makeProvider();
       const state = createInitialState("create", undefined, source);
       expect(state.routing.modelRedirects).toEqual(source.modelRedirects);
@@ -76,7 +76,10 @@ describe("createInitialState deep-copy safety", () => {
     it("allowedModels is a distinct array with equal values", () => {
       const source = makeProvider();
       const state = createInitialState("create", undefined, source);
-      expect(state.routing.allowedModels).toEqual(source.allowedModels);
+      expect(state.routing.allowedModels).toEqual([
+        { matchType: "exact", pattern: "claude-3" },
+        { matchType: "exact", pattern: "claude-3.5" },
+      ]);
       expect(state.routing.allowedModels).not.toBe(source.allowedModels);
     });
 
@@ -103,10 +106,10 @@ describe("createInitialState deep-copy safety", () => {
       expect(state.routing.anthropicAdaptiveThinking).toBeNull();
     });
 
-    it("null modelRedirects falls back to empty object", () => {
+    it("null modelRedirects falls back to empty array", () => {
       const source = makeProvider({ modelRedirects: null });
       const state = createInitialState("create", undefined, source);
-      expect(state.routing.modelRedirects).toEqual({});
+      expect(state.routing.modelRedirects).toEqual([]);
     });
 
     it("null allowedModels falls back to empty array", () => {
@@ -149,7 +152,7 @@ describe("createInitialState deep-copy safety", () => {
   describe("create mode without clone source", () => {
     it("nested objects use fresh defaults", () => {
       const state = createInitialState("create");
-      expect(state.routing.modelRedirects).toEqual({});
+      expect(state.routing.modelRedirects).toEqual([]);
       expect(state.routing.allowedModels).toEqual([]);
       expect(state.routing.groupPriorities).toEqual({});
       expect(state.routing.anthropicAdaptiveThinking).toBeNull();

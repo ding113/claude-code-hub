@@ -1,8 +1,17 @@
 "use client";
-import { Check, ChevronsUpDown, Cloud, Database, Loader2, Plus, RefreshCw } from "lucide-react";
+
+import {
+  Check,
+  ChevronsUpDown,
+  Cloud,
+  Database,
+  Loader2,
+  RefreshCw,
+  RotateCcw,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { getAvailableModelsByProviderType } from "@/actions/model-prices";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { type AvailableModelCatalogItem, getAvailableModelCatalog } from "@/actions/model-prices";
 import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,61 +24,73 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PRICE_FILTER_VENDORS } from "@/lib/model-vendor-icons";
+import { cn } from "@/lib/utils";
 import type { ProviderType } from "@/types/provider";
 
 type ModelSource = "upstream" | "fallback" | "loading";
+
+type ModelOption = AvailableModelCatalogItem & {
+  key: string;
+};
 
 interface ModelMultiSelectProps {
   providerType: ProviderType;
   selectedModels: string[];
   onChange: (models: string[]) => void;
   disabled?: boolean;
-  /** 供应商 URL（用于获取上游模型列表） */
   providerUrl?: string;
-  /** API Key（用于获取上游模型列表） */
   apiKey?: string;
-  /** 代理 URL */
   proxyUrl?: string | null;
-  /** 代理失败时是否回退到直连 */
   proxyFallbackToDirect?: boolean;
-  /** 供应商 ID（编辑模式下用于获取未脱敏的 API Key） */
   providerId?: number;
 }
 
-function ModelSourceIndicator({
-  loading,
-  isUpstream,
-  label,
-  description,
-}: {
-  loading: boolean;
-  isUpstream: boolean;
-  label: string;
-  description: string;
-}) {
-  if (loading) return null;
+function normalizeModelName(model: string): string {
+  return model.trim();
+}
 
-  const Icon = isUpstream ? Cloud : Database;
+function getModelKey(model: string): string {
+  return normalizeModelName(model);
+}
 
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs text-muted-foreground">
-            <Icon className="h-3 w-3" />
-            <span>{label}</span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[200px]">
-          <p className="text-xs">{description}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
+function getProviderTypeLabel(providerType: ProviderType, t: ReturnType<typeof useTranslations>) {
+  switch (providerType) {
+    case "claude":
+    case "claude-auth":
+      return t("claude");
+    case "gemini":
+    case "gemini-cli":
+      return t("gemini");
+    default:
+      return t("openai");
+  }
+}
+
+function buildLocalOption(item: AvailableModelCatalogItem): ModelOption {
+  return {
+    ...item,
+    key: getModelKey(item.modelName),
+  };
+}
+
+function buildVirtualOption(modelName: string): ModelOption {
+  return {
+    modelName,
+    litellmProvider: null,
+    updatedAt: "",
+    key: getModelKey(modelName),
+  };
 }
 
 export function ModelMultiSelect({
@@ -84,63 +105,126 @@ export function ModelMultiSelect({
   providerId,
 }: ModelMultiSelectProps) {
   const t = useTranslations("settings.providers.form.modelSelect");
+  const tPrices = useTranslations("settings.prices");
   const [open, setOpen] = useState(false);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [modelSource, setModelSource] = useState<ModelSource>("loading");
-  const [customModel, setCustomModel] = useState("");
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
+  const [searchValue, setSearchValue] = useState("");
+  const [providerFilter, setProviderFilter] = useState("__all__");
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
+
+  const providerOptions = useMemo(() => {
+    const knownProviders = new Map(
+      PRICE_FILTER_VENDORS.map((entry) => [entry.litellmProvider, entry.i18nKey])
+    );
+    const seen = new Set<string>();
+    const options: Array<{ value: string; label: string }> = [];
+
+    for (const entry of PRICE_FILTER_VENDORS) {
+      if (availableModels.some((model) => model.litellmProvider === entry.litellmProvider)) {
+        seen.add(entry.litellmProvider);
+        options.push({
+          value: entry.litellmProvider,
+          label: tPrices(`filters.${entry.i18nKey}`),
+        });
+      }
+    }
+
+    const unknownProviders = Array.from(
+      new Set(
+        availableModels
+          .map((model) => model.litellmProvider)
+          .filter((provider): provider is string => !!provider && !seen.has(provider))
+      )
+    ).sort((left, right) => left.localeCompare(right));
+
+    for (const provider of unknownProviders) {
+      seen.add(provider);
+      options.push({
+        value: provider,
+        label: knownProviders.has(provider)
+          ? tPrices(`filters.${knownProviders.get(provider)}`)
+          : provider,
+      });
+    }
+
+    return options;
+  }, [availableModels, tPrices]);
+
+  const selectedKeySet = useMemo(
+    () => new Set(selectedModels.map((model) => getModelKey(model))),
+    [selectedModels]
+  );
 
   const displayedModels = useMemo(() => {
+    const merged: ModelOption[] = [];
     const seen = new Set<string>();
-    const merged: string[] = [];
 
     for (const model of availableModels) {
-      if (seen.has(model)) continue;
-      seen.add(model);
+      if (seen.has(model.key)) {
+        continue;
+      }
+      seen.add(model.key);
       merged.push(model);
     }
 
-    // 关键：把已选中但不在远端列表的自定义模型也渲染出来，保证可取消选中
+    // 关键：保留已选但不在当前列表里的 exact 规则，这样用户仍然可以取消它们。
     for (const model of selectedModels) {
-      if (seen.has(model)) continue;
-      seen.add(model);
-      merged.push(model);
+      const option = buildVirtualOption(model);
+      if (seen.has(option.key)) {
+        continue;
+      }
+      seen.add(option.key);
+      merged.push(option);
     }
 
     return merged;
   }, [availableModels, selectedModels]);
 
-  // 供应商类型到显示名称的映射
-  const getProviderTypeLabel = (type: string): string => {
-    const typeMap: Record<string, string> = {
-      claude: t("claude"),
-      "claude-auth": t("claude"),
-      codex: t("openai"),
-      gemini: t("gemini"),
-      "gemini-cli": t("gemini"),
-      "openai-compatible": t("openai"),
-    };
-    return typeMap[type] || t("openai");
-  };
+  const filteredModels = useMemo(() => {
+    const keyword = searchValue.trim().toLowerCase();
+    const useProviderFilter = modelSource === "fallback" && providerFilter !== "__all__";
 
-  // 加载模型列表（优先上游，失败则回退）
+    return displayedModels.filter((model) => {
+      if (keyword && !model.modelName.toLowerCase().includes(keyword)) {
+        return false;
+      }
+      if (useProviderFilter && model.litellmProvider !== providerFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [displayedModels, modelSource, providerFilter, searchValue]);
+
+  const filteredSelectedModels = useMemo(
+    () => filteredModels.filter((model) => selectedKeySet.has(model.key)),
+    [filteredModels, selectedKeySet]
+  );
+  const filteredAvailableModels = useMemo(
+    () => filteredModels.filter((model) => !selectedKeySet.has(model.key)),
+    [filteredModels, selectedKeySet]
+  );
+
   const loadModels = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     setLoading(true);
     setModelSource("loading");
+    setFallbackNotice(null);
 
-    // 尝试从上游获取模型列表
-    if (providerUrl) {
-      // 解析 API Key：优先使用表单中的 key，否则从数据库获取
+    try {
       let resolvedKey = apiKey?.trim() || "";
-
-      if (!resolvedKey && providerId) {
+      if ((!resolvedKey || resolvedKey.includes("***")) && providerId) {
         const keyResult = await getUnmaskedProviderKey(providerId);
         if (keyResult.ok && keyResult.data?.key) {
           resolvedKey = keyResult.data.key;
         }
       }
 
-      if (resolvedKey) {
+      if (providerUrl && resolvedKey) {
         const upstreamResult = await fetchUpstreamModels({
           providerUrl,
           apiKey: resolvedKey,
@@ -149,210 +233,305 @@ export function ModelMultiSelect({
           proxyFallbackToDirect,
         });
 
-        if (upstreamResult.ok && upstreamResult.data) {
-          setAvailableModels(upstreamResult.data.models);
+        if (upstreamResult.ok && upstreamResult.data?.models?.length) {
+          if (requestId !== requestIdRef.current) {
+            return;
+          }
+
+          const upstreamModels = upstreamResult.data.models.map((modelName) =>
+            buildLocalOption({
+              modelName,
+              litellmProvider: null,
+              updatedAt: "",
+            })
+          );
+          setAvailableModels(upstreamModels);
           setModelSource("upstream");
-          setLoading(false);
+          setProviderFilter("__all__");
           return;
         }
+
+        if (!upstreamResult.ok && requestId === requestIdRef.current) {
+          setFallbackNotice(t("fallbackNotice"));
+        }
+      }
+
+      const localCatalog = await getAvailableModelCatalog();
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setAvailableModels(localCatalog.map(buildLocalOption));
+      setModelSource("fallback");
+      setProviderFilter("__all__");
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
       }
     }
+  }, [apiKey, providerId, providerType, providerUrl, proxyFallbackToDirect, proxyUrl, t]);
 
-    // 回退到全量模型列表
-    const fallbackModels = await getAvailableModelsByProviderType();
-    setAvailableModels(fallbackModels);
-    setModelSource("fallback");
-    setLoading(false);
-  }, [providerUrl, apiKey, providerId, providerType, proxyUrl, proxyFallbackToDirect]);
+  const handleOpenLoad = useEffectEvent(() => {
+    void loadModels();
+  });
 
-  // 组件挂载时加载模型
   useEffect(() => {
-    loadModels();
-  }, [loadModels]);
-
-  const toggleModel = (model: string) => {
-    if (selectedModels.includes(model)) {
-      onChange(selectedModels.filter((m) => m !== model));
-    } else {
-      onChange([...selectedModels, model]);
-    }
-  };
-
-  const selectAll = () => onChange(availableModels);
-  const clearAll = () => onChange([]);
-
-  const handleAddCustomModel = () => {
-    const trimmed = customModel.trim();
-    if (!trimmed) return;
-
-    if (selectedModels.includes(trimmed)) {
-      setCustomModel("");
+    if (!open) {
       return;
     }
 
-    onChange([...selectedModels, trimmed]);
-    setCustomModel("");
+    handleOpenLoad();
+  }, [open]);
+
+  const sourceLabel = modelSource === "upstream" ? t("sourceUpstream") : t("sourceFallback");
+  const sourceDescription =
+    modelSource === "upstream" ? t("sourceUpstreamDesc") : t("sourceFallbackDesc");
+  const SourceIcon = modelSource === "upstream" ? Cloud : Database;
+
+  const handleToggleModel = (modelName: string) => {
+    const normalized = normalizeModelName(modelName);
+    const modelKey = getModelKey(normalized);
+    if (selectedKeySet.has(modelKey)) {
+      onChange(selectedModels.filter((model) => getModelKey(model) !== modelKey));
+      return;
+    }
+    onChange([...selectedModels, normalized]);
   };
 
-  const isUpstream = modelSource === "upstream";
-  const sourceLabel = isUpstream ? t("sourceUpstream") : t("sourceFallback");
-  const sourceDescription = isUpstream ? t("sourceUpstreamDesc") : t("sourceFallbackDesc");
+  const handleSelectAll = () => {
+    const next = [...selectedModels];
+    const nextKeys = new Set(selectedModels.map((model) => getModelKey(model)));
+
+    for (const model of filteredModels) {
+      if (nextKeys.has(model.key)) {
+        continue;
+      }
+      nextKeys.add(model.key);
+      next.push(model.modelName);
+    }
+
+    onChange(next);
+  };
+
+  const handleInvertSelection = () => {
+    const filteredKeys = new Set(filteredModels.map((model) => model.key));
+    const preserved = selectedModels.filter((model) => !filteredKeys.has(getModelKey(model)));
+    const additions = filteredModels
+      .filter((model) => !selectedKeySet.has(model.key))
+      .map((model) => model.modelName);
+
+    onChange([...preserved, ...additions]);
+  };
+
+  const handleClearExactRules = () => {
+    onChange([]);
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className="w-full justify-between"
-        >
-          {selectedModels.length === 0 ? (
-            <span className="text-muted-foreground">
-              {t("allowAllModels", {
-                type: getProviderTypeLabel(providerType),
-              })}
+    <div className="space-y-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            data-allowed-model-picker-trigger
+            className="w-full justify-between border-dashed bg-background/70"
+          >
+            <span className="truncate text-left">
+              {selectedModels.length === 0
+                ? t("emptyLabel", { type: getProviderTypeLabel(providerType, t) })
+                : t("selectedCount", { count: selectedModels.length })}
             </span>
-          ) : (
-            <div className="flex gap-2 items-center">
-              <span className="truncate">
-                {t("selectedCount", { count: selectedModels.length })}
-              </span>
-              <Badge variant="secondary" className="ml-auto">
-                {selectedModels.length}
-              </Badge>
+            <div className="ml-3 flex items-center gap-2">
+              {selectedModels.length > 0 ? (
+                <Badge variant="secondary" className="shrink-0">
+                  {selectedModels.length}
+                </Badge>
+              ) : null}
+              {loading ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-60" />
+              ) : (
+                <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" />
+              )}
             </div>
-          )}
-          {loading ? (
-            <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
-          ) : (
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-[400px] max-w-[calc(100vw-2rem)] p-0 flex flex-col"
-        align="start"
-        onWheel={(e) => e.stopPropagation()}
-        onTouchMove={(e) => e.stopPropagation()}
-      >
-        <Command shouldFilter={true}>
-          <CommandInput placeholder={t("searchPlaceholder")} />
-          <CommandList className="max-h-[250px] overflow-y-auto">
-            <CommandEmpty>{loading ? t("loading") : t("notFound")}</CommandEmpty>
+          </Button>
+        </PopoverTrigger>
 
-            {!loading && (
-              <>
-                {/* 数据来源指示 + 快捷操作 */}
-                <CommandGroup>
-                  <div className="flex items-center justify-between gap-2 p-2">
-                    <div className="flex items-center gap-2">
-                      <ModelSourceIndicator
-                        loading={loading}
-                        isUpstream={isUpstream}
-                        label={sourceLabel}
-                        description={sourceDescription}
-                      />
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                loadModels();
-                              }}
-                              type="button"
-                            >
-                              <RefreshCw className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            <p className="text-xs">{t("refresh")}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={selectAll}
-                        className="h-7 text-xs"
-                        type="button"
+        <PopoverContent
+          className="w-[720px] max-w-[calc(100vw-2rem)] p-0"
+          align="start"
+          onWheel={(event) => event.stopPropagation()}
+          onTouchMove={(event) => event.stopPropagation()}
+        >
+          <Command shouldFilter={false}>
+            <div className="border-b border-border/60 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
+                          "bg-muted/40 text-muted-foreground"
+                        )}
                       >
-                        {t("selectAll", { count: availableModels.length })}
-                      </Button>
+                        <SourceIcon className="h-3.5 w-3.5" />
+                        <span>{sourceLabel}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p>{sourceDescription}</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={clearAll}
-                        disabled={selectedModels.length === 0}
-                        className="h-7 text-xs"
                         type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => void loadModels()}
+                        disabled={disabled || loading}
+                        data-allowed-model-refresh
                       >
-                        {t("clear")}
+                        <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
                       </Button>
-                    </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p>{t("refresh")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  {modelSource === "fallback" && providerOptions.length > 0 ? (
+                    <Select value={providerFilter} onValueChange={setProviderFilter}>
+                      <SelectTrigger className="h-8 w-[180px]" data-allowed-model-provider-filter>
+                        <SelectValue placeholder={t("providerFilterPlaceholder")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">{t("providerFilterAll")}</SelectItem>
+                        {providerOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSelectAll}
+                    disabled={disabled || loading || filteredModels.length === 0}
+                    data-allowed-model-select-all
+                  >
+                    {t("selectAll", { count: filteredModels.length })}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleInvertSelection}
+                    disabled={disabled || loading || filteredModels.length === 0}
+                    data-allowed-model-invert
+                  >
+                    <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                    {t("invertSelection")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleClearExactRules}
+                    disabled={disabled || selectedModels.length === 0}
+                    data-allowed-model-clear
+                  >
+                    {t("clear")}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                {fallbackNotice ? (
+                  <div className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
+                    {fallbackNotice}
                   </div>
-                </CommandGroup>
+                ) : null}
+                <CommandInput
+                  value={searchValue}
+                  onValueChange={setSearchValue}
+                  placeholder={t("searchPlaceholder")}
+                  data-allowed-model-picker-search
+                />
+              </div>
+            </div>
 
-                {/* 模型列表 */}
-                <CommandGroup>
-                  {displayedModels.map((model) => (
-                    <CommandItem
-                      key={model}
-                      value={model}
-                      onSelect={() => toggleModel(model)}
-                      className="cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={selectedModels.includes(model)}
-                        className="mr-2"
-                        onCheckedChange={() => toggleModel(model)}
-                      />
-                      <span className="font-mono text-sm flex-1">{model}</span>
-                      {selectedModels.includes(model) && <Check className="h-4 w-4 text-primary" />}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </>
-            )}
-          </CommandList>
-        </Command>
+            <CommandList className="max-h-[360px] overflow-y-auto p-2">
+              <CommandEmpty>{loading ? t("loading") : t("notFound")}</CommandEmpty>
 
-        {/* 手动输入区域 */}
-        <div className="border-t p-3 space-y-2">
-          <Label className="text-xs font-medium">{t("manualAdd")}</Label>
-          <div className="flex gap-2">
-            <Input
-              placeholder={t("manualPlaceholder")}
-              value={customModel}
-              onChange={(e) => setCustomModel(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleAddCustomModel();
-                }
-              }}
-              disabled={disabled}
-              className="font-mono text-sm flex-1"
-            />
-            <Button
-              size="sm"
-              onClick={handleAddCustomModel}
-              disabled={disabled || !customModel.trim()}
-              type="button"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+              {!loading && filteredSelectedModels.length > 0 ? (
+                <div data-model-group="selected">
+                  <CommandGroup heading={t("selectedGroupLabel")}>
+                    {filteredSelectedModels.map((model) => (
+                      <CommandItem
+                        key={`selected:${model.key}`}
+                        value={model.modelName}
+                        onSelect={() => handleToggleModel(model.modelName)}
+                        className="cursor-pointer"
+                      >
+                        <Checkbox checked className="mr-2 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate font-mono text-sm">
+                          {model.modelName}
+                        </span>
+                        <Check className="h-4 w-4 text-primary" />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </div>
+              ) : null}
+
+              {!loading ? (
+                <div data-model-group="available">
+                  <CommandGroup heading={t("availableGroupLabel")}>
+                    {filteredAvailableModels.map((model) => (
+                      <CommandItem
+                        key={`available:${model.key}`}
+                        value={model.modelName}
+                        onSelect={() => handleToggleModel(model.modelName)}
+                        className="cursor-pointer"
+                      >
+                        <Checkbox checked={false} className="mr-2 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-mono text-sm">{model.modelName}</div>
+                          {modelSource === "fallback" && model.litellmProvider ? (
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                              <span>
+                                {providerOptions.find(
+                                  (option) => option.value === model.litellmProvider
+                                )?.label ?? model.litellmProvider}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </div>
+              ) : null}
+            </CommandList>
+          </Command>
+
+          <div className="border-t border-border/60 px-3 py-2">
+            <Label className="text-xs text-muted-foreground">{t("exactMatchHint")}</Label>
           </div>
-          <p className="text-xs text-muted-foreground">{t("manualDesc")}</p>
-        </div>
-      </PopoverContent>
-    </Popover>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }

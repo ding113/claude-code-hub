@@ -739,17 +739,27 @@ export function isTransportError(error: Error): boolean {
     "UND_ERR_CONNECT_TIMEOUT",
     "UND_ERR_HEADERS_TIMEOUT",
     "UND_ERR_BODY_TIMEOUT",
+    "UND_ERR_DESTROYED", // agent destroyed while request in flight
+    "UND_ERR_CLOSED", // agent closed while request in flight
     "ECONNREFUSED",
     "ECONNRESET",
     "ETIMEDOUT",
     "ENOTFOUND",
     "EAI_AGAIN",
+    // Node.js HTTP/2 stream errors —— 常被 undici/fetch 包装后放到 cause 链上
+    // 必须在这里登记，才能在 cause.code 分支里正确识别为 transport 错误
+    "ERR_HTTP2_STREAM_ERROR",
   ]);
 
   const TRANSPORT_MESSAGE_SIGNATURES = ["other side closed", "fetch failed"];
 
   // Check error name
-  if (error.name === "SocketError") return true;
+  if (
+    error.name === "SocketError" ||
+    error.name === "ClientDestroyedError" ||
+    error.name === "ClientClosedError"
+  )
+    return true;
 
   // Check error code on error itself or cause
   const code =
@@ -760,6 +770,9 @@ export function isTransportError(error: Error): boolean {
   // Check message for known transport signatures
   const msg = error.message.toLowerCase();
   if (TRANSPORT_MESSAGE_SIGNATURES.some((sig) => msg.includes(sig))) return true;
+
+  // Check for HTTP/2 protocol errors (stream resets, GOAWAY, etc.)
+  if (isHttp2Error(error)) return true;
 
   return false;
 }

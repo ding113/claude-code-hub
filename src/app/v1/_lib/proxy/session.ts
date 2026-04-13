@@ -98,6 +98,13 @@ export class ProxySession {
   // 原始 URL 路径（用于 Gemini 模型重定向重置）
   private originalUrlPathname: string | null = null;
 
+  // 当前供应商 attempt 的模型重定向快照。
+  // 用于在 hedge shadow session 中延迟把 redirect 归属到真正的 winner/failed 链路项。
+  private currentModelRedirect: {
+    providerId: number;
+    redirect: NonNullable<ProviderChainItem["modelRedirect"]>;
+  } | null = null;
+
   // 上游决策链（记录尝试的供应商列表）
   private providerChain: ProviderChainItem[];
 
@@ -509,6 +516,7 @@ export class ProxySession {
       decisionContext?: ProviderChainItem["decisionContext"];
       strictBlockCause?: ProviderChainItem["strictBlockCause"]; // endpoint pool exhaustion cause
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
+      modelRedirect?: ProviderChainItem["modelRedirect"];
     }
   ): void {
     const item: ProviderChainItem = {
@@ -538,6 +546,7 @@ export class ProxySession {
       decisionContext: metadata?.decisionContext,
       strictBlockCause: metadata?.strictBlockCause,
       endpointFilterStats: metadata?.endpointFilterStats,
+      modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
     };
 
     // 避免重复添加同一个供应商
@@ -566,6 +575,42 @@ export class ProxySession {
    */
   getProviderChain(): ProviderChainItem[] {
     return this.providerChain;
+  }
+
+  setCurrentModelRedirect(
+    providerId: number,
+    redirect: NonNullable<ProviderChainItem["modelRedirect"]>
+  ): void {
+    this.currentModelRedirect = {
+      providerId,
+      redirect,
+    };
+  }
+
+  clearCurrentModelRedirect(): void {
+    this.currentModelRedirect = null;
+  }
+
+  getCurrentModelRedirect(providerId?: number): ProviderChainItem["modelRedirect"] | undefined {
+    if (!this.currentModelRedirect) return undefined;
+    if (providerId !== undefined && this.currentModelRedirect.providerId !== providerId) {
+      return undefined;
+    }
+    return this.currentModelRedirect.redirect;
+  }
+
+  attachCurrentModelRedirectToLastChainItem(providerId: number): boolean {
+    const redirect = this.getCurrentModelRedirect(providerId);
+    if (!redirect) return false;
+
+    const lastItem = this.providerChain[this.providerChain.length - 1];
+    if (!lastItem || lastItem.id !== providerId) {
+      return false;
+    }
+
+    lastItem.modelRedirect = redirect;
+    this.persistLiveChain();
+    return true;
   }
 
   /**

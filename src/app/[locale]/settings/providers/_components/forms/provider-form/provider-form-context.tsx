@@ -10,6 +10,8 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import { analyzeBatchProviderSettings } from "../../batch-edit/analyze-batch-settings";
@@ -110,7 +112,7 @@ export function createInitialState(
         modelRedirects:
           analysis.routing.modelRedirects.status === "uniform"
             ? analysis.routing.modelRedirects.value
-            : {},
+            : [],
         allowedModels:
           analysis.routing.allowedModels.status === "uniform"
             ? analysis.routing.allowedModels.value
@@ -288,7 +290,7 @@ export function createInitialState(
         groupTag: [],
         preserveClientIp: false,
         disableSessionReuse: false,
-        modelRedirects: {},
+        modelRedirects: [],
         allowedModels: [],
         allowedClients: [],
         blockedClients: [],
@@ -363,8 +365,8 @@ export function createInitialState(
       groupTag: parseProviderGroups(sourceProvider?.groupTag),
       preserveClientIp: sourceProvider?.preserveClientIp ?? false,
       disableSessionReuse: sourceProvider?.disableSessionReuse ?? false,
-      modelRedirects: sourceProvider?.modelRedirects ?? {},
-      allowedModels: sourceProvider?.allowedModels ?? [],
+      modelRedirects: normalizeProviderModelRedirectRules(sourceProvider?.modelRedirects) ?? [],
+      allowedModels: normalizeAllowedModelRules(sourceProvider?.allowedModels) ?? [],
       allowedClients: sourceProvider?.allowedClients ?? [],
       blockedClients: sourceProvider?.blockedClients ?? [],
       priority: sourceProvider?.priority ?? 0,

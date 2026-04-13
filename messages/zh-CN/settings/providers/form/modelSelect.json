@@ -1,11 +1,17 @@
 {
   "allowAllModels": "允许所有 {type} 模型",
-  "selectedCount": "已选择 {count} 个模型",
+  "selectedCount": "已选择 {count} 个精确模型",
+  "emptyLabel": "从列表添加 {type} 精确模型",
   "searchPlaceholder": "搜索模型名称...",
   "loading": "加载中...",
   "notFound": "未找到模型",
   "selectAll": "全选 ({count})",
+  "invertSelection": "反选",
   "clear": "清空",
+  "providerFilterAll": "全部供应商",
+  "providerFilterPlaceholder": "按供应商筛选",
+  "exactMatchHint": "这里选中的模型会作为精确匹配规则加入白名单；前缀、后缀、关键词和正则规则仍在下方高级编辑区维护。",
+  "fallbackNotice": "当前无法获取上游模型列表，已自动切换到本地价格表目录。",
   "manualAdd": "手动添加模型",
   "manualPlaceholder": "输入模型名称（如 gpt-5-turbo）",
   "manualDesc": "支持添加任意模型名称（不限于价格表中的模型）",
@@ -16,5 +22,10 @@
   "sourceUpstreamDesc": "模型列表来自上游服务商 API",
   "sourceFallback": "本地",
   "sourceFallbackDesc": "使用本地价格表中的模型列表（上游获取失败或不支持）",
-  "refresh": "刷新模型列表"
+  "refresh": "刷新模型列表",
+  "selectedEditEmpty": "模型名称不能为空",
+  "selectedEditExists": "模型 \"{model}\" 已在白名单中",
+  "selectedGroupLabel": "已选精确规则",
+  "selectedListLabel": "已选白名单 ({count})",
+  "availableGroupLabel": "可选模型"
 }

@@ -5,6 +5,7 @@ const getSessionMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
 
 const publishProviderCacheInvalidationMock = vi.fn();
+const terminateStickySessionsForProvidersMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -16,6 +17,12 @@ vi.mock("@/repository/provider", () => ({
 
 vi.mock("@/lib/cache/provider-cache", () => ({
   publishProviderCacheInvalidation: publishProviderCacheInvalidationMock,
+}));
+
+vi.mock("@/lib/session-manager", () => ({
+  SessionManager: {
+    terminateStickySessionsForProviders: terminateStickySessionsForProvidersMock,
+  },
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -35,6 +42,7 @@ describe("batchUpdateProviders - advanced field mapping", () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     updateProvidersBatchMock.mockResolvedValue(2);
     publishProviderCacheInvalidationMock.mockResolvedValue(undefined);
+    terminateStickySessionsForProvidersMock.mockResolvedValue(undefined);
   });
 
   it("should still map basic fields correctly (backward compat)", async () => {
@@ -64,7 +72,10 @@ describe("batchUpdateProviders - advanced field mapping", () => {
   });
 
   it("should map model_redirects to repository modelRedirects", async () => {
-    const redirects = { "claude-3-opus": "claude-3.5-sonnet", "gpt-4": "gpt-4o" };
+    const redirects = [
+      { matchType: "exact", source: "claude-3-opus", target: "claude-3.5-sonnet" },
+      { matchType: "exact", source: "gpt-4", target: "gpt-4o" },
+    ];
 
     const { batchUpdateProviders } = await import("@/actions/providers");
     const result = await batchUpdateProviders({
@@ -91,6 +102,19 @@ describe("batchUpdateProviders - advanced field mapping", () => {
     });
   });
 
+  it("should reject unsafe regex model_redirects in direct batchUpdateProviders", async () => {
+    const { batchUpdateProviders } = await import("@/actions/providers");
+    const result = await batchUpdateProviders({
+      providerIds: [5],
+      updates: {
+        model_redirects: [{ matchType: "regex", source: "(a+)+", target: "glm-4.6" }],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(updateProvidersBatchMock).not.toHaveBeenCalled();
+  });
+
   it("should map allowed_models with values correctly", async () => {
     const { batchUpdateProviders } = await import("@/actions/providers");
     const result = await batchUpdateProviders({
@@ -100,8 +124,15 @@ describe("batchUpdateProviders - advanced field mapping", () => {
 
     expect(result.ok).toBe(true);
     expect(updateProvidersBatchMock).toHaveBeenCalledWith([1, 2], {
-      allowedModels: ["model-a", "model-b"],
+      allowedModels: [
+        { matchType: "exact", pattern: "model-a" },
+        { matchType: "exact", pattern: "model-b" },
+      ],
     });
+    expect(terminateStickySessionsForProvidersMock).toHaveBeenCalledWith(
+      [1, 2],
+      "batchUpdateProviders"
+    );
   });
 
   it("should normalize allowed_models=[] to null (allow-all)", async () => {
@@ -217,7 +248,7 @@ describe("batchUpdateProviders - advanced field mapping", () => {
         weight: 3,
         cost_multiplier: 0.8,
         group_tag: "mixed-batch",
-        model_redirects: { "old-model": "new-model" },
+        model_redirects: [{ matchType: "exact", source: "old-model", target: "new-model" }],
         allowed_models: ["claude-3-opus"],
         anthropic_thinking_budget_preference: "5000",
         anthropic_adaptive_thinking: adaptiveConfig,
@@ -234,8 +265,8 @@ describe("batchUpdateProviders - advanced field mapping", () => {
       weight: 3,
       costMultiplier: "0.8",
       groupTag: "mixed-batch",
-      modelRedirects: { "old-model": "new-model" },
-      allowedModels: ["claude-3-opus"],
+      modelRedirects: [{ matchType: "exact", source: "old-model", target: "new-model" }],
+      allowedModels: [{ matchType: "exact", pattern: "claude-3-opus" }],
       anthropicThinkingBudgetPreference: "5000",
       anthropicAdaptiveThinking: adaptiveConfig,
     });

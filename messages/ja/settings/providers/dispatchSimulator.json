@@ -1,0 +1,53 @@
+{
+  "button": "ルーティング検証",
+  "title": "モデルルーティングシミュレーター",
+  "description": "入力プロトコル、モデル名、プロバイダーグループに基づいて、完全な選定チェーンを再現します。",
+  "protocolLabel": "入力プロトコル",
+  "modelLabel": "入力モデル名",
+  "modelPlaceholder": "例: claude-opus-4-1",
+  "groupsLabel": "プロバイダーグループ",
+  "noGroups": "利用可能なプロバイダーグループはありません。",
+  "simulateButton": "シミュレート",
+  "errorTitle": "シミュレーション失敗",
+  "genericError": "ルーティングシミュレーターの実行に失敗しました",
+  "surviving": "通過中",
+  "filteredOut": "この段階で除外",
+  "none": "なし",
+  "finalCandidatesTitle": "最終候補",
+  "finalCandidatesDescription": "選択された優先度 {priority} の層には {count} 件のプロバイダーが残っています。",
+  "noCandidatesTitle": "候補なし",
+  "noCandidatesDescription": "この入力では、決定チェーンを最後まで通過するプロバイダーがありません。",
+  "selectedTier": "選択された層",
+  "tierTitle": "優先度 {priority}",
+  "tierProviderCount": "{count} 件のプロバイダー",
+  "filteredCount": "{count} 件除外",
+  "priorityBadge": "優先度 {value}",
+  "weightLabel": "重み {weight}",
+  "redirectPreview": "リダイレクト結果: {model}",
+  "endpointStats": "エンドポイント: 合計 {total}、有効 {enabled}、オープン {circuitOpen}、利用可 {available}",
+  "formats": {
+    "claude": "Claude",
+    "openai": "OpenAI",
+    "response": "Codex / Responses",
+    "gemini": "Gemini",
+    "geminiCli": "Gemini CLI"
+  },
+  "steps": {
+    "groupFilter": "グループフィルター",
+    "formatCompatibility": "フォーマット互換性",
+    "enabledCheck": "プロバイダー有効状態",
+    "activeTime": "有効時間帯",
+    "modelAllowlist": "モデル許可リスト",
+    "healthAndLimits": "サーキットと上限",
+    "priorityTiers": "優先度レイヤー",
+    "modelRedirect": "モデルリダイレクト確認",
+    "endpointSummary": "エンドポイント概要"
+  },
+  "notes": {
+    "no_group_filter": "プロバイダーグループが未選択のため、グループフィルターはスキップされました。",
+    "model_filter_skipped_for_resource_request": "モデル名がないため、リソース系リクエストとして許可リスト判定をスキップします。",
+    "redirect_preview_skipped_for_resource_request": "モデル名が未指定のため、リダイレクト確認をスキップします。",
+    "redirects_apply_after_provider_selection": "モデルリダイレクトはプロバイダー選択後に評価されます。",
+    "endpoint_status_does_not_change_provider_preselection": "エンドポイント状態は下流リスクとして表示され、現時点ではプロバイダー事前選択には影響しません。"
+  }
+}

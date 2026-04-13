@@ -14,6 +14,7 @@ import strings from "./strings.json";
 
 import providersAutoSort from "./providers/autoSort.json";
 import providersBatchEdit from "./providers/batchEdit.json";
+import providersDispatchSimulator from "./providers/dispatchSimulator.json";
 import providersFilter from "./providers/filter.json";
 import providersGuide from "./providers/guide.json";
 import providersInlineEdit from "./providers/inlineEdit.json";
@@ -27,6 +28,7 @@ import providersStrings from "./providers/strings.json";
 import providersTypes from "./providers/types.json";
 
 import providersFormApiTest from "./providers/form/apiTest.json";
+import providersFormAllowedModelRules from "./providers/form/allowedModelRules.json";
 import providersFormButtons from "./providers/form/buttons.json";
 import providersFormCommon from "./providers/form/common.json";
 import providersFormDeleteDialog from "./providers/form/deleteDialog.json";
@@ -34,6 +36,7 @@ import providersFormErrors from "./providers/form/errors.json";
 import providersFormFailureThresholdConfirmDialog from "./providers/form/failureThresholdConfirmDialog.json";
 import providersFormKey from "./providers/form/key.json";
 import providersFormMaxRetryAttempts from "./providers/form/maxRetryAttempts.json";
+import providersFormMatchTester from "./providers/form/matchTester.json";
 import providersFormModelRedirect from "./providers/form/modelRedirect.json";
 import providersFormModelSelect from "./providers/form/modelSelect.json";
 import providersFormName from "./providers/form/name.json";
@@ -52,12 +55,14 @@ const providersForm = {
   ...providersFormStrings,
   ...providersFormCommon,
   apiTest: providersFormApiTest,
+  allowedModelRules: providersFormAllowedModelRules,
   buttons: providersFormButtons,
   common: providersFormCommon,
   deleteDialog: providersFormDeleteDialog,
   errors: providersFormErrors,
   failureThresholdConfirmDialog: providersFormFailureThresholdConfirmDialog,
   key: providersFormKey,
+  matchTester: providersFormMatchTester,
   maxRetryAttempts: providersFormMaxRetryAttempts,
   modelRedirect: providersFormModelRedirect,
   modelSelect: providersFormModelSelect,
@@ -77,6 +82,7 @@ const providers = {
   ...providersStrings,
   autoSort: providersAutoSort,
   batchEdit: providersBatchEdit,
+  dispatchSimulator: providersDispatchSimulator,
   filter: providersFilter,
   form: providersForm,
   guide: providersGuide,
