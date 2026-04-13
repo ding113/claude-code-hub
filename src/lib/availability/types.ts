@@ -83,7 +83,7 @@ export interface ProviderAvailabilitySummary {
   providerType: string;
   /** Whether provider is enabled */
   isEnabled: boolean;
-  /** Current status based on recent requests */
+  /** Current status based on the most recent returned buckets */
   currentStatus: AvailabilityStatus;
   /** Availability ratio over the returned time buckets (currently kept equal to successRate for compatibility) */
   currentAvailability: number;
@@ -139,29 +139,4 @@ export interface AvailabilityQueryResult {
    * When maxBuckets trims older non-empty buckets, this may reflect a truncated sub-window.
    */
   systemAvailability: number;
-}
-
-/**
- * Raw request data from database
- */
-export interface RawRequestData {
-  id: number;
-  providerId: number;
-  statusCode: number | null;
-  durationMs: number | null;
-  errorMessage: string | null;
-  createdAt: Date | null;
-}
-
-/**
- * Aggregated bucket data from database
- */
-export interface AggregatedBucketData {
-  providerId: number;
-  bucketStart: Date;
-  totalRequests: number;
-  greenCount: number;
-  redCount: number;
-  avgLatencyMs: number;
-  latencies: number[];
 }

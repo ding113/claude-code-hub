@@ -53,6 +53,7 @@ const FINALIZED_REQUEST_STATUS_CODE_SQL = sql.raw(`"${FINALIZED_REQUEST_STATUS_C
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
+const CURRENT_PROVIDER_STATUS_WINDOW_MINUTES = 15;
 export const MAX_AVAILABILITY_QUERY_RANGE_DAYS =
   (MAX_BUCKETS_HARD_LIMIT * MAX_BUCKET_SIZE_MINUTES) / (24 * 60);
 const MAX_AVAILABILITY_QUERY_RANGE_MS =
@@ -104,6 +105,14 @@ function buildTimestampUpperBound(
   fieldName: string
 ) {
   return sql`${column} <= CAST(${assertValidDate(date, fieldName).toISOString()} AS timestamptz)`;
+}
+
+function buildRelativeNowLowerBound(column: typeof messageRequest.createdAt, minutes: number) {
+  return sql`${column} >= NOW() - (${sql.raw(String(minutes))} * INTERVAL '1 minute')`;
+}
+
+function buildNowUpperBound(column: typeof messageRequest.createdAt) {
+  return sql`${column} <= NOW()`;
 }
 
 function buildAvailabilityRequestConditions(input: {
@@ -194,12 +203,9 @@ export function calculateAvailabilityScore(greenCount: number, redCount: number)
 }
 
 /**
- * Determine optimal time bucket size based on data density
+ * Determine optimal time bucket size based on time range
  */
-export function determineOptimalBucketSize(
-  _totalRequests: number,
-  timeRangeMinutes: number
-): number {
+export function determineOptimalBucketSize(timeRangeMinutes: number): number {
   // Target: 20-100 data points per time series for good visualization
   const targetBuckets = 50;
   const idealBucketMinutes = timeRangeMinutes / targetBuckets;
@@ -218,11 +224,18 @@ export function determineOptimalBucketSize(
 
 function sanitizeBucketSizeMinutes(
   explicitBucketSize: number | undefined,
-  timeRangeMinutes: number
+  timeRangeMinutes: number,
+  maxBuckets: number
 ): number {
-  const fallbackBucketSize = determineOptimalBucketSize(0, timeRangeMinutes);
+  const fallbackBucketSize = determineOptimalBucketSize(timeRangeMinutes);
   const safeFallbackBucketSize =
     Number.isFinite(fallbackBucketSize) && fallbackBucketSize > 0 ? fallbackBucketSize : 60;
+  const minimumBudgetBucketSize =
+    timeRangeMinutes > 0 ? timeRangeMinutes / Math.max(1, maxBuckets) : MIN_BUCKET_SIZE_MINUTES;
+  const clampedMinimumBudgetBucketSize = Math.min(
+    MAX_BUCKET_SIZE_MINUTES,
+    Math.max(MIN_BUCKET_SIZE_MINUTES, minimumBudgetBucketSize)
+  );
 
   if (
     typeof explicitBucketSize !== "number" ||
@@ -231,11 +244,22 @@ function sanitizeBucketSizeMinutes(
   ) {
     return Math.min(
       MAX_BUCKET_SIZE_MINUTES,
-      Math.max(MIN_BUCKET_SIZE_MINUTES, safeFallbackBucketSize)
+      Math.max(MIN_BUCKET_SIZE_MINUTES, safeFallbackBucketSize, clampedMinimumBudgetBucketSize)
     );
   }
 
-  return Math.min(MAX_BUCKET_SIZE_MINUTES, Math.max(MIN_BUCKET_SIZE_MINUTES, explicitBucketSize));
+  const normalizedExplicitBucketSize = Math.min(
+    MAX_BUCKET_SIZE_MINUTES,
+    Math.max(MIN_BUCKET_SIZE_MINUTES, explicitBucketSize)
+  );
+
+  if (timeRangeMinutes > normalizedExplicitBucketSize * maxBuckets) {
+    throw new AvailabilityQueryValidationError(
+      "Invalid bucket configuration: requested range exceeds the bucket budget implied by bucketSizeMinutes and maxBuckets"
+    );
+  }
+
+  return normalizedExplicitBucketSize;
 }
 
 function sanitizeMaxBuckets(maxBuckets: number | undefined): number {
@@ -283,10 +307,14 @@ export async function queryProviderAvailability(
   const endDate = parseAvailabilityDate(endTime, "endTime");
   validateAvailabilityTimeRange(startDate, endDate);
   const timeRangeMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60);
-  const bucketSizeMinutes = sanitizeBucketSizeMinutes(explicitBucketSize, timeRangeMinutes);
+  const sanitizedMaxBuckets = sanitizeMaxBuckets(maxBuckets);
+  const bucketSizeMinutes = sanitizeBucketSizeMinutes(
+    explicitBucketSize,
+    timeRangeMinutes,
+    sanitizedMaxBuckets
+  );
   const bucketSizeMs = bucketSizeMinutes * 60 * 1000;
   const bucketSizeSeconds = bucketSizeMinutes * 60;
-  const sanitizedMaxBuckets = sanitizeMaxBuckets(maxBuckets);
 
   // Get provider list
   const providerConditions = [isNull(providers.deletedAt)];
@@ -451,7 +479,9 @@ export async function queryProviderAvailability(
     const totalRequests = totalGreen + totalRed;
     const returnedBucketAvailability = calculateAvailabilityScore(totalGreen, totalRed);
 
-    // Determine current status based on last few buckets
+    // Determine current status from the most recent returned buckets.
+    // Because older non-empty buckets may already be trimmed by maxBuckets,
+    // this intentionally reflects the truncated tail window rather than the full query range.
     // IMPORTANT: No data = 'unknown', NOT 'green'! Must be honest.
     let currentStatus: AvailabilityStatus = "unknown";
     if (timeBuckets.length > 0) {
@@ -516,10 +546,6 @@ export async function getCurrentProviderStatus(): Promise<
     lastRequestAt: string | null;
   }>
 > {
-  // Query last 15 minutes of data for current status
-  const now = new Date();
-  const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-
   // Get enabled providers
   const providerList = await db
     .select({
@@ -534,11 +560,13 @@ export async function getCurrentProviderStatus(): Promise<
   }
 
   const providerIdList = providerList.map((provider) => provider.id);
-  const requestConditions = buildAvailabilityRequestConditions({
-    providerIds: providerIdList,
-    startDate: fifteenMinutesAgo,
-    endDate: now,
-  });
+  const requestConditions = and(
+    inArray(messageRequest.providerId, providerIdList),
+    buildRelativeNowLowerBound(messageRequest.createdAt, CURRENT_PROVIDER_STATUS_WINDOW_MINUTES),
+    buildNowUpperBound(messageRequest.createdAt),
+    isNull(messageRequest.deletedAt),
+    buildAvailabilityFinalizedCondition()
+  );
 
   const aggregateQuery = sql<AggregatedCurrentProviderStatusRow>`
     SELECT

@@ -184,6 +184,64 @@ describe("availability-service", () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
+  it("queryProviderAvailability 在显式 bucket 配置超出 maxBuckets 预算时直接报错且不访问数据库", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: new Date("2026-04-13T07:00:00.000Z"),
+        endTime: new Date("2026-04-13T09:00:00.000Z"),
+        bucketSizeMinutes: 1,
+        maxBuckets: 100,
+      })
+    ).rejects.toThrow("Invalid bucket configuration");
+
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("queryProviderAvailability 在自动分桶且 maxBuckets 较小时会上调 bucket 以匹配预算", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: new Date("2026-04-13T00:00:00.000Z"),
+        endTime: new Date("2026-04-14T00:00:00.000Z"),
+        maxBuckets: 10,
+      })
+    ).resolves.toEqual({
+      queriedAt: expect.any(String),
+      startTime: "2026-04-13T00:00:00.000Z",
+      endTime: "2026-04-14T00:00:00.000Z",
+      bucketSizeMinutes: 144,
+      providers: [],
+      systemAvailability: 0,
+    });
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
   it("queryProviderAvailability 改为数据库聚合后仍只统计终态请求", async () => {
     const selectMock = vi.fn(() =>
       createThenableQuery([
@@ -596,7 +654,8 @@ describe("availability-service", () => {
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     expect(queryText).toMatch(/where .*status_?code.*is not null/);
-    expect(queryText).toMatch(/where .*created_?at.*>= .*and .*created_?at.*<=/);
+    expect(queryText).toContain(">= now() - (15 * interval '1 minute')");
+    expect(queryText).toContain("<= now()");
     expect(queryText).toContain("count(*) filter");
     expect(queryText).toContain("max(");
   });
