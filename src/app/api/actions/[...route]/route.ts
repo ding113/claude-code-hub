@@ -2157,14 +2157,25 @@ app.get(
   })
 );
 
-// 健康检查端点
-app.get("/health", (c) =>
-  c.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    version: "1.0.0",
-  })
-);
+// 健康检查端点 (保持旧格式兼容，详细探针请用 /api/health/ready)
+app.get("/health", async (c) => {
+  try {
+    const { checkReadiness, getAppVersion } = await import("@/lib/health/checker");
+    const health = await checkReadiness();
+    return c.json({
+      status: health.status === "unhealthy" ? "error" : "ok",
+      timestamp: health.timestamp,
+      version: getAppVersion(),
+      details: health,
+    });
+  } catch {
+    return c.json({
+      status: "error",
+      timestamp: new Date().toISOString(),
+      version: "unknown",
+    });
+  }
+});
 
 // 导出处理器 (Vercel Edge Functions 格式)
 export const GET = handle(app);
