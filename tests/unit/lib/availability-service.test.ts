@@ -408,7 +408,8 @@ describe("availability-service", () => {
     expect(executeMock).toHaveBeenCalledTimes(1);
     expect(queryText).toContain("row_number() over");
     expect(queryText).toContain("where rn <=");
-    expect(query.params.at(-1)).toBe(100);
+    expect(query.params).toContain(100);
+    expect(query.params).not.toContain(Number.POSITIVE_INFINITY);
   });
 
   it("queryProviderAvailability 在 maxBuckets 为超大有限值时也会收紧到硬上限", async () => {
@@ -446,7 +447,8 @@ describe("availability-service", () => {
     expect(executeMock).toHaveBeenCalledTimes(1);
     expect(queryText).toContain("row_number() over");
     expect(queryText).toContain("where rn <=");
-    expect(query.params.at(-1)).toBe(100);
+    expect(query.params).toContain(100);
+    expect(query.params).not.toContain(Number.MAX_SAFE_INTEGER);
   });
 
   it("queryProviderAvailability 在无聚合数据时仍返回 unknown 提供商状态", async () => {

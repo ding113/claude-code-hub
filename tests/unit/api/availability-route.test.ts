@@ -19,6 +19,7 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/availability", () => ({
   AvailabilityQueryValidationError: MockAvailabilityQueryValidationError,
+  MIN_BUCKET_SIZE_MINUTES: 0.25,
   MAX_BUCKETS_HARD_LIMIT: 100,
   MAX_BUCKET_SIZE_MINUTES: 1440,
   queryProviderAvailability: mockQueryProviderAvailability,
@@ -126,6 +127,16 @@ describe("GET /api/availability", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: "Invalid bucketSizeMinutes: expected a positive number",
+    });
+    expect(mockQueryProviderAvailability).not.toHaveBeenCalled();
+  });
+
+  it("bucketSizeMinutes 低于最小值时返回 400 且不访问 service", async () => {
+    const res = await GET(makeRequest("bucketSizeMinutes=0.001"));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "Invalid bucketSizeMinutes: expected a positive number not less than 0.25",
     });
     expect(mockQueryProviderAvailability).not.toHaveBeenCalled();
   });

@@ -6,7 +6,7 @@
  *   - startTime: ISO string, start of query range (default: 24h ago)
  *   - endTime: ISO string, end of query range (default: now)
  *   - providerIds: comma-separated provider IDs (default: all)
- *   - bucketSizeMinutes: number, time bucket size (default: auto, hard cap: 1440)
+ *   - bucketSizeMinutes: number, time bucket size (default: auto, min: 0.25, hard cap: 1440)
  *   - includeDisabled: boolean, include disabled providers (default: false)
  *   - maxBuckets: number, max non-empty time buckets per provider (default: 100, hard cap: 100)
  */
@@ -18,6 +18,7 @@ import {
   AvailabilityQueryValidationError,
   MAX_BUCKET_SIZE_MINUTES,
   MAX_BUCKETS_HARD_LIMIT,
+  MIN_BUCKET_SIZE_MINUTES,
   queryProviderAvailability,
 } from "@/lib/availability";
 
@@ -55,16 +56,25 @@ function parsePositiveIntegerQueryParam(
 function parsePositiveNumberQueryParam(
   value: string,
   fieldName: string,
-  maxValue?: number
+  bounds?: {
+    minValue?: number;
+    maxValue?: number;
+  }
 ): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new AvailabilityQueryValidationError(`Invalid ${fieldName}: expected a positive number`);
   }
 
-  if (typeof maxValue === "number" && parsed > maxValue) {
+  if (typeof bounds?.minValue === "number" && parsed < bounds.minValue) {
     throw new AvailabilityQueryValidationError(
-      `Invalid ${fieldName}: expected a positive number not greater than ${maxValue}`
+      `Invalid ${fieldName}: expected a positive number not less than ${bounds.minValue}`
+    );
+  }
+
+  if (typeof bounds?.maxValue === "number" && parsed > bounds.maxValue) {
+    throw new AvailabilityQueryValidationError(
+      `Invalid ${fieldName}: expected a positive number not greater than ${bounds.maxValue}`
     );
   }
 
@@ -130,7 +140,10 @@ export async function GET(request: NextRequest) {
       options.bucketSizeMinutes = parsePositiveNumberQueryParam(
         bucketSizeMinutes,
         "bucketSizeMinutes",
-        MAX_BUCKET_SIZE_MINUTES
+        {
+          minValue: MIN_BUCKET_SIZE_MINUTES,
+          maxValue: MAX_BUCKET_SIZE_MINUTES,
+        }
       );
     }
 

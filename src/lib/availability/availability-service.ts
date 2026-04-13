@@ -37,7 +37,7 @@ type AggregatedCurrentProviderStatusRow = {
   lastRequestAt: Date | null;
 };
 
-const MIN_BUCKET_SIZE_MINUTES = 0.25;
+export const MIN_BUCKET_SIZE_MINUTES = 0.25;
 export const MAX_BUCKET_SIZE_MINUTES = 1440;
 const DEFAULT_MAX_BUCKETS = 100;
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
