@@ -19,6 +19,7 @@ export {
   classifyRequestStatus,
   determineOptimalBucketSize,
   getCurrentProviderStatus,
+  MAX_BUCKET_SIZE_MINUTES,
   queryProviderAvailability,
 } from "./availability-service";
 export * from "./types";

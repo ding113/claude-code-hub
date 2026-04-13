@@ -109,7 +109,7 @@ export interface AvailabilityQueryOptions {
   endTime?: string | Date;
   /** Provider IDs to filter (empty = all providers) */
   providerIds?: number[];
-  /** Time bucket size in minutes */
+  /** Time bucket size in minutes (hard capped at 1440) */
   bucketSizeMinutes?: number;
   /** Whether to include disabled providers */
   includeDisabled?: boolean;

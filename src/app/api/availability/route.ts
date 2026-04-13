@@ -6,7 +6,7 @@
  *   - startTime: ISO string, start of query range (default: 24h ago)
  *   - endTime: ISO string, end of query range (default: now)
  *   - providerIds: comma-separated provider IDs (default: all)
- *   - bucketSizeMinutes: number, time bucket size (default: auto)
+ *   - bucketSizeMinutes: number, time bucket size (default: auto, hard cap: 1440)
  *   - includeDisabled: boolean, include disabled providers (default: false)
  *   - maxBuckets: number, max non-empty time buckets per provider (default: 100, hard cap: 100)
  */
@@ -16,6 +16,7 @@ import { getSession } from "@/lib/auth";
 import {
   type AvailabilityQueryOptions,
   AvailabilityQueryValidationError,
+  MAX_BUCKET_SIZE_MINUTES,
   queryProviderAvailability,
 } from "@/lib/availability";
 
@@ -40,10 +41,20 @@ function parsePositiveIntegerQueryParam(value: string, fieldName: string): numbe
   return parsed;
 }
 
-function parsePositiveNumberQueryParam(value: string, fieldName: string): number {
+function parsePositiveNumberQueryParam(
+  value: string,
+  fieldName: string,
+  maxValue?: number
+): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new AvailabilityQueryValidationError(`Invalid ${fieldName}: expected a positive number`);
+  }
+
+  if (typeof maxValue === "number" && parsed > maxValue) {
+    throw new AvailabilityQueryValidationError(
+      `Invalid ${fieldName}: expected a positive number not greater than ${maxValue}`
+    );
   }
 
   return parsed;
@@ -107,7 +118,8 @@ export async function GET(request: NextRequest) {
     if (bucketSizeMinutes !== null) {
       options.bucketSizeMinutes = parsePositiveNumberQueryParam(
         bucketSizeMinutes,
-        "bucketSizeMinutes"
+        "bucketSizeMinutes",
+        MAX_BUCKET_SIZE_MINUTES
       );
     }
 

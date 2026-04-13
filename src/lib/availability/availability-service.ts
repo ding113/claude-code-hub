@@ -38,8 +38,10 @@ type AggregatedCurrentProviderStatusRow = {
 };
 
 const MIN_BUCKET_SIZE_MINUTES = 0.25;
+export const MAX_BUCKET_SIZE_MINUTES = 1440;
 const DEFAULT_MAX_BUCKETS = 100;
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
+// It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 const MAX_BUCKETS_HARD_LIMIT = 100;
 
 export class AvailabilityQueryValidationError extends Error {
@@ -195,10 +197,13 @@ function sanitizeBucketSizeMinutes(
     !Number.isFinite(explicitBucketSize) ||
     explicitBucketSize <= 0
   ) {
-    return Math.max(MIN_BUCKET_SIZE_MINUTES, safeFallbackBucketSize);
+    return Math.min(
+      MAX_BUCKET_SIZE_MINUTES,
+      Math.max(MIN_BUCKET_SIZE_MINUTES, safeFallbackBucketSize)
+    );
   }
 
-  return Math.max(MIN_BUCKET_SIZE_MINUTES, explicitBucketSize);
+  return Math.min(MAX_BUCKET_SIZE_MINUTES, Math.max(MIN_BUCKET_SIZE_MINUTES, explicitBucketSize));
 }
 
 function sanitizeMaxBuckets(maxBuckets: number | undefined): number {
