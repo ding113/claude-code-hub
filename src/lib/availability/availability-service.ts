@@ -486,9 +486,9 @@ export async function queryProviderAvailability(
     let currentStatus: AvailabilityStatus = "unknown";
     if (timeBuckets.length > 0) {
       const recentBuckets = timeBuckets.slice(-3); // Last 3 buckets
-      const recentScore =
-        recentBuckets.reduce((sum, bucket) => sum + bucket.availabilityScore, 0) /
-        recentBuckets.length;
+      const recentGreen = recentBuckets.reduce((sum, bucket) => sum + bucket.greenCount, 0);
+      const recentRed = recentBuckets.reduce((sum, bucket) => sum + bucket.redCount, 0);
+      const recentScore = calculateAvailabilityScore(recentGreen, recentRed);
 
       // Simple: >= 50% success = green, otherwise red
       currentStatus = recentScore >= 0.5 ? "green" : "red";

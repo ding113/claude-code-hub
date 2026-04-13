@@ -315,6 +315,69 @@ describe("availability-service", () => {
     expect(queryText).toContain("row_number() over");
   });
 
+  it("queryProviderAvailability 计算 currentStatus 时会按最近 buckets 的请求量加权", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => [
+      {
+        providerId: 1,
+        bucketStart: new Date("2026-04-13T08:00:00.000Z"),
+        greenCount: 1,
+        redCount: 0,
+        latencyCount: 1,
+        latencySumMs: 100,
+        avgLatencyMs: 100,
+        p50LatencyMs: 100,
+        p95LatencyMs: 100,
+        p99LatencyMs: 100,
+        lastRequestAt: new Date("2026-04-13T08:00:30.000Z"),
+      },
+      {
+        providerId: 1,
+        bucketStart: new Date("2026-04-13T09:00:00.000Z"),
+        greenCount: 0,
+        redCount: 100,
+        latencyCount: 100,
+        latencySumMs: 20000,
+        avgLatencyMs: 200,
+        p50LatencyMs: 200,
+        p95LatencyMs: 250,
+        p99LatencyMs: 300,
+        lastRequestAt: new Date("2026-04-13T09:59:59.000Z"),
+      },
+    ]);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    const result = await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T10:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    expect(result.providers[0]).toMatchObject({
+      providerId: 1,
+      totalRequests: 101,
+      currentAvailability: 1 / 101,
+      currentStatus: "red",
+      lastRequestAt: "2026-04-13T09:59:59.000Z",
+    });
+  });
+
   it("queryProviderAvailability 在 bucketSizeMinutes 为 Infinity 时回退到自动分桶", async () => {
     const selectMock = vi.fn(() =>
       createThenableQuery([
