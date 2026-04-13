@@ -434,7 +434,7 @@ export async function queryProviderAvailability(
     });
   }
 
-  // Calculate system-wide availability
+  // Calculate system-wide availability from the buckets returned after per-provider trimming.
   const totalSystemRequests = providerSummaries.reduce(
     (sum, provider) => sum + provider.totalRequests,
     0

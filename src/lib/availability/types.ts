@@ -113,7 +113,10 @@ export interface AvailabilityQueryOptions {
   bucketSizeMinutes?: number;
   /** Whether to include disabled providers */
   includeDisabled?: boolean;
-  /** Maximum number of non-empty time buckets to return per provider (hard capped at 100) */
+  /**
+   * Maximum number of non-empty time buckets to return per provider (hard capped at 100).
+   * Summary metrics in the response only reflect the returned buckets after this trimming.
+   */
   maxBuckets?: number;
 }
 
@@ -131,7 +134,10 @@ export interface AvailabilityQueryResult {
   bucketSizeMinutes: number;
   /** Provider summaries */
   providers: ProviderAvailabilitySummary[];
-  /** Overall system availability (weighted average) */
+  /**
+   * Overall system availability weighted over the returned provider buckets.
+   * When maxBuckets trims older non-empty buckets, this may reflect a truncated sub-window.
+   */
   systemAvailability: number;
 }
 
