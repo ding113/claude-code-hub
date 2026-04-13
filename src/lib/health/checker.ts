@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { NextResponse } from "next/server";
 import { db } from "@/drizzle/db";
 import { getRedisClient } from "@/lib/redis/client";
 import { APP_VERSION } from "@/lib/version";
@@ -18,7 +19,7 @@ const DB_CHECK_TIMEOUT_MS = 3_000;
 const REDIS_CHECK_TIMEOUT_MS = 2_000;
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
       () => reject(new Error(`${label} health check timed out after ${timeoutMs}ms`)),
@@ -28,7 +29,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   try {
     return await Promise.race([promise, timeout]);
   } finally {
-    clearTimeout(timer!);
+    clearTimeout(timer);
   }
 }
 
@@ -53,9 +54,18 @@ export async function checkDatabase(): Promise<ComponentHealth> {
 export async function checkRedis(): Promise<ComponentHealth> {
   const start = performance.now();
   try {
+    const redisUrl = process.env.REDIS_URL?.trim();
+    if (!redisUrl) {
+      return { status: "unchecked", message: "Redis not configured" };
+    }
+
     const client = getRedisClient({ allowWhenRateLimitDisabled: true });
     if (!client) {
-      return { status: "unchecked", message: "Redis not configured" };
+      return {
+        status: "down",
+        latencyMs: Math.round(performance.now() - start),
+        message: "Redis client initialization failed",
+      };
     }
     if (client.status === "end" || client.status === "close") {
       return {
@@ -126,4 +136,24 @@ export async function checkReadiness(): Promise<HealthCheckResponse> {
     uptime: Math.round(process.uptime()),
     components: { database, redis, proxy },
   };
+}
+
+// -- 共享路由 handler --
+
+export async function handleReadinessRequest(action: string): Promise<NextResponse> {
+  try {
+    const health = await checkReadiness();
+    const httpStatus = health.status === "unhealthy" ? 503 : 200;
+    return NextResponse.json(health, { status: httpStatus });
+  } catch (error) {
+    const { logger } = await import("@/lib/logger");
+    logger.error({
+      action,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json(
+      { status: "unhealthy", timestamp: new Date().toISOString(), error: "Health check failed" },
+      { status: 503 }
+    );
+  }
 }

@@ -2157,14 +2157,23 @@ app.get(
   })
 );
 
-// 健康检查端点 (委托给核心逻辑，支持 K8s 探针)
+// 健康检查端点 (保持旧格式兼容，详细探针请用 /api/health/ready)
 app.get("/health", async (c) => {
   try {
-    const { checkReadiness } = await import("@/lib/health/checker");
+    const { checkReadiness, getAppVersion } = await import("@/lib/health/checker");
     const health = await checkReadiness();
-    return c.json(health, health.status === "unhealthy" ? 503 : 200);
+    return c.json({
+      status: health.status === "unhealthy" ? "error" : "ok",
+      timestamp: health.timestamp,
+      version: getAppVersion(),
+      details: health,
+    });
   } catch {
-    return c.json({ status: "unhealthy", timestamp: new Date().toISOString() }, 503);
+    return c.json({
+      status: "error",
+      timestamp: new Date().toISOString(),
+      version: "unknown",
+    });
   }
 });
 

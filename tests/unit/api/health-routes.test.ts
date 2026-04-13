@@ -3,17 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // -- mocks --
 
 const mocks = vi.hoisted(() => ({
-  checkReadiness: vi.fn(),
-  loggerError: vi.fn(),
+  handleReadinessRequest: vi.fn(),
 }));
 
 vi.mock("@/lib/health/checker", () => ({
-  checkReadiness: mocks.checkReadiness,
+  handleReadinessRequest: mocks.handleReadinessRequest,
 }));
 
-vi.mock("@/lib/logger", () => ({
-  logger: { error: mocks.loggerError },
-}));
+// helper: create NextResponse-like object
+function jsonResponse(body: Record<string, unknown>, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 // -- liveness --
 
@@ -42,17 +45,9 @@ describe("GET /api/health/ready", () => {
   });
 
   it("returns 200 for healthy", async () => {
-    mocks.checkReadiness.mockResolvedValue({
-      status: "healthy",
-      timestamp: "2026-04-13T00:00:00.000Z",
-      version: "0.6.8",
-      uptime: 100,
-      components: {
-        database: { status: "up", latencyMs: 1 },
-        redis: { status: "up", latencyMs: 1 },
-        proxy: { status: "up", latencyMs: 1 },
-      },
-    });
+    mocks.handleReadinessRequest.mockResolvedValue(
+      jsonResponse({ status: "healthy", version: "0.6.8" }, 200)
+    );
     const { GET } = await import("@/app/api/health/ready/route");
     const response = await GET();
     expect(response.status).toBe(200);
@@ -61,17 +56,9 @@ describe("GET /api/health/ready", () => {
   });
 
   it("returns 200 for degraded", async () => {
-    mocks.checkReadiness.mockResolvedValue({
-      status: "degraded",
-      timestamp: "2026-04-13T00:00:00.000Z",
-      version: "0.6.8",
-      uptime: 100,
-      components: {
-        database: { status: "up", latencyMs: 1 },
-        redis: { status: "down", message: "timeout" },
-        proxy: { status: "up", latencyMs: 1 },
-      },
-    });
+    mocks.handleReadinessRequest.mockResolvedValue(
+      jsonResponse({ status: "degraded", version: "0.6.8" }, 200)
+    );
     const { GET } = await import("@/app/api/health/ready/route");
     const response = await GET();
     expect(response.status).toBe(200);
@@ -80,26 +67,7 @@ describe("GET /api/health/ready", () => {
   });
 
   it("returns 503 for unhealthy", async () => {
-    mocks.checkReadiness.mockResolvedValue({
-      status: "unhealthy",
-      timestamp: "2026-04-13T00:00:00.000Z",
-      version: "0.6.8",
-      uptime: 100,
-      components: {
-        database: { status: "down", message: "connection refused" },
-        redis: { status: "up", latencyMs: 1 },
-        proxy: { status: "up", latencyMs: 1 },
-      },
-    });
-    const { GET } = await import("@/app/api/health/ready/route");
-    const response = await GET();
-    expect(response.status).toBe(503);
-    const body = await response.json();
-    expect(body.status).toBe("unhealthy");
-  });
-
-  it("returns 503 when checkReadiness throws", async () => {
-    mocks.checkReadiness.mockRejectedValue(new Error("unexpected"));
+    mocks.handleReadinessRequest.mockResolvedValue(jsonResponse({ status: "unhealthy" }, 503));
     const { GET } = await import("@/app/api/health/ready/route");
     const response = await GET();
     expect(response.status).toBe(503);
@@ -117,34 +85,16 @@ describe("GET /api/health", () => {
   });
 
   it("returns 200 for healthy", async () => {
-    mocks.checkReadiness.mockResolvedValue({
-      status: "healthy",
-      timestamp: "2026-04-13T00:00:00.000Z",
-      version: "0.6.8",
-      uptime: 100,
-      components: {
-        database: { status: "up", latencyMs: 1 },
-        redis: { status: "up", latencyMs: 1 },
-        proxy: { status: "up", latencyMs: 1 },
-      },
-    });
+    mocks.handleReadinessRequest.mockResolvedValue(
+      jsonResponse({ status: "healthy", version: "0.6.8" }, 200)
+    );
     const { GET } = await import("@/app/api/health/route");
     const response = await GET();
     expect(response.status).toBe(200);
   });
 
   it("returns 503 for unhealthy", async () => {
-    mocks.checkReadiness.mockResolvedValue({
-      status: "unhealthy",
-      timestamp: "2026-04-13T00:00:00.000Z",
-      version: "0.6.8",
-      uptime: 100,
-      components: {
-        database: { status: "down", message: "connection refused" },
-        redis: { status: "down", message: "timeout" },
-        proxy: { status: "down", message: "middleware crashed" },
-      },
-    });
+    mocks.handleReadinessRequest.mockResolvedValue(jsonResponse({ status: "unhealthy" }, 503));
     const { GET } = await import("@/app/api/health/route");
     const response = await GET();
     expect(response.status).toBe(503);
