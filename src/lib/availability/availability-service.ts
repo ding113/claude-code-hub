@@ -37,6 +37,9 @@ type AggregatedCurrentProviderStatusRow = {
   lastRequestAt: Date | null;
 };
 
+const MIN_BUCKET_SIZE_MINUTES = 0.25;
+const DEFAULT_MAX_BUCKETS = 100;
+
 /**
  * 当前版本把“已终态”收敛为 `statusCode` 已落库。
  *
@@ -47,12 +50,32 @@ function buildAvailabilityFinalizedCondition() {
   return isNotNull(messageRequest.statusCode);
 }
 
-function buildTimestampLowerBound(column: typeof messageRequest.createdAt, date: Date) {
-  return sql`${column} >= CAST(${date.toISOString()} AS timestamptz)`;
+function assertValidDate(date: Date, fieldName: string): Date {
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error(`Invalid ${fieldName}: expected a valid Date or ISO timestamp`);
+  }
+
+  return date;
 }
 
-function buildTimestampUpperBound(column: typeof messageRequest.createdAt, date: Date) {
-  return sql`${column} <= CAST(${date.toISOString()} AS timestamptz)`;
+function parseAvailabilityDate(value: Date | string, fieldName: string): Date {
+  return assertValidDate(typeof value === "string" ? new Date(value) : value, fieldName);
+}
+
+function buildTimestampLowerBound(
+  column: typeof messageRequest.createdAt,
+  date: Date,
+  fieldName: string
+) {
+  return sql`${column} >= CAST(${assertValidDate(date, fieldName).toISOString()} AS timestamptz)`;
+}
+
+function buildTimestampUpperBound(
+  column: typeof messageRequest.createdAt,
+  date: Date,
+  fieldName: string
+) {
+  return sql`${column} <= CAST(${assertValidDate(date, fieldName).toISOString()} AS timestamptz)`;
 }
 
 function buildAvailabilityRequestConditions(input: {
@@ -62,13 +85,13 @@ function buildAvailabilityRequestConditions(input: {
 }) {
   const conditions = [
     inArray(messageRequest.providerId, input.providerIds),
-    buildTimestampLowerBound(messageRequest.createdAt, input.startDate),
+    buildTimestampLowerBound(messageRequest.createdAt, input.startDate, "startTime"),
     isNull(messageRequest.deletedAt),
     buildAvailabilityFinalizedCondition(),
   ];
 
   if (input.endDate) {
-    conditions.push(buildTimestampUpperBound(messageRequest.createdAt, input.endDate));
+    conditions.push(buildTimestampUpperBound(messageRequest.createdAt, input.endDate, "endTime"));
   }
 
   return and(...conditions);
@@ -148,6 +171,33 @@ export function determineOptimalBucketSize(
   return 1440; // Default to daily for very long ranges
 }
 
+function sanitizeBucketSizeMinutes(
+  explicitBucketSize: number | undefined,
+  timeRangeMinutes: number
+): number {
+  const fallbackBucketSize = determineOptimalBucketSize(0, timeRangeMinutes);
+  const safeFallbackBucketSize =
+    Number.isFinite(fallbackBucketSize) && fallbackBucketSize > 0 ? fallbackBucketSize : 60;
+
+  if (
+    typeof explicitBucketSize !== "number" ||
+    !Number.isFinite(explicitBucketSize) ||
+    explicitBucketSize <= 0
+  ) {
+    return Math.max(MIN_BUCKET_SIZE_MINUTES, safeFallbackBucketSize);
+  }
+
+  return Math.max(MIN_BUCKET_SIZE_MINUTES, explicitBucketSize);
+}
+
+function sanitizeMaxBuckets(maxBuckets: number | undefined): number {
+  if (typeof maxBuckets !== "number" || !Number.isFinite(maxBuckets) || maxBuckets <= 0) {
+    return DEFAULT_MAX_BUCKETS;
+  }
+
+  return Math.max(1, Math.floor(maxBuckets));
+}
+
 /**
  * Query availability data for providers
  */
@@ -164,9 +214,13 @@ export async function queryProviderAvailability(
     maxBuckets = 100,
   } = options;
 
-  const startDate = typeof startTime === "string" ? new Date(startTime) : startTime;
-  const endDate = typeof endTime === "string" ? new Date(endTime) : endTime;
+  const startDate = parseAvailabilityDate(startTime, "startTime");
+  const endDate = parseAvailabilityDate(endTime, "endTime");
   const timeRangeMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60);
+  const bucketSizeMinutes = sanitizeBucketSizeMinutes(explicitBucketSize, timeRangeMinutes);
+  const bucketSizeMs = bucketSizeMinutes * 60 * 1000;
+  const bucketSizeSeconds = bucketSizeMinutes * 60;
+  const sanitizedMaxBuckets = sanitizeMaxBuckets(maxBuckets);
 
   // Get provider list
   const providerConditions = [isNull(providers.deletedAt)];
@@ -192,28 +246,18 @@ export async function queryProviderAvailability(
       queriedAt: now.toISOString(),
       startTime: startDate.toISOString(),
       endTime: endDate.toISOString(),
-      bucketSizeMinutes: explicitBucketSize ?? 60,
+      bucketSizeMinutes,
       providers: [],
       systemAvailability: 0,
     };
   }
 
   const providerIdList = providerList.map((provider) => provider.id);
-
-  // Ensure minimum bucket size of 0.25 minutes (15 seconds) to prevent division by zero
-  // Handle NaN case (nullish coalescing doesn't catch NaN from invalid parseFloat input)
-  const rawBucketSize = explicitBucketSize ?? determineOptimalBucketSize(0, timeRangeMinutes);
-  const bucketSizeMinutes = Number.isNaN(rawBucketSize)
-    ? determineOptimalBucketSize(0, timeRangeMinutes)
-    : Math.max(0.25, rawBucketSize);
-  const bucketSizeMs = bucketSizeMinutes * 60 * 1000;
-  const bucketSizeSeconds = bucketSizeMinutes * 60;
   const requestConditions = buildAvailabilityRequestConditions({
     providerIds: providerIdList,
     startDate,
     endDate,
   });
-  const shouldLimitBuckets = Number.isFinite(maxBuckets) && maxBuckets > 0;
 
   const availabilityAggregationCtes = sql`
     finalized_requests AS (
@@ -258,49 +302,31 @@ export async function queryProviderAvailability(
     )
   `;
 
-  const bucketQuery = shouldLimitBuckets
-    ? sql<AggregatedAvailabilityBucketRow>`
-        WITH
-          ${availabilityAggregationCtes},
-          limited_provider_bucket_stats AS (
-            SELECT
-              *,
-              ROW_NUMBER() OVER (PARTITION BY "providerId" ORDER BY "bucketStart" DESC) AS rn
-            FROM provider_bucket_stats
-          )
+  const bucketQuery = sql<AggregatedAvailabilityBucketRow>`
+    WITH
+      ${availabilityAggregationCtes},
+      limited_provider_bucket_stats AS (
         SELECT
-          "providerId",
-          "bucketStart",
-          "greenCount",
-          "redCount",
-          "latencyCount",
-          "latencySumMs",
-          "avgLatencyMs",
-          "p50LatencyMs",
-          "p95LatencyMs",
-          "p99LatencyMs",
-          "lastRequestAt"
-        FROM limited_provider_bucket_stats
-        WHERE rn <= ${Math.floor(maxBuckets)}
-        ORDER BY "providerId" ASC, "bucketStart" ASC
-      `
-    : sql<AggregatedAvailabilityBucketRow>`
-        WITH ${availabilityAggregationCtes}
-        SELECT
-          "providerId",
-          "bucketStart",
-          "greenCount",
-          "redCount",
-          "latencyCount",
-          "latencySumMs",
-          "avgLatencyMs",
-          "p50LatencyMs",
-          "p95LatencyMs",
-          "p99LatencyMs",
-          "lastRequestAt"
+          *,
+          ROW_NUMBER() OVER (PARTITION BY "providerId" ORDER BY "bucketStart" DESC) AS rn
         FROM provider_bucket_stats
-        ORDER BY "providerId" ASC, "bucketStart" ASC
-      `;
+      )
+    SELECT
+      "providerId",
+      "bucketStart",
+      "greenCount",
+      "redCount",
+      "latencyCount",
+      "latencySumMs",
+      "avgLatencyMs",
+      "p50LatencyMs",
+      "p95LatencyMs",
+      "p99LatencyMs",
+      "lastRequestAt"
+    FROM limited_provider_bucket_stats
+    WHERE rn <= ${sanitizedMaxBuckets}
+    ORDER BY "providerId" ASC, "bucketStart" ASC
+  `;
 
   const bucketRows = Array.from(await db.execute(bucketQuery)) as AggregatedAvailabilityBucketRow[];
   const providerBuckets = new Map<number, AggregatedAvailabilityBucketRow[]>();

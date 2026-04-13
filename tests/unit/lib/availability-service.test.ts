@@ -21,14 +21,18 @@ function createThenableQuery<T>(result: T) {
   return query;
 }
 
-function sqlToString(sqlObject: unknown): string {
+function sqlToQuery(sqlObject: unknown) {
   return (sqlObject as SQL).toQuery({
     escapeName: (name: string) => `"${name}"`,
     escapeParam: (num: number, _value: unknown) => `$${num}`,
     escapeString: (value: string) => `'${value}'`,
     casing: new CasingCache(),
     paramStartIndex: { value: 1 },
-  }).sql;
+  });
+}
+
+function sqlToString(sqlObject: unknown): string {
+  return sqlToQuery(sqlObject).sql;
 }
 
 function normalizeSql(sqlObject: unknown): string {
@@ -67,6 +71,35 @@ describe("availability-service", () => {
       isSuccess: false,
       isError: true,
     });
+  });
+
+  it("queryProviderAvailability 在非法时间参数时抛出明确错误且不访问数据库", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: "invalid-start-time",
+      })
+    ).rejects.toThrow("Invalid startTime");
+
+    await expect(
+      queryProviderAvailability({
+        endTime: new Date("invalid-end-time"),
+      })
+    ).rejects.toThrow("Invalid endTime");
+
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
   });
 
   it("queryProviderAvailability 改为数据库聚合后仍只统计终态请求", async () => {
@@ -140,6 +173,42 @@ describe("availability-service", () => {
     expect(queryText).toContain("group by");
     expect(queryText).toContain("percentile_cont(0.95)");
     expect(queryText).toContain("row_number() over");
+  });
+
+  it("queryProviderAvailability 在 bucketSizeMinutes 为 Infinity 时回退到自动分桶", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    const result = await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: Number.POSITIVE_INFINITY,
+    });
+
+    const query = sqlToQuery(executeMock.mock.calls[0]?.[0]);
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result.bucketSizeMinutes).toBe(5);
+    expect(query.params).toContain(300);
+    expect(query.params).not.toContain(Number.POSITIVE_INFINITY);
   });
 
   it("queryProviderAvailability 会排除进行中请求(statusCode=null 且 durationMs=null)", async () => {
@@ -242,6 +311,44 @@ describe("availability-service", () => {
     expect(queryText).toMatch(
       /count\(\*\) filter \(where .*status_?code.*< 200 .*or .*status_?code.*>= 400\)/
     );
+  });
+
+  it("queryProviderAvailability 在 maxBuckets 为 Infinity 时仍使用默认桶上限", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+      maxBuckets: Number.POSITIVE_INFINITY,
+    });
+
+    const query = sqlToQuery(executeMock.mock.calls[0]?.[0]);
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(queryText).toContain("row_number() over");
+    expect(queryText).toContain("where rn <=");
+    expect(query.params.at(-1)).toBe(100);
   });
 
   it("queryProviderAvailability 在无聚合数据时仍返回 unknown 提供商状态", async () => {
