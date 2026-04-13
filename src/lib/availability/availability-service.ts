@@ -68,8 +68,9 @@ export class AvailabilityQueryValidationError extends Error {
 /**
  * 当前版本把“已终态”收敛为 `statusCode` 已落库。
  *
- * 已知限制：如果未来出现 `durationMs` / `errorMessage` 已落库、但 `statusCode` 仍为空且已稳定结束的写路径，
- * 这些记录会被当前可用性统计排除。届时应引入独立的 finalized 谓词，而不是直接放宽为 `durationMs IS NOT NULL`。
+ * 已知限制：在当前异步写入/丢 patch 的极端场景，或未来新增了 `durationMs` / `errorMessage`
+ * 已落库、但 `statusCode` 仍为空且已稳定结束的写路径时，这些记录会被当前可用性统计排除。
+ * 届时应引入独立的 finalized 谓词，而不是直接放宽为 `durationMs IS NOT NULL`。
  */
 function buildAvailabilityFinalizedCondition() {
   return isNotNull(messageRequest.statusCode);
