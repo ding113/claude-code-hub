@@ -42,13 +42,14 @@ export const MAX_BUCKET_SIZE_MINUTES = 1440;
 const DEFAULT_MAX_BUCKETS = 100;
 const AVAILABILITY_SUCCESS_STATUS_CODE_MIN = 200;
 const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE = 400;
+const FINALIZED_REQUEST_STATUS_CODE_ALIAS = "statusCode" as const;
 const AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL = sql.raw(
   String(AVAILABILITY_SUCCESS_STATUS_CODE_MIN)
 );
 const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL = sql.raw(
   String(AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE)
 );
-const FINALIZED_REQUEST_STATUS_CODE_SQL = sql.raw('"statusCode"');
+const FINALIZED_REQUEST_STATUS_CODE_SQL = sql.raw(`"${FINALIZED_REQUEST_STATUS_CODE_ALIAS}"`);
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
@@ -327,7 +328,7 @@ export async function queryProviderAvailability(
       SELECT
         ${messageRequest.providerId} AS "providerId",
         ${messageRequest.createdAt} AS "createdAt",
-        ${messageRequest.statusCode} AS "statusCode",
+        ${messageRequest.statusCode} AS ${FINALIZED_REQUEST_STATUS_CODE_SQL},
         ${messageRequest.durationMs} AS "durationMs",
         to_timestamp(
           floor(extract(epoch from ${messageRequest.createdAt}) / ${bucketSizeSeconds}) * ${bucketSizeSeconds}
