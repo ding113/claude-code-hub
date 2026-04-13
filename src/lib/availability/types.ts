@@ -85,11 +85,11 @@ export interface ProviderAvailabilitySummary {
   isEnabled: boolean;
   /** Current status based on recent requests */
   currentStatus: AvailabilityStatus;
-  /** Queried-window availability ratio (currently kept equal to successRate for compatibility) */
+  /** Availability ratio over the returned time buckets (currently kept equal to successRate for compatibility) */
   currentAvailability: number;
   /** Total request count in period */
   totalRequests: number;
-  /** Compatibility alias of currentAvailability (green requests / total) */
+  /** Compatibility alias of currentAvailability over the returned time buckets (green requests / total) */
   successRate: number;
   /** Average latency in ms */
   avgLatencyMs: number;
@@ -113,7 +113,7 @@ export interface AvailabilityQueryOptions {
   bucketSizeMinutes?: number;
   /** Whether to include disabled providers */
   includeDisabled?: boolean;
-  /** Maximum number of time buckets to return (hard capped at 100) */
+  /** Maximum number of non-empty time buckets to return per provider (hard capped at 100) */
   maxBuckets?: number;
 }
 

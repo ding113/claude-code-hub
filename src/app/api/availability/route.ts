@@ -8,7 +8,7 @@
  *   - providerIds: comma-separated provider IDs (default: all)
  *   - bucketSizeMinutes: number, time bucket size (default: auto)
  *   - includeDisabled: boolean, include disabled providers (default: false)
- *   - maxBuckets: number, max time buckets (default: 100, hard cap: 100)
+ *   - maxBuckets: number, max non-empty time buckets per provider (default: 100, hard cap: 100)
  */
 
 import { type NextRequest, NextResponse } from "next/server";

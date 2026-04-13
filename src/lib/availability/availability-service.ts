@@ -403,7 +403,7 @@ export async function queryProviderAvailability(
     }
 
     const totalRequests = totalGreen + totalRed;
-    const queriedWindowAvailability = calculateAvailabilityScore(totalGreen, totalRed);
+    const returnedBucketAvailability = calculateAvailabilityScore(totalGreen, totalRed);
 
     // Determine current status based on last few buckets
     // IMPORTANT: No data = 'unknown', NOT 'green'! Must be honest.
@@ -424,10 +424,10 @@ export async function queryProviderAvailability(
       providerType: provider.providerType ?? "claude",
       isEnabled: provider.enabled ?? true,
       currentStatus,
-      currentAvailability: queriedWindowAvailability,
+      currentAvailability: returnedBucketAvailability,
       totalRequests,
-      // Keep `successRate` as a compatibility alias of the queried-window availability ratio.
-      successRate: queriedWindowAvailability,
+      // Keep `successRate` as a compatibility alias of the returned-bucket availability ratio.
+      successRate: returnedBucketAvailability,
       avgLatencyMs: totalLatencyCount > 0 ? totalLatencySumMs / totalLatencyCount : 0,
       lastRequestAt: lastRequestAtTime > 0 ? new Date(lastRequestAtTime).toISOString() : null,
       timeBuckets,
