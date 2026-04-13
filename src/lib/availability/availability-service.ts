@@ -4,7 +4,7 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
-import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, type SQLWrapper, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
 import type {
@@ -40,6 +40,15 @@ type AggregatedCurrentProviderStatusRow = {
 export const MIN_BUCKET_SIZE_MINUTES = 0.25;
 export const MAX_BUCKET_SIZE_MINUTES = 1440;
 const DEFAULT_MAX_BUCKETS = 100;
+const AVAILABILITY_SUCCESS_STATUS_CODE_MIN = 200;
+const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE = 400;
+const AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL = sql.raw(
+  String(AVAILABILITY_SUCCESS_STATUS_CODE_MIN)
+);
+const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL = sql.raw(
+  String(AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE)
+);
+const FINALIZED_REQUEST_STATUS_CODE_SQL = sql.raw('"statusCode"');
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
@@ -134,13 +143,30 @@ function getTimeValue(value: Date | string | null | undefined): number {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function isAvailabilitySuccessStatusCode(statusCode: number): boolean {
+  return (
+    statusCode >= AVAILABILITY_SUCCESS_STATUS_CODE_MIN &&
+    statusCode < AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE
+  );
+}
+
+function buildAvailabilitySuccessStatusCondition(statusCodeExpression: SQLWrapper) {
+  return sql`${statusCodeExpression} >= ${AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL}
+    AND ${statusCodeExpression} < ${AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL}`;
+}
+
+function buildAvailabilityFailureStatusCondition(statusCodeExpression: SQLWrapper) {
+  return sql`${statusCodeExpression} < ${AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL}
+    OR ${statusCodeExpression} >= ${AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL}`;
+}
+
 /**
  * Classify a single finalized request's status
  * Simple: success (2xx/3xx) = green, failure = red
  */
 export function classifyRequestStatus(statusCode: number): RequestStatusClassification {
   // 仅把 2xx/3xx 视为成功；1xx 不应在可用性里被计为绿色。
-  if (statusCode >= 200 && statusCode < 400) {
+  if (isAvailabilitySuccessStatusCode(statusCode)) {
     return {
       status: "green",
       isSuccess: true,
@@ -313,8 +339,8 @@ export async function queryProviderAvailability(
       SELECT
         "providerId",
         "bucketStart",
-        COUNT(*) FILTER (WHERE "statusCode" >= 200 AND "statusCode" < 400)::int AS "greenCount",
-        COUNT(*) FILTER (WHERE "statusCode" < 200 OR "statusCode" >= 400)::int AS "redCount",
+        COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessStatusCondition(FINALIZED_REQUEST_STATUS_CODE_SQL)})::int AS "greenCount",
+        COUNT(*) FILTER (WHERE ${buildAvailabilityFailureStatusCondition(FINALIZED_REQUEST_STATUS_CODE_SQL)})::int AS "redCount",
         COUNT("durationMs")::int AS "latencyCount",
         COALESCE(SUM("durationMs")::double precision, 0) AS "latencySumMs",
         COALESCE(AVG("durationMs")::double precision, 0) AS "avgLatencyMs",
@@ -513,8 +539,8 @@ export async function getCurrentProviderStatus(): Promise<
   const aggregateQuery = sql<AggregatedCurrentProviderStatusRow>`
     SELECT
       ${messageRequest.providerId} AS "providerId",
-      COUNT(*) FILTER (WHERE ${messageRequest.statusCode} >= 200 AND ${messageRequest.statusCode} < 400)::int AS "greenCount",
-      COUNT(*) FILTER (WHERE ${messageRequest.statusCode} < 200 OR ${messageRequest.statusCode} >= 400)::int AS "redCount",
+      COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessStatusCondition(messageRequest.statusCode)})::int AS "greenCount",
+      COUNT(*) FILTER (WHERE ${buildAvailabilityFailureStatusCondition(messageRequest.statusCode)})::int AS "redCount",
       MAX(${messageRequest.createdAt}) AS "lastRequestAt"
     FROM ${messageRequest}
     WHERE ${requestConditions}
