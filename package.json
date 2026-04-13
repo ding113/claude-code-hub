@@ -79,7 +79,7 @@
     "date-fns-tz": "^3",
     "decimal.js-light": "^2",
     "dotenv": "^17",
-    "drizzle-orm": "^0.44",
+    "drizzle-orm": "^0.45",
     "fetch-socks": "^1",
     "framer-motion": "^12",
     "hono": "^4",
