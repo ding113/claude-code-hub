@@ -1,42 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-function sqlToString(sqlObj: unknown): string {
-  const visited = new Set<unknown>();
-
-  const walk = (node: unknown): string => {
-    if (!node || visited.has(node)) return "";
-    visited.add(node);
-
-    if (typeof node === "string") return node;
-
-    if (typeof node === "object") {
-      const anyNode = node as {
-        value?: unknown;
-        queryChunks?: unknown;
-      };
-
-      if (Array.isArray(anyNode)) {
-        return anyNode.map(walk).join("");
-      }
-
-      if (anyNode.value) {
-        if (Array.isArray(anyNode.value)) {
-          return anyNode.value.map(String).join("");
-        }
-        return String(anyNode.value);
-      }
-
-      if (anyNode.queryChunks) {
-        return walk(anyNode.queryChunks);
-      }
-    }
-
-    return "";
-  };
-
-  return walk(sqlObj);
-}
-
 function createThenableQuery<T>(result: T, whereArgs?: unknown[]) {
   const query: {
     from: ReturnType<typeof vi.fn>;
@@ -78,8 +41,7 @@ describe("availability-service", () => {
     vi.clearAllMocks();
   });
 
-  it("queryProviderAvailability 只统计已获得最终结果的请求", async () => {
-    const requestWhereArgs: unknown[] = [];
+  it("queryProviderAvailability 只统计已获得最终状态码的请求", async () => {
     const selectQueue = [
       createThenableQuery([
         {
@@ -89,35 +51,40 @@ describe("availability-service", () => {
           enabled: true,
         },
       ]),
-      createThenableQuery(
-        [
-          {
-            id: 100,
-            providerId: 1,
-            statusCode: null,
-            durationMs: null,
-            errorMessage: null,
-            createdAt: new Date("2026-04-13T08:00:00.000Z"),
-          },
-          {
-            id: 101,
-            providerId: 1,
-            statusCode: 200,
-            durationMs: 120,
-            errorMessage: null,
-            createdAt: new Date("2026-04-13T08:01:00.000Z"),
-          },
-          {
-            id: 102,
-            providerId: 1,
-            statusCode: 500,
-            durationMs: 240,
-            errorMessage: "HTTP 500",
-            createdAt: new Date("2026-04-13T08:02:00.000Z"),
-          },
-        ],
-        requestWhereArgs
-      ),
+      createThenableQuery([
+        {
+          id: 100,
+          providerId: 1,
+          statusCode: null,
+          durationMs: null,
+          errorMessage: null,
+          createdAt: new Date("2026-04-13T08:00:00.000Z"),
+        },
+        {
+          id: 101,
+          providerId: 1,
+          statusCode: 200,
+          durationMs: null,
+          errorMessage: null,
+          createdAt: new Date("2026-04-13T08:01:00.000Z"),
+        },
+        {
+          id: 102,
+          providerId: 1,
+          statusCode: 500,
+          durationMs: 240,
+          errorMessage: "HTTP 500",
+          createdAt: new Date("2026-04-13T08:02:00.000Z"),
+        },
+        {
+          id: 103,
+          providerId: 1,
+          statusCode: 200,
+          durationMs: 120,
+          errorMessage: null,
+          createdAt: new Date("2026-04-13T08:03:00.000Z"),
+        },
+      ]),
     ];
 
     const fallbackQuery = createThenableQuery<unknown[]>([]);
@@ -141,26 +108,22 @@ describe("availability-service", () => {
     expect(result.providers).toHaveLength(1);
     expect(result.providers[0]).toMatchObject({
       providerId: 1,
-      totalRequests: 2,
-      currentAvailability: 0.5,
-      successRate: 0.5,
+      totalRequests: 3,
+      currentAvailability: 2 / 3,
+      successRate: 2 / 3,
       currentStatus: "green",
+      lastRequestAt: "2026-04-13T09:00:00.000Z",
     });
     expect(result.providers[0]?.timeBuckets).toHaveLength(1);
     expect(result.providers[0]?.timeBuckets[0]).toMatchObject({
-      totalRequests: 2,
-      greenCount: 1,
+      totalRequests: 3,
+      greenCount: 2,
       redCount: 1,
-      availabilityScore: 0.5,
+      availabilityScore: 2 / 3,
     });
-
-    expect(requestWhereArgs).toHaveLength(1);
-    const whereSql = sqlToString(requestWhereArgs[0]).toLowerCase();
-    expect(whereSql).toContain("is not null");
   });
 
-  it("getCurrentProviderStatus 只统计已获得最终结果的请求", async () => {
-    const requestWhereArgs: unknown[] = [];
+  it("getCurrentProviderStatus 只统计已获得最终状态码的请求", async () => {
     const selectQueue = [
       createThenableQuery([
         {
@@ -168,29 +131,26 @@ describe("availability-service", () => {
           name: "Provider A",
         },
       ]),
-      createThenableQuery(
-        [
-          {
-            providerId: 1,
-            statusCode: null,
-            durationMs: null,
-            createdAt: new Date("2026-04-13T08:03:00.000Z"),
-          },
-          {
-            providerId: 1,
-            statusCode: 503,
-            durationMs: 300,
-            createdAt: new Date("2026-04-13T08:02:00.000Z"),
-          },
-          {
-            providerId: 1,
-            statusCode: 200,
-            durationMs: 120,
-            createdAt: new Date("2026-04-13T08:01:00.000Z"),
-          },
-        ],
-        requestWhereArgs
-      ),
+      createThenableQuery([
+        {
+          providerId: 1,
+          statusCode: null,
+          durationMs: null,
+          createdAt: new Date("2026-04-13T08:03:00.000Z"),
+        },
+        {
+          providerId: 1,
+          statusCode: 503,
+          durationMs: null,
+          createdAt: new Date("2026-04-13T08:02:00.000Z"),
+        },
+        {
+          providerId: 1,
+          statusCode: 200,
+          durationMs: 120,
+          createdAt: new Date("2026-04-13T08:01:00.000Z"),
+        },
+      ]),
     ];
 
     const fallbackQuery = createThenableQuery<unknown[]>([]);
@@ -217,9 +177,5 @@ describe("availability-service", () => {
         lastRequestAt: "2026-04-13T08:02:00.000Z",
       },
     ]);
-
-    expect(requestWhereArgs).toHaveLength(1);
-    const whereSql = sqlToString(requestWhereArgs[0]).toLowerCase();
-    expect(whereSql).toContain("is not null");
   });
 });

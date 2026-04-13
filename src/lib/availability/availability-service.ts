@@ -151,7 +151,8 @@ export async function queryProviderAvailability(
     gte(messageRequest.createdAt, startDate),
     lte(messageRequest.createdAt, endDate),
     isNull(messageRequest.deletedAt),
-    isNotNull(messageRequest.durationMs),
+    // 终态应以 statusCode 为准；Gemini passthrough 等路径可能已结束但尚未回填 durationMs。
+    isNotNull(messageRequest.statusCode),
   ];
 
   const requests = await db
@@ -207,7 +208,8 @@ export async function queryProviderAvailability(
 
   // Process requests
   for (const req of requests) {
-    if (!req.createdAt || req.durationMs == null) continue;
+    // 防御性兜底：异步写缓冲短暂不一致时，仍跳过尚未写入最终状态码的记录。
+    if (!req.createdAt || req.statusCode == null) continue;
 
     const bucketStart = new Date(Math.floor(req.createdAt.getTime() / bucketSizeMs) * bucketSizeMs);
     const bucketKey = bucketStart.toISOString();
@@ -281,7 +283,7 @@ export async function queryProviderAvailability(
       });
 
       // Track last request time
-      if (bucket.latencies.length > 0) {
+      if (bucket.greenCount + bucket.redCount > 0) {
         lastRequestAt = bucketEnd.toISOString();
       }
     }
@@ -383,7 +385,8 @@ export async function getCurrentProviderStatus(): Promise<
         inArray(messageRequest.providerId, providerIdList),
         gte(messageRequest.createdAt, fifteenMinutesAgo),
         isNull(messageRequest.deletedAt),
-        isNotNull(messageRequest.durationMs)
+        // 终态应以 statusCode 为准；Gemini passthrough 等路径可能已结束但尚未回填 durationMs。
+        isNotNull(messageRequest.statusCode)
       )
     )
     .orderBy(desc(messageRequest.createdAt));
@@ -407,7 +410,8 @@ export async function getCurrentProviderStatus(): Promise<
   }
 
   for (const req of requests) {
-    if (req.durationMs == null) continue;
+    // 防御性兜底：异步写缓冲短暂不一致时，仍跳过尚未写入最终状态码的记录。
+    if (req.statusCode == null) continue;
 
     const stats = providerStats.get(req.providerId);
     if (!stats) continue;
