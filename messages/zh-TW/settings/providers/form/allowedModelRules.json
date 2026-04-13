@@ -9,7 +9,7 @@
   "matchTypeContains": "關鍵字",
   "matchTypeRegex": "正則",
   "orderHint": "越靠前的規則越先命中",
-  "maxRules": "最多只能新增 {max} 條白名單規則",
+  "maxRules": "最多只能新增 {max, number} 條白名單規則",
   "saveRule": "儲存規則",
   "cancelEdit": "取消編輯",
   "moveRuleUp": "上移規則",
@@ -31,6 +31,6 @@
   "quickAddMissingUrl": "請先填寫供應商 URL 再執行快速匯入",
   "quickAddMissingKey": "請先提供可用的 API Key 再執行快速匯入",
   "quickAddFailed": "取得上游模型失敗",
-  "quickAddReachedLimit": "匯入上游模型時觸及 {max} 條規則上限",
+  "quickAddReachedLimit": "匯入上游模型時觸及 {max, number} 條規則上限",
   "quickAddNoNewRules": "沒有匯入新的上游模型規則"
 }

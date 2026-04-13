@@ -8,7 +8,7 @@
   "matchTypeContains": "关键词匹配",
   "matchTypeRegex": "正则匹配",
   "orderHint": "靠前规则优先生效",
-  "maxRules": "最多只能添加 {max} 条重定向规则",
+  "maxRules": "最多只能添加 {max, number} 条重定向规则",
   "saveRule": "保存规则",
   "cancelEdit": "取消编辑",
   "moveRuleUp": "上移规则",

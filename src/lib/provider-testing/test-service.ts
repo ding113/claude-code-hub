@@ -13,6 +13,7 @@ import {
   type PresetConfig,
 } from "./presets";
 import type {
+  ParsedResponse,
   ProviderTestConfig,
   ProviderTestResult,
   TestStatus,
@@ -195,8 +196,16 @@ async function runSingleAttempt(
       const responseBody = await response.text();
       const latencyMs = Date.now() - startTime;
       const contentType = response.headers.get("content-type") || undefined;
-      const parsed = parseResponse(config.providerType, responseBody, contentType);
-      const validationInput = parsed.content || responseBody;
+
+      // best-effort 解析：即使解析失败也保留 HTTP 状态信息，避免 4xx/5xx 被误判为 network_error
+      let parsed: ParsedResponse;
+      try {
+        parsed = parseResponse(config.providerType, responseBody, contentType);
+      } catch {
+        parsed = { content: responseBody, model: undefined, usage: undefined, isStreaming: false };
+      }
+
+      const validationInput = parsed.content ?? responseBody;
       const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
       const contentResult = evaluateContentValidation(
         httpResult.status,
@@ -214,7 +223,7 @@ async function runSingleAttempt(
         httpStatusCode: response.status,
         httpStatusText: response.statusText,
         model: parsed.model,
-        content: parsed.content || responseBody,
+        content: parsed.content ?? responseBody,
         rawResponse: responseBody,
         usage: parsed.usage,
         streamInfo: parsed.isStreaming

@@ -100,9 +100,9 @@ class ErrorRuleDetector {
       try {
         const { eventEmitter } = await import("@/lib/event-emitter");
         const handleUpdated = () => {
-          // 重置标记，强制下次从数据库重新加载
+          // 标记数据可能过期，让 reload 成功后刷新标记。
+          // 注意：不清 isInitialized，避免 reload 失败时 ensureInitialized() 在每次请求上重试打库。
           this.dbLoadedSuccessfully = false;
-          this.isInitialized = false;
           this.reload({ queueIfRunning: true }).catch((error) => {
             logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
           });
@@ -171,8 +171,10 @@ class ErrorRuleDetector {
    */
   async reload(options: { queueIfRunning?: boolean } = {}): Promise<void> {
     if (this.activeReloadPromise) {
+      // 无论是事件驱动还是显式调用，只要有 in-flight reload 就排队补跑一轮，
+      // 确保调用方写库后的显式 reload 不会拿到旧快照。
+      this.reloadRequestedWhileLoading = true;
       if (options.queueIfRunning) {
-        this.reloadRequestedWhileLoading = true;
         logger.info("[ErrorRuleDetector] Reload already in progress, queueing another pass");
       }
       return this.activeReloadPromise;

@@ -10,7 +10,7 @@
   "matchTypeContains": "Contains",
   "matchTypeRegex": "Regex",
   "orderHint": "Top rules match first",
-  "maxRules": "You can add up to {max} redirect rules",
+  "maxRules": "You can add up to {max, number} redirect rules",
   "saveRule": "Save rule",
   "cancelEdit": "Cancel edit",
   "moveRuleUp": "Move rule up",

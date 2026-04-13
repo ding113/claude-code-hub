@@ -10,7 +10,7 @@
   "matchTypeContains": "關鍵字比對",
   "matchTypeRegex": "正則比對",
   "orderHint": "越前面的規則越先命中",
-  "maxRules": "最多只能新增 {max} 條重新導向規則",
+  "maxRules": "最多只能新增 {max, number} 條重新導向規則",
   "saveRule": "儲存規則",
   "cancelEdit": "取消編輯",
   "moveRuleUp": "上移規則",

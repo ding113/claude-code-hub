@@ -9,7 +9,7 @@
   "matchTypeContains": "Ключевое слово",
   "matchTypeRegex": "Регекс",
   "orderHint": "Правила выше срабатывают раньше",
-  "maxRules": "Можно добавить не более {max} правил allowlist",
+  "maxRules": "Можно добавить не более {max, number} правил allowlist",
   "saveRule": "Сохранить правило",
   "cancelEdit": "Отменить редактирование",
   "moveRuleUp": "Переместить правило вверх",
@@ -31,6 +31,6 @@
   "quickAddMissingUrl": "Перед быстрым добавлением укажите URL провайдера",
   "quickAddMissingKey": "Перед быстрым добавлением укажите рабочий API Key",
   "quickAddFailed": "Не удалось получить модели апстрима",
-  "quickAddReachedLimit": "Во время импорта моделей достигнут лимит в {max} правил",
+  "quickAddReachedLimit": "Во время импорта моделей достигнут лимит в {max, number} правил",
   "quickAddNoNewRules": "Новых правил из апстрима не найдено"
 }

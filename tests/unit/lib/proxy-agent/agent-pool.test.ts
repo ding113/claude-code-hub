@@ -526,15 +526,15 @@ describe("AgentPool", () => {
     });
 
     it("should count pending-creation waiters in activeRequests", async () => {
-      // ⭐ 回归用例：真正模拟"首次创建阶段的并发请求"
+      // 回归用例：真正模拟"首次创建阶段的并发请求"
       // 使用 vi.useRealTimers() 并通过 spy 阻塞 createAgent 以强制等待者走 pendingCreations 路径。
       // 如果 waiter 未正确递增 activeRequests，下面 expect(3) 会退化为 1 或 2。
       vi.useRealTimers();
+      const concurrentPool = new AgentPoolImpl({
+        ...defaultConfig,
+        agentTtlMs: 60_000,
+      });
       try {
-        const concurrentPool = new AgentPoolImpl({
-          ...defaultConfig,
-          agentTtlMs: 60_000,
-        });
 
         const params = {
           endpointUrl: "https://api.anthropic.com/v1/messages",
@@ -589,14 +589,14 @@ describe("AgentPool", () => {
         expect(concurrentPool.getPoolStats().activeRequests).toBe(0);
 
         createSpy.mockRestore();
-        await concurrentPool.shutdown();
       } finally {
+        await concurrentPool.shutdown();
         vi.useFakeTimers();
       }
     });
 
     it("should ignore releaseAgent from stale dispatcher generation", async () => {
-      // ⭐ 回归用例：cacheKey 相同但 dispatcher 已被重建时，旧 release 不应误减新实例
+      // 回归用例：cacheKey 相同但 dispatcher 已被重建时，旧 release 不应误减新实例
       const regenPool = new AgentPoolImpl({
         ...defaultConfig,
         agentTtlMs: 1000,

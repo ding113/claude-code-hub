@@ -10,7 +10,7 @@
   "matchTypeContains": "部分一致",
   "matchTypeRegex": "正規表現",
   "orderHint": "上のルールから順に適用されます",
-  "maxRules": "追加できるリダイレクトルールは {max} 件までです",
+  "maxRules": "追加できるリダイレクトルールは {max, number} 件までです",
   "saveRule": "ルールを保存",
   "cancelEdit": "編集をキャンセル",
   "moveRuleUp": "ルールを上へ移動",

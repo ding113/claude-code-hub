@@ -785,6 +785,7 @@ export class ProxyResponseHandler {
     const messageContext = session.messageContext;
     const provider = session.provider;
     if (!provider) {
+      releaseSessionAgent(session);
       return response;
     }
 
@@ -1381,6 +1382,7 @@ export class ProxyResponseHandler {
     const provider = session.provider;
 
     if (!messageContext || !provider || !response.body) {
+      releaseSessionAgent(session);
       return response;
     }
 
