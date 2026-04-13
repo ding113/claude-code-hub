@@ -43,6 +43,10 @@ const DEFAULT_MAX_BUCKETS = 100;
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
+export const MAX_AVAILABILITY_QUERY_RANGE_DAYS =
+  (MAX_BUCKETS_HARD_LIMIT * MAX_BUCKET_SIZE_MINUTES) / (24 * 60);
+const MAX_AVAILABILITY_QUERY_RANGE_MS =
+  MAX_BUCKETS_HARD_LIMIT * MAX_BUCKET_SIZE_MINUTES * 60 * 1000;
 
 export class AvailabilityQueryValidationError extends Error {
   constructor(message: string) {
@@ -215,9 +219,17 @@ function sanitizeMaxBuckets(maxBuckets: number | undefined): number {
 }
 
 function validateAvailabilityTimeRange(startDate: Date, endDate: Date): void {
-  if (endDate.getTime() < startDate.getTime()) {
+  const rangeMs = endDate.getTime() - startDate.getTime();
+
+  if (rangeMs < 0) {
     throw new AvailabilityQueryValidationError(
       "Invalid time range: endTime must be greater than or equal to startTime"
+    );
+  }
+
+  if (rangeMs > MAX_AVAILABILITY_QUERY_RANGE_MS) {
+    throw new AvailabilityQueryValidationError(
+      `Invalid time range: requested range must not exceed ${MAX_AVAILABILITY_QUERY_RANGE_DAYS} days`
     );
   }
 }

@@ -19,6 +19,7 @@ export {
   classifyRequestStatus,
   determineOptimalBucketSize,
   getCurrentProviderStatus,
+  MAX_AVAILABILITY_QUERY_RANGE_DAYS,
   MAX_BUCKET_SIZE_MINUTES,
   MAX_BUCKETS_HARD_LIMIT,
   MIN_BUCKET_SIZE_MINUTES,

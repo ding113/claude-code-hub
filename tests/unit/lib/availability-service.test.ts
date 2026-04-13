@@ -126,6 +126,30 @@ describe("availability-service", () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
+  it("queryProviderAvailability 在时间跨度超过 100 天时抛出明确错误且不访问数据库", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: new Date("2025-12-01T00:00:00.000Z"),
+        endTime: new Date("2026-04-13T00:00:00.000Z"),
+      })
+    ).rejects.toThrow("requested range must not exceed 100 days");
+
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
   it("queryProviderAvailability 改为数据库聚合后仍只统计终态请求", async () => {
     const selectMock = vi.fn(() =>
       createThenableQuery([

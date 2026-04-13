@@ -3,8 +3,8 @@
  *
  * GET /api/availability
  * Query parameters:
- *   - startTime: ISO string, start of query range (default: 24h ago)
- *   - endTime: ISO string, end of query range (default: now)
+ *   - startTime: ISO string, start of query range (default: 24h ago, maximum span with endTime: 100 days)
+ *   - endTime: ISO string, end of query range (default: now, maximum span with startTime: 100 days)
  *   - providerIds: comma-separated provider IDs (default: all)
  *   - bucketSizeMinutes: number, time bucket size (default: auto, min: 0.25, hard cap: 1440)
  *   - includeDisabled: boolean, include disabled providers (default: false)

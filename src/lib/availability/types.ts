@@ -103,9 +103,9 @@ export interface ProviderAvailabilitySummary {
  * Availability query options
  */
 export interface AvailabilityQueryOptions {
-  /** Start time for query (ISO string or Date) */
+  /** Start time for query (ISO string or Date, maximum span with endTime is 100 days) */
   startTime?: string | Date;
-  /** End time for query (ISO string or Date) */
+  /** End time for query (ISO string or Date, maximum span with startTime is 100 days) */
   endTime?: string | Date;
   /** Provider IDs to filter (empty = all providers) */
   providerIds?: number[];
