@@ -124,9 +124,14 @@ export interface UserCacheHitRateLeaderboardEntry {
   totalCost: number;
   cacheCreationCost: number;
   totalInputTokens: number;
-  /** @deprecated Use totalInputTokens instead */
+  /** 为与现有缓存命中率榜单前端保持字段一致而保留；值始终等于 totalInputTokens */
   totalTokens: number;
   cacheHitRate: number; // 0-1
+  /**
+   * 可选：按模型拆分
+   * - undefined: 未请求 includeModelStats
+   * - []: 已请求 includeModelStats，但该用户下无可用模型统计
+   */
   modelStats?: UserCacheHitModelStat[];
 }
 
@@ -285,7 +290,7 @@ function buildUserFilterCondition(userFilters?: UserLeaderboardFilters) {
   if (normalizedGroups.length > 0) {
     const groupConditions = normalizedGroups.map(
       (group) =>
-        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*,\\s*'))`
+        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*[,，\n\r]+\\s*'))`
     );
     groupFilterCondition = sql`(${sql.join(groupConditions, sql` OR `)})`;
   }

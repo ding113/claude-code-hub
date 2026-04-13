@@ -126,4 +126,57 @@ describe("LeaderboardView user cache hit rate scope", () => {
     expect(container!.textContent).toContain("cache-user");
     expect(container!.textContent).toContain("50.0%");
   });
+
+  it("keeps model cost visible in the existing user leaderboard drilldown", async () => {
+    searchParamsState.value = new URLSearchParams("scope=user");
+    fetchMock.mockImplementationOnce(async (input) => {
+      const url = String(input);
+      if (url.includes("scope=user")) {
+        return {
+          ok: true,
+          json: async () => [
+            {
+              userId: 3,
+              userName: "cost-user",
+              totalRequests: 12,
+              totalCost: 4.2,
+              totalCostFormatted: "$4.20",
+              totalTokens: 2400,
+              modelStats: [
+                {
+                  model: "claude-sonnet-4",
+                  totalRequests: 7,
+                  totalCost: 2.1,
+                  totalCostFormatted: "$2.10",
+                  totalTokens: 1400,
+                },
+              ],
+            },
+          ],
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => [],
+      } as Response;
+    });
+
+    await act(async () => {
+      root!.render(<LeaderboardView isAdmin />);
+    });
+
+    const expandButton = container!.querySelector(
+      'button[aria-label="expandModelStats"]'
+    ) as HTMLButtonElement | null;
+    expect(expandButton).toBeTruthy();
+
+    await act(async () => {
+      expandButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container!.textContent).toContain("cost-user");
+    expect(container!.textContent).toContain("claude-sonnet-4");
+    expect(container!.textContent).toContain("$2.10");
+  });
 });

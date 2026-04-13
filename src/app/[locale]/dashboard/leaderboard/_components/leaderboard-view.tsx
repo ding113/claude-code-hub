@@ -264,14 +264,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.consumedAmount"),
       className: "text-right font-mono",
-      cell: (row) =>
-        "userName" in row ? (
-          (row.totalCostFormatted ?? row.totalCost)
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        ),
+      cell: (row) => row.totalCostFormatted ?? row.totalCost,
       sortKey: "totalCost",
-      getValue: (row) => ("userName" in row ? row.totalCost : 0),
+      getValue: (row) => row.totalCost,
       defaultBold: true,
     },
   ];
