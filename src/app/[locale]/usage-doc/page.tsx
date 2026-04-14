@@ -140,7 +140,8 @@ export function UsageDocContent({ origin }: UsageDocContentProps) {
   const t = useTranslations("usage");
   const resolvedOrigin = origin || t("ui.currentSiteAddress");
   // 优先使用显式配置的 API 域名，兼容 Web/UI 与 API 分域部署
-  const apiOrigin = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ?? "").replace(/\/$/, "") || resolvedOrigin;
+  const apiOrigin =
+    (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ?? "").replace(/\/$/, "") || resolvedOrigin;
   const CLI_CONFIGS = getCLIConfigs(t);
 
   /**
