@@ -11,6 +11,82 @@
 
 import type { ParsedResponse, TokenUsage } from "../types";
 
+function collectOutputTexts(node: unknown, texts: string[]) {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+
+  const record = node as Record<string, unknown>;
+
+  if (typeof record.text === "string") {
+    texts.push(record.text);
+  }
+
+  if (record.type === "output_text" && typeof record.text === "string") {
+    texts.push(record.text);
+  }
+
+  const content = record.content;
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      collectOutputTexts(item, texts);
+    }
+  }
+
+  const output = record.output;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      collectOutputTexts(item, texts);
+    }
+  }
+
+  const part = record.part;
+  if (part && typeof part === "object") {
+    collectOutputTexts(part, texts);
+  }
+
+  const item = record.item;
+  if (item && typeof item === "object") {
+    collectOutputTexts(item, texts);
+  }
+
+  const response = record.response;
+  if (response && typeof response === "object") {
+    collectOutputTexts(response, texts);
+  }
+}
+
+function extractUsageFromNode(node: unknown): TokenUsage | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+
+  const record = node as Record<string, unknown>;
+  const usage = record.usage;
+  if (!usage || typeof usage !== "object") {
+    return undefined;
+  }
+
+  const usageRecord = usage as Record<string, unknown>;
+  const inputTokens =
+    typeof usageRecord.input_tokens === "number"
+      ? usageRecord.input_tokens
+      : typeof usageRecord.prompt_tokens === "number"
+        ? usageRecord.prompt_tokens
+        : 0;
+  const outputTokens =
+    typeof usageRecord.output_tokens === "number"
+      ? usageRecord.output_tokens
+      : typeof usageRecord.completion_tokens === "number"
+        ? usageRecord.completion_tokens
+        : 0;
+
+  return {
+    inputTokens,
+    outputTokens,
+  };
+}
+
 /**
  * Extract text content from an SSE stream body
  * Handles both Anthropic and OpenAI streaming formats
@@ -60,22 +136,18 @@ export function extractTextFromSSE(body: string): string {
         continue;
       }
 
+      // OpenAI Responses SSE delta format: {"type":"response.output_text.delta","delta":"..."}
+      if (typeof obj.delta === "string") {
+        texts.push(obj.delta);
+        continue;
+      }
+
       // Codex Response API format: {"output":[{"content":[{"text":"..."}]}]}
-      const output = obj.output as
-        | Array<{
-            content?: Array<{ text?: string }>;
-          }>
-        | undefined;
-      if (output && Array.isArray(output)) {
-        for (const item of output) {
-          if (item.content && Array.isArray(item.content)) {
-            for (const c of item.content) {
-              if (c.text) {
-                texts.push(c.text);
-              }
-            }
-          }
-        }
+      const beforeCount = texts.length;
+      if (beforeCount === 0) {
+        collectOutputTexts(obj, texts);
+      }
+      if (texts.length > beforeCount) {
         continue;
       }
 
@@ -128,10 +200,15 @@ export function parseSSEStream(body: string): ParsedResponse {
 
     try {
       const obj = JSON.parse(payload) as Record<string, unknown>;
+      const response = obj.response as Record<string, unknown> | undefined;
+      const textCountBeforeEvent = texts.length;
 
       // Extract model from first chunk
       if (!model && obj.model && typeof obj.model === "string") {
         model = obj.model;
+      }
+      if (!model && response?.model && typeof response.model === "string") {
+        model = response.model;
       }
 
       // Anthropic format
@@ -154,20 +231,14 @@ export function parseSSEStream(body: string): ParsedResponse {
         }
       }
 
-      // Codex Response API format
-      const output = obj.output as
-        | Array<{
-            content?: Array<{ text?: string }>;
-          }>
-        | undefined;
-      if (output) {
-        for (const item of output) {
-          if (item.content) {
-            for (const c of item.content) {
-              if (c.text) texts.push(c.text);
-            }
-          }
-        }
+      // OpenAI Responses SSE delta format
+      if (typeof obj.delta === "string") {
+        texts.push(obj.delta);
+      }
+
+      // Codex / Responses completed payloads, nested response objects, and part/item events
+      if (textCountBeforeEvent === 0) {
+        collectOutputTexts(obj, texts);
       }
 
       // Extract usage from final chunk (Anthropic message_delta)
@@ -198,6 +269,16 @@ export function parseSSEStream(body: string): ParsedResponse {
           inputTokens: objUsage.prompt_tokens || 0,
           outputTokens: objUsage.completion_tokens || 0,
         };
+      }
+
+      const responseUsage = extractUsageFromNode(response);
+      if (responseUsage) {
+        usage = responseUsage;
+      } else {
+        const objectUsage = extractUsageFromNode(obj);
+        if (objectUsage) {
+          usage = objectUsage;
+        }
       }
     } catch {
       // Skip invalid JSON chunks

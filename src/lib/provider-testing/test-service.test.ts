@@ -238,6 +238,51 @@ describe("executeProviderTest", () => {
     expect(result.validationDetails.contentPassed).toBe(false);
   });
 
+  test("codex 应该能解析新版 Responses SSE 事件流并通过内容校验", async () => {
+    const responseBody = [
+      'event: response.created',
+      'data: {"type":"response.created","response":{"id":"resp_123","object":"response","created_at":1776172359,"status":"in_progress","model":"gpt-5.4"}}',
+      "",
+      'event: response.in_progress',
+      'data: {"type":"response.in_progress","response":{"id":"resp_123","object":"response","created_at":1776172359,"status":"in_progress","model":"gpt-5.4"}}',
+      "",
+      'event: response.output_text.delta',
+      'data: {"type":"response.output_text.delta","delta":"pong"}',
+      "",
+      'event: response.completed',
+      'data: {"type":"response.completed","response":{"id":"resp_123","object":"response","created_at":1776172359,"status":"completed","model":"gpt-5.4","output":[{"type":"message","id":"msg_123","status":"completed","role":"assistant","content":[{"type":"output_text","text":"pong"}]}],"usage":{"input_tokens":10,"output_tokens":1,"total_tokens":11}}}',
+      "",
+    ].join("\n");
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({
+        "content-type": "text/event-stream",
+      }),
+      text: async () => responseBody,
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.4",
+      successContains: "pong",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.subStatus).toBe("success");
+    expect(result.model).toBe("gpt-5.4");
+    expect(result.content).toBe("pong");
+    expect(result.validationDetails.contentPassed).toBe(true);
+    expect(result.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 1,
+    });
+  });
+
   test("网络错误时 latency 层不能被标记为通过", async () => {
     fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
 
