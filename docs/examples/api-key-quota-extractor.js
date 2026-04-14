@@ -7,7 +7,7 @@
       "Content-Type": "application/json",
       "User-Agent": "cc-switch/1.0"
     },
-    body: {}
+    body: "{}"
   },
 
   extractor: function(response) {
@@ -26,12 +26,15 @@
     return {
       ok: response && response.ok === true,
       isValid: toBoolean(data.keyIsEnabled, true) && toBoolean(data.userIsEnabled, true),
+      planName: "Weekly Quota",
 
       keyName: typeof data.keyName === "string" ? data.keyName : null,
       userName: typeof data.userName === "string" ? data.userName : null,
       providerGroup: typeof data.providerGroup === "string" ? data.providerGroup : null,
 
-      remaining: toNumber(data.remaining, null),
+      remaining: toNumber(data.remainingWeeklyUsd, null),
+      total: toNumber(data.limitWeeklyUsd, null),
+      used: toNumber(data.usedWeeklyUsd, 0),
       unit: typeof data.unit === "string" ? data.unit : "USD",
 
       remaining5hUsd: toNumber(data.remaining5hUsd, null),
@@ -54,8 +57,13 @@
       expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : null,
       resetMode: typeof data.resetMode === "string" ? data.resetMode : null,
       resetTime: typeof data.resetTime === "string" ? data.resetTime : null,
+      extra: [
+        "Overall remaining: " + (toNumber(data.remaining, null) ?? "unlimited"),
+        "Daily remaining: " + (toNumber(data.remainingDailyUsd, null) ?? "unlimited"),
+        "Monthly remaining: " + (toNumber(data.remainingMonthlyUsd, null) ?? "unlimited")
+      ].join(" | "),
 
-      balance: toNumber(data.remaining, null),
+      balance: toNumber(data.remainingWeeklyUsd, null),
       dailyBalance: toNumber(data.remainingDailyUsd, null),
       weeklyBalance: toNumber(data.remainingWeeklyUsd, null),
       monthlyBalance: toNumber(data.remainingMonthlyUsd, null)
