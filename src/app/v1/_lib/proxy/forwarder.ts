@@ -3,6 +3,7 @@ import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
 import { request as undiciRequest } from "undici";
+import { resolveAnthropicAuthHeaders } from "@/lib/anthropic/auth-headers";
 import { applyAnthropicProviderOverridesWithAudit } from "@/lib/anthropic/provider-overrides";
 import {
   getCircuitState,
@@ -81,7 +82,12 @@ import {
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
 
-const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
+const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = [
+  "content-length",
+  "connection",
+  "transfer-encoding",
+  "x-api-key",
+];
 
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
@@ -4006,15 +4012,22 @@ export class ProxyForwarder {
     // 构建请求头覆盖规则
     const overrides: Record<string, string> = {
       host: HeaderProcessor.extractHost(provider.url),
-      authorization: `Bearer ${outboundKey}`,
-      "x-api-key": outboundKey,
       "content-type": "application/json", // 确保 Content-Type
       "accept-encoding": "identity", // 禁用压缩：避免 undici ZlibError（代理应透传原始数据）
     };
 
-    // claude-auth: 移除 x-api-key（避免中转服务冲突）
-    if (provider.providerType === "claude-auth") {
-      delete overrides["x-api-key"];
+    if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+      Object.assign(
+        overrides,
+        resolveAnthropicAuthHeaders({
+          apiKey: outboundKey,
+          providerUrl: provider.url,
+          providerType: provider.providerType,
+        })
+      );
+    } else {
+      overrides.authorization = `Bearer ${outboundKey}`;
+      overrides["x-api-key"] = outboundKey;
     }
 
     // Codex 特殊处理：优先使用过滤器修改的 User-Agent
