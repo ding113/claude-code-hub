@@ -265,6 +265,7 @@ export async function validateAuthToken(
   options?: { allowReadOnlyAccess?: boolean }
 ): Promise<AuthSession | null> {
   const mode = getSessionTokenMode();
+  const tokenKind = detectSessionTokenKind(token);
 
   if (mode !== "legacy") {
     try {
@@ -288,6 +289,10 @@ export async function validateAuthToken(
   }
 
   if (mode === "legacy" || mode === "dual") {
+    return validateKey(token, options);
+  }
+
+  if (options?.allowReadOnlyAccess && tokenKind === "legacy") {
     return validateKey(token, options);
   }
 
