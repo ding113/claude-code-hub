@@ -125,12 +125,95 @@ export interface MyUsageQuota {
   keyName: string;
   keyIsEnabled: boolean;
 
+  providerGroup: string | null;
+
+  limit5hUsd: number | null;
+  used5hUsd: number;
+  remaining5hUsd: number | null;
+
+  limitDailyUsd: number | null;
+  usedDailyUsd: number;
+  remainingDailyUsd: number | null;
+
+  limitWeeklyUsd: number | null;
+  usedWeeklyUsd: number;
+  remainingWeeklyUsd: number | null;
+
+  limitMonthlyUsd: number | null;
+  usedMonthlyUsd: number;
+  remainingMonthlyUsd: number | null;
+
+  limitTotalUsd: number | null;
+  usedTotalUsd: number;
+  remainingTotalUsd: number | null;
+
+  rpmLimit: number | null;
+  concurrentSessions: number;
+  concurrentSessionsLimit: number | null;
+
   userAllowedModels: string[];
   userAllowedClients: string[];
 
   expiresAt: Date | null;
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
+  resetMode: "fixed" | "rolling";
+  resetTime: string;
+  remaining: number | null;
+  unit: "USD";
+}
+
+type EffectiveQuotaWindow = {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+};
+
+function clampRemaining(limit: number, used: number): number {
+  return Math.max(limit - used, 0);
+}
+
+function resolveEffectiveQuotaWindow(
+  candidates: Array<{ limit: number | null | undefined; used: number }>
+): EffectiveQuotaWindow {
+  const boundedCandidates = candidates
+    .filter((candidate): candidate is { limit: number; used: number } => candidate.limit != null)
+    .map((candidate) => ({
+      limit: candidate.limit,
+      used: candidate.used,
+      remaining: clampRemaining(candidate.limit, candidate.used),
+    }));
+
+  if (boundedCandidates.length === 0) {
+    return {
+      limit: null,
+      used: Math.max(...candidates.map((candidate) => candidate.used), 0),
+      remaining: null,
+    };
+  }
+
+  const mostRestrictive = boundedCandidates.reduce((current, candidate) => {
+    if (candidate.remaining < current.remaining) {
+      return candidate;
+    }
+
+    if (candidate.remaining === current.remaining && candidate.limit < current.limit) {
+      return candidate;
+    }
+
+    return current;
+  });
+
+  return mostRestrictive;
+}
+
+function resolveOverallRemaining(values: Array<number | null>): number | null {
+  const boundedValues = values.filter((value): value is number => value != null);
+  if (boundedValues.length === 0) {
+    return null;
+  }
+
+  return Math.max(Math.min(...boundedValues), 0);
 }
 
 export interface MyTodayStats {
@@ -361,6 +444,37 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       costTotal: userTotalCost,
     } = userCosts;
 
+    const effective5h = resolveEffectiveQuotaWindow([
+      { limit: key.limit5hUsd, used: keyCost5h },
+      { limit: user.limit5hUsd, used: userCost5h },
+    ]);
+    const effectiveDaily = resolveEffectiveQuotaWindow([
+      { limit: key.limitDailyUsd, used: keyCostDaily },
+      { limit: user.dailyQuota, used: userCostDaily },
+    ]);
+    const effectiveWeekly = resolveEffectiveQuotaWindow([
+      { limit: key.limitWeeklyUsd, used: keyCostWeekly },
+      { limit: user.limitWeeklyUsd, used: userCostWeekly },
+    ]);
+    const effectiveMonthly = resolveEffectiveQuotaWindow([
+      { limit: key.limitMonthlyUsd, used: keyCostMonthly },
+      { limit: user.limitMonthlyUsd, used: userCostMonthly },
+    ]);
+    const effectiveTotal = resolveEffectiveQuotaWindow([
+      { limit: key.limitTotalUsd, used: keyTotalCost },
+      { limit: user.limitTotalUsd, used: userTotalCost },
+    ]);
+    const overallRemaining = resolveOverallRemaining([
+      effective5h.remaining,
+      effectiveDaily.remaining,
+      effectiveWeekly.remaining,
+      effectiveMonthly.remaining,
+      effectiveTotal.remaining,
+    ]);
+    const concurrentSessions = Math.max(keyConcurrent, userKeyConcurrent);
+    const concurrentSessionsLimit =
+      effectiveKeyConcurrentLimit > 0 ? effectiveKeyConcurrentLimit : null;
+
     const quota: MyUsageQuota = {
       keyLimit5hUsd: key.limit5hUsd ?? null,
       keyLimitDailyUsd: key.limitDailyUsd ?? null,
@@ -398,12 +512,42 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyName: key.name,
       keyIsEnabled: key.isEnabled ?? true,
 
+      providerGroup: key.providerGroup ?? user.providerGroup ?? null,
+
+      limit5hUsd: effective5h.limit,
+      used5hUsd: effective5h.used,
+      remaining5hUsd: effective5h.remaining,
+
+      limitDailyUsd: effectiveDaily.limit,
+      usedDailyUsd: effectiveDaily.used,
+      remainingDailyUsd: effectiveDaily.remaining,
+
+      limitWeeklyUsd: effectiveWeekly.limit,
+      usedWeeklyUsd: effectiveWeekly.used,
+      remainingWeeklyUsd: effectiveWeekly.remaining,
+
+      limitMonthlyUsd: effectiveMonthly.limit,
+      usedMonthlyUsd: effectiveMonthly.used,
+      remainingMonthlyUsd: effectiveMonthly.remaining,
+
+      limitTotalUsd: effectiveTotal.limit,
+      usedTotalUsd: effectiveTotal.used,
+      remainingTotalUsd: effectiveTotal.remaining,
+
+      rpmLimit: user.rpm ?? null,
+      concurrentSessions,
+      concurrentSessionsLimit,
+
       userAllowedModels: user.allowedModels ?? [],
       userAllowedClients: user.allowedClients ?? [],
 
       expiresAt: key.expiresAt ?? null,
       dailyResetMode: key.dailyResetMode ?? "fixed",
       dailyResetTime: key.dailyResetTime ?? "00:00",
+      resetMode: key.dailyResetMode ?? "fixed",
+      resetTime: key.dailyResetTime ?? "00:00",
+      remaining: overallRemaining,
+      unit: "USD",
     };
 
     return { ok: true, data: quota };
