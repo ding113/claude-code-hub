@@ -1124,6 +1124,7 @@ const { route: getMyQuotaRoute, handler: getMyQuotaHandler } = createActionRoute
       userLimitMonthlyUsd: z.number().nullable(),
       userLimitTotalUsd: z.number().nullable(),
       userLimitConcurrentSessions: z.number().nullable(),
+      userRpmLimit: z.number().nullable(),
       userCurrent5hUsd: z.number(),
       userCurrentDailyUsd: z.number(),
       userCurrentWeeklyUsd: z.number(),
@@ -1141,9 +1142,42 @@ const { route: getMyQuotaRoute, handler: getMyQuotaHandler } = createActionRoute
       keyName: z.string(),
       keyIsEnabled: z.boolean(),
 
+      providerGroup: z.string().nullable(),
+
+      limit5hUsd: z.number().nullable(),
+      used5hUsd: z.number(),
+      remaining5hUsd: z.number().nullable(),
+
+      limitDailyUsd: z.number().nullable(),
+      usedDailyUsd: z.number(),
+      remainingDailyUsd: z.number().nullable(),
+
+      limitWeeklyUsd: z.number().nullable(),
+      usedWeeklyUsd: z.number(),
+      remainingWeeklyUsd: z.number().nullable(),
+
+      limitMonthlyUsd: z.number().nullable(),
+      usedMonthlyUsd: z.number(),
+      remainingMonthlyUsd: z.number().nullable(),
+
+      limitTotalUsd: z.number().nullable(),
+      usedTotalUsd: z.number(),
+      remainingTotalUsd: z.number().nullable(),
+
+      rpmLimit: z.number().nullable(),
+      concurrentSessions: z.number(),
+      concurrentSessionsLimit: z.number().nullable(),
+
+      userAllowedModels: z.array(z.string()),
+      userAllowedClients: z.array(z.string()),
+
       expiresAt: z.string().nullable(),
       dailyResetMode: z.enum(["fixed", "rolling"]),
       dailyResetTime: z.string(),
+      resetMode: z.enum(["fixed", "rolling"]),
+      resetTime: z.string(),
+      remaining: z.number().nullable(),
+      unit: z.literal("USD"),
     }),
     description: "获取当前会话的限额与当前使用量（仅返回自己的数据）",
     summary: "获取我的限额与用量",

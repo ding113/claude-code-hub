@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, usageLedger, users } from "@/drizzle/schema";
 
@@ -349,6 +349,28 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
     });
     createdKeyIds.push(readonlyKey.id);
 
+    await db
+      .update(users)
+      .set({
+        rpmLimit: 60,
+        dailyLimitUsd: "15",
+        limit5hUsd: 12,
+        limitWeeklyUsd: 25,
+        limitMonthlyUsd: 35,
+        providerGroup: "default",
+      })
+      .where(eq(users.id, user.id));
+
+    await db
+      .update(keys)
+      .set({
+        limit5hUsd: 10,
+        limitDailyUsd: 20,
+        limitWeeklyUsd: 30,
+        limitMonthlyUsd: 40,
+      })
+      .where(eq(keys.id, readonlyKey.id));
+
     const now = new Date();
     const msgId = await createMessage({
       userId: user.id,
@@ -373,6 +395,37 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
     expect(stats.response.status).toBe(200);
     expect(stats.json).toMatchObject({ ok: true });
     expect((stats.json as any).data.calls).toBe(1);
+
+    const quota = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyQuota",
+      headers: { Authorization: currentAuthorization },
+      body: {},
+    });
+    expect(quota.response.status).toBe(200);
+    expect(quota.json).toMatchObject({ ok: true });
+
+    const quotaData = (quota.json as { ok: boolean; data: Record<string, unknown> }).data;
+    expect(quotaData.keyName).toBe(readonlyKey.name);
+    expect(quotaData.userName).toBe(user.name);
+    expect(quotaData.providerGroup).toBe("default");
+    expect(quotaData.keyIsEnabled).toBe(true);
+    expect(quotaData.userIsEnabled).toBe(true);
+    expect(quotaData.rpmLimit).toBe(60);
+    expect(quotaData.unit).toBe("USD");
+    expect(quotaData.remaining).toBeTypeOf("number");
+    expect(quotaData.remaining5hUsd).toBeTypeOf("number");
+    expect(quotaData.remainingDailyUsd).toBeTypeOf("number");
+    expect(quotaData.remainingWeeklyUsd).toBeTypeOf("number");
+    expect(quotaData.remainingMonthlyUsd).toBeTypeOf("number");
+    expect(quotaData.used5hUsd).toBeTypeOf("number");
+    expect(quotaData.usedDailyUsd).toBeTypeOf("number");
+    expect(quotaData.usedWeeklyUsd).toBeTypeOf("number");
+    expect(quotaData.usedMonthlyUsd).toBeTypeOf("number");
+    expect(quotaData.limit5hUsd).toBe(10);
+    expect(quotaData.limitDailyUsd).toBe(15);
+    expect(quotaData.limitWeeklyUsd).toBe(25);
+    expect(quotaData.limitMonthlyUsd).toBe(35);
 
     // Issue #687 fix: getUsers 现在也支持 allowReadOnlyAccess
     const usersApi = await callActionsRoute({
