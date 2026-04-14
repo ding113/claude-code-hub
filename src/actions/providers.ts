@@ -9,6 +9,7 @@ import { db } from "@/drizzle/db";
 import { providers as providersTable } from "@/drizzle/schema";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { emitActionAudit } from "@/lib/audit/emit";
+import { resolveAnthropicAuthHeaders } from "@/lib/anthropic/auth-headers";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
@@ -4079,42 +4080,6 @@ async function executeProviderApiTest(
 /**
  * 测试 Anthropic Messages API 连通性
  */
-function getHostnameFromUrl(url: string): string | null {
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-function resolveAnthropicAuthHeaders(apiKey: string, providerUrl: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "anthropic-version": "2023-06-01",
-  };
-
-  const hostname = getHostnameFromUrl(providerUrl);
-  const isOfficialAnthropic = hostname
-    ? hostname.endsWith("anthropic.com") || hostname.endsWith("claude.ai")
-    : false;
-  const looksLikeProxy = hostname
-    ? /proxy|relay|gateway|router|openai|api2d|openrouter|worker|gpt/i.test(hostname)
-    : false;
-
-  if (isOfficialAnthropic) {
-    headers["x-api-key"] = apiKey;
-    return headers;
-  }
-
-  if (looksLikeProxy) {
-    headers.Authorization = `Bearer ${apiKey}`;
-    return headers;
-  }
-
-  headers["x-api-key"] = apiKey;
-  headers.Authorization = `Bearer ${apiKey}`;
-  return headers;
-}
 
 export async function testProviderAnthropicMessages(
   data: ProviderApiTestArgs
@@ -4122,7 +4087,12 @@ export async function testProviderAnthropicMessages(
   return executeProviderApiTest(data, {
     path: "/v1/messages",
     defaultModel: "claude-sonnet-4-6",
-    headers: (apiKey, context) => resolveAnthropicAuthHeaders(apiKey, context.providerUrl),
+    headers: (apiKey, context) =>
+      resolveAnthropicAuthHeaders({
+        apiKey,
+        providerUrl: context.providerUrl,
+        providerType: context.providerType,
+      }),
     body: (model) => ({
       model,
       max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
@@ -4933,7 +4903,11 @@ async function fetchAnthropicModels(
   const url = `${normalizedUrl}/v1/models`;
 
   // 复用认证逻辑：官方 API 用 x-api-key，代理用 Bearer token
-  const authHeaders = resolveAnthropicAuthHeaders(data.apiKey, normalizedUrl);
+  const authHeaders = resolveAnthropicAuthHeaders({
+    apiKey: data.apiKey,
+    providerUrl: normalizedUrl,
+    providerType: data.providerType,
+  });
 
   try {
     const response = await executeProxiedFetch(

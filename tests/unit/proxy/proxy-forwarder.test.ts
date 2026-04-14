@@ -59,6 +59,18 @@ function createCodexProvider(): Provider {
   } as unknown as Provider;
 }
 
+function createClaudeProvider(
+  providerType: "claude" | "claude-auth",
+  url: string = "https://example.com/v1/messages"
+): Provider {
+  return {
+    providerType,
+    url,
+    key: "test-outbound-key",
+    preserveClientIp: false,
+  } as unknown as Provider;
+}
+
 function createGeminiProvider(providerType: "gemini" | "gemini-cli"): Provider {
   return {
     providerType,
@@ -174,6 +186,62 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     expect(resultHeaders.get("connection")).toBeNull();
     expect(resultHeaders.get("transfer-encoding")).toBeNull();
     expect(resultHeaders.get("content-length")).toBeNull();
+  });
+});
+
+describe("ProxyForwarder - buildHeaders Anthropic auth resolution", () => {
+  it("should use bearer-only auth for relay-style claude providers", () => {
+    const session = createSession({
+      userAgent: "claude-cli/2.1.105 (external, cli)",
+      headers: new Headers([
+        ["authorization", "Bearer customer-key-should-not-leak"],
+        ["x-api-key", "customer-x-api-key-should-not-leak"],
+        ["anthropic-version", "2023-06-01"],
+      ]),
+    });
+
+    const provider = createClaudeProvider("claude", "https://cpa.fkcodex.com:8317");
+    const { buildHeaders } = ProxyForwarder as unknown as {
+      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+    };
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBeNull();
+    expect(resultHeaders.get("host")).toBe("cpa.fkcodex.com:8317");
+    expect(resultHeaders.get("anthropic-version")).toBe("2023-06-01");
+  });
+
+  it("should keep dual auth headers for non-relay claude providers", () => {
+    const session = createSession({
+      userAgent: "claude-cli/2.1.105 (external, cli)",
+      headers: new Headers([["anthropic-version", "2023-06-01"]]),
+    });
+
+    const provider = createClaudeProvider("claude", "https://anthropic-compatible.example.com");
+    const { buildHeaders } = ProxyForwarder as unknown as {
+      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+    };
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBe("test-outbound-key");
+  });
+
+  it("should always use bearer-only auth for claude-auth providers", () => {
+    const session = createSession({
+      userAgent: "claude-cli/2.1.105 (external, cli)",
+      headers: new Headers([["anthropic-version", "2023-06-01"]]),
+    });
+
+    const provider = createClaudeProvider("claude-auth", "https://anthropic-compatible.example.com");
+    const { buildHeaders } = ProxyForwarder as unknown as {
+      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+    };
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBeNull();
   });
 });
 
