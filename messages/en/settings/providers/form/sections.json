@@ -201,7 +201,7 @@
         }
       },
       "reasoningEffort": {
-        "help": "Controls how much reasoning effort the model uses before answering. \"inherit\" follows the client request; other values force override reasoning.effort. Note: \"none\" is only supported on GPT-5.1 models; \"xhigh\" is only supported on GPT-5.1-Codex-Max. Using an unsupported value will cause an upstream error.",
+        "help": "Controls how much reasoning effort the model uses before answering. \"inherit\" follows the client request; other values force override reasoning.effort. Note: \"none\" is only supported on GPT-5.4 mini models. Using an unsupported value will cause an upstream error.",
         "label": "Reasoning Effort Override",
         "options": {
           "high": "high",
@@ -209,8 +209,8 @@
           "low": "low",
           "medium": "medium (default)",
           "minimal": "minimal",
-          "none": "none (GPT-5.1 only)",
-          "xhigh": "xhigh (GPT-5.1-Codex-Max only)"
+          "none": "none (GPT-5.4 mini only)",
+          "xhigh": "xhigh"
         }
       },
       "reasoningSummary": {

@@ -172,10 +172,10 @@
   "deleteConfirm": "Are you sure you want to delete model {name}? This action cannot be undone.",
   "form": {
     "modelName": "Model ID",
-    "modelNamePlaceholder": "e.g., gpt-5.2-codex",
+    "modelNamePlaceholder": "e.g., gpt-5.3-codex",
     "modelNameRequired": "Model ID is required",
     "displayName": "Display Name (Optional)",
-    "displayNamePlaceholder": "e.g., GPT-5.2 Codex",
+    "displayNamePlaceholder": "e.g., GPT-5.3 Codex",
     "type": "Type",
     "provider": "Provider",
     "providerPlaceholder": "e.g., openai",

@@ -4020,7 +4020,7 @@ export async function testProviderAnthropicMessages(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/messages",
-    defaultModel: "claude-sonnet-4-5-20250929",
+    defaultModel: "claude-sonnet-4-6",
     headers: (apiKey, context) => resolveAnthropicAuthHeaders(apiKey, context.providerUrl),
     body: (model) => ({
       model,
@@ -4028,7 +4028,7 @@ export async function testProviderAnthropicMessages(
       stream: false, // 显式禁用流式响应，避免 Cloudflare 520 错误
       messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
     }),
-    userAgent: "claude-cli/2.0.50 (external, cli)",
+    userAgent: "claude-cli/2.0.76 (external, cli)",
     successMessage: "Anthropic Messages API 测试成功",
     extract: (result) => ({
       model: "model" in result ? result.model : undefined,
@@ -4046,7 +4046,7 @@ export async function testProviderOpenAIChatCompletions(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/chat/completions",
-    defaultModel: "gpt-5.1-codex",
+    defaultModel: "gpt-5.3-codex",
     headers: (apiKey, context) => {
       void context;
       return {
@@ -4080,7 +4080,7 @@ export async function testProviderOpenAIResponses(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/responses",
-    defaultModel: "gpt-5.1-codex",
+    defaultModel: "gpt-5.3-codex",
     headers: (apiKey, context) => {
       void context;
       return {

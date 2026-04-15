@@ -151,15 +151,15 @@
       "desc": "在供应商级别覆写 Codex (Responses API) 请求参数",
       "reasoningEffort": {
         "label": "推理等级覆写",
-        "help": "控制模型在输出前用于推理的强度（推理 token 数量）。选择“跟随客户端”表示不改写请求；选择其他值则强制覆写 reasoning.effort。注意：none 仅 GPT-5.1 系列支持；xhigh 仅 GPT-5.1-Codex-Max 支持，模型不支持会返回错误。",
+        "help": "控制模型在输出前用于推理的强度（推理 token 数量）。选择“跟随客户端”表示不改写请求；选择其他值则强制覆写 reasoning.effort。注意：none 仅 GPT-5.4 mini 系列支持，模型不支持会返回错误。",
         "options": {
           "inherit": "不覆写（跟随客户端）",
           "minimal": "minimal（更省、更快）",
           "low": "low",
           "medium": "medium（默认）",
           "high": "high（更强推理）",
-          "xhigh": "xhigh（仅 GPT-5.1-Codex-Max）",
-          "none": "none（仅 GPT-5.1）"
+          "xhigh": "xhigh",
+          "none": "none（仅 GPT-5.4 mini）"
         }
       },
       "reasoningSummary": {

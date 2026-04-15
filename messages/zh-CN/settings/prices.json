@@ -172,10 +172,10 @@
   "deleteConfirm": "确定要删除模型 {name} 吗？此操作不可撤销。",
   "form": {
     "modelName": "模型 ID",
-    "modelNamePlaceholder": "例如: gpt-5.2-codex",
+    "modelNamePlaceholder": "例如: gpt-5.3-codex",
     "modelNameRequired": "模型 ID 不能为空",
     "displayName": "展示名称（可选）",
-    "displayNamePlaceholder": "例如: GPT-5.2 Codex",
+    "displayNamePlaceholder": "例如: GPT-5.3 Codex",
     "type": "类型",
     "provider": "供应商",
     "providerPlaceholder": "例如: openai",

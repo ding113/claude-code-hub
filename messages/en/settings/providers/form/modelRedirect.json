@@ -18,16 +18,16 @@
   "editRule": "Edit rule",
   "deleteRule": "Delete rule",
   "ruleMoved": "This rule changed while you were editing. Please try again.",
-  "description": "Redirect Claude Code client requested models (e.g. claude-sonnet-4.5) to upstream provider supported models (e.g. glm-4.6, gemini-pro). For cost optimization or third-party AI integration.",
+  "description": "Redirect Claude Code client requested models (e.g. claude-sonnet-4.6) to upstream provider supported models (e.g. glm-5.1, gemini-pro). For cost optimization or third-party AI integration.",
   "emptyState": "No redirect rules yet. After adding rules, the system will automatically rewrite model names in requests.",
   "sourceEmpty": "Source model name cannot be empty",
   "sourceTooLong": "Source model name is too long (max {max} characters)",
   "sourceModel": "User Requested Model",
-  "sourcePlaceholder": "e.g. claude-sonnet-4-5-20250929",
+  "sourcePlaceholder": "e.g. claude-sonnet-4-6",
   "regexInvalid": "Regex pattern is invalid",
   "regexUnsafe": "Regex pattern has potential ReDoS risk",
   "targetEmpty": "Target model name cannot be empty",
   "targetTooLong": "Target model name is too long (max {max} characters)",
   "targetModel": "Actual Forwarded Model",
-  "targetPlaceholder": "e.g. glm-4.6"
+  "targetPlaceholder": "e.g. glm-5.1"
 }

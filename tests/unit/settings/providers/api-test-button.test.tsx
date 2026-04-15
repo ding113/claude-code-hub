@@ -80,7 +80,7 @@ describe("ApiTestButton", () => {
           id: "cx_base",
           description: "legacy preset",
           defaultSuccessContains: "pong",
-          defaultModel: "gpt-5.1-codex",
+          defaultModel: "gpt-5.3-codex",
         },
       ],
     });

@@ -18,8 +18,8 @@
   "ruleMoved": "规则在编辑期间发生了变化，请重试",
   "sourceModel": "用户请求的模型",
   "targetModel": "实际转发的模型",
-  "sourcePlaceholder": "例如: claude-sonnet-4-5-20250929",
-  "targetPlaceholder": "例如: glm-4.6",
+  "sourcePlaceholder": "例如: claude-sonnet-4-6",
+  "targetPlaceholder": "例如: glm-5.1",
   "add": "添加",
   "sourceEmpty": "源模型名称不能为空",
   "sourceTooLong": "源模型名称过长（最多 {max} 个字符）",
@@ -28,6 +28,6 @@
   "alreadyExists": "模型 \"{model}\" 已存在重定向规则",
   "regexInvalid": "正则表达式无效",
   "regexUnsafe": "正则表达式存在 ReDoS 风险",
-  "description": "将 Claude Code 客户端请求的模型（如 claude-sonnet-4.5）重定向到上游供应商实际支持的模型（如 glm-4.6、gemini-pro）。用于成本优化或接入第三方 AI 服务。",
+  "description": "将 Claude Code 客户端请求的模型（如 claude-sonnet-4.6）重定向到上游供应商实际支持的模型（如 glm-5.1、gemini-pro）。用于成本优化或接入第三方 AI 服务。",
   "emptyState": "暂无重定向规则。添加规则后，系统将自动重写请求中的模型名称。"
 }
