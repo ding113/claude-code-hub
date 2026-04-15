@@ -14,6 +14,7 @@ import providerChain from "./provider-chain.json";
 import providers from "./providers.json";
 import quota from "./quota.json";
 import settings from "./settings";
+import systemStatus from "./systemStatus.json";
 import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
@@ -35,6 +36,7 @@ export default {
   quota,
   myUsage,
   settings,
+  systemStatus,
   ui,
   usage,
   users,
