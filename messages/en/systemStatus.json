@@ -1,0 +1,53 @@
+{
+  "pageTitle": "System Status - Claude Code Hub",
+  "pageDescription": "Public provider status board for Claude Code Hub",
+  "hero": {
+    "title": "System Status",
+    "description": "A single public path for watching provider health, cache efficiency, output speed, and token cost efficiency.",
+    "window": "Rolling window · last {days} days",
+    "updatedAt": "Updated {value}",
+    "awaitingData": "Waiting for first snapshot",
+    "refreshing": "Refreshing",
+    "autoRefresh": "Auto refresh every 30s"
+  },
+  "summary": {
+    "systemAvailability": "System Availability",
+    "providerCoverage": "{providers} providers tracked",
+    "healthyProviders": "Healthy Providers",
+    "degradedBreakdown": "{degraded} degraded · {unknown} unknown",
+    "weightedCacheHitRate": "Weighted Cache Hit",
+    "cacheHint": "Traffic-weighted across active providers",
+    "weightedCostPerMillionTokens": "Weighted Cost / 1M",
+    "weightedOutputRate": "Weighted output rate {value}"
+  },
+  "status": {
+    "green": "Operational",
+    "red": "Degraded",
+    "unknown": "Unknown"
+  },
+  "metrics": {
+    "availability": "Availability",
+    "cacheHitRate": "Cache Hit Rate",
+    "outputRate": "Avg Output Rate",
+    "outputRateValue": "{value} tok/s",
+    "costPerMillionTokens": "Avg Cost / 1M Tokens",
+    "costPerHundredMillionTokens": "Avg Cost / 100M Tokens"
+  },
+  "provider": {
+    "sectionEyebrow": "Provider Watch",
+    "sectionTitle": "One card per provider",
+    "history": "Recent availability path",
+    "meta": {
+      "windowHint": "Current status plus rolling seven-day efficiency metrics.",
+      "requests": "Requests",
+      "successRate": "Success",
+      "latency": "Avg latency",
+      "lastRequestValue": "Last request {value}",
+      "noRecentTraffic": "No recent traffic"
+    }
+  },
+  "states": {
+    "fetchFailed": "Unable to refresh system status right now",
+    "empty": "No provider status data is available yet."
+  }
+}
