@@ -7,6 +7,13 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 const nextConfig: NextConfig = {
   output: "standalone",
 
+  turbopack: {
+    resolveAlias: {
+      html2canvas: "html2canvas/dist/html2canvas.esm.js",
+      jspdf: "jspdf/dist/jspdf.es.min.js",
+    },
+  },
+
   // 转译 ESM 模块（@lobehub/icons 需要）
   transpilePackages: ["@lobehub/icons"],
 
