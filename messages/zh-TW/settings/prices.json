@@ -172,10 +172,10 @@
   "deleteConfirm": "確定要刪除模型 {name} 嗎？此操作無法復原。",
   "form": {
     "modelName": "模型識別碼",
-    "modelNamePlaceholder": "例如：gpt-5.2-codex",
+    "modelNamePlaceholder": "例如：gpt-5.3-codex",
     "modelNameRequired": "模型 ID 為必填",
     "displayName": "顯示名稱（選填）",
-    "displayNamePlaceholder": "例如：GPT-5.2 Codex",
+    "displayNamePlaceholder": "例如：GPT-5.3 Codex",
     "type": "類型",
     "provider": "供應商",
     "providerPlaceholder": "例如：openai",
