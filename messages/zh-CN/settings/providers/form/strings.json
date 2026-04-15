@@ -20,7 +20,7 @@
   "limitAmountWeekly": "周消费上限 (USD)",
   "limitAmountMonthly": "月消费上限 (USD)",
   "modelRedirects": "模型重定向",
-  "modelRedirectsDesc": "将 Claude Code 客户端请求的模型（如 claude-sonnet-4-6）重定向到上游供应商实际支持的模型（如 glm-5.1、gemini-pro）。用于成本优化或接入第三方 AI 服务。",
+  "modelRedirectsDesc": "将 Claude Code 客户端请求的模型（如 claude-sonnet-4.6）重定向到上游供应商实际支持的模型（如 glm-5.1、gemini-pro）。用于成本优化或接入第三方 AI 服务。",
   "sourceModel": "源模型名称",
   "sourceModelPlaceholder": "例如: claude-sonnet-4-6",
   "sourceModelRequired": "源模型名称不能为空",
