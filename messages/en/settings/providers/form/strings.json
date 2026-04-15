@@ -61,7 +61,7 @@
   "modelRedirects": "Model Redirects",
   "modelRedirectsAddNew": "Add New Rule",
   "modelRedirectsCurrentRules": "Current Rules ({count})",
-  "modelRedirectsDesc": "Redirect Claude Code client model requests (e.g. claude-sonnet-4.6) to upstream provider supported models (e.g. glm-5.1, gemini-pro). For cost optimization or third-party AI integration.",
+  "modelRedirectsDesc": "Redirect Claude Code client model requests (e.g. claude-sonnet-4-6) to upstream provider supported models (e.g. glm-5.1, gemini-pro). For cost optimization or third-party AI integration.",
   "modelRedirectsEmpty": "No redirect rules yet. System will auto-rewrite model names after adding rules.",
   "modelRedirectsExists": "Model \"{model}\" already has a redirect rule",
   "modelRedirectsLabel": "Model Redirects Configuration",
