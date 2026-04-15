@@ -3,24 +3,47 @@
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   Clock3,
   Gauge,
   RefreshCw,
-  ShieldAlert,
   ShieldCheck,
+  Sparkles,
+  Star,
+  TriangleAlert,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useTranslations } from "next-intl";
-import { startTransition, useEffect, useEffectEvent, useMemo, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useMemo, useState, type CSSProperties } from "react";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import type { PublicSystemStatusProvider, PublicSystemStatusSnapshot } from "@/lib/system-status";
 import { cn } from "@/lib/utils";
 
 const REFRESH_INTERVAL_MS = 30_000;
-const DISPLAY_TITLE = "font-['Space_Grotesk','Public_Sans','Segoe_UI',sans-serif]";
-const DISPLAY_SANS = "font-['Public_Sans','Segoe_UI',sans-serif]";
-const DISPLAY_MONO = "font-['IBM_Plex_Mono','SFMono-Regular',monospace]";
+
+const PAGE_VARS: CSSProperties = {
+  ["--neo-bg" as string]: "#FFFDF5",
+  ["--neo-ink" as string]: "#000000",
+  ["--neo-red" as string]: "#FF6B6B",
+  ["--neo-yellow" as string]: "#FFD93D",
+  ["--neo-violet" as string]: "#C4B5FD",
+  ["--neo-mint" as string]: "#86EFAC",
+  ["--neo-paper" as string]: "#FFFFFF",
+};
+
+const DISPLAY = "font-[family-name:var(--font-system-status-display)]";
+const MONO = "font-[family-name:var(--font-system-status-mono)]";
+const PANEL = "border-4 border-black bg-[var(--neo-paper)] shadow-[8px_8px_0px_0px_#000]";
+const PANEL_DEEP = "border-4 border-black bg-[var(--neo-paper)] shadow-[12px_12px_0px_0px_#000]";
+const PANEL_PRESSABLE =
+  "transition-transform duration-150 ease-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[12px_12px_0px_0px_#000]";
+const OUTLINE_TEXT_STYLE: CSSProperties = {
+  WebkitTextStroke: "3px #000",
+  color: "transparent",
+  textShadow: "6px 6px 0px rgba(0,0,0,0.04)",
+};
 
 function formatPercent(locale: string, value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) {
@@ -99,49 +122,7 @@ function formatMarkerDate(locale: string, value: string) {
   }).format(date);
 }
 
-function getStatusTone(status: PublicSystemStatusProvider["currentStatus"]) {
-  if (status === "green") {
-    return {
-      badge: "border-emerald-200 bg-emerald-500/10 text-emerald-700",
-      dot: "bg-emerald-500 shadow-[0_0_0_6px_rgba(16,185,129,0.14)]",
-      card: "border-emerald-200/80 bg-white",
-      accent: "from-emerald-500/18 via-emerald-500/6 to-transparent",
-      meter: "bg-emerald-500",
-      history: "bg-emerald-500/90",
-      historyIdle: "bg-emerald-100",
-      value: "text-emerald-700",
-      icon: ShieldCheck,
-    };
-  }
-
-  if (status === "red") {
-    return {
-      badge: "border-rose-200 bg-rose-500/10 text-rose-700",
-      dot: "bg-rose-500 shadow-[0_0_0_6px_rgba(244,63,94,0.12)]",
-      card: "border-rose-200/80 bg-white",
-      accent: "from-rose-500/18 via-rose-500/7 to-transparent",
-      meter: "bg-rose-500",
-      history: "bg-rose-500/90",
-      historyIdle: "bg-rose-100",
-      value: "text-rose-700",
-      icon: ShieldAlert,
-    };
-  }
-
-  return {
-    badge: "border-amber-200 bg-amber-500/10 text-amber-700",
-    dot: "bg-amber-400 shadow-[0_0_0_6px_rgba(251,191,36,0.16)]",
-    card: "border-amber-200/80 bg-white",
-    accent: "from-amber-400/18 via-amber-400/8 to-transparent",
-    meter: "bg-amber-400",
-    history: "bg-slate-400",
-    historyIdle: "bg-slate-200",
-    value: "text-amber-700",
-    icon: AlertTriangle,
-  };
-}
-
-function getSystemLabel(
+function getSystemStatus(
   healthyCount: number | undefined,
   degradedCount: number | undefined,
   unknownCount: number | undefined
@@ -157,141 +138,166 @@ function getSystemLabel(
   return "unknown";
 }
 
+function getStatusTone(status: PublicSystemStatusProvider["currentStatus"] | "green" | "red" | "unknown") {
+  if (status === "green") {
+    return {
+      chip: "bg-[var(--neo-mint)] text-black",
+      accent: "bg-[var(--neo-mint)]",
+      accentSoft: "bg-[color:rgba(134,239,172,0.24)]",
+      panel: "bg-[var(--neo-paper)]",
+      history: "bg-[var(--neo-mint)]",
+      icon: ShieldCheck,
+    };
+  }
+
+  if (status === "red") {
+    return {
+      chip: "bg-[var(--neo-red)] text-black",
+      accent: "bg-[var(--neo-red)]",
+      accentSoft: "bg-[color:rgba(255,107,107,0.22)]",
+      panel: "bg-[color:rgba(255,107,107,0.08)]",
+      history: "bg-[var(--neo-red)]",
+      icon: TriangleAlert,
+    };
+  }
+
+  return {
+    chip: "bg-[var(--neo-yellow)] text-black",
+    accent: "bg-[var(--neo-yellow)]",
+    accentSoft: "bg-[color:rgba(255,217,61,0.24)]",
+    panel: "bg-[color:rgba(255,217,61,0.12)]",
+    history: "bg-[var(--neo-yellow)]",
+    icon: AlertTriangle,
+  };
+}
+
 function getHistoryBarClass(score: number, totalRequests: number) {
   if (totalRequests <= 0) {
-    return "bg-slate-200";
+    return "bg-white";
   }
 
   if (score >= 0.95) {
-    return "bg-emerald-500";
+    return "bg-[var(--neo-mint)]";
   }
 
   if (score >= 0.5) {
-    return "bg-amber-400";
+    return "bg-[var(--neo-yellow)]";
   }
 
-  return "bg-rose-500";
+  return "bg-[var(--neo-red)]";
 }
 
 function getHistoryBarHeight(score: number, totalRequests: number) {
   if (totalRequests <= 0) {
-    return 16;
+    return 14;
   }
 
   return Math.max(18, Math.round(score * 100));
 }
 
-function StatusBadge({
+function Sticker({
+  children,
+  className,
+  rotate = "rotate-0",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  rotate?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        MONO,
+        "inline-flex items-center gap-2 border-4 border-black px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] shadow-[4px_4px_0px_0px_#000]",
+        rotate,
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function StatusSticker({
   label,
   status,
   animated,
 }: {
   label: string;
-  status: PublicSystemStatusProvider["currentStatus"];
+  status: PublicSystemStatusProvider["currentStatus"] | "green" | "red" | "unknown";
   animated?: boolean;
 }) {
   const tone = getStatusTone(status);
   const reduceMotion = useReducedMotion();
 
   return (
-    <span
-      className={cn(
-        DISPLAY_MONO,
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.22em]",
-        tone.badge
-      )}
-    >
+    <Sticker className={cn("rounded-full", tone.chip)} rotate="-rotate-2">
       <motion.span
-        className={cn("h-2.5 w-2.5 rounded-full", tone.dot)}
+        className="h-2.5 w-2.5 rounded-full border-2 border-black bg-black"
         animate={
           animated && !reduceMotion
             ? {
-                scale: [1, 1.18, 1],
-                opacity: [0.78, 1, 0.78],
+                scale: [1, 1.14, 1],
               }
             : undefined
         }
         transition={{
-          duration: 1.8,
+          duration: 1.1,
           repeat: Infinity,
-          ease: "easeInOut",
+          ease: "linear",
         }}
       />
       {label}
-    </span>
+    </Sticker>
   );
 }
 
 function SummaryCard({
   icon: Icon,
   label,
-  value,
   note,
-  emphasis,
+  rotate,
+  toneClass,
+  value,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   label: string;
-  value: string;
   note?: string;
-  emphasis?: "default" | "primary";
+  rotate?: string;
+  toneClass: string;
+  value: string;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-2xl border px-4 py-4",
-        emphasis === "primary"
-          ? "border-slate-900 bg-slate-950 text-white"
-          : "border-slate-200 bg-white/85 text-slate-950"
-      )}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p
-          className={cn(
-            DISPLAY_MONO,
-            "text-[11px] uppercase tracking-[0.22em]",
-            emphasis === "primary" ? "text-slate-300" : "text-slate-500"
-          )}
-        >
-          {label}
-        </p>
-        <Icon className={cn("h-4 w-4", emphasis === "primary" ? "text-sky-300" : "text-slate-400")} />
+    <div className={cn(PANEL, PANEL_PRESSABLE, "p-4", toneClass, rotate)}>
+      <div className="flex items-start justify-between gap-3">
+        <span className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em]")}>{label}</span>
+        <div className="border-4 border-black bg-white p-2">
+          <Icon className="h-4 w-4 stroke-[2.75px]" />
+        </div>
       </div>
-      <p
-        className={cn(
-          DISPLAY_TITLE,
-          "mt-3 text-3xl font-semibold leading-none tracking-[-0.05em]",
-          emphasis === "primary" ? "text-white" : "text-slate-950"
-        )}
-      >
+      <div className={cn(DISPLAY, "mt-5 text-4xl font-bold leading-none tracking-[-0.07em]")}>
         {value}
-      </p>
-      {note ? (
-        <p className={cn("mt-2 text-sm", emphasis === "primary" ? "text-slate-300" : "text-slate-500")}>
-          {note}
-        </p>
-      ) : null}
+      </div>
+      {note ? <div className="mt-3 text-sm font-bold">{note}</div> : null}
     </div>
   );
 }
 
-function MetricTile({
+function MetricCell({
   label,
   value,
-  accent,
+  toneClass = "bg-white",
 }: {
   label: string;
   value: string;
-  accent?: string;
+  toneClass?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-4">
-      <p className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.2em] text-slate-500")}>
-        {label}
-      </p>
-      <p className={cn(DISPLAY_TITLE, "mt-3 text-2xl font-semibold tracking-[-0.05em] text-slate-950")}>
+    <div className={cn("border-4 border-black p-3 shadow-[4px_4px_0px_0px_#000]", toneClass)}>
+      <div className={cn(MONO, "text-[10px] font-bold uppercase tracking-[0.16em]")}>{label}</div>
+      <div className={cn(DISPLAY, "mt-3 text-2xl font-bold leading-none tracking-[-0.05em]")}>
         {value}
-      </p>
-      {accent ? <p className="mt-1.5 text-xs text-slate-500">{accent}</p> : null}
+      </div>
     </div>
   );
 }
@@ -311,12 +317,15 @@ function ProviderCard({
   const tTypes = useTranslations("settings.providers.types");
   const reduceMotion = useReducedMotion();
   const tone = getStatusTone(provider.currentStatus);
-  const StatusIcon = tone.icon;
-  const typeConfig = getProviderTypeConfig(provider.providerType);
-  const ProviderIcon = typeConfig.icon;
+  const TypeIcon = getProviderTypeConfig(provider.providerType).icon;
   const typeKey = getProviderTypeTranslationKey(provider.providerType);
   const typeLabel = tTypes(`${typeKey}.label`);
-  const availabilityWidth = provider.availability * 100;
+  const StatusIcon = tone.icon;
+  const latestAvailability =
+    provider.history.at(-1)?.totalRequests && provider.history.at(-1)?.availabilityScore != null
+      ? provider.history.at(-1)!.availabilityScore
+      : provider.availability;
+
   const historyMarkers = useMemo(() => {
     if (provider.history.length === 0) {
       return [] as string[];
@@ -333,54 +342,57 @@ function ProviderCard({
     <motion.article
       initial={reduceMotion ? false : { opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.42, ease: "easeOut", delay: reduceMotion ? 0 : index * 0.06 }}
+      transition={{ duration: 0.22, ease: "easeOut", delay: reduceMotion ? 0 : index * 0.04 }}
       className={cn(
-        "relative overflow-hidden rounded-[30px] border p-5 shadow-[0_20px_60px_-38px_rgba(15,23,42,0.35)] sm:p-6",
-        tone.card
+        PANEL_DEEP,
+        PANEL_PRESSABLE,
+        "relative overflow-hidden p-4 sm:p-5",
+        provider.currentStatus === "green"
+          ? "bg-[var(--neo-paper)]"
+          : provider.currentStatus === "red"
+            ? "bg-[color:rgba(255,107,107,0.08)]"
+            : "bg-[color:rgba(255,217,61,0.12)]"
       )}
     >
-      <div className={cn("pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-r", tone.accent)} />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.08)_1px,transparent_1px)] bg-[size:24px_24px] opacity-30" />
+      <div className="pointer-events-none absolute right-4 top-4 hidden h-24 w-24 border-4 border-black bg-[radial-gradient(#000_1.8px,transparent_1.8px)] bg-[size:12px_12px] lg:block" />
 
       <div className="relative">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <StatusBadge
-                animated
-                label={t(`status.${provider.currentStatus}`)}
-                status={provider.currentStatus}
-              />
-              <span
-                className={cn(
-                  DISPLAY_MONO,
-                  "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-slate-500"
-                )}
-              >
-                <ProviderIcon className={cn("h-3.5 w-3.5", typeConfig.iconColor)} />
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusSticker animated label={t(`status.${provider.currentStatus}`)} status={provider.currentStatus} />
+              <Sticker className="bg-[var(--neo-violet)]" rotate="rotate-2">
+                <TypeIcon className="h-3.5 w-3.5 stroke-[2.5px]" />
                 {typeLabel}
-              </span>
+              </Sticker>
+              <Sticker className="bg-white" rotate="-rotate-1">
+                <Activity className="h-3.5 w-3.5 stroke-[2.5px]" />
+                {formatCompactNumber(locale, provider.totalRequests)}
+              </Sticker>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-start gap-4">
-              <div className={cn("rounded-2xl border border-slate-200 p-3", typeConfig.bgColor)}>
-                <ProviderIcon className={cn("h-6 w-6", typeConfig.iconColor)} />
+            <div className="mt-4 flex flex-wrap items-end gap-4">
+              <div className="border-4 border-black bg-[var(--neo-yellow)] p-3 shadow-[6px_6px_0px_0px_#000]">
+                <TypeIcon className="h-6 w-6 stroke-[2.75px]" />
               </div>
+
               <div className="min-w-0">
                 <h2
                   className={cn(
-                    DISPLAY_TITLE,
-                    "truncate text-[clamp(2rem,4vw,3rem)] font-semibold leading-none tracking-[-0.06em] text-slate-950"
+                    DISPLAY,
+                    "max-w-full break-all text-[clamp(2rem,5vw,3.6rem)] font-bold leading-[0.9] tracking-[-0.08em]"
                   )}
                 >
                   {provider.providerName}
                 </h2>
-                <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                  <span className="inline-flex items-center gap-1.5">
-                    <StatusIcon className={cn("h-4 w-4", tone.value)} />
-                    {formatCompactNumber(locale, provider.totalRequests)}
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-sm font-bold">
+                  <span className="inline-flex items-center gap-1.5 border-2 border-black bg-white px-2.5 py-1">
+                    <StatusIcon className="h-4 w-4 stroke-[2.5px]" />
+                    {formatPercent(locale, provider.successRate)}
                   </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Clock3 className="h-4 w-4 text-slate-400" />
+                  <span className="inline-flex items-center gap-1.5 border-2 border-black bg-white px-2.5 py-1">
+                    <Clock3 className="h-4 w-4 stroke-[2.5px]" />
                     {provider.lastRequestAt
                       ? formatTimestamp(locale, provider.lastRequestAt)
                       : t("provider.meta.noRecentTraffic")}
@@ -390,165 +402,110 @@ function ProviderCard({
             </div>
           </div>
 
-          <div className="min-w-[180px] rounded-[24px] border border-slate-200 bg-slate-950 px-4 py-4 text-white">
-            <p className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.22em] text-slate-300")}>
+          <div className="w-full max-w-[240px] border-4 border-black bg-black p-4 text-white shadow-[8px_8px_0px_0px_#FFD93D]">
+            <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--neo-yellow)]")}>
               {t("metrics.availability")}
-            </p>
-            <p className={cn(DISPLAY_TITLE, "mt-3 text-5xl font-semibold leading-none tracking-[-0.08em]")}>
-              {formatPercent(locale, provider.availability)}
-            </p>
-            <p className="mt-3 text-sm text-slate-300">
-              {formatPercent(locale, provider.successRate)} success
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(240px,0.62fr)_minmax(0,1.38fr)]">
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 p-4">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.2em] text-slate-500")}>
-                  {t("metrics.availability")}
-                </p>
-                <p className={cn(DISPLAY_TITLE, "mt-3 text-4xl font-semibold tracking-[-0.06em] text-slate-950")}>
-                  {formatPercent(locale, provider.availability)}
-                </p>
-              </div>
-              <p className="text-sm text-slate-500">{formatNumber(locale, provider.avgLatencyMs, 0)} ms</p>
             </div>
-
-            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-200">
+            <div className={cn(DISPLAY, "mt-3 text-5xl font-bold leading-none tracking-[-0.08em]")}>
+              {formatPercent(locale, provider.availability)}
+            </div>
+            <div className="mt-4 h-4 border-4 border-white bg-black">
               <motion.div
-                className={cn("h-full rounded-full", tone.meter)}
+                className={cn("h-full border-r-4 border-black", tone.accent)}
                 initial={reduceMotion ? false : { width: 0 }}
-                animate={{ width: `${Math.max(0, Math.min(availabilityWidth, 100))}%` }}
-                transition={{ duration: 0.7, ease: "easeOut", delay: reduceMotion ? 0 : 0.08 }}
+                animate={{ width: `${Math.max(0, Math.min(provider.availability * 100, 100))}%` }}
+                transition={{ duration: 0.24, ease: "linear" }}
               />
             </div>
-
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <div className="rounded-2xl bg-white px-3 py-3">
-                <p className={cn(DISPLAY_MONO, "text-[10px] uppercase tracking-[0.18em] text-slate-400")}>
-                  {t("provider.meta.requests")}
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {formatCompactNumber(locale, provider.totalRequests)}
-                </p>
-              </div>
-              <div className="rounded-2xl bg-white px-3 py-3">
-                <p className={cn(DISPLAY_MONO, "text-[10px] uppercase tracking-[0.18em] text-slate-400")}>
-                  {t("provider.meta.successRate")}
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {formatPercent(locale, provider.successRate)}
-                </p>
-              </div>
-              <div className="rounded-2xl bg-white px-3 py-3">
-                <p className={cn(DISPLAY_MONO, "text-[10px] uppercase tracking-[0.18em] text-slate-400")}>
-                  {t("provider.meta.latency")}
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {formatNumber(locale, provider.avgLatencyMs, 0)} ms
-                </p>
-              </div>
+            <div className="mt-3 text-sm font-bold text-white/90">
+              {formatNumber(locale, provider.avgLatencyMs, 0)} ms
             </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricTile
-              label={t("metrics.cacheHitRate")}
-              value={formatPercent(locale, provider.cacheHitRate)}
-            />
-            <MetricTile
-              label={t("metrics.outputRate")}
-              value={
-                provider.avgTokensPerSecond == null
-                  ? "--"
-                  : t("metrics.outputRateValue", {
-                      value: formatNumber(locale, provider.avgTokensPerSecond),
-                    })
-              }
-            />
-            <MetricTile
-              label={t("metrics.costPerMillionTokens")}
-              value={formatCurrency(locale, currencyDisplay, provider.avgCostPerMillionTokens)}
-            />
-            <MetricTile
-              label={t("metrics.costPerHundredMillionTokens")}
-              value={formatCurrency(locale, currencyDisplay, provider.avgCostPerHundredMillionTokens)}
-            />
           </div>
         </div>
 
-        <div className="mt-5 rounded-[24px] border border-slate-200 bg-white/70 px-4 py-4">
+        <div className="mt-5 grid gap-3 lg:grid-cols-4">
+          <MetricCell
+            label={t("metrics.cacheHitRate")}
+            toneClass="bg-[var(--neo-violet)]"
+            value={formatPercent(locale, provider.cacheHitRate)}
+          />
+          <MetricCell
+            label={t("metrics.outputRate")}
+            toneClass="bg-[var(--neo-yellow)]"
+            value={
+              provider.avgTokensPerSecond == null
+                ? "--"
+                : t("metrics.outputRateValue", {
+                    value: formatNumber(locale, provider.avgTokensPerSecond),
+                  })
+            }
+          />
+          <MetricCell
+            label={t("metrics.costPerMillionTokens")}
+            toneClass="bg-white"
+            value={formatCurrency(locale, currencyDisplay, provider.avgCostPerMillionTokens)}
+          />
+          <MetricCell
+            label={t("metrics.costPerHundredMillionTokens")}
+            toneClass="bg-[var(--neo-red)]"
+            value={formatCurrency(locale, currencyDisplay, provider.avgCostPerHundredMillionTokens)}
+          />
+        </div>
+
+        <div className={cn("mt-5 border-4 border-black p-4 shadow-[6px_6px_0px_0px_#000]", tone.accentSoft)}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.2em] text-slate-500")}>
-                {t("provider.history")}
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                {provider.lastRequestAt
-                  ? t("provider.meta.lastRequestValue", {
-                      value: formatTimestamp(locale, provider.lastRequestAt),
-                    })
-                  : t("provider.meta.noRecentTraffic")}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.2em] text-slate-400")}>
-                Live
-              </p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">
-                {formatPercent(
-                  locale,
-                  provider.history.at(-1)?.totalRequests ? provider.history.at(-1)?.availabilityScore : provider.availability
-                )}
-              </p>
+            <Sticker className="bg-white" rotate="-rotate-1">
+              <Gauge className="h-3.5 w-3.5 stroke-[2.5px]" />
+              {t("provider.history")}
+            </Sticker>
+            <div className="flex flex-wrap items-center gap-2">
+              <Sticker className="bg-white" rotate="rotate-1">
+                {t("provider.meta.requests")} {formatCompactNumber(locale, provider.totalRequests)}
+              </Sticker>
+              <Sticker className={cn("bg-white", provider.lastRequestAt ? "" : "bg-[var(--neo-yellow)]")} rotate="-rotate-1">
+                LIVE {formatPercent(locale, latestAvailability)}
+              </Sticker>
             </div>
           </div>
 
-          <div className="relative mt-4">
-            <div className="pointer-events-none absolute inset-0 grid grid-rows-4">
-              <div className="border-t border-dashed border-slate-200/90" />
-              <div className="border-t border-dashed border-slate-200/70" />
-              <div className="border-t border-dashed border-slate-200/70" />
-              <div className="border-t border-dashed border-slate-200/90" />
+          <div className="mt-5 border-4 border-black bg-white p-3">
+            <div className="relative h-32 overflow-hidden bg-[linear-gradient(to_right,rgba(0,0,0,0.09)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.09)_1px,transparent_1px)] bg-[size:16px_16px]">
+              <div className="absolute inset-x-0 bottom-0 top-0 flex items-end gap-1.5 px-1 pb-1">
+                {provider.history.map((bucket, bucketIndex) => (
+                  <motion.div
+                    key={`${provider.providerId}-${bucket.bucketStart}`}
+                    title={`${formatTimestamp(locale, bucket.bucketStart)} · ${formatPercent(
+                      locale,
+                      bucket.totalRequests > 0 ? bucket.availabilityScore : null
+                    )}`}
+                    className={cn(
+                      "min-w-0 flex-1 border-2 border-black",
+                      getHistoryBarClass(bucket.availabilityScore, bucket.totalRequests)
+                    )}
+                    style={{
+                      height: `${getHistoryBarHeight(bucket.availabilityScore, bucket.totalRequests)}%`,
+                      transformOrigin: "bottom",
+                    }}
+                    initial={reduceMotion ? false : { scaleY: 0 }}
+                    animate={{ scaleY: 1 }}
+                    transition={{
+                      duration: 0.16,
+                      ease: "linear",
+                      delay: reduceMotion ? 0 : index * 0.03 + bucketIndex * 0.005,
+                    }}
+                  />
+                ))}
+              </div>
             </div>
 
-            <div className="relative flex h-28 items-end gap-1">
-              {provider.history.map((bucket, bucketIndex) => (
-                <motion.div
-                  key={`${provider.providerId}-${bucket.bucketStart}`}
-                  title={`${formatTimestamp(locale, bucket.bucketStart)} · ${formatPercent(
-                    locale,
-                    bucket.totalRequests > 0 ? bucket.availabilityScore : null
-                  )}`}
-                  className={cn(
-                    "min-w-0 flex-1 rounded-t-[10px] transition-colors duration-200",
-                    getHistoryBarClass(bucket.availabilityScore, bucket.totalRequests)
-                  )}
-                  style={{
-                    height: `${getHistoryBarHeight(bucket.availabilityScore, bucket.totalRequests)}%`,
-                  }}
-                  initial={reduceMotion ? false : { opacity: 0.35, scaleY: 0.2 }}
-                  animate={{ opacity: 1, scaleY: 1 }}
-                  transition={{
-                    duration: 0.35,
-                    ease: "easeOut",
-                    delay: reduceMotion ? 0 : index * 0.05 + bucketIndex * 0.006,
-                  }}
-                />
-              ))}
-            </div>
+            {historyMarkers.length === 3 ? (
+              <div className={cn(MONO, "mt-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.12em]")}>
+                <span>{historyMarkers[0]}</span>
+                <span>{historyMarkers[1]}</span>
+                <span>{historyMarkers[2]}</span>
+              </div>
+            ) : null}
           </div>
-
-          {historyMarkers.length === 3 ? (
-            <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
-              <span>{historyMarkers[0]}</span>
-              <span>{historyMarkers[1]}</span>
-              <span>{historyMarkers[2]}</span>
-            </div>
-          ) : null}
         </div>
       </div>
     </motion.article>
@@ -619,126 +576,150 @@ export function SystemStatusView({
   }, [initialData, refreshSnapshot]);
 
   const summary = data?.summary;
-  const systemStatus = getSystemLabel(
+  const systemStatus = getSystemStatus(
     summary?.healthyCount,
     summary?.degradedCount,
     summary?.unknownCount
   );
   const orderedProviders = data?.providers ?? [];
+  const liveTone = getStatusTone(systemStatus);
+  const liveAvailability = formatPercent(locale, summary?.systemAvailability);
 
   return (
     <main
       className={cn(
-        DISPLAY_SANS,
-        "min-h-[var(--cch-viewport-height,100vh)] bg-[#eef4ff] text-slate-950"
+        DISPLAY,
+        "min-h-[var(--cch-viewport-height,100vh)] bg-[var(--neo-bg)] text-[var(--neo-ink)]"
       )}
+      style={PAGE_VARS}
     >
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(30,64,175,0.12),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.08),transparent_28%)]" />
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:32px_32px]" />
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.08)_1px,transparent_1px)] bg-[size:32px_32px]" />
+      <div className="pointer-events-none fixed inset-0 opacity-20 [background-image:radial-gradient(#000_1.6px,transparent_1.6px)] [background-size:22px_22px]" />
 
-      <div className="relative mx-auto max-w-[1480px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
         <motion.section
-          initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="rounded-[32px] border border-slate-200/90 bg-white/88 p-5 shadow-[0_28px_90px_-55px_rgba(15,23,42,0.45)] backdrop-blur sm:p-6"
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className={cn(PANEL_DEEP, "relative overflow-hidden bg-[var(--neo-bg)] p-4 sm:p-6")}
         >
-          <div className="flex flex-col gap-5 border-b border-slate-200 pb-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="pointer-events-none absolute -right-4 top-5 hidden rotate-6 border-4 border-black bg-[var(--neo-red)] px-4 py-2 shadow-[6px_6px_0px_0px_#000] lg:block">
+            <Sparkles className="h-5 w-5 stroke-[2.75px]" />
+          </div>
+          <div className="pointer-events-none absolute bottom-4 right-4 hidden lg:block">
+            <Star className="h-16 w-16 fill-[var(--neo-yellow)] stroke-[3px]" />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Sticker className="bg-[var(--neo-yellow)]" rotate="-rotate-2">
+              Claude Code Hub
+            </Sticker>
+            <Sticker className="bg-white" rotate="rotate-1">
+              {t("hero.pathLabel")}
+              <ArrowRight className="h-3.5 w-3.5 stroke-[2.75px]" />
+              /{locale}/system-status
+            </Sticker>
+            <StatusSticker animated label={t(`status.${systemStatus}`)} status={systemStatus} />
+          </div>
+
+          <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_320px]">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
+              <div className="relative">
+                <div
                   className={cn(
-                    DISPLAY_MONO,
-                    "rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-slate-500"
+                    DISPLAY,
+                    "text-[clamp(3.8rem,11vw,8rem)] font-bold uppercase leading-[0.8] tracking-[-0.12em]"
+                  )}
+                  style={OUTLINE_TEXT_STYLE}
+                >
+                  SYSTEM
+                </div>
+                <div
+                  className={cn(
+                    DISPLAY,
+                    "mt-[-0.4rem] text-[clamp(3rem,9vw,6.5rem)] font-bold uppercase leading-[0.85] tracking-[-0.12em]"
                   )}
                 >
-                  Claude Code Hub
-                </span>
-                <span
-                  className={cn(
-                    DISPLAY_MONO,
-                    "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-slate-500"
-                  )}
-                >
-                  /{locale}/system-status
-                </span>
-                <StatusBadge label={t(`status.${systemStatus}`)} status={systemStatus} />
+                  STATUS
+                </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-end gap-4">
-                <h1
-                  className={cn(
-                    DISPLAY_TITLE,
-                    "text-[clamp(2.2rem,5vw,3.8rem)] font-semibold leading-none tracking-[-0.08em] text-slate-950"
-                  )}
-                >
-                  {t("hero.title")}
-                </h1>
-                <span
-                  className={cn(
-                    DISPLAY_MONO,
-                    "mb-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-slate-500"
-                  )}
-                >
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Sticker className="bg-[var(--neo-violet)]" rotate="rotate-2">
                   {t("hero.window", { days: data?.windowDays ?? 7 })}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.2em] text-slate-500")}>
+                </Sticker>
+                <Sticker className="bg-white" rotate="-rotate-1">
                   {data?.queriedAt
                     ? t("hero.updatedAt", { value: formatTimestamp(locale, data.queriedAt) })
                     : t("hero.awaitingData")}
-                </p>
+                </Sticker>
+                <Sticker className={cn(refreshing ? "bg-[var(--neo-red)]" : "bg-white")} rotate="rotate-1">
+                  <RefreshCw
+                    className={cn(
+                      "h-3.5 w-3.5 stroke-[2.75px] motion-reduce:animate-none",
+                      refreshing && "animate-spin"
+                    )}
+                  />
+                  {refreshing ? t("hero.refreshing") : t("hero.autoRefresh")}
+                </Sticker>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4 motion-reduce:animate-none",
-                    refreshing && "animate-spin"
-                  )}
-                />
-                {refreshing ? t("hero.refreshing") : t("hero.autoRefresh")}
+            </div>
+
+            <div
+              className={cn(
+                "border-4 border-black p-4 text-black shadow-[12px_12px_0px_0px_#000]",
+                liveTone.accent
+              )}
+            >
+              <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em]")}>
+                {t("summary.systemAvailability")}
+              </div>
+              <div className={cn(DISPLAY, "mt-4 text-6xl font-bold leading-none tracking-[-0.1em]")}>
+                {liveAvailability}
+              </div>
+              <div className="mt-5 border-4 border-black bg-white px-3 py-3">
+                <div className={cn(MONO, "text-[10px] font-bold uppercase tracking-[0.16em]")}>
+                  {t("summary.providerCoverage", {
+                    providers: formatNumber(locale, summary?.providerCount, 0),
+                  })}
+                </div>
               </div>
             </div>
           </div>
 
           {error ? (
-            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{error}</span>
+            <div className={cn(PANEL, "mt-5 bg-[var(--neo-red)] p-4")}>
+              <div className="flex items-start gap-3 text-sm font-bold">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 stroke-[2.75px]" />
+                <span>{error}</span>
+              </div>
             </div>
           ) : null}
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <SummaryCard
-              icon={Gauge}
-              label={t("summary.systemAvailability")}
-              value={formatPercent(locale, summary?.systemAvailability)}
-              note={t("summary.providerCoverage", {
-                providers: formatNumber(locale, summary?.providerCount, 0),
-              })}
-              emphasis="primary"
-            />
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
               icon={ShieldCheck}
               label={t("summary.healthyProviders")}
-              value={formatNumber(locale, summary?.healthyCount, 0)}
               note={t("summary.degradedBreakdown", {
                 degraded: formatNumber(locale, summary?.degradedCount, 0),
                 unknown: formatNumber(locale, summary?.unknownCount, 0),
               })}
+              rotate="-rotate-1"
+              toneClass="bg-[var(--neo-yellow)]"
+              value={formatNumber(locale, summary?.healthyCount, 0)}
             />
             <SummaryCard
               icon={Activity}
               label={t("summary.weightedCacheHitRate")}
+              rotate="rotate-1"
+              toneClass="bg-[var(--neo-violet)]"
               value={formatPercent(locale, summary?.weightedCacheHitRate)}
             />
             <SummaryCard
               icon={Zap}
               label={t("metrics.outputRate")}
+              rotate="-rotate-1"
+              toneClass="bg-white"
               value={
                 summary?.weightedTokensPerSecond == null
                   ? "--"
@@ -750,11 +731,6 @@ export function SystemStatusView({
             <SummaryCard
               icon={Clock3}
               label={t("metrics.costPerMillionTokens")}
-              value={
-                data
-                  ? formatCurrency(locale, data.currencyDisplay, summary?.weightedCostPerMillionTokens)
-                  : "--"
-              }
               note={
                 data
                   ? formatCurrency(
@@ -764,13 +740,29 @@ export function SystemStatusView({
                     )
                   : "--"
               }
+              rotate="rotate-1"
+              toneClass="bg-[var(--neo-red)]"
+              value={
+                data
+                  ? formatCurrency(locale, data.currencyDisplay, summary?.weightedCostPerMillionTokens)
+                  : "--"
+              }
             />
           </div>
         </motion.section>
 
-        <section className="mt-4">
+        <section className="mt-5">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <Sticker className="bg-[var(--neo-yellow)]" rotate="-rotate-2">
+              {t("provider.sectionEyebrow")}
+            </Sticker>
+            <Sticker className="bg-white" rotate="rotate-1">
+              {orderedProviders.length} providers
+            </Sticker>
+          </div>
+
           {orderedProviders.length > 0 ? (
-            <div className="grid gap-4">
+            <div className="grid gap-5">
               {orderedProviders.map((provider, index) => (
                 <ProviderCard
                   key={provider.providerId}
@@ -782,9 +774,7 @@ export function SystemStatusView({
               ))}
             </div>
           ) : (
-            <div className="rounded-[28px] border border-dashed border-slate-300 bg-white/70 px-6 py-16 text-center text-slate-500 shadow-[0_18px_60px_-42px_rgba(15,23,42,0.4)]">
-              {t("states.empty")}
-            </div>
+            <div className={cn(PANEL_DEEP, "bg-white p-10 text-center")}>{t("states.empty")}</div>
           )}
         </section>
       </div>

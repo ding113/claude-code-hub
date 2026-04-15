@@ -8,6 +8,11 @@ const intlServerMocks = vi.hoisted(() => ({
 
 vi.mock("next-intl/server", () => intlServerMocks);
 
+vi.mock("next/font/google", () => ({
+  IBM_Plex_Mono: vi.fn(() => ({ variable: "font-ibm-plex-mono" })),
+  Space_Grotesk: vi.fn(() => ({ variable: "font-space-grotesk" })),
+}));
+
 vi.mock("@/lib/logger", () => ({
   logger: {
     error: vi.fn(),
