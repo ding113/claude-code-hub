@@ -195,6 +195,59 @@ function getHistoryBarHeight(score: number, totalRequests: number) {
   return Math.max(18, Math.round(score * 100));
 }
 
+function getHistoryDayKey(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function buildHistorySegments(
+  locale: string,
+  history: PublicSystemStatusProvider["history"]
+) {
+  const grouped: Array<{
+    key: string;
+    bucketStart: string;
+    totalRequests: number;
+    weightedAvailability: number;
+  }> = [];
+
+  for (const bucket of history) {
+    const groupKey = getHistoryDayKey(bucket.bucketStart);
+    const currentGroup = grouped.at(-1);
+
+    if (!currentGroup || currentGroup.key !== groupKey) {
+      grouped.push({
+        key: groupKey,
+        bucketStart: bucket.bucketStart,
+        totalRequests: bucket.totalRequests,
+        weightedAvailability: bucket.totalRequests > 0 ? bucket.availabilityScore * bucket.totalRequests : 0,
+      });
+      continue;
+    }
+
+    currentGroup.totalRequests += bucket.totalRequests;
+    currentGroup.weightedAvailability +=
+      bucket.totalRequests > 0 ? bucket.availabilityScore * bucket.totalRequests : 0;
+  }
+
+  return grouped.map((group) => {
+    const availability = group.totalRequests > 0 ? group.weightedAvailability / group.totalRequests : null;
+
+    return {
+      key: group.key,
+      label: formatMarkerDate(locale, group.bucketStart),
+      availability,
+      totalRequests: group.totalRequests,
+      toneClass: getHistoryBarClass(availability ?? 0, group.totalRequests),
+      height: getHistoryBarHeight(availability ?? 0, group.totalRequests),
+    };
+  });
+}
+
 function Sticker({
   children,
   className,
@@ -326,17 +379,7 @@ function ProviderCard({
       ? provider.history.at(-1)!.availabilityScore
       : provider.availability;
 
-  const historyMarkers = useMemo(() => {
-    if (provider.history.length === 0) {
-      return [] as string[];
-    }
-
-    const lastIndex = provider.history.length - 1;
-    const middleIndex = Math.floor(lastIndex / 2);
-    return [0, middleIndex, lastIndex].map((position) =>
-      formatMarkerDate(locale, provider.history[position].bucketStart)
-    );
-  }, [locale, provider.history]);
+  const historySegments = useMemo(() => buildHistorySegments(locale, provider.history), [locale, provider.history]);
 
   return (
     <motion.article
@@ -469,42 +512,53 @@ function ProviderCard({
           </div>
 
           <div className="mt-5 border-4 border-black bg-white p-3">
-            <div className="relative h-32 overflow-hidden bg-[linear-gradient(to_right,rgba(0,0,0,0.09)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.09)_1px,transparent_1px)] bg-[size:16px_16px]">
-              <div className="absolute inset-x-0 bottom-0 top-0 flex items-end gap-1.5 px-1 pb-1">
-                {provider.history.map((bucket, bucketIndex) => (
+            <div className="overflow-x-auto pb-1">
+              <div className="grid min-w-max grid-flow-col gap-3">
+                {historySegments.map((segment, segmentIndex) => (
                   <motion.div
-                    key={`${provider.providerId}-${bucket.bucketStart}`}
-                    title={`${formatTimestamp(locale, bucket.bucketStart)} · ${formatPercent(
-                      locale,
-                      bucket.totalRequests > 0 ? bucket.availabilityScore : null
-                    )}`}
-                    className={cn(
-                      "min-w-0 flex-1 border-2 border-black",
-                      getHistoryBarClass(bucket.availabilityScore, bucket.totalRequests)
-                    )}
-                    style={{
-                      height: `${getHistoryBarHeight(bucket.availabilityScore, bucket.totalRequests)}%`,
-                      transformOrigin: "bottom",
-                    }}
-                    initial={reduceMotion ? false : { scaleY: 0 }}
-                    animate={{ scaleY: 1 }}
+                    key={`${provider.providerId}-${segment.key}`}
+                    title={`${segment.label} · ${formatPercent(locale, segment.availability)}`}
+                    initial={reduceMotion ? false : { opacity: 0, y: 14, rotate: -1.5 }}
+                    animate={{ opacity: 1, y: 0, rotate: 0 }}
                     transition={{
-                      duration: 0.16,
-                      ease: "linear",
-                      delay: reduceMotion ? 0 : index * 0.03 + bucketIndex * 0.005,
+                      duration: 0.18,
+                      ease: "easeOut",
+                      delay: reduceMotion ? 0 : index * 0.03 + segmentIndex * 0.04,
                     }}
-                  />
+                    className={cn(
+                      "relative flex h-32 w-[168px] shrink-0 flex-col justify-between overflow-hidden border-4 border-black p-3 shadow-[6px_6px_0px_0px_#000]",
+                      segment.toneClass
+                    )}
+                  >
+                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.08)_1px,transparent_1px)] bg-[size:16px_16px] opacity-25" />
+                    <motion.div
+                      className="absolute inset-x-0 bottom-0 border-t-4 border-black bg-white/60"
+                      initial={reduceMotion ? false : { height: 0 }}
+                      animate={{ height: `${Math.max(0, 100 - segment.height)}%` }}
+                      transition={{
+                        duration: 0.2,
+                        ease: "linear",
+                        delay: reduceMotion ? 0 : index * 0.03 + segmentIndex * 0.04,
+                      }}
+                    />
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                      <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.14em]")}>{segment.label}</div>
+                      <div className="border-2 border-black bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]">
+                        {segment.totalRequests > 0 ? formatCompactNumber(locale, segment.totalRequests) : "NO DATA"}
+                      </div>
+                    </div>
+                    <div className="relative z-10">
+                      <div className={cn(DISPLAY, "text-3xl font-bold leading-none tracking-[-0.08em]")}>
+                        {formatPercent(locale, segment.availability)}
+                      </div>
+                      <div className={cn(MONO, "mt-2 text-[10px] font-bold uppercase tracking-[0.14em]")}>
+                        {t("provider.meta.requests")}
+                      </div>
+                    </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
-
-            {historyMarkers.length === 3 ? (
-              <div className={cn(MONO, "mt-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.12em]")}>
-                <span>{historyMarkers[0]}</span>
-                <span>{historyMarkers[1]}</span>
-                <span>{historyMarkers[2]}</span>
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
