@@ -4028,7 +4028,7 @@ export async function testProviderAnthropicMessages(
       stream: false, // 显式禁用流式响应，避免 Cloudflare 520 错误
       messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
     }),
-    userAgent: "claude-cli/2.0.76 (external, cli)",
+    userAgent: "claude-cli/2.1.76 (external, cli)",
     successMessage: "Anthropic Messages API 测试成功",
     extract: (result) => ({
       model: "model" in result ? result.model : undefined,
