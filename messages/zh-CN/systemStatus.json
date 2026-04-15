@@ -2,6 +2,8 @@
   "pageTitle": "系统状态 - Claude Code Hub",
   "pageDescription": "Claude Code Hub 公开供应商状态页",
   "hero": {
+    "kicker": "可信公开观测路径",
+    "pathLabel": "公开状态路径",
     "title": "系统状态",
     "description": "一个公开路径，集中观察 provider 健康度、缓存命中效率、输出速率与 token 成本效率。",
     "window": "滚动窗口 · 最近 {days} 天",

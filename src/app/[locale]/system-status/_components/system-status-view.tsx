@@ -1,6 +1,14 @@
 "use client";
 
-import { AlertTriangle, Clock3, Gauge, RefreshCw, ShieldCheck, Zap } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Clock3,
+  Gauge,
+  RefreshCw,
+  ShieldCheck,
+  Zap,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
@@ -8,6 +16,9 @@ import type { PublicSystemStatusProvider, PublicSystemStatusSnapshot } from "@/l
 import { cn } from "@/lib/utils";
 
 const REFRESH_INTERVAL_MS = 30_000;
+const DISPLAY_SERIF = "font-['Iowan_Old_Style','Palatino_Linotype','Book_Antiqua',Georgia,serif]";
+const DISPLAY_SANS = "font-['Public_Sans','Segoe_UI',sans-serif]";
+const DISPLAY_MONO = "font-['IBM_Plex_Mono','SFMono-Regular',monospace]";
 
 function formatPercent(locale: string, value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) {
@@ -65,29 +76,35 @@ function getStatusTone(status: PublicSystemStatusProvider["currentStatus"]) {
   if (status === "green") {
     return {
       dot: "bg-emerald-500",
-      badge: "bg-emerald-500/12 text-emerald-700 ring-emerald-500/20",
-      bar: "bg-emerald-500",
+      badge: "border-emerald-300 bg-emerald-500/10 text-emerald-800",
+      text: "text-emerald-700",
+      rail: "bg-emerald-500",
+      chart: "bg-emerald-500",
     };
   }
 
   if (status === "red") {
     return {
       dot: "bg-rose-500",
-      badge: "bg-rose-500/12 text-rose-700 ring-rose-500/20",
-      bar: "bg-rose-500",
+      badge: "border-rose-300 bg-rose-500/10 text-rose-800",
+      text: "text-rose-700",
+      rail: "bg-rose-500",
+      chart: "bg-rose-500",
     };
   }
 
   return {
-    dot: "bg-slate-400",
-    badge: "bg-slate-500/12 text-slate-600 ring-slate-500/20",
-    bar: "bg-slate-300",
+    dot: "bg-amber-500",
+    badge: "border-amber-300 bg-amber-500/10 text-amber-800",
+    text: "text-amber-700",
+    rail: "bg-amber-400",
+    chart: "bg-stone-300",
   };
 }
 
 function getBucketClass(score: number, totalRequests: number) {
   if (totalRequests <= 0) {
-    return "bg-slate-200";
+    return "bg-stone-200";
   }
 
   if (score >= 0.95) {
@@ -101,34 +118,65 @@ function getBucketClass(score: number, totalRequests: number) {
   return "bg-rose-500";
 }
 
-function SummaryCard({
-  title,
-  value,
-  meta,
-  icon: Icon,
+function getSystemLabel(
+  healthyCount: number | undefined,
+  degradedCount: number | undefined,
+  unknownCount: number | undefined
+) {
+  if ((degradedCount ?? 0) > 0) {
+    return "degraded";
+  }
+
+  if ((healthyCount ?? 0) > 0 && (unknownCount ?? 0) === 0) {
+    return "normal";
+  }
+
+  return "unknown";
+}
+
+function StatusPill({
+  status,
+  label,
 }: {
-  title: string;
-  value: string;
-  meta: string;
-  icon: typeof ShieldCheck;
+  status: PublicSystemStatusProvider["currentStatus"];
+  label: string;
 }) {
+  const tone = getStatusTone(status);
+
   return (
-    <div className="rounded-[28px] border border-white/80 bg-white/85 p-5 shadow-[0_20px_70px_-45px_rgba(15,23,42,0.35)] backdrop-blur">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-500">{title}</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
-        </div>
-        <div className="rounded-2xl bg-slate-950 p-3 text-white">
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-      <p className="mt-4 text-sm text-slate-500">{meta}</p>
+    <span
+      className={cn(
+        DISPLAY_MONO,
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em]",
+        tone.badge
+      )}
+    >
+      <span className={cn("h-2 w-2 rounded-full", tone.dot)} />
+      {label}
+    </span>
+  );
+}
+
+function MetricStrip({ title, value, meta }: { title: string; value: string; meta: string }) {
+  return (
+    <div className="border-t border-stone-300 py-4 first:border-t-0 lg:border-t-0 lg:border-l lg:px-5 lg:first:border-l-0">
+      <p className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.28em] text-stone-500")}>
+        {title}
+      </p>
+      <p
+        className={cn(
+          DISPLAY_SERIF,
+          "mt-2 text-3xl leading-none tracking-[-0.04em] text-stone-950"
+        )}
+      >
+        {value}
+      </p>
+      <p className="mt-2 text-sm leading-6 text-stone-600">{meta}</p>
     </div>
   );
 }
 
-function ProviderCard({
+function ProviderRow({
   locale,
   currencyDisplay,
   provider,
@@ -141,92 +189,122 @@ function ProviderCard({
   const tTypes = useTranslations("settings.providers.types");
   const typeKey = getProviderTypeTranslationKey(provider.providerType);
   const providerTypeLabel = tTypes(`${typeKey}.label`);
-  const statusTone = getStatusTone(provider.currentStatus);
   const typeConfig = getProviderTypeConfig(provider.providerType);
   const ProviderIcon = typeConfig.icon;
+  const tone = getStatusTone(provider.currentStatus);
 
   return (
-    <article className="rounded-[32px] border border-white/80 bg-white/88 p-6 shadow-[0_25px_80px_-45px_rgba(15,23,42,0.38)] backdrop-blur">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <div className={cn("rounded-[22px] p-3", typeConfig.bgColor)}>
-            <ProviderIcon className={cn("h-7 w-7", typeConfig.iconColor)} />
+    <article className="group relative overflow-hidden border-b border-stone-300/90 py-6 last:border-b-0">
+      <div className="absolute left-0 top-6 hidden h-[calc(100%-3rem)] w-1 rounded-full lg:block">
+        <div
+          className={cn("h-full w-full rounded-full transition-opacity duration-300", tone.rail)}
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,1fr)] lg:gap-8 lg:pl-6">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className={cn("rounded-full border border-stone-300 p-3", typeConfig.bgColor)}>
+              <ProviderIcon className={cn("h-5 w-5", typeConfig.iconColor)} />
+            </div>
+            <StatusPill
+              status={provider.currentStatus}
+              label={t(`status.${provider.currentStatus}`)}
+            />
+            <span
+              className={cn(
+                DISPLAY_MONO,
+                "rounded-full border border-stone-300 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-stone-500"
+              )}
+            >
+              {providerTypeLabel}
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+
+          <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0">
+              <h2
+                className={cn(
+                  DISPLAY_SERIF,
+                  "text-3xl leading-none tracking-[-0.045em] text-stone-950 sm:text-4xl"
+                )}
+              >
                 {provider.providerName}
               </h2>
-              <span className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                {providerTypeLabel}
-              </span>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-stone-600">
+                {t("provider.meta.windowHint")}
+              </p>
             </div>
-            <p className="mt-2 text-sm text-slate-500">{t("provider.meta.windowHint")}</p>
+            <div className="text-right">
+              <p
+                className={cn(
+                  DISPLAY_MONO,
+                  "text-[11px] uppercase tracking-[0.24em] text-stone-500"
+                )}
+              >
+                {t("metrics.availability")}
+              </p>
+              <p
+                className={cn(
+                  DISPLAY_SERIF,
+                  "mt-2 text-5xl leading-none tracking-[-0.06em] text-stone-950"
+                )}
+              >
+                {formatPercent(locale, provider.availability)}
+              </p>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 ring-1 ring-slate-200/80">
-          <span className={cn("h-2.5 w-2.5 rounded-full", statusTone.dot)} />
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-1 text-xs font-semibold ring-1",
-              statusTone.badge
-            )}
-          >
-            {t(`status.${provider.currentStatus}`)}
-          </span>
-        </div>
-      </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-[24px] bg-slate-50/90 p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-            {t("metrics.availability")}
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">
-            {formatPercent(locale, provider.availability)}
-          </p>
-        </div>
-        <div className="rounded-[24px] bg-slate-50/90 p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-            {t("metrics.cacheHitRate")}
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">
-            {formatPercent(locale, provider.cacheHitRate)}
-          </p>
-        </div>
-        <div className="rounded-[24px] bg-slate-50/90 p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-            {t("metrics.outputRate")}
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">
-            {provider.avgTokensPerSecond == null
-              ? "--"
-              : t("metrics.outputRateValue", {
-                  value: formatNumber(locale, provider.avgTokensPerSecond),
-                })}
-          </p>
-        </div>
-        <div className="rounded-[24px] bg-slate-50/90 p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-            {t("metrics.costPerMillionTokens")}
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">
-            {formatCurrency(locale, currencyDisplay, provider.avgCostPerMillionTokens)}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-5 rounded-[24px] border border-slate-200/80 bg-white/90 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-2">
           <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+            <p
+              className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.24em] text-stone-500")}
+            >
+              {t("metrics.cacheHitRate")}
+            </p>
+            <p className="mt-2 text-lg font-semibold text-stone-950">
+              {formatPercent(locale, provider.cacheHitRate)}
+            </p>
+          </div>
+          <div>
+            <p
+              className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.24em] text-stone-500")}
+            >
+              {t("metrics.outputRate")}
+            </p>
+            <p className="mt-2 text-lg font-semibold text-stone-950">
+              {provider.avgTokensPerSecond == null
+                ? "--"
+                : t("metrics.outputRateValue", {
+                    value: formatNumber(locale, provider.avgTokensPerSecond),
+                  })}
+            </p>
+          </div>
+          <div>
+            <p
+              className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.24em] text-stone-500")}
+            >
+              {t("metrics.costPerMillionTokens")}
+            </p>
+            <p className="mt-2 text-lg font-semibold text-stone-950">
+              {formatCurrency(locale, currencyDisplay, provider.avgCostPerMillionTokens)}
+            </p>
+          </div>
+          <div>
+            <p
+              className={cn(DISPLAY_MONO, "text-[11px] uppercase tracking-[0.24em] text-stone-500")}
+            >
               {t("metrics.costPerHundredMillionTokens")}
             </p>
-            <p className="mt-2 text-xl font-semibold text-slate-950">
+            <p className="mt-2 text-lg font-semibold text-stone-950">
               {formatCurrency(locale, currencyDisplay, provider.avgCostPerHundredMillionTokens)}
             </p>
           </div>
-          <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+        </div>
+
+        <div className="space-y-4 border-t border-stone-300 pt-4 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-stone-600">
             <span>
               {t("provider.meta.requests")} {formatNumber(locale, provider.totalRequests, 0)}
             </span>
@@ -237,39 +315,52 @@ function ProviderCard({
               {t("provider.meta.latency")} {formatNumber(locale, provider.avgLatencyMs, 0)} ms
             </span>
           </div>
-        </div>
-      </div>
 
-      <div className="mt-5">
-        <div className="mb-3 flex items-center justify-between text-xs uppercase tracking-[0.18em] text-slate-500">
-          <span>{t("provider.history")}</span>
-          <span>
-            {provider.lastRequestAt
-              ? t("provider.meta.lastRequestValue", {
-                  value: formatUpdatedAt(locale, provider.lastRequestAt),
-                })
-              : t("provider.meta.noRecentTraffic")}
-          </span>
-        </div>
-        <div
-          className="grid gap-1"
-          style={{
-            gridTemplateColumns: `repeat(${Math.max(provider.history.length, 1)}, minmax(0, 1fr))`,
-          }}
-        >
-          {provider.history.map((bucket) => (
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p
+                className={cn(
+                  DISPLAY_MONO,
+                  "text-[11px] uppercase tracking-[0.24em] text-stone-500"
+                )}
+              >
+                {t("provider.history")}
+              </p>
+              <p
+                className={cn(
+                  DISPLAY_MONO,
+                  "text-[11px] uppercase tracking-[0.2em] text-stone-400"
+                )}
+              >
+                {provider.lastRequestAt
+                  ? t("provider.meta.lastRequestValue", {
+                      value: formatUpdatedAt(locale, provider.lastRequestAt),
+                    })
+                  : t("provider.meta.noRecentTraffic")}
+              </p>
+            </div>
+
             <div
-              key={`${provider.providerId}-${bucket.bucketStart}`}
-              className={cn(
-                "h-7 rounded-[6px]",
-                getBucketClass(bucket.availabilityScore, bucket.totalRequests)
-              )}
-              title={`${formatUpdatedAt(locale, bucket.bucketStart)} · ${formatPercent(
-                locale,
-                bucket.totalRequests > 0 ? bucket.availabilityScore : null
-              )}`}
-            />
-          ))}
+              className="grid gap-1"
+              style={{
+                gridTemplateColumns: `repeat(${Math.max(provider.history.length, 1)}, minmax(0, 1fr))`,
+              }}
+            >
+              {provider.history.map((bucket) => (
+                <div
+                  key={`${provider.providerId}-${bucket.bucketStart}`}
+                  className={cn(
+                    "h-9 rounded-sm transition-colors duration-300",
+                    getBucketClass(bucket.availabilityScore, bucket.totalRequests)
+                  )}
+                  title={`${formatUpdatedAt(locale, bucket.bucketStart)} · ${formatPercent(
+                    locale,
+                    bucket.totalRequests > 0 ? bucket.availabilityScore : null
+                  )}`}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </article>
@@ -347,115 +438,234 @@ export function SystemStatusView({
   }, [initialData, t]);
 
   const summary = data?.summary;
+  const systemLabel = getSystemLabel(
+    summary?.healthyCount,
+    summary?.degradedCount,
+    summary?.unknownCount
+  );
 
   return (
-    <main className="min-h-[var(--cch-viewport-height,100vh)] overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(15,23,42,0.08),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.14),_transparent_30%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)]">
-      <div className="mx-auto max-w-7xl px-6 py-10 sm:px-8 lg:px-10">
-        <section className="relative overflow-hidden rounded-[40px] border border-white/80 bg-white/78 p-8 shadow-[0_30px_120px_-55px_rgba(15,23,42,0.4)] backdrop-blur-xl">
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-slate-500">
-                Claude Code Hub
+    <main
+      className={cn(
+        DISPLAY_SANS,
+        "min-h-[var(--cch-viewport-height,100vh)] overflow-hidden bg-[#f5f1e8] text-stone-950"
+      )}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(120,113,108,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(120,113,108,0.08)_1px,transparent_1px)] bg-[size:32px_32px] opacity-50" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.12),transparent_35%)]" />
+
+      <div className="relative mx-auto max-w-[1600px] px-5 py-6 sm:px-8 lg:px-10">
+        <section className="border border-stone-400/80 bg-[#fbf8f1]/95 shadow-[0_30px_100px_-60px_rgba(28,25,23,0.55)]">
+          <div className="border-b border-stone-300 px-5 py-3 sm:px-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={cn(
+                    DISPLAY_MONO,
+                    "text-[11px] uppercase tracking-[0.32em] text-stone-500"
+                  )}
+                >
+                  Claude Code Hub
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 text-stone-400" />
+                <span
+                  className={cn(
+                    DISPLAY_MONO,
+                    "text-[11px] uppercase tracking-[0.32em] text-stone-500"
+                  )}
+                >
+                  {t("hero.pathLabel")}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill
+                  status={
+                    systemLabel === "normal"
+                      ? "green"
+                      : systemLabel === "degraded"
+                        ? "red"
+                        : "unknown"
+                  }
+                  label={t(
+                    `status.${systemLabel === "normal" ? "green" : systemLabel === "degraded" ? "red" : "unknown"}`
+                  )}
+                />
+                <span
+                  className={cn(
+                    DISPLAY_MONO,
+                    "rounded-full border border-stone-300 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-stone-500"
+                  )}
+                >
+                  {t("hero.window", { days: data?.windowDays ?? 7 })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-8 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] lg:gap-10">
+            <div>
+              <p
+                className={cn(
+                  DISPLAY_MONO,
+                  "text-[11px] uppercase tracking-[0.28em] text-stone-500"
+                )}
+              >
+                {t("hero.kicker")}
               </p>
-              <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+              <h1
+                className={cn(
+                  DISPLAY_SERIF,
+                  "mt-5 max-w-5xl text-[clamp(4rem,11vw,10rem)] leading-[0.88] tracking-[-0.07em] text-stone-950"
+                )}
+              >
                 {t("hero.title")}
               </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+              <p className="mt-5 max-w-2xl text-base leading-8 text-stone-700 sm:text-lg">
                 {t("hero.description")}
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <div className="rounded-full border border-slate-200 bg-white/85 px-4 py-2 text-sm text-slate-600">
-                {t("hero.window", { days: data?.windowDays ?? 7 })}
+            <div className="grid content-start gap-4">
+              <div className="border border-stone-300 bg-stone-950 p-5 text-stone-50">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p
+                      className={cn(
+                        DISPLAY_MONO,
+                        "text-[11px] uppercase tracking-[0.24em] text-stone-300"
+                      )}
+                    >
+                      {t("summary.systemAvailability")}
+                    </p>
+                    <p
+                      className={cn(
+                        DISPLAY_SERIF,
+                        "mt-3 text-5xl leading-none tracking-[-0.06em] text-white"
+                      )}
+                    >
+                      {formatPercent(locale, summary?.systemAvailability)}
+                    </p>
+                  </div>
+                  <ShieldCheck className="h-8 w-8 text-amber-300" />
+                </div>
+                <p className="mt-4 text-sm leading-6 text-stone-300">
+                  {t("summary.providerCoverage", {
+                    providers: formatNumber(locale, summary?.providerCount, 0),
+                  })}
+                </p>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/85 px-4 py-2 text-sm text-slate-600">
-                <Clock3 className="h-4 w-4" />
-                <span>
-                  {data?.queriedAt
-                    ? t("hero.updatedAt", { value: formatUpdatedAt(locale, data.queriedAt) })
-                    : t("hero.awaitingData")}
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/85 px-4 py-2 text-sm text-slate-600">
-                <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-                <span>{refreshing ? t("hero.refreshing") : t("hero.autoRefresh")}</span>
+
+              <div className="border border-stone-300 bg-[#f2ece1] p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p
+                    className={cn(
+                      DISPLAY_MONO,
+                      "text-[11px] uppercase tracking-[0.24em] text-stone-500"
+                    )}
+                  >
+                    {data?.queriedAt
+                      ? t("hero.updatedAt", { value: formatUpdatedAt(locale, data.queriedAt) })
+                      : t("hero.awaitingData")}
+                  </p>
+                  <div className="inline-flex items-center gap-2 text-stone-600">
+                    <RefreshCw
+                      className={cn(
+                        "h-4 w-4 motion-reduce:animate-none",
+                        refreshing && "animate-spin"
+                      )}
+                    />
+                    <span className="text-sm">
+                      {refreshing ? t("hero.refreshing") : t("hero.autoRefresh")}
+                    </span>
+                  </div>
+                </div>
+
+                {error ? (
+                  <div className="mt-4 flex items-start gap-3 border border-amber-300 bg-amber-100 px-4 py-3 text-sm leading-6 text-amber-900">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
 
-          {error ? (
-            <div className="mt-6 flex items-center gap-3 rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              <AlertTriangle className="h-4 w-4" />
-              <span>{error}</span>
+          <div className="border-t border-stone-300 px-5 py-6 sm:px-8">
+            <div className="grid gap-1 lg:grid-cols-4">
+              <MetricStrip
+                title={t("summary.healthyProviders")}
+                value={formatNumber(locale, summary?.healthyCount, 0)}
+                meta={t("summary.degradedBreakdown", {
+                  degraded: formatNumber(locale, summary?.degradedCount, 0),
+                  unknown: formatNumber(locale, summary?.unknownCount, 0),
+                })}
+              />
+              <MetricStrip
+                title={t("summary.weightedCacheHitRate")}
+                value={formatPercent(locale, summary?.weightedCacheHitRate)}
+                meta={t("summary.cacheHint")}
+              />
+              <MetricStrip
+                title={t("summary.weightedCostPerMillionTokens")}
+                value={
+                  data
+                    ? formatCurrency(
+                        locale,
+                        data.currencyDisplay,
+                        summary?.weightedCostPerMillionTokens
+                      )
+                    : "--"
+                }
+                meta={
+                  data
+                    ? formatCurrency(
+                        locale,
+                        data.currencyDisplay,
+                        summary?.weightedCostPerHundredMillionTokens
+                      )
+                    : "--"
+                }
+              />
+              <MetricStrip
+                title={t("metrics.outputRate")}
+                value={
+                  summary?.weightedTokensPerSecond == null
+                    ? "--"
+                    : t("metrics.outputRateValue", {
+                        value: formatNumber(locale, summary.weightedTokensPerSecond),
+                      })
+                }
+                meta={t("provider.sectionTitle")}
+              />
             </div>
-          ) : null}
+          </div>
         </section>
 
-        <section className="mt-6 grid gap-4 lg:grid-cols-4">
-          <SummaryCard
-            title={t("summary.systemAvailability")}
-            value={formatPercent(locale, summary?.systemAvailability)}
-            meta={t("summary.providerCoverage", {
-              providers: formatNumber(locale, summary?.providerCount, 0),
-            })}
-            icon={ShieldCheck}
-          />
-          <SummaryCard
-            title={t("summary.healthyProviders")}
-            value={formatNumber(locale, summary?.healthyCount, 0)}
-            meta={t("summary.degradedBreakdown", {
-              degraded: formatNumber(locale, summary?.degradedCount, 0),
-              unknown: formatNumber(locale, summary?.unknownCount, 0),
-            })}
-            icon={Gauge}
-          />
-          <SummaryCard
-            title={t("summary.weightedCacheHitRate")}
-            value={formatPercent(locale, summary?.weightedCacheHitRate)}
-            meta={t("summary.cacheHint")}
-            icon={Zap}
-          />
-          <SummaryCard
-            title={t("summary.weightedCostPerMillionTokens")}
-            value={
-              data
-                ? formatCurrency(
-                    locale,
-                    data.currencyDisplay,
-                    summary?.weightedCostPerMillionTokens
-                  )
-                : "--"
-            }
-            meta={t("summary.weightedOutputRate", {
-              value:
-                summary?.weightedTokensPerSecond == null
-                  ? "--"
-                  : t("metrics.outputRateValue", {
-                      value: formatNumber(locale, summary.weightedTokensPerSecond),
-                    }),
-            })}
-            icon={Clock3}
-          />
-        </section>
-
-        <section className="mt-8">
-          <div className="mb-4 flex items-center justify-between gap-4">
+        <section className="mt-8 border border-stone-400/80 bg-[#fbf8f1]/95 px-5 py-6 shadow-[0_30px_100px_-60px_rgba(28,25,23,0.45)] sm:px-8">
+          <div className="mb-6 flex flex-col gap-3 border-b border-stone-300 pb-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+              <p
+                className={cn(
+                  DISPLAY_MONO,
+                  "text-[11px] uppercase tracking-[0.28em] text-stone-500"
+                )}
+              >
                 {t("provider.sectionEyebrow")}
               </p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+              <h2 className={cn(DISPLAY_SERIF, "mt-3 text-4xl tracking-[-0.05em] text-stone-950")}>
                 {t("provider.sectionTitle")}
               </h2>
+            </div>
+            <div className="max-w-xl text-sm leading-7 text-stone-600">
+              {t("provider.meta.windowHint")}
             </div>
           </div>
 
           {data && data.providers.length > 0 ? (
-            <div className="grid gap-5">
+            <div>
               {data.providers.map((provider) => (
-                <ProviderCard
+                <ProviderRow
                   key={provider.providerId}
                   locale={locale}
                   currencyDisplay={data.currencyDisplay}
@@ -464,11 +674,28 @@ export function SystemStatusView({
               ))}
             </div>
           ) : (
-            <div className="rounded-[32px] border border-dashed border-slate-300 bg-white/70 px-6 py-12 text-center text-slate-500">
+            <div className="border border-dashed border-stone-300 bg-[#f3ede1] px-6 py-14 text-center text-stone-600">
               {t("states.empty")}
             </div>
           )}
         </section>
+
+        <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-stone-300 px-1 pt-4 text-sm text-stone-500">
+          <div className="inline-flex items-center gap-2">
+            <Gauge className="h-4 w-4" />
+            <span>{t("summary.systemAvailability")}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="inline-flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              {t("summary.weightedCacheHitRate")}
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Clock3 className="h-4 w-4" />
+              {t("metrics.outputRate")}
+            </span>
+          </div>
+        </footer>
       </div>
     </main>
   );
