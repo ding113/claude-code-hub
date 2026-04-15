@@ -2,6 +2,8 @@
   "pageTitle": "System Status - Claude Code Hub",
   "pageDescription": "Public provider status board for Claude Code Hub",
   "hero": {
+    "kicker": "Trusted public observation path",
+    "pathLabel": "Public Status Line",
     "title": "System Status",
     "description": "A single public path for watching provider health, cache efficiency, output speed, and token cost efficiency.",
     "window": "Rolling window · last {days} days",
