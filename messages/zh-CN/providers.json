@@ -26,5 +26,27 @@
       "label": "OpenAI Compatible",
       "description": "OpenAI 兼容 API"
     }
+  },
+
+  "providerGroups": {
+    "title": "供应商分组",
+    "description": "管理供应商分组及其费用倍率",
+    "addGroup": "添加分组",
+    "editGroup": "编辑分组",
+    "deleteGroup": "删除分组",
+    "name": "分组名称",
+    "multiplier": "费用倍率",
+    "groupDescription": "描述",
+    "providerCount": "供应商数",
+    "defaultGroup": "默认",
+    "cannotDeleteDefault": "无法删除默认分组",
+    "deleteConfirm": "确定要删除该分组吗？",
+    "createSuccess": "供应商分组创建成功",
+    "updateSuccess": "供应商分组更新成功",
+    "deleteSuccess": "供应商分组删除成功",
+    "nameRequired": "分组名称不能为空",
+    "duplicateName": "同名分组已存在",
+    "invalidMultiplier": "费用倍率必须为非负数",
+    "noGroups": "未找到供应商分组"
   }
 }

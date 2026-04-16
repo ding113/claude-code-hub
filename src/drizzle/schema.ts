@@ -15,6 +15,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
+import type { StoredCostBreakdown } from '@/types/cost-breakdown';
 import type { ResponseFixerConfig } from '@/types/system-config';
 import type { AllowedModelRuleInput, ProviderModelRedirectRule, ProviderType } from "@/types/provider";
 import type { FilterOperation } from "@/lib/request-filter-types";
@@ -157,6 +158,16 @@ export const providerVendors = pgTable('provider_vendors', {
   ),
   providerVendorsCreatedAtIdx: index('idx_provider_vendors_created_at').on(table.createdAt),
 }));
+
+// Provider Groups table
+export const providerGroups = pgTable('provider_groups', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 200 }).notNull().unique(),
+  costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).notNull().default('1.0'),
+  description: varchar('description', { length: 500 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
 
 // Providers table
 export const providers = pgTable('providers', {
@@ -441,6 +452,12 @@ export const messageRequest = pgTable('message_request', {
 
   // 供应商倍率（用于日志展示，记录该请求使用的 cost_multiplier）
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }),
+
+  // 供应商分组倍率（用于日志展示，记录该请求使用的 group_cost_multiplier）
+  groupCostMultiplier: numeric('group_cost_multiplier', { precision: 10, scale: 4 }),
+
+  // 费用明细（记录各组件的基础费用及倍率，用于请求详情展示）
+  costBreakdown: jsonb('cost_breakdown').$type<StoredCostBreakdown>(),
 
   // Session ID（用于会话粘性和日志追踪）
   sessionId: varchar('session_id', { length: 64 }),
@@ -912,6 +929,7 @@ export const usageLedger = pgTable('usage_ledger', {
   blockedBy: varchar('blocked_by', { length: 50 }),
   costUsd: numeric('cost_usd', { precision: 21, scale: 15 }).default('0'),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }),
+  groupCostMultiplier: numeric('group_cost_multiplier', { precision: 10, scale: 4 }),
   inputTokens: bigint('input_tokens', { mode: 'number' }),
   outputTokens: bigint('output_tokens', { mode: 'number' }),
   cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),

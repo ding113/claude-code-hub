@@ -20,6 +20,7 @@ import {
   calculateRequestCostBreakdown,
   matchLongContextPricing,
 } from "@/lib/utils/cost-calculation";
+import { COST_SCALE, Decimal } from "@/lib/utils/currency";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 import {
@@ -27,10 +28,11 @@ import {
   inferUpstreamErrorStatusCodeFromText,
 } from "@/lib/utils/upstream-error-detection";
 import {
-  updateMessageRequestCost,
+  updateMessageRequestCostWithBreakdown,
   updateMessageRequestDetails,
   updateMessageRequestDuration,
 } from "@/repository/message";
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { Provider } from "@/types/provider";
 import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
@@ -352,10 +354,12 @@ function buildCostCalculationOptions(
   costMultiplier: number,
   context1mApplied: boolean,
   priorityServiceTierApplied: boolean,
-  longContextPricing: ResolvedLongContextPricing | null
+  longContextPricing: ResolvedLongContextPricing | null,
+  groupCostMultiplier: number = 1
 ): RequestCostCalculationOptions {
   return {
     multiplier: costMultiplier,
+    groupMultiplier: groupCostMultiplier,
     context1mApplied,
     priorityServiceTierApplied,
     longContextPricing,
@@ -1075,7 +1079,8 @@ export class ProxyResponseHandler {
             provider,
             provider.costMultiplier,
             session.getContext1mApplied(),
-            priorityServiceTierApplied
+            priorityServiceTierApplied,
+            session.getGroupCostMultiplier()
           );
           if (costUpdateResult.longContextPricingApplied) {
             ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -1110,14 +1115,15 @@ export class ProxyResponseHandler {
                     provider.costMultiplier,
                     session.getContext1mApplied(),
                     priorityServiceTierApplied,
-                    longContextPricing
+                    longContextPricing,
+                    session.getGroupCostMultiplier()
                   )
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
                 }
                 // Raw cost without multiplier for Langfuse
-                if (provider.costMultiplier !== 1) {
+                if (provider.costMultiplier !== 1 || session.getGroupCostMultiplier() !== 1) {
                   const rawCost = calculateRequestCost(
                     usageMetrics,
                     resolvedPricing.priceData,
@@ -2093,7 +2099,8 @@ export class ProxyResponseHandler {
           provider,
           provider.costMultiplier,
           session.getContext1mApplied(),
-          priorityServiceTierApplied
+          priorityServiceTierApplied,
+          session.getGroupCostMultiplier()
         );
         if (costUpdateResult.longContextPricingApplied) {
           ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -2127,14 +2134,15 @@ export class ProxyResponseHandler {
                     provider.costMultiplier,
                     session.getContext1mApplied(),
                     priorityServiceTierApplied,
-                    longContextPricing
+                    longContextPricing,
+                    session.getGroupCostMultiplier()
                   )
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
                 }
                 // Raw cost without multiplier for Langfuse
-                if (provider.costMultiplier !== 1) {
+                if (provider.costMultiplier !== 1 || session.getGroupCostMultiplier() !== 1) {
                   const rawCost = calculateRequestCost(
                     usageForCost,
                     resolvedPricing.priceData,
@@ -3151,7 +3159,8 @@ async function updateRequestCostFromUsage(
   provider: Provider | null,
   costMultiplier: number = 1.0,
   context1mApplied: boolean = false,
-  priorityServiceTierApplied: boolean = false
+  priorityServiceTierApplied: boolean = false,
+  groupCostMultiplier: number = 1.0
 ): Promise<{
   costUsd: string | null;
   resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>> | null;
@@ -3211,9 +3220,36 @@ async function updateRequestCostFromUsage(
         costMultiplier,
         context1mApplied,
         priorityServiceTierApplied,
-        longContextPricing
+        longContextPricing,
+        groupCostMultiplier
       )
     );
+
+    // Calculate and store cost breakdown
+    let storedBreakdown: StoredCostBreakdown | undefined;
+    try {
+      const breakdown = calculateRequestCostBreakdown(usage, resolvedPricing.priceData, {
+        context1mApplied,
+        priorityServiceTierApplied,
+        longContextPricing,
+      });
+      const baseTotal = new Decimal(breakdown.input)
+        .plus(breakdown.output)
+        .plus(breakdown.cache_creation)
+        .plus(breakdown.cache_read);
+      storedBreakdown = {
+        input: String(breakdown.input),
+        output: String(breakdown.output),
+        cache_creation: String(breakdown.cache_creation),
+        cache_read: String(breakdown.cache_read),
+        base_total: baseTotal.toDecimalPlaces(COST_SCALE).toString(),
+        provider_multiplier: costMultiplier,
+        group_multiplier: groupCostMultiplier,
+        total: cost.toString(),
+      };
+    } catch {
+      /* non-critical */
+    }
 
     logger.info("[CostCalculation] Cost calculated successfully", {
       messageId,
@@ -3222,11 +3258,12 @@ async function updateRequestCostFromUsage(
       pricingResolutionSource: resolvedPricing.source,
       costUsd: cost.toString(),
       costMultiplier,
+      groupCostMultiplier,
       usage,
     });
 
     if (cost.gt(0)) {
-      await updateMessageRequestCost(messageId, cost);
+      await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown);
       return {
         costUsd: cost.toString(),
         resolvedPricing,
@@ -3328,7 +3365,8 @@ export async function finalizeRequestStats(
     provider,
     provider.costMultiplier,
     session.getContext1mApplied(),
-    priorityServiceTierApplied
+    priorityServiceTierApplied,
+    session.getGroupCostMultiplier()
   );
   if (costUpdateResult.longContextPricingApplied) {
     ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -3360,7 +3398,8 @@ export async function finalizeRequestStats(
               provider.costMultiplier,
               session.getContext1mApplied(),
               priorityServiceTierApplied,
-              longContextPricing
+              longContextPricing,
+              session.getGroupCostMultiplier()
             )
           );
           if (cost.gt(0)) {

@@ -52,6 +52,7 @@ vi.mock("@/repository/system-config", () => ({
 
 vi.mock("@/repository/message", () => ({
   updateMessageRequestCost: vi.fn(),
+  updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
@@ -173,6 +174,7 @@ function createSession(opts: {
     cachedBillingModelSource: undefined,
     isHeaderModified: () => false,
     getContext1mApplied: () => false,
+    getGroupCostMultiplier: () => 1,
     getOriginalModel: () => originalModel,
     getCurrentModel: () => redirectedModel,
     getProviderChain: () => session.providerChain,

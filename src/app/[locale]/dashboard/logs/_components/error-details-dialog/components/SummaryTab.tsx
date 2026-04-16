@@ -51,6 +51,8 @@ export function SummaryTab({
   swapCacheTtlApplied,
   costUsd,
   costMultiplier,
+  groupCostMultiplier,
+  costBreakdown,
   context1mApplied,
   durationMs,
   ttfbMs,
@@ -300,21 +302,38 @@ export function SummaryTab({
             {t("metadata.billingInfo")}
           </h4>
           <div className="rounded-lg border bg-card p-4 space-y-3">
-            {/* Token breakdown */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            {/* Token breakdown with optional per-component costs */}
+            <div className="space-y-2 text-sm">
+              {/* Input */}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("billingDetails.input")}:</span>
-                <span className="font-mono">{formatTokenAmount(inputTokens)} tokens</span>
+                <span className="font-mono">
+                  {formatTokenAmount(inputTokens)} tokens
+                  {costBreakdown ? (
+                    <span className="ml-3 text-muted-foreground">
+                      {formatCurrency(costBreakdown.input, "USD", 6)}
+                    </span>
+                  ) : null}
+                </span>
               </div>
+
+              {/* Output */}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("billingDetails.output")}:</span>
-                <span className="font-mono">{formatTokenAmount(outputTokens)} tokens</span>
+                <span className="font-mono">
+                  {formatTokenAmount(outputTokens)} tokens
+                  {costBreakdown ? (
+                    <span className="ml-3 text-muted-foreground">
+                      {formatCurrency(costBreakdown.output, "USD", 6)}
+                    </span>
+                  ) : null}
+                </span>
               </div>
 
               {/* Cache Write 5m */}
               {((cacheCreation5mInputTokens ?? 0) > 0 ||
                 ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied !== "1h")) && (
-                <div className="flex justify-between col-span-2">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheWrite5m")}:</span>
                   <span className="font-mono">
                     {formatTokenAmount(
@@ -323,6 +342,11 @@ export function SummaryTab({
                         : cacheCreationInputTokens
                     )}{" "}
                     tokens <span className="text-orange-600">(1.25x)</span>
+                    {costBreakdown ? (
+                      <span className="ml-3 text-muted-foreground">
+                        {formatCurrency(costBreakdown.cache_creation, "USD", 6)}
+                      </span>
+                    ) : null}
                   </span>
                 </div>
               )}
@@ -330,7 +354,7 @@ export function SummaryTab({
               {/* Cache Write 1h */}
               {((cacheCreation1hInputTokens ?? 0) > 0 ||
                 ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied === "1h")) && (
-                <div className="flex justify-between col-span-2">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheWrite1h")}:</span>
                   <span className="font-mono">
                     {formatTokenAmount(
@@ -339,24 +363,34 @@ export function SummaryTab({
                         : cacheCreationInputTokens
                     )}{" "}
                     tokens <span className="text-orange-600">(2x)</span>
+                    {costBreakdown ? (
+                      <span className="ml-3 text-muted-foreground">
+                        {formatCurrency(costBreakdown.cache_creation, "USD", 6)}
+                      </span>
+                    ) : null}
                   </span>
                 </div>
               )}
 
               {/* Cache Read */}
               {(cacheReadInputTokens ?? 0) > 0 && (
-                <div className="flex justify-between col-span-2">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheRead")}:</span>
                   <span className="font-mono">
                     {formatTokenAmount(cacheReadInputTokens)} tokens{" "}
                     <span className="text-emerald-600">(0.1x)</span>
+                    {costBreakdown ? (
+                      <span className="ml-3 text-muted-foreground">
+                        {formatCurrency(costBreakdown.cache_read, "USD", 6)}
+                      </span>
+                    ) : null}
                   </span>
                 </div>
               )}
 
               {/* Cache TTL */}
               {cacheTtlApplied && (
-                <div className="flex justify-between items-center col-span-2">
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">{t("billingDetails.cacheTtl")}:</span>
                   <Badge
                     variant="outline"
@@ -376,7 +410,7 @@ export function SummaryTab({
 
               {/* 1M Context */}
               {context1mApplied && (
-                <div className="flex justify-between items-center col-span-2">
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">{t("billingDetails.context1m")}:</span>
                   <div className="flex items-center gap-2">
                     <Badge
@@ -393,7 +427,7 @@ export function SummaryTab({
               )}
 
               {hasPriorityServiceTier ? (
-                <div className="flex justify-between items-center col-span-2">
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">{t("billingDetails.fast")}:</span>
                   <Badge
                     variant="outline"
@@ -406,7 +440,7 @@ export function SummaryTab({
 
               {pricingResolution && pricingSourceLabel ? (
                 <>
-                  <div className="flex justify-between col-span-2">
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">
                       {t("billingDetails.pricingProvider")}:
                     </span>
@@ -414,7 +448,7 @@ export function SummaryTab({
                       {pricingResolution.resolvedPricingProviderKey}
                     </span>
                   </div>
-                  <div className="flex justify-between col-span-2">
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">
                       {t("billingDetails.pricingSourceLabel")}:
                     </span>
@@ -423,15 +457,68 @@ export function SummaryTab({
                 </>
               ) : null}
 
-              {/* Cost Multiplier */}
+              {/* Base Total (only when breakdown is available) */}
+              {costBreakdown ? (
+                <div className="pt-2 border-t flex justify-between">
+                  <span className="text-muted-foreground font-medium">
+                    {t("billingDetails.baseTotal")}:
+                  </span>
+                  <span className="font-mono font-medium">
+                    {formatCurrency(costBreakdown.base_total, "USD", 6)}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Provider Multiplier */}
               {(() => {
+                if (costBreakdown) {
+                  const pm = costBreakdown.provider_multiplier;
+                  if (!Number.isFinite(pm) || pm === 1) return null;
+                  return (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("billingDetails.providerMultiplier")}:
+                      </span>
+                      <span className="font-mono">{pm.toFixed(2)}x</span>
+                    </div>
+                  );
+                }
                 if (costMultiplier === "" || costMultiplier == null) return null;
-                const multiplier = Number(costMultiplier);
-                if (!Number.isFinite(multiplier) || multiplier === 1) return null;
+                const pm = Number(costMultiplier);
+                if (!Number.isFinite(pm) || pm === 1) return null;
                 return (
-                  <div className="flex justify-between col-span-2">
-                    <span className="text-muted-foreground">{t("billingDetails.multiplier")}:</span>
-                    <span className="font-mono">{multiplier.toFixed(2)}x</span>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("billingDetails.providerMultiplier")}:
+                    </span>
+                    <span className="font-mono">{pm.toFixed(2)}x</span>
+                  </div>
+                );
+              })()}
+
+              {/* Group Multiplier */}
+              {(() => {
+                if (costBreakdown) {
+                  const gm = costBreakdown.group_multiplier;
+                  if (!Number.isFinite(gm) || gm === 1) return null;
+                  return (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("billingDetails.groupMultiplier")}:
+                      </span>
+                      <span className="font-mono">{gm.toFixed(2)}x</span>
+                    </div>
+                  );
+                }
+                if (groupCostMultiplier === "" || groupCostMultiplier == null) return null;
+                const gm = Number(groupCostMultiplier);
+                if (!Number.isFinite(gm) || gm === 1) return null;
+                return (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("billingDetails.groupMultiplier")}:
+                    </span>
+                    <span className="font-mono">{gm.toFixed(2)}x</span>
                   </div>
                 );
               })()}
@@ -441,7 +528,7 @@ export function SummaryTab({
             <div className="pt-3 border-t flex justify-between items-center">
               <span className="font-medium">{t("billingDetails.totalCost")}:</span>
               <span className="font-mono text-lg font-semibold text-emerald-600">
-                {formatCurrency(costUsd, "USD", 6)}
+                {formatCurrency(costBreakdown?.total ?? costUsd, "USD", 6)}
               </span>
             </div>
           </div>

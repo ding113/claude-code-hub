@@ -33,12 +33,16 @@ export interface ResolvedLongContextPricing {
 
 export interface RequestCostCalculationOptions {
   multiplier?: number;
+  groupMultiplier?: number;
   context1mApplied?: boolean;
   priorityServiceTierApplied?: boolean;
   longContextPricing?: ResolvedLongContextPricing | null;
 }
 
-type RequestCostBreakdownOptions = Omit<RequestCostCalculationOptions, "multiplier">;
+type RequestCostBreakdownOptions = Omit<
+  RequestCostCalculationOptions,
+  "multiplier" | "groupMultiplier"
+>;
 
 export interface LongContextPricingMatch {
   thresholdTokens: number;
@@ -298,6 +302,7 @@ function normalizeRequestCostOptions(
   if (typeof multiplierOrOptions === "object" && multiplierOrOptions !== null) {
     return {
       multiplier: multiplierOrOptions.multiplier ?? 1.0,
+      groupMultiplier: multiplierOrOptions.groupMultiplier ?? 1.0,
       context1mApplied: multiplierOrOptions.context1mApplied ?? false,
       priorityServiceTierApplied: multiplierOrOptions.priorityServiceTierApplied ?? false,
       longContextPricing: multiplierOrOptions.longContextPricing ?? null,
@@ -306,6 +311,7 @@ function normalizeRequestCostOptions(
 
   return {
     multiplier: multiplierOrOptions,
+    groupMultiplier: 1.0,
     context1mApplied,
     priorityServiceTierApplied,
     longContextPricing: null,
@@ -976,7 +982,8 @@ export function calculateRequestCost(
 
   const total = segments.reduce((acc, segment) => acc.plus(segment), new Decimal(0));
 
-  // 应用倍率
+  // Apply provider and group multipliers
   const multiplierDecimal = new Decimal(options.multiplier);
-  return total.mul(multiplierDecimal).toDecimalPlaces(COST_SCALE);
+  const groupMultiplierDecimal = new Decimal(options.groupMultiplier);
+  return total.mul(multiplierDecimal).mul(groupMultiplierDecimal).toDecimalPlaces(COST_SCALE);
 }

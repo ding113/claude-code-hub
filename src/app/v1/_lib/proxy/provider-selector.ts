@@ -9,6 +9,7 @@ import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
+import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
@@ -211,6 +212,13 @@ export class ProxyProviderResolver {
       );
       session.setProvider(provider);
       session.setLastSelectionContext(context); // 保存用于后续记录
+    }
+
+    // === Resolve group cost multiplier ===
+    const effectiveGroup = getEffectiveProviderGroup(session);
+    if (effectiveGroup) {
+      const multiplier = await getGroupCostMultiplier(effectiveGroup);
+      session.setGroupCostMultiplier(multiplier);
     }
 
     // === 故障转移循环 ===

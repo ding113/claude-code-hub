@@ -10,6 +10,7 @@ describe("ProxyErrorHandler.handle - session id on errors", () => {
       getProviderChain: () => [],
       getCurrentModel: () => null,
       getContext1mApplied: () => false,
+      getGroupCostMultiplier: () => 1,
       provider: null,
     } as any;
 

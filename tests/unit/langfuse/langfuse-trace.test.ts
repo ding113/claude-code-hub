@@ -121,6 +121,7 @@ function createMockSession(overrides: Record<string, unknown> = {}) {
     getSpecialSettings: () => null,
     getCacheTtlResolved: () => null,
     getContext1mApplied: () => false,
+    getGroupCostMultiplier: () => 1,
     ...overrides,
   } as any;
 }

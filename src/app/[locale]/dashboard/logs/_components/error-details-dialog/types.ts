@@ -1,3 +1,4 @@
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
@@ -54,6 +55,10 @@ export interface TabSharedProps {
   costUsd?: string | null;
   /** Cost multiplier */
   costMultiplier?: string | null;
+  /** Group cost multiplier */
+  groupCostMultiplier?: string | null;
+  /** Cost breakdown per component */
+  costBreakdown?: StoredCostBreakdown | null;
   /** Whether 1M context pricing was applied */
   context1mApplied?: boolean | null;
   /** Total request duration in ms */

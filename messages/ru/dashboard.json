@@ -300,7 +300,11 @@
           "priority_fallback": "Приоритетная резервная цена",
           "single_provider_top_level": "Цена верхнего уровня для одного провайдера",
           "official_fallback": "Официальная цена"
-        }
+        },
+        "baseCost": "Базовая стоимость",
+        "providerMultiplier": "Множитель поставщика",
+        "groupMultiplier": "Множитель группы",
+        "baseTotal": "Базовый итог"
       },
       "performance": {
         "title": "Производительность",
@@ -407,7 +411,11 @@
         "priority_fallback": "Приоритетная резервная цена",
         "single_provider_top_level": "Цена верхнего уровня для одного провайдера",
         "official_fallback": "Официальная цена"
-      }
+      },
+      "baseCost": "Базовая стоимость",
+      "providerMultiplier": "Множитель поставщика",
+      "groupMultiplier": "Множитель группы",
+      "baseTotal": "Базовый итог"
     }
   },
   "leaderboard": {

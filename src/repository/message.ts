@@ -6,6 +6,7 @@ import { keys as keysTable, messageRequest, providers, usageLedger, users } from
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
@@ -29,6 +30,7 @@ export async function createMessageRequest(
     durationMs: data.duration_ms,
     costUsd: formattedCost ?? undefined,
     costMultiplier: data.cost_multiplier?.toString() ?? undefined, // 供应商倍率（转为字符串）
+    groupCostMultiplier: data.group_cost_multiplier?.toString() ?? undefined, // 分组倍率（转为字符串）
     sessionId: data.session_id, // Session ID
     requestSequence: data.request_sequence, // Request Sequence（Session 内请求序号）
     userAgent: data.user_agent, // User-Agent
@@ -110,6 +112,37 @@ export async function updateMessageRequestCost(
     .update(messageRequest)
     .set({
       costUsd: formattedCost,
+      updatedAt: new Date(),
+    })
+    .where(eq(messageRequest.id, id));
+}
+
+/**
+ * Update cost with optional breakdown for billing detail display.
+ */
+export async function updateMessageRequestCostWithBreakdown(
+  id: number,
+  costUsd: CreateMessageRequestData["cost_usd"],
+  costBreakdown?: StoredCostBreakdown
+): Promise<void> {
+  const formattedCost = formatCostForStorage(costUsd);
+  if (!formattedCost) {
+    return;
+  }
+
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
+    enqueueMessageRequestUpdate(id, {
+      costUsd: formattedCost,
+      ...(costBreakdown ? { costBreakdown } : {}),
+    });
+    return;
+  }
+
+  await db
+    .update(messageRequest)
+    .set({
+      costUsd: formattedCost,
+      ...(costBreakdown ? { costBreakdown } : {}),
       updatedAt: new Date(),
     })
     .where(eq(messageRequest.id, id));

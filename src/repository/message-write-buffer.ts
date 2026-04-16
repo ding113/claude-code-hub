@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData } from "@/types/message";
 
 export type MessageRequestUpdatePatch = {
@@ -28,6 +29,7 @@ export type MessageRequestUpdatePatch = {
   context1mApplied?: boolean;
   swapCacheTtlApplied?: boolean;
   specialSettings?: CreateMessageRequestData["special_settings"];
+  costBreakdown?: StoredCostBreakdown;
 };
 
 type MessageRequestUpdateRecord = {
@@ -62,6 +64,7 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   context1mApplied: "context_1m_applied",
   swapCacheTtlApplied: "swap_cache_ttl_applied",
   specialSettings: "special_settings",
+  costBreakdown: "cost_breakdown",
 };
 
 function loadWriterConfig(): WriterConfig {
@@ -103,7 +106,7 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
         continue;
       }
 
-      if (key === "providerChain" || key === "specialSettings") {
+      if (key === "providerChain" || key === "specialSettings" || key === "costBreakdown") {
         if (value === null) {
           cases.push(sql`WHEN ${update.id} THEN NULL`);
           continue;

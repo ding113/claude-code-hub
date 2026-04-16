@@ -47,6 +47,7 @@
   "viewMode": "视图模式",
   "viewModeList": "列表",
   "viewModeVendor": "服务商",
+  "viewModeGroups": "分组",
   "endpoints": "服务端点",
   "manualProbe": "测速",
   "addEndpoint": "添加端点",

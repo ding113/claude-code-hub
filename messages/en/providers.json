@@ -26,5 +26,27 @@
       "label": "OpenAI Compatible",
       "description": "OpenAI Compatible API"
     }
+  },
+
+  "providerGroups": {
+    "title": "Provider Groups",
+    "description": "Manage provider groups and their cost multipliers",
+    "addGroup": "Add Group",
+    "editGroup": "Edit Group",
+    "deleteGroup": "Delete Group",
+    "name": "Group Name",
+    "multiplier": "Cost Multiplier",
+    "groupDescription": "Description",
+    "providerCount": "Providers",
+    "defaultGroup": "Default",
+    "cannotDeleteDefault": "Cannot delete the default group",
+    "deleteConfirm": "Are you sure you want to delete this group?",
+    "createSuccess": "Provider group created successfully",
+    "updateSuccess": "Provider group updated successfully",
+    "deleteSuccess": "Provider group deleted successfully",
+    "nameRequired": "Group name is required",
+    "duplicateName": "A group with this name already exists",
+    "invalidMultiplier": "Cost multiplier must be a non-negative number",
+    "noGroups": "No provider groups found"
   }
 }

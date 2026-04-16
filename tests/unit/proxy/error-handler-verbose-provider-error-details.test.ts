@@ -41,6 +41,7 @@ function createSession(): any {
     getProviderChain: () => [],
     getCurrentModel: () => null,
     getContext1mApplied: () => false,
+    getGroupCostMultiplier: () => 1,
     provider: null,
   };
 }

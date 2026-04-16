@@ -117,6 +117,9 @@ export class ProxySession {
   // 1M Context Window applied (resolved)
   private context1mApplied: boolean = false;
 
+  // Group-level cost multiplier (applied on top of provider costMultiplier)
+  private groupCostMultiplier: number = 1;
+
   // 特殊设置（用于审计/展示，可扩展）
   private specialSettings: SpecialSetting[] = [];
 
@@ -301,6 +304,14 @@ export class ProxySession {
 
   getContext1mApplied(): boolean {
     return this.context1mApplied;
+  }
+
+  setGroupCostMultiplier(value: number): void {
+    this.groupCostMultiplier = value;
+  }
+
+  getGroupCostMultiplier(): number {
+    return this.groupCostMultiplier;
   }
 
   setHighConcurrencyModeEnabled(enabled: boolean): void {

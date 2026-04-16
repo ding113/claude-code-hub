@@ -1,5 +1,13 @@
 "use client";
-import { AlertTriangle, Filter, LayoutGrid, LayoutList, Loader2, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Filter,
+  Layers,
+  LayoutGrid,
+  LayoutList,
+  Loader2,
+  Search,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +34,7 @@ import {
   ProviderBatchDialog,
   ProviderBatchToolbar,
 } from "./batch-edit";
+import { ProviderGroupTab } from "./provider-group-tab";
 import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
@@ -86,7 +95,7 @@ export function ProviderManager({
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "vendor">("list");
+  const [viewMode, setViewMode] = useState<"list" | "vendor" | "groups">("list");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   // Status and group filters
@@ -507,6 +516,16 @@ export function ProviderManager({
                 <LayoutGrid className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{tStrings("viewModeVendor")}</span>
               </Button>
+              <Button
+                variant={viewMode === "groups" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 gap-1.5 text-xs"
+                onClick={() => setViewMode("groups")}
+                title={tStrings("viewModeGroups")}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{tStrings("viewModeGroups")}</span>
+              </Button>
             </div>
 
             <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} disabled={loading} />
@@ -619,8 +638,10 @@ export function ProviderManager({
         </div>
       </div>
 
-      {/* 供应商列表 */}
-      {loading && providers.length === 0 ? (
+      {/* Provider list / vendor view / groups tab */}
+      {viewMode === "groups" ? (
+        <ProviderGroupTab />
+      ) : loading && providers.length === 0 ? (
         <ProviderListSkeleton label={tCommon("loading")} />
       ) : (
         <div className="space-y-3">

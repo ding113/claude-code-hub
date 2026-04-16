@@ -7,6 +7,7 @@ import { TTLMap } from "@/lib/cache/ttl-map";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { extractAnthropicEffortFromSpecialSettings } from "@/lib/utils/anthropic-effort";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
@@ -57,6 +58,8 @@ export interface UsageLogRow {
   totalTokens: number;
   costUsd: string | null;
   costMultiplier: string | null; // 供应商倍率
+  groupCostMultiplier: string | null; // 分组倍率
+  costBreakdown: StoredCostBreakdown | null; // 费用明细
   durationMs: number | null;
   ttfbMs: number | null;
   errorMessage: string | null;
@@ -187,6 +190,8 @@ export async function findUsageLogsBatch(
       cacheTtlApplied: messageRequest.cacheTtlApplied,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier,
+      groupCostMultiplier: messageRequest.groupCostMultiplier,
+      costBreakdown: messageRequest.costBreakdown,
       durationMs: messageRequest.durationMs,
       ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
@@ -244,6 +249,8 @@ export async function findUsageLogsBatch(
       cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
       cacheTtlApplied: row.cacheTtlApplied,
       costUsd: row.costUsd?.toString() ?? null,
+      groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
+      costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
@@ -336,6 +343,7 @@ export async function findUsageLogsBatch(
       cacheTtlApplied: usageLedger.cacheTtlApplied,
       costUsd: usageLedger.costUsd,
       costMultiplier: usageLedger.costMultiplier,
+      groupCostMultiplier: usageLedger.groupCostMultiplier,
       durationMs: usageLedger.durationMs,
       ttfbMs: usageLedger.ttfbMs,
       context1mApplied: usageLedger.context1mApplied,
@@ -387,6 +395,8 @@ export async function findUsageLogsBatch(
       totalTokens: totalRowTokens,
       costUsd: row.costUsd?.toString() ?? null,
       costMultiplier: row.costMultiplier?.toString() ?? null,
+      groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
+      costBreakdown: null,
       durationMs: row.durationMs,
       ttfbMs: row.ttfbMs,
       errorMessage: null,
@@ -990,6 +1000,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       cacheTtlApplied: messageRequest.cacheTtlApplied,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier, // 供应商倍率
+      groupCostMultiplier: messageRequest.groupCostMultiplier, // 分组倍率
+      costBreakdown: messageRequest.costBreakdown, // 费用明细
       durationMs: messageRequest.durationMs,
       ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
@@ -1052,6 +1064,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
       cacheTtlApplied: row.cacheTtlApplied,
       costUsd: row.costUsd?.toString() ?? null,
+      groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
+      costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
