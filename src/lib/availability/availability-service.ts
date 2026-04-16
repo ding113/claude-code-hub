@@ -4,10 +4,9 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
-import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, type SQLWrapper, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
-import { logger } from "@/lib/logger";
 import type {
   AvailabilityQueryOptions,
   AvailabilityQueryResult,
@@ -17,37 +16,179 @@ import type {
   TimeBucketMetrics,
 } from "./types";
 
-// Maximum requests to load per query to prevent OOM
-const MAX_REQUESTS_PER_QUERY = 100000;
+type AggregatedAvailabilityBucketRow = {
+  providerId: number;
+  bucketStart: Date;
+  greenCount: number;
+  redCount: number;
+  latencyCount: number;
+  latencySumMs: number;
+  avgLatencyMs: number;
+  p50LatencyMs: number;
+  p95LatencyMs: number;
+  p99LatencyMs: number;
+  lastRequestAt: Date | null;
+};
+
+type AggregatedCurrentProviderStatusRow = {
+  providerId: number;
+  greenCount: number;
+  redCount: number;
+  lastRequestAt: Date | null;
+};
+
+export const MIN_BUCKET_SIZE_MINUTES = 0.25;
+export const MAX_BUCKET_SIZE_MINUTES = 1440;
+const DEFAULT_MAX_BUCKETS = 100;
+const AVAILABILITY_SUCCESS_STATUS_CODE_MIN = 200;
+const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE = 400;
+const FINALIZED_REQUEST_STATUS_CODE_ALIAS = "statusCode" as const;
+const AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL = sql.raw(
+  String(AVAILABILITY_SUCCESS_STATUS_CODE_MIN)
+);
+const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL = sql.raw(
+  String(AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE)
+);
+const FINALIZED_REQUEST_STATUS_CODE_SQL = sql.raw(`"${FINALIZED_REQUEST_STATUS_CODE_ALIAS}"`);
+// Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
+// It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
+export const MAX_BUCKETS_HARD_LIMIT = 100;
+const CURRENT_PROVIDER_STATUS_WINDOW_MINUTES = 15;
+export const MAX_AVAILABILITY_QUERY_RANGE_DAYS =
+  (MAX_BUCKETS_HARD_LIMIT * MAX_BUCKET_SIZE_MINUTES) / (24 * 60);
+const MAX_AVAILABILITY_QUERY_RANGE_MS =
+  MAX_BUCKETS_HARD_LIMIT * MAX_BUCKET_SIZE_MINUTES * 60 * 1000;
+
+export class AvailabilityQueryValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AvailabilityQueryValidationError";
+  }
+}
 
 /**
- * Classify a single request's status
+ * 当前版本把“已终态”收敛为 `statusCode` 已落库。
+ *
+ * 已知限制：在当前异步写入/丢 patch 的极端场景，或未来新增了 `durationMs` / `errorMessage`
+ * 已落库、但 `statusCode` 仍为空且已稳定结束的写路径时，这些记录会被当前可用性统计排除。
+ * 届时应引入独立的 finalized 谓词，而不是直接放宽为 `durationMs IS NOT NULL`。
+ */
+function buildAvailabilityFinalizedCondition() {
+  return isNotNull(messageRequest.statusCode);
+}
+
+function assertValidDate(date: Date, fieldName: string): Date {
+  if (!Number.isFinite(date.getTime())) {
+    throw new AvailabilityQueryValidationError(
+      `Invalid ${fieldName}: expected a valid Date or ISO timestamp`
+    );
+  }
+
+  return date;
+}
+
+function parseAvailabilityDate(value: Date | string, fieldName: string): Date {
+  return assertValidDate(typeof value === "string" ? new Date(value) : value, fieldName);
+}
+
+function buildTimestampLowerBound(
+  column: typeof messageRequest.createdAt,
+  date: Date,
+  fieldName: string
+) {
+  return sql`${column} >= CAST(${assertValidDate(date, fieldName).toISOString()} AS timestamptz)`;
+}
+
+function buildTimestampUpperBound(
+  column: typeof messageRequest.createdAt,
+  date: Date,
+  fieldName: string
+) {
+  return sql`${column} <= CAST(${assertValidDate(date, fieldName).toISOString()} AS timestamptz)`;
+}
+
+function buildRelativeNowLowerBound(column: typeof messageRequest.createdAt, minutes: number) {
+  return sql`${column} >= NOW() - (${sql.raw(String(minutes))} * INTERVAL '1 minute')`;
+}
+
+function buildNowUpperBound(column: typeof messageRequest.createdAt) {
+  return sql`${column} <= NOW()`;
+}
+
+function buildAvailabilityRequestConditions(input: {
+  providerIds: number[];
+  startDate: Date;
+  endDate?: Date;
+}) {
+  const conditions = [
+    inArray(messageRequest.providerId, input.providerIds),
+    buildTimestampLowerBound(messageRequest.createdAt, input.startDate, "startTime"),
+    isNull(messageRequest.deletedAt),
+    buildAvailabilityFinalizedCondition(),
+  ];
+
+  if (input.endDate) {
+    conditions.push(buildTimestampUpperBound(messageRequest.createdAt, input.endDate, "endTime"));
+  }
+
+  return and(...conditions);
+}
+
+function toFiniteNumber(value: number | string | null | undefined): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toIsoString(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function getTimeValue(value: Date | string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = value instanceof Date ? value : new Date(value);
+  const timestamp = parsed.getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function isAvailabilitySuccessStatusCode(statusCode: number): boolean {
+  return (
+    statusCode >= AVAILABILITY_SUCCESS_STATUS_CODE_MIN &&
+    statusCode < AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE
+  );
+}
+
+function buildAvailabilitySuccessStatusCondition(statusCodeExpression: SQLWrapper) {
+  return sql`${statusCodeExpression} >= ${AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL}
+    AND ${statusCodeExpression} < ${AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL}`;
+}
+
+function buildAvailabilityFailureStatusCondition(statusCodeExpression: SQLWrapper) {
+  return sql`(${statusCodeExpression} < ${AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL}
+    OR ${statusCodeExpression} >= ${AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL})`;
+}
+
+/**
+ * Classify a single finalized request's status
  * Simple: success (2xx/3xx) = green, failure = red
  */
-export function classifyRequestStatus(statusCode: number | null): RequestStatusClassification {
-  // No status code means network error or timeout
-  if (statusCode === null) {
+export function classifyRequestStatus(statusCode: number): RequestStatusClassification {
+  // 仅把 2xx/3xx 视为成功；1xx 不应在可用性里被计为绿色。
+  if (isAvailabilitySuccessStatusCode(statusCode)) {
     return {
-      status: "red",
-      isSuccess: false,
-      isError: true,
+      status: "green",
+      isSuccess: true,
+      isError: false,
     };
   }
 
-  // HTTP error (4xx/5xx)
-  if (statusCode >= 400) {
-    return {
-      status: "red",
-      isSuccess: false,
-      isError: true,
-    };
-  }
-
-  // HTTP success (2xx/3xx) - all successful requests are green
   return {
-    status: "green",
-    isSuccess: true,
-    isError: false,
+    status: "red",
+    isSuccess: false,
+    isError: true,
   };
 }
 
@@ -62,21 +203,9 @@ export function calculateAvailabilityScore(greenCount: number, redCount: number)
 }
 
 /**
- * Calculate percentile from sorted array
+ * Determine optimal time bucket size based on time range
  */
-function calculatePercentile(sortedValues: number[], percentile: number): number {
-  if (sortedValues.length === 0) return 0;
-  const index = Math.ceil((percentile / 100) * sortedValues.length) - 1;
-  return sortedValues[Math.max(0, Math.min(index, sortedValues.length - 1))];
-}
-
-/**
- * Determine optimal time bucket size based on data density
- */
-export function determineOptimalBucketSize(
-  _totalRequests: number,
-  timeRangeMinutes: number
-): number {
+export function determineOptimalBucketSize(timeRangeMinutes: number): number {
   // Target: 20-100 data points per time series for good visualization
   const targetBuckets = 50;
   const idealBucketMinutes = timeRangeMinutes / targetBuckets;
@@ -93,6 +222,70 @@ export function determineOptimalBucketSize(
   return 1440; // Default to daily for very long ranges
 }
 
+function sanitizeBucketSizeMinutes(
+  explicitBucketSize: number | undefined,
+  timeRangeMinutes: number,
+  maxBuckets: number
+): number {
+  const fallbackBucketSize = determineOptimalBucketSize(timeRangeMinutes);
+  const safeFallbackBucketSize =
+    Number.isFinite(fallbackBucketSize) && fallbackBucketSize > 0 ? fallbackBucketSize : 60;
+  const minimumBudgetBucketSize =
+    timeRangeMinutes > 0 ? timeRangeMinutes / Math.max(1, maxBuckets) : MIN_BUCKET_SIZE_MINUTES;
+  const clampedMinimumBudgetBucketSize = Math.min(
+    MAX_BUCKET_SIZE_MINUTES,
+    Math.max(MIN_BUCKET_SIZE_MINUTES, minimumBudgetBucketSize)
+  );
+
+  if (
+    typeof explicitBucketSize !== "number" ||
+    !Number.isFinite(explicitBucketSize) ||
+    explicitBucketSize <= 0
+  ) {
+    return Math.min(
+      MAX_BUCKET_SIZE_MINUTES,
+      Math.max(MIN_BUCKET_SIZE_MINUTES, safeFallbackBucketSize, clampedMinimumBudgetBucketSize)
+    );
+  }
+
+  const normalizedExplicitBucketSize = Math.min(
+    MAX_BUCKET_SIZE_MINUTES,
+    Math.max(MIN_BUCKET_SIZE_MINUTES, explicitBucketSize)
+  );
+
+  if (timeRangeMinutes > normalizedExplicitBucketSize * maxBuckets) {
+    throw new AvailabilityQueryValidationError(
+      "Invalid bucket configuration: requested range exceeds the bucket budget implied by bucketSizeMinutes and maxBuckets"
+    );
+  }
+
+  return normalizedExplicitBucketSize;
+}
+
+function sanitizeMaxBuckets(maxBuckets: number | undefined): number {
+  if (typeof maxBuckets !== "number" || !Number.isFinite(maxBuckets) || maxBuckets <= 0) {
+    return DEFAULT_MAX_BUCKETS;
+  }
+
+  return Math.min(MAX_BUCKETS_HARD_LIMIT, Math.max(1, Math.floor(maxBuckets)));
+}
+
+function validateAvailabilityTimeRange(startDate: Date, endDate: Date): void {
+  const rangeMs = endDate.getTime() - startDate.getTime();
+
+  if (rangeMs < 0) {
+    throw new AvailabilityQueryValidationError(
+      "Invalid time range: endTime must be greater than or equal to startTime"
+    );
+  }
+
+  if (rangeMs > MAX_AVAILABILITY_QUERY_RANGE_MS) {
+    throw new AvailabilityQueryValidationError(
+      `Invalid time range: requested range must not exceed ${MAX_AVAILABILITY_QUERY_RANGE_DAYS} days`
+    );
+  }
+}
+
 /**
  * Query availability data for providers
  */
@@ -106,12 +299,22 @@ export async function queryProviderAvailability(
     providerIds = [],
     bucketSizeMinutes: explicitBucketSize,
     includeDisabled = false,
-    maxBuckets = 100,
+    maxBuckets = DEFAULT_MAX_BUCKETS,
   } = options;
 
-  const startDate = typeof startTime === "string" ? new Date(startTime) : startTime;
-  const endDate = typeof endTime === "string" ? new Date(endTime) : endTime;
+  // Apply defaults first so both implicit defaults and user-supplied values share the same parse/validation path.
+  const startDate = parseAvailabilityDate(startTime, "startTime");
+  const endDate = parseAvailabilityDate(endTime, "endTime");
+  validateAvailabilityTimeRange(startDate, endDate);
   const timeRangeMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60);
+  const sanitizedMaxBuckets = sanitizeMaxBuckets(maxBuckets);
+  const bucketSizeMinutes = sanitizeBucketSizeMinutes(
+    explicitBucketSize,
+    timeRangeMinutes,
+    sanitizedMaxBuckets
+  );
+  const bucketSizeMs = bucketSizeMinutes * 60 * 1000;
+  const bucketSizeSeconds = bucketSizeMinutes * 60;
 
   // Get provider list
   const providerConditions = [isNull(providers.deletedAt)];
@@ -137,164 +340,155 @@ export async function queryProviderAvailability(
       queriedAt: now.toISOString(),
       startTime: startDate.toISOString(),
       endTime: endDate.toISOString(),
-      bucketSizeMinutes: explicitBucketSize ?? 60,
+      bucketSizeMinutes,
       providers: [],
       systemAvailability: 0,
     };
   }
 
-  const providerIdList = providerList.map((p) => p.id);
+  const providerIdList = providerList.map((provider) => provider.id);
+  const requestConditions = buildAvailabilityRequestConditions({
+    providerIds: providerIdList,
+    startDate,
+    endDate,
+  });
 
-  // Query raw request data
-  const requestConditions = [
-    inArray(messageRequest.providerId, providerIdList),
-    gte(messageRequest.createdAt, startDate),
-    lte(messageRequest.createdAt, endDate),
-    isNull(messageRequest.deletedAt),
-  ];
+  const availabilityAggregationCtes = sql`
+    finalized_requests AS (
+      SELECT
+        ${messageRequest.providerId} AS "providerId",
+        ${messageRequest.createdAt} AS "createdAt",
+        ${messageRequest.statusCode} AS ${FINALIZED_REQUEST_STATUS_CODE_SQL},
+        ${messageRequest.durationMs} AS "durationMs",
+        to_timestamp(
+          floor(extract(epoch from ${messageRequest.createdAt}) / ${bucketSizeSeconds}) * ${bucketSizeSeconds}
+        ) AS "bucketStart"
+      FROM ${messageRequest}
+      WHERE ${requestConditions}
+    ),
+    provider_bucket_stats AS (
+      SELECT
+        "providerId",
+        "bucketStart",
+        COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessStatusCondition(FINALIZED_REQUEST_STATUS_CODE_SQL)})::int AS "greenCount",
+        COUNT(*) FILTER (WHERE ${buildAvailabilityFailureStatusCondition(FINALIZED_REQUEST_STATUS_CODE_SQL)})::int AS "redCount",
+        COUNT("durationMs")::int AS "latencyCount",
+        COALESCE(SUM("durationMs")::double precision, 0) AS "latencySumMs",
+        COALESCE(AVG("durationMs")::double precision, 0) AS "avgLatencyMs",
+        COALESCE(
+          percentile_cont(0.5) WITHIN GROUP (ORDER BY "durationMs"::double precision)
+            FILTER (WHERE "durationMs" IS NOT NULL),
+          0
+        )::double precision AS "p50LatencyMs",
+        COALESCE(
+          percentile_cont(0.95) WITHIN GROUP (ORDER BY "durationMs"::double precision)
+            FILTER (WHERE "durationMs" IS NOT NULL),
+          0
+        )::double precision AS "p95LatencyMs",
+        COALESCE(
+          percentile_cont(0.99) WITHIN GROUP (ORDER BY "durationMs"::double precision)
+            FILTER (WHERE "durationMs" IS NOT NULL),
+          0
+        )::double precision AS "p99LatencyMs",
+        MAX("createdAt") AS "lastRequestAt"
+      FROM finalized_requests
+      GROUP BY "providerId", "bucketStart"
+    )
+  `;
 
-  const requests = await db
-    .select({
-      id: messageRequest.id,
-      providerId: messageRequest.providerId,
-      statusCode: messageRequest.statusCode,
-      durationMs: messageRequest.durationMs,
-      errorMessage: messageRequest.errorMessage,
-      createdAt: messageRequest.createdAt,
-    })
-    .from(messageRequest)
-    .where(and(...requestConditions))
-    .orderBy(messageRequest.createdAt)
-    .limit(MAX_REQUESTS_PER_QUERY);
+  const bucketQuery = sql<AggregatedAvailabilityBucketRow>`
+    WITH
+      ${availabilityAggregationCtes},
+      limited_provider_bucket_stats AS (
+        SELECT
+          *,
+          ROW_NUMBER() OVER (PARTITION BY "providerId" ORDER BY "bucketStart" DESC) AS rn
+        FROM provider_bucket_stats
+      )
+    SELECT
+      "providerId",
+      "bucketStart",
+      "greenCount",
+      "redCount",
+      "latencyCount",
+      "latencySumMs",
+      "avgLatencyMs",
+      "p50LatencyMs",
+      "p95LatencyMs",
+      "p99LatencyMs",
+      "lastRequestAt"
+    FROM limited_provider_bucket_stats
+    WHERE rn <= ${sanitizedMaxBuckets}
+    ORDER BY "providerId" ASC, "bucketStart" ASC
+  `;
 
-  // Warn if query hit the limit - results may be incomplete
-  if (requests.length === MAX_REQUESTS_PER_QUERY) {
-    logger.warn("[Availability] Query hit max request limit, results may be incomplete", {
-      limit: MAX_REQUESTS_PER_QUERY,
-      startTime: startDate.toISOString(),
-      endTime: endDate.toISOString(),
-    });
-  }
+  const bucketRows = Array.from(await db.execute(bucketQuery)) as AggregatedAvailabilityBucketRow[];
+  const providerBuckets = new Map<number, AggregatedAvailabilityBucketRow[]>();
 
-  // Determine bucket size if not explicitly specified
-  // Ensure minimum bucket size of 0.25 minutes (15 seconds) to prevent division by zero
-  // Handle NaN case (nullish coalescing doesn't catch NaN from invalid parseFloat input)
-  const rawBucketSize =
-    explicitBucketSize ?? determineOptimalBucketSize(requests.length, timeRangeMinutes);
-  const bucketSizeMinutes = Number.isNaN(rawBucketSize)
-    ? determineOptimalBucketSize(requests.length, timeRangeMinutes)
-    : Math.max(0.25, rawBucketSize);
-  const bucketSizeMs = bucketSizeMinutes * 60 * 1000;
-
-  // Group requests by provider and time bucket
-  const providerBuckets = new Map<
-    number,
-    Map<
-      string,
-      {
-        greenCount: number;
-        redCount: number;
-        latencies: number[];
-      }
-    >
-  >();
-
-  // Initialize provider buckets
   for (const provider of providerList) {
-    providerBuckets.set(provider.id, new Map());
+    providerBuckets.set(provider.id, []);
   }
 
-  // Process requests
-  for (const req of requests) {
-    if (!req.createdAt) continue;
-
-    const bucketStart = new Date(Math.floor(req.createdAt.getTime() / bucketSizeMs) * bucketSizeMs);
-    const bucketKey = bucketStart.toISOString();
-
-    const providerData = providerBuckets.get(req.providerId);
-    if (!providerData) continue;
-
-    if (!providerData.has(bucketKey)) {
-      providerData.set(bucketKey, {
-        greenCount: 0,
-        redCount: 0,
-        latencies: [],
-      });
-    }
-
-    const bucket = providerData.get(bucketKey)!;
-    const classification = classifyRequestStatus(req.statusCode);
-
-    if (classification.status === "green") {
-      bucket.greenCount++;
-    } else {
-      bucket.redCount++;
-    }
-
-    if (req.durationMs !== null) {
-      bucket.latencies.push(req.durationMs);
-    }
+  for (const row of bucketRows) {
+    providerBuckets.get(row.providerId)?.push(row);
   }
 
   // Build provider summaries
   const providerSummaries: ProviderAvailabilitySummary[] = [];
 
   for (const provider of providerList) {
-    const bucketData = providerBuckets.get(provider.id)!;
+    const bucketRowsForProvider = providerBuckets.get(provider.id) ?? [];
     const timeBuckets: TimeBucketMetrics[] = [];
 
     let totalGreen = 0;
     let totalRed = 0;
-    const allLatencies: number[] = [];
-    let lastRequestAt: string | null = null;
+    let totalLatencyCount = 0;
+    let totalLatencySumMs = 0;
+    let lastRequestAtTime = 0;
 
-    // Sort buckets by time and limit
-    const sortedBucketKeys = Array.from(bucketData.keys()).sort().slice(-maxBuckets);
+    for (const bucket of bucketRowsForProvider) {
+      const greenCount = toFiniteNumber(bucket.greenCount);
+      const redCount = toFiniteNumber(bucket.redCount);
+      const totalRequests = greenCount + redCount;
+      const latencyCount = toFiniteNumber(bucket.latencyCount);
+      const latencySumMs = toFiniteNumber(bucket.latencySumMs);
 
-    for (const bucketKey of sortedBucketKeys) {
-      const bucket = bucketData.get(bucketKey)!;
-      const bucketStart = new Date(bucketKey);
+      totalGreen += greenCount;
+      totalRed += redCount;
+      totalLatencyCount += latencyCount;
+      totalLatencySumMs += latencySumMs;
+      lastRequestAtTime = Math.max(lastRequestAtTime, getTimeValue(bucket.lastRequestAt));
+
+      const bucketStart = new Date(bucket.bucketStart);
       const bucketEnd = new Date(bucketStart.getTime() + bucketSizeMs);
-
-      totalGreen += bucket.greenCount;
-      totalRed += bucket.redCount;
-      allLatencies.push(...bucket.latencies);
-
-      const sortedLatencies = [...bucket.latencies].sort((a, b) => a - b);
-      const total = bucket.greenCount + bucket.redCount;
 
       timeBuckets.push({
         bucketStart: bucketStart.toISOString(),
         bucketEnd: bucketEnd.toISOString(),
-        totalRequests: total,
-        greenCount: bucket.greenCount,
-        redCount: bucket.redCount,
-        availabilityScore: calculateAvailabilityScore(bucket.greenCount, bucket.redCount),
-        avgLatencyMs:
-          sortedLatencies.length > 0
-            ? sortedLatencies.reduce((a, b) => a + b, 0) / sortedLatencies.length
-            : 0,
-        p50LatencyMs: calculatePercentile(sortedLatencies, 50),
-        p95LatencyMs: calculatePercentile(sortedLatencies, 95),
-        p99LatencyMs: calculatePercentile(sortedLatencies, 99),
+        totalRequests,
+        greenCount,
+        redCount,
+        availabilityScore: calculateAvailabilityScore(greenCount, redCount),
+        avgLatencyMs: toFiniteNumber(bucket.avgLatencyMs),
+        p50LatencyMs: toFiniteNumber(bucket.p50LatencyMs),
+        p95LatencyMs: toFiniteNumber(bucket.p95LatencyMs),
+        p99LatencyMs: toFiniteNumber(bucket.p99LatencyMs),
       });
-
-      // Track last request time
-      if (bucket.latencies.length > 0) {
-        lastRequestAt = bucketEnd.toISOString();
-      }
     }
 
     const totalRequests = totalGreen + totalRed;
-    const sortedAllLatencies = allLatencies.sort((a, b) => a - b);
+    const returnedBucketAvailability = calculateAvailabilityScore(totalGreen, totalRed);
 
-    // Determine current status based on last few buckets
+    // Determine current status from the most recent returned buckets.
+    // Because older non-empty buckets may already be trimmed by maxBuckets,
+    // this intentionally reflects the truncated tail window rather than the full query range.
     // IMPORTANT: No data = 'unknown', NOT 'green'! Must be honest.
     let currentStatus: AvailabilityStatus = "unknown";
     if (timeBuckets.length > 0) {
       const recentBuckets = timeBuckets.slice(-3); // Last 3 buckets
-      const recentScore =
-        recentBuckets.reduce((sum, b) => sum + b.availabilityScore, 0) / recentBuckets.length;
+      const recentGreen = recentBuckets.reduce((sum, bucket) => sum + bucket.greenCount, 0);
+      const recentRed = recentBuckets.reduce((sum, bucket) => sum + bucket.redCount, 0);
+      const recentScore = calculateAvailabilityScore(recentGreen, recentRed);
 
       // Simple: >= 50% success = green, otherwise red
       currentStatus = recentScore >= 0.5 ? "green" : "red";
@@ -306,24 +500,27 @@ export async function queryProviderAvailability(
       providerType: provider.providerType ?? "claude",
       isEnabled: provider.enabled ?? true,
       currentStatus,
-      currentAvailability: calculateAvailabilityScore(totalGreen, totalRed),
+      currentAvailability: returnedBucketAvailability,
       totalRequests,
-      successRate: totalRequests > 0 ? totalGreen / totalRequests : 0,
-      avgLatencyMs:
-        sortedAllLatencies.length > 0
-          ? sortedAllLatencies.reduce((a, b) => a + b, 0) / sortedAllLatencies.length
-          : 0,
-      lastRequestAt,
+      // Keep `successRate` as a compatibility alias of the returned-bucket availability ratio.
+      successRate: returnedBucketAvailability,
+      avgLatencyMs: totalLatencyCount > 0 ? totalLatencySumMs / totalLatencyCount : 0,
+      lastRequestAt: lastRequestAtTime > 0 ? new Date(lastRequestAtTime).toISOString() : null,
       timeBuckets,
     });
   }
 
-  // Calculate system-wide availability
-  const totalSystemRequests = providerSummaries.reduce((sum, p) => sum + p.totalRequests, 0);
+  // Calculate system-wide availability from the buckets returned after per-provider trimming.
+  const totalSystemRequests = providerSummaries.reduce(
+    (sum, provider) => sum + provider.totalRequests,
+    0
+  );
   const weightedSystemAvailability =
     totalSystemRequests > 0
-      ? providerSummaries.reduce((sum, p) => sum + p.currentAvailability * p.totalRequests, 0) /
-        totalSystemRequests
+      ? providerSummaries.reduce(
+          (sum, provider) => sum + provider.currentAvailability * provider.totalRequests,
+          0
+        ) / totalSystemRequests
       : 0;
 
   return {
@@ -349,10 +546,6 @@ export async function getCurrentProviderStatus(): Promise<
     lastRequestAt: string | null;
   }>
 > {
-  // Query last 15 minutes of data for current status
-  const now = new Date();
-  const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-
   // Get enabled providers
   const providerList = await db
     .select({
@@ -366,27 +559,29 @@ export async function getCurrentProviderStatus(): Promise<
     return [];
   }
 
-  const providerIdList = providerList.map((p) => p.id);
+  const providerIdList = providerList.map((provider) => provider.id);
+  const requestConditions = and(
+    inArray(messageRequest.providerId, providerIdList),
+    buildRelativeNowLowerBound(messageRequest.createdAt, CURRENT_PROVIDER_STATUS_WINDOW_MINUTES),
+    buildNowUpperBound(messageRequest.createdAt),
+    isNull(messageRequest.deletedAt),
+    buildAvailabilityFinalizedCondition()
+  );
 
-  // Query recent requests
-  const requests = await db
-    .select({
-      providerId: messageRequest.providerId,
-      statusCode: messageRequest.statusCode,
-      durationMs: messageRequest.durationMs,
-      createdAt: messageRequest.createdAt,
-    })
-    .from(messageRequest)
-    .where(
-      and(
-        inArray(messageRequest.providerId, providerIdList),
-        gte(messageRequest.createdAt, fifteenMinutesAgo),
-        isNull(messageRequest.deletedAt)
-      )
-    )
-    .orderBy(desc(messageRequest.createdAt));
+  const aggregateQuery = sql<AggregatedCurrentProviderStatusRow>`
+    SELECT
+      ${messageRequest.providerId} AS "providerId",
+      COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessStatusCondition(messageRequest.statusCode)})::int AS "greenCount",
+      COUNT(*) FILTER (WHERE ${buildAvailabilityFailureStatusCondition(messageRequest.statusCode)})::int AS "redCount",
+      MAX(${messageRequest.createdAt}) AS "lastRequestAt"
+    FROM ${messageRequest}
+    WHERE ${requestConditions}
+    GROUP BY ${messageRequest.providerId}
+  `;
 
-  // Aggregate by provider
+  const aggregateRows = Array.from(
+    await db.execute(aggregateQuery)
+  ) as AggregatedCurrentProviderStatusRow[];
   const providerStats = new Map<
     number,
     {
@@ -404,21 +599,12 @@ export async function getCurrentProviderStatus(): Promise<
     });
   }
 
-  for (const req of requests) {
-    const stats = providerStats.get(req.providerId);
-    if (!stats) continue;
-
-    const classification = classifyRequestStatus(req.statusCode);
-
-    if (classification.status === "green") {
-      stats.greenCount++;
-    } else {
-      stats.redCount++;
-    }
-
-    if (!stats.lastRequestAt && req.createdAt) {
-      stats.lastRequestAt = req.createdAt.toISOString();
-    }
+  for (const row of aggregateRows) {
+    providerStats.set(row.providerId, {
+      greenCount: toFiniteNumber(row.greenCount),
+      redCount: toFiniteNumber(row.redCount),
+      lastRequestAt: toIsoString(row.lastRequestAt),
+    });
   }
 
   return providerList.map((provider) => {

@@ -150,6 +150,18 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
   `;
 }
 
+function getPatchRetentionPriority(patch: MessageRequestUpdatePatch): number {
+  if (patch.statusCode !== undefined) {
+    return 3;
+  }
+
+  if (patch.durationMs !== undefined) {
+    return 2;
+  }
+
+  return 1;
+}
+
 class MessageRequestWriteBuffer {
   private readonly config: WriterConfig;
   private readonly pending = new Map<number, MessageRequestUpdatePatch>();
@@ -176,15 +188,19 @@ class MessageRequestWriteBuffer {
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
-      // 优先丢弃非“终态”更新（没有 durationMs 的条目），尽量保留请求完成信息
+      // 优先保留更接近终态的 patch：
+      // statusCode > durationMs > metadata-only
+      // 这样 Gemini passthrough 等 statusCode-only 终态更新不会比 duration-only 更容易被丢弃。
       let droppedId: number | undefined;
       let droppedPatch: MessageRequestUpdatePatch | undefined;
+      let lowestPriority = Number.POSITIVE_INFINITY;
 
       for (const [candidateId, candidatePatch] of this.pending) {
-        if (candidatePatch.durationMs === undefined) {
+        const priority = getPatchRetentionPriority(candidatePatch);
+        if (priority < lowestPriority) {
+          lowestPriority = priority;
           droppedId = candidateId;
           droppedPatch = candidatePatch;
-          break;
         }
       }
 
@@ -203,7 +219,9 @@ class MessageRequestWriteBuffer {
         logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping update", {
           maxPending: this.config.maxPending,
           droppedId,
+          droppedPriority: lowestPriority,
           droppedHasDurationMs: droppedPatch?.durationMs !== undefined,
+          droppedHasStatusCode: droppedPatch?.statusCode !== undefined,
           currentPending: this.pending.size,
         });
       }

@@ -6,7 +6,7 @@
 /**
  * Status values for availability calculation
  * - GREEN (1.0): HTTP 2xx/3xx (all successful requests)
- * - RED (0.0): HTTP 4xx/5xx or error
+ * - RED (0.0): finalized requests with non-2xx/3xx HTTP status codes
  * - UNKNOWN (-1): No data available (must be displayed honestly as "no data")
  */
 export type AvailabilityStatus = "green" | "red" | "unknown";
@@ -57,7 +57,7 @@ export interface TimeBucketMetrics {
   totalRequests: number;
   /** Successful requests (2xx/3xx) */
   greenCount: number;
-  /** Failed requests (4xx/5xx or error) */
+  /** Failed finalized requests (non-2xx/3xx status codes) */
   redCount: number;
   /** Weighted availability score (0.0-1.0) */
   availabilityScore: number;
@@ -83,15 +83,15 @@ export interface ProviderAvailabilitySummary {
   providerType: string;
   /** Whether provider is enabled */
   isEnabled: boolean;
-  /** Current status based on recent requests */
+  /** Current status based on the most recent returned buckets */
   currentStatus: AvailabilityStatus;
-  /** Current weighted availability (0.0-1.0) */
+  /** Availability ratio over the returned time buckets (currently kept equal to successRate for compatibility) */
   currentAvailability: number;
-  /** Total request count in period */
+  /** Total finalized request count represented by the returned time buckets */
   totalRequests: number;
-  /** Success rate (green requests / total) */
+  /** Compatibility alias of currentAvailability over the returned time buckets (green requests / total) */
   successRate: number;
-  /** Average latency in ms */
+  /** Average latency in ms over the returned time buckets */
   avgLatencyMs: number;
   /** Last request timestamp */
   lastRequestAt: string | null;
@@ -103,17 +103,20 @@ export interface ProviderAvailabilitySummary {
  * Availability query options
  */
 export interface AvailabilityQueryOptions {
-  /** Start time for query (ISO string or Date) */
+  /** Start time for query (ISO string or Date, maximum span with endTime is 100 days) */
   startTime?: string | Date;
-  /** End time for query (ISO string or Date) */
+  /** End time for query (ISO string or Date, maximum span with startTime is 100 days) */
   endTime?: string | Date;
   /** Provider IDs to filter (empty = all providers) */
   providerIds?: number[];
-  /** Time bucket size in minutes */
+  /** Time bucket size in minutes (minimum 0.25, hard capped at 1440) */
   bucketSizeMinutes?: number;
   /** Whether to include disabled providers */
   includeDisabled?: boolean;
-  /** Maximum number of time buckets to return */
+  /**
+   * Maximum number of non-empty time buckets to return per provider (hard capped at 100).
+   * Summary metrics in the response only reflect the returned buckets after this trimming.
+   */
   maxBuckets?: number;
 }
 
@@ -131,31 +134,9 @@ export interface AvailabilityQueryResult {
   bucketSizeMinutes: number;
   /** Provider summaries */
   providers: ProviderAvailabilitySummary[];
-  /** Overall system availability (weighted average) */
+  /**
+   * Overall system availability weighted over the returned provider buckets.
+   * When maxBuckets trims older non-empty buckets, this may reflect a truncated sub-window.
+   */
   systemAvailability: number;
-}
-
-/**
- * Raw request data from database
- */
-export interface RawRequestData {
-  id: number;
-  providerId: number;
-  statusCode: number | null;
-  durationMs: number | null;
-  errorMessage: string | null;
-  createdAt: Date | null;
-}
-
-/**
- * Aggregated bucket data from database
- */
-export interface AggregatedBucketData {
-  providerId: number;
-  bucketStart: Date;
-  totalRequests: number;
-  greenCount: number;
-  redCount: number;
-  avgLatencyMs: number;
-  latencies: number[];
 }

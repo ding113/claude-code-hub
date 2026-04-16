@@ -617,6 +617,13 @@
       "when": 1774678770349,
       "tag": "0087_nappy_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1776095902010,
+      "tag": "0088_amazing_energizer",
+      "breakpoints": true
     }
   ]
 }

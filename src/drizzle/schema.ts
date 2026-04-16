@@ -511,6 +511,12 @@ export const messageRequest = pgTable('message_request', {
   messageRequestProviderCreatedAtActiveIdx: index('idx_message_request_provider_created_at_active')
     .on(table.providerId, table.createdAt)
     .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
+  // #slow-query: availability 终态聚合热路径（provider + 时间范围 + status_code 已落库）
+  messageRequestProviderCreatedAtFinalizedActiveIdx: index(
+    'idx_message_request_provider_created_at_finalized_active'
+  )
+    .on(table.providerId, table.createdAt.desc())
+    .where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
   // Session ID 前缀查询索引（LIKE 'prefix%'，可稳定命中 B-tree）

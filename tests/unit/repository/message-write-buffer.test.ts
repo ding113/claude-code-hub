@@ -238,7 +238,7 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain("status_code");
   });
 
-  it("队列溢出时应优先丢弃非终态更新（尽量保留 durationMs）", async () => {
+  it("队列溢出时应优先保留带 statusCode 的终态 patch", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
     process.env.MESSAGE_REQUEST_ASYNC_MAX_PENDING = "100";
 
@@ -246,7 +246,7 @@ describe("message_request 异步批量写入", () => {
       "@/repository/message-write-buffer"
     );
 
-    enqueueMessageRequestUpdate(1001, { statusCode: 200 }); // 非终态（无 durationMs）
+    enqueueMessageRequestUpdate(1001, { statusCode: 200 }); // Gemini passthrough 等 statusCode-only 终态
     for (let i = 0; i < 100; i++) {
       enqueueMessageRequestUpdate(2000 + i, { durationMs: i });
     }
@@ -258,8 +258,9 @@ describe("message_request 异步批量写入", () => {
     const query = executeMock.mock.calls[0]?.[0];
     const built = toSqlText(query);
 
-    expect(built.params).toContain(2000);
+    expect(built.params).toContain(1001);
+    expect(built.sql).toContain("status_code");
+    expect(built.params).not.toContain(2000);
     expect(built.params).toContain(2099);
-    expect(built.params).not.toContain(1001);
   });
 });
