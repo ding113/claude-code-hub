@@ -425,6 +425,7 @@
       "users": "Рейтинг пользователей",
       "keys": "Рейтинг ключей",
       "userRanking": "Рейтинг пользователей",
+      "userCacheHitRateRanking": "Рейтинг пользователей по попаданиям в кэш",
       "providerRanking": "Рейтинг поставщиков",
       "providerCacheHitRateRanking": "Рейтинг по попаданиям в кэш",
       "modelRanking": "Рейтинг моделей",

@@ -425,6 +425,7 @@
       "users": "使用者排名",
       "keys": "密鑰排名",
       "userRanking": "使用者排名",
+      "userCacheHitRateRanking": "使用者快取命中率排行",
       "providerRanking": "供應商排名",
       "providerCacheHitRateRanking": "供應商快取命中率排行",
       "modelRanking": "模型排名",

@@ -425,6 +425,7 @@
       "users": "User Rankings",
       "keys": "Key Rankings",
       "userRanking": "User Rankings",
+      "userCacheHitRateRanking": "User Cache Hit Rate",
       "providerRanking": "Provider Rankings",
       "providerCacheHitRateRanking": "Provider Cache Hit Rate",
       "modelRanking": "Model Rankings",

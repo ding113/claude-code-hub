@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers, usageLedger, users } from "@/drizzle/schema";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -108,6 +108,33 @@ export interface ProviderCacheHitRateLeaderboardEntry {
 /**
  * 模型排行榜条目类型
  */
+export interface UserCacheHitModelStat {
+  model: string | null;
+  totalRequests: number;
+  cacheReadTokens: number;
+  totalInputTokens: number;
+  cacheHitRate: number; // 0-1
+}
+
+export interface UserCacheHitRateLeaderboardEntry {
+  userId: number;
+  userName: string;
+  totalRequests: number;
+  cacheReadTokens: number;
+  totalCost: number;
+  cacheCreationCost: number;
+  totalInputTokens: number;
+  /** 为与现有缓存命中率榜单前端保持字段一致而保留；值始终等于 totalInputTokens */
+  totalTokens: number;
+  cacheHitRate: number; // 0-1
+  /**
+   * 可选：按模型拆分
+   * - undefined: 未请求 includeModelStats
+   * - []: 已请求 includeModelStats，但该用户下无可用模型统计
+   */
+  modelStats?: UserCacheHitModelStat[];
+}
+
 export interface ModelLeaderboardEntry {
   model: string;
   totalRequests: number;
@@ -250,18 +277,7 @@ function buildDateCondition(
 /**
  * 通用排行榜查询函数（使用 SQL AT TIME ZONE 确保时区正确）
  */
-async function findLeaderboardWithTimezone(
-  period: LeaderboardPeriod,
-  timezone: string,
-  dateRange?: DateRangeParams,
-  userFilters?: UserLeaderboardFilters,
-  includeModelStats?: boolean
-): Promise<LeaderboardEntry[]> {
-  const whereConditions = [
-    LEDGER_BILLING_CONDITION,
-    buildDateCondition(period, timezone, dateRange),
-  ];
-
+function buildUserFilterCondition(userFilters?: UserLeaderboardFilters) {
   const normalizedTags = (userFilters?.userTags ?? []).map((t) => t.trim()).filter(Boolean);
   let tagFilterCondition: ReturnType<typeof sql> | undefined;
   if (normalizedTags.length > 0) {
@@ -274,17 +290,33 @@ async function findLeaderboardWithTimezone(
   if (normalizedGroups.length > 0) {
     const groupConditions = normalizedGroups.map(
       (group) =>
-        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*[,，]+\\s*'))`
+        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*[,，\n\r]+\\s*'))`
     );
     groupFilterCondition = sql`(${sql.join(groupConditions, sql` OR `)})`;
   }
 
   if (tagFilterCondition && groupFilterCondition) {
-    whereConditions.push(sql`(${tagFilterCondition} OR ${groupFilterCondition})`);
-  } else if (tagFilterCondition) {
-    whereConditions.push(tagFilterCondition);
-  } else if (groupFilterCondition) {
-    whereConditions.push(groupFilterCondition);
+    return sql`(${tagFilterCondition} OR ${groupFilterCondition})`;
+  }
+
+  return tagFilterCondition ?? groupFilterCondition;
+}
+
+async function findLeaderboardWithTimezone(
+  period: LeaderboardPeriod,
+  timezone: string,
+  dateRange?: DateRangeParams,
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
+): Promise<LeaderboardEntry[]> {
+  const whereConditions = [
+    LEDGER_BILLING_CONDITION,
+    buildDateCondition(period, timezone, dateRange),
+  ];
+
+  const userFilterCondition = buildUserFilterCondition(userFilters);
+  if (userFilterCondition) {
+    whereConditions.push(userFilterCondition);
   }
 
   const rankings = await db
@@ -510,6 +542,62 @@ export async function findAllTimeProviderCacheHitRateLeaderboard(
     timezone,
     undefined,
     providerType
+  );
+}
+
+export async function findDailyUserCacheHitRateLeaderboard(
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
+): Promise<UserCacheHitRateLeaderboardEntry[]> {
+  const timezone = await resolveSystemTimezone();
+  return findUserCacheHitRateLeaderboardWithTimezone(
+    "daily",
+    timezone,
+    undefined,
+    userFilters,
+    includeModelStats
+  );
+}
+
+export async function findMonthlyUserCacheHitRateLeaderboard(
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
+): Promise<UserCacheHitRateLeaderboardEntry[]> {
+  const timezone = await resolveSystemTimezone();
+  return findUserCacheHitRateLeaderboardWithTimezone(
+    "monthly",
+    timezone,
+    undefined,
+    userFilters,
+    includeModelStats
+  );
+}
+
+export async function findWeeklyUserCacheHitRateLeaderboard(
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
+): Promise<UserCacheHitRateLeaderboardEntry[]> {
+  const timezone = await resolveSystemTimezone();
+  return findUserCacheHitRateLeaderboardWithTimezone(
+    "weekly",
+    timezone,
+    undefined,
+    userFilters,
+    includeModelStats
+  );
+}
+
+export async function findAllTimeUserCacheHitRateLeaderboard(
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
+): Promise<UserCacheHitRateLeaderboardEntry[]> {
+  const timezone = await resolveSystemTimezone();
+  return findUserCacheHitRateLeaderboardWithTimezone(
+    "allTime",
+    timezone,
+    undefined,
+    userFilters,
+    includeModelStats
   );
 }
 
@@ -798,6 +886,124 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
  * 查询自定义日期范围供应商消耗排行榜
  * includeModelStats=true 时会额外返回按模型拆分的统计数据（modelStats）
  */
+async function findUserCacheHitRateLeaderboardWithTimezone(
+  period: LeaderboardPeriod,
+  timezone: string,
+  dateRange?: DateRangeParams,
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
+): Promise<UserCacheHitRateLeaderboardEntry[]> {
+  const totalInputTokensExpr = sql<number>`(
+    COALESCE(${usageLedger.inputTokens}, 0)::double precision +
+    COALESCE(${usageLedger.cacheCreationInputTokens}, 0)::double precision +
+    COALESCE(${usageLedger.cacheReadInputTokens}, 0)::double precision
+  )`;
+
+  const cacheRequiredCondition = sql`(
+    COALESCE(${usageLedger.cacheCreationInputTokens}, 0) > 0
+    OR COALESCE(${usageLedger.cacheReadInputTokens}, 0) > 0
+  )`;
+
+  const sumTotalInputTokens = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
+  const sumCacheReadTokens = sql<number>`COALESCE(sum(COALESCE(${usageLedger.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
+  const sumCacheCreationCost = sql<string>`COALESCE(sum(CASE WHEN COALESCE(${usageLedger.cacheCreationInputTokens}, 0) > 0 THEN ${usageLedger.costUsd} ELSE 0 END), 0)`;
+
+  const cacheHitRateExpr = sql<number>`COALESCE(
+    ${sumCacheReadTokens} / NULLIF(${sumTotalInputTokens}, 0::double precision),
+    0::double precision
+  )`;
+
+  const whereConditions = [
+    LEDGER_BILLING_CONDITION,
+    buildDateCondition(period, timezone, dateRange),
+    cacheRequiredCondition,
+  ];
+
+  const userFilterCondition = buildUserFilterCondition(userFilters);
+  if (userFilterCondition) {
+    whereConditions.push(userFilterCondition);
+  }
+
+  const rankings = await db
+    .select({
+      userId: usageLedger.userId,
+      userName: users.name,
+      totalRequests: sql<number>`count(*)::double precision`,
+      totalCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
+      cacheReadTokens: sumCacheReadTokens,
+      cacheCreationCost: sumCacheCreationCost,
+      totalInputTokens: sumTotalInputTokens,
+      cacheHitRate: cacheHitRateExpr,
+    })
+    .from(usageLedger)
+    .innerJoin(users, and(sql`${usageLedger.userId} = ${users.id}`, isNull(users.deletedAt)))
+    .where(and(...whereConditions))
+    .groupBy(usageLedger.userId, users.name)
+    .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`), asc(users.name), asc(usageLedger.userId));
+
+  const baseEntries: UserCacheHitRateLeaderboardEntry[] = rankings.map((entry) => ({
+    userId: entry.userId,
+    userName: entry.userName,
+    totalRequests: entry.totalRequests,
+    totalCost: parseFloat(entry.totalCost),
+    cacheReadTokens: entry.cacheReadTokens,
+    cacheCreationCost: parseFloat(entry.cacheCreationCost),
+    totalInputTokens: entry.totalInputTokens,
+    totalTokens: entry.totalInputTokens,
+    cacheHitRate: clampRatio01(entry.cacheHitRate),
+  }));
+
+  if (!includeModelStats) return baseEntries;
+
+  const systemSettings = await getSystemSettings();
+  const billingModelSource = systemSettings.billingModelSource;
+  const rawModelField =
+    billingModelSource === "original"
+      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
+      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const modelField = sql<string | null>`NULLIF(TRIM(${rawModelField}), '')`;
+
+  const modelTotalInput = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
+  const modelCacheRead = sql<number>`COALESCE(sum(COALESCE(${usageLedger.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
+  const modelCacheHitRate = sql<number>`COALESCE(
+    ${modelCacheRead} / NULLIF(${modelTotalInput}, 0::double precision),
+    0::double precision
+  )`;
+
+  const modelRows = await db
+    .select({
+      userId: usageLedger.userId,
+      model: modelField,
+      totalRequests: sql<number>`count(*)::double precision`,
+      cacheReadTokens: modelCacheRead,
+      totalInputTokens: modelTotalInput,
+      cacheHitRate: modelCacheHitRate,
+    })
+    .from(usageLedger)
+    .innerJoin(users, and(sql`${usageLedger.userId} = ${users.id}`, isNull(users.deletedAt)))
+    .where(and(...whereConditions))
+    .groupBy(usageLedger.userId, modelField)
+    .orderBy(desc(modelCacheHitRate), desc(sql`count(*)`), asc(modelField));
+
+  const modelStatsByUser = new Map<number, UserCacheHitModelStat[]>();
+  for (const row of modelRows) {
+    const stats = modelStatsByUser.get(row.userId) ?? [];
+    stats.push({
+      model: row.model,
+      totalRequests: row.totalRequests,
+      cacheReadTokens: row.cacheReadTokens,
+      totalInputTokens: row.totalInputTokens,
+      cacheHitRate: clampRatio01(row.cacheHitRate),
+    });
+    modelStatsByUser.set(row.userId, stats);
+  }
+
+  return baseEntries.map((entry) => ({
+    ...entry,
+    modelStats: modelStatsByUser.get(entry.userId) ?? [],
+  }));
+}
+
 export async function findCustomRangeProviderLeaderboard(
   dateRange: DateRangeParams,
   providerType?: ProviderType,
@@ -833,6 +1039,21 @@ export async function findCustomRangeProviderCacheHitRateLeaderboard(
  * 查询今日模型调用排行榜（不限制数量）
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于系统时区
  */
+export async function findCustomRangeUserCacheHitRateLeaderboard(
+  dateRange: DateRangeParams,
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
+): Promise<UserCacheHitRateLeaderboardEntry[]> {
+  const timezone = await resolveSystemTimezone();
+  return findUserCacheHitRateLeaderboardWithTimezone(
+    "custom",
+    timezone,
+    dateRange,
+    userFilters,
+    includeModelStats
+  );
+}
+
 export async function findDailyModelLeaderboard(): Promise<ModelLeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
   return findModelLeaderboardWithTimezone("daily", timezone);
