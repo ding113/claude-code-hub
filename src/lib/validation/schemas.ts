@@ -60,7 +60,7 @@ const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
 
 const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
   .object({
-    effort: z.enum(["low", "medium", "high", "max"]),
+    effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
     modelMatchMode: z.enum(["specific", "all"]),
     models: z.array(z.string().min(1).max(100)).max(50),
   })

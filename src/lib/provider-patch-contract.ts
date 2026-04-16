@@ -148,7 +148,7 @@ function isAdaptiveThinkingConfig(
     return false;
   }
 
-  const effortValues = new Set(["low", "medium", "high", "max"]);
+  const effortValues = new Set(["low", "medium", "high", "xhigh", "max"]);
   const modeValues = new Set(["specific", "all"]);
 
   if (typeof value.effort !== "string" || !effortValues.has(value.effort)) {

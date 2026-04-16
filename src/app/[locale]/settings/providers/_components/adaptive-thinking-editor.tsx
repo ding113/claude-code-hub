@@ -85,7 +85,7 @@ export function AdaptiveThinkingEditor({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {(["low", "medium", "high", "max"] as const).map((level) => (
+                      {(["low", "medium", "high", "xhigh", "max"] as const).map((level) => (
                         <SelectItem key={level} value={level}>
                           {t(
                             `sections.routing.anthropicOverrides.adaptiveThinking.effort.options.${level}`

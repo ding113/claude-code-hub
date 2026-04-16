@@ -38,7 +38,7 @@ export type AnthropicMaxTokensPreference = "inherit" | string;
 export type AnthropicThinkingBudgetPreference = "inherit" | string;
 
 // Anthropic adaptive thinking configuration
-export type AnthropicAdaptiveThinkingEffort = "low" | "medium" | "high" | "max";
+export type AnthropicAdaptiveThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
 export type AnthropicAdaptiveThinkingModelMatchMode = "specific" | "all";
 export interface AnthropicAdaptiveThinkingConfig {
   effort: AnthropicAdaptiveThinkingEffort;
