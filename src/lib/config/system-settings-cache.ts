@@ -141,6 +141,8 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      ipExtractionConfig: null,
+      ipGeoLookupEnabled: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies SystemSettings;

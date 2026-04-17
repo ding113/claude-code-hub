@@ -1,4 +1,5 @@
 import type { CurrencyCode } from "@/lib/utils";
+import type { IpExtractionConfig } from "@/types/ip-extraction";
 
 // 计费模型来源: 'original' (重定向前) | 'redirected' (重定向后)
 export type BillingModelSource = "original" | "redirected";
@@ -91,6 +92,11 @@ export interface SystemSettings {
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
 
+  // 客户端 IP 提取链（null 走内置默认）
+  ipExtractionConfig: IpExtractionConfig | null;
+  // 是否启用 IP 归属地查询
+  ipGeoLookupEnabled: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -162,4 +168,9 @@ export interface UpdateSystemSettingsInput {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+
+  // 客户端 IP 提取链（可选，null = 使用默认）
+  ipExtractionConfig?: IpExtractionConfig | null;
+  // 是否启用 IP 归属地查询（可选）
+  ipGeoLookupEnabled?: boolean;
 }

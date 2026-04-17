@@ -10,6 +10,7 @@ import {
   validateKey,
 } from "@/lib/auth";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { getClientIp } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
@@ -102,34 +103,13 @@ function shouldIncludeFailureTaxonomy(request: NextRequest): boolean {
   return request.headers.has("x-forwarded-proto");
 }
 
-function getClientIp(request: NextRequest): string {
-  // 1. Next.js platform-provided IP (trusted in Vercel / managed deployments)
+function resolveClientIp(request: NextRequest): string {
+  // Platform-provided IP (Vercel / Next.js managed runtime) takes precedence
+  // over header-based extraction because it's not user-controllable.
   const platformIp = (request as unknown as { ip?: string }).ip;
-  if (platformIp) {
-    return platformIp;
-  }
+  if (platformIp) return platformIp;
 
-  // 2. x-real-ip is typically set by the closest trusted reverse proxy
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  if (realIp) {
-    return realIp;
-  }
-
-  // 3. x-forwarded-for: take the rightmost (last) entry, which is the IP
-  //    appended by the closest trusted proxy. The leftmost entry is
-  //    client-controlled and can be spoofed.
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const ips = forwarded
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (ips.length > 0) {
-      return ips[ips.length - 1];
-    }
-  }
-
-  return "unknown";
+  return getClientIp(request.headers) ?? "unknown";
 }
 
 let sessionStoreInstance:
@@ -163,7 +143,7 @@ export async function POST(request: NextRequest) {
 
   const locale = getLocaleFromRequest(request);
   const t = await getAuthErrorTranslations(locale);
-  const clientIp = getClientIp(request);
+  const clientIp = resolveClientIp(request);
 
   const decision = loginPolicy.check(clientIp);
   if (!decision.allowed) {

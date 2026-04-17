@@ -171,6 +171,8 @@ function createFallbackSettings(): SystemSettings {
     quotaLeasePercentWeekly: 0.05,
     quotaLeasePercentMonthly: 0.05,
     quotaLeaseCapUsd: null,
+    ipExtractionConfig: null,
+    ipGeoLookupEnabled: true,
     createdAt: now,
     updatedAt: now,
   };

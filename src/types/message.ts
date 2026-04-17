@@ -266,6 +266,9 @@ export interface MessageRequest {
   // User-Agent（用于客户端类型分析）
   userAgent?: string;
 
+  // 客户端 IP（IPv4/IPv6；由统一 IP 提取中间件写入）
+  clientIp?: string | null;
+
   // 请求的 API endpoint（例如：/v1/messages），从 URL.pathname 提取
   endpoint?: string;
 
@@ -332,6 +335,9 @@ export interface CreateMessageRequestData {
 
   // User-Agent（用于客户端类型分析）
   user_agent?: string;
+
+  // 客户端 IP（IPv4/IPv6）
+  client_ip?: string;
 
   // 请求的 API endpoint（例如：/v1/messages），从 URL.pathname 提取
   endpoint?: string;

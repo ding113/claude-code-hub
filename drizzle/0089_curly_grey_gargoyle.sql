@@ -1,3 +1,48 @@
+CREATE TABLE IF NOT EXISTS "audit_log" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"action_category" varchar(32) NOT NULL,
+	"action_type" varchar(64) NOT NULL,
+	"target_type" varchar(32),
+	"target_id" varchar(64),
+	"target_name" varchar(256),
+	"before_value" jsonb,
+	"after_value" jsonb,
+	"operator_user_id" integer,
+	"operator_user_name" varchar(128),
+	"operator_key_id" integer,
+	"operator_key_name" varchar(128),
+	"operator_ip" varchar(45),
+	"user_agent" varchar(512),
+	"success" boolean NOT NULL,
+	"error_message" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "provider_groups" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"name" varchar(200) NOT NULL,
+	"cost_multiplier" numeric(10, 4) DEFAULT '1.0' NOT NULL,
+	"description" varchar(500),
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "provider_groups_name_unique" UNIQUE("name")
+);
+--> statement-breakpoint
+ALTER TABLE "message_request" ADD COLUMN "group_cost_multiplier" numeric(10, 4);--> statement-breakpoint
+ALTER TABLE "message_request" ADD COLUMN "cost_breakdown" jsonb;--> statement-breakpoint
+ALTER TABLE "message_request" ADD COLUMN "client_ip" varchar(45);--> statement-breakpoint
+ALTER TABLE "system_settings" ADD COLUMN "ip_extraction_config" jsonb;--> statement-breakpoint
+ALTER TABLE "system_settings" ADD COLUMN "ip_geo_lookup_enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "usage_ledger" ADD COLUMN "group_cost_multiplier" numeric(10, 4);--> statement-breakpoint
+ALTER TABLE "usage_ledger" ADD COLUMN "client_ip" varchar(45);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_audit_log_category_created_at" ON "audit_log" USING btree ("action_category","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_audit_log_operator_user_created_at" ON "audit_log" USING btree ("operator_user_id","created_at" DESC NULLS LAST) WHERE "audit_log"."operator_user_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_audit_log_operator_ip_created_at" ON "audit_log" USING btree ("operator_ip","created_at" DESC NULLS LAST) WHERE "audit_log"."operator_ip" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_audit_log_target" ON "audit_log" USING btree ("target_type","target_id") WHERE "audit_log"."target_type" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_audit_log_created_at_id" ON "audit_log" USING btree ("created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_client_ip_created_at" ON "message_request" USING btree ("client_ip","created_at" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL AND "message_request"."client_ip" IS NOT NULL;--> statement-breakpoint
+-- Update fn_upsert_usage_ledger trigger to propagate client_ip and group_cost_multiplier
+-- from message_request to usage_ledger. Mirror of src/lib/ledger-backfill/trigger.sql.
 CREATE OR REPLACE FUNCTION fn_upsert_usage_ledger()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -5,7 +50,6 @@ DECLARE
   v_is_success boolean;
 BEGIN
   IF NEW.blocked_by = 'warmup' THEN
-    -- If a ledger row already exists (row was originally non-warmup), mark it as warmup
     UPDATE usage_ledger SET blocked_by = 'warmup' WHERE request_id = NEW.id;
     RETURN NEW;
   END IF;
@@ -80,8 +124,3 @@ EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_upsert_usage_ledger
-AFTER INSERT OR UPDATE ON message_request
-FOR EACH ROW
-EXECUTE FUNCTION fn_upsert_usage_ledger();

@@ -60,6 +60,7 @@ export class ProxyMessageService {
       cost_multiplier: provider.costMultiplier, // 传入 cost_multiplier
       group_cost_multiplier: session.getGroupCostMultiplier(), // 传入分组倍率
       user_agent: session.userAgent ?? undefined, // 传入 user_agent
+      client_ip: session.clientIp ?? undefined, // 客户端 IP（由统一 IP 提取中间件写入 session）
       original_model: session.getOriginalModel() ?? undefined, // 传入原始模型（用户请求的模型）
       messages_count: session.getMessagesLength(), // 传入 messages 数量
       endpoint, // 传入请求端点（可能为 undefined）

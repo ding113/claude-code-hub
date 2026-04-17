@@ -83,6 +83,9 @@ export class ProxySession {
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 
+  // 客户端 IP（由 ProxyAuthenticator 按系统设置的 ip_extraction_config 解析后写入）
+  clientIp: string | null = null;
+
   // Request Sequence（Session 内请求序号）
   requestSequence: number = 1;
 
