@@ -479,7 +479,7 @@ function GroupMembersTable({ groupName, members, onSaved }: GroupMembersTablePro
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>{t("groupName")}</TableHead>
+            <TableHead>{t("providerName")}</TableHead>
             <TableHead className="w-[180px]">{t("effectivePriority")}</TableHead>
             <TableHead className="w-[120px]" />
           </TableRow>
@@ -516,6 +516,10 @@ function MemberRow({ member, groupName, onSaved }: MemberRowProps) {
 
   const handleSave = useCallback(() => {
     const trimmed = draft.trim();
+    if (trimmed === "") {
+      toast.error(t("savePriorityFailed"));
+      return;
+    }
     const value = Number(trimmed);
     if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
       toast.error(t("savePriorityFailed"));

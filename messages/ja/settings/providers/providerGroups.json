@@ -31,6 +31,7 @@
   "invalidMultiplier": "有効な非負のコスト倍率を入力してください",
   "groupInUse": "プロバイダーから参照されているグループは削除できません",
   "groupMembers": "グループメンバー",
+  "providerName": "プロバイダー名",
   "effectivePriority": "グループ内の優先度",
   "noMembers": "メンバーがいません",
   "savePriorityFailed": "優先度の保存に失敗しました",

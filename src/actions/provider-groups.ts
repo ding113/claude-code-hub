@@ -47,37 +47,42 @@ export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWit
       findAllProvidersFresh(),
     ]);
 
-    // 聚合 providers.groupTag 里实际被引用的分组名（未打 tag 的 provider 归入 default）
+    // 单次遍历 providers：同时聚合引用集合与按组计数（未打 tag 的 provider 归入 default）
     const referenced = new Set<string>();
+    const groupCounts = new Map<string, number>();
     for (const provider of providers) {
       const parsed = parseProviderGroups(provider.groupTag);
       if (parsed.length === 0) {
         referenced.add(PROVIDER_GROUP.DEFAULT);
-      } else {
-        for (const name of parsed) referenced.add(name);
-      }
-    }
-
-    // 读时自愈：把被引用但表里缺失的分组名批量补齐，保证表是字符串集合的超集
-    const existingNames = new Set(initialGroups.map((g) => g.name));
-    const missing = [...referenced].filter((n) => !existingNames.has(n));
-    let groups = initialGroups;
-    if (missing.length > 0) {
-      await ensureProviderGroupsExist(missing);
-      // 重新拉取一次，拿到新插入行的完整字段（id/timestamps/默认倍率）
-      groups = await findAllProviderGroups();
-    }
-
-    // Count providers per group
-    const groupCounts = new Map<string, number>();
-    for (const provider of providers) {
-      const parsedGroups = parseProviderGroups(provider.groupTag);
-      if (parsedGroups.length === 0) {
         groupCounts.set(PROVIDER_GROUP.DEFAULT, (groupCounts.get(PROVIDER_GROUP.DEFAULT) || 0) + 1);
         continue;
       }
-      for (const groupName of parsedGroups) {
-        groupCounts.set(groupName, (groupCounts.get(groupName) || 0) + 1);
+      for (const name of parsed) {
+        referenced.add(name);
+        groupCounts.set(name, (groupCounts.get(name) || 0) + 1);
+      }
+    }
+
+    // 读时自愈：把被引用但表里缺失的分组名批量补齐。
+    // 必须吞错——若 ensureProviderGroupsExist 因任何原因失败（如历史 tag 超过 provider_groups.name 长度上限），
+    // Tab 依然应能展示既有分组，不能因自愈失败整页不可用。
+    const existingNames = new Set(initialGroups.map((g) => g.name));
+    const PROVIDER_GROUP_NAME_MAX = 200; // 与 schema 保持一致
+    const missing = [...referenced].filter(
+      (n) => !existingNames.has(n) && n.length <= PROVIDER_GROUP_NAME_MAX
+    );
+    let groups = initialGroups;
+    if (missing.length > 0) {
+      try {
+        await ensureProviderGroupsExist(missing);
+        // 重新拉取一次，拿到新插入行的完整字段（id/timestamps/默认倍率）
+        groups = await findAllProviderGroups();
+      } catch (syncError) {
+        logger.warn("getProviderGroups:self_heal_failed", {
+          error: syncError instanceof Error ? syncError.message : String(syncError),
+          missingCount: missing.length,
+        });
+        // 继续用 initialGroups 返回，不阻塞 Tab 加载
       }
     }
 

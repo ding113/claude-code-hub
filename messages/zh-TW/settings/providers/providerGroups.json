@@ -31,6 +31,7 @@
   "invalidMultiplier": "請輸入有效的非負成本倍率",
   "groupInUse": "該分組仍被供應商引用，無法刪除",
   "groupMembers": "分組成員",
+  "providerName": "供應商名稱",
   "effectivePriority": "本組優先級",
   "noMembers": "暫無成員",
   "savePriorityFailed": "儲存優先級失敗",

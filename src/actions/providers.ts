@@ -840,9 +840,18 @@ export async function editProvider(
     }
 
     // 同步 provider_groups 表（系统级，失败不影响主流程）
+    // 同时覆盖 group_tag 新增 tag 与 group_priorities 引用的分组名（如 admin 在 Tab 里给某 provider
+    // 设置了新组的优先级，该组名也应立即物化为表行）
+    const groupNamesToEnsure = new Set<string>();
     if (payload.group_tag !== undefined) {
+      for (const n of parseProviderGroups(payload.group_tag)) groupNamesToEnsure.add(n);
+    }
+    if (validated.group_priorities !== undefined && validated.group_priorities !== null) {
+      for (const n of Object.keys(validated.group_priorities)) groupNamesToEnsure.add(n);
+    }
+    if (groupNamesToEnsure.size > 0) {
       try {
-        await ensureProviderGroupsExist(parseProviderGroups(payload.group_tag));
+        await ensureProviderGroupsExist([...groupNamesToEnsure]);
       } catch (error) {
         logger.warn("editProvider:provider_groups_sync_failed", {
           providerId,
@@ -2388,7 +2397,7 @@ export async function batchUpdateProviders(
       try {
         await ensureProviderGroupsExist(parseProviderGroups(repositoryUpdates.groupTag));
       } catch (error) {
-        logger.warn("updateProvider:provider_groups_sync_failed", {
+        logger.warn("batchUpdateProviders:provider_groups_sync_failed", {
           error: error instanceof Error ? error.message : String(error),
         });
       }
