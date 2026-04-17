@@ -33,6 +33,7 @@ import {
 } from "@/lib/utils/special-settings";
 import type { UsageLogRow } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
+import { IpDetailsDialog } from "../../_components/ip-details-dialog";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
@@ -74,6 +75,9 @@ export function UsageLogsTable({
     expandedChainIndex?: number;
   }>({ logId: null, scrollToRedirect: false });
 
+  const [ipDialogOpen, setIpDialogOpen] = useState(false);
+  const [ipDialogValue, setIpDialogValue] = useState<string | null>(null);
+
   const handleCopySessionIdClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       const sessionId = event.currentTarget.dataset.sessionId;
@@ -96,6 +100,7 @@ export function UsageLogsTable({
               <TableHead>{t("logs.columns.user")}</TableHead>
               <TableHead>{t("logs.columns.key")}</TableHead>
               <TableHead>{t("logs.columns.sessionId")}</TableHead>
+              <TableHead>{t("logs.columns.ip")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
               <TableHead>{t("logs.columns.model")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.tokens")}</TableHead>
@@ -108,7 +113,7 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center text-muted-foreground">
+                <TableCell colSpan={12} className="text-center text-muted-foreground">
                   {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
@@ -180,6 +185,22 @@ export function UsageLogsTable({
                         </TooltipProvider>
                       ) : (
                         <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {log.clientIp ? (
+                        <button
+                          type="button"
+                          className="text-left cursor-pointer hover:underline"
+                          onClick={() => {
+                            setIpDialogValue(log.clientIp);
+                            setIpDialogOpen(true);
+                          }}
+                        >
+                          {log.clientIp}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-left">
@@ -602,6 +623,8 @@ export function UsageLogsTable({
           </div>
         </div>
       )}
+
+      <IpDetailsDialog ip={ipDialogValue} open={ipDialogOpen} onOpenChange={setIpDialogOpen} />
     </div>
   );
 }

@@ -136,10 +136,7 @@ describe("withAudit — no session / no request ctx", () => {
     const { withAudit } = await import("./with-audit");
 
     // No runWithRequestContext wrap → expect null ip/userAgent
-    await withAudit(
-      { category: "auth", action: "login.success" },
-      async () => ({ ok: true })
-    );
+    await withAudit({ category: "auth", action: "login.success" }, async () => ({ ok: true }));
 
     const entry = emittedEntries[0] as Record<string, unknown>;
     expect(entry.operatorUserId).toBeNull();

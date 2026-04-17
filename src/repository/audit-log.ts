@@ -4,12 +4,7 @@ import { and, desc, eq, gte, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { auditLog } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
-import type {
-  AuditCategory,
-  AuditLogFilter,
-  AuditLogInput,
-  AuditLogRow,
-} from "@/types/audit-log";
+import type { AuditCategory, AuditLogFilter, AuditLogInput, AuditLogRow } from "@/types/audit-log";
 
 function toRow(row: typeof auditLog.$inferSelect): AuditLogRow {
   return {
@@ -63,16 +58,22 @@ async function insertAuditLog(entry: AuditLogInput): Promise<void> {
  * Audit writes must never block the hot path (login, mutation actions), so
  * errors are caught and logged but not propagated. If the audit write fails
  * (DB down, table missing on fresh install, etc.) the original request
- * succeeds without blocking.
+ * succeeds without blocking. Returned promise resolves once the insert
+ * completes (or fails silently) — callers should `void` the result, not await.
+ *
+ * Declared `async` (rather than plain sync fire-and-forget) so this file
+ * satisfies Next.js's "use server" constraint that every export is async.
  */
-export function createAuditLogAsync(entry: AuditLogInput): void {
-  void insertAuditLog(entry).catch((error) => {
+export async function createAuditLogAsync(entry: AuditLogInput): Promise<void> {
+  try {
+    await insertAuditLog(entry);
+  } catch (error) {
     logger.warn("[AuditLog] failed to persist audit entry", {
       category: entry.actionCategory,
       action: entry.actionType,
       error: error instanceof Error ? error.message : String(error),
     });
-  });
+  }
 }
 
 export interface AuditLogCursor {
@@ -129,7 +130,10 @@ export async function listAuditLogs(
   const trimmed = hasMore ? rows.slice(0, pageSize) : rows;
   const nextCursor: AuditLogCursor | null =
     hasMore && trimmed.length > 0
-      ? { createdAt: trimmed[trimmed.length - 1].createdAt!.toISOString(), id: trimmed[trimmed.length - 1].id }
+      ? {
+          createdAt: trimmed[trimmed.length - 1].createdAt!.toISOString(),
+          id: trimmed[trimmed.length - 1].id,
+        }
       : null;
 
   return { rows: trimmed.map(toRow), nextCursor };
@@ -148,9 +152,6 @@ export async function countAuditLogs(filter: AuditLogFilter = {}): Promise<numbe
   if (filter.to) conditions.push(lte(auditLog.createdAt, filter.to));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(auditLog)
-    .where(where);
+  const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(auditLog).where(where);
   return row?.count ?? 0;
 }

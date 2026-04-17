@@ -19,6 +19,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { handle } from "hono/vercel";
 import { z } from "zod";
 import * as activeSessionActions from "@/actions/active-sessions";
+import * as auditLogActions from "@/actions/audit-logs";
 import * as keyActions from "@/actions/keys";
 import * as modelPriceActions from "@/actions/model-prices";
 import * as myUsageActions from "@/actions/my-usage";
@@ -1478,6 +1479,88 @@ const { route: getCacheStatsRoute, handler: getCacheStatsHandler } = createActio
   }
 );
 app.openapi(getCacheStatsRoute, getCacheStatsHandler);
+
+// ==================== 审计日志 ====================
+
+const auditLogCursorSchema = z
+  .object({
+    createdAt: z.string(),
+    id: z.number().int(),
+  })
+  .nullable()
+  .optional();
+
+const auditLogRowSchema = z.object({
+  id: z.number(),
+  actionCategory: z.string(),
+  actionType: z.string(),
+  targetType: z.string().nullable(),
+  targetId: z.string().nullable(),
+  targetName: z.string().nullable(),
+  beforeValue: z.any().nullable(),
+  afterValue: z.any().nullable(),
+  operatorUserId: z.number().nullable(),
+  operatorUserName: z.string().nullable(),
+  operatorKeyId: z.number().nullable(),
+  operatorKeyName: z.string().nullable(),
+  operatorIp: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  success: z.boolean(),
+  errorMessage: z.string().nullable(),
+  createdAt: z.union([z.date(), z.string()]),
+});
+
+const { route: getAuditLogsBatchRoute, handler: getAuditLogsBatchHandler } = createActionRoute(
+  "audit-logs",
+  "getAuditLogsBatch",
+  auditLogActions.getAuditLogsBatch,
+  {
+    requestSchema: z.object({
+      filter: z
+        .object({
+          category: z.string().optional(),
+          success: z.boolean().optional(),
+          from: z.string().optional(),
+          to: z.string().optional(),
+        })
+        .optional(),
+      cursor: auditLogCursorSchema,
+      pageSize: z.number().int().positive().optional(),
+    }),
+    responseSchema: z.object({
+      rows: z.array(auditLogRowSchema),
+      nextCursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number().int(),
+        })
+        .nullable(),
+    }),
+    description: "分页获取审计日志 (管理员)",
+    summary: "分页获取审计日志",
+    tags: ["审计日志"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(getAuditLogsBatchRoute, getAuditLogsBatchHandler);
+
+const { route: getAuditLogDetailRoute, handler: getAuditLogDetailHandler } = createActionRoute(
+  "audit-logs",
+  "getAuditLogDetail",
+  auditLogActions.getAuditLogDetail,
+  {
+    requestSchema: z.object({
+      id: z.number().int().positive(),
+    }),
+    responseSchema: auditLogRowSchema.nullable(),
+    description: "获取审计日志详情 (管理员)",
+    summary: "获取审计日志详情",
+    tags: ["审计日志"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body.id],
+  }
+);
+app.openapi(getAuditLogDetailRoute, getAuditLogDetailHandler);
 
 // ==================== 活跃 Session ====================
 

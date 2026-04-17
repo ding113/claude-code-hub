@@ -41,10 +41,7 @@ export interface WithAuditOptions<TResult> {
  *
  * On exception, a failure audit row is emitted before the error is rethrown.
  */
-export async function withAudit<T>(
-  options: WithAuditOptions<T>,
-  fn: () => Promise<T>
-): Promise<T> {
+export async function withAudit<T>(options: WithAuditOptions<T>, fn: () => Promise<T>): Promise<T> {
   const before = options.snapshotBefore ? await options.snapshotBefore() : undefined;
   const redactedBefore =
     before !== undefined ? redactSensitive(before, options.redactExtraKeys) : undefined;
@@ -52,8 +49,7 @@ export async function withAudit<T>(
   try {
     const result = await fn();
     const target = resolveTarget(options.target, result);
-    const after =
-      options.extractAfter !== undefined ? options.extractAfter(result) : result;
+    const after = options.extractAfter !== undefined ? options.extractAfter(result) : result;
     const redactedAfter =
       after !== undefined ? redactSensitive(after, options.redactExtraKeys) : undefined;
 

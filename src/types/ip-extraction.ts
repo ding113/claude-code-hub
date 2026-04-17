@@ -1,7 +1,4 @@
-export type XffPick =
-  | "leftmost"
-  | "rightmost"
-  | { kind: "index"; index: number };
+export type XffPick = "leftmost" | "rightmost" | { kind: "index"; index: number };
 
 export interface IpHeaderRule {
   name: string;

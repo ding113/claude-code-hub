@@ -13,10 +13,7 @@ export const runtime = "nodejs";
  * - 当系统设置 `ipGeoLookupEnabled` 为 false 时返回 404
  * - 结果由 Redis 缓存，默认 TTL 3600s
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ ip: string }> }
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ ip: string }> }) {
   const session = await getSession();
   if (!session) {
     return Response.json({ error: "unauthenticated" }, { status: 401 });

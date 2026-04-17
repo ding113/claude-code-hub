@@ -664,7 +664,12 @@ export async function addProvider(data: {
       targetType: "provider",
       targetId: String(provider.id),
       targetName: provider.name,
-      after: { id: provider.id, name: provider.name, url: provider.url, isEnabled: provider.isEnabled },
+      after: {
+        id: provider.id,
+        name: provider.name,
+        url: provider.url,
+        isEnabled: provider.isEnabled,
+      },
       success: true,
     });
     return { ok: true };
@@ -965,9 +970,7 @@ export async function removeProvider(
       targetType: "provider",
       targetId: String(providerId),
       targetName: provider?.name ?? null,
-      before: provider
-        ? { id: provider.id, name: provider.name, url: provider.url }
-        : undefined,
+      before: provider ? { id: provider.id, name: provider.name, url: provider.url } : undefined,
       success: true,
     });
     return {

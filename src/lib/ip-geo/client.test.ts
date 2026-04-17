@@ -163,9 +163,7 @@ describe("lookupIp — successful lookup", () => {
   });
 
   test("sends Bearer token when IP_GEO_API_TOKEN is set", async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify(SAMPLE_LOOKUP), { status: 200 })
-    );
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(SAMPLE_LOOKUP), { status: 200 }));
     const { lookupIp } = await import("./client");
     await lookupIp("1.1.1.1");
 

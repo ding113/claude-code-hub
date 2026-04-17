@@ -38,6 +38,7 @@ import {
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
+import { IpDetailsDialog } from "../../_components/ip-details-dialog";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
@@ -95,6 +96,7 @@ export function VirtualizedLogsTable({
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
   const hideKeyColumn = hiddenColumns?.includes("key") ?? false;
   const hideSessionIdColumn = hiddenColumns?.includes("sessionId") ?? false;
+  const hideIpColumn = hiddenColumns?.includes("ip") ?? false;
   const hideTokensColumn = hiddenColumns?.includes("tokens") ?? false;
   const hideCacheColumn = hiddenColumns?.includes("cache") ?? false;
   const hideCostColumn = hiddenColumns?.includes("cost") ?? false;
@@ -107,6 +109,9 @@ export function VirtualizedLogsTable({
     targetTab?: "summary" | "logic-trace" | "performance";
     expandedChainIndex?: number;
   }>({ logId: null, scrollToRedirect: false });
+
+  const [ipDialogOpen, setIpDialogOpen] = useState(false);
+  const [ipDialogValue, setIpDialogValue] = useState<string | null>(null);
 
   const handleCopySessionIdClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
@@ -257,6 +262,14 @@ export function VirtualizedLogsTable({
                   title={t("logs.columns.sessionId")}
                 >
                   {t("logs.columns.sessionId")}
+                </div>
+              )}
+              {hideIpColumn ? null : (
+                <div
+                  className="flex-[0.8] min-w-[90px] px-1.5 truncate"
+                  title={t("logs.columns.ip")}
+                >
+                  {t("logs.columns.ip")}
                 </div>
               )}
               {hideProviderColumn ? null : (
@@ -420,6 +433,26 @@ export function VirtualizedLogsTable({
                           </TooltipProvider>
                         ) : (
                           <span className="font-mono text-xs text-muted-foreground">-</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* IP */}
+                    {hideIpColumn ? null : (
+                      <div className="flex-[0.8] min-w-[90px] px-1.5">
+                        {log.clientIp ? (
+                          <button
+                            type="button"
+                            className="text-left font-mono text-xs truncate cursor-pointer hover:underline"
+                            onClick={() => {
+                              setIpDialogValue(log.clientIp);
+                              setIpDialogOpen(true);
+                            }}
+                          >
+                            {log.clientIp}
+                          </button>
+                        ) : (
+                          <span className="font-mono text-xs text-muted-foreground">—</span>
                         )}
                       </div>
                     )}
@@ -853,6 +886,8 @@ export function VirtualizedLogsTable({
           {t("logs.table.scrollToTop")}
         </Button>
       ) : null}
+
+      <IpDetailsDialog ip={ipDialogValue} open={ipDialogOpen} onOpenChange={setIpDialogOpen} />
     </div>
   );
 }

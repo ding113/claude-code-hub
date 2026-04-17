@@ -691,11 +691,7 @@ export function SummaryTab({
         </div>
       )}
 
-      <IpDetailsDialog
-        ip={clientIp ?? null}
-        open={ipDialogOpen}
-        onOpenChange={setIpDialogOpen}
-      />
+      <IpDetailsDialog ip={clientIp ?? null} open={ipDialogOpen} onOpenChange={setIpDialogOpen} />
     </div>
   );
 }

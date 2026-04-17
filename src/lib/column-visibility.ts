@@ -14,6 +14,7 @@ export type LogsTableColumn =
   | "user"
   | "key"
   | "sessionId"
+  | "ip"
   | "provider"
   | "tokens"
   | "cache"
@@ -27,6 +28,7 @@ export const DEFAULT_VISIBLE_COLUMNS: LogsTableColumn[] = [
   "user",
   "key",
   "sessionId",
+  "ip",
   "provider",
   "tokens",
   "cache",

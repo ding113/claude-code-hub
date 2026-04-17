@@ -992,9 +992,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           <div className="flex items-center justify-between pl-11">
             <div>
               <p className="text-sm font-medium text-foreground">{tIpLogging("geoLookup")}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {tIpLogging("geoLookupHint")}
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tIpLogging("geoLookupHint")}</p>
             </div>
             <Switch
               id="ip-geo-lookup-enabled"
@@ -1006,10 +1004,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
 
           {/* Extraction config JSON */}
           <div className="space-y-2 pl-11">
-            <Label
-              htmlFor="ip-extraction-config"
-              className="text-sm font-medium text-foreground"
-            >
+            <Label htmlFor="ip-extraction-config" className="text-sm font-medium text-foreground">
               {tIpLogging("extractionConfigLabel")}
             </Label>
             <Textarea

@@ -117,30 +117,22 @@ describe("extractClientIp — parsing robustness", () => {
   test("header lookup is case-insensitive (Headers normalizes)", () => {
     const headers = new Headers();
     headers.set("X-Real-IP", "5.5.5.5");
-    expect(
-      extractClientIp(headers, { headers: [{ name: "x-real-ip" }] })
-    ).toBe("5.5.5.5");
+    expect(extractClientIp(headers, { headers: [{ name: "x-real-ip" }] })).toBe("5.5.5.5");
   });
 
   test("strips port suffix from IPv4 value", () => {
     const headers = h({ "x-real-ip": "1.2.3.4:5678" });
-    expect(
-      extractClientIp(headers, { headers: [{ name: "x-real-ip" }] })
-    ).toBe("1.2.3.4");
+    expect(extractClientIp(headers, { headers: [{ name: "x-real-ip" }] })).toBe("1.2.3.4");
   });
 
   test("strips bracketed IPv6 form with port", () => {
     const headers = h({ "x-real-ip": "[2001:db8::1]:443" });
-    expect(
-      extractClientIp(headers, { headers: [{ name: "x-real-ip" }] })
-    ).toBe("2001:db8::1");
+    expect(extractClientIp(headers, { headers: [{ name: "x-real-ip" }] })).toBe("2001:db8::1");
   });
 
   test("accepts plain IPv6 without brackets", () => {
     const headers = h({ "x-real-ip": "2001:db8::1" });
-    expect(
-      extractClientIp(headers, { headers: [{ name: "x-real-ip" }] })
-    ).toBe("2001:db8::1");
+    expect(extractClientIp(headers, { headers: [{ name: "x-real-ip" }] })).toBe("2001:db8::1");
   });
 
   test("skips rule with invalid IP and continues fallback chain", () => {
@@ -164,12 +156,9 @@ describe("extractClientIp — parsing robustness", () => {
 
 describe("extractClientIp — misc", () => {
   test("accepts plain object headers (Record<string,string>)", () => {
-    expect(
-      extractClientIp(
-        { "x-real-ip": "7.7.7.7" },
-        { headers: [{ name: "x-real-ip" }] }
-      )
-    ).toBe("7.7.7.7");
+    expect(extractClientIp({ "x-real-ip": "7.7.7.7" }, { headers: [{ name: "x-real-ip" }] })).toBe(
+      "7.7.7.7"
+    );
   });
 
   test("no headers configured returns null", () => {
