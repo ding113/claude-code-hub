@@ -9,16 +9,16 @@ function h(entries: Record<string, string>): Headers {
 }
 
 describe("extractClientIp — default config", () => {
-  test("prefers cf-connecting-ip over x-real-ip and x-forwarded-for", () => {
+  test("does NOT trust cf-connecting-ip out of the box (spoofable without an edge in front)", () => {
     const headers = h({
       "cf-connecting-ip": "1.1.1.1",
       "x-real-ip": "2.2.2.2",
       "x-forwarded-for": "3.3.3.3, 4.4.4.4",
     });
-    expect(extractClientIp(headers, DEFAULT_IP_EXTRACTION_CONFIG)).toBe("1.1.1.1");
+    expect(extractClientIp(headers, DEFAULT_IP_EXTRACTION_CONFIG)).toBe("2.2.2.2");
   });
 
-  test("falls back to x-real-ip when cf-connecting-ip absent", () => {
+  test("prefers x-real-ip over x-forwarded-for", () => {
     const headers = h({
       "x-real-ip": "2.2.2.2",
       "x-forwarded-for": "3.3.3.3, 4.4.4.4",

@@ -19,6 +19,8 @@
     "siteTitle": "站点标题",
     "siteTitlePlaceholder": "例如：Claude Code Hub",
     "siteTitleRequired": "站点标题不能为空",
+    "ipLoggingInvalidJson": "IP 提取配置不是合法的 JSON：{message}",
+    "ipLoggingInvalidShape": "IP 提取配置必须是包含 `headers` 数组的对象。",
     "siteTitleDesc": "用于设置浏览器标签页标题以及系统默认显示名称。",
     "currencyDisplay": "货币显示单位",
     "currencyDisplayPlaceholder": "选择货币单位",

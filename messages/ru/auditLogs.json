@@ -34,7 +34,18 @@
     "before": "До",
     "after": "После",
     "errorMessage": "Ошибка",
-    "noChange": "Снимок не сохранён"
+    "noChange": "Снимок не сохранён",
+    "userAgent": "User-Agent",
+    "keyLabel": "ключ: {name}",
+    "userIdLabel": "ID пользователя: {id}",
+    "targetIdLabel": "ID: {id}"
+  },
+  "adminTokenOperator": "Admin Token",
+  "loadError": "Не удалось загрузить записи аудита.",
+  "errors": {
+    "unauthorized": "Требуются права администратора.",
+    "listFailed": "Не удалось получить список записей аудита.",
+    "detailFailed": "Не удалось загрузить детали записи аудита."
   },
   "empty": "По выбранным фильтрам записей аудита нет."
 }

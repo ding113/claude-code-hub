@@ -145,8 +145,18 @@ export async function getAuditLog(id: number): Promise<AuditLogRow | null> {
 }
 
 export async function countAuditLogs(filter: AuditLogFilter = {}): Promise<number> {
+  // Kept in sync with the filter set in `listAuditLogs` — passing the same
+  // filter object to both functions is expected to return consistent pages
+  // and totals. Do not add a filter to one without the other.
   const conditions = [];
   if (filter.category) conditions.push(eq(auditLog.actionCategory, filter.category));
+  if (filter.actionType) conditions.push(eq(auditLog.actionType, filter.actionType));
+  if (filter.operatorUserId !== undefined) {
+    conditions.push(eq(auditLog.operatorUserId, filter.operatorUserId));
+  }
+  if (filter.operatorIp) conditions.push(eq(auditLog.operatorIp, filter.operatorIp));
+  if (filter.targetType) conditions.push(eq(auditLog.targetType, filter.targetType));
+  if (filter.targetId) conditions.push(eq(auditLog.targetId, filter.targetId));
   if (filter.success !== undefined) conditions.push(eq(auditLog.success, filter.success));
   if (filter.from) conditions.push(gte(auditLog.createdAt, filter.from));
   if (filter.to) conditions.push(lte(auditLog.createdAt, filter.to));

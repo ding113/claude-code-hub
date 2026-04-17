@@ -34,7 +34,18 @@
     "before": "变更前",
     "after": "变更后",
     "errorMessage": "错误信息",
-    "noChange": "未记录快照"
+    "noChange": "未记录快照",
+    "userAgent": "User-Agent",
+    "keyLabel": "密钥：{name}",
+    "userIdLabel": "用户 ID：{id}",
+    "targetIdLabel": "ID：{id}"
+  },
+  "adminTokenOperator": "Admin Token",
+  "loadError": "加载审计记录失败。",
+  "errors": {
+    "unauthorized": "需要管理员权限。",
+    "listFailed": "获取审计日志列表失败。",
+    "detailFailed": "获取审计日志详情失败。"
   },
   "empty": "当前筛选条件下没有审计记录。"
 }

@@ -9,14 +9,20 @@ export const runtime = "nodejs";
  * GET /api/ip-geo/:ip
  *
  * Dashboard 侧代理接口：根据 IP 返回归属地与网络信息。
- * - 仅登录用户可用（任何 role）
+ * - 仅管理员可用（IP lookup is an operator tool — logs / audit pages that
+ *   consume it are already admin-only, so gating the API matches that scope
+ *   and prevents arbitrary authenticated callers from scanning IPs through
+ *   our upstream quota）。
  * - 当系统设置 `ipGeoLookupEnabled` 为 false 时返回 404
  * - 结果由 Redis 缓存，默认 TTL 3600s
  */
-export async function GET(_request: Request, { params }: { params: Promise<{ ip: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ ip: string }> }) {
   const session = await getSession();
   if (!session) {
     return Response.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  if (session.user.role !== "admin") {
+    return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
   const { ip } = await params;
@@ -26,7 +32,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ip:
     return Response.json({ error: "ip geolocation disabled" }, { status: 404 });
   }
 
-  const result = await lookupIp(decodeURIComponent(ip));
+  // Next.js already percent-decodes route params, so no manual decode.
+  // (Previous `decodeURIComponent` would throw on values containing a lone
+  // `%` byte, surfacing as a 500 instead of a safe 400.)
+  const url = new URL(request.url);
+  const lang = url.searchParams.get("lang") ?? undefined;
+  const result = await lookupIp(ip, { lang });
   // Cache on the edge for a short window — response body already cached server-side.
   return Response.json(result, {
     headers: { "cache-control": "private, max-age=60" },

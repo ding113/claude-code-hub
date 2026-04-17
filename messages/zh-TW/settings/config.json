@@ -89,6 +89,8 @@
     "siteTitleDesc": "用於設定瀏覽器分頁標題以及系統預設顯示名稱。",
     "siteTitlePlaceholder": "例：Claude Code Hub",
     "siteTitleRequired": "站台標題不能為空",
+    "ipLoggingInvalidJson": "IP 擷取設定不是合法的 JSON：{message}",
+    "ipLoggingInvalidShape": "IP 擷取設定必須是包含 `headers` 陣列的物件。",
     "verboseProviderError": "詳細供應商錯誤資訊",
     "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
     "timezoneLabel": "系統時區",

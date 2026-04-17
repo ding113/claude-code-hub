@@ -359,7 +359,9 @@ export async function addKey(data: {
       targetType: "key",
       targetName: data.name ?? null,
       success: false,
-      errorMessage: message,
+      // Stable code only — raw `error.message` from pg may include secrets or
+      // user-controlled input (duplicate key values, constraint names).
+      errorMessage: "CREATE_FAILED",
       redactExtraKeys: ["key"],
     });
     return { ok: false, error: message };
@@ -652,7 +654,7 @@ export async function editKey(
       targetType: "key",
       targetId: String(keyId),
       success: false,
-      errorMessage: message,
+      errorMessage: "UPDATE_FAILED",
       redactExtraKeys: ["key"],
     });
     return { ok: false, error: message };
@@ -753,7 +755,7 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       targetType: "key",
       targetId: String(keyId),
       success: false,
-      errorMessage: message,
+      errorMessage: "DELETE_FAILED",
       redactExtraKeys: ["key"],
     });
     return { ok: false, error: message };

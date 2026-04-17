@@ -2,12 +2,12 @@
 
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { AuditLogRow } from "@/types/audit-log";
-import { IpDetailsDialog } from "../../_components/ip-details-dialog";
 
 interface AuditLogDetailSheetProps {
   log: AuditLogRow | null;
@@ -56,7 +56,7 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
   const beforeText = formatJson(log.beforeValue);
   const afterText = formatJson(log.afterValue);
 
-  const operatorName = log.operatorUserName ?? "Admin Token";
+  const operatorName = log.operatorUserName ?? t("adminTokenOperator");
 
   const categoryLabel = (() => {
     const key = `categories.${log.actionCategory}` as const;
@@ -124,7 +124,7 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
                   <div>{log.targetName ?? "—"}</div>
                   {log.targetId && (
                     <div className="text-xs text-muted-foreground font-mono">
-                      id: {log.targetId}
+                      {t("detail.targetIdLabel", { id: log.targetId })}
                     </div>
                   )}
                 </div>
@@ -139,12 +139,12 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
                   <div>{operatorName}</div>
                   {log.operatorKeyName && (
                     <div className="text-xs text-muted-foreground font-mono">
-                      key: {log.operatorKeyName}
+                      {t("detail.keyLabel", { name: log.operatorKeyName })}
                     </div>
                   )}
                   {log.operatorUserId != null && (
                     <div className="text-xs text-muted-foreground font-mono">
-                      user id: {log.operatorUserId}
+                      {t("detail.userIdLabel", { id: log.operatorUserId })}
                     </div>
                   )}
                 </div>
@@ -164,7 +164,7 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
                 )}
               </Row>
 
-              <Row label="User-Agent">
+              <Row label={t("detail.userAgent")}>
                 {log.userAgent ? (
                   <span className="font-mono text-xs break-all">{log.userAgent}</span>
                 ) : (

@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { type MouseEvent, useCallback, useState } from "react";
 import { toast } from "sonner";
+import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -33,7 +34,6 @@ import {
 } from "@/lib/utils/special-settings";
 import type { UsageLogRow } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
-import { IpDetailsDialog } from "../../_components/ip-details-dialog";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";

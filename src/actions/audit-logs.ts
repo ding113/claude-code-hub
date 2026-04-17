@@ -1,7 +1,9 @@
 "use server";
 
+import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { type AuditLogCursor, getAuditLog, listAuditLogs } from "@/repository/audit-log";
 import type { AuditCategory, AuditLogFilter, AuditLogRow } from "@/types/audit-log";
 import type { ActionResult } from "./types";
@@ -44,10 +46,16 @@ export interface GetAuditLogsBatchResult {
 export async function getAuditLogsBatch(
   input: GetAuditLogsBatchInput = {}
 ): Promise<ActionResult<GetAuditLogsBatchResult>> {
+  const tAudit = await getTranslations("auditLogs");
+  const tErrors = await getTranslations("errors");
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "权限不足" };
+      return {
+        ok: false,
+        error: tErrors("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     const filter: AuditLogFilter = {};
@@ -79,8 +87,13 @@ export async function getAuditLogsBatch(
     return { ok: true, data: result };
   } catch (error) {
     logger.error("[AuditLogsAction] Failed to list audit logs:", error);
-    const message = error instanceof Error ? error.message : "获取审计日志失败";
-    return { ok: false, error: message };
+    // Never expose raw error.message — a pg error could carry SQL fragments
+    // or user input. Surface a stable localized string instead.
+    return {
+      ok: false,
+      error: tAudit("errors.listFailed"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
@@ -88,17 +101,26 @@ export async function getAuditLogsBatch(
  * 获取审计日志详情（管理员）
  */
 export async function getAuditLogDetail(id: number): Promise<ActionResult<AuditLogRow | null>> {
+  const tAudit = await getTranslations("auditLogs");
+  const tErrors = await getTranslations("errors");
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "权限不足" };
+      return {
+        ok: false,
+        error: tErrors("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     const row = await getAuditLog(id);
     return { ok: true, data: row };
   } catch (error) {
     logger.error("[AuditLogsAction] Failed to get audit log detail:", error);
-    const message = error instanceof Error ? error.message : "获取审计日志详情失败";
-    return { ok: false, error: message };
+    return {
+      ok: false,
+      error: tAudit("errors.detailFailed"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }

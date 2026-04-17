@@ -1097,6 +1097,19 @@ export async function batchUpdateUsers(
   }
 }
 
+// Audit snapshot helper: never throws, logs and returns null on failure.
+async function safeFindUser(userId: number): Promise<Awaited<ReturnType<typeof findUserById>>> {
+  try {
+    return await findUserById(userId);
+  } catch (error) {
+    logger.warn("[Audit] failed to snapshot user for audit", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 // 添加用户
 export async function addUser(data: {
   name: string;
@@ -1305,7 +1318,7 @@ export async function addUser(data: {
       targetType: "user",
       targetName: data.name,
       success: false,
-      errorMessage: message,
+      errorMessage: "CREATE_FAILED",
     });
     return {
       ok: false,
@@ -1588,6 +1601,11 @@ export async function editUser(
         ? undefined
         : normalizeProviderGroup(validatedData.providerGroup);
 
+    // Snapshot for audit before mutation so we can diff against the
+    // post-update state. Failure here must not block the mutation — audit
+    // is best-effort.
+    const beforeUser = await safeFindUser(userId);
+
     // Update user with validated data
     await updateUser(userId, {
       name: validatedData.name,
@@ -1613,13 +1631,15 @@ export async function editUser(
     // 用户分组由 Key 分组自动计算，不再需要级联更新 Key 的 providerGroup
 
     revalidatePath("/dashboard");
+    const afterUser = await safeFindUser(userId);
     emitActionAudit({
       category: "user",
       action: "user.update",
       targetType: "user",
       targetId: String(userId),
-      targetName: validatedData.name ?? null,
-      after: validatedData,
+      targetName: afterUser?.name ?? beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      after: afterUser ?? validatedData,
       success: true,
     });
     return { ok: true };
@@ -1633,7 +1653,10 @@ export async function editUser(
       targetType: "user",
       targetId: String(userId),
       success: false,
-      errorMessage: message,
+      // Stable code only — `error.message` from `updateUser` can carry raw pg
+      // errors (duplicate key values, constraint names) which we don't want
+      // to persist into an audit row that operators read.
+      errorMessage: "UPDATE_FAILED",
     });
     return {
       ok: false,
@@ -1659,7 +1682,7 @@ export async function removeUser(userId: number): Promise<ActionResult> {
       };
     }
 
-    const beforeUser = await findUserById(userId);
+    const beforeUser = await safeFindUser(userId);
     await deleteUser(userId);
     revalidatePath("/dashboard");
     emitActionAudit({
@@ -1682,7 +1705,7 @@ export async function removeUser(userId: number): Promise<ActionResult> {
       targetType: "user",
       targetId: String(userId),
       success: false,
-      errorMessage: message,
+      errorMessage: "DELETE_FAILED",
     });
     return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }

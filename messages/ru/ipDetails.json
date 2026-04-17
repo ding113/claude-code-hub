@@ -28,6 +28,14 @@
     "anycast": "Anycast",
     "hostname": "Имя хоста",
     "riskLevel": "Уровень риска",
+    "score": "оценка",
+    "riskLevels": {
+      "none": "Нет",
+      "low": "Низкий",
+      "medium": "Средний",
+      "high": "Высокий",
+      "critical": "Критический"
+    },
     "abuseContact": "Контакт по злоупотреблениям",
     "email": "Email"
   },

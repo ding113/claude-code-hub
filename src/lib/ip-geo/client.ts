@@ -53,6 +53,24 @@ async function writeCache(key: string, entry: CachedEntry, ttlSeconds: number): 
   }
 }
 
+function isValidLookupResult(data: unknown): data is IpGeoLookupResult {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  if (typeof d.ip !== "string" || d.ip.length === 0) return false;
+
+  const location = d.location as Record<string, unknown> | undefined;
+  if (!location || typeof location !== "object") return false;
+  const country = location.country as Record<string, unknown> | undefined;
+  if (!country || typeof country !== "object") return false;
+  if (typeof country.code !== "string" || typeof country.name !== "string") return false;
+
+  const connection = d.connection as Record<string, unknown> | undefined;
+  if (!connection || typeof connection !== "object") return false;
+  if (typeof connection.asn !== "number") return false;
+
+  return true;
+}
+
 async function fetchFromUpstream(
   ip: string,
   lang: string
@@ -79,7 +97,10 @@ async function fetchFromUpstream(
     }
 
     const data = (await response.json()) as IpGeoLookupResult;
-    if (!data || typeof data !== "object" || !("ip" in data)) {
+    // Validate the UI-critical subtree before we cache this for an hour.
+    // If upstream drifts or returns a partial payload, fail here rather than
+    // letting the dashboard blow up at `data.location.country.flag.emoji`.
+    if (!isValidLookupResult(data)) {
       return { error: "upstream returned unexpected shape" };
     }
     return data;

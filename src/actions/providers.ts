@@ -686,7 +686,7 @@ export async function addProvider(data: {
       targetType: "provider",
       targetName: data.name,
       success: false,
-      errorMessage: message,
+      errorMessage: "CREATE_FAILED",
     });
     return { ok: false, error: message };
   }
@@ -903,7 +903,7 @@ export async function editProvider(
       targetType: "provider",
       targetId: String(providerId),
       success: false,
-      errorMessage: message,
+      errorMessage: "UPDATE_FAILED",
     });
     return { ok: false, error: message };
   }
@@ -989,7 +989,7 @@ export async function removeProvider(
       targetType: "provider",
       targetId: String(providerId),
       success: false,
-      errorMessage: message,
+      errorMessage: "DELETE_FAILED",
     });
     return { ok: false, error: message };
   }

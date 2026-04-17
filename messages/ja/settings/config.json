@@ -89,6 +89,8 @@
     "siteTitleDesc": "ブラウザタブのタイトルとシステムのデフォルト表示名を設定するために使用されます。",
     "siteTitlePlaceholder": "例：Claude Code Hub",
     "siteTitleRequired": "サイトタイトルは空にできません",
+    "ipLoggingInvalidJson": "IP 抽出設定が有効な JSON ではありません：{message}",
+    "ipLoggingInvalidShape": "IP 抽出設定は `headers` 配列を持つオブジェクトである必要があります。",
     "verboseProviderError": "詳細なプロバイダーエラー",
     "verboseProviderErrorDesc": "有効にすると、すべてのプロバイダーが利用不可の場合に詳細なエラーメッセージ（プロバイダー数、レート制限の理由など）を返します。無効の場合は簡潔なエラーコードのみを返します。",
     "timezoneLabel": "システムタイムゾーン",

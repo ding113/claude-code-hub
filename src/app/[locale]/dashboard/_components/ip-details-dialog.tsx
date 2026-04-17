@@ -18,6 +18,16 @@ interface IpDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const KNOWN_RISK_LEVELS = new Set(["none", "low", "medium", "high", "critical"]);
+
+function riskLevelLabel(t: ReturnType<typeof useTranslations<"ipDetails">>, level: string): string {
+  if (KNOWN_RISK_LEVELS.has(level)) {
+    return t(`riskLevels.${level}` as "riskLevels.none");
+  }
+  // Unknown future enum value: fall back to the raw string rather than throw.
+  return level;
+}
+
 function SectionRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-3 items-baseline gap-2 py-1">
@@ -153,8 +163,8 @@ function IpDetailsContent({
               )}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              {t("fields.riskLevel")}: {data.data.threat.risk_level} (score{" "}
-              {data.data.threat.score.toFixed(3)})
+              {t("fields.riskLevel")}: {riskLevelLabel(t, data.data.threat.risk_level)} (
+              {t("fields.score")} {data.data.threat.score.toFixed(3)})
             </p>
           </div>
 

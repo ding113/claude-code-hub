@@ -28,6 +28,14 @@
     "anycast": "Anycast",
     "hostname": "ホスト名",
     "riskLevel": "リスクレベル",
+    "score": "スコア",
+    "riskLevels": {
+      "none": "なし",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "critical": "重大"
+    },
     "abuseContact": "不正利用の連絡先",
     "email": "メール"
   },

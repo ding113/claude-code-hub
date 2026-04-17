@@ -2,7 +2,7 @@ import * as authModule from "@/lib/auth";
 import { createAuditLogAsync } from "@/repository/audit-log";
 import type { AuditCategory } from "@/types/audit-log";
 import { redactSensitive } from "./redact";
-import { getRequestContext } from "./request-context";
+import { resolveRequestContext } from "./request-context";
 
 // Tolerant accessor: some action tests partially mock "@/lib/auth" without
 // exporting getScopedAuthSession. We treat a missing export as "no session".
@@ -38,10 +38,20 @@ export interface EmitActionAuditArgs {
  * before persistence.
  */
 export function emitActionAudit(args: EmitActionAuditArgs): void {
-  const session = safeGetScopedAuthSession();
-  const { ip, userAgent } = getRequestContext();
+  // Launch the audit pipeline asynchronously. This stays fire-and-forget
+  // from the caller's perspective; the inner implementation can `await`
+  // `next/headers` for the Next.js Server Action fallback.
+  void emitAsync(args);
+}
 
-  createAuditLogAsync({
+async function emitAsync(args: EmitActionAuditArgs): Promise<void> {
+  const session = safeGetScopedAuthSession();
+  // Prefer the adapter-populated ALS; fall back to next/headers for direct
+  // Server Actions that bypass the OpenAPI adapter (system-settings form,
+  // any future "use server" form action, etc).
+  const { ip, userAgent } = await resolveRequestContext();
+
+  await createAuditLogAsync({
     actionCategory: args.category,
     actionType: args.action,
     targetType: args.targetType ?? null,

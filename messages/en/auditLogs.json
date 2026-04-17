@@ -34,7 +34,18 @@
     "before": "Before",
     "after": "After",
     "errorMessage": "Error",
-    "noChange": "No snapshot captured"
+    "noChange": "No snapshot captured",
+    "userAgent": "User-Agent",
+    "keyLabel": "key: {name}",
+    "userIdLabel": "user id: {id}",
+    "targetIdLabel": "id: {id}"
+  },
+  "adminTokenOperator": "Admin Token",
+  "loadError": "Failed to load audit entries.",
+  "errors": {
+    "unauthorized": "Administrator access is required.",
+    "listFailed": "Failed to list audit entries.",
+    "detailFailed": "Failed to load audit entry detail."
   },
   "empty": "No audit entries found for the selected filters."
 }

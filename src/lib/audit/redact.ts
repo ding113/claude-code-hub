@@ -1,25 +1,42 @@
+// Lowercase-only — the walker compares against `k.toLowerCase()`, so any
+// mixed-case entry here would silently never match. Covers the common
+// camelCase / snake_case / kebab-case variants of each secret surface.
 const DEFAULT_SENSITIVE_KEYS = new Set([
   "key",
   "apikey",
   "api_key",
+  "api-key",
   "password",
   "secret",
   "token",
   "authorization",
   "webhook_secret",
-  "webhookSecret",
+  "webhooksecret",
+  "webhook-secret",
 ]);
 
 const REDACTED = "[REDACTED]";
 
+/**
+ * True only for `{}` / `Object.create(null)` — rejects `Date`, `Map`, `Set`,
+ * `Buffer`, `URL`, and user-defined classes. If we recursed into those via
+ * `Object.entries`, we'd rewrite them to plain objects in the snapshot,
+ * losing information the reviewer might need.
+ */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === null || proto === Object.prototype;
 }
 
 /**
  * Deep-copy `value` with fields matching the sensitive key set replaced by
  * `[REDACTED]`. Non-mutating. Used to sanitize before/after snapshots before
  * they hit the audit log (which is eventually viewable by operators).
+ *
+ * Non-POJO objects (Date, class instances, Buffers, etc.) pass through
+ * untouched so the audit row preserves their `toJSON()` behavior at the
+ * outer `JSON.stringify` step.
  */
 export function redactSensitive<T>(value: T, extraKeys: string[] = []): T {
   const keys = new Set([...DEFAULT_SENSITIVE_KEYS, ...extraKeys.map((k) => k.toLowerCase())]);

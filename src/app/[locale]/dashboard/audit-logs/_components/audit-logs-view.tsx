@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { getAuditLogsBatch } from "@/actions/audit-logs";
+import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -18,7 +19,6 @@ import {
 import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
 import { cn } from "@/lib/utils";
 import type { AuditCategory, AuditLogRow } from "@/types/audit-log";
-import { IpDetailsDialog } from "../../_components/ip-details-dialog";
 import { AuditLogDetailSheet } from "./audit-log-detail-sheet";
 
 const BATCH_SIZE = 50;
@@ -85,7 +85,10 @@ export function AuditLogsView() {
   const getItemKey = useCallback((index: number) => rows[index]?.id ?? `loader-${index}`, [rows]);
 
   const { parentRef, rowVirtualizer, virtualItems, handleScroll } = useVirtualizedInfiniteList({
-    itemCount: rows.length,
+    // +1 for the trailing loader row rendered when `hasNextPage` is true,
+    // so `isLoaderRow` below actually triggers when the list is scrolled
+    // past the last data row.
+    itemCount: rows.length + (hasNextPage ? 1 : 0),
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
@@ -183,7 +186,7 @@ export function AuditLogsView() {
           </div>
         ) : isError ? (
           <div className="text-center py-8 text-destructive">
-            {error instanceof Error ? error.message : "Error"}
+            {error instanceof Error ? error.message : t("loadError")}
           </div>
         ) : rows.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground text-sm">{t("empty")}</div>
@@ -219,7 +222,7 @@ export function AuditLogsView() {
                   );
                 }
 
-                const operator = log.operatorUserName ?? "Admin Token";
+                const operator = log.operatorUserName ?? t("adminTokenOperator");
 
                 return (
                   <div

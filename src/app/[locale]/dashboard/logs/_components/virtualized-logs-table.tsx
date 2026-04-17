@@ -14,6 +14,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
+import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -38,7 +39,6 @@ import {
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
-import { IpDetailsDialog } from "../../_components/ip-details-dialog";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";

@@ -70,7 +70,7 @@ export async function updateNotificationSettingsAction(
       action: "notification.update",
       targetType: "notification",
       success: false,
-      errorMessage: message,
+      errorMessage: "UPDATE_FAILED",
     });
     return {
       ok: false,

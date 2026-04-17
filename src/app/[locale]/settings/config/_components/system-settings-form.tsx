@@ -189,23 +189,32 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       quotaDbRefreshIntervalSecondsStr
     );
 
-    // Parse the IP extraction config textarea. Empty/invalid -> null (server uses default).
+    // Parse the IP extraction config textarea. Empty -> null (server uses default).
+    // Invalid JSON or wrong shape: surface the error and abort the save so the
+    // user doesn't unintentionally revert to defaults.
     let ipExtractionConfigToSave: IpExtractionConfig | null = null;
     const trimmedIpExtractionConfig = ipExtractionConfigText.trim();
     if (trimmedIpExtractionConfig) {
+      let parsed: unknown;
       try {
-        const parsed = JSON.parse(trimmedIpExtractionConfig);
-        if (
-          parsed &&
-          typeof parsed === "object" &&
-          Array.isArray((parsed as { headers?: unknown }).headers)
-        ) {
-          ipExtractionConfigToSave = parsed as IpExtractionConfig;
-        }
-      } catch {
-        // Treat invalid JSON as "use default"
-        ipExtractionConfigToSave = null;
+        parsed = JSON.parse(trimmedIpExtractionConfig);
+      } catch (error) {
+        toast.error(
+          t("ipLoggingInvalidJson", {
+            message: error instanceof Error ? error.message : String(error),
+          })
+        );
+        return;
       }
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        !Array.isArray((parsed as { headers?: unknown }).headers)
+      ) {
+        toast.error(t("ipLoggingInvalidShape"));
+        return;
+      }
+      ipExtractionConfigToSave = parsed as IpExtractionConfig;
     }
 
     startTransition(async () => {

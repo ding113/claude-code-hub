@@ -28,6 +28,14 @@
     "anycast": "Anycast",
     "hostname": "Hostname",
     "riskLevel": "Risk level",
+    "score": "score",
+    "riskLevels": {
+      "none": "None",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    },
     "abuseContact": "Abuse contact",
     "email": "Email"
   },

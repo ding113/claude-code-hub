@@ -28,6 +28,14 @@
     "anycast": "Anycast",
     "hostname": "主機名稱",
     "riskLevel": "風險等級",
+    "score": "分數",
+    "riskLevels": {
+      "none": "無",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "critical": "嚴重"
+    },
     "abuseContact": "濫用聯絡人",
     "email": "電子郵件"
   },

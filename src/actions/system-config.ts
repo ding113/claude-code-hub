@@ -158,7 +158,7 @@ export async function saveSystemSettings(formData: {
       targetName: "global",
       before: before ?? undefined,
       success: false,
-      errorMessage: message,
+      errorMessage: "UPDATE_FAILED",
     });
     return { ok: false, error: message };
   }

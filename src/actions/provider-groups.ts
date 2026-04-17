@@ -135,14 +135,13 @@ export async function createProviderGroup(input: {
     return { ok: true, data: group };
   } catch (error) {
     logger.error("Failed to create provider group:", error);
-    const message = error instanceof Error ? error.message : "Failed to create provider group";
     emitActionAudit({
       category: "provider_group",
       action: "provider_group.create",
       targetType: "provider_group",
       targetName: input.name?.trim() ?? null,
       success: false,
-      errorMessage: message,
+      errorMessage: "CREATE_FAILED",
     });
     return { ok: false, error: "Failed to create provider group" };
   }
@@ -202,14 +201,13 @@ export async function updateProviderGroup(
     return { ok: true, data: updated };
   } catch (error) {
     logger.error("Failed to update provider group:", error);
-    const message = error instanceof Error ? error.message : "Failed to update provider group";
     emitActionAudit({
       category: "provider_group",
       action: "provider_group.update",
       targetType: "provider_group",
       targetId: String(id),
       success: false,
-      errorMessage: message,
+      errorMessage: "UPDATE_FAILED",
     });
     return { ok: false, error: "Failed to update provider group" };
   }
@@ -264,14 +262,13 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
     // The default-group case is handled by the explicit pre-check above; the
     // repository's string-matched fallback is belt-and-suspenders only.
     logger.error("Failed to delete provider group:", error);
-    const message = error instanceof Error ? error.message : "Failed to delete provider group";
     emitActionAudit({
       category: "provider_group",
       action: "provider_group.delete",
       targetType: "provider_group",
       targetId: String(id),
       success: false,
-      errorMessage: message,
+      errorMessage: "DELETE_FAILED",
     });
     return { ok: false, error: "Failed to delete provider group" };
   }

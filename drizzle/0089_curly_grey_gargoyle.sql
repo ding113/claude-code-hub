@@ -115,8 +115,9 @@ BEGIN
     swap_cache_ttl_applied = EXCLUDED.swap_cache_ttl_applied,
     duration_ms = EXCLUDED.duration_ms,
     ttfb_ms = EXCLUDED.ttfb_ms,
-    client_ip = EXCLUDED.client_ip,
-    created_at = EXCLUDED.created_at;
+    client_ip = EXCLUDED.client_ip;
+    -- created_at deliberately NOT updated on conflict: it represents the
+    -- original insert time of the ledger row, which is immutable by design.
 
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN

@@ -103,14 +103,13 @@ export async function createSensitiveWordAction(data: {
     };
   } catch (error) {
     logger.error("[SensitiveWordsAction] Failed to create sensitive word:", error);
-    const message = error instanceof Error ? error.message : "创建敏感词失败";
     emitActionAudit({
       category: "sensitive_word",
       action: "sensitive_word.create",
       targetType: "sensitive_word",
       targetName: data.word ?? null,
       success: false,
-      errorMessage: message,
+      errorMessage: "CREATE_FAILED",
     });
     return {
       ok: false,
@@ -191,14 +190,13 @@ export async function updateSensitiveWordAction(
     };
   } catch (error) {
     logger.error("[SensitiveWordsAction] Failed to update sensitive word:", error);
-    const message = error instanceof Error ? error.message : "更新敏感词失败";
     emitActionAudit({
       category: "sensitive_word",
       action: "sensitive_word.update",
       targetType: "sensitive_word",
       targetId: String(id),
       success: false,
-      errorMessage: message,
+      errorMessage: "UPDATE_FAILED",
     });
     return {
       ok: false,
@@ -249,14 +247,13 @@ export async function deleteSensitiveWordAction(id: number): Promise<ActionResul
     };
   } catch (error) {
     logger.error("[SensitiveWordsAction] Failed to delete sensitive word:", error);
-    const message = error instanceof Error ? error.message : "删除敏感词失败";
     emitActionAudit({
       category: "sensitive_word",
       action: "sensitive_word.delete",
       targetType: "sensitive_word",
       targetId: String(id),
       success: false,
-      errorMessage: message,
+      errorMessage: "DELETE_FAILED",
     });
     return {
       ok: false,

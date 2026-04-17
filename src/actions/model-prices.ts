@@ -570,7 +570,7 @@ export async function syncLiteLLMPrices(
       action: "model_price.sync_litellm",
       targetType: "model_price",
       success: false,
-      errorMessage: message,
+      errorMessage: "SYNC_FAILED",
     });
     return { ok: false, error: message };
   }
@@ -713,7 +713,7 @@ export async function upsertSingleModelPrice(
       targetType: "model_price",
       targetName: input.modelName?.trim() ?? null,
       success: false,
-      errorMessage: message,
+      errorMessage: "UPSERT_FAILED",
     });
     return { ok: false, error: message };
   }
@@ -769,7 +769,7 @@ export async function deleteSingleModelPrice(modelName: string): Promise<ActionR
       targetType: "model_price",
       targetName: modelName?.trim() ?? null,
       success: false,
-      errorMessage: message,
+      errorMessage: "DELETE_FAILED",
     });
     return { ok: false, error: message };
   }
