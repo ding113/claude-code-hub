@@ -7,9 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { cn } from "@/lib/utils/cn";
 import type { IpGeoLookupResult } from "@/types/ip-geo";
-import { BLOCKLIST_CATEGORY_STYLES, RiskDot, type RiskLevel, ScoreMeter, Section } from "./atoms";
-
-const KNOWN_RISK_LEVELS = new Set<RiskLevel>(["none", "low", "medium", "high", "critical"]);
+import {
+  asRiskLevel,
+  BLOCKLIST_CATEGORY_STYLES,
+  hasActiveThreatSignals,
+  RiskDot,
+  ScoreMeter,
+  Section,
+} from "./atoms";
 
 const KNOWN_BLOCKLIST_CATEGORIES = new Set([
   "spam",
@@ -24,10 +29,6 @@ const KNOWN_BLOCKLIST_CATEGORIES = new Set([
 
 type T = ReturnType<typeof useTranslations<"ipDetails">>;
 
-function asRiskLevel(level: string): RiskLevel {
-  return KNOWN_RISK_LEVELS.has(level as RiskLevel) ? (level as RiskLevel) : "none";
-}
-
 function blocklistCategoryLabel(t: T, category: string): string {
   if (KNOWN_BLOCKLIST_CATEGORIES.has(category)) {
     return t(`blocklistCategories.${category}` as "blocklistCategories.other");
@@ -39,8 +40,7 @@ export function SecuritySection({ result }: { result: IpGeoLookupResult }) {
   const t = useTranslations("ipDetails");
   const { privacy, threat } = result;
   const level = asRiskLevel(threat.risk_level);
-  const anyActive =
-    privacy.is_anonymous || threat.is_threat || threat.is_crawler || threat.blocklists.length > 0;
+  const anyActive = hasActiveThreatSignals(privacy, threat);
 
   return (
     <Section

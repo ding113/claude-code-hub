@@ -23,7 +23,8 @@
     "low": "低",
     "medium": "中",
     "high": "高",
-    "critical": "重大"
+    "critical": "重大",
+    "unknown": "不明"
   },
   "sections": {
     "location": "所在地の詳細",
@@ -43,7 +44,6 @@
     "noLocation": "所在地不明",
     "noAsn": "ASN なし",
     "unknownOrg": "組織不明",
-    "clean": "クリーン",
     "cleanHint": "匿名化・脅威の兆候なし"
   },
   "fields": {
@@ -162,7 +162,6 @@
     "abuser": "不正利用者",
     "attacker": "攻撃者",
     "crawler": "クローラー",
-    "clean": "クリーン",
     "anycast": "Anycast"
   },
   "privacyDesc": {

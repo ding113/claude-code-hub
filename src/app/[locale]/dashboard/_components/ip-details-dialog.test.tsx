@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import type { IpGeoLookupResponse } from "@/types/ip-geo";
+import type { IpGeoLookupResponse, IpGeoLookupResult } from "@/types/ip-geo";
 import ipDetailsMessages from "../../../../../messages/en/ipDetails.json";
 
 const useIpGeoMocks = vi.hoisted(() => ({
@@ -539,6 +539,90 @@ describe("IpDetailsDialog: high-risk rendering", () => {
 
     // Clean hint must NOT appear in this case.
     expect(text).not.toContain(ipDetailsMessages.hero.cleanHint);
+
+    unmount();
+  });
+
+  test("hero and security section agree on crawler-only IPs (no clean-hint regression)", () => {
+    // Regression: the hero previously ignored `is_crawler` when deciding
+    // whether to show the "Clean — no signals" hint, while the security
+    // section counted it towards `anyActive`. Result: green shield + chip
+    // for the same IP. Both must now agree via `hasActiveThreatSignals`.
+    const crawlerOnly: IpGeoLookupResponse = {
+      status: "ok",
+      data: {
+        ...FULL_RESPONSE.data,
+        privacy: {
+          is_proxy: false,
+          is_vpn: false,
+          is_tor: false,
+          is_tor_exit: false,
+          is_relay: false,
+          is_anonymous: false,
+        },
+        threat: {
+          is_abuser: false,
+          is_attacker: false,
+          is_crawler: true,
+          is_threat: false,
+          score: 0.02,
+          risk_level: "low",
+          blocklists: [],
+        },
+      },
+    } as IpGeoLookupResponse;
+
+    useIpGeoMocks.useIpGeo.mockReturnValue({
+      data: crawlerOnly,
+      isLoading: false,
+      isError: false,
+    });
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <IpDetailsDialog ip="66.249.66.1" open onOpenChange={() => {}} />
+      </NextIntlClientProvider>
+    );
+
+    const text = allText();
+    // Crawler chip/badge visible.
+    expect(text).toContain(ipDetailsMessages.badges.crawler);
+    // Hero must NOT advertise the IP as clean.
+    expect(text).not.toContain(ipDetailsMessages.hero.cleanHint);
+
+    unmount();
+  });
+
+  test("unknown risk level falls back to the 'unknown' bucket, not 'none'", () => {
+    const weirdLevel: IpGeoLookupResponse = {
+      status: "ok",
+      data: {
+        ...FULL_RESPONSE.data,
+        threat: {
+          ...FULL_RESPONSE.data.threat,
+          // Simulate an upstream adding a new severity the frontend hasn't
+          // learned about yet. Must not be styled as the safest state.
+          risk_level: "extreme" as unknown as IpGeoLookupResult["threat"]["risk_level"],
+          score: 0.95,
+        },
+      },
+    } as IpGeoLookupResponse;
+
+    useIpGeoMocks.useIpGeo.mockReturnValue({
+      data: weirdLevel,
+      isLoading: false,
+      isError: false,
+    });
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <IpDetailsDialog ip="8.8.8.8" open onOpenChange={() => {}} />
+      </NextIntlClientProvider>
+    );
+
+    const text = allText();
+    expect(text).toContain(ipDetailsMessages.riskLevels.unknown);
+    expect(text).not.toContain(ipDetailsMessages.riskLevels.none);
 
     unmount();
   });

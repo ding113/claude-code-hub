@@ -23,7 +23,8 @@
     "low": "Low",
     "medium": "Medium",
     "high": "High",
-    "critical": "Critical"
+    "critical": "Critical",
+    "unknown": "Unknown"
   },
   "sections": {
     "location": "Location details",
@@ -43,7 +44,6 @@
     "noLocation": "Location unknown",
     "noAsn": "No ASN",
     "unknownOrg": "Unknown organization",
-    "clean": "Clean",
     "cleanHint": "No anonymization or threat signals"
   },
   "fields": {
@@ -162,7 +162,6 @@
     "abuser": "Abuser",
     "attacker": "Attacker",
     "crawler": "Crawler",
-    "clean": "Clean",
     "anycast": "Anycast"
   },
   "privacyDesc": {

@@ -17,9 +17,14 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils/cn";
 import type { IpGeoLookupResult } from "@/types/ip-geo";
-import { NETWORK_TYPE_STYLES, RiskDot, type RiskLevel, riskClasses, ScoreMeter } from "./atoms";
-
-const KNOWN_RISK_LEVELS = new Set<RiskLevel>(["none", "low", "medium", "high", "critical"]);
+import {
+  asRiskLevel,
+  hasActiveThreatSignals,
+  NETWORK_TYPE_STYLES,
+  RiskDot,
+  riskClasses,
+  ScoreMeter,
+} from "./atoms";
 
 const KNOWN_NETWORK_TYPES = new Set([
   "residential",
@@ -45,10 +50,6 @@ const KNOWN_SUBTYPES = new Set([
   "wisp",
 ]);
 
-function asRiskLevel(level: string): RiskLevel {
-  return KNOWN_RISK_LEVELS.has(level as RiskLevel) ? (level as RiskLevel) : "none";
-}
-
 type T = ReturnType<typeof useTranslations<"ipDetails">>;
 
 function networkTypeLabel(t: T, type: string): string {
@@ -63,6 +64,10 @@ function subtypeLabel(t: T, subtype: string): string {
     return t(`subtypes.${subtype}` as "subtypes.cloud");
   }
   return subtype;
+}
+
+function riskLevelLabel(t: T, level: ReturnType<typeof asRiskLevel>): string {
+  return t(`riskLevels.${level}` as "riskLevels.none");
 }
 
 export function IpHeroStrip({ result }: { result: IpGeoLookupResult }) {
@@ -110,7 +115,7 @@ function RiskHero({ result }: { result: IpGeoLookupResult }) {
   const level = asRiskLevel(result.threat.risk_level);
   const { tint, border } = riskClasses(level);
   const { privacy, threat } = result;
-  const isClean = !privacy.is_anonymous && !threat.is_threat && threat.blocklists.length === 0;
+  const isClean = !hasActiveThreatSignals(privacy, threat);
 
   return (
     <HeroCard
@@ -122,9 +127,7 @@ function RiskHero({ result }: { result: IpGeoLookupResult }) {
       <div className="flex items-baseline justify-between gap-2">
         <div className="flex items-center gap-2">
           <RiskDot level={level} className="size-2.5" />
-          <span className="text-lg font-semibold leading-tight">
-            {t(`riskLevels.${level}` as "riskLevels.none")}
-          </span>
+          <span className="text-lg font-semibold leading-tight">{riskLevelLabel(t, level)}</span>
         </div>
         <span className="font-mono text-xs text-muted-foreground">
           {result.threat.score.toFixed(3)}

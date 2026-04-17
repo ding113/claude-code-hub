@@ -23,7 +23,8 @@
     "low": "低",
     "medium": "中",
     "high": "高",
-    "critical": "严重"
+    "critical": "严重",
+    "unknown": "未知"
   },
   "sections": {
     "location": "地理位置详情",
@@ -43,7 +44,6 @@
     "noLocation": "位置未知",
     "noAsn": "无 ASN",
     "unknownOrg": "组织未知",
-    "clean": "安全",
     "cleanHint": "未检测到匿名或威胁信号"
   },
   "fields": {
@@ -162,7 +162,6 @@
     "abuser": "滥用者",
     "attacker": "攻击者",
     "crawler": "爬虫",
-    "clean": "安全",
     "anycast": "Anycast"
   },
   "privacyDesc": {

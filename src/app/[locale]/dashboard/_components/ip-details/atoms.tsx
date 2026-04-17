@@ -3,7 +3,7 @@
 import { Check, ChevronDown, Copy } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,41 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import { cn } from "@/lib/utils/cn";
-import type { IpGeoCoordinates } from "@/types/ip-geo";
+import type { IpGeoCoordinates, IpGeoPrivacy, IpGeoThreat } from "@/types/ip-geo";
 
-export type RiskLevel = "none" | "low" | "medium" | "high" | "critical";
+export type RiskLevel = "none" | "low" | "medium" | "high" | "critical" | "unknown";
+
+const KNOWN_RISK_LEVELS = new Set<RiskLevel>(["none", "low", "medium", "high", "critical"]);
+
+/**
+ * Coerce an API `risk_level` string to our internal `RiskLevel` enum.
+ * Unknown values map to `"unknown"` — not `"none"` — so a future backend
+ * severity doesn't get silently styled as the safest state.
+ */
+export function asRiskLevel(level: string): RiskLevel {
+  return KNOWN_RISK_LEVELS.has(level as RiskLevel) ? (level as RiskLevel) : "unknown";
+}
+
+/**
+ * Single source of truth for "this IP has something worth flagging". Used
+ * by both the hero's clean-hint decision and the Privacy & Threat section's
+ * auto-expand / icon selection so the two can never contradict each other.
+ */
+export function hasActiveThreatSignals(privacy: IpGeoPrivacy, threat: IpGeoThreat): boolean {
+  return (
+    privacy.is_vpn ||
+    privacy.is_proxy ||
+    privacy.is_tor ||
+    privacy.is_tor_exit ||
+    privacy.is_relay ||
+    privacy.is_anonymous ||
+    threat.is_abuser ||
+    threat.is_attacker ||
+    threat.is_crawler ||
+    threat.is_threat ||
+    threat.blocklists.length > 0
+  );
+}
 
 export function isNonEmpty(value: unknown): boolean {
   return value !== null && value !== undefined && value !== "";
@@ -67,6 +99,14 @@ const RISK_CLASSES: Record<RiskLevel, { tint: string; border: string; dot: strin
       dot: "bg-red-500",
       bar: "bg-red-500",
     },
+    // Fallback for future / unrecognized risk levels. Amber rather than
+    // slate so an unknown severity is visually cautionary, not "safe".
+    unknown: {
+      tint: "bg-amber-500/5 dark:bg-amber-500/10",
+      border: "border-amber-500/40",
+      dot: "bg-amber-500",
+      bar: "bg-amber-500",
+    },
   };
 
 export function riskClasses(level: RiskLevel) {
@@ -108,6 +148,18 @@ export function CopyButton({
 }) {
   const t = useTranslations("ipDetails");
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!copied) return;
+    timerRef.current = window.setTimeout(() => setCopied(false), 1500);
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [copied]);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -115,7 +167,6 @@ export function CopyButton({
     if (ok) {
       setCopied(true);
       toast.success(t("actions.copyGeneric"));
-      window.setTimeout(() => setCopied(false), 1500);
     } else {
       toast.error(t("actions.copyFailed"));
     }
@@ -293,12 +344,9 @@ export function ExternalLink({
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className={cn(
-        "inline-flex min-w-0 items-center gap-1 text-primary hover:underline",
-        className
-      )}
+      className={cn("text-primary hover:underline", className)}
     >
-      <span className="min-w-0 truncate">{children}</span>
+      {children}
     </a>
   );
 }
@@ -313,6 +361,11 @@ export function formatBigNumber(value: number, locale: string): string {
 
 export function formatLocalTime(iso: string, tzId: string, locale: string): string {
   try {
+    const d = new Date(iso);
+    // `Intl.DateTimeFormat.format(Invalid Date)` returns the literal string
+    // "Invalid Date" rather than throwing, so the try/catch alone wouldn't
+    // catch malformed input. Check explicitly.
+    if (Number.isNaN(d.getTime())) return iso;
     return new Intl.DateTimeFormat(locale, {
       year: "numeric",
       month: "short",
@@ -322,7 +375,7 @@ export function formatLocalTime(iso: string, tzId: string, locale: string): stri
       second: "2-digit",
       timeZone: tzId,
       timeZoneName: "short",
-    }).format(new Date(iso));
+    }).format(d);
   } catch {
     return iso;
   }

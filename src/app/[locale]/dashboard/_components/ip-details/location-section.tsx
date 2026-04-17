@@ -3,16 +3,32 @@
 import { Clock, MapPin } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
-import type { IpGeoLookupResult } from "@/types/ip-geo";
+import type { IpGeoCountry, IpGeoLookupResult } from "@/types/ip-geo";
 import {
   FieldRow,
   formatBigNumber,
   formatLocalTime,
-  hasAny,
   hasMeaningfulCoordinates,
   Section,
   SubCard,
 } from "./atoms";
+
+/**
+ * Upstream uses these sentinel values when a country is not resolvable
+ * (e.g. CGN/bogon IPs). Treating them as "has data" would render empty
+ * sub-cards, so the predicates below filter them out explicitly.
+ */
+function hasCountryContent(country: IpGeoCountry): boolean {
+  if (country.capital) return true;
+  if (country.calling_code && country.calling_code !== "+0") return true;
+  if (country.tld && country.tld !== ".unknown") return true;
+  if (country.name_native && country.name_native !== country.name) return true;
+  if (country.languages.length > 0) return true;
+  if (country.currencies.length > 0) return true;
+  if (country.borders.length > 0) return true;
+  if (country.population > 0 || country.area_km2 > 0) return true;
+  return false;
+}
 
 /**
  * Return `true` when this section has *any* non-trivial content beyond the
@@ -25,11 +41,7 @@ export function hasLocationContent(result: IpGeoLookupResult): boolean {
   if (hasMeaningfulCoordinates(location.coordinates)) return true;
   if (location.continent?.name) return true;
   if (timezone?.id) return true;
-  if (hasAny(location.country, ["capital", "calling_code", "tld", "name_native"])) return true;
-  if (location.country.languages.length > 0) return true;
-  if (location.country.currencies.length > 0) return true;
-  if (location.country.borders.length > 0) return true;
-  if (location.country.population > 0 || location.country.area_km2 > 0) return true;
+  if (hasCountryContent(location.country)) return true;
   return false;
 }
 
@@ -53,15 +65,7 @@ export function LocationSection({ result }: { result: IpGeoLookupResult }) {
 
   const hasTimezone = !!timezone?.id;
 
-  const showCountrySubCard =
-    !isUnknownCountry &&
-    (hasAny(country, ["capital", "calling_code", "tld"]) ||
-      country.languages.length > 0 ||
-      country.currencies.length > 0 ||
-      country.borders.length > 0 ||
-      country.population > 0 ||
-      country.area_km2 > 0 ||
-      (!!country.name_native && country.name_native !== country.name));
+  const showCountrySubCard = !isUnknownCountry && hasCountryContent(country);
 
   const nativeSuffix =
     country.name_native && country.name_native !== country.name ? country.name_native : null;

@@ -3,7 +3,7 @@
 import { Building2, Network as NetworkIcon, Server, Smartphone } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { IpGeoLookupResult } from "@/types/ip-geo";
-import { FieldRow, hasAny, InlineCopy, Section, SubCard } from "./atoms";
+import { ExternalLink, FieldRow, hasAny, InlineCopy, Section, SubCard } from "./atoms";
 
 const KNOWN_COMPANY_TYPES = new Set([
   "isp",
@@ -42,9 +42,13 @@ function scopeLabel(t: T, scope: string): string {
   return scope;
 }
 
+/**
+ * Hostname is already rendered as the dialog subtitle, so it doesn't count
+ * here — otherwise a row with only a PTR and no real network info would
+ * render an otherwise-empty "Network details" section.
+ */
 export function hasNetworkContent(result: IpGeoLookupResult): boolean {
-  const { connection, company, hosting, carrier, hostname } = result;
-  if (hostname) return true;
+  const { connection, company, hosting, carrier } = result;
   if (connection.route || connection.handle || connection.domain) return true;
   if (connection.rir && connection.rir !== "UNKNOWN") return true;
   if (connection.scope && connection.scope !== "public") return true;
@@ -56,18 +60,13 @@ export function hasNetworkContent(result: IpGeoLookupResult): boolean {
 
 export function NetworkSection({ result }: { result: IpGeoLookupResult }) {
   const t = useTranslations("ipDetails");
-  const { connection, company, hosting, carrier, hostname } = result;
+  const { connection, company, hosting, carrier } = result;
 
   const showRir = connection.rir && connection.rir !== "UNKNOWN";
   const showScope = connection.scope && connection.scope !== "public";
 
   const hasCoreConnection =
-    !!hostname ||
-    !!connection.route ||
-    !!connection.handle ||
-    !!connection.domain ||
-    showRir ||
-    showScope;
+    !!connection.route || !!connection.handle || !!connection.domain || showRir || showScope;
 
   const hasCompany = hasAny(company, ["name", "domain"]);
   const hasHosting = hosting !== null && hasAny(hosting, ["provider", "domain", "network"]);
@@ -81,13 +80,6 @@ export function NetworkSection({ result }: { result: IpGeoLookupResult }) {
     >
       {hasCoreConnection && (
         <div className="space-y-0.5">
-          {hostname && (
-            <FieldRow
-              label={t("fields.hostname")}
-              value={<InlineCopy text={hostname}>{hostname}</InlineCopy>}
-              mono
-            />
-          )}
           {connection.route && (
             <FieldRow
               label={t("fields.route")}
@@ -102,14 +94,9 @@ export function NetworkSection({ result }: { result: IpGeoLookupResult }) {
             <FieldRow
               label={t("fields.asnDomain")}
               value={
-                <a
-                  href={`https://${connection.domain}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="text-primary hover:underline"
-                >
+                <ExternalLink href={`https://${connection.domain}`}>
                   {connection.domain}
-                </a>
+                </ExternalLink>
               }
               mono
             />
@@ -129,14 +116,7 @@ export function NetworkSection({ result }: { result: IpGeoLookupResult }) {
               <FieldRow
                 label={t("fields.companyDomain")}
                 value={
-                  <a
-                    href={`https://${company.domain}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-primary hover:underline"
-                  >
-                    {company.domain}
-                  </a>
+                  <ExternalLink href={`https://${company.domain}`}>{company.domain}</ExternalLink>
                 }
                 mono
               />
@@ -158,14 +138,7 @@ export function NetworkSection({ result }: { result: IpGeoLookupResult }) {
               <FieldRow
                 label={t("fields.hostingDomain")}
                 value={
-                  <a
-                    href={`https://${hosting.domain}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-primary hover:underline"
-                  >
-                    {hosting.domain}
-                  </a>
+                  <ExternalLink href={`https://${hosting.domain}`}>{hosting.domain}</ExternalLink>
                 }
                 mono
               />
