@@ -1,15 +1,20 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Filter, Loader2, RefreshCw, ScrollText, X } from "lucide-react";
+import { fromZonedTime } from "date-fns-tz";
+import { ChevronDown, Filter, RefreshCw, ScrollText } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getMyAvailableEndpoints,
   getMyAvailableModels,
-  getMyUsageLogsBatch,
+  getMyUsageLogsBatchFull,
 } from "@/actions/my-usage";
 import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
+import {
+  type LogsFetchFn,
+  VirtualizedLogsTable,
+  type VirtualizedLogsTableFilters,
+} from "@/app/[locale]/dashboard/logs/_components/virtualized-logs-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -22,10 +27,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn } from "@/lib/utils";
-import { UsageLogsTable } from "./usage-logs-table";
 
-const BATCH_SIZE = 20;
+/** Columns always hidden on my-usage page (user/key/provider not available) */
+const MY_USAGE_HIDDEN_COLUMNS: LogsTableColumn[] = ["user", "key", "provider"];
 
 interface UsageLogsSectionProps {
   autoRefreshSeconds?: number;
@@ -43,13 +49,43 @@ interface Filters {
   minRetryCount?: number;
 }
 
+/**
+ * Convert date strings (YYYY-MM-DD) to timestamps using server timezone.
+ */
+function parseDateRange(
+  startDate?: string,
+  endDate?: string,
+  timezone?: string
+): { startTime?: number; endTime?: number } {
+  const tz = timezone ?? "UTC";
+  let startTime: number | undefined;
+  let endTime: number | undefined;
+
+  if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    startTime = fromZonedTime(`${startDate}T00:00:00`, tz).getTime();
+  }
+  if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    // End date is exclusive (next day midnight)
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(endDate);
+    if (match) {
+      const next = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+      next.setUTCDate(next.getUTCDate() + 1);
+      const nextStr = next.toISOString().slice(0, 10);
+      endTime = fromZonedTime(`${nextStr}T00:00:00`, tz).getTime();
+    }
+  }
+
+  return { startTime, endTime };
+}
+
+const myUsageFetchFn: LogsFetchFn = (params) => getMyUsageLogsBatchFull(params);
+
 export function UsageLogsSection({
   autoRefreshSeconds,
   defaultOpen = false,
   serverTimeZone,
 }: UsageLogsSectionProps) {
   const t = useTranslations("myUsage.logs");
-  const tCollapsible = useTranslations("myUsage.logsCollapsible");
   const tDashboard = useTranslations("dashboard");
   const tCommon = useTranslations("common");
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -59,7 +95,6 @@ export function UsageLogsSection({
   const [isEndpointsLoading, setIsEndpointsLoading] = useState(true);
   const [draftFilters, setDraftFilters] = useState<Filters>({});
   const [appliedFilters, setAppliedFilters] = useState<Filters>({});
-  const [isBrowsingHistory, setIsBrowsingHistory] = useState(false);
 
   useEffect(() => {
     setIsModelsLoading(true);
@@ -82,44 +117,23 @@ export function UsageLogsSection({
       .finally(() => setIsEndpointsLoading(false));
   }, []);
 
-  const query = useInfiniteQuery({
-    queryKey: ["my-usage-logs-batch", appliedFilters],
-    queryFn: async ({ pageParam }) => {
-      const result = await getMyUsageLogsBatch({
-        ...appliedFilters,
-        cursor: pageParam,
-        limit: BATCH_SIZE,
-      });
-      if (!result.ok) {
-        throw new Error(result.error);
-      }
-      return result.data;
-    },
-    initialPageParam: undefined as { createdAt: string; id: number } | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    refetchInterval: autoRefreshSeconds
-      ? (query) => {
-          if (isBrowsingHistory) return false;
-          if (query.state.fetchStatus !== "idle") return false;
-          return autoRefreshSeconds * 1000;
-        }
-      : false,
-  });
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage = false,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    error,
-    isRefetching = false,
-  } = query;
-
-  const logs = useMemo(() => data?.pages.flatMap((page) => page.logs) ?? [], [data]);
-  const latestPage = data?.pages[0];
+  // Convert date-based filters to VirtualizedLogsTable format (timestamps)
+  const tableFilters = useMemo<VirtualizedLogsTableFilters>(() => {
+    const { startTime, endTime } = parseDateRange(
+      appliedFilters.startDate,
+      appliedFilters.endDate,
+      serverTimeZone
+    );
+    return {
+      startTime,
+      endTime,
+      model: appliedFilters.model,
+      statusCode: appliedFilters.statusCode,
+      excludeStatusCode200: appliedFilters.excludeStatusCode200,
+      endpoint: appliedFilters.endpoint,
+      minRetryCount: appliedFilters.minRetryCount,
+    };
+  }, [appliedFilters, serverTimeZone]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -131,65 +145,32 @@ export function UsageLogsSection({
     return count;
   }, [appliedFilters]);
 
-  const lastLog = logs[0] ?? null;
-
-  const lastStatusText = useMemo(() => {
-    if (!lastLog?.createdAt) return null;
-    const now = new Date();
-    const logTime = new Date(lastLog.createdAt);
-    const diffMs = now.getTime() - logTime.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return "now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${Math.floor(diffHours / 24)}d ago`;
-  }, [lastLog]);
-
-  const successRate = useMemo(() => {
-    if (logs.length === 0) return null;
-    const successCount = logs.filter((log) => log.statusCode && log.statusCode < 400).length;
-    return Math.round((successCount / logs.length) * 100);
-  }, [logs]);
-
-  const lastStatusColor = useMemo(() => {
-    if (!lastLog?.statusCode) return "";
-    if (lastLog.statusCode === 200) return "text-green-600 dark:text-green-400";
-    if (lastLog.statusCode >= 400) return "text-red-600 dark:text-red-400";
-    return "";
-  }, [lastLog]);
-
-  const handleFilterChange = (changes: Partial<Filters>) => {
+  const handleFilterChange = useCallback((changes: Partial<Filters>) => {
     setDraftFilters((prev) => ({ ...prev, ...changes }));
-  };
+  }, []);
 
-  const handleApply = () => {
+  const handleApply = useCallback(() => {
     const nextFilters = { ...draftFilters };
     if (JSON.stringify(nextFilters) === JSON.stringify(appliedFilters)) {
       return;
     }
     setAppliedFilters(nextFilters);
-  };
+  }, [draftFilters, appliedFilters]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setDraftFilters({});
     if (Object.keys(appliedFilters).length === 0) {
       return;
     }
     setAppliedFilters({});
-  };
+  }, [appliedFilters]);
 
-  const handleDateRangeChange = (range: { startDate?: string; endDate?: string }) => {
-    handleFilterChange(range);
-  };
-
-  const handleLoadMore = useCallback(() => {
-    void fetchNextPage();
-  }, [fetchNextPage]);
-
-  const isRefreshing = isRefetching && !isFetchingNextPage && logs.length > 0;
-  const errorMessage = isError ? (error instanceof Error ? error.message : t("loadFailed")) : null;
+  const handleDateRangeChange = useCallback(
+    (range: { startDate?: string; endDate?: string }) => {
+      handleFilterChange(range);
+    },
+    [handleFilterChange]
+  );
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -206,92 +187,23 @@ export function UsageLogsSection({
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                 <ScrollText className="h-4 w-4" />
               </div>
-              <span className="text-sm font-semibold">{tCollapsible("title")}</span>
+              <span className="text-sm font-semibold">{t("title")}</span>
             </div>
 
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex items-center gap-2 text-sm">
-                {lastLog ? (
-                  <span className={cn("font-mono", lastStatusColor)}>
-                    {tCollapsible("lastStatus", {
-                      code: lastLog.statusCode ?? "-",
-                      time: lastStatusText ?? "-",
-                    })}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">{tCollapsible("noData")}</span>
-                )}
-
-                <span className="text-muted-foreground">|</span>
-
-                {successRate !== null ? (
-                  <span
-                    className={cn(
-                      "flex items-center gap-1",
-                      successRate >= 80
-                        ? "text-green-600 dark:text-green-400"
-                        : "text-red-600 dark:text-red-400"
-                    )}
-                  >
-                    {successRate >= 80 ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                    {tCollapsible("successRate", { rate: successRate })}
-                  </span>
-                ) : null}
-
                 {activeFiltersCount > 0 && (
-                  <>
-                    <span className="text-muted-foreground">|</span>
-                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                      <Filter className="h-3 w-3 mr-1" />
-                      {activeFiltersCount}
-                    </Badge>
-                  </>
+                  <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                    <Filter className="h-3 w-3 mr-1" />
+                    {activeFiltersCount}
+                  </Badge>
                 )}
 
                 {autoRefreshSeconds && (
                   <>
-                    <span className="text-muted-foreground">|</span>
-                    <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+                    {activeFiltersCount > 0 && <span className="text-muted-foreground">|</span>}
+                    <RefreshCw className="h-3.5 w-3.5" />
                     <span className="text-xs text-muted-foreground">{autoRefreshSeconds}s</span>
-                  </>
-                )}
-              </div>
-
-              <div className="flex items-center gap-1.5 text-xs sm:hidden">
-                {lastLog ? (
-                  <span className={cn("font-mono", lastStatusColor)}>
-                    {lastLog.statusCode ?? "-"} ({lastStatusText ?? "-"})
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">{tCollapsible("noData")}</span>
-                )}
-
-                <span className="text-muted-foreground">|</span>
-
-                {successRate !== null ? (
-                  <span
-                    className={cn(
-                      "flex items-center gap-0.5",
-                      successRate >= 80 ? "text-green-600" : "text-red-600"
-                    )}
-                  >
-                    {successRate >= 80 ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                    {successRate}%
-                  </span>
-                ) : null}
-
-                {activeFiltersCount > 0 && (
-                  <>
-                    <span className="text-muted-foreground">|</span>
-                    <Badge variant="secondary" className="h-4 px-1 text-[10px]">
-                      {activeFiltersCount}
-                    </Badge>
-                  </>
-                )}
-                {autoRefreshSeconds && (
-                  <>
-                    <span className="text-muted-foreground">|</span>
-                    <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
                   </>
                 )}
               </div>
@@ -426,33 +338,25 @@ export function UsageLogsSection({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={handleApply} disabled={isLoading}>
+              <Button size="sm" onClick={handleApply}>
                 {t("filters.apply")}
               </Button>
-              <Button size="sm" variant="outline" onClick={handleReset} disabled={isLoading}>
+              <Button size="sm" variant="outline" onClick={handleReset}>
                 {t("filters.reset")}
               </Button>
             </div>
 
-            {isRefreshing ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>{tCommon("loading")}</span>
-              </div>
-            ) : null}
-
-            <UsageLogsTable
-              logs={logs}
-              hasNextPage={hasNextPage}
-              isFetchingNextPage={isFetchingNextPage}
-              currencyCode={latestPage?.currencyCode}
-              loading={isLoading}
-              loadingLabel={tCommon("loading")}
-              errorMessage={errorMessage}
-              onLoadMore={handleLoadMore}
-              resetScrollKey={appliedFilters}
-              onHistoryBrowsingChange={setIsBrowsingHistory}
-            />
+            <div className="rounded-lg border border-border/60 overflow-hidden">
+              <VirtualizedLogsTable
+                filters={tableFilters}
+                hiddenColumns={MY_USAGE_HIDDEN_COLUMNS}
+                disableDetailDialog
+                fetchFn={myUsageFetchFn}
+                queryKeyPrefix="my-usage-logs-batch"
+                autoRefreshEnabled={!!autoRefreshSeconds}
+                autoRefreshIntervalMs={autoRefreshSeconds ? autoRefreshSeconds * 1000 : undefined}
+              />
+            </div>
           </div>
         </CollapsibleContent>
       </div>

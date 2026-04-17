@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
+  DEFAULT_HIDDEN_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
   getHiddenColumns,
   getVisibleColumns,
@@ -51,9 +52,9 @@ describe("column-visibility", () => {
   });
 
   describe("getHiddenColumns", () => {
-    test("returns empty array when no data stored", () => {
+    test("returns default hidden columns when no data stored", () => {
       const result = getHiddenColumns(userId, tableId);
-      expect(result).toEqual([]);
+      expect(result).toEqual(DEFAULT_HIDDEN_COLUMNS);
     });
 
     test("returns stored hidden columns", () => {
@@ -103,9 +104,10 @@ describe("column-visibility", () => {
   });
 
   describe("getVisibleColumns", () => {
-    test("returns all columns when none hidden", () => {
+    test("returns all columns except default hidden when none explicitly hidden", () => {
       const result = getVisibleColumns(userId, tableId);
-      expect(result).toEqual(DEFAULT_VISIBLE_COLUMNS);
+      const expected = DEFAULT_VISIBLE_COLUMNS.filter((c) => !DEFAULT_HIDDEN_COLUMNS.includes(c));
+      expect(result).toEqual(expected);
     });
 
     test("excludes hidden columns", () => {
@@ -129,14 +131,14 @@ describe("column-visibility", () => {
       expect(mockStorage[storageKey]).toBe(JSON.stringify(hidden));
     });
 
-    test("removes storage key when array is empty", () => {
+    test("stores empty array when set to empty", () => {
       // First set some hidden columns
       mockStorage[storageKey] = JSON.stringify(["user"]);
 
       // Then reset to empty
       setHiddenColumns(userId, tableId, []);
 
-      expect(mockStorage[storageKey]).toBeUndefined();
+      expect(mockStorage[storageKey]).toBe(JSON.stringify([]));
     });
 
     test("handles localStorage errors gracefully", () => {
@@ -170,6 +172,9 @@ describe("column-visibility", () => {
     });
 
     test("returns updated hidden columns array", () => {
+      // Start fresh - set explicit empty to override defaults
+      setHiddenColumns(userId, tableId, []);
+
       const result1 = toggleColumn(userId, tableId, "user");
       expect(result1).toEqual(["user"]);
 
@@ -192,7 +197,7 @@ describe("column-visibility", () => {
   });
 
   describe("resetColumns", () => {
-    test("removes all hidden columns", () => {
+    test("removes all hidden columns from storage", () => {
       // Set some hidden columns
       setHiddenColumns(userId, tableId, ["user", "key", "provider"]);
       expect(getHiddenColumns(userId, tableId)).toHaveLength(3);
@@ -200,11 +205,11 @@ describe("column-visibility", () => {
       // Reset
       resetColumns(userId, tableId);
 
+      // After reset, storage has explicit empty array
       expect(getHiddenColumns(userId, tableId)).toEqual([]);
-      expect(mockStorage[storageKey]).toBeUndefined();
     });
 
-    test("is idempotent when no columns hidden", () => {
+    test("is idempotent when no columns explicitly hidden", () => {
       resetColumns(userId, tableId);
       resetColumns(userId, tableId);
 
@@ -222,6 +227,18 @@ describe("column-visibility", () => {
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("cost");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("cache");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("performance");
+    });
+  });
+
+  describe("DEFAULT_HIDDEN_COLUMNS", () => {
+    test("contains ip column", () => {
+      expect(DEFAULT_HIDDEN_COLUMNS).toContain("ip");
+    });
+
+    test("all default hidden columns are valid toggleable columns", () => {
+      for (const col of DEFAULT_HIDDEN_COLUMNS) {
+        expect(DEFAULT_VISIBLE_COLUMNS).toContain(col);
+      }
     });
   });
 });

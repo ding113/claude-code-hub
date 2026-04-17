@@ -16,12 +16,15 @@ import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
+  findUsageLogsBatch,
   findUsageLogsForKeyBatch,
   findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
+  type UsageLogBatchFilters,
   type UsageLogSlimBatchResult,
   type UsageLogSummary,
+  type UsageLogsBatchResult,
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
@@ -634,6 +637,30 @@ export async function getMyUsageLogsBatch(
     };
   } catch (error) {
     logger.error("[my-usage] getMyUsageLogsBatch failed", error);
+    return { ok: false, error: "Failed to get usage logs" };
+  }
+}
+
+/**
+ * Full-format batch fetch for VirtualizedLogsTable on my-usage page.
+ * Scoped to the current key (not just user) and uses allowReadOnlyAccess.
+ * Returns UsageLogsBatchResult (same shape as admin getUsageLogsBatch).
+ */
+export async function getMyUsageLogsBatchFull(
+  params: Omit<UsageLogBatchFilters, "userId" | "keyId" | "providerId">
+): Promise<ActionResult<UsageLogsBatchResult>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const result = await findUsageLogsBatch({
+      ...params,
+      keyId: session.key.id,
+    });
+
+    return { ok: true, data: result };
+  } catch (error) {
+    logger.error("[my-usage] getMyUsageLogsBatchFull failed", error);
     return { ok: false, error: "Failed to get usage logs" };
   }
 }
