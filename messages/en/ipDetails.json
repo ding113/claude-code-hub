@@ -4,7 +4,9 @@
     "copy": "Copy",
     "copied": "Copied",
     "copySuccess": "IP copied to clipboard",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "copyGeneric": "Copied to clipboard",
+    "openExternal": "Open in new tab"
   },
   "loading": "Looking up…",
   "error": "IP lookup unavailable.",
@@ -12,45 +14,174 @@
   "privateIpNote": "This address is not routable on the public internet.",
   "yes": "Yes",
   "no": "No",
+  "version": {
+    "ipv4": "IPv4",
+    "ipv6": "IPv6"
+  },
   "riskLevels": {
     "none": "None",
     "low": "Low",
     "medium": "Medium",
     "high": "High",
-    "critical": "Critical"
+    "critical": "Critical",
+    "unknown": "Unknown"
   },
   "sections": {
+    "location": "Location details",
+    "country": "Country",
+    "network": "Network details",
+    "company": "Company",
+    "hosting": "Hosting",
+    "carrier": "Mobile carrier",
+    "privacyThreat": "Privacy & Threat",
+    "blocklists": "Blocklists",
+    "abuse": "Abuse contact"
+  },
+  "hero": {
+    "risk": "Risk",
     "location": "Location",
     "network": "Network",
-    "privacyThreat": "Privacy & threat",
-    "abuse": "Abuse contact"
+    "noLocation": "Location unknown",
+    "noAsn": "No ASN",
+    "unknownOrg": "Unknown organization",
+    "cleanHint": "No anonymization or threat signals"
   },
   "fields": {
     "country": "Country",
+    "countryNative": "Native name",
+    "capital": "Capital",
+    "callingCode": "Calling code",
+    "tld": "TLD",
+    "area": "Area",
+    "population": "Population",
+    "borders": "Borders",
+    "euMember": "EU member",
+    "languages": "Languages",
+    "currencies": "Currencies",
+    "continent": "Continent",
     "region": "Region",
     "city": "City",
     "postalCode": "Postal code",
     "coordinates": "Coordinates",
+    "accuracyRadius": "Accuracy",
     "timezone": "Timezone",
+    "timezoneName": "Name",
+    "timezoneAbbreviation": "Abbr.",
+    "utcOffset": "UTC offset",
+    "currentTime": "Local time",
+    "dst": "DST",
     "asn": "ASN",
+    "asnHandle": "ASN handle",
+    "asnDomain": "ASN domain",
     "organization": "Organization",
     "route": "Route",
     "type": "Type",
     "subtype": "Subtype",
     "rir": "RIR",
     "anycast": "Anycast",
+    "scope": "Scope",
     "hostname": "Hostname",
+    "companyName": "Name",
+    "companyDomain": "Domain",
+    "companyType": "Type",
+    "hostingProvider": "Provider",
+    "hostingDomain": "Domain",
+    "hostingNetwork": "Network",
+    "carrierName": "Name",
+    "mcc": "MCC",
+    "mnc": "MNC",
     "riskLevel": "Risk level",
-    "score": "score",
+    "score": "Score",
     "abuseContact": "Abuse contact",
-    "email": "Email"
+    "abuseName": "Name",
+    "abuseEmail": "Email",
+    "abusePhone": "Phone",
+    "abuseAddress": "Address",
+    "email": "Email",
+    "listedAt": "Listed"
+  },
+  "networkTypes": {
+    "residential": "Residential",
+    "business": "Business",
+    "mobile": "Mobile",
+    "hosting": "Hosting",
+    "education": "Education",
+    "government": "Government",
+    "military": "Military",
+    "satellite": "Satellite",
+    "unknown": "Unknown"
+  },
+  "subtypes": {
+    "cloud": "Cloud",
+    "dedicated": "Dedicated",
+    "vps": "VPS",
+    "cdn": "CDN",
+    "colocation": "Colocation",
+    "4g": "4G",
+    "5g": "5G",
+    "lte": "LTE",
+    "wisp": "WISP"
+  },
+  "scopes": {
+    "public": "Public",
+    "private": "Private",
+    "loopback": "Loopback",
+    "link_local": "Link-local",
+    "multicast": "Multicast",
+    "broadcast": "Broadcast",
+    "reserved": "Reserved",
+    "bogon": "Bogon"
+  },
+  "companyTypes": {
+    "isp": "ISP",
+    "hosting": "Hosting",
+    "business": "Business",
+    "education": "Education",
+    "government": "Government",
+    "organization": "Organization",
+    "unknown": "Unknown"
+  },
+  "blocklistCategories": {
+    "spam": "Spam",
+    "malware": "Malware",
+    "phishing": "Phishing",
+    "scanner": "Scanner",
+    "exploit": "Exploit",
+    "fraud": "Fraud",
+    "abuse": "Abuse",
+    "other": "Other"
   },
   "badges": {
     "vpn": "VPN",
     "proxy": "Proxy",
     "tor": "Tor",
+    "torExit": "Tor exit",
     "relay": "Relay",
+    "anonymous": "Anonymous",
     "threat": "Threat",
-    "clean": "Clean"
+    "abuser": "Abuser",
+    "attacker": "Attacker",
+    "crawler": "Crawler",
+    "anycast": "Anycast"
+  },
+  "privacyDesc": {
+    "vpn": "Commercial VPN provider detected",
+    "proxy": "HTTP or SOCKS proxy detected",
+    "tor": "Tor network node",
+    "torExit": "Tor exit node — traffic source",
+    "relay": "Privacy relay (e.g. iCloud Private Relay)",
+    "anonymous": "Any anonymization signal present"
+  },
+  "threatDesc": {
+    "abuser": "Reported for spam, fraud, or brute force",
+    "attacker": "Active DDoS or exploit source",
+    "crawler": "Known scraper or indexing bot"
+  },
+  "misc": {
+    "km2": "km²",
+    "noneDetected": "None detected",
+    "dstOn": "Currently observing DST",
+    "dstOff": "No DST in effect",
+    "detected": "Detected"
   }
 }
