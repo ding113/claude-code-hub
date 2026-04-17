@@ -8,6 +8,7 @@ import { buildProxyUrl } from "@/app/v1/_lib/url";
 import { db } from "@/drizzle/db";
 import { providers as providersTable } from "@/drizzle/schema";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
@@ -657,6 +658,15 @@ export async function addProvider(data: {
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "add", providerId: provider.id });
 
+    emitActionAudit({
+      category: "provider",
+      action: "provider.create",
+      targetType: "provider",
+      targetId: String(provider.id),
+      targetName: provider.name,
+      after: { id: provider.id, name: provider.name, url: provider.url, isEnabled: provider.isEnabled },
+      success: true,
+    });
     return { ok: true };
   } catch (error) {
     logger.trace("addProvider:error", {
@@ -665,6 +675,14 @@ export async function addProvider(data: {
     });
     logger.error("创建服务商失败:", error);
     const message = error instanceof Error ? error.message : "创建服务商失败";
+    emitActionAudit({
+      category: "provider",
+      action: "provider.create",
+      targetType: "provider",
+      targetName: data.name,
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: message };
   }
 }
@@ -854,6 +872,16 @@ export async function editProvider(
       patch: EMPTY_PROVIDER_BATCH_PATCH,
     });
 
+    emitActionAudit({
+      category: "provider",
+      action: "provider.update",
+      targetType: "provider",
+      targetId: String(providerId),
+      before: preimageFields,
+      after: data,
+      success: true,
+      redactExtraKeys: ["key"],
+    });
     return {
       ok: true,
       data: {
@@ -864,6 +892,14 @@ export async function editProvider(
   } catch (error) {
     logger.error("更新服务商失败:", error);
     const message = error instanceof Error ? error.message : "更新服务商失败";
+    emitActionAudit({
+      category: "provider",
+      action: "provider.update",
+      targetType: "provider",
+      targetId: String(providerId),
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: message };
   }
 }
@@ -923,6 +959,17 @@ export async function removeProvider(
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "remove", providerId });
 
+    emitActionAudit({
+      category: "provider",
+      action: "provider.delete",
+      targetType: "provider",
+      targetId: String(providerId),
+      targetName: provider?.name ?? null,
+      before: provider
+        ? { id: provider.id, name: provider.name, url: provider.url }
+        : undefined,
+      success: true,
+    });
     return {
       ok: true,
       data: {
@@ -933,6 +980,14 @@ export async function removeProvider(
   } catch (error) {
     logger.error("删除服务商失败:", error);
     const message = error instanceof Error ? error.message : "删除服务商失败";
+    emitActionAudit({
+      category: "provider",
+      action: "provider.delete",
+      targetType: "provider",
+      targetId: String(providerId),
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: message };
   }
 }

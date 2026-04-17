@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import {
@@ -13,6 +14,7 @@ import {
   findAllLatestPrices,
   findAllLatestPricesPaginated,
   findAllManualPrices,
+  findLatestPriceByModel,
   findLatestPriceByModelAndSource,
   hasAnyPriceRecords,
   type PaginatedResult,
@@ -246,12 +248,47 @@ export async function uploadPriceTable(
   } catch {
     const parseResult = parseCloudPriceTableToml(content);
     if (!parseResult.ok) {
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.bulk_upload",
+        targetType: "model_price",
+        success: false,
+        errorMessage: parseResult.error,
+      });
       return { ok: false, error: parseResult.error };
     }
     jsonContent = JSON.stringify(parseResult.data.models);
   }
 
-  return processPriceTableInternal(jsonContent, overwriteManual);
+  const result = await processPriceTableInternal(jsonContent, overwriteManual);
+
+  if (result.ok) {
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.bulk_upload",
+      targetType: "model_price",
+      after: {
+        added: result.data.added.length,
+        updated: result.data.updated.length,
+        unchanged: result.data.unchanged.length,
+        failed: result.data.failed.length,
+        skippedConflicts: result.data.skippedConflicts?.length ?? 0,
+        total: result.data.total,
+        overwriteManualCount: overwriteManual?.length ?? 0,
+      },
+      success: true,
+    });
+  } else {
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.bulk_upload",
+      targetType: "model_price",
+      success: false,
+      errorMessage: result.error,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -463,12 +500,26 @@ export async function syncLiteLLMPrices(
     const tomlResult = await fetchCloudPriceTableToml();
     if (!tomlResult.ok) {
       logger.error("[PriceSync] Failed to fetch cloud price table", { error: tomlResult.error });
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.sync_litellm",
+        targetType: "model_price",
+        success: false,
+        errorMessage: tomlResult.error,
+      });
       return { ok: false, error: tomlResult.error };
     }
 
     const parseResult = parseCloudPriceTableToml(tomlResult.data);
     if (!parseResult.ok) {
       logger.error("[PriceSync] Failed to parse cloud price table", { error: parseResult.error });
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.sync_litellm",
+        targetType: "model_price",
+        success: false,
+        errorMessage: parseResult.error,
+      });
       return { ok: false, error: parseResult.error };
     }
 
@@ -484,14 +535,43 @@ export async function syncLiteLLMPrices(
         skippedConflicts: result.data.skippedConflicts?.length ?? 0,
         total: result.data.total,
       });
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.sync_litellm",
+        targetType: "model_price",
+        after: {
+          added: result.data.added.length,
+          updated: result.data.updated.length,
+          unchanged: result.data.unchanged.length,
+          failed: result.data.failed.length,
+          skippedConflicts: result.data.skippedConflicts?.length ?? 0,
+          total: result.data.total,
+          overwriteManualCount: overwriteManual?.length ?? 0,
+        },
+        success: true,
+      });
     } else {
       logger.error("[PriceSync] Cloud price sync failed", { error: result.error });
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.sync_litellm",
+        targetType: "model_price",
+        success: false,
+        errorMessage: result.error,
+      });
     }
 
     return result;
   } catch (error) {
     logger.error("[PriceSync] Cloud price sync failed", error);
     const message = error instanceof Error ? error.message : "同步失败，请稍后重试";
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.sync_litellm",
+      targetType: "model_price",
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: message };
   }
 }
@@ -592,6 +672,9 @@ export async function upsertSingleModelPrice(
       cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr,
     };
 
+    // 捕获 before 快照
+    const beforePrice = await findLatestPriceByModel(input.modelName.trim());
+
     // 执行更新
     const result = await upsertModelPrice(input.modelName.trim(), priceData);
 
@@ -605,10 +688,33 @@ export async function upsertSingleModelPrice(
       });
     }
 
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.upsert",
+      targetType: "model_price",
+      targetId: String(result.id),
+      targetName: result.modelName,
+      before: beforePrice ?? undefined,
+      after: {
+        id: result.id,
+        modelName: result.modelName,
+        source: result.source,
+        priceData: result.priceData,
+      },
+      success: true,
+    });
     return { ok: true, data: result };
   } catch (error) {
     logger.error("更新模型价格失败:", error);
     const message = error instanceof Error ? error.message : "操作失败，请稍后重试";
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.upsert",
+      targetType: "model_price",
+      targetName: input.modelName?.trim() ?? null,
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: message };
   }
 }
@@ -629,6 +735,9 @@ export async function deleteSingleModelPrice(modelName: string): Promise<ActionR
       return { ok: false, error: "模型名称不能为空" };
     }
 
+    // 捕获 before 快照
+    const beforePrice = await findLatestPriceByModel(modelName.trim());
+
     // 执行删除
     await deleteModelPriceByName(modelName.trim());
 
@@ -641,10 +750,27 @@ export async function deleteSingleModelPrice(modelName: string): Promise<ActionR
       });
     }
 
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.delete",
+      targetType: "model_price",
+      targetId: beforePrice ? String(beforePrice.id) : null,
+      targetName: modelName.trim(),
+      before: beforePrice ?? undefined,
+      success: true,
+    });
     return { ok: true, data: undefined };
   } catch (error) {
     logger.error("删除模型价格失败:", error);
     const message = error instanceof Error ? error.message : "删除失败，请稍后重试";
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.delete",
+      targetType: "model_price",
+      targetName: modelName?.trim() ?? null,
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: message };
   }
 }

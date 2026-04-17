@@ -15,6 +15,7 @@ import { logger } from "@/lib/logger";
 import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
+import { createAuditLogAsync } from "@/repository/audit-log";
 
 // 需要数据库连接
 export const runtime = "nodejs";
@@ -145,8 +146,19 @@ export async function POST(request: NextRequest) {
   const t = await getAuthErrorTranslations(locale);
   const clientIp = resolveClientIp(request);
 
+  const userAgent = request.headers.get("user-agent");
+  const auditIp = clientIp === "unknown" ? null : clientIp;
   const decision = loginPolicy.check(clientIp);
   if (!decision.allowed) {
+    createAuditLogAsync({
+      actionCategory: "auth",
+      actionType: "login.rate_limited",
+      operatorIp: auditIp,
+      userAgent,
+      success: false,
+      errorMessage: "RATE_LIMITED",
+    });
+
     const response = withAuthResponseHeaders(
       NextResponse.json(
         {
@@ -169,6 +181,14 @@ export async function POST(request: NextRequest) {
 
     if (!key || typeof key !== "string") {
       loginPolicy.recordFailure(clientIp);
+      createAuditLogAsync({
+        actionCategory: "auth",
+        actionType: "login.failure",
+        operatorIp: auditIp,
+        userAgent,
+        success: false,
+        errorMessage: "KEY_REQUIRED",
+      });
 
       if (!shouldIncludeFailureTaxonomy(request)) {
         return withAuthResponseHeaders(
@@ -190,6 +210,14 @@ export async function POST(request: NextRequest) {
     const session = await validateKey(key, { allowReadOnlyAccess: true });
     if (!session) {
       loginPolicy.recordFailure(clientIp);
+      createAuditLogAsync({
+        actionCategory: "auth",
+        actionType: "login.failure",
+        operatorIp: auditIp,
+        userAgent,
+        success: false,
+        errorMessage: "KEY_INVALID",
+      });
 
       if (!shouldIncludeFailureTaxonomy(request)) {
         return withAuthResponseHeaders(
@@ -259,6 +287,22 @@ export async function POST(request: NextRequest) {
         : session.key.canLoginWebUi
           ? "dashboard_user"
           : "readonly_user";
+
+    createAuditLogAsync({
+      actionCategory: "auth",
+      actionType: "login.success",
+      targetType: "user",
+      targetId: String(session.user.id),
+      targetName: session.user.name,
+      operatorUserId: session.user.id,
+      operatorUserName: session.user.name,
+      operatorKeyId: session.key.id,
+      operatorKeyName: session.key.name,
+      operatorIp: auditIp,
+      userAgent,
+      success: true,
+      afterValue: { loginType },
+    });
 
     return withAuthResponseHeaders(
       NextResponse.json({

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger, users as usersTable } from "@/drizzle/schema";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -1251,6 +1252,21 @@ export async function addUser(data: {
     });
 
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "user",
+      action: "user.create",
+      targetType: "user",
+      targetId: String(newUser.id),
+      targetName: newUser.name,
+      after: {
+        id: newUser.id,
+        name: newUser.name,
+        role: newUser.role,
+        isEnabled: newUser.isEnabled,
+        providerGroup: newUser.providerGroup,
+      },
+      success: true,
+    });
     return {
       ok: true,
       data: {
@@ -1283,6 +1299,14 @@ export async function addUser(data: {
     logger.error("Failed to create user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.create",
+      targetType: "user",
+      targetName: data.name,
+      success: false,
+      errorMessage: message,
+    });
     return {
       ok: false,
       error: message,
@@ -1589,11 +1613,28 @@ export async function editUser(
     // 用户分组由 Key 分组自动计算，不再需要级联更新 Key 的 providerGroup
 
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "user",
+      action: "user.update",
+      targetType: "user",
+      targetId: String(userId),
+      targetName: validatedData.name ?? null,
+      after: validatedData,
+      success: true,
+    });
     return { ok: true };
   } catch (error) {
     logger.error("Failed to update user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.update",
+      targetType: "user",
+      targetId: String(userId),
+      success: false,
+      errorMessage: message,
+    });
     return {
       ok: false,
       error: message,
@@ -1618,13 +1659,31 @@ export async function removeUser(userId: number): Promise<ActionResult> {
       };
     }
 
+    const beforeUser = await findUserById(userId);
     await deleteUser(userId);
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "user",
+      action: "user.delete",
+      targetType: "user",
+      targetId: String(userId),
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      success: true,
+    });
     return { ok: true };
   } catch (error) {
     logger.error("Failed to delete user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("DELETE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.delete",
+      targetType: "user",
+      targetId: String(userId),
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }

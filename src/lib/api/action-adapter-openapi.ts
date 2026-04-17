@@ -12,7 +12,9 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
+import { runWithRequestContext } from "@/lib/audit/request-context";
 import { AUTH_COOKIE_NAME, runWithAuthSession, validateAuthToken } from "@/lib/auth";
+import { getClientIp } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 
 function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefined {
@@ -362,10 +364,25 @@ export function createActionRoute(
         args = [body];
       }
 
+      // Capture operator IP + UA once so audit hooks inside actions can read
+      // them via getRequestContext() without re-parsing headers. Test mocks
+      // may not provide a Hono Context with `header()` / raw — default to null.
+      const rawHeaders = c.req.raw?.headers;
+      const readHeader =
+        typeof c.req.header === "function" ? (name: string) => c.req.header(name) : () => undefined;
+      const requestCtx = {
+        ip: rawHeaders ? getClientIp(rawHeaders) : null,
+        userAgent: readHeader("user-agent") ?? null,
+      };
+
       const rawResult =
         authSession != null
-          ? await runWithAuthSession(authSession, () => action(...args), { allowReadOnlyAccess })
-          : await action(...args);
+          ? await runWithAuthSession(
+              authSession,
+              () => runWithRequestContext(requestCtx, () => action(...args)),
+              { allowReadOnlyAccess }
+            )
+          : await runWithRequestContext(requestCtx, () => action(...args));
 
       // 2.5. 包装非 ActionResult 格式的返回值
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

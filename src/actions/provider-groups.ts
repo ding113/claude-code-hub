@@ -1,5 +1,6 @@
 "use server";
 
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -117,9 +118,32 @@ export async function createProviderGroup(input: {
       description: input.description ?? null,
     });
 
+    emitActionAudit({
+      category: "provider_group",
+      action: "provider_group.create",
+      targetType: "provider_group",
+      targetId: String(group.id),
+      targetName: group.name,
+      after: {
+        id: group.id,
+        name: group.name,
+        costMultiplier: group.costMultiplier,
+        description: group.description,
+      },
+      success: true,
+    });
     return { ok: true, data: group };
   } catch (error) {
     logger.error("Failed to create provider group:", error);
+    const message = error instanceof Error ? error.message : "Failed to create provider group";
+    emitActionAudit({
+      category: "provider_group",
+      action: "provider_group.create",
+      targetType: "provider_group",
+      targetName: input.name?.trim() ?? null,
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: "Failed to create provider group" };
   }
 }
@@ -149,6 +173,8 @@ export async function updateProviderGroup(
       };
     }
 
+    const beforeGroup = await findProviderGroupById(id);
+
     const updated = await repoUpdateProviderGroup(id, {
       costMultiplier: input.costMultiplier,
       description: input.description,
@@ -158,9 +184,33 @@ export async function updateProviderGroup(
       return { ok: false, error: "Provider group not found" };
     }
 
+    emitActionAudit({
+      category: "provider_group",
+      action: "provider_group.update",
+      targetType: "provider_group",
+      targetId: String(id),
+      targetName: updated.name,
+      before: beforeGroup ?? undefined,
+      after: {
+        id: updated.id,
+        name: updated.name,
+        costMultiplier: updated.costMultiplier,
+        description: updated.description,
+      },
+      success: true,
+    });
     return { ok: true, data: updated };
   } catch (error) {
     logger.error("Failed to update provider group:", error);
+    const message = error instanceof Error ? error.message : "Failed to update provider group";
+    emitActionAudit({
+      category: "provider_group",
+      action: "provider_group.update",
+      targetType: "provider_group",
+      targetId: String(id),
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: "Failed to update provider group" };
   }
 }
@@ -200,11 +250,29 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
     }
 
     await repoDeleteProviderGroup(id);
+    emitActionAudit({
+      category: "provider_group",
+      action: "provider_group.delete",
+      targetType: "provider_group",
+      targetId: String(id),
+      targetName: existing.name,
+      before: existing,
+      success: true,
+    });
     return { ok: true, data: undefined };
   } catch (error) {
     // The default-group case is handled by the explicit pre-check above; the
     // repository's string-matched fallback is belt-and-suspenders only.
     logger.error("Failed to delete provider group:", error);
+    const message = error instanceof Error ? error.message : "Failed to delete provider group";
+    emitActionAudit({
+      category: "provider_group",
+      action: "provider_group.delete",
+      targetType: "provider_group",
+      targetId: String(id),
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: "Failed to delete provider group" };
   }
 }

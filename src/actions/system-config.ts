@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { locales } from "@/i18n/config";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
@@ -78,12 +79,14 @@ export async function saveSystemSettings(formData: {
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
 }): Promise<ActionResult<SystemSettings>> {
+  let before: SystemSettings | null = null;
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    before = await getSystemSettings();
     const validated = UpdateSystemSettingsSchema.parse(formData);
     const updated = await updateSystemSettings({
       siteTitle: validated.siteTitle?.trim(),
@@ -127,10 +130,30 @@ export async function saveSystemSettings(formData: {
     }
     revalidatePath("/", "layout");
 
+    emitActionAudit({
+      category: "system_settings",
+      action: "system_settings.update",
+      targetType: "system_settings",
+      targetId: String(updated.id),
+      targetName: "global",
+      before: before ?? undefined,
+      after: updated,
+      success: true,
+    });
+
     return { ok: true, data: updated };
   } catch (error) {
     logger.error("更新系统设置失败:", error);
     const message = error instanceof Error ? error.message : "更新系统设置失败";
+    emitActionAudit({
+      category: "system_settings",
+      action: "system_settings.update",
+      targetType: "system_settings",
+      targetName: "global",
+      before: before ?? undefined,
+      success: false,
+      errorMessage: message,
+    });
     return { ok: false, error: message };
   }
 }

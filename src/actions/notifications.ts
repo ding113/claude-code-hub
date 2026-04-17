@@ -1,5 +1,6 @@
 "use server";
 
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
@@ -37,6 +38,7 @@ export async function updateNotificationSettingsAction(
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    const before = await getNotificationSettings();
     const updated = await updateNotificationSettings(payload);
 
     // 重新调度通知任务（仅生产环境）
@@ -52,11 +54,27 @@ export async function updateNotificationSettingsAction(
       });
     }
 
+    emitActionAudit({
+      category: "notification",
+      action: "notification.update",
+      targetType: "notification",
+      before,
+      after: updated,
+      success: true,
+    });
     return { ok: true, data: updated };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "更新通知设置失败";
+    emitActionAudit({
+      category: "notification",
+      action: "notification.update",
+      targetType: "notification",
+      success: false,
+      errorMessage: message,
+    });
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "更新通知设置失败",
+      error: message,
     };
   }
 }

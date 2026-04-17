@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -293,7 +294,7 @@ export async function addKey(data: {
         ? null
         : parseDateInputAsTimezone(validatedData.expiresAt, timezone);
 
-    await createKey({
+    const createdKey = await createKey({
       user_id: data.userId,
       name: validatedData.name,
       key: generatedKey,
@@ -319,11 +320,48 @@ export async function addKey(data: {
 
     revalidatePath("/dashboard");
 
+    emitActionAudit({
+      category: "key",
+      action: "key.create",
+      targetType: "key",
+      targetId: String(createdKey.id),
+      targetName: createdKey.name,
+      after: {
+        id: createdKey.id,
+        userId: createdKey.userId,
+        name: createdKey.name,
+        isEnabled: createdKey.isEnabled,
+        expiresAt: createdKey.expiresAt,
+        canLoginWebUi: createdKey.canLoginWebUi,
+        providerGroup: createdKey.providerGroup,
+        limit5hUsd: createdKey.limit5hUsd,
+        limitDailyUsd: createdKey.limitDailyUsd,
+        limitWeeklyUsd: createdKey.limitWeeklyUsd,
+        limitMonthlyUsd: createdKey.limitMonthlyUsd,
+        limitTotalUsd: createdKey.limitTotalUsd,
+        limitConcurrentSessions: createdKey.limitConcurrentSessions,
+        dailyResetMode: createdKey.dailyResetMode,
+        dailyResetTime: createdKey.dailyResetTime,
+        cacheTtlPreference: createdKey.cacheTtlPreference,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
     // 返回生成的key供前端显示
     return { ok: true, data: { generatedKey, name: validatedData.name } };
   } catch (error) {
     logger.error("添加密钥失败:", error);
     const message = error instanceof Error ? error.message : "添加密钥失败，请稍后重试";
+    emitActionAudit({
+      category: "key",
+      action: "key.create",
+      targetType: "key",
+      targetName: data.name ?? null,
+      success: false,
+      errorMessage: message,
+      redactExtraKeys: ["key"],
+    });
     return { ok: false, error: message };
   }
 }
@@ -561,10 +599,62 @@ export async function editKey(
     }
 
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "key",
+      action: "key.update",
+      targetType: "key",
+      targetId: String(keyId),
+      targetName: validatedData.name,
+      before: {
+        id: key.id,
+        userId: key.userId,
+        name: key.name,
+        isEnabled: key.isEnabled,
+        expiresAt: key.expiresAt,
+        canLoginWebUi: key.canLoginWebUi,
+        providerGroup: key.providerGroup,
+        limit5hUsd: key.limit5hUsd,
+        limitDailyUsd: key.limitDailyUsd,
+        limitWeeklyUsd: key.limitWeeklyUsd,
+        limitMonthlyUsd: key.limitMonthlyUsd,
+        limitTotalUsd: key.limitTotalUsd,
+        limitConcurrentSessions: key.limitConcurrentSessions,
+        dailyResetMode: key.dailyResetMode,
+        dailyResetTime: key.dailyResetTime,
+        cacheTtlPreference: key.cacheTtlPreference,
+      },
+      after: {
+        name: validatedData.name,
+        isEnabled: data.isEnabled,
+        expiresAt: hasExpiresAtField ? expiresAt : undefined,
+        canLoginWebUi: validatedData.canLoginWebUi,
+        providerGroup: isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : undefined,
+        limit5hUsd: validatedData.limit5hUsd,
+        limitDailyUsd: validatedData.limitDailyUsd,
+        limitWeeklyUsd: validatedData.limitWeeklyUsd,
+        limitMonthlyUsd: validatedData.limitMonthlyUsd,
+        limitTotalUsd: validatedData.limitTotalUsd,
+        limitConcurrentSessions: validatedData.limitConcurrentSessions,
+        dailyResetMode: validatedData.dailyResetMode,
+        dailyResetTime: validatedData.dailyResetTime,
+        cacheTtlPreference: validatedData.cacheTtlPreference,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
     return { ok: true };
   } catch (error) {
     logger.error("Failed to update key:", error);
     const message = error instanceof Error ? error.message : "更新密钥失败，请稍后重试";
+    emitActionAudit({
+      category: "key",
+      action: "key.update",
+      targetType: "key",
+      targetId: String(keyId),
+      success: false,
+      errorMessage: message,
+      redactExtraKeys: ["key"],
+    });
     return { ok: false, error: message };
   }
 }
@@ -629,10 +719,43 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
     await syncUserProviderGroupFromKeys(key.userId);
 
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "key",
+      action: "key.delete",
+      targetType: "key",
+      targetId: String(keyId),
+      targetName: key.name,
+      before: {
+        id: key.id,
+        userId: key.userId,
+        name: key.name,
+        isEnabled: key.isEnabled,
+        expiresAt: key.expiresAt,
+        canLoginWebUi: key.canLoginWebUi,
+        providerGroup: key.providerGroup,
+        limit5hUsd: key.limit5hUsd,
+        limitDailyUsd: key.limitDailyUsd,
+        limitWeeklyUsd: key.limitWeeklyUsd,
+        limitMonthlyUsd: key.limitMonthlyUsd,
+        limitTotalUsd: key.limitTotalUsd,
+        limitConcurrentSessions: key.limitConcurrentSessions,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
     return { ok: true };
   } catch (error) {
     logger.error("删除密钥失败:", error);
     const message = error instanceof Error ? error.message : "删除密钥失败，请稍后重试";
+    emitActionAudit({
+      category: "key",
+      action: "key.delete",
+      targetType: "key",
+      targetId: String(keyId),
+      success: false,
+      errorMessage: message,
+      redactExtraKeys: ["key"],
+    });
     return { ok: false, error: message };
   }
 }
