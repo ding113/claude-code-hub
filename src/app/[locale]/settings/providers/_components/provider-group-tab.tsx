@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,10 +114,36 @@ export function ProviderGroupTab() {
     setForm(INITIAL_FORM);
   }, []);
 
+  // Map server-side error codes to localized toast messages. Falls back to
+  // the provided fallback when the code is unknown or absent.
+  const mapSaveError = useCallback(
+    (errorCode: string | undefined, fallback: string): string => {
+      switch (errorCode) {
+        case "NAME_REQUIRED":
+          return t("nameRequired");
+        case "DUPLICATE_NAME":
+          return t("duplicateName");
+        case "INVALID_MULTIPLIER":
+          return t("invalidMultiplier");
+        default:
+          return fallback;
+      }
+    },
+    [t]
+  );
+
   const handleSave = useCallback(() => {
+    // All synchronous validation happens BEFORE the transition so that
+    // `isSaving` never briefly flips true for validation failures.
     const costMultiplier = Number.parseFloat(form.costMultiplier);
     if (!Number.isFinite(costMultiplier) || costMultiplier < 0) {
       toast.error(t("invalidMultiplier"));
+      return;
+    }
+
+    const trimmedName = form.name.trim();
+    if (!editingGroup && !trimmedName) {
+      toast.error(t("nameRequired"));
       return;
     }
 
@@ -132,16 +159,12 @@ export function ProviderGroupTab() {
           closeDialog();
           fetchGroups();
         } else {
-          toast.error(result.error ?? t("updateFailed"));
+          toast.error(mapSaveError(result.errorCode, result.error ?? t("updateFailed")));
         }
       } else {
         // Create
-        if (!form.name.trim()) {
-          toast.error(t("nameRequired"));
-          return;
-        }
         const result = await createProviderGroup({
-          name: form.name.trim(),
+          name: trimmedName,
           costMultiplier,
           description: form.description || undefined,
         });
@@ -150,11 +173,11 @@ export function ProviderGroupTab() {
           closeDialog();
           fetchGroups();
         } else {
-          toast.error(result.error ?? t("createFailed"));
+          toast.error(mapSaveError(result.errorCode, result.error ?? t("createFailed")));
         }
       }
     });
-  }, [editingGroup, form, t, closeDialog, fetchGroups]);
+  }, [editingGroup, form, t, closeDialog, fetchGroups, mapSaveError]);
 
   // ---------------------------------------------------------------------------
   // Delete handlers
@@ -232,7 +255,7 @@ export function ProviderGroupTab() {
             </TableHeader>
             <TableBody>
               {groups.map((group) => {
-                const isDefault = group.name === "default";
+                const isDefault = group.name === PROVIDER_GROUP.DEFAULT;
                 return (
                   <TableRow key={group.id}>
                     <TableCell className="font-medium">

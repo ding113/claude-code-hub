@@ -298,8 +298,13 @@ export function resolveLongContextPricing(
  * Clamp a multiplier to a safe value. NaN, Infinity, or negative inputs fall
  * back to the provided default (1.0). Prevents poisoned multipliers from
  * propagating into Decimal arithmetic and cost storage.
+ *
+ * Exported so callers that persist multipliers alongside a cost value
+ * (e.g. cost breakdown storage) can apply the same sanitization rules used
+ * inside `calculateRequestCost`, ensuring
+ * `total === base_total * provider_multiplier * group_multiplier`.
  */
-function sanitizeMultiplier(value: number | undefined, fallback: number = 1.0): number {
+export function sanitizeMultiplier(value: number | undefined, fallback: number = 1.0): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return fallback;
   }

@@ -3,6 +3,7 @@ import "server-only";
 import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providerGroups, providers } from "@/drizzle/schema";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type {
   CreateProviderGroupInput,
@@ -60,7 +61,7 @@ export async function findAllProviderGroups(): Promise<ProviderGroup[]> {
     .select()
     .from(providerGroups)
     .orderBy(
-      sql`CASE WHEN ${providerGroups.name} = 'default' THEN 0 ELSE 1 END`,
+      sql`CASE WHEN ${providerGroups.name} = ${PROVIDER_GROUP.DEFAULT} THEN 0 ELSE 1 END`,
       asc(providerGroups.name)
     );
 
@@ -174,7 +175,7 @@ export async function deleteProviderGroup(id: number): Promise<void> {
     .where(eq(providerGroups.id, id))
     .limit(1);
 
-  if (existing?.name === "default") {
+  if (existing?.name === PROVIDER_GROUP.DEFAULT) {
     throw new Error("Cannot delete the default provider group");
   }
 
@@ -187,27 +188,60 @@ export async function deleteProviderGroup(id: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Return the cost multiplier for a provider group.
- * Falls back to 1.0 when the group does not exist.
+ * Return the cost multiplier for an effective provider group string.
+ *
+ * The input can be a single group name ("premium") or a comma/newline
+ * separated list as stored on users / keys ("premium,enterprise").
+ *
+ * Resolution policy: the first group in the parsed list that exists in the
+ * provider_groups table wins. This gives users and admins a predictable
+ * ordering (the user's first-declared group takes precedence).
+ *
+ * Falls back to 1.0 when none of the groups exist.
  *
  * Results are cached in-memory with a 60-second TTL so that the proxy
  * pipeline can call this on every request without extra DB round-trips.
+ * Cache misses (value === 1.0 because no matching row was found) are NOT
+ * cached, so newly-created groups propagate on the next request.
+ *
+ * Note: this cache is per-process. In multi-instance deployments, a mutation
+ * on one node will not invalidate other nodes' caches; worst-case staleness
+ * is bounded by CACHE_TTL_MS.
  */
-export async function getGroupCostMultiplier(groupName: string): Promise<number> {
+export async function getGroupCostMultiplier(rawGroupString: string): Promise<number> {
   const now = Date.now();
-  const cached = multiplierCache.get(groupName);
 
+  // Cache hit fast-path: we key the cache on the raw input string so that
+  // repeated lookups for the same user bypass parsing + DB entirely.
+  const cached = multiplierCache.get(rawGroupString);
   if (cached && cached.expiresAt > now) {
     return cached.value;
   }
 
-  const group = await findProviderGroupByName(groupName);
-  const value = group?.costMultiplier ?? 1.0;
+  const parsedGroups = parseProviderGroups(rawGroupString);
+  if (parsedGroups.length === 0) {
+    return 1.0;
+  }
 
-  multiplierCache.set(groupName, {
-    value,
-    expiresAt: now + CACHE_TTL_MS,
-  });
+  // Walk the user's declared groups in order; the first matching DB row wins.
+  let resolved: number | null = null;
+  for (const name of parsedGroups) {
+    const group = await findProviderGroupByName(name);
+    if (group) {
+      resolved = group.costMultiplier;
+      break;
+    }
+  }
 
-  return value;
+  // Only cache real hits. Caching misses would defer new-group visibility by
+  // up to CACHE_TTL_MS on this process and is rarely worth the win.
+  if (resolved !== null) {
+    multiplierCache.set(rawGroupString, {
+      value: resolved,
+      expiresAt: now + CACHE_TTL_MS,
+    });
+    return resolved;
+  }
+
+  return 1.0;
 }

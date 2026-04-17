@@ -90,6 +90,53 @@ export function SummaryTab({
       ? t(getFake200ReasonKey(fake200Code, "fake200Reasons"))
       : null;
 
+  // Resolve per-TTL cache creation costs for display. Strategy:
+  //  1. Prefer the split fields (cache_creation_5m / _1h) written since the
+  //     breakdown split landed.
+  //  2. Legacy rows predate the split and only carry the aggregated
+  //     cache_creation. For mixed-TTL legacy rows we split the aggregate
+  //     proportionally by token count so neither row gets double-counted
+  //     and neither attribute zero. Pure-5m / pure-1h legacy rows route the
+  //     aggregate to the matching row.
+  const resolveCacheCreationSplit = () => {
+    if (!costBreakdown) return { fiveM: null as string | null, oneH: null as string | null };
+
+    const has5m = costBreakdown.cache_creation_5m !== undefined;
+    const has1h = costBreakdown.cache_creation_1h !== undefined;
+    if (has5m || has1h) {
+      return {
+        fiveM: costBreakdown.cache_creation_5m ?? "0",
+        oneH: costBreakdown.cache_creation_1h ?? "0",
+      };
+    }
+
+    // Legacy: only aggregate cache_creation is available.
+    const aggregate = costBreakdown.cache_creation;
+    const aggregateNum = Number(aggregate);
+    if (!Number.isFinite(aggregateNum) || aggregateNum === 0) {
+      return { fiveM: "0", oneH: "0" };
+    }
+
+    const tokens5m = cacheCreation5mInputTokens ?? 0;
+    const tokens1h = cacheCreation1hInputTokens ?? 0;
+    if (cacheTtlApplied === "mixed" && tokens5m + tokens1h > 0) {
+      // Proportional split by token count (prices differ 1.25x vs 2x but for
+      // a post-hoc legacy display this approximation is close enough).
+      const total = tokens5m + tokens1h;
+      const share5m = (aggregateNum * tokens5m) / total;
+      const share1h = aggregateNum - share5m;
+      return { fiveM: share5m.toString(), oneH: share1h.toString() };
+    }
+
+    if (cacheTtlApplied === "1h") {
+      return { fiveM: "0", oneH: aggregate };
+    }
+    // Default / 5m case
+    return { fiveM: aggregate, oneH: "0" };
+  };
+
+  const cacheSplit = resolveCacheCreationSplit();
+
   return (
     <div className="space-y-6">
       {/* Status Hero */}
@@ -343,16 +390,9 @@ export function SummaryTab({
                     )}{" "}
                     {t("billingDetails.unit.tokens")}{" "}
                     <span className="text-orange-600">(1.25x)</span>
-                    {costBreakdown ? (
+                    {costBreakdown && cacheSplit.fiveM !== null ? (
                       <span className="ml-3 text-muted-foreground">
-                        {formatCurrency(
-                          costBreakdown.cache_creation_5m ??
-                            // Back-compat for rows stored before the split:
-                            // only fall back to aggregate when 1h TTL is NOT also present
-                            (cacheTtlApplied === "1h" ? "0" : costBreakdown.cache_creation),
-                          "USD",
-                          6
-                        )}
+                        {formatCurrency(cacheSplit.fiveM, "USD", 6)}
                       </span>
                     ) : null}
                   </span>
@@ -371,16 +411,9 @@ export function SummaryTab({
                         : cacheCreationInputTokens
                     )}{" "}
                     {t("billingDetails.unit.tokens")} <span className="text-orange-600">(2x)</span>
-                    {costBreakdown ? (
+                    {costBreakdown && cacheSplit.oneH !== null ? (
                       <span className="ml-3 text-muted-foreground">
-                        {formatCurrency(
-                          costBreakdown.cache_creation_1h ??
-                            // Back-compat for rows stored before the split:
-                            // fall back to aggregate only when 1h is the dominant TTL
-                            (cacheTtlApplied === "1h" ? costBreakdown.cache_creation : "0"),
-                          "USD",
-                          6
-                        )}
+                        {formatCurrency(cacheSplit.oneH, "USD", 6)}
                       </span>
                     ) : null}
                   </span>

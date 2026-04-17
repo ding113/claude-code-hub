@@ -48,13 +48,13 @@ export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWit
     // Count providers per group
     const groupCounts = new Map<string, number>();
     for (const provider of providers) {
-      const providerGroups = parseProviderGroups(provider.groupTag);
-      if (providerGroups.length === 0) {
+      const parsedGroups = parseProviderGroups(provider.groupTag);
+      if (parsedGroups.length === 0) {
         groupCounts.set(PROVIDER_GROUP.DEFAULT, (groupCounts.get(PROVIDER_GROUP.DEFAULT) || 0) + 1);
         continue;
       }
-      for (const g of providerGroups) {
-        groupCounts.set(g, (groupCounts.get(g) || 0) + 1);
+      for (const groupName of parsedGroups) {
+        groupCounts.set(groupName, (groupCounts.get(groupName) || 0) + 1);
       }
     }
 
@@ -202,13 +202,8 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
     await repoDeleteProviderGroup(id);
     return { ok: true, data: undefined };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("default")) {
-      return {
-        ok: false,
-        error: "Cannot delete the default group",
-        errorCode: "CANNOT_DELETE_DEFAULT",
-      };
-    }
+    // The default-group case is handled by the explicit pre-check above; the
+    // repository's string-matched fallback is belt-and-suspenders only.
     logger.error("Failed to delete provider group:", error);
     return { ok: false, error: "Failed to delete provider group" };
   }

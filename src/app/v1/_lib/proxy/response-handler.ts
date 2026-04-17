@@ -19,6 +19,7 @@ import {
   calculateRequestCost,
   calculateRequestCostBreakdown,
   matchLongContextPricing,
+  sanitizeMultiplier,
 } from "@/lib/utils/cost-calculation";
 import { COST_SCALE, Decimal } from "@/lib/utils/currency";
 import { hasValidPriceData } from "@/lib/utils/price-data";
@@ -3237,6 +3238,9 @@ async function updateRequestCostFromUsage(
         .plus(breakdown.output)
         .plus(breakdown.cache_creation)
         .plus(breakdown.cache_read);
+      // Use the same sanitization rules as calculateRequestCost so that
+      // total === base_total * provider_multiplier * group_multiplier
+      // holds even when the caller passes NaN / Infinity / negative values.
       storedBreakdown = {
         input: String(breakdown.input),
         output: String(breakdown.output),
@@ -3245,8 +3249,8 @@ async function updateRequestCostFromUsage(
         cache_creation_1h: String(breakdown.cache_creation_1h),
         cache_read: String(breakdown.cache_read),
         base_total: baseTotal.toDecimalPlaces(COST_SCALE).toString(),
-        provider_multiplier: costMultiplier,
-        group_multiplier: groupCostMultiplier,
+        provider_multiplier: sanitizeMultiplier(costMultiplier),
+        group_multiplier: sanitizeMultiplier(groupCostMultiplier),
         total: cost.toString(),
       };
     } catch {

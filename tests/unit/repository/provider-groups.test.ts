@@ -158,6 +158,68 @@ describe("provider-groups repository", () => {
       // A new DB call must have been made.
       expect(selectMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
     });
+
+    it("resolves comma-separated groups by taking the first matching group", async () => {
+      // First lookup (for "premium") -> miss; second lookup (for "enterprise") -> hit
+      limitMock
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([fakeRow({ name: "enterprise", costMultiplier: "2.0000" })]);
+
+      const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
+        "@/repository/provider-groups"
+      );
+      invalidateGroupMultiplierCache();
+
+      const result = await getGroupCostMultiplier("premium,enterprise");
+      expect(result).toBe(2.0);
+    });
+
+    it("first matching group wins even if a later group also matches", async () => {
+      // "premium" matches first and should short-circuit before looking up "enterprise"
+      limitMock.mockResolvedValue([fakeRow({ name: "premium", costMultiplier: "1.5000" })]);
+
+      const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
+        "@/repository/provider-groups"
+      );
+      invalidateGroupMultiplierCache();
+
+      const result = await getGroupCostMultiplier("premium,enterprise");
+      expect(result).toBe(1.5);
+    });
+
+    it("falls back to 1.0 when no group in the comma list matches", async () => {
+      limitMock.mockResolvedValue([]);
+
+      const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
+        "@/repository/provider-groups"
+      );
+      invalidateGroupMultiplierCache();
+
+      const result = await getGroupCostMultiplier("ghost,unknown");
+      expect(result).toBe(1.0);
+    });
+
+    it("does not cache misses (fallback 1.0 is not persisted)", async () => {
+      // First call: miss, returns 1.0
+      limitMock.mockResolvedValue([]);
+
+      const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
+        "@/repository/provider-groups"
+      );
+      invalidateGroupMultiplierCache();
+
+      const first = await getGroupCostMultiplier("new-group");
+      expect(first).toBe(1.0);
+
+      const callsAfterFirst = selectMock.mock.calls.length;
+
+      // Second call: DB now has the row. Cache must NOT have returned the stale 1.0.
+      limitMock.mockResolvedValue([fakeRow({ name: "new-group", costMultiplier: "5.0000" })]);
+
+      const second = await getGroupCostMultiplier("new-group");
+      expect(second).toBe(5.0);
+      expect(selectMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    });
   });
 
   // -----------------------------------------------------------------------

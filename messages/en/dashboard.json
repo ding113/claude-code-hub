@@ -418,7 +418,10 @@
       "baseCost": "Base Cost",
       "providerMultiplier": "Provider Multiplier",
       "groupMultiplier": "Group Multiplier",
-      "baseTotal": "Base Total"
+      "baseTotal": "Base Total",
+      "unit": {
+        "tokens": "tokens"
+      }
     }
   },
   "leaderboard": {

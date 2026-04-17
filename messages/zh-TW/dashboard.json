@@ -418,7 +418,10 @@
       "baseCost": "基礎費用",
       "providerMultiplier": "供應商倍率",
       "groupMultiplier": "分組倍率",
-      "baseTotal": "基礎合計"
+      "baseTotal": "基礎合計",
+      "unit": {
+        "tokens": "tokens"
+      }
     }
   },
   "leaderboard": {
