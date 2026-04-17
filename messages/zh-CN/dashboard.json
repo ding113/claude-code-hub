@@ -779,6 +779,7 @@
     "usageLogs": "使用记录",
     "leaderboard": "排行榜",
     "availability": "可用性监控",
+    "systemStatus": "系统状态",
     "myQuota": "我的配额",
     "quotasManagement": "限额管理",
     "providers": "供应商管理",
@@ -1540,7 +1541,8 @@
         "disabled": "已禁用"
       },
       "actions": {
-        "addKey": "新增密钥"
+        "addKey": "新增密钥",
+        "addTemporaryKey": "创建临时 Key"
       }
     },
     "keyFullDisplay": {
@@ -1622,6 +1624,68 @@
     "dialog": {
       "createKeyTitle": "创建 Key",
       "editKeyTitle": "编辑 Key"
+    },
+    "temporaryKeys": {
+      "createDialog": {
+        "title": "批量生成临时 Key",
+        "description": "选择一个基础 Key，并按当前用户组批量生成临时 API Key。",
+        "baseKeyLabel": "基础 Key",
+        "baseKeyPlaceholder": "请选择基础 Key",
+        "baseKeyRequired": "请选择基础 Key",
+        "groupNameLabel": "用户组别",
+        "groupNamePlaceholder": "例如：渠道A-4月活动",
+        "quantityLabel": "生成数量",
+        "quantityDescription": "支持快捷生成 5 / 10 / 20 / 50 / 100，也可自定义数量。",
+        "customLimitLabel": "每个 Key 总额度 (USD)",
+        "customLimitPlaceholder": "留空则沿用基础 Key 的总额度配置",
+        "customLimitDescription": "仅覆写总额度，其余配置保持和基础 Key 一致。",
+        "baseKeyRequiredHint": "请选择一个基础 Key 后再生成。",
+        "baseKeyRequiredShort": "请选择基础 Key",
+        "submit": "立即生成",
+        "submitting": "生成中...",
+        "noKeys": "当前用户暂无可用的基础 Key",
+        "invalidCount": "请输入有效的生成数量",
+        "invalidLimit": "请输入有效的总额度",
+        "genericError": "批量生成失败"
+      },
+      "success": {
+        "title": "临时 Key 生成完成",
+        "description": "分组 {group} 已成功生成 {count} 个临时 Key，请立即下载保存完整密钥。",
+        "groupName": "用户组别",
+        "sourceKey": "基础 Key",
+        "previewTitle": "预览（前 5 条）",
+        "download": "下载纯 Key"
+      },
+      "listActions": {
+        "showMore": "展开其余 {count} 个",
+        "showLess": "收起"
+      },
+      "sections": {
+        "standard": {
+          "title": "常规 Key",
+          "description": "主业务 Key 管理区，保持原有逻辑不变。",
+          "empty": "暂无常规 Key"
+        },
+        "temporary": {
+          "title": "临时 Key",
+          "description": "额外的临时 CDKey 分组，按当前用户组批量创建、下载和删除。",
+          "empty": "暂无临时 Key 分组"
+        }
+      },
+      "groups": {
+        "title": "临时 Key 分组",
+        "groupBadge": "临时",
+        "count": "{count} 个 Key",
+        "download": "下载纯 Key",
+        "delete": "删除分组"
+      },
+      "toasts": {
+        "createSuccess": "已生成 {count} 个临时 Key",
+        "createFailed": "生成临时 Key 失败：{error}",
+        "deleteSuccess": "已删除分组 {group}（{count} 个 Key）",
+        "deleteFailed": "删除临时 Key 分组失败：{error}",
+        "downloadFailed": "下载临时 Key 失败：{error}"
+      }
     },
     "editDialog": {
       "title": "编辑用户",

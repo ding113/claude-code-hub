@@ -509,6 +509,8 @@ services:
       - ./.env
     environment:
       NODE_ENV: production
+      HOST: 0.0.0.0
+      HOSTNAME: 0.0.0.0
       PORT: \${APP_PORT:-${APP_PORT}}
       DSN: postgresql://\${DB_USER:-postgres}:\${DB_PASSWORD:-postgres}@claude-code-hub-db-${SUFFIX}:5432/\${DB_NAME:-claude_code_hub}
       REDIS_URL: redis://claude-code-hub-redis-${SUFFIX}:6379
@@ -531,7 +533,7 @@ EOF
     networks:
       - claude-code-hub-net-${SUFFIX}
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:\${APP_PORT:-${APP_PORT}}/api/actions/health || exit 1"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || \${APP_PORT:-${APP_PORT}}) + '/api/actions/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

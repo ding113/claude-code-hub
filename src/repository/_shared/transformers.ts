@@ -81,6 +81,7 @@ export function toKey(dbKey: any): Key {
     limitConcurrentSessions: dbKey?.limitConcurrentSessions ?? 0,
     providerGroup: dbKey?.providerGroup ?? null,
     cacheTtlPreference: dbKey?.cacheTtlPreference ?? null,
+    temporaryGroupName: dbKey?.temporaryGroupName ?? null,
     createdAt: dbKey?.createdAt ? new Date(dbKey.createdAt) : new Date(),
     updatedAt: dbKey?.updatedAt ? new Date(dbKey.updatedAt) : new Date(),
   };
