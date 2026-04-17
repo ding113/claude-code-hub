@@ -37,9 +37,8 @@ function hasCountryContent(country: IpGeoCountry): boolean {
  */
 export function hasLocationContent(result: IpGeoLookupResult): boolean {
   const { location, timezone } = result;
-  if (location.postal_code) return true;
+  if (location.postal_code && location.postal_code !== "-") return true;
   if (hasMeaningfulCoordinates(location.coordinates)) return true;
-  if (location.continent?.name) return true;
   if (timezone?.id) return true;
   if (hasCountryContent(location.country)) return true;
   return false;
@@ -61,7 +60,9 @@ export function LocationSection({ result }: { result: IpGeoLookupResult }) {
       ? `± ${location.coordinates.accuracy_radius_km} km`
       : null;
 
-  const hasPlace = !!location.postal_code || !!coords || !!location.continent?.name;
+  const postal = location.postal_code && location.postal_code !== "-" ? location.postal_code : null;
+
+  const hasPlace = !!postal || !!coords;
 
   const hasTimezone = !!timezone?.id;
 
@@ -78,9 +79,7 @@ export function LocationSection({ result }: { result: IpGeoLookupResult }) {
     >
       {hasPlace && (
         <div className="space-y-0.5">
-          {location.postal_code && (
-            <FieldRow label={t("fields.postalCode")} value={location.postal_code} mono />
-          )}
+          {postal && <FieldRow label={t("fields.postalCode")} value={postal} mono />}
           {coords && (
             <FieldRow
               label={t("fields.coordinates")}
@@ -88,21 +87,6 @@ export function LocationSection({ result }: { result: IpGeoLookupResult }) {
                 <span className="inline-flex flex-wrap items-baseline gap-x-2">
                   <span className="font-mono">{coords}</span>
                   {accuracy && <span className="text-xs text-muted-foreground">{accuracy}</span>}
-                </span>
-              }
-            />
-          )}
-          {location.continent?.name && (
-            <FieldRow
-              label={t("fields.continent")}
-              value={
-                <span className="inline-flex items-baseline gap-1.5">
-                  <span>{location.continent.name}</span>
-                  {location.continent.code && (
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {location.continent.code}
-                    </span>
-                  )}
                 </span>
               }
             />
@@ -154,7 +138,7 @@ export function LocationSection({ result }: { result: IpGeoLookupResult }) {
       )}
 
       {showCountrySubCard && (
-        <SubCard title={t("sections.country")}>
+        <SubCard title={t("sections.country")} collapsible defaultOpen={false}>
           <div className="space-y-0.5">
             {nativeSuffix && <FieldRow label={t("fields.countryNative")} value={nativeSuffix} />}
             {country.capital && <FieldRow label={t("fields.capital")} value={country.capital} />}

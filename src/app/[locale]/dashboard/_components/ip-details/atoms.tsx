@@ -216,20 +216,49 @@ export function SubCard({
   icon,
   children,
   className,
+  collapsible = false,
+  defaultOpen = true,
 }: {
   title: string;
   icon?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
-  return (
-    <div className={cn("rounded-lg border bg-muted/30 px-3 py-2.5 dark:bg-muted/20", className)}>
-      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {icon}
-        <span>{title}</span>
+  if (!collapsible) {
+    return (
+      <div className={cn("rounded-lg border bg-muted/30 px-3 py-2.5 dark:bg-muted/20", className)}>
+        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {icon}
+          <span>{title}</span>
+        </div>
+        <div>{children}</div>
       </div>
-      <div>{children}</div>
-    </div>
+    );
+  }
+
+  return (
+    <Collapsible
+      defaultOpen={defaultOpen}
+      className={cn("group/subcard rounded-lg border bg-muted/30 dark:bg-muted/20", className)}
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/50"
+        >
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {icon}
+            <span>{title}</span>
+          </div>
+          <ChevronDown className="size-3.5 text-muted-foreground transition-transform group-data-[state=closed]/subcard:-rotate-90" />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-3 pb-2.5">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

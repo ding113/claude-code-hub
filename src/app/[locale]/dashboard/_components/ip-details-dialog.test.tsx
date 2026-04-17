@@ -437,10 +437,11 @@ describe("IpDetailsDialog: full-data rendering", () => {
     // Company sub-card
     expect(text).toContain(ipDetailsMessages.sections.company);
 
-    // Country sub-card basics
-    expect(text).toContain("Washington, D.C.");
-    expect(text).toContain("+1");
-    expect(text).toContain(".us");
+    // Country sub-card is collapsed by default (trivia like capital,
+    // calling code, and TLD should not render until the user expands it).
+    expect(text).toContain(ipDetailsMessages.sections.country);
+    expect(text).not.toContain("Washington, D.C.");
+    expect(text).not.toContain(".us");
 
     // Abuse section with phone + address
     expect(text).toContain("network-abuse@google.com");
