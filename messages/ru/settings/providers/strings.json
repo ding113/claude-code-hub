@@ -47,6 +47,7 @@
   "viewMode": "Режим просмотра",
   "viewModeList": "Список",
   "viewModeVendor": "Вендор",
+  "viewModeGroups": "Группы",
   "endpoints": "Эндпоинты",
   "manualProbe": "Проверка",
   "addEndpoint": "Добавить эндпоинт",

@@ -50,6 +50,7 @@ vi.mock("@/repository/system-config", () => ({
 
 vi.mock("@/repository/message", () => ({
   updateMessageRequestCost: vi.fn(),
+  updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
@@ -178,6 +179,7 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
     endpointPolicy: resolveEndpointPolicy("/v1/messages"),
     isHeaderModified: () => false,
     getContext1mApplied: () => false,
+    getGroupCostMultiplier: () => 1,
     getOriginalModel: () => "test-model",
     getCurrentModel: () => "test-model",
     getProviderChain: () => session.providerChain,

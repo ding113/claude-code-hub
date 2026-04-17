@@ -88,6 +88,7 @@ function createSession(
     clientRequestsContext1m: vi.fn(() => false),
     setContext1mApplied: vi.fn(),
     getContext1mApplied: vi.fn(() => false),
+    getGroupCostMultiplier: vi.fn(() => 1),
     getEndpointPolicy: vi.fn(() => resolveEndpointPolicy(pathname)),
     isHeaderModified: vi.fn(() => false),
   });

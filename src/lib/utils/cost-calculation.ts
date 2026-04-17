@@ -33,12 +33,16 @@ export interface ResolvedLongContextPricing {
 
 export interface RequestCostCalculationOptions {
   multiplier?: number;
+  groupMultiplier?: number;
   context1mApplied?: boolean;
   priorityServiceTierApplied?: boolean;
   longContextPricing?: ResolvedLongContextPricing | null;
 }
 
-type RequestCostBreakdownOptions = Omit<RequestCostCalculationOptions, "multiplier">;
+type RequestCostBreakdownOptions = Omit<
+  RequestCostCalculationOptions,
+  "multiplier" | "groupMultiplier"
+>;
 
 export interface LongContextPricingMatch {
   thresholdTokens: number;
@@ -290,6 +294,23 @@ export function resolveLongContextPricing(
   };
 }
 
+/**
+ * Clamp a multiplier to a safe value. NaN, Infinity, or negative inputs fall
+ * back to the provided default (1.0). Prevents poisoned multipliers from
+ * propagating into Decimal arithmetic and cost storage.
+ *
+ * Exported so callers that persist multipliers alongside a cost value
+ * (e.g. cost breakdown storage) can apply the same sanitization rules used
+ * inside `calculateRequestCost`, ensuring
+ * `total === base_total * provider_multiplier * group_multiplier`.
+ */
+export function sanitizeMultiplier(value: number | undefined, fallback: number = 1.0): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return fallback;
+  }
+  return value;
+}
+
 function normalizeRequestCostOptions(
   multiplierOrOptions: number | RequestCostCalculationOptions = 1.0,
   context1mApplied: boolean = false,
@@ -297,7 +318,8 @@ function normalizeRequestCostOptions(
 ): Required<RequestCostCalculationOptions> {
   if (typeof multiplierOrOptions === "object" && multiplierOrOptions !== null) {
     return {
-      multiplier: multiplierOrOptions.multiplier ?? 1.0,
+      multiplier: sanitizeMultiplier(multiplierOrOptions.multiplier),
+      groupMultiplier: sanitizeMultiplier(multiplierOrOptions.groupMultiplier),
       context1mApplied: multiplierOrOptions.context1mApplied ?? false,
       priorityServiceTierApplied: multiplierOrOptions.priorityServiceTierApplied ?? false,
       longContextPricing: multiplierOrOptions.longContextPricing ?? null,
@@ -305,7 +327,8 @@ function normalizeRequestCostOptions(
   }
 
   return {
-    multiplier: multiplierOrOptions,
+    multiplier: sanitizeMultiplier(multiplierOrOptions),
+    groupMultiplier: 1.0,
     context1mApplied,
     priorityServiceTierApplied,
     longContextPricing: null,
@@ -392,7 +415,12 @@ export function matchLongContextPricing(
 export interface CostBreakdown {
   input: number;
   output: number;
+  /** Aggregate of 5m + 1h cache creation cost (kept for Langfuse back-compat). */
   cache_creation: number;
+  /** Cache creation cost for 5-minute TTL tokens only. */
+  cache_creation_5m: number;
+  /** Cache creation cost for 1-hour TTL tokens only. */
+  cache_creation_1h: number;
   cache_read: number;
   total: number;
 }
@@ -413,7 +441,8 @@ export function calculateRequestCostBreakdown(
   );
   let inputBucket = new Decimal(0);
   let outputBucket = new Decimal(0);
-  let cacheCreationBucket = new Decimal(0);
+  let cacheCreation5mBucket = new Decimal(0);
+  let cacheCreation1hBucket = new Decimal(0);
   let cacheReadBucket = new Decimal(0);
 
   const baseInputCostPerToken = priceData.input_cost_per_token;
@@ -584,13 +613,13 @@ export function calculateRequestCostBreakdown(
 
   // Cache costs
 
-  // Cache creation 5m -> cache_creation bucket
+  // Cache creation 5m -> cache_creation_5m bucket
   if (
     longContextPricing &&
     longContextPricing.cacheCreationInputTokenCost != null &&
     cache5mTokens != null
   ) {
-    cacheCreationBucket = cacheCreationBucket.add(
+    cacheCreation5mBucket = cacheCreation5mBucket.add(
       multiplyCost(cache5mTokens, longContextPricing.cacheCreationInputTokenCost)
     );
   } else if (
@@ -599,7 +628,7 @@ export function calculateRequestCostBreakdown(
     cacheCreationAboveThreshold != null &&
     cache5mTokens != null
   ) {
-    cacheCreationBucket = cacheCreationBucket.add(
+    cacheCreation5mBucket = cacheCreation5mBucket.add(
       multiplyCost(cache5mTokens, cacheCreationAboveThreshold)
     );
   } else if (
@@ -609,20 +638,22 @@ export function calculateRequestCostBreakdown(
     cacheCreation5mCost != null &&
     cache5mTokens != null
   ) {
-    cacheCreationBucket = cacheCreationBucket.add(
+    cacheCreation5mBucket = cacheCreation5mBucket.add(
       multiplyCost(cache5mTokens, cacheCreation5mCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
-    cacheCreationBucket = cacheCreationBucket.add(multiplyCost(cache5mTokens, cacheCreation5mCost));
+    cacheCreation5mBucket = cacheCreation5mBucket.add(
+      multiplyCost(cache5mTokens, cacheCreation5mCost)
+    );
   }
 
-  // Cache creation 1h -> cache_creation bucket
+  // Cache creation 1h -> cache_creation_1h bucket
   if (
     longContextPricing &&
     longContextPricing.cacheCreationInputTokenCostAbove1hr != null &&
     cache1hTokens != null
   ) {
-    cacheCreationBucket = cacheCreationBucket.add(
+    cacheCreation1hBucket = cacheCreation1hBucket.add(
       multiplyCost(cache1hTokens, longContextPricing.cacheCreationInputTokenCostAbove1hr)
     );
   } else if (
@@ -631,7 +662,7 @@ export function calculateRequestCostBreakdown(
     cacheCreation1hAboveThreshold != null &&
     cache1hTokens != null
   ) {
-    cacheCreationBucket = cacheCreationBucket.add(
+    cacheCreation1hBucket = cacheCreation1hBucket.add(
       multiplyCost(cache1hTokens, cacheCreation1hAboveThreshold)
     );
   } else if (
@@ -641,11 +672,13 @@ export function calculateRequestCostBreakdown(
     cacheCreation1hCost != null &&
     cache1hTokens != null
   ) {
-    cacheCreationBucket = cacheCreationBucket.add(
+    cacheCreation1hBucket = cacheCreation1hBucket.add(
       multiplyCost(cache1hTokens, cacheCreation1hCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
-    cacheCreationBucket = cacheCreationBucket.add(multiplyCost(cache1hTokens, cacheCreation1hCost));
+    cacheCreation1hBucket = cacheCreation1hBucket.add(
+      multiplyCost(cache1hTokens, cacheCreation1hCost)
+    );
   }
 
   // Cache read -> cache_read bucket
@@ -685,12 +718,15 @@ export function calculateRequestCostBreakdown(
     inputBucket = inputBucket.add(multiplyCost(usage.input_image_tokens, imageCostPerToken));
   }
 
+  const cacheCreationBucket = cacheCreation5mBucket.add(cacheCreation1hBucket);
   const total = inputBucket.add(outputBucket).add(cacheCreationBucket).add(cacheReadBucket);
 
   return {
     input: inputBucket.toDecimalPlaces(COST_SCALE).toNumber(),
     output: outputBucket.toDecimalPlaces(COST_SCALE).toNumber(),
     cache_creation: cacheCreationBucket.toDecimalPlaces(COST_SCALE).toNumber(),
+    cache_creation_5m: cacheCreation5mBucket.toDecimalPlaces(COST_SCALE).toNumber(),
+    cache_creation_1h: cacheCreation1hBucket.toDecimalPlaces(COST_SCALE).toNumber(),
     cache_read: cacheReadBucket.toDecimalPlaces(COST_SCALE).toNumber(),
     total: total.toDecimalPlaces(COST_SCALE).toNumber(),
   };
@@ -976,7 +1012,8 @@ export function calculateRequestCost(
 
   const total = segments.reduce((acc, segment) => acc.plus(segment), new Decimal(0));
 
-  // 应用倍率
+  // Apply provider and group multipliers
   const multiplierDecimal = new Decimal(options.multiplier);
-  return total.mul(multiplierDecimal).toDecimalPlaces(COST_SCALE);
+  const groupMultiplierDecimal = new Decimal(options.groupMultiplier);
+  return total.mul(multiplierDecimal).mul(groupMultiplierDecimal).toDecimalPlaces(COST_SCALE);
 }

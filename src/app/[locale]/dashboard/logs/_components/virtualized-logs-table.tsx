@@ -812,6 +812,8 @@ export function VirtualizedLogsTable({
                         swapCacheTtlApplied={log.swapCacheTtlApplied}
                         costUsd={log.costUsd}
                         costMultiplier={log.costMultiplier}
+                        groupCostMultiplier={log.groupCostMultiplier}
+                        costBreakdown={log.costBreakdown}
                         context1mApplied={log.context1mApplied}
                         durationMs={log.durationMs}
                         ttfbMs={log.ttfbMs}

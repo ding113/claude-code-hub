@@ -300,6 +300,13 @@
           "priority_fallback": "優先フォールバック価格",
           "single_provider_top_level": "トップレベル単一プロバイダー価格",
           "official_fallback": "公式価格"
+        },
+        "baseCost": "基本コスト",
+        "providerMultiplier": "プロバイダー倍率",
+        "groupMultiplier": "グループ倍率",
+        "baseTotal": "基本合計",
+        "unit": {
+          "tokens": "トークン"
         }
       },
       "performance": {
@@ -407,6 +414,13 @@
         "priority_fallback": "優先フォールバック価格",
         "single_provider_top_level": "トップレベル単一プロバイダー価格",
         "official_fallback": "公式価格"
+      },
+      "baseCost": "基本コスト",
+      "providerMultiplier": "プロバイダー倍率",
+      "groupMultiplier": "グループ倍率",
+      "baseTotal": "基本合計",
+      "unit": {
+        "tokens": "トークン"
       }
     }
   },

@@ -9,6 +9,7 @@ import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
+import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
@@ -211,6 +212,26 @@ export class ProxyProviderResolver {
       );
       session.setProvider(provider);
       session.setLastSelectionContext(context); // 保存用于后续记录
+    }
+
+    // === Resolve group cost multiplier ===
+    // Fail soft: if the lookup throws (Redis/DB hiccup), fall back to 1.0 so
+    // request handling proceeds without billing disruption.
+    const effectiveGroup = getEffectiveProviderGroup(session);
+    if (effectiveGroup) {
+      try {
+        const multiplier = await getGroupCostMultiplier(effectiveGroup);
+        session.setGroupCostMultiplier(multiplier);
+      } catch (error) {
+        logger.warn(
+          "[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0",
+          {
+            effectiveGroup,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+        session.setGroupCostMultiplier(1.0);
+      }
     }
 
     // === 故障转移循环 ===

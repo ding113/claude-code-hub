@@ -300,6 +300,13 @@
           "priority_fallback": "Priority provider fallback pricing",
           "single_provider_top_level": "Top-level single-provider pricing",
           "official_fallback": "Official pricing"
+        },
+        "baseCost": "Base Cost",
+        "providerMultiplier": "Provider Multiplier",
+        "groupMultiplier": "Group Multiplier",
+        "baseTotal": "Base Total",
+        "unit": {
+          "tokens": "tokens"
         }
       },
       "performance": {
@@ -407,6 +414,13 @@
         "priority_fallback": "Priority provider fallback pricing",
         "single_provider_top_level": "Top-level single-provider pricing",
         "official_fallback": "Official pricing"
+      },
+      "baseCost": "Base Cost",
+      "providerMultiplier": "Provider Multiplier",
+      "groupMultiplier": "Group Multiplier",
+      "baseTotal": "Base Total",
+      "unit": {
+        "tokens": "tokens"
       }
     }
   },

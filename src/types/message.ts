@@ -300,6 +300,9 @@ export interface CreateMessageRequestData {
   // 供应商倍率（记录该请求使用的 cost_multiplier）
   cost_multiplier?: number;
 
+  // 供应商分组倍率（记录该请求使用的 group_cost_multiplier）
+  group_cost_multiplier?: number;
+
   // Session ID（用于会话粘性和日志追踪）
   session_id?: string;
 

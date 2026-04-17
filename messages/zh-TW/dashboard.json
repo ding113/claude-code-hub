@@ -300,6 +300,13 @@
           "priority_fallback": "優先級回退價格",
           "single_provider_top_level": "頂層單供應商價格",
           "official_fallback": "官方價格"
+        },
+        "baseCost": "基礎費用",
+        "providerMultiplier": "供應商倍率",
+        "groupMultiplier": "分組倍率",
+        "baseTotal": "基礎合計",
+        "unit": {
+          "tokens": "tokens"
         }
       },
       "performance": {
@@ -407,6 +414,13 @@
         "priority_fallback": "優先級回退價格",
         "single_provider_top_level": "頂層單供應商價格",
         "official_fallback": "官方價格"
+      },
+      "baseCost": "基礎費用",
+      "providerMultiplier": "供應商倍率",
+      "groupMultiplier": "分組倍率",
+      "baseTotal": "基礎合計",
+      "unit": {
+        "tokens": "tokens"
       }
     }
   },

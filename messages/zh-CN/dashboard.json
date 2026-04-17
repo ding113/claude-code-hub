@@ -300,6 +300,13 @@
           "priority_fallback": "优先级回退价格",
           "single_provider_top_level": "顶层单提供商价格",
           "official_fallback": "官方价格"
+        },
+        "baseCost": "基础费用",
+        "providerMultiplier": "供应商倍率",
+        "groupMultiplier": "分组倍率",
+        "baseTotal": "基础合计",
+        "unit": {
+          "tokens": "tokens"
         }
       },
       "performance": {
@@ -407,6 +414,13 @@
         "priority_fallback": "优先级回退价格",
         "single_provider_top_level": "顶层单提供商价格",
         "official_fallback": "官方价格"
+      },
+      "baseCost": "基础费用",
+      "providerMultiplier": "供应商倍率",
+      "groupMultiplier": "分组倍率",
+      "baseTotal": "基础合计",
+      "unit": {
+        "tokens": "tokens"
       }
     }
   },

@@ -73,6 +73,8 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     totalTokens: 2,
     costUsd: "0.01",
     costMultiplier: null,
+    groupCostMultiplier: null,
+    costBreakdown: null,
     durationMs: 100,
     ttfbMs: 50,
     errorMessage: null,
