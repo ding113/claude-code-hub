@@ -89,6 +89,8 @@
     "siteTitleDesc": "Used to set browser tab title and system default display name.",
     "siteTitlePlaceholder": "e.g. Claude Code Hub",
     "siteTitleRequired": "Site title cannot be empty",
+    "ipLoggingInvalidJson": "IP extraction config is not valid JSON: {message}",
+    "ipLoggingInvalidShape": "IP extraction config must be an object with a `headers` array.",
     "verboseProviderError": "Verbose Provider Error",
     "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
     "timezoneLabel": "System Timezone",
@@ -116,6 +118,15 @@
         "leaseCapZero": "Lease cap is 0. This may cause the per-lease budget to be 0."
       }
     }
+  },
+  "ipLogging": {
+    "title": "IP logging & extraction",
+    "description": "Configure which request headers are consulted to determine the client IP, and whether IP geolocation lookup is enabled.",
+    "geoLookup": "Enable IP geolocation lookup",
+    "geoLookupHint": "When enabled, the dashboard will resolve IP addresses to country / city / ASN via the configured IP geolocation service.",
+    "extractionConfigLabel": "Header extraction chain (JSON)",
+    "extractionConfigHint": "Leave empty to use the safe built-in default: x-real-ip → x-forwarded-for (rightmost). If fronted by Cloudflare or a CDN that strips client-supplied headers, add its header explicitly (example: `{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`). Each entry has `name` and optional `pick` (\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}).",
+    "resetToDefault": "Reset to default"
   },
   "section": {
     "autoCleanup": {

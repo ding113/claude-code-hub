@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger, users as usersTable } from "@/drizzle/schema";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -1096,6 +1097,44 @@ export async function batchUpdateUsers(
   }
 }
 
+// Audit snapshot helper: never throws, logs and returns null on failure.
+async function safeFindUser(userId: number): Promise<Awaited<ReturnType<typeof findUserById>>> {
+  try {
+    return await findUserById(userId);
+  } catch (error) {
+    logger.warn("[Audit] failed to snapshot user for audit", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Shared `user.create` audit emit. Called from both `addUser` (which also
+ * issues a default key) and `createUserOnly` (unified edit-dialog create
+ * path) so every user-creation flow produces an audit row with the full
+ * post-creation snapshot.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: the repository's createUser
+// return type is wider than the action-side User type; we pass it straight
+// to the audit emitter which redacts & serializes unknown fields.
+function emitUserCreateAudit(user: any): void {
+  emitActionAudit({
+    category: "user",
+    action: "user.create",
+    targetType: "user",
+    targetId: String(user.id),
+    targetName: user.name,
+    // Full user record — the redactor strips sensitive fields; everything
+    // else (id, name, role, isEnabled, expiresAt, providerGroup, tags,
+    // quota fields, allowed/blocked clients & models, …) is preserved so
+    // the audit captures the complete post-creation state.
+    after: user,
+    success: true,
+  });
+}
+
 // 添加用户
 export async function addUser(data: {
   name: string;
@@ -1251,6 +1290,7 @@ export async function addUser(data: {
     });
 
     revalidatePath("/dashboard");
+    emitUserCreateAudit(newUser);
     return {
       ok: true,
       data: {
@@ -1283,6 +1323,14 @@ export async function addUser(data: {
     logger.error("Failed to create user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.create",
+      targetType: "user",
+      targetName: data.name,
+      success: false,
+      errorMessage: "CREATE_FAILED",
+    });
     return {
       ok: false,
       error: message,
@@ -1427,6 +1475,7 @@ export async function createUserOnly(data: {
     });
 
     revalidatePath("/dashboard");
+    emitUserCreateAudit(newUser);
     return {
       ok: true,
       data: {
@@ -1453,6 +1502,14 @@ export async function createUserOnly(data: {
     logger.error("Failed to create user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.create",
+      targetType: "user",
+      targetName: data.name,
+      success: false,
+      errorMessage: "CREATE_FAILED",
+    });
     return {
       ok: false,
       error: message,
@@ -1485,6 +1542,12 @@ export async function editUser(
     allowedModels?: string[];
   }
 ): Promise<ActionResult> {
+  // Snapshot operator-visible state BEFORE entering the try block so failure
+  // audit events also carry `before` context (target name / previous values).
+  // `safeFindUser` never throws — it catches internally and returns null —
+  // which is why we can hoist it above the try/catch boundary safely.
+  const beforeUser = await safeFindUser(userId);
+
   try {
     // Get translations for error messages
     const tError = await getTranslations("errors");
@@ -1589,11 +1652,37 @@ export async function editUser(
     // 用户分组由 Key 分组自动计算，不再需要级联更新 Key 的 providerGroup
 
     revalidatePath("/dashboard");
+    const afterUser = await safeFindUser(userId);
+    emitActionAudit({
+      category: "user",
+      action: "user.update",
+      targetType: "user",
+      targetId: String(userId),
+      targetName: afterUser?.name ?? beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      after: afterUser ?? validatedData,
+      success: true,
+    });
     return { ok: true };
   } catch (error) {
     logger.error("Failed to update user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.update",
+      targetType: "user",
+      targetId: String(userId),
+      // Include before-snapshot (captured above the try block) so the audit
+      // row has context even when the update itself failed.
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      success: false,
+      // Stable code only — `error.message` from `updateUser` can carry raw pg
+      // errors (duplicate key values, constraint names) which we don't want
+      // to persist into an audit row that operators read.
+      errorMessage: "UPDATE_FAILED",
+    });
     return {
       ok: false,
       error: message,
@@ -1605,6 +1694,9 @@ export async function editUser(
 // 删除用户
 // Ledger rows intentionally survive user deletion (billing audit trail)
 export async function removeUser(userId: number): Promise<ActionResult> {
+  // Hoisted above try/catch so the failure emit also carries before-snapshot.
+  const beforeUser = await safeFindUser(userId);
+
   try {
     // Get translations for error messages
     const tError = await getTranslations("errors");
@@ -1620,11 +1712,30 @@ export async function removeUser(userId: number): Promise<ActionResult> {
 
     await deleteUser(userId);
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "user",
+      action: "user.delete",
+      targetType: "user",
+      targetId: String(userId),
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      success: true,
+    });
     return { ok: true };
   } catch (error) {
     logger.error("Failed to delete user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("DELETE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.delete",
+      targetType: "user",
+      targetId: String(userId),
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      success: false,
+      errorMessage: "DELETE_FAILED",
+    });
     return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }

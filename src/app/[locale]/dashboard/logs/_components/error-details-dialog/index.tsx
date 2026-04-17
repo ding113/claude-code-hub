@@ -26,6 +26,7 @@ interface ErrorDetailsDialogProps {
   originalModel?: string | null;
   currentModel?: string | null;
   userAgent?: string | null;
+  clientIp?: string | null;
   messagesCount?: number | null;
   endpoint?: string | null;
   billingModelSource?: BillingModelSource;
@@ -67,6 +68,7 @@ export function ErrorDetailsDialog({
   originalModel,
   currentModel,
   userAgent,
+  clientIp,
   messagesCount,
   endpoint,
   billingModelSource = "original",
@@ -213,6 +215,7 @@ export function ErrorDetailsDialog({
     originalModel,
     currentModel,
     userAgent,
+    clientIp,
     messagesCount,
     endpoint,
     billingModelSource,

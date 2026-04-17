@@ -1003,6 +1003,23 @@ export const UpdateSystemSettingsSchema = z.object({
     .max(1, "Lease percent cannot exceed 1")
     .optional(),
   quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
+
+  // 客户端 IP 提取链（可选；null 表示使用内置默认）
+  ipExtractionConfig: z
+    .union([
+      z.null(),
+      z.object({
+        headers: z.array(
+          z.object({
+            name: z.string(),
+            pick: z.any().optional(),
+          })
+        ),
+      }),
+    ])
+    .optional(),
+  // 是否启用 IP 归属地查询（可选）
+  ipGeoLookupEnabled: z.boolean().optional(),
 });
 
 // 导出类型推断

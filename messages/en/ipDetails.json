@@ -1,0 +1,50 @@
+{
+  "description": "Full geolocation & network info for this IP.",
+  "loading": "Looking up…",
+  "error": "IP lookup unavailable.",
+  "privateIp": "Private / LAN",
+  "privateIpNote": "This address is not routable on the public internet.",
+  "yes": "Yes",
+  "no": "No",
+  "sections": {
+    "location": "Location",
+    "network": "Network",
+    "privacyThreat": "Privacy & threat",
+    "abuse": "Abuse contact"
+  },
+  "fields": {
+    "country": "Country",
+    "region": "Region",
+    "city": "City",
+    "postalCode": "Postal code",
+    "coordinates": "Coordinates",
+    "timezone": "Timezone",
+    "asn": "ASN",
+    "organization": "Organization",
+    "route": "Route",
+    "type": "Type",
+    "subtype": "Subtype",
+    "rir": "RIR",
+    "anycast": "Anycast",
+    "hostname": "Hostname",
+    "riskLevel": "Risk level",
+    "score": "score",
+    "riskLevels": {
+      "none": "None",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    },
+    "abuseContact": "Abuse contact",
+    "email": "Email"
+  },
+  "badges": {
+    "vpn": "VPN",
+    "proxy": "Proxy",
+    "tor": "Tor",
+    "relay": "Relay",
+    "threat": "Threat",
+    "clean": "Clean"
+  }
+}

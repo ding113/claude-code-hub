@@ -1,0 +1,51 @@
+{
+  "title": "Журнал аудита",
+  "description": "Каждый вход и каждое административное изменение — с IP оператора, User-Agent и снимками до и после.",
+  "filters": {
+    "category": "Категория",
+    "success": "Статус",
+    "all": "Все",
+    "succeeded": "Успех",
+    "failed": "Ошибка",
+    "allCategories": "Все категории"
+  },
+  "categories": {
+    "auth": "Аутентификация",
+    "user": "Пользователи",
+    "provider": "Провайдеры",
+    "provider_group": "Группы провайдеров",
+    "system_settings": "Системные настройки",
+    "key": "Ключи",
+    "notification": "Уведомления",
+    "sensitive_word": "Запрещённые слова",
+    "model_price": "Цены моделей"
+  },
+  "columns": {
+    "time": "Время",
+    "category": "Категория",
+    "action": "Действие",
+    "operator": "Оператор",
+    "ip": "IP",
+    "target": "Объект",
+    "status": "Статус"
+  },
+  "detail": {
+    "title": "Запись аудита",
+    "before": "До",
+    "after": "После",
+    "errorMessage": "Ошибка",
+    "noChange": "Снимок не сохранён",
+    "userAgent": "User-Agent",
+    "keyLabel": "ключ: {name}",
+    "userIdLabel": "ID пользователя: {id}",
+    "targetIdLabel": "ID: {id}"
+  },
+  "adminTokenOperator": "Admin Token",
+  "loadError": "Не удалось загрузить записи аудита.",
+  "errors": {
+    "unauthorized": "Требуются права администратора.",
+    "listFailed": "Не удалось получить список записей аудита.",
+    "detailFailed": "Не удалось загрузить детали записи аудита."
+  },
+  "empty": "По выбранным фильтрам записей аудита нет."
+}

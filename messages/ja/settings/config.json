@@ -89,6 +89,8 @@
     "siteTitleDesc": "ブラウザタブのタイトルとシステムのデフォルト表示名を設定するために使用されます。",
     "siteTitlePlaceholder": "例：Claude Code Hub",
     "siteTitleRequired": "サイトタイトルは空にできません",
+    "ipLoggingInvalidJson": "IP 抽出設定が有効な JSON ではありません：{message}",
+    "ipLoggingInvalidShape": "IP 抽出設定は `headers` 配列を持つオブジェクトである必要があります。",
     "verboseProviderError": "詳細なプロバイダーエラー",
     "verboseProviderErrorDesc": "有効にすると、すべてのプロバイダーが利用不可の場合に詳細なエラーメッセージ（プロバイダー数、レート制限の理由など）を返します。無効の場合は簡潔なエラーコードのみを返します。",
     "timezoneLabel": "システムタイムゾーン",
@@ -116,6 +118,15 @@
         "leaseCapZero": "上限が 0 です。リースごとの予算が 0 になる可能性があります。"
       }
     }
+  },
+  "ipLogging": {
+    "title": "IP ログと抽出",
+    "description": "クライアント IP を特定する際に参照するリクエストヘッダー、および IP 地理情報照会の有効化を設定します。",
+    "geoLookup": "IP 地理情報照会を有効化",
+    "geoLookupHint": "有効にすると、ダッシュボードは設定済みの IP 地理情報サービスを用いて IP を国・都市・ASN に解決します。",
+    "extractionConfigLabel": "ヘッダー抽出チェーン（JSON）",
+    "extractionConfigHint": "空の場合は安全な組み込み既定（x-real-ip → x-forwarded-for の最右値）を使用します。Cloudflare や同等の CDN 経由の場合は、そのヘッダーを明示的に追加してください（例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。各項目には `name` と任意の `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）を含められます。",
+    "resetToDefault": "既定に戻す"
   },
   "section": {
     "autoCleanup": {

@@ -1,0 +1,51 @@
+{
+  "title": "稽核日誌",
+  "description": "記錄每一次登入與管理員變更操作，包含操作者 IP、User-Agent 以及變更前後的快照。",
+  "filters": {
+    "category": "分類",
+    "success": "狀態",
+    "all": "全部",
+    "succeeded": "成功",
+    "failed": "失敗",
+    "allCategories": "全部分類"
+  },
+  "categories": {
+    "auth": "登入認證",
+    "user": "使用者",
+    "provider": "供應商",
+    "provider_group": "供應商分組",
+    "system_settings": "系統設定",
+    "key": "金鑰",
+    "notification": "通知",
+    "sensitive_word": "敏感詞",
+    "model_price": "模型價格"
+  },
+  "columns": {
+    "time": "時間",
+    "category": "分類",
+    "action": "操作",
+    "operator": "操作者",
+    "ip": "IP",
+    "target": "目標",
+    "status": "狀態"
+  },
+  "detail": {
+    "title": "稽核詳情",
+    "before": "變更前",
+    "after": "變更後",
+    "errorMessage": "錯誤訊息",
+    "noChange": "未記錄快照",
+    "userAgent": "User-Agent",
+    "keyLabel": "金鑰：{name}",
+    "userIdLabel": "使用者 ID：{id}",
+    "targetIdLabel": "ID：{id}"
+  },
+  "adminTokenOperator": "Admin Token",
+  "loadError": "載入稽核記錄失敗。",
+  "errors": {
+    "unauthorized": "需要管理員權限。",
+    "listFailed": "取得稽核日誌清單失敗。",
+    "detailFailed": "取得稽核日誌詳情失敗。"
+  },
+  "empty": "目前篩選條件下沒有稽核記錄。"
+}

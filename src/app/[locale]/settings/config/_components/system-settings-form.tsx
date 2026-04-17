@@ -7,6 +7,7 @@ import {
   Eye,
   FileCode,
   Globe,
+  MapPin,
   Network,
   Pencil,
   Terminal,
@@ -32,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
@@ -41,6 +43,7 @@ import {
   shouldWarnQuotaLeaseCapZero,
   shouldWarnQuotaLeasePercentZero,
 } from "@/lib/utils/validation/quota-lease-warnings";
+import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   BillingModelSource,
   CodexPriorityBillingSource,
@@ -74,6 +77,8 @@ interface SystemSettingsFormProps {
     | "quotaLeasePercentWeekly"
     | "quotaLeasePercentMonthly"
     | "quotaLeaseCapUsd"
+    | "ipGeoLookupEnabled"
+    | "ipExtractionConfig"
   >;
 }
 
@@ -88,6 +93,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const router = useRouter();
   const t = useTranslations("settings.config.form");
   const tCommon = useTranslations("settings.common");
+  const tIpLogging = useTranslations("settings.config.ipLogging");
   const [siteTitle, setSiteTitle] = useState(initialSettings.siteTitle);
   const [allowGlobalUsageView, setAllowGlobalUsageView] = useState(
     initialSettings.allowGlobalUsageView
@@ -159,6 +165,14 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [quotaLeaseCapUsd, setQuotaLeaseCapUsd] = useState<string>(
     initialSettings.quotaLeaseCapUsd != null ? String(initialSettings.quotaLeaseCapUsd) : ""
   );
+  const [ipGeoLookupEnabled, setIpGeoLookupEnabled] = useState(
+    initialSettings.ipGeoLookupEnabled ?? true
+  );
+  const [ipExtractionConfigText, setIpExtractionConfigText] = useState<string>(
+    initialSettings.ipExtractionConfig
+      ? JSON.stringify(initialSettings.ipExtractionConfig, null, 2)
+      : ""
+  );
   const [isPending, startTransition] = useTransition();
   const [responseFixerOpen, setResponseFixerOpen] = useState(false);
   const [quotaLeaseOpen, setQuotaLeaseOpen] = useState(false);
@@ -174,6 +188,34 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     const quotaDbRefreshIntervalSecondsToSave = clampQuotaDbRefreshIntervalSeconds(
       quotaDbRefreshIntervalSecondsStr
     );
+
+    // Parse the IP extraction config textarea. Empty -> null (server uses default).
+    // Invalid JSON or wrong shape: surface the error and abort the save so the
+    // user doesn't unintentionally revert to defaults.
+    let ipExtractionConfigToSave: IpExtractionConfig | null = null;
+    const trimmedIpExtractionConfig = ipExtractionConfigText.trim();
+    if (trimmedIpExtractionConfig) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmedIpExtractionConfig);
+      } catch (error) {
+        toast.error(
+          t("ipLoggingInvalidJson", {
+            message: error instanceof Error ? error.message : String(error),
+          })
+        );
+        return;
+      }
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        !Array.isArray((parsed as { headers?: unknown }).headers)
+      ) {
+        toast.error(t("ipLoggingInvalidShape"));
+        return;
+      }
+      ipExtractionConfigToSave = parsed as IpExtractionConfig;
+    }
 
     startTransition(async () => {
       const result = await saveSystemSettings({
@@ -201,6 +243,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         quotaLeasePercentWeekly,
         quotaLeasePercentMonthly,
         quotaLeaseCapUsd: quotaLeaseCapUsd.trim() === "" ? null : parseFloat(quotaLeaseCapUsd),
+        ipGeoLookupEnabled,
+        ipExtractionConfig: ipExtractionConfigToSave,
       });
 
       if (!result.ok) {
@@ -236,6 +280,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setQuotaLeasePercentMonthly(result.data.quotaLeasePercentMonthly ?? 0.05);
         setQuotaLeaseCapUsd(
           result.data.quotaLeaseCapUsd != null ? String(result.data.quotaLeaseCapUsd) : ""
+        );
+        setIpGeoLookupEnabled(result.data.ipGeoLookupEnabled ?? true);
+        setIpExtractionConfigText(
+          result.data.ipExtractionConfig
+            ? JSON.stringify(result.data.ipExtractionConfig, null, 2)
+            : ""
         );
       }
 
@@ -934,6 +984,61 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             </CollapsibleContent>
           </div>
         </Collapsible>
+
+        {/* IP Logging & Extraction Section */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+              <MapPin className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{tIpLogging("title")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tIpLogging("description")}</p>
+            </div>
+          </div>
+
+          {/* Geo lookup toggle */}
+          <div className="flex items-center justify-between pl-11">
+            <div>
+              <p className="text-sm font-medium text-foreground">{tIpLogging("geoLookup")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tIpLogging("geoLookupHint")}</p>
+            </div>
+            <Switch
+              id="ip-geo-lookup-enabled"
+              checked={ipGeoLookupEnabled}
+              onCheckedChange={(checked) => setIpGeoLookupEnabled(checked)}
+              disabled={isPending}
+            />
+          </div>
+
+          {/* Extraction config JSON */}
+          <div className="space-y-2 pl-11">
+            <Label htmlFor="ip-extraction-config" className="text-sm font-medium text-foreground">
+              {tIpLogging("extractionConfigLabel")}
+            </Label>
+            <Textarea
+              id="ip-extraction-config"
+              value={ipExtractionConfigText}
+              onChange={(event) => setIpExtractionConfigText(event.target.value)}
+              disabled={isPending}
+              rows={5}
+              spellCheck={false}
+              className={`${inputClassName} font-mono text-xs`}
+            />
+            <p className="text-xs text-muted-foreground">{tIpLogging("extractionConfigHint")}</p>
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIpExtractionConfigText("")}
+                disabled={isPending}
+              >
+                {tIpLogging("resetToDefault")}
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-end pt-2">

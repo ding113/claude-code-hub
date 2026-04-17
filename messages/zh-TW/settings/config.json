@@ -89,6 +89,8 @@
     "siteTitleDesc": "用於設定瀏覽器分頁標題以及系統預設顯示名稱。",
     "siteTitlePlaceholder": "例：Claude Code Hub",
     "siteTitleRequired": "站台標題不能為空",
+    "ipLoggingInvalidJson": "IP 擷取設定不是合法的 JSON：{message}",
+    "ipLoggingInvalidShape": "IP 擷取設定必須是包含 `headers` 陣列的物件。",
     "verboseProviderError": "詳細供應商錯誤資訊",
     "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
     "timezoneLabel": "系統時區",
@@ -116,6 +118,15 @@
         "leaseCapZero": "租約上限為 0 可能導致單次租約預算為 0。"
       }
     }
+  },
+  "ipLogging": {
+    "title": "IP 記錄與提取",
+    "description": "設定用於判定客戶端 IP 的請求標頭鏈，以及是否啟用 IP 歸屬地查詢。",
+    "geoLookup": "啟用 IP 歸屬地查詢",
+    "geoLookupHint": "啟用後，儀表板會透過設定的 IP 歸屬地服務解析出國家/城市/ASN 等資訊。",
+    "extractionConfigLabel": "請求標頭提取鏈（JSON）",
+    "extractionConfigHint": "留空則使用安全的內建預設鏈：x-real-ip → x-forwarded-for（取最右）。若應用前方有 Cloudflare 等會剝除客戶端偽造標頭的 CDN，請顯式將其專用標頭加到鏈的最前面（範例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。陣列每一項皆含 `name` 以及可選的 `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）。",
+    "resetToDefault": "恢復預設"
   },
   "section": {
     "autoCleanup": {

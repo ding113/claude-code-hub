@@ -64,6 +64,8 @@ async function SettingsConfigContent() {
             quotaLeasePercentWeekly: settings.quotaLeasePercentWeekly,
             quotaLeasePercentMonthly: settings.quotaLeasePercentMonthly,
             quotaLeaseCapUsd: settings.quotaLeaseCapUsd,
+            ipGeoLookupEnabled: settings.ipGeoLookupEnabled,
+            ipExtractionConfig: settings.ipExtractionConfig,
           }}
         />
       </Section>

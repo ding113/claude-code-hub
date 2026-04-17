@@ -1,3 +1,4 @@
+import { getClientIp } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
 import { validateApiKeyAndGetUser } from "@/repository/key";
@@ -20,28 +21,13 @@ const proxyAuthPolicy = new LoginAbusePolicy({
   lockoutSeconds: 600,
 });
 
-function extractClientIp(session: ProxySession): string {
-  // Prefer x-real-ip (set by trusted reverse proxy), then rightmost
-  // x-forwarded-for entry, avoiding the client-spoofable leftmost value.
-  const realIp = session.headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-
-  const forwarded = session.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const ips = forwarded
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (ips.length > 0) return ips[ips.length - 1];
-  }
-
-  return "unknown";
-}
-
 export class ProxyAuthenticator {
   static async ensure(session: ProxySession): Promise<Response | null> {
-    // Pre-auth rate limit: block IPs with too many recent auth failures
-    const clientIp = extractClientIp(session);
+    // Pre-auth rate limit: block IPs with too many recent auth failures.
+    // Extracted once here and stashed on the session for later consumers
+    // (message-service / audit writer) so we only parse headers once.
+    const clientIp = getClientIp(session.headers) ?? "unknown";
+    session.clientIp = clientIp === "unknown" ? null : clientIp;
     const rateLimitDecision = proxyAuthPolicy.check(clientIp);
     if (!rateLimitDecision.allowed) {
       const retryAfter = rateLimitDecision.retryAfterSeconds;

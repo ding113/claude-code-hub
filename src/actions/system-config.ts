@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { locales } from "@/i18n/config";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
+import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   CodexPriorityBillingSource,
   ResponseFixerConfig,
@@ -77,13 +79,18 @@ export async function saveSystemSettings(formData: {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+  // IP 提取 / 归属地查询
+  ipExtractionConfig?: IpExtractionConfig | null;
+  ipGeoLookupEnabled?: boolean;
 }): Promise<ActionResult<SystemSettings>> {
+  let before: SystemSettings | null = null;
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    before = await getSystemSettings();
     const validated = UpdateSystemSettingsSchema.parse(formData);
     const updated = await updateSystemSettings({
       siteTitle: validated.siteTitle?.trim(),
@@ -115,6 +122,8 @@ export async function saveSystemSettings(formData: {
       quotaLeasePercentWeekly: validated.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: validated.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: validated.quotaLeaseCapUsd,
+      ipExtractionConfig: validated.ipExtractionConfig,
+      ipGeoLookupEnabled: validated.ipGeoLookupEnabled,
     });
 
     // Invalidate the system settings cache so proxy requests get fresh settings
@@ -127,10 +136,30 @@ export async function saveSystemSettings(formData: {
     }
     revalidatePath("/", "layout");
 
+    emitActionAudit({
+      category: "system_settings",
+      action: "system_settings.update",
+      targetType: "system_settings",
+      targetId: String(updated.id),
+      targetName: "global",
+      before: before ?? undefined,
+      after: updated,
+      success: true,
+    });
+
     return { ok: true, data: updated };
   } catch (error) {
     logger.error("更新系统设置失败:", error);
     const message = error instanceof Error ? error.message : "更新系统设置失败";
+    emitActionAudit({
+      category: "system_settings",
+      action: "system_settings.update",
+      targetType: "system_settings",
+      targetName: "global",
+      before: before ?? undefined,
+      success: false,
+      errorMessage: "UPDATE_FAILED",
+    });
     return { ok: false, error: message };
   }
 }

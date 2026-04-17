@@ -19,6 +19,8 @@
     "siteTitle": "站点标题",
     "siteTitlePlaceholder": "例如：Claude Code Hub",
     "siteTitleRequired": "站点标题不能为空",
+    "ipLoggingInvalidJson": "IP 提取配置不是合法的 JSON：{message}",
+    "ipLoggingInvalidShape": "IP 提取配置必须是包含 `headers` 数组的对象。",
     "siteTitleDesc": "用于设置浏览器标签页标题以及系统默认显示名称。",
     "currencyDisplay": "货币显示单位",
     "currencyDisplayPlaceholder": "选择货币单位",
@@ -129,5 +131,14 @@
         "leaseCapZero": "租约上限为 0 可能导致单次租约预算为 0。"
       }
     }
+  },
+  "ipLogging": {
+    "title": "IP 记录与提取",
+    "description": "配置用于判定客户端 IP 的请求头链，以及是否启用 IP 归属地查询。",
+    "geoLookup": "启用 IP 归属地查询",
+    "geoLookupHint": "开启后，仪表盘会通过配置的 IP 归属地服务解析出国家/城市/ASN 等信息。",
+    "extractionConfigLabel": "请求头提取链（JSON）",
+    "extractionConfigHint": "留空则使用安全的内置默认链：x-real-ip → x-forwarded-for（取最右）。如果应用前面有 Cloudflare 等剥离客户端伪造头的 CDN，请显式把其专有头加到链的最前面（示例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。数组每项包含 `name` 以及可选的 `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）。",
+    "resetToDefault": "恢复默认"
   }
 }

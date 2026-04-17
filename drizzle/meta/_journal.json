@@ -624,6 +624,20 @@
       "when": 1776095902010,
       "tag": "0088_amazing_energizer",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1776409181358,
+      "tag": "0089_curly_grey_gargoyle",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1776421578713,
+      "tag": "0090_demonic_captain_universe",
+      "breakpoints": true
     }
   ]
 }

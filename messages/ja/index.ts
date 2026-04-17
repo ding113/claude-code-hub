@@ -1,3 +1,4 @@
+import auditLogs from "./auditLogs.json";
 import auth from "./auth.json";
 import bigScreen from "./bigScreen.json";
 import common from "./common.json";
@@ -6,6 +7,7 @@ import dashboard from "./dashboard.json";
 import errors from "./errors.json";
 import forms from "./forms.json";
 import internal from "./internal.json";
+import ipDetails from "./ipDetails.json";
 import myUsage from "./myUsage.json";
 import notifications from "./notifications.json";
 import providerChain from "./provider-chain.json";
@@ -18,6 +20,7 @@ import users from "./users.json";
 import validation from "./validation.json";
 
 export default {
+  auditLogs,
   auth,
   bigScreen,
   common,
@@ -25,6 +28,7 @@ export default {
   dashboard,
   errors,
   forms,
+  ipDetails,
   notifications,
   "provider-chain": providerChain,
   providers,

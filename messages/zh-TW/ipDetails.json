@@ -1,0 +1,50 @@
+{
+  "description": "該 IP 的完整歸屬地與網路資訊。",
+  "loading": "查詢中…",
+  "error": "無法取得 IP 資訊。",
+  "privateIp": "內網 / 區域網",
+  "privateIpNote": "該位址不在公網可路由範圍內。",
+  "yes": "是",
+  "no": "否",
+  "sections": {
+    "location": "地理位置",
+    "network": "網路資訊",
+    "privacyThreat": "隱私與風險",
+    "abuse": "濫用聯絡資訊"
+  },
+  "fields": {
+    "country": "國家/地區",
+    "region": "省/州",
+    "city": "城市",
+    "postalCode": "郵遞區號",
+    "coordinates": "經緯度",
+    "timezone": "時區",
+    "asn": "ASN",
+    "organization": "所屬組織",
+    "route": "路由前綴",
+    "type": "類型",
+    "subtype": "子類型",
+    "rir": "地區註冊機構 (RIR)",
+    "anycast": "Anycast",
+    "hostname": "主機名稱",
+    "riskLevel": "風險等級",
+    "score": "分數",
+    "riskLevels": {
+      "none": "無",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "critical": "嚴重"
+    },
+    "abuseContact": "濫用聯絡人",
+    "email": "電子郵件"
+  },
+  "badges": {
+    "vpn": "VPN",
+    "proxy": "代理",
+    "tor": "Tor",
+    "relay": "中繼",
+    "threat": "威脅",
+    "clean": "安全"
+  }
+}

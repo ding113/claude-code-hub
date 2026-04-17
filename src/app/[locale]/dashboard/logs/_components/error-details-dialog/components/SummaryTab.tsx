@@ -15,6 +15,8 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,6 +61,7 @@ export function SummaryTab({
   sessionId,
   requestSequence,
   userAgent,
+  clientIp,
   endpoint,
   specialSettings,
   hasMessages,
@@ -66,6 +69,7 @@ export function SummaryTab({
   onViewLogicTrace,
 }: SummaryTabProps) {
   const t = useTranslations("dashboard.logs.details");
+  const [ipDialogOpen, setIpDialogOpen] = useState(false);
 
   const isSuccess = isSuccessStatus(statusCode);
   const isInProgress = isInProgressStatus(statusCode);
@@ -315,13 +319,25 @@ export function SummaryTab({
       )}
 
       {/* Client Info */}
-      {(userAgent || endpoint) && (
+      {(userAgent || endpoint || clientIp) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold flex items-center gap-2">
             <Monitor className="h-4 w-4 text-blue-600" />
             {t("metadata.clientInfo")}
           </h4>
           <div className="rounded-lg border bg-card divide-y">
+            {clientIp && (
+              <div className="p-3">
+                <p className="text-xs text-muted-foreground mb-1">IP</p>
+                <button
+                  type="button"
+                  onClick={() => setIpDialogOpen(true)}
+                  className="text-xs font-mono break-all underline underline-offset-2 hover:text-primary text-left"
+                >
+                  {clientIp}
+                </button>
+              </div>
+            )}
             {userAgent && (
               <div className="p-3">
                 <p className="text-xs text-muted-foreground mb-1">User-Agent</p>
@@ -674,6 +690,8 @@ export function SummaryTab({
           </div>
         </div>
       )}
+
+      <IpDetailsDialog ip={clientIp ?? null} open={ipDialogOpen} onOpenChange={setIpDialogOpen} />
     </div>
   );
 }

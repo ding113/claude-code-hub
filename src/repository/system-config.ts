@@ -171,6 +171,8 @@ function createFallbackSettings(): SystemSettings {
     quotaLeasePercentWeekly: 0.05,
     quotaLeasePercentMonthly: 0.05,
     quotaLeaseCapUsd: null,
+    ipExtractionConfig: null,
+    ipGeoLookupEnabled: true,
     createdAt: now,
     updatedAt: now,
   };
@@ -249,6 +251,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     const fullSelection = {
       ...selectionWithoutHighConcurrencyMode,
       enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+      ipExtractionConfig: systemSettings.ipExtractionConfig,
+      ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
     };
 
     try {
@@ -440,6 +444,8 @@ export async function updateSystemSettings(
   const fullReturning = {
     ...returningWithoutHighConcurrencyMode,
     enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+    ipExtractionConfig: systemSettings.ipExtractionConfig,
+    ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
   };
 
   try {
@@ -578,6 +584,14 @@ export async function updateSystemSettings(
         payload.quotaLeaseCapUsd === null ? null : String(payload.quotaLeaseCapUsd);
     }
 
+    // 客户端 IP 提取链（如果提供；null 表示显式清空走默认）
+    if (payload.ipExtractionConfig !== undefined) {
+      updates.ipExtractionConfig = payload.ipExtractionConfig;
+    }
+    if (payload.ipGeoLookupEnabled !== undefined) {
+      updates.ipGeoLookupEnabled = payload.ipGeoLookupEnabled;
+    }
+
     let updated;
     try {
       [updated] = await db
@@ -596,6 +610,8 @@ export async function updateSystemSettings(
 
       const downgradedUpdates = { ...updates };
       delete downgradedUpdates.enableHighConcurrencyMode;
+      delete downgradedUpdates.ipExtractionConfig;
+      delete downgradedUpdates.ipGeoLookupEnabled;
 
       try {
         [updated] = await db

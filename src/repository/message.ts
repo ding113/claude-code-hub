@@ -34,6 +34,7 @@ export async function createMessageRequest(
     sessionId: data.session_id, // Session ID
     requestSequence: data.request_sequence, // Request Sequence（Session 内请求序号）
     userAgent: data.user_agent, // User-Agent
+    clientIp: data.client_ip, // 客户端 IP（IPv4/IPv6）
     endpoint: data.endpoint, // 请求端点（可为空）
     messagesCount: data.messages_count, // Messages 数量
     specialSettings: data.special_settings ?? undefined, // 特殊设置（审计/展示）
@@ -57,6 +58,7 @@ export async function createMessageRequest(
     sessionId: messageRequest.sessionId, // 新增
     requestSequence: messageRequest.requestSequence, // Request Sequence
     userAgent: messageRequest.userAgent, // 新增
+    clientIp: messageRequest.clientIp, // 客户端 IP
     endpoint: messageRequest.endpoint, // 新增：返回端点
     messagesCount: messageRequest.messagesCount, // 新增
     cacheTtlApplied: messageRequest.cacheTtlApplied,
@@ -281,6 +283,7 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       costMultiplier: messageRequest.costMultiplier,
       sessionId: messageRequest.sessionId,
       userAgent: messageRequest.userAgent,
+      clientIp: messageRequest.clientIp,
       endpoint: messageRequest.endpoint,
       messagesCount: messageRequest.messagesCount,
       statusCode: messageRequest.statusCode,
@@ -404,6 +407,7 @@ export async function findMessageRequestBySessionId(
       costMultiplier: messageRequest.costMultiplier,
       sessionId: messageRequest.sessionId,
       userAgent: messageRequest.userAgent,
+      clientIp: messageRequest.clientIp,
       messagesCount: messageRequest.messagesCount,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
