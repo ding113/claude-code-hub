@@ -117,6 +117,15 @@
       }
     }
   },
+  "ipLogging": {
+    "title": "IP ログと抽出",
+    "description": "クライアント IP を特定する際に参照するリクエストヘッダー、および IP 地理情報照会の有効化を設定します。",
+    "geoLookup": "IP 地理情報照会を有効化",
+    "geoLookupHint": "有効にすると、ダッシュボードは設定済みの IP 地理情報サービスを用いて IP を国・都市・ASN に解決します。",
+    "extractionConfigLabel": "ヘッダー抽出チェーン（JSON）",
+    "extractionConfigHint": "空の場合は組み込み既定（cf-connecting-ip → x-real-ip → x-forwarded-for の最右値）を使用します。詳細設定：`headers` 配列を持つ JSON オブジェクトを指定してください。各項目には `name` と任意の `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）を含められます。",
+    "resetToDefault": "既定に戻す"
+  },
   "section": {
     "autoCleanup": {
       "description": "スケジュールに従って履歴ログを自動的にクリーンアップし、データベース容量を解放します。",

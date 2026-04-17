@@ -1,0 +1,42 @@
+{
+  "description": "Полная информация о геолокации и сети для этого IP.",
+  "loading": "Поиск…",
+  "error": "Не удалось получить данные об IP.",
+  "privateIp": "Частный / LAN",
+  "privateIpNote": "Этот адрес не маршрутизируется в публичном интернете.",
+  "yes": "Да",
+  "no": "Нет",
+  "sections": {
+    "location": "Местоположение",
+    "network": "Сеть",
+    "privacyThreat": "Приватность и угрозы",
+    "abuse": "Контакт по злоупотреблениям"
+  },
+  "fields": {
+    "country": "Страна",
+    "region": "Регион",
+    "city": "Город",
+    "postalCode": "Почтовый индекс",
+    "coordinates": "Координаты",
+    "timezone": "Часовой пояс",
+    "asn": "ASN",
+    "organization": "Организация",
+    "route": "Маршрут",
+    "type": "Тип",
+    "subtype": "Подтип",
+    "rir": "RIR",
+    "anycast": "Anycast",
+    "hostname": "Имя хоста",
+    "riskLevel": "Уровень риска",
+    "abuseContact": "Контакт по злоупотреблениям",
+    "email": "Email"
+  },
+  "badges": {
+    "vpn": "VPN",
+    "proxy": "Proxy",
+    "tor": "Tor",
+    "relay": "Relay",
+    "threat": "Угроза",
+    "clean": "Чисто"
+  }
+}

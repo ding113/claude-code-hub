@@ -798,6 +798,7 @@ export function VirtualizedLogsTable({
                         originalModel={log.originalModel}
                         currentModel={log.model}
                         userAgent={log.userAgent}
+                        clientIp={log.clientIp}
                         messagesCount={log.messagesCount}
                         endpoint={log.endpoint}
                         billingModelSource={billingModelSource}

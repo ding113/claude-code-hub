@@ -27,6 +27,8 @@ export interface TabSharedProps {
   currentModel?: string | null;
   /** User-Agent header */
   userAgent?: string | null;
+  /** Client IP (IPv4/IPv6) */
+  clientIp?: string | null;
   /** Number of messages in request */
   messagesCount?: number | null;
   /** API endpoint */

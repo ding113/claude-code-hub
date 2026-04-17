@@ -1,0 +1,40 @@
+{
+  "title": "Audit logs",
+  "description": "Every login and admin mutation, with operator IP, user-agent, and before/after snapshots.",
+  "filters": {
+    "category": "Category",
+    "success": "Status",
+    "all": "All",
+    "succeeded": "Success",
+    "failed": "Failure",
+    "allCategories": "All categories"
+  },
+  "categories": {
+    "auth": "Authentication",
+    "user": "Users",
+    "provider": "Providers",
+    "provider_group": "Provider groups",
+    "system_settings": "System settings",
+    "key": "Keys",
+    "notification": "Notifications",
+    "sensitive_word": "Sensitive words",
+    "model_price": "Model prices"
+  },
+  "columns": {
+    "time": "Time",
+    "category": "Category",
+    "action": "Action",
+    "operator": "Operator",
+    "ip": "IP",
+    "target": "Target",
+    "status": "Status"
+  },
+  "detail": {
+    "title": "Audit entry",
+    "before": "Before",
+    "after": "After",
+    "errorMessage": "Error",
+    "noChange": "No snapshot captured"
+  },
+  "empty": "No audit entries found for the selected filters."
+}

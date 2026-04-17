@@ -1,0 +1,42 @@
+{
+  "description": "该 IP 的完整归属地与网络信息。",
+  "loading": "查询中…",
+  "error": "无法获取 IP 信息。",
+  "privateIp": "内网 / 局域网",
+  "privateIpNote": "该地址不在公网可路由范围内。",
+  "yes": "是",
+  "no": "否",
+  "sections": {
+    "location": "地理位置",
+    "network": "网络信息",
+    "privacyThreat": "隐私与风险",
+    "abuse": "滥用联系信息"
+  },
+  "fields": {
+    "country": "国家/地区",
+    "region": "省/州",
+    "city": "城市",
+    "postalCode": "邮政编码",
+    "coordinates": "经纬度",
+    "timezone": "时区",
+    "asn": "ASN",
+    "organization": "所属组织",
+    "route": "路由前缀",
+    "type": "类型",
+    "subtype": "子类型",
+    "rir": "地区注册机构 (RIR)",
+    "anycast": "Anycast",
+    "hostname": "主机名",
+    "riskLevel": "风险等级",
+    "abuseContact": "滥用联系人",
+    "email": "邮箱"
+  },
+  "badges": {
+    "vpn": "VPN",
+    "proxy": "代理",
+    "tor": "Tor",
+    "relay": "中继",
+    "threat": "威胁",
+    "clean": "安全"
+  }
+}

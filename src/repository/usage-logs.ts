@@ -67,6 +67,7 @@ export interface UsageLogRow {
   blockedBy: string | null; // 拦截类型（如 'sensitive_word'）
   blockedReason: string | null; // 拦截原因（JSON 字符串）
   userAgent: string | null; // User-Agent（客户端信息）
+  clientIp: string | null; // 客户端 IP（IPv4/IPv6）
   messagesCount: number | null; // Messages 数量
   context1mApplied: boolean | null; // 是否应用了1M上下文窗口
   swapCacheTtlApplied: boolean | null; // 是否启用了swap cache TTL billing
@@ -199,6 +200,7 @@ export async function findUsageLogsBatch(
       blockedBy: messageRequest.blockedBy,
       blockedReason: messageRequest.blockedReason,
       userAgent: messageRequest.userAgent,
+      clientIp: messageRequest.clientIp,
       messagesCount: messageRequest.messagesCount,
       context1mApplied: messageRequest.context1mApplied,
       swapCacheTtlApplied: messageRequest.swapCacheTtlApplied,
@@ -346,6 +348,7 @@ export async function findUsageLogsBatch(
       groupCostMultiplier: usageLedger.groupCostMultiplier,
       durationMs: usageLedger.durationMs,
       ttfbMs: usageLedger.ttfbMs,
+      clientIp: usageLedger.clientIp,
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
     })
@@ -404,6 +407,7 @@ export async function findUsageLogsBatch(
       blockedBy: null,
       blockedReason: null,
       userAgent: null,
+      clientIp: row.clientIp ?? null,
       messagesCount: null,
       context1mApplied: row.context1mApplied ?? null,
       swapCacheTtlApplied: row.swapCacheTtlApplied ?? null,
@@ -1009,6 +1013,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       blockedBy: messageRequest.blockedBy, // 拦截类型
       blockedReason: messageRequest.blockedReason, // 拦截原因
       userAgent: messageRequest.userAgent, // User-Agent
+      clientIp: messageRequest.clientIp, // 客户端 IP
       messagesCount: messageRequest.messagesCount, // Messages 数量
       context1mApplied: messageRequest.context1mApplied, // 1M上下文窗口
       swapCacheTtlApplied: messageRequest.swapCacheTtlApplied, // swap cache TTL billing

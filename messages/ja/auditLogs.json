@@ -1,0 +1,40 @@
+{
+  "title": "監査ログ",
+  "description": "ログインや管理操作ごとに、操作者 IP・ユーザーエージェント・変更前後のスナップショットを記録します。",
+  "filters": {
+    "category": "カテゴリー",
+    "success": "ステータス",
+    "all": "すべて",
+    "succeeded": "成功",
+    "failed": "失敗",
+    "allCategories": "すべてのカテゴリー"
+  },
+  "categories": {
+    "auth": "認証",
+    "user": "ユーザー",
+    "provider": "プロバイダー",
+    "provider_group": "プロバイダーグループ",
+    "system_settings": "システム設定",
+    "key": "キー",
+    "notification": "通知",
+    "sensitive_word": "機密ワード",
+    "model_price": "モデル価格"
+  },
+  "columns": {
+    "time": "日時",
+    "category": "カテゴリー",
+    "action": "操作",
+    "operator": "操作者",
+    "ip": "IP",
+    "target": "対象",
+    "status": "ステータス"
+  },
+  "detail": {
+    "title": "監査エントリー",
+    "before": "変更前",
+    "after": "変更後",
+    "errorMessage": "エラー",
+    "noChange": "スナップショットは記録されていません"
+  },
+  "empty": "選択した条件に該当する監査ログはありません。"
+}

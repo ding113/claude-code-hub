@@ -9,6 +9,7 @@ import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
+import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   CodexPriorityBillingSource,
   ResponseFixerConfig,
@@ -78,6 +79,9 @@ export async function saveSystemSettings(formData: {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+  // IP 提取 / 归属地查询
+  ipExtractionConfig?: IpExtractionConfig | null;
+  ipGeoLookupEnabled?: boolean;
 }): Promise<ActionResult<SystemSettings>> {
   let before: SystemSettings | null = null;
   try {
@@ -118,6 +122,8 @@ export async function saveSystemSettings(formData: {
       quotaLeasePercentWeekly: validated.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: validated.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: validated.quotaLeaseCapUsd,
+      ipExtractionConfig: validated.ipExtractionConfig,
+      ipGeoLookupEnabled: validated.ipGeoLookupEnabled,
     });
 
     // Invalidate the system settings cache so proxy requests get fresh settings

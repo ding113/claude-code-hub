@@ -117,6 +117,15 @@
       }
     }
   },
+  "ipLogging": {
+    "title": "IP logging & extraction",
+    "description": "Configure which request headers are consulted to determine the client IP, and whether IP geolocation lookup is enabled.",
+    "geoLookup": "Enable IP geolocation lookup",
+    "geoLookupHint": "When enabled, the dashboard will resolve IP addresses to country / city / ASN via the configured IP geolocation service.",
+    "extractionConfigLabel": "Header extraction chain (JSON)",
+    "extractionConfigHint": "Leave empty to use the built-in default: cf-connecting-ip → x-real-ip → x-forwarded-for (rightmost). Advanced: provide a JSON object with a `headers` array; each entry has `name` and optional `pick` (\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}).",
+    "resetToDefault": "Reset to default"
+  },
   "section": {
     "autoCleanup": {
       "description": "Automatically clean up historical log data on schedule to free up database storage space.",

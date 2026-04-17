@@ -117,6 +117,15 @@
       }
     }
   },
+  "ipLogging": {
+    "title": "IP 記錄與提取",
+    "description": "設定用於判定客戶端 IP 的請求標頭鏈，以及是否啟用 IP 歸屬地查詢。",
+    "geoLookup": "啟用 IP 歸屬地查詢",
+    "geoLookupHint": "啟用後，儀表板會透過設定的 IP 歸屬地服務解析出國家/城市/ASN 等資訊。",
+    "extractionConfigLabel": "請求標頭提取鏈（JSON）",
+    "extractionConfigHint": "留空則使用內建預設鏈：cf-connecting-ip → x-real-ip → x-forwarded-for（取最右）。進階：填入包含 `headers` 陣列的 JSON 物件，陣列每一項皆含 `name` 以及可選的 `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）。",
+    "resetToDefault": "恢復預設"
+  },
   "section": {
     "autoCleanup": {
       "description": "定時自動清理歷史日誌資料，釋放資料庫儲存空間。",

@@ -141,6 +141,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     blockedBy: null,
     blockedReason: null,
     userAgent: null,
+    clientIp: null,
     messagesCount: null,
     context1mApplied: null,
     swapCacheTtlApplied: null,

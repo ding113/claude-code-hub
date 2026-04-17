@@ -1,0 +1,42 @@
+{
+  "description": "この IP の詳細な地理情報とネットワーク情報。",
+  "loading": "照会中…",
+  "error": "IP 情報を取得できません。",
+  "privateIp": "プライベート / LAN",
+  "privateIpNote": "このアドレスはインターネットからルーティングできません。",
+  "yes": "はい",
+  "no": "いいえ",
+  "sections": {
+    "location": "所在地",
+    "network": "ネットワーク",
+    "privacyThreat": "プライバシー・リスク",
+    "abuse": "不正利用の連絡先"
+  },
+  "fields": {
+    "country": "国 / 地域",
+    "region": "都道府県 / 州",
+    "city": "都市",
+    "postalCode": "郵便番号",
+    "coordinates": "緯度・経度",
+    "timezone": "タイムゾーン",
+    "asn": "ASN",
+    "organization": "組織",
+    "route": "ルート",
+    "type": "種別",
+    "subtype": "サブタイプ",
+    "rir": "RIR",
+    "anycast": "Anycast",
+    "hostname": "ホスト名",
+    "riskLevel": "リスクレベル",
+    "abuseContact": "不正利用の連絡先",
+    "email": "メール"
+  },
+  "badges": {
+    "vpn": "VPN",
+    "proxy": "プロキシ",
+    "tor": "Tor",
+    "relay": "リレー",
+    "threat": "脅威",
+    "clean": "クリーン"
+  }
+}
