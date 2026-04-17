@@ -22,6 +22,19 @@ const useIpGeoMocks = vi.hoisted(() => ({
 }));
 vi.mock("@/hooks/use-ip-geo", () => useIpGeoMocks);
 
+const clipboardMocks = vi.hoisted(() => ({
+  copyTextToClipboard: vi.fn<(text: string) => Promise<boolean>>(),
+}));
+vi.mock("@/lib/utils/clipboard", () => clipboardMocks);
+
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+}));
+vi.mock("sonner", () => ({
+  toast: toastMocks,
+}));
+
 import { hasMeaningfulCoordinates, IpDetailsDialog } from "./ip-details-dialog";
 
 const messages = { ipDetails: ipDetailsMessages };
@@ -163,6 +176,7 @@ describe("IpDetailsDialog: partial payload rendering (CGN / bogon / tailscale)",
   beforeEach(() => {
     vi.clearAllMocks();
     document.body.innerHTML = "";
+    clipboardMocks.copyTextToClipboard.mockResolvedValue(true);
     useIpGeoMocks.useIpGeo.mockReturnValue({
       data: CGN_RESPONSE,
       isLoading: false,
@@ -217,6 +231,30 @@ describe("IpDetailsDialog: partial payload rendering (CGN / bogon / tailscale)",
     const text = allText();
     // Anycast label should not appear when the flag is false.
     expect(text).not.toContain("Anycast");
+
+    unmount();
+  });
+
+  test("copies the full ip from dialog header", async () => {
+    const ip = "2001:0db8:85a3:0000:0000:8a2e:0370:7334";
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <IpDetailsDialog ip={ip} open onOpenChange={() => {}} />
+      </NextIntlClientProvider>
+    );
+
+    const copyButton = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === ipDetailsMessages.actions.copy
+    );
+
+    expect(copyButton).toBeTruthy();
+
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(clipboardMocks.copyTextToClipboard).toHaveBeenCalledWith(ip);
+    expect(toastMocks.success).toHaveBeenCalledWith(ipDetailsMessages.actions.copySuccess);
 
     unmount();
   });

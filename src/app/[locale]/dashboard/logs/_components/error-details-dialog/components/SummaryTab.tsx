@@ -17,6 +17,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
+import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -329,13 +330,12 @@ export function SummaryTab({
             {clientIp && (
               <div className="p-3">
                 <p className="text-xs text-muted-foreground mb-1">IP</p>
-                <button
-                  type="button"
+                <IpDisplayTrigger
+                  ip={clientIp}
                   onClick={() => setIpDialogOpen(true)}
-                  className="text-xs font-mono break-all underline underline-offset-2 hover:text-primary text-left"
-                >
-                  {clientIp}
-                </button>
+                  buttonClassName="max-w-full"
+                  textClassName="text-xs underline-offset-2 hover:text-primary"
+                />
               </div>
             )}
             {userAgent && (

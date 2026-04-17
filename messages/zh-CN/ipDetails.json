@@ -1,5 +1,11 @@
 {
   "description": "该 IP 的完整归属地与网络信息。",
+  "actions": {
+    "copy": "复制",
+    "copied": "已复制",
+    "copySuccess": "IP 已复制到剪贴板",
+    "copyFailed": "复制失败"
+  },
   "loading": "查询中…",
   "error": "无法获取 IP 信息。",
   "privateIp": "内网 / 局域网",

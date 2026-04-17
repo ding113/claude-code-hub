@@ -1,7 +1,11 @@
 "use client";
 
+import { Check, Copy } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useIpGeo } from "@/hooks/use-ip-geo";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
 
 interface IpDetailsDialogProps {
   ip: string | null;
@@ -54,15 +59,51 @@ function SectionRow({ label, value }: { label: string; value: React.ReactNode })
 
 export function IpDetailsDialog({ ip, open, onOpenChange }: IpDetailsDialogProps) {
   const t = useTranslations("ipDetails");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setCopied(false);
+    }
+  }, [open]);
+
+  const handleCopy = async () => {
+    if (!ip) return;
+
+    const ok = await copyTextToClipboard(ip);
+    if (ok) {
+      setCopied(true);
+      toast.success(t("actions.copySuccess"));
+      return;
+    }
+
+    toast.error(t("actions.copyFailed"));
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            <span className="font-mono">{ip ?? "—"}</span>
-          </DialogTitle>
-          <DialogDescription>{t("description")}</DialogDescription>
+        <DialogHeader className="gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <DialogTitle>
+                <span className="block break-all font-mono text-sm">{ip ?? "—"}</span>
+              </DialogTitle>
+              <DialogDescription className="mt-1">{t("description")}</DialogDescription>
+            </div>
+            {ip ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={handleCopy}
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied ? t("actions.copied") : t("actions.copy")}
+              </Button>
+            ) : null}
+          </div>
         </DialogHeader>
 
         {/* Only mount the content (and its useQuery) when the dialog is open.

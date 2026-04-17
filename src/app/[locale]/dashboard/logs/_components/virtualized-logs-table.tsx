@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import type { ActionResult } from "@/actions/types";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
+import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -482,21 +483,14 @@ export function VirtualizedLogsTable({
 
                     {/* IP */}
                     {hideIpColumn ? null : (
-                      <div className="flex-[0.8] min-w-[90px] px-1.5">
-                        {log.clientIp ? (
-                          <button
-                            type="button"
-                            className="text-left font-mono text-xs truncate cursor-pointer hover:underline"
-                            onClick={() => {
-                              setIpDialogValue(log.clientIp);
-                              setIpDialogOpen(true);
-                            }}
-                          >
-                            {log.clientIp}
-                          </button>
-                        ) : (
-                          <span className="font-mono text-xs text-muted-foreground">—</span>
-                        )}
+                      <div className="flex-[0.8] min-w-[90px] px-1.5 overflow-hidden">
+                        <IpDisplayTrigger
+                          ip={log.clientIp}
+                          onClick={() => {
+                            setIpDialogValue(log.clientIp as string);
+                            setIpDialogOpen(true);
+                          }}
+                        />
                       </div>
                     )}
 

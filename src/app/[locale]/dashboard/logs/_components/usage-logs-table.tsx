@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { type MouseEvent, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
+import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -100,7 +101,7 @@ export function UsageLogsTable({
               <TableHead>{t("logs.columns.user")}</TableHead>
               <TableHead>{t("logs.columns.key")}</TableHead>
               <TableHead>{t("logs.columns.sessionId")}</TableHead>
-              <TableHead>{t("logs.columns.ip")}</TableHead>
+              <TableHead className="w-[140px] max-w-[140px]">{t("logs.columns.ip")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
               <TableHead>{t("logs.columns.model")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.tokens")}</TableHead>
@@ -187,21 +188,14 @@ export function UsageLogsTable({
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {log.clientIp ? (
-                        <button
-                          type="button"
-                          className="text-left cursor-pointer hover:underline"
-                          onClick={() => {
-                            setIpDialogValue(log.clientIp);
-                            setIpDialogOpen(true);
-                          }}
-                        >
-                          {log.clientIp}
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                    <TableCell className="w-[140px] max-w-[140px] overflow-hidden font-mono text-xs">
+                      <IpDisplayTrigger
+                        ip={log.clientIp}
+                        onClick={() => {
+                          setIpDialogValue(log.clientIp as string);
+                          setIpDialogOpen(true);
+                        }}
+                      />
                     </TableCell>
                     <TableCell className="text-left">
                       {isWarmupSkipped ? (

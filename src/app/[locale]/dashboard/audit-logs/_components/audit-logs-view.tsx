@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { getAuditLogsBatch } from "@/actions/audit-logs";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
+import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -266,21 +267,13 @@ export function AuditLogsView() {
                     <div className="flex-[0.9] min-w-[110px] px-1.5 truncate" title={operator}>
                       {operator}
                     </div>
-                    <div className="flex-[0.9] min-w-[120px] px-1.5 truncate">
-                      {log.operatorIp ? (
-                        <button
-                          type="button"
-                          className="font-mono text-xs underline decoration-dotted hover:decoration-solid"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openIp(log.operatorIp as string);
-                          }}
-                        >
-                          {log.operatorIp}
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
+                    <div className="flex-[0.9] min-w-[120px] px-1.5 overflow-hidden">
+                      <IpDisplayTrigger
+                        ip={log.operatorIp}
+                        onClick={() => openIp(log.operatorIp as string)}
+                        buttonClassName="font-mono"
+                        className="text-xs"
+                      />
                     </div>
                     <div
                       className="flex-[1.2] min-w-[160px] px-1.5 truncate"

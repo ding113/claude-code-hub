@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
+import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Separator } from "@/components/ui/separator";
@@ -28,7 +29,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return (
     <div className="grid grid-cols-3 items-start gap-2 py-1">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <div className="col-span-2 text-sm font-medium break-all">{children}</div>
+      <div className="col-span-2 min-w-0 text-sm font-medium break-all">{children}</div>
     </div>
   );
 }
@@ -160,17 +161,13 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
               </Row>
 
               <Row label={t("columns.ip")}>
-                {log.operatorIp ? (
-                  <button
-                    type="button"
-                    className="font-mono text-sm underline decoration-dotted hover:decoration-solid"
-                    onClick={() => openIpDialog(log.operatorIp as string)}
-                  >
-                    {log.operatorIp}
-                  </button>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
+                <IpDisplayTrigger
+                  ip={log.operatorIp}
+                  onClick={() => openIpDialog(log.operatorIp as string)}
+                  buttonClassName="max-w-full"
+                  textClassName="text-sm"
+                  placeholderClassName="text-sm"
+                />
               </Row>
 
               <Row label={t("detail.userAgent")}>

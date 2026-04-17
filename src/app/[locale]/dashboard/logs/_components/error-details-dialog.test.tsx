@@ -5,6 +5,7 @@ import { act } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { Window } from "happy-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import ipDetailsMessages from "../../../../../../messages/en/ipDetails.json";
 
 const hasSessionMessagesMock = vi.fn();
 
@@ -348,6 +349,7 @@ const messages = {
       costMultiplier: "Cost",
     },
   },
+  ipDetails: ipDetailsMessages,
 };
 
 function renderWithIntl(node: ReactNode) {

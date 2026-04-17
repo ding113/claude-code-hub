@@ -1,5 +1,11 @@
 {
   "description": "該 IP 的完整歸屬地與網路資訊。",
+  "actions": {
+    "copy": "複製",
+    "copied": "已複製",
+    "copySuccess": "IP 已複製到剪貼簿",
+    "copyFailed": "複製失敗"
+  },
   "loading": "查詢中…",
   "error": "無法取得 IP 資訊。",
   "privateIp": "內網 / 區域網",

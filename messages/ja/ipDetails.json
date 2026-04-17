@@ -1,5 +1,11 @@
 {
   "description": "この IP の詳細な地理情報とネットワーク情報。",
+  "actions": {
+    "copy": "コピー",
+    "copied": "コピー済み",
+    "copySuccess": "IP をクリップボードにコピーしました",
+    "copyFailed": "コピーに失敗しました"
+  },
   "loading": "照会中…",
   "error": "IP 情報を取得できません。",
   "privateIp": "プライベート / LAN",

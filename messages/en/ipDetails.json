@@ -1,5 +1,11 @@
 {
   "description": "Full geolocation & network info for this IP.",
+  "actions": {
+    "copy": "Copy",
+    "copied": "Copied",
+    "copySuccess": "IP copied to clipboard",
+    "copyFailed": "Copy failed"
+  },
   "loading": "Looking up…",
   "error": "IP lookup unavailable.",
   "privateIp": "Private / LAN",
