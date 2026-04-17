@@ -8,8 +8,15 @@ export interface StoredCostBreakdown {
   input: string;
   /** Base output cost (no multiplier) */
   output: string;
-  /** Base cache creation cost (no multiplier) */
+  /**
+   * Base cache creation cost aggregated across 5m + 1h TTLs (no multiplier).
+   * Retained for backward compatibility; use cache_creation_5m / _1h for per-TTL display.
+   */
   cache_creation: string;
+  /** Base cache creation cost for 5-minute TTL only (no multiplier). Optional for historical rows. */
+  cache_creation_5m?: string;
+  /** Base cache creation cost for 1-hour TTL only (no multiplier). Optional for historical rows. */
+  cache_creation_1h?: string;
   /** Base cache read cost (no multiplier) */
   cache_read: string;
   /** Sum of all base costs before multipliers */

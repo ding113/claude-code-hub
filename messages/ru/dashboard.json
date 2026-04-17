@@ -304,7 +304,10 @@
         "baseCost": "Базовая стоимость",
         "providerMultiplier": "Множитель поставщика",
         "groupMultiplier": "Множитель группы",
-        "baseTotal": "Базовый итог"
+        "baseTotal": "Базовый итог",
+        "unit": {
+          "tokens": "токенов"
+        }
       },
       "performance": {
         "title": "Производительность",

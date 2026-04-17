@@ -2,7 +2,8 @@ import "server-only";
 
 import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providerGroups } from "@/drizzle/schema";
+import { providerGroups, providers } from "@/drizzle/schema";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type {
   CreateProviderGroupInput,
   ProviderGroup,
@@ -79,6 +80,15 @@ export async function findProviderGroupByName(name: string): Promise<ProviderGro
   return row ? toProviderGroup(row) : null;
 }
 
+/**
+ * Look up a single provider group by its id.
+ */
+export async function findProviderGroupById(id: number): Promise<ProviderGroup | null> {
+  const [row] = await db.select().from(providerGroups).where(eq(providerGroups.id, id)).limit(1);
+
+  return row ? toProviderGroup(row) : null;
+}
+
 // ---------------------------------------------------------------------------
 // Mutation functions
 // ---------------------------------------------------------------------------
@@ -129,6 +139,27 @@ export async function updateProviderGroup(
 
   invalidateGroupMultiplierCache();
   return toProviderGroup(row);
+}
+
+/**
+ * Count how many providers reference the given group name in their groupTag.
+ * Used to prevent orphaning providers when a group is deleted.
+ *
+ * Note: `groupTag` is a comma/newline separated string, so we parse each
+ * provider's tag and count matches. Provider count is small, no optimization
+ * needed.
+ */
+export async function countProvidersUsingGroup(name: string): Promise<number> {
+  const rows = await db.select({ groupTag: providers.groupTag }).from(providers);
+
+  let count = 0;
+  for (const row of rows) {
+    const groups = parseProviderGroups(row.groupTag);
+    if (groups.includes(name)) {
+      count++;
+    }
+  }
+  return count;
 }
 
 /**

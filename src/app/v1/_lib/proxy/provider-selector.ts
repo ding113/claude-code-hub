@@ -215,10 +215,23 @@ export class ProxyProviderResolver {
     }
 
     // === Resolve group cost multiplier ===
+    // Fail soft: if the lookup throws (Redis/DB hiccup), fall back to 1.0 so
+    // request handling proceeds without billing disruption.
     const effectiveGroup = getEffectiveProviderGroup(session);
     if (effectiveGroup) {
-      const multiplier = await getGroupCostMultiplier(effectiveGroup);
-      session.setGroupCostMultiplier(multiplier);
+      try {
+        const multiplier = await getGroupCostMultiplier(effectiveGroup);
+        session.setGroupCostMultiplier(multiplier);
+      } catch (error) {
+        logger.warn(
+          "[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0",
+          {
+            effectiveGroup,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+        session.setGroupCostMultiplier(1.0);
+      }
     }
 
     // === 故障转移循环 ===

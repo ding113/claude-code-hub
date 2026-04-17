@@ -115,7 +115,8 @@ export function ProviderGroupTab() {
 
   const handleSave = useCallback(() => {
     const costMultiplier = Number.parseFloat(form.costMultiplier);
-    if (Number.isNaN(costMultiplier) || costMultiplier < 0) {
+    if (!Number.isFinite(costMultiplier) || costMultiplier < 0) {
+      toast.error(t("invalidMultiplier"));
       return;
     }
 
@@ -177,7 +178,14 @@ export function ProviderGroupTab() {
         closeDeleteConfirm();
         fetchGroups();
       } else {
-        toast.error(result.error ?? t("deleteFailed"));
+        // Map known error codes to localized messages.
+        if (result.errorCode === "GROUP_IN_USE") {
+          toast.error(t("groupInUse"));
+        } else if (result.errorCode === "CANNOT_DELETE_DEFAULT") {
+          toast.error(t("cannotDeleteDefault"));
+        } else {
+          toast.error(result.error ?? t("deleteFailed"));
+        }
       }
     });
   }, [deleteTarget, t, closeDeleteConfirm, fetchGroups]);

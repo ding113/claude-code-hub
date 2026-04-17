@@ -308,7 +308,7 @@ export function SummaryTab({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("billingDetails.input")}:</span>
                 <span className="font-mono">
-                  {formatTokenAmount(inputTokens)} tokens
+                  {formatTokenAmount(inputTokens)} {t("billingDetails.unit.tokens")}
                   {costBreakdown ? (
                     <span className="ml-3 text-muted-foreground">
                       {formatCurrency(costBreakdown.input, "USD", 6)}
@@ -321,7 +321,7 @@ export function SummaryTab({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("billingDetails.output")}:</span>
                 <span className="font-mono">
-                  {formatTokenAmount(outputTokens)} tokens
+                  {formatTokenAmount(outputTokens)} {t("billingDetails.unit.tokens")}
                   {costBreakdown ? (
                     <span className="ml-3 text-muted-foreground">
                       {formatCurrency(costBreakdown.output, "USD", 6)}
@@ -341,10 +341,18 @@ export function SummaryTab({
                         ? cacheCreation5mInputTokens
                         : cacheCreationInputTokens
                     )}{" "}
-                    tokens <span className="text-orange-600">(1.25x)</span>
+                    {t("billingDetails.unit.tokens")}{" "}
+                    <span className="text-orange-600">(1.25x)</span>
                     {costBreakdown ? (
                       <span className="ml-3 text-muted-foreground">
-                        {formatCurrency(costBreakdown.cache_creation, "USD", 6)}
+                        {formatCurrency(
+                          costBreakdown.cache_creation_5m ??
+                            // Back-compat for rows stored before the split:
+                            // only fall back to aggregate when 1h TTL is NOT also present
+                            (cacheTtlApplied === "1h" ? "0" : costBreakdown.cache_creation),
+                          "USD",
+                          6
+                        )}
                       </span>
                     ) : null}
                   </span>
@@ -362,10 +370,17 @@ export function SummaryTab({
                         ? cacheCreation1hInputTokens
                         : cacheCreationInputTokens
                     )}{" "}
-                    tokens <span className="text-orange-600">(2x)</span>
+                    {t("billingDetails.unit.tokens")} <span className="text-orange-600">(2x)</span>
                     {costBreakdown ? (
                       <span className="ml-3 text-muted-foreground">
-                        {formatCurrency(costBreakdown.cache_creation, "USD", 6)}
+                        {formatCurrency(
+                          costBreakdown.cache_creation_1h ??
+                            // Back-compat for rows stored before the split:
+                            // fall back to aggregate only when 1h is the dominant TTL
+                            (cacheTtlApplied === "1h" ? costBreakdown.cache_creation : "0"),
+                          "USD",
+                          6
+                        )}
                       </span>
                     ) : null}
                   </span>
@@ -377,7 +392,7 @@ export function SummaryTab({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheRead")}:</span>
                   <span className="font-mono">
-                    {formatTokenAmount(cacheReadInputTokens)} tokens{" "}
+                    {formatTokenAmount(cacheReadInputTokens)} {t("billingDetails.unit.tokens")}{" "}
                     <span className="text-emerald-600">(0.1x)</span>
                     {costBreakdown ? (
                       <span className="ml-3 text-muted-foreground">

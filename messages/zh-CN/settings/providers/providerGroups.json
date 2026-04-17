@@ -27,5 +27,7 @@
   "confirm": "确认",
   "loading": "加载中...",
   "nameRequired": "分组名称为必填项",
-  "duplicateName": "已存在同名分组"
+  "duplicateName": "已存在同名分组",
+  "invalidMultiplier": "请输入有效的非负成本倍率",
+  "groupInUse": "该分组仍被供应商引用，无法删除"
 }

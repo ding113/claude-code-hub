@@ -3241,6 +3241,8 @@ async function updateRequestCostFromUsage(
         input: String(breakdown.input),
         output: String(breakdown.output),
         cache_creation: String(breakdown.cache_creation),
+        cache_creation_5m: String(breakdown.cache_creation_5m),
+        cache_creation_1h: String(breakdown.cache_creation_1h),
         cache_read: String(breakdown.cache_read),
         base_total: baseTotal.toDecimalPlaces(COST_SCALE).toString(),
         provider_multiplier: costMultiplier,
@@ -3502,7 +3504,8 @@ async function trackCostToRedis(
         provider.costMultiplier,
         session.getContext1mApplied(),
         priorityServiceTierApplied,
-        longContextPricing
+        longContextPricing,
+        session.getGroupCostMultiplier()
       )
     );
     if (cost.lte(0)) return;

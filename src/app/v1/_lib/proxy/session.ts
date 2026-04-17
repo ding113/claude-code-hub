@@ -307,6 +307,11 @@ export class ProxySession {
   }
 
   setGroupCostMultiplier(value: number): void {
+    // Guard against NaN, Infinity, negative values polluting cost calculations.
+    if (!Number.isFinite(value) || value < 0) {
+      this.groupCostMultiplier = 1;
+      return;
+    }
     this.groupCostMultiplier = value;
   }
 

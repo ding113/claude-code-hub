@@ -27,5 +27,7 @@
   "confirm": "確認",
   "loading": "読み込み中...",
   "nameRequired": "グループ名は必須です",
-  "duplicateName": "同じ名前のグループが既に存在します"
+  "duplicateName": "同じ名前のグループが既に存在します",
+  "invalidMultiplier": "有効な非負のコスト倍率を入力してください",
+  "groupInUse": "プロバイダーから参照されているグループは削除できません"
 }

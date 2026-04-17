@@ -6,7 +6,9 @@ import { logger } from "@/lib/logger";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { findAllProvidersFresh } from "@/repository/provider";
 import {
+  countProvidersUsingGroup,
   findAllProviderGroups,
+  findProviderGroupById,
   findProviderGroupByName,
   createProviderGroup as repoCreateProviderGroup,
   deleteProviderGroup as repoDeleteProviderGroup,
@@ -88,10 +90,13 @@ export async function createProviderGroup(input: {
       return { ok: false, error: "Group name is required", errorCode: "NAME_REQUIRED" };
     }
 
-    if (input.costMultiplier !== undefined && input.costMultiplier < 0) {
+    if (
+      input.costMultiplier !== undefined &&
+      (!Number.isFinite(input.costMultiplier) || input.costMultiplier < 0)
+    ) {
       return {
         ok: false,
-        error: "Cost multiplier must be a non-negative number",
+        error: "Cost multiplier must be a finite non-negative number",
         errorCode: "INVALID_MULTIPLIER",
       };
     }
@@ -133,10 +138,13 @@ export async function updateProviderGroup(
       return { ok: false, error: "Unauthorized" };
     }
 
-    if (input.costMultiplier !== undefined && input.costMultiplier < 0) {
+    if (
+      input.costMultiplier !== undefined &&
+      (!Number.isFinite(input.costMultiplier) || input.costMultiplier < 0)
+    ) {
       return {
         ok: false,
-        error: "Cost multiplier must be a non-negative number",
+        error: "Cost multiplier must be a finite non-negative number",
         errorCode: "INVALID_MULTIPLIER",
       };
     }
@@ -166,6 +174,29 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return { ok: false, error: "Unauthorized" };
+    }
+
+    // Pre-check: verify group exists and is not referenced by any provider.
+    const existing = await findProviderGroupById(id);
+    if (!existing) {
+      return { ok: false, error: "Provider group not found" };
+    }
+
+    if (existing.name === PROVIDER_GROUP.DEFAULT) {
+      return {
+        ok: false,
+        error: "Cannot delete the default group",
+        errorCode: "CANNOT_DELETE_DEFAULT",
+      };
+    }
+
+    const referenceCount = await countProvidersUsingGroup(existing.name);
+    if (referenceCount > 0) {
+      return {
+        ok: false,
+        error: "Cannot delete a group that is still referenced by providers",
+        errorCode: "GROUP_IN_USE",
+      };
     }
 
     await repoDeleteProviderGroup(id);

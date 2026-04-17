@@ -29,7 +29,11 @@ export type MessageRequestUpdatePatch = {
   context1mApplied?: boolean;
   swapCacheTtlApplied?: boolean;
   specialSettings?: CreateMessageRequestData["special_settings"];
-  costBreakdown?: StoredCostBreakdown;
+  /**
+   * undefined = do not update the column.
+   * null = clear the column explicitly.
+   */
+  costBreakdown?: StoredCostBreakdown | null;
 };
 
 type MessageRequestUpdateRecord = {

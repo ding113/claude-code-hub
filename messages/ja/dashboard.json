@@ -304,7 +304,10 @@
         "baseCost": "基本コスト",
         "providerMultiplier": "プロバイダー倍率",
         "groupMultiplier": "グループ倍率",
-        "baseTotal": "基本合計"
+        "baseTotal": "基本合計",
+        "unit": {
+          "tokens": "トークン"
+        }
       },
       "performance": {
         "title": "パフォーマンス",

@@ -188,6 +188,8 @@ describe("calculateRequestCostBreakdown", () => {
       input: 0,
       output: 0,
       cache_creation: 0,
+      cache_creation_5m: 0,
+      cache_creation_1h: 0,
       cache_read: 0,
       total: 0,
     });

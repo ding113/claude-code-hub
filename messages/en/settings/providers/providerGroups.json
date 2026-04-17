@@ -27,5 +27,7 @@
   "confirm": "Confirm",
   "loading": "Loading...",
   "nameRequired": "Group name is required",
-  "duplicateName": "A group with this name already exists"
+  "duplicateName": "A group with this name already exists",
+  "invalidMultiplier": "Please enter a valid non-negative cost multiplier",
+  "groupInUse": "Cannot delete a group that is still referenced by providers"
 }

@@ -304,7 +304,10 @@
         "baseCost": "基础费用",
         "providerMultiplier": "供应商倍率",
         "groupMultiplier": "分组倍率",
-        "baseTotal": "基础合计"
+        "baseTotal": "基础合计",
+        "unit": {
+          "tokens": "tokens"
+        }
       },
       "performance": {
         "title": "性能数据",

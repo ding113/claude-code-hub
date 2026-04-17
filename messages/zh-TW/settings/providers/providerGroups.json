@@ -27,5 +27,7 @@
   "confirm": "確認",
   "loading": "載入中...",
   "nameRequired": "分組名稱為必填",
-  "duplicateName": "已有相同名稱的分組"
+  "duplicateName": "已有相同名稱的分組",
+  "invalidMultiplier": "請輸入有效的非負成本倍率",
+  "groupInUse": "該分組仍被供應商引用，無法刪除"
 }
