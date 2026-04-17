@@ -262,7 +262,8 @@
           "options": {
             "low": "Low",
             "medium": "Medium",
-            "high": "High (Recommended)",
+            "high": "High",
+            "xhigh": "Xhigh (Recommended)",
             "max": "Max"
           }
         },
