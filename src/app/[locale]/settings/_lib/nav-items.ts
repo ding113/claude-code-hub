@@ -72,6 +72,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     iconName: "bell",
   },
   {
+    href: "/dashboard/audit-logs",
+    labelKey: "nav.auditLogs",
+    label: "Audit Logs",
+    iconName: "file-text",
+  },
+  {
     href: "/api/actions/scalar",
     labelKey: "nav.apiDocs",
     label: "API Docs",

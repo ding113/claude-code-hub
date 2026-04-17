@@ -114,19 +114,53 @@ async function fetchFromUpstream(
       signal: controller.signal,
     });
 
+    const responseText = await response.text();
+
     if (!response.ok) {
+      logger.error("[IpGeo] upstream request failed", {
+        ip,
+        lang,
+        url,
+        status: response.status,
+        bodySnippet: responseText.slice(0, 300),
+      });
       return { error: `upstream status ${response.status}` };
     }
 
-    const data = (await response.json()) as IpGeoLookupResult;
+    let data: IpGeoLookupResult;
+    try {
+      data = JSON.parse(responseText) as IpGeoLookupResult;
+    } catch (error) {
+      logger.error("[IpGeo] upstream returned invalid json", {
+        ip,
+        lang,
+        url,
+        error: error instanceof Error ? error.message : String(error),
+        bodySnippet: responseText.slice(0, 300),
+      });
+      return { error: "upstream invalid json" };
+    }
+
     // Validate the UI-critical subtree before we cache this for an hour.
     // If upstream drifts or returns a partial payload, fail here rather than
     // letting the dashboard blow up at `data.location.country.flag.emoji`.
     if (!isValidLookupResult(data)) {
+      logger.error("[IpGeo] upstream returned unexpected shape", {
+        ip,
+        lang,
+        url,
+        bodySnippet: responseText.slice(0, 300),
+      });
       return { error: "upstream returned unexpected shape" };
     }
     return data;
   } catch (error) {
+    logger.error("[IpGeo] upstream request threw", {
+      ip,
+      lang,
+      url,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return {
       error: error instanceof Error ? error.message : String(error),
     };
@@ -178,6 +212,12 @@ export async function lookupIp(
   const upstream = await fetchFromUpstream(trimmedIp, lang);
 
   if ("error" in upstream) {
+    logger.warn("[IpGeo] lookup failed", {
+      ip: trimmedIp,
+      lang,
+      error: upstream.error,
+      bypassCache: !!options.bypassCache,
+    });
     await writeCache(key, { kind: "error", error: upstream.error }, NEGATIVE_TTL_SECONDS);
     return { status: "error", error: upstream.error };
   }

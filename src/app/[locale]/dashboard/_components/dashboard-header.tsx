@@ -27,7 +27,6 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
       ? [{ href: "/dashboard/quotas", label: t("quotasManagement") }]
       : [{ href: "/dashboard/my-quota", label: t("myQuota") }]),
     { href: "/dashboard/users", label: t("userManagement") },
-    { href: "/dashboard/audit-logs", label: t("auditLogs"), adminOnly: true },
     { href: "/usage-doc", label: t("documentation") },
     { href: "/settings", label: t("systemSettings"), adminOnly: true },
   ];

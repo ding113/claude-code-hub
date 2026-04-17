@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { lookupIp } from "@/lib/ip-geo/client";
+import { logger } from "@/lib/logger";
 
 // IP 查询需要 Redis + 网络，运行在 Node runtime
 export const runtime = "nodejs";
@@ -38,6 +39,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ ip: 
   const url = new URL(request.url);
   const lang = url.searchParams.get("lang") ?? undefined;
   const result = await lookupIp(ip, { lang });
+  if (result.status === "error") {
+    logger.warn("[IpGeoRoute] lookup returned error", {
+      ip,
+      lang,
+      error: result.error,
+      userId: session.user.id,
+    });
+  }
   // Cache on the edge for a short window — response body already cached server-side.
   return Response.json(result, {
     headers: { "cache-control": "private, max-age=60" },
