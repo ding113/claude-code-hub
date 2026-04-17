@@ -29,5 +29,11 @@
   "nameRequired": "グループ名は必須です",
   "duplicateName": "同じ名前のグループが既に存在します",
   "invalidMultiplier": "有効な非負のコスト倍率を入力してください",
-  "groupInUse": "プロバイダーから参照されているグループは削除できません"
+  "groupInUse": "プロバイダーから参照されているグループは削除できません",
+  "groupMembers": "グループメンバー",
+  "providerName": "プロバイダー名",
+  "effectivePriority": "グループ内の優先度",
+  "noMembers": "メンバーがいません",
+  "savePriorityFailed": "優先度の保存に失敗しました",
+  "savePrioritySuccess": "優先度を更新しました"
 }
