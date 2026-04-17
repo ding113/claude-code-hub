@@ -12,8 +12,9 @@ export interface IpGeoCoordinates {
 export interface IpGeoFlag {
   emoji: string;
   unicode: string;
-  svg: string;
-  png: string;
+  // svg/png may be null for the "ZZ" unknown-country fallback.
+  svg: string | null;
+  png: string | null;
 }
 
 export interface IpGeoLanguage {
@@ -73,11 +74,14 @@ export interface IpGeoTimezone {
 }
 
 export interface IpGeoConnection {
-  asn: number;
+  // CGN / bogon / tailscale-style addresses legitimately have no ASN and no
+  // advertised route. Both are nullable in practice despite the OpenAPI
+  // spec listing them as required.
+  asn: number | null;
   handle: string | null;
   organization: string | null;
   domain: string | null;
-  route: string;
+  route: string | null;
   rir: string;
   type: string;
   subtype: string | null;

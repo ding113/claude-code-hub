@@ -58,15 +58,27 @@ function isValidLookupResult(data: unknown): data is IpGeoLookupResult {
   const d = data as Record<string, unknown>;
   if (typeof d.ip !== "string" || d.ip.length === 0) return false;
 
+  // Required UI-critical subtree:
+  //   ip, location.country.{code,name}, timezone.id, connection (object).
+  // Individual fields inside `connection` (asn / route / organization /
+  // domain / ...) may legitimately be null — CGN (100.64/10), Tailscale,
+  // and bogon ranges have no advertised ASN or route. We intentionally
+  // accept those payloads so the UI can surface what info is available
+  // instead of negative-caching every private-ish IP.
   const location = d.location as Record<string, unknown> | undefined;
   if (!location || typeof location !== "object") return false;
   const country = location.country as Record<string, unknown> | undefined;
   if (!country || typeof country !== "object") return false;
   if (typeof country.code !== "string" || typeof country.name !== "string") return false;
 
+  const timezone = d.timezone as Record<string, unknown> | undefined;
+  if (!timezone || typeof timezone !== "object") return false;
+  if (typeof timezone.id !== "string") return false;
+
   const connection = d.connection as Record<string, unknown> | undefined;
   if (!connection || typeof connection !== "object") return false;
-  if (typeof connection.asn !== "number") return false;
+  // Accept asn = number | null (null for CGN / bogon)
+  if (connection.asn !== null && typeof connection.asn !== "number") return false;
 
   return true;
 }

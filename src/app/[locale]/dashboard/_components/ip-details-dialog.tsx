@@ -20,6 +20,21 @@ interface IpDetailsDialogProps {
 
 const KNOWN_RISK_LEVELS = new Set(["none", "low", "medium", "high", "critical"]);
 
+/**
+ * True when the API actually located the IP. For CGN / bogon / tailscale
+ * IPs upstream returns `0,0` with `accuracy_radius_km = null`, which is a
+ * "we don't know" signal rather than a real pair of coordinates — hide it.
+ */
+export function hasMeaningfulCoordinates(coords: {
+  latitude: number;
+  longitude: number;
+  accuracy_radius_km: number | null;
+}): boolean {
+  if (coords.accuracy_radius_km === null) return false;
+  if (coords.latitude === 0 && coords.longitude === 0) return false;
+  return true;
+}
+
 function riskLevelLabel(t: ReturnType<typeof useTranslations<"ipDetails">>, level: string): string {
   if (KNOWN_RISK_LEVELS.has(level)) {
     return t(`riskLevels.${level}` as "riskLevels.none");
@@ -112,10 +127,12 @@ function IpDetailsContent({
             {data.data.location.postal_code && (
               <SectionRow label={t("fields.postalCode")} value={data.data.location.postal_code} />
             )}
-            <SectionRow
-              label={t("fields.coordinates")}
-              value={`${data.data.location.coordinates.latitude}, ${data.data.location.coordinates.longitude}`}
-            />
+            {hasMeaningfulCoordinates(data.data.location.coordinates) && (
+              <SectionRow
+                label={t("fields.coordinates")}
+                value={`${data.data.location.coordinates.latitude}, ${data.data.location.coordinates.longitude}`}
+              />
+            )}
             <SectionRow
               label={t("fields.timezone")}
               value={`${data.data.timezone.id} (${data.data.timezone.utc_offset})`}
@@ -126,21 +143,28 @@ function IpDetailsContent({
 
           <div>
             <h3 className="text-sm font-semibold mb-2">{t("sections.network")}</h3>
-            <SectionRow label={t("fields.asn")} value={`AS${data.data.connection.asn}`} />
-            <SectionRow
-              label={t("fields.organization")}
-              value={data.data.connection.organization ?? "—"}
-            />
-            <SectionRow label={t("fields.route")} value={data.data.connection.route} />
+            {data.data.connection.asn !== null && (
+              <SectionRow label={t("fields.asn")} value={`AS${data.data.connection.asn}`} />
+            )}
+            {data.data.connection.organization && (
+              <SectionRow
+                label={t("fields.organization")}
+                value={data.data.connection.organization}
+              />
+            )}
+            {data.data.connection.route && (
+              <SectionRow label={t("fields.route")} value={data.data.connection.route} />
+            )}
             <SectionRow label={t("fields.type")} value={data.data.connection.type} />
             {data.data.connection.subtype && (
               <SectionRow label={t("fields.subtype")} value={data.data.connection.subtype} />
             )}
-            <SectionRow label={t("fields.rir")} value={data.data.connection.rir} />
-            <SectionRow
-              label={t("fields.anycast")}
-              value={data.data.connection.is_anycast ? t("yes") : t("no")}
-            />
+            {data.data.connection.rir && data.data.connection.rir !== "UNKNOWN" && (
+              <SectionRow label={t("fields.rir")} value={data.data.connection.rir} />
+            )}
+            {data.data.connection.is_anycast && (
+              <SectionRow label={t("fields.anycast")} value={t("yes")} />
+            )}
             {data.data.hostname && (
               <SectionRow label={t("fields.hostname")} value={data.data.hostname} />
             )}

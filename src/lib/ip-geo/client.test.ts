@@ -227,3 +227,113 @@ describe("lookupIp — degradation", () => {
     expect(result.status).toBe("error");
   });
 });
+
+describe("lookupIp — partial payloads (CGN / bogon / tailscale IPs)", () => {
+  // Real-world response from the CCH-hosted service for a Tailscale CGN IP.
+  // `connection.asn`, `connection.route`, `connection.domain`,
+  // `location.region`, `location.city`, `location.postal_code`, and
+  // `location.coordinates.accuracy_radius_km` are all null here. We MUST
+  // still surface this payload to the dashboard (so operators can at least
+  // see the IP + scope + carrier/NAT organization) rather than treating
+  // every 100.64/10 address as an "unexpected shape" and caching a 60s
+  // negative entry.
+  const CGN_PAYLOAD = {
+    ip: "100.85.244.112",
+    version: "ipv4",
+    hostname: "dings-macbook-pro.taile7ff02.ts.net",
+    location: {
+      continent: { code: "AN", name: "Unknown" },
+      country: {
+        code: "ZZ",
+        code3: "ZZZ",
+        name: "Unknown",
+        name_native: "Unknown",
+        capital: null,
+        calling_code: "+0",
+        tld: ".unknown",
+        area_km2: 0,
+        population: 0,
+        borders: [],
+        is_eu_member: false,
+        flag: { emoji: "🇿🇿", unicode: "U+1F1FF U+1F1FF", svg: null, png: null },
+        languages: [],
+        currencies: [],
+      },
+      region: null,
+      city: null,
+      postal_code: null,
+      coordinates: { latitude: 0.0, longitude: 0.0, accuracy_radius_km: null },
+    },
+    timezone: {
+      id: "UTC",
+      name: "Coordinated Universal Time",
+      abbreviation: "UTC",
+      utc_offset: "+00:00",
+      utc_offset_seconds: 0,
+      is_dst: false,
+      current_time: "2026-04-17T08:31:24Z",
+    },
+    connection: {
+      asn: null,
+      handle: null,
+      organization: "Carrier-Grade NAT RFC6598",
+      domain: null,
+      route: null,
+      rir: "UNKNOWN",
+      type: "unknown",
+      subtype: null,
+      scope: "bogon",
+      is_anycast: false,
+    },
+    company: { name: "Carrier-Grade NAT RFC6598", domain: null, type: "unknown" },
+    carrier: null,
+    hosting: null,
+    privacy: {
+      is_proxy: false,
+      is_vpn: false,
+      is_tor: false,
+      is_tor_exit: false,
+      is_relay: false,
+      is_anonymous: false,
+    },
+    threat: {
+      is_abuser: false,
+      is_attacker: false,
+      is_crawler: false,
+      is_threat: false,
+      score: 0.0,
+      risk_level: "none",
+      blocklists: [],
+    },
+    abuse: null,
+  };
+
+  test("accepts payload with null asn / route / region / city / accuracy", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(CGN_PAYLOAD), { status: 200 }));
+    const { lookupIp } = await import("./client");
+    // 100.85.x/16 is CGN — isPrivateIp treats 100.64/10 as private, so to
+    // actually hit the upstream path we use a public IP and return the CGN
+    // payload. We're validating the shape-acceptance branch here.
+    const result = await lookupIp("8.8.4.4");
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.data.connection.asn).toBeNull();
+      expect(result.data.connection.route).toBeNull();
+      expect(result.data.location.region).toBeNull();
+      expect(result.data.location.city).toBeNull();
+      expect(result.data.location.coordinates.accuracy_radius_km).toBeNull();
+    }
+  });
+
+  test("still rejects payload missing UI-critical subtree (ip / country / timezone)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ip: "1.1.1.1", location: { country: { code: "US" } } }),
+        { status: 200 }
+      )
+    );
+    const { lookupIp } = await import("./client");
+    const result = await lookupIp("1.1.1.1");
+    expect(result.status).toBe("error");
+  });
+});
