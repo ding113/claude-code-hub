@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS "provider_groups" (
 	"name" varchar(200) NOT NULL,
 	"cost_multiplier" numeric(10, 4) DEFAULT '1.0' NOT NULL,
 	"description" varchar(500),
-	"created_at" timestamp with time zone DEFAULT now(),
-	"updated_at" timestamp with time zone DEFAULT now(),
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "provider_groups_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint

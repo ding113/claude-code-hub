@@ -138,7 +138,7 @@
     "geoLookup": "启用 IP 归属地查询",
     "geoLookupHint": "开启后，仪表盘会通过配置的 IP 归属地服务解析出国家/城市/ASN 等信息。",
     "extractionConfigLabel": "请求头提取链（JSON）",
-    "extractionConfigHint": "留空则使用内置默认链：cf-connecting-ip → x-real-ip → x-forwarded-for（取最右）。进阶：填写包含 `headers` 数组的 JSON 对象，数组每项包含 `name` 以及可选的 `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）。",
+    "extractionConfigHint": "留空则使用安全的内置默认链：x-real-ip → x-forwarded-for（取最右）。如果应用前面有 Cloudflare 等剥离客户端伪造头的 CDN，请显式把其专有头加到链的最前面（示例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。数组每项包含 `name` 以及可选的 `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）。",
     "resetToDefault": "恢复默认"
   }
 }

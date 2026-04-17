@@ -335,4 +335,22 @@ describe("lookupIp — partial payloads (CGN / bogon / tailscale IPs)", () => {
     const result = await lookupIp("1.1.1.1");
     expect(result.status).toBe("error");
   });
+
+  test("rejects payload where country is missing flag.emoji (dialog deref would crash)", async () => {
+    const brokenPayload = {
+      ...CGN_PAYLOAD,
+      location: {
+        ...CGN_PAYLOAD.location,
+        country: {
+          ...CGN_PAYLOAD.location.country,
+          // Upstream drift: flag object present but emoji omitted.
+          flag: { unicode: "U+1F1FA U+1F1F8", svg: null, png: null },
+        },
+      },
+    };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(brokenPayload), { status: 200 }));
+    const { lookupIp } = await import("./client");
+    const result = await lookupIp("6.6.6.6");
+    expect(result.status).toBe("error");
+  });
 });

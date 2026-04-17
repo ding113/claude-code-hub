@@ -125,7 +125,7 @@
     "geoLookup": "IP 地理情報照会を有効化",
     "geoLookupHint": "有効にすると、ダッシュボードは設定済みの IP 地理情報サービスを用いて IP を国・都市・ASN に解決します。",
     "extractionConfigLabel": "ヘッダー抽出チェーン（JSON）",
-    "extractionConfigHint": "空の場合は組み込み既定（cf-connecting-ip → x-real-ip → x-forwarded-for の最右値）を使用します。詳細設定：`headers` 配列を持つ JSON オブジェクトを指定してください。各項目には `name` と任意の `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）を含められます。",
+    "extractionConfigHint": "空の場合は安全な組み込み既定（x-real-ip → x-forwarded-for の最右値）を使用します。Cloudflare や同等の CDN 経由の場合は、そのヘッダーを明示的に追加してください（例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。各項目には `name` と任意の `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）を含められます。",
     "resetToDefault": "既定に戻す"
   },
   "section": {

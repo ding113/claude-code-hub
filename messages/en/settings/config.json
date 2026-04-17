@@ -125,7 +125,7 @@
     "geoLookup": "Enable IP geolocation lookup",
     "geoLookupHint": "When enabled, the dashboard will resolve IP addresses to country / city / ASN via the configured IP geolocation service.",
     "extractionConfigLabel": "Header extraction chain (JSON)",
-    "extractionConfigHint": "Leave empty to use the built-in default: cf-connecting-ip → x-real-ip → x-forwarded-for (rightmost). Advanced: provide a JSON object with a `headers` array; each entry has `name` and optional `pick` (\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}).",
+    "extractionConfigHint": "Leave empty to use the safe built-in default: x-real-ip → x-forwarded-for (rightmost). If fronted by Cloudflare or a CDN that strips client-supplied headers, add its header explicitly (example: `{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`). Each entry has `name` and optional `pick` (\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}).",
     "resetToDefault": "Reset to default"
   },
   "section": {

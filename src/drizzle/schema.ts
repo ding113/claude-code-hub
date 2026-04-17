@@ -167,8 +167,8 @@ export const providerGroups = pgTable('provider_groups', {
   name: varchar('name', { length: 200 }).notNull().unique(),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).notNull().default('1.0'),
   description: varchar('description', { length: 500 }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Providers table

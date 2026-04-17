@@ -1110,6 +1110,31 @@ async function safeFindUser(userId: number): Promise<Awaited<ReturnType<typeof f
   }
 }
 
+/**
+ * Shared `user.create` audit emit. Called from both `addUser` (which also
+ * issues a default key) and `createUserOnly` (unified edit-dialog create
+ * path) so every user-creation flow produces an audit row with the full
+ * post-creation snapshot.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: the repository's createUser
+// return type is wider than the action-side User type; we pass it straight
+// to the audit emitter which redacts & serializes unknown fields.
+function emitUserCreateAudit(user: any): void {
+  emitActionAudit({
+    category: "user",
+    action: "user.create",
+    targetType: "user",
+    targetId: String(user.id),
+    targetName: user.name,
+    // Full user record — the redactor strips sensitive fields; everything
+    // else (id, name, role, isEnabled, expiresAt, providerGroup, tags,
+    // quota fields, allowed/blocked clients & models, …) is preserved so
+    // the audit captures the complete post-creation state.
+    after: user,
+    success: true,
+  });
+}
+
 // 添加用户
 export async function addUser(data: {
   name: string;
@@ -1265,21 +1290,7 @@ export async function addUser(data: {
     });
 
     revalidatePath("/dashboard");
-    emitActionAudit({
-      category: "user",
-      action: "user.create",
-      targetType: "user",
-      targetId: String(newUser.id),
-      targetName: newUser.name,
-      after: {
-        id: newUser.id,
-        name: newUser.name,
-        role: newUser.role,
-        isEnabled: newUser.isEnabled,
-        providerGroup: newUser.providerGroup,
-      },
-      success: true,
-    });
+    emitUserCreateAudit(newUser);
     return {
       ok: true,
       data: {
@@ -1464,6 +1475,7 @@ export async function createUserOnly(data: {
     });
 
     revalidatePath("/dashboard");
+    emitUserCreateAudit(newUser);
     return {
       ok: true,
       data: {
@@ -1490,6 +1502,14 @@ export async function createUserOnly(data: {
     logger.error("Failed to create user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.create",
+      targetType: "user",
+      targetName: data.name,
+      success: false,
+      errorMessage: "CREATE_FAILED",
+    });
     return {
       ok: false,
       error: message,
@@ -1522,6 +1542,12 @@ export async function editUser(
     allowedModels?: string[];
   }
 ): Promise<ActionResult> {
+  // Snapshot operator-visible state BEFORE entering the try block so failure
+  // audit events also carry `before` context (target name / previous values).
+  // `safeFindUser` never throws — it catches internally and returns null —
+  // which is why we can hoist it above the try/catch boundary safely.
+  const beforeUser = await safeFindUser(userId);
+
   try {
     // Get translations for error messages
     const tError = await getTranslations("errors");
@@ -1601,11 +1627,6 @@ export async function editUser(
         ? undefined
         : normalizeProviderGroup(validatedData.providerGroup);
 
-    // Snapshot for audit before mutation so we can diff against the
-    // post-update state. Failure here must not block the mutation — audit
-    // is best-effort.
-    const beforeUser = await safeFindUser(userId);
-
     // Update user with validated data
     await updateUser(userId, {
       name: validatedData.name,
@@ -1652,6 +1673,10 @@ export async function editUser(
       action: "user.update",
       targetType: "user",
       targetId: String(userId),
+      // Include before-snapshot (captured above the try block) so the audit
+      // row has context even when the update itself failed.
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
       success: false,
       // Stable code only — `error.message` from `updateUser` can carry raw pg
       // errors (duplicate key values, constraint names) which we don't want
@@ -1669,6 +1694,9 @@ export async function editUser(
 // 删除用户
 // Ledger rows intentionally survive user deletion (billing audit trail)
 export async function removeUser(userId: number): Promise<ActionResult> {
+  // Hoisted above try/catch so the failure emit also carries before-snapshot.
+  const beforeUser = await safeFindUser(userId);
+
   try {
     // Get translations for error messages
     const tError = await getTranslations("errors");
@@ -1682,7 +1710,6 @@ export async function removeUser(userId: number): Promise<ActionResult> {
       };
     }
 
-    const beforeUser = await safeFindUser(userId);
     await deleteUser(userId);
     revalidatePath("/dashboard");
     emitActionAudit({
@@ -1704,6 +1731,8 @@ export async function removeUser(userId: number): Promise<ActionResult> {
       action: "user.delete",
       targetType: "user",
       targetId: String(userId),
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
       success: false,
       errorMessage: "DELETE_FAILED",
     });

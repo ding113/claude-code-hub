@@ -125,7 +125,7 @@
     "geoLookup": "Включить поиск геолокации IP",
     "geoLookupHint": "Если включено, панель будет определять страну, город и ASN по IP через настроенный сервис геолокации.",
     "extractionConfigLabel": "Цепочка извлечения из заголовков (JSON)",
-    "extractionConfigHint": "Оставьте пустым для встроенной цепочки по умолчанию: cf-connecting-ip → x-real-ip → x-forwarded-for (самое правое значение). Для тонкой настройки: передайте JSON-объект с массивом `headers`, где каждый элемент содержит `name` и необязательное `pick` (\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}).",
+    "extractionConfigHint": "Оставьте пустым для безопасной встроенной цепочки по умолчанию: x-real-ip → x-forwarded-for (самое правое значение). Если перед приложением работает Cloudflare или аналогичный CDN, добавьте соответствующий заголовок явно (пример: `{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`). Каждый элемент содержит `name` и необязательное `pick` (\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}).",
     "resetToDefault": "Сбросить к умолчанию"
   },
   "section": {

@@ -1,4 +1,5 @@
 import * as authModule from "@/lib/auth";
+import { logger } from "@/lib/logger";
 import { createAuditLogAsync } from "@/repository/audit-log";
 import type { AuditCategory } from "@/types/audit-log";
 import { redactSensitive } from "./redact";
@@ -45,28 +46,46 @@ export function emitActionAudit(args: EmitActionAuditArgs): void {
 }
 
 async function emitAsync(args: EmitActionAuditArgs): Promise<void> {
-  const session = safeGetScopedAuthSession();
-  // Prefer the adapter-populated ALS; fall back to next/headers for direct
-  // Server Actions that bypass the OpenAPI adapter (system-settings form,
-  // any future "use server" form action, etc).
-  const { ip, userAgent } = await resolveRequestContext();
+  // Defense-in-depth: swallow ANY failure inside the audit pipeline.
+  //   - `resolveRequestContext()` has its own try/catch but dynamic-import
+  //     semantics could still surprise us in untested runtimes.
+  //   - `redactSensitive()` walks unknown caller-supplied objects — a
+  //     circular reference or a getter that throws should not cause an
+  //     unhandled promise rejection at the `void emitAsync(...)` site.
+  //   - `createAuditLogAsync()` already catches its DB errors, but this
+  //     extra outer catch keeps the contract consistent even if that
+  //     implementation changes later.
+  try {
+    const session = safeGetScopedAuthSession();
+    // Prefer the adapter-populated ALS; fall back to next/headers for direct
+    // Server Actions that bypass the OpenAPI adapter (system-settings form,
+    // any future "use server" form action, etc).
+    const { ip, userAgent } = await resolveRequestContext();
 
-  await createAuditLogAsync({
-    actionCategory: args.category,
-    actionType: args.action,
-    targetType: args.targetType ?? null,
-    targetId: args.targetId != null ? String(args.targetId) : null,
-    targetName: args.targetName ?? null,
-    beforeValue:
-      args.before !== undefined ? redactSensitive(args.before, args.redactExtraKeys) : null,
-    afterValue: args.after !== undefined ? redactSensitive(args.after, args.redactExtraKeys) : null,
-    operatorUserId: session?.user.id ?? null,
-    operatorUserName: session?.user.name ?? null,
-    operatorKeyId: session?.key.id ?? null,
-    operatorKeyName: session?.key.name ?? null,
-    operatorIp: ip,
-    userAgent,
-    success: args.success,
-    errorMessage: args.errorMessage ?? null,
-  });
+    await createAuditLogAsync({
+      actionCategory: args.category,
+      actionType: args.action,
+      targetType: args.targetType ?? null,
+      targetId: args.targetId != null ? String(args.targetId) : null,
+      targetName: args.targetName ?? null,
+      beforeValue:
+        args.before !== undefined ? redactSensitive(args.before, args.redactExtraKeys) : null,
+      afterValue:
+        args.after !== undefined ? redactSensitive(args.after, args.redactExtraKeys) : null,
+      operatorUserId: session?.user.id ?? null,
+      operatorUserName: session?.user.name ?? null,
+      operatorKeyId: session?.key.id ?? null,
+      operatorKeyName: session?.key.name ?? null,
+      operatorIp: ip,
+      userAgent,
+      success: args.success,
+      errorMessage: args.errorMessage ?? null,
+    });
+  } catch (error) {
+    logger.warn("[Audit] emitActionAudit failed, suppressed", {
+      category: args.category,
+      action: args.action,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

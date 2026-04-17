@@ -71,6 +71,16 @@ function isValidLookupResult(data: unknown): data is IpGeoLookupResult {
   if (!country || typeof country !== "object") return false;
   if (typeof country.code !== "string" || typeof country.name !== "string") return false;
 
+  // `country.flag.emoji` is dereferenced directly by the dialog, so if
+  // upstream drifts into omitting the flag object we'd crash at render
+  // time. Reject here instead, falling into the negative-cache path. Note
+  // that `flag.svg` and `flag.png` are still allowed to be null — only the
+  // emoji is a hard requirement (the "ZZ" unknown-country payload carries
+  // 🇿🇿 for it).
+  const flag = country.flag as Record<string, unknown> | undefined;
+  if (!flag || typeof flag !== "object") return false;
+  if (typeof flag.emoji !== "string") return false;
+
   const timezone = d.timezone as Record<string, unknown> | undefined;
   if (!timezone || typeof timezone !== "object") return false;
   if (typeof timezone.id !== "string") return false;

@@ -8,7 +8,11 @@ import { type AuditLogCursor, getAuditLog, listAuditLogs } from "@/repository/au
 import type { AuditCategory, AuditLogFilter, AuditLogRow } from "@/types/audit-log";
 import type { ActionResult } from "./types";
 
-const AUDIT_CATEGORY_VALUES: AuditCategory[] = [
+// `satisfies` lets TypeScript check that every literal is a valid
+// AuditCategory AND preserves the narrow tuple type. If a future category is
+// added to `AuditCategory` without being listed here, the exhaustiveness
+// check below fails compilation — see `_EXHAUSTIVE_CHECK`.
+const AUDIT_CATEGORY_VALUES = [
   "auth",
   "user",
   "provider",
@@ -18,10 +22,17 @@ const AUDIT_CATEGORY_VALUES: AuditCategory[] = [
   "notification",
   "sensitive_word",
   "model_price",
-];
+] as const satisfies readonly AuditCategory[];
+
+// If a new variant is added to `AuditCategory` without also being appended
+// to AUDIT_CATEGORY_VALUES, `UncoveredCategory` becomes non-never and this
+// assertion fails to compile.
+type UncoveredCategory = Exclude<AuditCategory, (typeof AUDIT_CATEGORY_VALUES)[number]>;
+const _EXHAUSTIVE_CHECK: UncoveredCategory extends never ? true : false = true;
+void _EXHAUSTIVE_CHECK;
 
 function isAuditCategory(value: string): value is AuditCategory {
-  return (AUDIT_CATEGORY_VALUES as string[]).includes(value);
+  return (AUDIT_CATEGORY_VALUES as readonly string[]).includes(value);
 }
 
 export interface GetAuditLogsBatchInput {
