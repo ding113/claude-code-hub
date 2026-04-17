@@ -6,6 +6,13 @@
   "privateIpNote": "該位址不在公網可路由範圍內。",
   "yes": "是",
   "no": "否",
+  "riskLevels": {
+    "none": "無",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "critical": "嚴重"
+  },
   "sections": {
     "location": "地理位置",
     "network": "網路資訊",
@@ -29,13 +36,6 @@
     "hostname": "主機名稱",
     "riskLevel": "風險等級",
     "score": "分數",
-    "riskLevels": {
-      "none": "無",
-      "low": "低",
-      "medium": "中",
-      "high": "高",
-      "critical": "嚴重"
-    },
     "abuseContact": "濫用聯絡人",
     "email": "電子郵件"
   },

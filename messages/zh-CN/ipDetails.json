@@ -6,6 +6,13 @@
   "privateIpNote": "该地址不在公网可路由范围内。",
   "yes": "是",
   "no": "否",
+  "riskLevels": {
+    "none": "无",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "critical": "严重"
+  },
   "sections": {
     "location": "地理位置",
     "network": "网络信息",
@@ -29,13 +36,6 @@
     "hostname": "主机名",
     "riskLevel": "风险等级",
     "score": "分数",
-    "riskLevels": {
-      "none": "无",
-      "low": "低",
-      "medium": "中",
-      "high": "高",
-      "critical": "严重"
-    },
     "abuseContact": "滥用联系人",
     "email": "邮箱"
   },

@@ -6,6 +6,13 @@
   "privateIpNote": "This address is not routable on the public internet.",
   "yes": "Yes",
   "no": "No",
+  "riskLevels": {
+    "none": "None",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "critical": "Critical"
+  },
   "sections": {
     "location": "Location",
     "network": "Network",
@@ -29,13 +36,6 @@
     "hostname": "Hostname",
     "riskLevel": "Risk level",
     "score": "score",
-    "riskLevels": {
-      "none": "None",
-      "low": "Low",
-      "medium": "Medium",
-      "high": "High",
-      "critical": "Critical"
-    },
     "abuseContact": "Abuse contact",
     "email": "Email"
   },

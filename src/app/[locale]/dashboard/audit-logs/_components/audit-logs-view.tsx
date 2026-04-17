@@ -116,6 +116,15 @@ export function AuditLogsView() {
     }
   };
 
+  const actionLabel = (actionType: string) => {
+    const key = `actions.${actionType}` as const;
+    try {
+      return t(key);
+    } catch {
+      return actionType;
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -250,9 +259,9 @@ export function AuditLogsView() {
                     </div>
                     <div
                       className="flex-[1.2] min-w-[140px] font-mono text-xs px-1.5 truncate"
-                      title={log.actionType}
+                      title={actionLabel(log.actionType)}
                     >
-                      {log.actionType}
+                      {actionLabel(log.actionType)}
                     </div>
                     <div className="flex-[0.9] min-w-[110px] px-1.5 truncate" title={operator}>
                       {operator}

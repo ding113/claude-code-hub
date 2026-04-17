@@ -67,6 +67,15 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
     }
   })();
 
+  const actionLabel = (() => {
+    const key = `actions.${log.actionType}` as const;
+    try {
+      return t(key);
+    } catch {
+      return log.actionType;
+    }
+  })();
+
   const openIpDialog = (ip: string) => {
     setIpDialogValue(ip);
     setIpDialogOpen(true);
@@ -92,7 +101,7 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
                 <Badge variant="outline">{categoryLabel}</Badge>
               </Row>
               <Row label={t("columns.action")}>
-                <span className="font-mono text-xs">{log.actionType}</span>
+                <span className="font-mono text-xs">{actionLabel}</span>
               </Row>
               <Row label={t("columns.status")}>
                 {log.success ? (
