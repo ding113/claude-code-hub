@@ -40,6 +40,7 @@ export async function findKeyById(id: number): Promise<Key | null> {
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
+      temporaryGroupName: keys.temporaryGroupName,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -72,6 +73,7 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
+      temporaryGroupName: keys.temporaryGroupName,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -112,6 +114,7 @@ export async function findKeyListBatch(userIds: number[]): Promise<Map<number, K
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
+      temporaryGroupName: keys.temporaryGroupName,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -156,6 +159,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitConcurrentSessions: keyData.limit_concurrent_sessions,
     providerGroup: keyData.provider_group ?? null,
     cacheTtlPreference: keyData.cache_ttl_preference ?? null,
+    temporaryGroupName: keyData.temporary_group_name ?? null,
   };
 
   const [key] = await db.insert(keys).values(dbData).returning({
@@ -177,6 +181,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitConcurrentSessions: keys.limitConcurrentSessions,
     providerGroup: keys.providerGroup,
     cacheTtlPreference: keys.cacheTtlPreference,
+    temporaryGroupName: keys.temporaryGroupName,
     createdAt: keys.createdAt,
     updatedAt: keys.updatedAt,
     deletedAt: keys.deletedAt,
@@ -248,6 +253,8 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (keyData.provider_group !== undefined) dbData.providerGroup = keyData.provider_group;
   if (keyData.cache_ttl_preference !== undefined)
     dbData.cacheTtlPreference = keyData.cache_ttl_preference ?? null;
+  if (keyData.temporary_group_name !== undefined)
+    dbData.temporaryGroupName = keyData.temporary_group_name ?? null;
 
   const [key] = await db
     .update(keys)
@@ -272,6 +279,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
+      temporaryGroupName: keys.temporaryGroupName,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -315,6 +323,7 @@ export async function findActiveKeyByUserIdAndName(
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
+      temporaryGroupName: keys.temporaryGroupName,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -447,7 +456,7 @@ export async function countActiveKeysByUser(userId: number): Promise<number> {
 export async function deleteKey(id: number): Promise<boolean> {
   const result = await db
     .update(keys)
-    .set({ deletedAt: new Date() })
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(keys.id, id), isNull(keys.deletedAt)))
     .returning({ id: keys.id, key: keys.key });
 
@@ -455,6 +464,97 @@ export async function deleteKey(id: number): Promise<boolean> {
     await invalidateCachedKey(result[0].key).catch(() => {});
   }
   return result.length > 0;
+}
+
+export async function deleteKeysBatch(ids: number[]): Promise<number> {
+  if (ids.length === 0) return 0;
+
+  const result = await db
+    .update(keys)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(and(inArray(keys.id, ids), isNull(keys.deletedAt)))
+    .returning({ id: keys.id, key: keys.key });
+
+  await Promise.all(result.map((row) => invalidateCachedKey(row.key).catch(() => {})));
+  return result.length;
+}
+
+export async function createKeysBatch(keyDataList: CreateKeyData[]): Promise<Key[]> {
+  if (keyDataList.length === 0) return [];
+
+  const rows = keyDataList.map((keyData) => ({
+    userId: keyData.user_id,
+    key: keyData.key,
+    name: keyData.name,
+    isEnabled: keyData.is_enabled,
+    expiresAt: keyData.expires_at,
+    canLoginWebUi: keyData.can_login_web_ui ?? true,
+    limit5hUsd: keyData.limit_5h_usd != null ? keyData.limit_5h_usd.toString() : null,
+    limitDailyUsd: keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null,
+    dailyResetMode: keyData.daily_reset_mode ?? "fixed",
+    dailyResetTime: keyData.daily_reset_time ?? "00:00",
+    limitWeeklyUsd: keyData.limit_weekly_usd != null ? keyData.limit_weekly_usd.toString() : null,
+    limitMonthlyUsd:
+      keyData.limit_monthly_usd != null ? keyData.limit_monthly_usd.toString() : null,
+    limitTotalUsd: keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null,
+    costResetAt: keyData.cost_reset_at ?? null,
+    limitConcurrentSessions: keyData.limit_concurrent_sessions,
+    providerGroup: keyData.provider_group ?? null,
+    cacheTtlPreference: keyData.cache_ttl_preference ?? null,
+    temporaryGroupName: keyData.temporary_group_name ?? null,
+  }));
+
+  const inserted = await db.insert(keys).values(rows).returning({
+    id: keys.id,
+    userId: keys.userId,
+    key: keys.key,
+    name: keys.name,
+    isEnabled: keys.isEnabled,
+    expiresAt: keys.expiresAt,
+    canLoginWebUi: keys.canLoginWebUi,
+    limit5hUsd: keys.limit5hUsd,
+    limitDailyUsd: keys.limitDailyUsd,
+    dailyResetMode: keys.dailyResetMode,
+    dailyResetTime: keys.dailyResetTime,
+    limitWeeklyUsd: keys.limitWeeklyUsd,
+    limitMonthlyUsd: keys.limitMonthlyUsd,
+    limitTotalUsd: keys.limitTotalUsd,
+    costResetAt: keys.costResetAt,
+    limitConcurrentSessions: keys.limitConcurrentSessions,
+    providerGroup: keys.providerGroup,
+    cacheTtlPreference: keys.cacheTtlPreference,
+    temporaryGroupName: keys.temporaryGroupName,
+    createdAt: keys.createdAt,
+    updatedAt: keys.updatedAt,
+    deletedAt: keys.deletedAt,
+  });
+
+  const created = inserted.map(toKey);
+
+  for (const key of created) {
+    try {
+      apiKeyVacuumFilter.noteExistingKey(key.key);
+    } catch {
+      // ignore
+    }
+  }
+
+  const redisBestEffortTimeoutMs = 400;
+  const redisTasks: Array<Promise<unknown>> = created.map((key) => cacheActiveKey(key).catch(() => {}));
+
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (process.env.REDIS_URL && rateLimitRaw !== "false" && rateLimitRaw !== "0") {
+    redisTasks.push(publishCacheInvalidation(CHANNEL_API_KEYS_UPDATED).catch(() => {}));
+  }
+
+  if (redisTasks.length > 0) {
+    await Promise.race([
+      Promise.all(redisTasks),
+      new Promise<void>((resolve) => setTimeout(resolve, redisBestEffortTimeoutMs)),
+    ]);
+  }
+
+  return created;
 }
 
 export async function resetKeyCostResetAt(keyId: number, resetAt: Date | null): Promise<boolean> {
@@ -511,6 +611,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
+      temporaryGroupName: keys.temporaryGroupName,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -619,6 +720,7 @@ export async function validateApiKeyAndGetUser(
       keyLimitConcurrentSessions: keys.limitConcurrentSessions,
       keyProviderGroup: keys.providerGroup,
       keyCacheTtlPreference: keys.cacheTtlPreference,
+      keyTemporaryGroupName: keys.temporaryGroupName,
       keyCreatedAt: keys.createdAt,
       keyUpdatedAt: keys.updatedAt,
       keyDeletedAt: keys.deletedAt,
@@ -708,6 +810,7 @@ export async function validateApiKeyAndGetUser(
     limitConcurrentSessions: row.keyLimitConcurrentSessions,
     providerGroup: row.keyProviderGroup,
     cacheTtlPreference: row.keyCacheTtlPreference,
+    temporaryGroupName: row.keyTemporaryGroupName,
     createdAt: row.keyCreatedAt,
     updatedAt: row.keyUpdatedAt,
     deletedAt: row.keyDeletedAt,

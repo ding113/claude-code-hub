@@ -31,6 +31,9 @@ export interface Key {
   // Cache TTL override (inherit -> follow provider/client)
   cacheTtlPreference: CacheTtlPreference | null;
 
+  // 临时 Key 分组：非空表示该 Key 属于一个批量管理分组
+  temporaryGroupName?: string | null;
+
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
@@ -62,6 +65,9 @@ export interface CreateKeyData {
 
   // Cache TTL override
   cache_ttl_preference?: CacheTtlPreference;
+
+  // Temporary Key batch group
+  temporary_group_name?: string | null;
 }
 
 /**
@@ -88,4 +94,7 @@ export interface UpdateKeyData {
 
   // Cache TTL override
   cache_ttl_preference?: CacheTtlPreference;
+
+  // Temporary Key batch group
+  temporary_group_name?: string | null;
 }

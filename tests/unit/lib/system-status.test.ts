@@ -39,8 +39,29 @@ describe("getPublicSystemStatusSnapshot", () => {
       systemAvailability: 0.8,
       providers: [
         {
+          providerId: 3,
+          providerName: "Anthropic Edge",
+          weight: 5,
+          providerType: "claude",
+          isEnabled: true,
+          currentStatus: "red",
+          currentAvailability: 0.4,
+          totalRequests: 20,
+          successRate: 0.45,
+          avgLatencyMs: 720,
+          lastRequestAt: "2026-04-15T11:57:00.000Z",
+          timeBuckets: [
+            {
+              bucketStart: "2026-04-15T08:00:00.000Z",
+              availabilityScore: 0.4,
+              totalRequests: 20,
+            },
+          ],
+        },
+        {
           providerId: 2,
           providerName: "Codex Fast",
+          weight: 1,
           providerType: "codex",
           isEnabled: true,
           currentStatus: "red",
@@ -60,6 +81,7 @@ describe("getPublicSystemStatusSnapshot", () => {
         {
           providerId: 1,
           providerName: "Claude Prime",
+          weight: 5,
           providerType: "claude",
           isEnabled: true,
           currentStatus: "green",
@@ -83,6 +105,18 @@ describe("getPublicSystemStatusSnapshot", () => {
       async (_period: string, _currency: string, scope: string) => {
         if (scope === "provider") {
           return [
+            {
+              providerId: 3,
+              providerName: "Anthropic Edge",
+              totalRequests: 20,
+              totalCost: 75,
+              totalTokens: 5_000_000,
+              successRate: 0.45,
+              avgTtfbMs: 420,
+              avgTokensPerSecond: 70,
+              avgCostPerRequest: 3.75,
+              avgCostPerMillionTokens: 15,
+            },
             {
               providerId: 1,
               providerName: "Claude Prime",
@@ -111,6 +145,18 @@ describe("getPublicSystemStatusSnapshot", () => {
         }
 
         return [
+          {
+            providerId: 3,
+            providerName: "Anthropic Edge",
+            totalRequests: 20,
+            cacheReadTokens: 400,
+            totalCost: 75,
+            cacheCreationCost: 8,
+            totalInputTokens: 800,
+            totalTokens: 800,
+            cacheHitRate: 0.5,
+            modelStats: [],
+          },
           {
             providerId: 1,
             providerName: "Claude Prime",
@@ -145,15 +191,16 @@ describe("getPublicSystemStatusSnapshot", () => {
     expect(snapshot.currencyDisplay).toBe("USD");
     expect(snapshot.windowDays).toBe(7);
     expect(snapshot.providers.map((provider) => provider.providerName)).toEqual([
-      "Codex Fast",
+      "Anthropic Edge",
       "Claude Prime",
+      "Codex Fast",
     ]);
     expect(snapshot.providers[0]).toMatchObject({
-      providerId: 2,
-      cacheHitRate: 0.25,
-      avgTokensPerSecond: 40,
-      avgCostPerMillionTokens: 20,
-      avgCostPerHundredMillionTokens: 2000,
+      providerId: 3,
+      cacheHitRate: 0.5,
+      avgTokensPerSecond: 70,
+      avgCostPerMillionTokens: 15,
+      avgCostPerHundredMillionTokens: 1500,
     });
     expect(snapshot.providers[1]).toMatchObject({
       providerId: 1,
@@ -164,15 +211,15 @@ describe("getPublicSystemStatusSnapshot", () => {
     });
     expect(snapshot.summary).toMatchObject({
       systemAvailability: 0.8,
-      providerCount: 2,
+      providerCount: 3,
       healthyCount: 1,
-      degradedCount: 1,
+      degradedCount: 2,
       unknownCount: 0,
     });
-    expect(snapshot.summary.weightedCacheHitRate).toBeCloseTo(0.673, 3);
-    expect(snapshot.summary.weightedTokensPerSecond).toBeCloseTo(130, 3);
-    expect(snapshot.summary.weightedCostPerMillionTokens).toBeCloseTo(13.25, 3);
-    expect(snapshot.summary.weightedCostPerHundredMillionTokens).toBeCloseTo(1325, 3);
+    expect(snapshot.summary.weightedCacheHitRate).toBeCloseTo(0.644, 3);
+    expect(snapshot.summary.weightedTokensPerSecond).toBeCloseTo(120, 3);
+    expect(snapshot.summary.weightedCostPerMillionTokens).toBeCloseTo(13.542, 3);
+    expect(snapshot.summary.weightedCostPerHundredMillionTokens).toBeCloseTo(1354.167, 3);
     expect(mocks.getLeaderboardWithCache).toHaveBeenCalledWith("custom", "USD", "provider", {
       startDate: "2026-04-09",
       endDate: "2026-04-15",

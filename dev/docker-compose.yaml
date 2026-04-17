@@ -52,6 +52,8 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      HOST: 0.0.0.0
+      HOSTNAME: 0.0.0.0
       DSN: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-claude_code_hub}
       REDIS_URL: redis://redis:6379
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
@@ -62,7 +64,13 @@ services:
     ports:
       - "${APP_PORT:-23000}:3000"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/actions/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/actions/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 15s
       timeout: 5s
       retries: 20

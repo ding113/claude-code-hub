@@ -1,7 +1,7 @@
 import "server-only";
 
 import { formatInTimeZone } from "date-fns-tz";
-import { queryProviderAvailability } from "@/lib/availability";
+import { queryProviderAvailability, type ProviderAvailabilitySummary } from "@/lib/availability";
 import { getLeaderboardWithCache } from "@/lib/redis";
 import type { CurrencyCode } from "@/lib/utils";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -11,12 +11,6 @@ import type {
 } from "@/repository/leaderboard";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderType } from "@/types/provider";
-
-const STATUS_PRIORITY = {
-  red: 0,
-  unknown: 1,
-  green: 2,
-} as const;
 
 export const PUBLIC_SYSTEM_STATUS_WINDOW_DAYS = 7;
 export const PUBLIC_SYSTEM_STATUS_BUCKETS = 60;
@@ -102,18 +96,21 @@ function computeWeightedAverage<T>(
   return totalWeight > 0 ? weightedSum / totalWeight : null;
 }
 
-function sortProviders(a: PublicSystemStatusProvider, b: PublicSystemStatusProvider) {
-  const statusDelta = STATUS_PRIORITY[a.currentStatus] - STATUS_PRIORITY[b.currentStatus];
-  if (statusDelta !== 0) {
-    return statusDelta;
+function sortProviders(
+  a: Pick<ProviderAvailabilitySummary, "providerId" | "providerName" | "weight">,
+  b: Pick<ProviderAvailabilitySummary, "providerId" | "providerName" | "weight">
+) {
+  const weightDelta = (b.weight ?? 0) - (a.weight ?? 0);
+  if (weightDelta !== 0) {
+    return weightDelta;
   }
 
-  const availabilityDelta = a.availability - b.availability;
-  if (availabilityDelta !== 0) {
-    return availabilityDelta;
+  const nameDelta = a.providerName.localeCompare(b.providerName);
+  if (nameDelta !== 0) {
+    return nameDelta;
   }
 
-  return a.providerName.localeCompare(b.providerName);
+  return a.providerId - b.providerId;
 }
 
 export async function getPublicSystemStatusSnapshot(
@@ -139,7 +136,8 @@ export async function getPublicSystemStatusSnapshot(
   const providerMetrics = new Map(providerRows.map((entry) => [entry.providerId, entry]));
   const cacheMetrics = new Map(cacheRows.map((entry) => [entry.providerId, entry]));
 
-  const providers = availabilityResult.providers
+  const providers = [...availabilityResult.providers]
+    .sort(sortProviders)
     .map<PublicSystemStatusProvider>((provider) => {
       const providerRow = providerMetrics.get(provider.providerId);
       const cacheRow = cacheMetrics.get(provider.providerId);
@@ -165,8 +163,7 @@ export async function getPublicSystemStatusSnapshot(
           totalRequests: bucket.totalRequests,
         })),
       };
-    })
-    .sort(sortProviders);
+    });
 
   const summary: PublicSystemStatusSummary = {
     systemAvailability: availabilityResult.systemAvailability,

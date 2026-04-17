@@ -18,6 +18,10 @@ ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
+
 # 关键：确保复制了所有必要的文件，特别是 drizzle 文件夹
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./

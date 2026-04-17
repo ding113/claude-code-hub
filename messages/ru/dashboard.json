@@ -748,6 +748,7 @@
     "usageLogs": "Журналы",
     "leaderboard": "Лидеры",
     "availability": "Мониторинг",
+    "systemStatus": "Статус системы",
     "myQuota": "Моя квота",
     "quotasManagement": "Квоты",
     "userManagement": "Пользователи",
@@ -1480,7 +1481,8 @@
         "disabled": "Отключен"
       },
       "actions": {
-        "addKey": "Добавить ключ"
+        "addKey": "Добавить ключ",
+        "addTemporaryKey": "Временные ключи"
       }
     },
     "keyFullDisplay": {
@@ -1562,6 +1564,52 @@
     "dialog": {
       "createKeyTitle": "Создать ключ",
       "editKeyTitle": "Редактировать ключ"
+    },
+    "temporaryKeys": {
+      "createDialog": {
+        "title": "Пакетная генерация временных ключей",
+        "description": "Выберите базовый ключ и массово создайте временные API-ключи в отдельной группе.",
+        "baseKeyLabel": "Базовый ключ",
+        "baseKeyPlaceholder": "Выберите базовый ключ",
+        "baseKeyRequired": "Выберите базовый ключ",
+        "groupNameLabel": "Имя группы",
+        "groupNamePlaceholder": "Например: campaign-april",
+        "quantityLabel": "Количество",
+        "quantityDescription": "Быстрая генерация 5 / 10 / 20 / 50 / 100 ключей или ввод своего количества.",
+        "customLimitLabel": "Общий лимит на ключ (USD)",
+        "customLimitPlaceholder": "Оставьте пустым, чтобы использовать лимит базового ключа",
+        "customLimitDescription": "Переопределяется только общий лимит. Остальные настройки копируются с базового ключа.",
+        "baseKeyRequiredHint": "Перед генерацией выберите базовый ключ.",
+        "baseKeyRequiredShort": "Выберите базовый ключ",
+        "submit": "Сгенерировать",
+        "submitting": "Генерация...",
+        "noKeys": "У пользователя нет доступного базового ключа",
+        "invalidCount": "Введите корректное количество",
+        "invalidLimit": "Введите корректный общий лимит",
+        "genericError": "Не удалось сгенерировать временные ключи"
+      },
+      "success": {
+        "title": "Временные ключи готовы",
+        "description": "В группе {group} создано {count} временных ключей. Сразу скачайте полный список ключей и сохраните его.",
+        "groupName": "Имя группы",
+        "sourceKey": "Базовый ключ",
+        "previewTitle": "Предпросмотр (первые 5)",
+        "download": "Скачать CSV"
+      },
+      "groups": {
+        "title": "Группы временных ключей",
+        "groupBadge": "Temp",
+        "count": "{count} keys",
+        "download": "Скачать",
+        "delete": "Удалить группу"
+      },
+      "toasts": {
+        "createSuccess": "Сгенерировано временных ключей: {count}",
+        "createFailed": "Не удалось сгенерировать временные ключи: {error}",
+        "deleteSuccess": "Группа {group} удалена ({count} keys)",
+        "deleteFailed": "Не удалось удалить группу временных ключей: {error}",
+        "downloadFailed": "Не удалось скачать временные ключи: {error}"
+      }
     },
     "editDialog": {
       "title": "Редактировать пользователя",

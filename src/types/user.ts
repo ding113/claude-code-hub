@@ -132,6 +132,8 @@ export interface UserKeyDisplay {
   costResetAt?: string | null; // 软重置时间
   // Provider group override (null = inherit from user)
   providerGroup?: string | null;
+  // Temporary Key batch group
+  temporaryGroupName?: string | null;
 }
 
 /**
