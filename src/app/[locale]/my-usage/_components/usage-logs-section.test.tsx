@@ -4,11 +4,10 @@ import { act } from "react";
 import { describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  useInfiniteQuery: vi.fn(),
-  getMyUsageLogs: vi.fn(),
-  getMyUsageLogsBatch: vi.fn(),
   getMyAvailableModels: vi.fn(),
   getMyAvailableEndpoints: vi.fn(),
+  getMyUsageLogsBatchFull: vi.fn(),
+  getMyUsageMetadata: vi.fn(),
 }));
 
 vi.mock("next-intl", () => ({
@@ -17,19 +16,32 @@ vi.mock("next-intl", () => ({
   useTimeZone: () => "UTC",
 }));
 
-vi.mock("@tanstack/react-query", () => ({
-  useInfiniteQuery: mocks.useInfiniteQuery,
-}));
-
 vi.mock("@/actions/my-usage", () => ({
-  getMyUsageLogs: mocks.getMyUsageLogs,
-  getMyUsageLogsBatch: mocks.getMyUsageLogsBatch,
   getMyAvailableModels: mocks.getMyAvailableModels,
   getMyAvailableEndpoints: mocks.getMyAvailableEndpoints,
+  getMyUsageLogsBatchFull: mocks.getMyUsageLogsBatchFull,
+  getMyUsageMetadata: mocks.getMyUsageMetadata,
 }));
 
 vi.mock("@/app/[locale]/dashboard/logs/_components/logs-date-range-picker", () => ({
   LogsDateRangePicker: () => <div data-testid="logs-date-range-picker" />,
+}));
+
+vi.mock("@/app/[locale]/dashboard/logs/_components/virtualized-logs-table", () => ({
+  VirtualizedLogsTable: (props: {
+    hiddenColumns?: string[];
+    disableDetailDialog?: boolean;
+    fetchFn?: unknown;
+    queryKeyPrefix?: string;
+  }) => (
+    <div
+      data-testid="virtualized-logs-table"
+      data-hidden-columns={JSON.stringify(props.hiddenColumns)}
+      data-disable-detail-dialog={String(props.disableDetailDialog)}
+      data-query-key-prefix={props.queryKeyPrefix}
+      data-has-fetch-fn={String(!!props.fetchFn)}
+    />
+  ),
 }));
 
 vi.mock("@/components/ui/collapsible", () => ({
@@ -66,48 +78,16 @@ vi.mock("@/components/ui/label", () => ({
   Label: ({ children }: { children?: ReactNode }) => <label>{children}</label>,
 }));
 
-vi.mock("./usage-logs-table", () => ({
-  UsageLogsTable: () => <div data-testid="usage-logs-table" />,
-}));
-
 import { UsageLogsSection } from "./usage-logs-section";
 
 describe("my-usage usage logs section", () => {
-  test("uses infinite query instead of the old page-based getMyUsageLogs flow", async () => {
-    let capturedQueryFn:
-      | ((context: {
-          pageParam?: { createdAt: string; id: number } | undefined;
-        }) => Promise<unknown>)
-      | undefined;
-
-    mocks.useInfiniteQuery.mockImplementation((options: { queryFn: typeof capturedQueryFn }) => {
-      capturedQueryFn = options.queryFn;
-      return {
-        data: { pages: [{ logs: [], nextCursor: null, hasMore: false }] },
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-        isLoading: false,
-        isError: false,
-        error: null,
-      };
-    });
-    mocks.getMyUsageLogsBatch.mockResolvedValue({
-      ok: true,
-      data: {
-        logs: [],
-        nextCursor: null,
-        hasMore: false,
-        currencyCode: "USD",
-        billingModelSource: "original",
-      },
-    });
-    mocks.getMyUsageLogs.mockResolvedValue({
-      ok: true,
-      data: { logs: [], total: 0, page: 1, pageSize: 20, currencyCode: "USD" },
-    });
+  test("renders VirtualizedLogsTable with correct restrictions", async () => {
     mocks.getMyAvailableModels.mockResolvedValue({ ok: true, data: [] });
     mocks.getMyAvailableEndpoints.mockResolvedValue({ ok: true, data: [] });
+    mocks.getMyUsageMetadata.mockResolvedValue({
+      ok: true,
+      data: { currencyCode: "USD", billingModelSource: "original" },
+    });
 
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -117,13 +97,21 @@ describe("my-usage usage logs section", () => {
       root.render(<UsageLogsSection defaultOpen />);
     });
 
-    await act(async () => {
-      await capturedQueryFn?.({ pageParam: undefined });
-    });
+    const table = container.querySelector('[data-testid="virtualized-logs-table"]');
+    expect(table).toBeTruthy();
 
-    expect(mocks.useInfiniteQuery).toHaveBeenCalled();
-    expect(mocks.getMyUsageLogsBatch).toHaveBeenCalled();
-    expect(mocks.getMyUsageLogs).not.toHaveBeenCalled();
+    // Verify user/key/provider columns are hidden
+    const hiddenColumns = JSON.parse(table!.getAttribute("data-hidden-columns") ?? "[]");
+    expect(hiddenColumns).toContain("user");
+    expect(hiddenColumns).toContain("key");
+    expect(hiddenColumns).toContain("provider");
+
+    // Verify detail dialog is disabled
+    expect(table!.getAttribute("data-disable-detail-dialog")).toBe("true");
+
+    // Verify custom fetch function and query key
+    expect(table!.getAttribute("data-has-fetch-fn")).toBe("true");
+    expect(table!.getAttribute("data-query-key-prefix")).toBe("my-usage-logs-batch");
 
     await act(async () => {
       root.unmount();

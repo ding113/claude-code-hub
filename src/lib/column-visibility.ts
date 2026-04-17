@@ -37,6 +37,11 @@ export const DEFAULT_VISIBLE_COLUMNS: LogsTableColumn[] = [
 ];
 
 /**
+ * Columns hidden by default when no user preference is stored
+ */
+export const DEFAULT_HIDDEN_COLUMNS: LogsTableColumn[] = ["ip"];
+
+/**
  * Columns that cannot be hidden (always visible)
  */
 export const ALWAYS_VISIBLE_COLUMNS = ["time", "model", "status"] as const;
@@ -63,13 +68,13 @@ export function getHiddenColumns(userId: number, tableId: string): LogsTableColu
   try {
     const stored = localStorage.getItem(getStorageKey(userId, tableId));
     if (!stored) {
-      return [];
+      return [...DEFAULT_HIDDEN_COLUMNS];
     }
     const parsed = JSON.parse(stored) as LogsTableColumn[];
     // Validate that all items are valid column names
     return parsed.filter((col) => DEFAULT_VISIBLE_COLUMNS.includes(col));
   } catch {
-    return [];
+    return [...DEFAULT_HIDDEN_COLUMNS];
   }
 }
 
@@ -103,11 +108,7 @@ export function setHiddenColumns(
 
   try {
     const key = getStorageKey(userId, tableId);
-    if (hiddenColumns.length === 0) {
-      localStorage.removeItem(key);
-    } else {
-      localStorage.setItem(key, JSON.stringify(hiddenColumns));
-    }
+    localStorage.setItem(key, JSON.stringify(hiddenColumns));
   } catch {
     // localStorage not available, silently fail
   }

@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import type { ActionResult } from "@/actions/types";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ import {
   getPricingResolutionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
+import type { UsageLogsBatchResult } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
@@ -45,6 +47,13 @@ import { ProviderChainPopover } from "./provider-chain-popover";
 
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 52; // Estimated row height in pixels
+
+export type LogsFetchFn = (
+  params: VirtualizedLogsTableFilters & {
+    cursor?: { createdAt: string; id: number };
+    limit: number;
+  }
+) => Promise<ActionResult<UsageLogsBatchResult>>;
 
 export interface VirtualizedLogsTableFilters {
   userId?: number;
@@ -60,6 +69,30 @@ export interface VirtualizedLogsTableFilters {
   minRetryCount?: number;
 }
 
+const STATUS_BADGE_FALLBACK =
+  "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
+
+function getStatusBadgeClassName(statusCode: number | null): string {
+  if (statusCode != null && statusCode >= 200 && statusCode < 300) {
+    return "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700";
+  }
+  if (statusCode != null && statusCode >= 400 && statusCode < 500) {
+    return "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-700";
+  }
+  if (statusCode != null && statusCode >= 500) {
+    return "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700";
+  }
+  return STATUS_BADGE_FALLBACK;
+}
+
+function StatusBadgeOnly({ statusCode }: { statusCode: number | null }) {
+  return (
+    <Badge variant="outline" className={getStatusBadgeClassName(statusCode)}>
+      {statusCode ?? "-"}
+    </Badge>
+  );
+}
+
 interface VirtualizedLogsTableProps {
   filters: VirtualizedLogsTableFilters;
   currencyCode?: CurrencyCode;
@@ -71,6 +104,12 @@ interface VirtualizedLogsTableProps {
   hiddenColumns?: LogsTableColumn[];
   bodyClassName?: string;
   serverTimeZone?: string;
+  /** Custom fetch function (defaults to getUsageLogsBatch) */
+  fetchFn?: LogsFetchFn;
+  /** Custom query key prefix (defaults to "usage-logs-batch") */
+  queryKeyPrefix?: string;
+  /** Disable the detail side-panel dialog on status badge click */
+  disableDetailDialog?: boolean;
 }
 
 export function VirtualizedLogsTable({
@@ -84,6 +123,9 @@ export function VirtualizedLogsTable({
   hiddenColumns,
   bodyClassName,
   serverTimeZone: _serverTimeZone,
+  fetchFn,
+  queryKeyPrefix = "usage-logs-batch",
+  disableDetailDialog = false,
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
   const getPricingSourceLabel = (source: string) =>
@@ -128,9 +170,10 @@ export function VirtualizedLogsTable({
   // Infinite query with cursor-based pagination
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error } =
     useInfiniteQuery({
-      queryKey: ["usage-logs-batch", filters],
+      queryKey: [queryKeyPrefix, filters],
       queryFn: async ({ pageParam }) => {
-        const result = await getUsageLogsBatch({
+        const fetcher = fetchFn ?? getUsageLogsBatch;
+        const result = await fetcher({
           ...filters,
           cursor: pageParam,
           limit: BATCH_SIZE,
@@ -577,8 +620,11 @@ export function VirtualizedLogsTable({
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
                                 billingModelSource={billingModelSource}
-                                onRedirectClick={() =>
-                                  setDialogState({ logId: log.id, scrollToRedirect: true })
+                                onRedirectClick={
+                                  disableDetailDialog
+                                    ? undefined
+                                    : () =>
+                                        setDialogState({ logId: log.id, scrollToRedirect: true })
                                 }
                               />
                             </div>
@@ -820,51 +866,57 @@ export function VirtualizedLogsTable({
 
                     {/* Status */}
                     <div className="flex-[0.7] min-w-[70px] pr-3">
-                      <ErrorDetailsDialog
-                        statusCode={log.statusCode}
-                        errorMessage={log.errorMessage}
-                        providerChain={log.providerChain}
-                        sessionId={log.sessionId}
-                        requestSequence={log.requestSequence}
-                        blockedBy={log.blockedBy}
-                        blockedReason={log.blockedReason}
-                        originalModel={log.originalModel}
-                        currentModel={log.model}
-                        userAgent={log.userAgent}
-                        clientIp={log.clientIp}
-                        messagesCount={log.messagesCount}
-                        endpoint={log.endpoint}
-                        billingModelSource={billingModelSource}
-                        specialSettings={log.specialSettings}
-                        inputTokens={log.inputTokens}
-                        outputTokens={log.outputTokens}
-                        cacheCreationInputTokens={log.cacheCreationInputTokens}
-                        cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
-                        cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
-                        cacheReadInputTokens={log.cacheReadInputTokens}
-                        cacheTtlApplied={log.cacheTtlApplied}
-                        swapCacheTtlApplied={log.swapCacheTtlApplied}
-                        costUsd={log.costUsd}
-                        costMultiplier={log.costMultiplier}
-                        groupCostMultiplier={log.groupCostMultiplier}
-                        costBreakdown={log.costBreakdown}
-                        context1mApplied={log.context1mApplied}
-                        durationMs={log.durationMs}
-                        ttfbMs={log.ttfbMs}
-                        externalOpen={dialogState.logId === log.id ? true : undefined}
-                        onExternalOpenChange={(open) => {
-                          if (!open) setDialogState({ logId: null, scrollToRedirect: false });
-                        }}
-                        scrollToRedirect={
-                          dialogState.logId === log.id && dialogState.scrollToRedirect
-                        }
-                        initialTab={
-                          dialogState.logId === log.id ? dialogState.targetTab : undefined
-                        }
-                        initialExpandedChainIndex={
-                          dialogState.logId === log.id ? dialogState.expandedChainIndex : undefined
-                        }
-                      />
+                      {disableDetailDialog ? (
+                        <StatusBadgeOnly statusCode={log.statusCode} />
+                      ) : (
+                        <ErrorDetailsDialog
+                          statusCode={log.statusCode}
+                          errorMessage={log.errorMessage}
+                          providerChain={log.providerChain}
+                          sessionId={log.sessionId}
+                          requestSequence={log.requestSequence}
+                          blockedBy={log.blockedBy}
+                          blockedReason={log.blockedReason}
+                          originalModel={log.originalModel}
+                          currentModel={log.model}
+                          userAgent={log.userAgent}
+                          clientIp={log.clientIp}
+                          messagesCount={log.messagesCount}
+                          endpoint={log.endpoint}
+                          billingModelSource={billingModelSource}
+                          specialSettings={log.specialSettings}
+                          inputTokens={log.inputTokens}
+                          outputTokens={log.outputTokens}
+                          cacheCreationInputTokens={log.cacheCreationInputTokens}
+                          cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
+                          cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
+                          cacheReadInputTokens={log.cacheReadInputTokens}
+                          cacheTtlApplied={log.cacheTtlApplied}
+                          swapCacheTtlApplied={log.swapCacheTtlApplied}
+                          costUsd={log.costUsd}
+                          costMultiplier={log.costMultiplier}
+                          groupCostMultiplier={log.groupCostMultiplier}
+                          costBreakdown={log.costBreakdown}
+                          context1mApplied={log.context1mApplied}
+                          durationMs={log.durationMs}
+                          ttfbMs={log.ttfbMs}
+                          externalOpen={dialogState.logId === log.id ? true : undefined}
+                          onExternalOpenChange={(open) => {
+                            if (!open) setDialogState({ logId: null, scrollToRedirect: false });
+                          }}
+                          scrollToRedirect={
+                            dialogState.logId === log.id && dialogState.scrollToRedirect
+                          }
+                          initialTab={
+                            dialogState.logId === log.id ? dialogState.targetTab : undefined
+                          }
+                          initialExpandedChainIndex={
+                            dialogState.logId === log.id
+                              ? dialogState.expandedChainIndex
+                              : undefined
+                          }
+                        />
+                      )}
                     </div>
                   </div>
                 );
