@@ -1,6 +1,5 @@
 "use client";
 
-import { fromZonedTime } from "date-fns-tz";
 import { ChevronDown, Filter, RefreshCw, ScrollText } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,6 +7,7 @@ import {
   getMyAvailableEndpoints,
   getMyAvailableModels,
   getMyUsageLogsBatchFull,
+  getMyUsageMetadata,
 } from "@/actions/my-usage";
 import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
 import {
@@ -29,6 +29,9 @@ import {
 } from "@/components/ui/select";
 import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn } from "@/lib/utils";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { parseDateRangeToTimestamps } from "@/lib/utils/date-range";
+import type { BillingModelSource } from "@/types/system-config";
 
 /** Columns always hidden on my-usage page (user/key/provider not available) */
 const MY_USAGE_HIDDEN_COLUMNS: LogsTableColumn[] = ["user", "key", "provider"];
@@ -49,35 +52,6 @@ interface Filters {
   minRetryCount?: number;
 }
 
-/**
- * Convert date strings (YYYY-MM-DD) to timestamps using server timezone.
- */
-function parseDateRange(
-  startDate?: string,
-  endDate?: string,
-  timezone?: string
-): { startTime?: number; endTime?: number } {
-  const tz = timezone ?? "UTC";
-  let startTime: number | undefined;
-  let endTime: number | undefined;
-
-  if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-    startTime = fromZonedTime(`${startDate}T00:00:00`, tz).getTime();
-  }
-  if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-    // End date is exclusive (next day midnight)
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(endDate);
-    if (match) {
-      const next = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-      next.setUTCDate(next.getUTCDate() + 1);
-      const nextStr = next.toISOString().slice(0, 10);
-      endTime = fromZonedTime(`${nextStr}T00:00:00`, tz).getTime();
-    }
-  }
-
-  return { startTime, endTime };
-}
-
 const myUsageFetchFn: LogsFetchFn = (params) => getMyUsageLogsBatchFull(params);
 
 export function UsageLogsSection({
@@ -95,6 +69,8 @@ export function UsageLogsSection({
   const [isEndpointsLoading, setIsEndpointsLoading] = useState(true);
   const [draftFilters, setDraftFilters] = useState<Filters>({});
   const [appliedFilters, setAppliedFilters] = useState<Filters>({});
+  const [currencyCode, setCurrencyCode] = useState<CurrencyCode>("USD");
+  const [billingModelSource, setBillingModelSource] = useState<BillingModelSource>("original");
 
   useEffect(() => {
     setIsModelsLoading(true);
@@ -115,11 +91,18 @@ export function UsageLogsSection({
         }
       })
       .finally(() => setIsEndpointsLoading(false));
+
+    void getMyUsageMetadata().then((metaResult) => {
+      if (metaResult.ok && metaResult.data) {
+        setCurrencyCode(metaResult.data.currencyCode);
+        setBillingModelSource(metaResult.data.billingModelSource);
+      }
+    });
   }, []);
 
   // Convert date-based filters to VirtualizedLogsTable format (timestamps)
   const tableFilters = useMemo<VirtualizedLogsTableFilters>(() => {
-    const { startTime, endTime } = parseDateRange(
+    const { startTime, endTime } = parseDateRangeToTimestamps(
       appliedFilters.startDate,
       appliedFilters.endDate,
       serverTimeZone
@@ -349,6 +332,8 @@ export function UsageLogsSection({
             <div className="rounded-lg border border-border/60 overflow-hidden">
               <VirtualizedLogsTable
                 filters={tableFilters}
+                currencyCode={currencyCode}
+                billingModelSource={billingModelSource}
                 hiddenColumns={MY_USAGE_HIDDEN_COLUMNS}
                 disableDetailDialog
                 fetchFn={myUsageFetchFn}

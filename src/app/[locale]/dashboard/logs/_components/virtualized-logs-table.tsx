@@ -69,20 +69,20 @@ export interface VirtualizedLogsTableFilters {
   minRetryCount?: number;
 }
 
+const STATUS_BADGE_FALLBACK =
+  "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
+
 function getStatusBadgeClassName(statusCode: number | null): string {
-  if (statusCode === null || !statusCode) {
-    return "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
-  }
-  if (statusCode >= 200 && statusCode < 300) {
+  if (statusCode != null && statusCode >= 200 && statusCode < 300) {
     return "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700";
   }
-  if (statusCode >= 400 && statusCode < 500) {
+  if (statusCode != null && statusCode >= 400 && statusCode < 500) {
     return "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-700";
   }
-  if (statusCode >= 500) {
+  if (statusCode != null && statusCode >= 500) {
     return "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700";
   }
-  return "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
+  return STATUS_BADGE_FALLBACK;
 }
 
 function StatusBadgeOnly({ statusCode }: { statusCode: number | null }) {
@@ -620,8 +620,11 @@ export function VirtualizedLogsTable({
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
                                 billingModelSource={billingModelSource}
-                                onRedirectClick={() =>
-                                  setDialogState({ logId: log.id, scrollToRedirect: true })
+                                onRedirectClick={
+                                  disableDetailDialog
+                                    ? undefined
+                                    : () =>
+                                        setDialogState({ logId: log.id, scrollToRedirect: true })
                                 }
                               />
                             </div>

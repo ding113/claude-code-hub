@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getMyAvailableModels: vi.fn(),
   getMyAvailableEndpoints: vi.fn(),
   getMyUsageLogsBatchFull: vi.fn(),
+  getMyUsageMetadata: vi.fn(),
 }));
 
 vi.mock("next-intl", () => ({
@@ -19,6 +20,7 @@ vi.mock("@/actions/my-usage", () => ({
   getMyAvailableModels: mocks.getMyAvailableModels,
   getMyAvailableEndpoints: mocks.getMyAvailableEndpoints,
   getMyUsageLogsBatchFull: mocks.getMyUsageLogsBatchFull,
+  getMyUsageMetadata: mocks.getMyUsageMetadata,
 }));
 
 vi.mock("@/app/[locale]/dashboard/logs/_components/logs-date-range-picker", () => ({
@@ -82,6 +84,10 @@ describe("my-usage usage logs section", () => {
   test("renders VirtualizedLogsTable with correct restrictions", async () => {
     mocks.getMyAvailableModels.mockResolvedValue({ ok: true, data: [] });
     mocks.getMyAvailableEndpoints.mockResolvedValue({ ok: true, data: [] });
+    mocks.getMyUsageMetadata.mockResolvedValue({
+      ok: true,
+      data: { currencyCode: "USD", billingModelSource: "original" },
+    });
 
     const container = document.createElement("div");
     document.body.appendChild(container);

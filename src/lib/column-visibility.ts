@@ -74,7 +74,7 @@ export function getHiddenColumns(userId: number, tableId: string): LogsTableColu
     // Validate that all items are valid column names
     return parsed.filter((col) => DEFAULT_VISIBLE_COLUMNS.includes(col));
   } catch {
-    return [];
+    return [...DEFAULT_HIDDEN_COLUMNS];
   }
 }
 

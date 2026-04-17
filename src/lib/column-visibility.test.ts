@@ -77,7 +77,7 @@ describe("column-visibility", () => {
       mockStorage[storageKey] = "not-valid-json";
 
       const result = getHiddenColumns(userId, tableId);
-      expect(result).toEqual([]);
+      expect(result).toEqual([...DEFAULT_HIDDEN_COLUMNS]);
     });
 
     test("scopes by user ID", () => {

@@ -89,6 +89,7 @@ export interface MyUsageMetadata {
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
   currencyCode: CurrencyCode;
+  billingModelSource: BillingModelSource;
 }
 
 export interface MyUsageQuota {
@@ -227,6 +228,7 @@ export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata
       dailyResetMode: key.dailyResetMode ?? "fixed",
       dailyResetTime: key.dailyResetTime ?? "00:00",
       currencyCode: settings.currencyDisplay,
+      billingModelSource: settings.billingModelSource,
     };
 
     return { ok: true, data: metadata };
@@ -653,8 +655,9 @@ export async function getMyUsageLogsBatchFull(
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
+    const { userId: _u, keyId: _k, providerId: _p, ...safeParams } = params as UsageLogBatchFilters;
     const result = await findUsageLogsBatch({
-      ...params,
+      ...safeParams,
       keyId: session.key.id,
     });
 
