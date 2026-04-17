@@ -11,11 +11,14 @@ import type { IpGeoLookupResponse } from "@/types/ip-geo";
 import ipDetailsMessages from "../../../../../messages/en/ipDetails.json";
 
 const useIpGeoMocks = vi.hoisted(() => ({
-  useIpGeo: vi.fn<(ip: string | null | undefined) => {
-    data?: IpGeoLookupResponse;
-    isLoading: boolean;
-    isError: boolean;
-  }>(),
+  useIpGeo:
+    vi.fn<
+      (ip: string | null | undefined) => {
+        data?: IpGeoLookupResponse;
+        isLoading: boolean;
+        isError: boolean;
+      }
+    >(),
 }));
 vi.mock("@/hooks/use-ip-geo", () => useIpGeoMocks);
 
@@ -120,9 +123,9 @@ const CGN_RESPONSE: IpGeoLookupResponse = {
 
 describe("hasMeaningfulCoordinates", () => {
   test("returns false when accuracy_radius_km is null (CGN / bogon / tailscale)", () => {
-    expect(
-      hasMeaningfulCoordinates({ latitude: 0, longitude: 0, accuracy_radius_km: null })
-    ).toBe(false);
+    expect(hasMeaningfulCoordinates({ latitude: 0, longitude: 0, accuracy_radius_km: null })).toBe(
+      false
+    );
 
     // Even a non-zero pair with null accuracy is untrusted — `null` means
     // "we don't know", not "exact".
@@ -132,9 +135,9 @@ describe("hasMeaningfulCoordinates", () => {
   });
 
   test("returns false for the 0,0 null-island fallback", () => {
-    expect(
-      hasMeaningfulCoordinates({ latitude: 0, longitude: 0, accuracy_radius_km: 100 })
-    ).toBe(false);
+    expect(hasMeaningfulCoordinates({ latitude: 0, longitude: 0, accuracy_radius_km: 100 })).toBe(
+      false
+    );
   });
 
   test("returns true for real coordinates with a known accuracy", () => {

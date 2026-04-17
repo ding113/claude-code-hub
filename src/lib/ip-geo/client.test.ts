@@ -327,10 +327,9 @@ describe("lookupIp — partial payloads (CGN / bogon / tailscale IPs)", () => {
 
   test("still rejects payload missing UI-critical subtree (ip / country / timezone)", async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ ip: "1.1.1.1", location: { country: { code: "US" } } }),
-        { status: 200 }
-      )
+      new Response(JSON.stringify({ ip: "1.1.1.1", location: { country: { code: "US" } } }), {
+        status: 200,
+      })
     );
     const { lookupIp } = await import("./client");
     const result = await lookupIp("1.1.1.1");
