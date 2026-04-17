@@ -29,5 +29,10 @@
   "nameRequired": "分组名称为必填项",
   "duplicateName": "已存在同名分组",
   "invalidMultiplier": "请输入有效的非负成本倍率",
-  "groupInUse": "该分组仍被供应商引用，无法删除"
+  "groupInUse": "该分组仍被供应商引用，无法删除",
+  "groupMembers": "分组成员",
+  "effectivePriority": "本组优先级",
+  "noMembers": "暂无成员",
+  "savePriorityFailed": "保存优先级失败",
+  "savePrioritySuccess": "优先级已更新"
 }

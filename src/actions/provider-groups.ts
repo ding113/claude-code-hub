@@ -8,6 +8,7 @@ import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { findAllProvidersFresh } from "@/repository/provider";
 import {
   countProvidersUsingGroup,
+  ensureProviderGroupsExist,
   findAllProviderGroups,
   findProviderGroupById,
   findProviderGroupByName,
@@ -41,10 +42,31 @@ export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWit
       return { ok: false, error: "Unauthorized" };
     }
 
-    const [groups, providers] = await Promise.all([
+    const [initialGroups, providers] = await Promise.all([
       findAllProviderGroups(),
       findAllProvidersFresh(),
     ]);
+
+    // 聚合 providers.groupTag 里实际被引用的分组名（未打 tag 的 provider 归入 default）
+    const referenced = new Set<string>();
+    for (const provider of providers) {
+      const parsed = parseProviderGroups(provider.groupTag);
+      if (parsed.length === 0) {
+        referenced.add(PROVIDER_GROUP.DEFAULT);
+      } else {
+        for (const name of parsed) referenced.add(name);
+      }
+    }
+
+    // 读时自愈：把被引用但表里缺失的分组名批量补齐，保证表是字符串集合的超集
+    const existingNames = new Set(initialGroups.map((g) => g.name));
+    const missing = [...referenced].filter((n) => !existingNames.has(n));
+    let groups = initialGroups;
+    if (missing.length > 0) {
+      await ensureProviderGroupsExist(missing);
+      // 重新拉取一次，拿到新插入行的完整字段（id/timestamps/默认倍率）
+      groups = await findAllProviderGroups();
+    }
 
     // Count providers per group
     const groupCounts = new Map<string, number>();

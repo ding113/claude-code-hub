@@ -75,6 +75,7 @@ import {
   getOrCreateProviderVendorIdFromUrls,
   tryDeleteProviderVendorIfEmpty,
 } from "@/repository/provider-endpoints";
+import { ensureProviderGroupsExist } from "@/repository/provider-groups";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
   AllowedModelRuleInput,
@@ -637,6 +638,16 @@ export async function addProvider(data: {
       providerId: provider.id,
     });
 
+    // 同步 provider_groups 表（系统级，失败不影响主流程）
+    try {
+      await ensureProviderGroupsExist(parseProviderGroups(payload.group_tag));
+    } catch (error) {
+      logger.warn("addProvider:provider_groups_sync_failed", {
+        providerId: provider.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     // 同步熔断器配置到 Redis
     try {
       await saveProviderCircuitConfig(provider.id, {
@@ -826,6 +837,18 @@ export async function editProvider(
 
     if (!provider) {
       return { ok: false, error: "供应商不存在" };
+    }
+
+    // 同步 provider_groups 表（系统级，失败不影响主流程）
+    if (payload.group_tag !== undefined) {
+      try {
+        await ensureProviderGroupsExist(parseProviderGroups(payload.group_tag));
+      } catch (error) {
+        logger.warn("editProvider:provider_groups_sync_failed", {
+          providerId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     if (shouldInvalidateStickySessionsOnProviderEdit(preimageFields)) {
@@ -2359,6 +2382,17 @@ export async function batchUpdateProviders(
     }
 
     const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
+
+    // 同步 provider_groups 表（系统级，失败不影响主流程）
+    if (repositoryUpdates.groupTag !== undefined) {
+      try {
+        await ensureProviderGroupsExist(parseProviderGroups(repositoryUpdates.groupTag));
+      } catch (error) {
+        logger.warn("updateProvider:provider_groups_sync_failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     const shouldInvalidateStickySessions =
       updates.group_tag !== undefined ||

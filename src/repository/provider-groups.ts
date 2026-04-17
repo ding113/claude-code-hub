@@ -164,6 +164,27 @@ export async function countProvidersUsingGroup(name: string): Promise<number> {
 }
 
 /**
+ * 批量确保给定分组名在 provider_groups 表中存在。
+ *
+ * 用于 source-of-truth (providers.groupTag 字符串) 向元数据侧表的写时同步。
+ * 对每个不存在的分组名插入一行（使用 schema 默认倍率 1.0，description 为 null），
+ * 已存在的名字走 ON CONFLICT DO NOTHING 忽略，保证幂等与并发安全。
+ *
+ * 不触发 audit——这是系统级同步，非用户显式操作。
+ */
+export async function ensureProviderGroupsExist(names: string[]): Promise<void> {
+  const unique = Array.from(new Set(names.map((n) => n.trim()).filter((n) => n.length > 0)));
+  if (unique.length === 0) return;
+
+  await db
+    .insert(providerGroups)
+    .values(unique.map((name) => ({ name })))
+    .onConflictDoNothing({ target: providerGroups.name });
+
+  invalidateGroupMultiplierCache();
+}
+
+/**
  * Delete a provider group by id.
  * Throws an error when attempting to delete the "default" group.
  */
