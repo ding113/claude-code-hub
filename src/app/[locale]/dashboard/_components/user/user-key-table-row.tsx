@@ -2,6 +2,16 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -176,11 +186,12 @@ export function UserKeyTableRow({
 }: UserKeyTableRowProps) {
   const locale = useLocale();
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
+  const tCommon = useTranslations("common");
   const tUserStatus = useTranslations("dashboard.userManagement.userStatus");
   const tTemporaryKeys = useTranslations("dashboard.userManagement.temporaryKeys");
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [_isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   // 乐观更新：本地状态跟踪启用状态
   const [localIsEnabled, setLocalIsEnabled] = useState(user.isEnabled);
@@ -195,6 +206,10 @@ export function UserKeyTableRow({
   const [expandedTemporaryGroupKeyLists, setExpandedTemporaryGroupKeyLists] = useState<Set<string>>(
     () => new Set()
   );
+  const [pendingDeleteGroup, setPendingDeleteGroup] = useState<{
+    name: string;
+    count: number;
+  } | null>(null);
   const isExpanded = isMultiSelectMode ? true : expanded;
   const resolvedGridColumnsClass = gridColumnsClass ?? DEFAULT_GRID_COLUMNS_CLASS;
 
@@ -213,6 +228,7 @@ export function UserKeyTableRow({
     setShowAllStandardKeys(false);
     setExpandedTemporaryGroups(new Set());
     setExpandedTemporaryGroupKeyLists(new Set());
+    setPendingDeleteGroup(null);
   }, [user.id]);
 
   const keyRowTranslations = {
@@ -343,17 +359,6 @@ export function UserKeyTableRow({
   };
 
   const handleDeleteTemporaryGroup = (groupName: string) => {
-    const groupKeyCount = user.keys.filter((key) => key.temporaryGroupName === groupName).length;
-    const confirmed = window.confirm(
-      tTemporaryKeys("groups.deleteConfirm", {
-        group: groupName,
-        count: groupKeyCount,
-      })
-    );
-    if (!confirmed) {
-      return;
-    }
-
     startTransition(async () => {
       const result = await removeTemporaryKeyGroup({ userId: user.id, groupName });
       if (!result.ok) {
@@ -374,6 +379,11 @@ export function UserKeyTableRow({
       queryClient.invalidateQueries({ queryKey: ["users"] });
       router.refresh();
     });
+  };
+
+  const requestDeleteTemporaryGroup = (groupName: string) => {
+    const count = user.keys.filter((key) => key.temporaryGroupName === groupName).length;
+    setPendingDeleteGroup({ name: groupName, count });
   };
 
   const handleToggleUserEnabled = async (checked: boolean) => {
@@ -894,7 +904,7 @@ export function UserKeyTableRow({
                                 size="icon-sm"
                                 title={tTemporaryKeys("groups.delete")}
                                 aria-label={tTemporaryKeys("groups.delete")}
-                                onClick={() => handleDeleteTemporaryGroup(group.name)}
+                                onClick={() => requestDeleteTemporaryGroup(group.name)}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -925,6 +935,46 @@ export function UserKeyTableRow({
           </div>
         </div>
       ) : null}
+
+      <AlertDialog
+        open={pendingDeleteGroup !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteGroup(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tTemporaryKeys("groups.delete")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteGroup
+                ? tTemporaryKeys("groups.deleteConfirm", {
+                    group: pendingDeleteGroup.name,
+                    count: pendingDeleteGroup.count,
+                  })
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>{tCommon("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isPending || !pendingDeleteGroup}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!pendingDeleteGroup) {
+                  return;
+                }
+                const groupName = pendingDeleteGroup.name;
+                setPendingDeleteGroup(null);
+                handleDeleteTemporaryGroup(groupName);
+              }}
+            >
+              {tTemporaryKeys("groups.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Key 编辑 Dialog */}
       {editingKeyId !== null &&

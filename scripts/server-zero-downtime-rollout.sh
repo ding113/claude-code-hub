@@ -207,6 +207,21 @@ set -a
 source "$ENV_FILE"
 set +a
 
+normalize_numeric_port() {
+  local name="$1"
+  local raw="$2"
+  local trimmed="${raw//[[:space:]]/}"
+  if [[ ! "$trimmed" =~ ^[0-9]+$ ]]; then
+    printf 'Invalid %s: %q\n' "$name" "$raw" >&2
+    exit 1
+  fi
+  if (( trimmed < 1 || trimmed > 65535 )); then
+    printf 'Invalid %s: %q (must be 1-65535)\n' "$name" "$raw" >&2
+    exit 1
+  fi
+  printf '%s\n' "$trimmed"
+}
+
 if [[ -z "$STANDARD_PORT" ]]; then
   STANDARD_PORT="${APP_PORT:-23000}"
 fi
@@ -246,21 +261,6 @@ acquire_lock() {
 
 release_lock() {
   rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
-}
-
-normalize_numeric_port() {
-  local name="$1"
-  local raw="$2"
-  local trimmed="${raw//[[:space:]]/}"
-  if [[ ! "$trimmed" =~ ^[0-9]+$ ]]; then
-    printf 'Invalid %s: %q\n' "$name" "$raw" >&2
-    exit 1
-  fi
-  if (( trimmed < 1 || trimmed > 65535 )); then
-    printf 'Invalid %s: %q (must be 1-65535)\n' "$name" "$raw" >&2
-    exit 1
-  fi
-  printf '%s\n' "$trimmed"
 }
 
 get_domain_proxy_port() {
@@ -375,8 +375,25 @@ PY
 find_container_by_host_port() {
   local port="$1"
   docker ps --format '{{.Names}}\t{{.Ports}}' | awk -v port="$port" '
-    $0 ~ ("127.0.0.1:" port "->") {print $1; exit}
+    $0 ~ ("(^|[,[:space:]])([^,[:space:]]+:)?" port "->") {print $1; exit}
   '
+}
+
+get_container_label() {
+  local container_name="$1"
+  local label_name="$2"
+  docker inspect --format "{{ index .Config.Labels \"$label_name\" }}" "$container_name" 2>/dev/null || true
+}
+
+is_live_container_same_compose_service() {
+  local container_name="$1"
+  [[ -n "$container_name" ]] || return 1
+
+  local live_project live_service
+  live_project="$(get_container_label "$container_name" "com.docker.compose.project")"
+  live_service="$(get_container_label "$container_name" "com.docker.compose.service")"
+
+  [[ -n "$live_project" && -n "$live_service" && "$live_project" == "$PROJECT_NAME" && "$live_service" == "$APP_SERVICE" ]]
 }
 
 port_is_free() {
@@ -578,6 +595,10 @@ trap 'handle_exit $?' EXIT
 LIVE_PORT="$(get_domain_proxy_port)"
 LIVE_CONTAINER="$(find_container_by_host_port "$LIVE_PORT" || true)"
 STANDARD_PORT_CONTAINER="$(find_container_by_host_port "$STANDARD_PORT" || true)"
+LIVE_IS_CURRENT_COMPOSE_SERVICE=false
+if is_live_container_same_compose_service "$LIVE_CONTAINER"; then
+  LIVE_IS_CURRENT_COMPOSE_SERVICE=true
+fi
 
 log_info "Current live domain: ${DOMAIN}"
 log_info "Current live port: ${LIVE_PORT}"
@@ -585,6 +606,9 @@ log_info "Current live container: ${LIVE_CONTAINER:-<none>}"
 log_info "Standard port: ${STANDARD_PORT}"
 log_info "Green fallback port: ${GREEN_PORT}"
 log_info "Keep old live container after cutover: ${KEEP_OLD_RUNNING}"
+if [[ "$LIVE_IS_CURRENT_COMPOSE_SERVICE" == true ]]; then
+  log_warn "Live container belongs to the current compose app service; rollout will avoid compose recreate and use manual green"
+fi
 
 docker image inspect "$IMAGE_TAG" >/dev/null 2>&1 || {
   log_error "Image tag not found on server: $IMAGE_TAG"
@@ -594,7 +618,9 @@ docker image inspect "$IMAGE_TAG" >/dev/null 2>&1 || {
 verify_live_public_before_rollout
 
 if [[ "$DRY_RUN" == true ]]; then
-  if [[ "$LIVE_PORT" != "$STANDARD_PORT" ]] && port_is_free "$STANDARD_PORT"; then
+  if [[ "$LIVE_IS_CURRENT_COMPOSE_SERVICE" == true ]]; then
+    print_plan_and_exit "manual-green-compose-live"
+  elif [[ "$LIVE_PORT" != "$STANDARD_PORT" ]] && port_is_free "$STANDARD_PORT"; then
     print_plan_and_exit "compose-standard-free"
   elif [[ "$LIVE_PORT" != "$STANDARD_PORT" ]] && [[ -n "$STANDARD_PORT_CONTAINER" && "$STANDARD_PORT_CONTAINER" != "$LIVE_CONTAINER" ]]; then
     print_plan_and_exit "compose-standard-reclaim"
@@ -611,7 +637,7 @@ log_success "Runtime backup created: $BACKUP_DIR"
 docker tag "$IMAGE_TAG" "$CURRENT_TAG"
 log_info "Retagged ${IMAGE_TAG} -> ${CURRENT_TAG}"
 
-if [[ "$LIVE_PORT" != "$STANDARD_PORT" ]] && port_is_free "$STANDARD_PORT"; then
+if [[ "$LIVE_IS_CURRENT_COMPOSE_SERVICE" == false && "$LIVE_PORT" != "$STANDARD_PORT" ]] && port_is_free "$STANDARD_PORT"; then
   start_compose_on_standard_port
   wait_http_ok "http://127.0.0.1:${STANDARD_PORT}${HEALTH_PATH}" "$LOCAL_HEALTH_TIMEOUT" || {
     log_error "Compose app failed local health check on standard port ${STANDARD_PORT}"
@@ -622,7 +648,7 @@ if [[ "$LIVE_PORT" != "$STANDARD_PORT" ]] && port_is_free "$STANDARD_PORT"; then
   stop_old_live_container "$LIVE_CONTAINER"
   log_success "Traffic switched to compose app on standard port ${STANDARD_PORT}"
   log_info "Runtime ownership: compose-managed"
-elif [[ "$LIVE_PORT" != "$STANDARD_PORT" ]] && [[ -n "$STANDARD_PORT_CONTAINER" && "$STANDARD_PORT_CONTAINER" != "$LIVE_CONTAINER" ]]; then
+elif [[ "$LIVE_IS_CURRENT_COMPOSE_SERVICE" == false && "$LIVE_PORT" != "$STANDARD_PORT" ]] && [[ -n "$STANDARD_PORT_CONTAINER" && "$STANDARD_PORT_CONTAINER" != "$LIVE_CONTAINER" ]]; then
   log_info "Standard port ${STANDARD_PORT} is occupied by non-live container ${STANDARD_PORT_CONTAINER}, reclaiming it"
   stop_non_live_standard_holder "$STANDARD_PORT_CONTAINER"
   port_is_free "$STANDARD_PORT" || {
@@ -639,7 +665,7 @@ elif [[ "$LIVE_PORT" != "$STANDARD_PORT" ]] && [[ -n "$STANDARD_PORT_CONTAINER" 
   stop_old_live_container "$LIVE_CONTAINER"
   log_success "Traffic switched to compose app on reclaimed standard port ${STANDARD_PORT}"
   log_info "Runtime ownership: compose-managed"
-elif [[ "$LIVE_PORT" != "$STANDARD_PORT" ]] && wait_http_ok "http://127.0.0.1:${STANDARD_PORT}${HEALTH_PATH}" 2; then
+elif [[ "$LIVE_IS_CURRENT_COMPOSE_SERVICE" == false && "$LIVE_PORT" != "$STANDARD_PORT" ]] && wait_http_ok "http://127.0.0.1:${STANDARD_PORT}${HEALTH_PATH}" 2; then
   log_info "Standard port ${STANDARD_PORT} is already healthy, cutting traffic back without restarting app"
   cutover_proxy "$STANDARD_PORT"
   verify_public_health

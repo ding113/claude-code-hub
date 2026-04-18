@@ -484,7 +484,9 @@ export async function deleteKeysBatch(ids: number[]): Promise<number> {
   );
   const failedInvalidations = invalidationResults.filter((item) => item.status === "rejected");
   if (failedInvalidations.length > 0) {
-    throw new Error(`Failed to invalidate ${failedInvalidations.length} deleted keys`);
+    console.error(
+      `[deleteKeysBatch] failed to invalidate ${failedInvalidations.length} deleted keys`
+    );
   }
   return result.length;
 }

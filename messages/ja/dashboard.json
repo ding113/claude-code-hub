@@ -1634,7 +1634,7 @@
         "groupName": "グループ名",
         "sourceKey": "ベースキー",
         "previewTitle": "プレビュー（先頭 5 件）",
-        "download": "CSV をダウンロード"
+        "download": "キーをダウンロード"
       },
       "listActions": {
         "showMore": "残り {count} 件を表示",
