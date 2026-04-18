@@ -18,8 +18,10 @@ export function useIpGeo(ip: string | null | undefined) {
       return (await response.json()) as IpGeoLookupResponse;
     },
     enabled: !!ip,
-    staleTime: 60 * 60 * 1000, // 1h, matches server cache default
-    gcTime: 24 * 60 * 60 * 1000,
+    // 禁用本地缓存：每次打开 IP 详情都强制拉取最新数据，服务端已有缓存
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
     retry: false,
   });
 }
