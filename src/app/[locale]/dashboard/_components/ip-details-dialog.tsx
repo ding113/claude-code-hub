@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { useIpGeo } from "@/hooks/use-ip-geo";
+import { type IpGeoLookupMode, useIpGeo } from "@/hooks/use-ip-geo";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import { AbuseSection, hasAbuseContent } from "./ip-details/abuse-section";
 import { hasMeaningfulCoordinates } from "./ip-details/atoms";
@@ -29,9 +29,15 @@ interface IpDetailsDialogProps {
   ip: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  lookupMode?: IpGeoLookupMode;
 }
 
-export function IpDetailsDialog({ ip, open, onOpenChange }: IpDetailsDialogProps) {
+export function IpDetailsDialog({
+  ip,
+  open,
+  onOpenChange,
+  lookupMode = "default",
+}: IpDetailsDialogProps) {
   const t = useTranslations("ipDetails");
   const [copied, setCopied] = useState(false);
 
@@ -83,15 +89,15 @@ export function IpDetailsDialog({ ip, open, onOpenChange }: IpDetailsDialogProps
         {/* Only mount the content (and its useQuery) when the dialog is open.
             This keeps tests that never open the dialog free of a QueryClient
             dependency. */}
-        {open && <IpDetailsContent ip={ip} />}
+        {open && <IpDetailsContent ip={ip} lookupMode={lookupMode} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function IpDetailsContent({ ip }: { ip: string | null }) {
+function IpDetailsContent({ ip, lookupMode }: { ip: string | null; lookupMode: IpGeoLookupMode }) {
   const t = useTranslations("ipDetails");
-  const { data, isLoading, isError } = useIpGeo(ip);
+  const { data, isLoading, isError } = useIpGeo(ip, { mode: lookupMode });
 
   if (isLoading) {
     return <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>;

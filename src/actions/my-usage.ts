@@ -5,6 +5,7 @@ import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { lookupIp } from "@/lib/ip-geo/client";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
@@ -26,6 +27,7 @@ import {
   type UsageLogSummary,
   type UsageLogsBatchResult,
 } from "@/repository/usage-logs";
+import type { IpGeoLookupResult, IpGeoPrivateMarker } from "@/types/ip-geo";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
@@ -691,6 +693,60 @@ export async function getMyAvailableEndpoints(): Promise<ActionResult<string[]>>
   } catch (error) {
     logger.error("[my-usage] getMyAvailableEndpoints failed", error);
     return { ok: false, error: "Failed to get endpoint list" };
+  }
+}
+
+export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): Promise<
+  ActionResult<{
+    status: "ok" | "private" | "error";
+    data?: IpGeoLookupResult | IpGeoPrivateMarker;
+    error?: string;
+  }>
+> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const ip = params.ip.trim();
+    if (!ip) return { ok: false, error: "IP is required" };
+
+    // 仅允许查询当前 key 在 my-usage 可见日志中真实出现过的 IP。
+    const [visibleLog] = await db
+      .select({ id: messageRequest.id })
+      .from(messageRequest)
+      .where(
+        and(
+          isNull(messageRequest.deletedAt),
+          eq(messageRequest.key, session.key.key),
+          eq(messageRequest.clientIp, ip)
+        )
+      )
+      .limit(1);
+
+    if (!visibleLog) {
+      return { ok: false, error: "IP not found in current key usage logs" };
+    }
+
+    const settings = await getSystemSettings();
+    if (!settings.ipGeoLookupEnabled) {
+      return { ok: false, error: "IP geolocation disabled" };
+    }
+
+    const result = await lookupIp(ip, { lang: params.lang });
+    if (result.status === "error") {
+      logger.warn("[my-usage] getMyIpGeoDetails lookup returned error", {
+        ip,
+        lang: params.lang,
+        userId: session.user.id,
+        keyId: session.key.id,
+        error: result.error,
+      });
+    }
+
+    return { ok: true, data: result };
+  } catch (error) {
+    logger.error("[my-usage] getMyIpGeoDetails failed", { error, ip: params.ip });
+    return { ok: false, error: "Failed to get IP details" };
   }
 }
 

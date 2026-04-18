@@ -95,6 +95,7 @@ async function createMessage(params: {
   inputTokens?: number | null;
   outputTokens?: number | null;
   blockedBy?: string | null;
+  clientIp?: string | null;
   createdAt: Date;
 }): Promise<number> {
   const [row] = await db
@@ -110,6 +111,7 @@ async function createMessage(params: {
       inputTokens: params.inputTokens ?? 0,
       outputTokens: params.outputTokens ?? 0,
       blockedBy: params.blockedBy ?? null,
+      clientIp: params.clientIp ?? null,
       createdAt: params.createdAt,
       updatedAt: params.createdAt,
     })
@@ -290,6 +292,75 @@ describe("my-usage API：只读 Key 自助查询", () => {
     const usersData = (usersApi.json as { ok: boolean; data: Array<{ id: number }> }).data;
     expect(usersData.length).toBe(1);
     expect(usersData[0].id).toBe(user.id);
+  });
+
+  test("只读 Key：只能查询当前 key 日志里出现过的 IP 详情", async () => {
+    const unique = `my-usage-ip-geo-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const userA = await createTestUser(`Test ${unique}-A`);
+    createdUserIds.push(userA.id);
+    const keyA = await createTestKey({
+      userId: userA.id,
+      key: `test-ip-geo-key-A-${unique}`,
+      name: `ip-geo-A-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(keyA.id);
+
+    const userB = await createTestUser(`Test ${unique}-B`);
+    createdUserIds.push(userB.id);
+    const keyB = await createTestKey({
+      userId: userB.id,
+      key: `test-ip-geo-key-B-${unique}`,
+      name: `ip-geo-B-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(keyB.id);
+
+    const now = new Date();
+    const visibleIp = "203.0.113.9";
+    const hiddenIp = "198.51.100.88";
+
+    createdMessageIds.push(
+      await createMessage({
+        userId: userA.id,
+        key: keyA.key,
+        model: "gpt-4.1-mini",
+        clientIp: visibleIp,
+        createdAt: now,
+      })
+    );
+    createdMessageIds.push(
+      await createMessage({
+        userId: userB.id,
+        key: keyB.key,
+        model: "gpt-4.1-mini",
+        clientIp: hiddenIp,
+        createdAt: now,
+      })
+    );
+
+    currentAuthToken = keyA.key;
+
+    const visible = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyIpGeoDetails",
+      authToken: keyA.key,
+      body: { ip: visibleIp, lang: "en" },
+    });
+    expect(visible.response.status).toBe(200);
+    expect(visible.json).toMatchObject({ ok: true });
+
+    const hidden = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyIpGeoDetails",
+      authToken: keyA.key,
+      body: { ip: hiddenIp, lang: "en" },
+    });
+    expect(hidden.response.status).toBe(200);
+    expect(hidden.json).toMatchObject({
+      ok: false,
+      error: "IP not found in current key usage logs",
+    });
   });
 
   test("今日统计：应与 message_request 数据一致，并排除 warmup 与其他 Key 数据", async () => {
