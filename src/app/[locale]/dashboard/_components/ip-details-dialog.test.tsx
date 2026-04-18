@@ -594,6 +594,9 @@ describe("IpDetailsDialog: location layout", () => {
     expect(document.querySelector('[data-testid="ip-location-map-popup"]')?.textContent).toContain(
       "Hong Kong"
     );
+    expect(
+      document.querySelector('[data-testid="ip-location-map-popup"]')?.textContent
+    ).not.toContain("Hong Kong · Hong Kong");
 
     unmount();
   });

@@ -83,7 +83,12 @@ export function LocationSection({ result }: { result: IpGeoLookupResult }) {
   const nativeSuffix =
     country.name_native && country.name_native !== country.name ? country.name_native : null;
   const mapTitle = cityName ?? regionName ?? countryName ?? t("hero.location");
-  const mapSubtitle = [regionName, countryName].filter(Boolean).join(" · ") || null;
+  const mapSubtitleParts = Array.from(
+    new Set(
+      [regionName, countryName].filter((value): value is string => !!value && value !== mapTitle)
+    )
+  );
+  const mapSubtitle = mapSubtitleParts.length > 0 ? mapSubtitleParts.join(" · ") : null;
 
   return (
     <Section

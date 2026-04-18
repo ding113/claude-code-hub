@@ -144,9 +144,13 @@
     @apply bg-background text-foreground;
     min-height: 100%;
   }
+}
+
+@layer components {
   .maplibregl-popup-content {
-    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+    @apply bg-background/95! text-foreground! shadow-none! p-0! rounded-none!;
   }
+
   .maplibregl-popup-tip {
     @apply hidden!;
   }
