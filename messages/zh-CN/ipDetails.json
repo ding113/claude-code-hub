@@ -29,6 +29,7 @@
   "sections": {
     "location": "地理位置详情",
     "country": "国家 / 地区",
+    "countryTimezone": "国家地区与时区",
     "network": "网络详情",
     "company": "所属公司",
     "hosting": "托管信息",

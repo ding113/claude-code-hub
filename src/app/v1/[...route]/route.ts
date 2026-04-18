@@ -19,10 +19,14 @@ SessionTracker.initialize().catch((err) => {
   logger.error("[App] SessionTracker initialization failed:", err);
 });
 
-// 初始化敏感词检测器（加载缓存）
-sensitiveWordDetector.reload().catch((err) => {
-  logger.error("[App] SensitiveWordDetector initialization failed:", err);
-});
+// 无 DSN 时直接跳过预热，避免健康检查在无数据库测试环境里被启动副作用拖成 error。
+if (process.env.DSN?.trim()) {
+  sensitiveWordDetector.reload().catch((err) => {
+    logger.error("[App] SensitiveWordDetector initialization failed:", err);
+  });
+} else {
+  logger.info("[App] SensitiveWordDetector warmup skipped: DSN not configured");
+}
 
 const app = new Hono().basePath("/v1");
 

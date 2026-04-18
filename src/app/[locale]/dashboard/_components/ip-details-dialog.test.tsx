@@ -34,6 +34,15 @@ const toastMocks = vi.hoisted(() => ({
 vi.mock("sonner", () => ({
   toast: toastMocks,
 }));
+vi.mock("@/components/ui/map", () => ({
+  Map: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="ip-location-map">{children}</div>
+  ),
+  MapControls: () => <div data-testid="ip-location-map-controls" />,
+  MapPopup: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="ip-location-map-popup">{children}</div>
+  ),
+}));
 
 import { hasMeaningfulCoordinates, IpDetailsDialog } from "./ip-details-dialog";
 
@@ -135,16 +144,16 @@ const CGN_RESPONSE: IpGeoLookupResponse = {
 };
 
 describe("hasMeaningfulCoordinates", () => {
-  test("returns false when accuracy_radius_km is null (CGN / bogon / tailscale)", () => {
+  test("returns false for the 0,0 null-island fallback even when accuracy is unknown", () => {
     expect(hasMeaningfulCoordinates({ latitude: 0, longitude: 0, accuracy_radius_km: null })).toBe(
       false
     );
+  });
 
-    // Even a non-zero pair with null accuracy is untrusted — `null` means
-    // "we don't know", not "exact".
+  test("returns true for real coordinates even when accuracy_radius_km is null", () => {
     expect(
       hasMeaningfulCoordinates({ latitude: 37.4, longitude: -122.07, accuracy_radius_km: null })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test("returns false for the 0,0 null-island fallback", () => {
@@ -202,7 +211,8 @@ describe("IpDetailsDialog: partial payload rendering (CGN / bogon / tailscale)",
     // dialog is useful rather than near-empty:
     expect(text).toContain("Carrier-Grade NAT RFC6598"); // organization
     expect(text).toContain("dings-macbook-pro.taile7ff02.ts.net"); // hostname
-    expect(text).toContain("UTC"); // timezone id
+    expect(text).toContain(ipDetailsMessages.sections.countryTimezone);
+    expect(text).not.toContain("UTC"); // collapsed by default
 
     unmount();
   });
@@ -273,7 +283,7 @@ describe("IpDetailsDialog: partial payload rendering (CGN / bogon / tailscale)",
     unmount();
   });
 
-  test("hides country sub-card when country is the 'ZZ' unknown marker", () => {
+  test("hides unknown-country metadata rows even though the shared meta group still exists", () => {
     const { unmount } = render(
       <NextIntlClientProvider locale="en" messages={messages}>
         <IpDetailsDialog ip="100.85.244.112" open onOpenChange={() => {}} />
@@ -285,8 +295,8 @@ describe("IpDetailsDialog: partial payload rendering (CGN / bogon / tailscale)",
     expect(text).not.toContain(ipDetailsMessages.fields.capital);
     expect(text).not.toContain(ipDetailsMessages.fields.callingCode);
     expect(text).not.toContain(".unknown");
-    // Country section header itself should also not render.
-    expect(text).not.toContain(ipDetailsMessages.sections.country);
+    // 共享折叠组仍然存在，因为时区信息仍可展示。
+    expect(text).toContain(ipDetailsMessages.sections.countryTimezone);
 
     unmount();
   });
@@ -380,6 +390,100 @@ const FULL_RESPONSE: IpGeoLookupResponse = {
   },
 };
 
+const NULL_ACCURACY_RESPONSE: IpGeoLookupResponse = {
+  status: "ok",
+  data: {
+    ip: "103.229.54.214",
+    version: "ipv4",
+    hostname: null,
+    location: {
+      continent: { code: "AS", name: "Asia" },
+      country: {
+        code: "HK",
+        code3: "HKG",
+        name: "Hong Kong",
+        name_native: "Hong Kong",
+        capital: "City of Victoria",
+        calling_code: "+852",
+        tld: ".hk",
+        area_km2: 1104,
+        population: 0,
+        borders: ["CN"],
+        is_eu_member: false,
+        flag: { emoji: "🇭🇰", unicode: "U+1F1ED U+1F1F0", svg: null, png: null },
+        languages: [
+          { code: "en", name: "English", name_native: "English" },
+          { code: "zh", name: "Chinese", name_native: "Chinese" },
+        ],
+        currencies: [
+          {
+            code: "HKD",
+            name: "Hong Kong dollar",
+            symbol: "$",
+            symbol_native: "$",
+            format: { decimal_separator: ".", group_separator: "," },
+          },
+        ],
+      },
+      region: { code: "HK-NKT", name: "Hong Kong", type: "region" },
+      city: "Hong Kong",
+      postal_code: "-",
+      coordinates: {
+        latitude: 22.2855205535889,
+        longitude: 114.157691955566,
+        accuracy_radius_km: null,
+      },
+    },
+    timezone: {
+      id: "Asia/Hong_Kong",
+      name: "Asia/Hong_Kong",
+      abbreviation: "HKT",
+      utc_offset: "+08:00",
+      utc_offset_seconds: 28800,
+      is_dst: false,
+      current_time: "2026-04-18T02:28:25+08:00",
+    },
+    connection: {
+      asn: 38136,
+      handle: "AKARI-NETWORKS-AS-AP",
+      organization: "Shangxing Tech Limited",
+      domain: "akari.hk",
+      route: "103.229.54.0/23",
+      rir: "APNIC",
+      type: "business",
+      subtype: "hosting",
+      scope: "public",
+      is_anycast: false,
+    },
+    company: { name: "Shangxing Tech Limited", domain: "shangxingtech.com", type: "isp" },
+    carrier: null,
+    hosting: { provider: "akrn.net", domain: "shangxingtech.com", network: "103.229.54.0/24" },
+    privacy: {
+      is_proxy: true,
+      is_vpn: false,
+      is_tor: false,
+      is_tor_exit: false,
+      is_relay: false,
+      is_anonymous: true,
+    },
+    threat: {
+      is_abuser: false,
+      is_attacker: false,
+      is_crawler: false,
+      is_threat: false,
+      score: 0.0391,
+      risk_level: "none",
+      blocklists: [],
+    },
+    abuse: {
+      name: "SHANGXING TECH LIMITED",
+      email: "coco.lee@shangxingtech.com",
+      phone: "+85262042671",
+      address: "HK, Kwai Chung, Kwai Tsing District, New Territories, Hong Kong",
+    },
+  },
+};
+
 describe("IpDetailsDialog: full-data rendering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -460,6 +564,51 @@ describe("IpDetailsDialog: full-data rendering", () => {
 
     const text = allText();
     expect(text).toContain(ipDetailsMessages.hero.cleanHint);
+
+    unmount();
+  });
+});
+
+describe("IpDetailsDialog: location layout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    document.body.innerHTML = "";
+    useIpGeoMocks.useIpGeo.mockReturnValue({
+      data: NULL_ACCURACY_RESPONSE,
+      isLoading: false,
+      isError: false,
+    });
+  });
+
+  test("shows non-zero coordinates and map even when accuracy radius is null", () => {
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <IpDetailsDialog ip="103.229.54.214" open onOpenChange={() => {}} />
+      </NextIntlClientProvider>
+    );
+
+    const text = allText();
+    expect(text).toContain("22.2855205535889, 114.157691955566");
+    expect(text).not.toContain(ipDetailsMessages.fields.accuracyRadius);
+    expect(document.querySelector('[data-testid="ip-location-map"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="ip-location-map-popup"]')?.textContent).toContain(
+      "Hong Kong"
+    );
+
+    unmount();
+  });
+
+  test("keeps country and timezone details collapsed into one default-closed group", () => {
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <IpDetailsDialog ip="103.229.54.214" open onOpenChange={() => {}} />
+      </NextIntlClientProvider>
+    );
+
+    const text = allText();
+    expect(text).toContain("Country & timezone");
+    expect(text).not.toContain("City of Victoria");
+    expect(text).not.toContain("Asia/Hong_Kong");
 
     unmount();
   });

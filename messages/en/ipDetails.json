@@ -29,6 +29,7 @@
   "sections": {
     "location": "Location details",
     "country": "Country",
+    "countryTimezone": "Country & timezone",
     "network": "Network details",
     "company": "Company",
     "hosting": "Hosting",

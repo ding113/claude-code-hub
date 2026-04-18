@@ -144,6 +144,12 @@
     @apply bg-background text-foreground;
     min-height: 100%;
   }
+  .maplibregl-popup-content {
+    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+  }
+  .maplibregl-popup-tip {
+    @apply hidden!;
+  }
 }
 
 /* 隐藏滚动条但保留滚动功能 */

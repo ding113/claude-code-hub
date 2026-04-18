@@ -29,6 +29,7 @@
   "sections": {
     "location": "Подробности местоположения",
     "country": "Страна",
+    "countryTimezone": "Страна и часовой пояс",
     "network": "Подробности сети",
     "company": "Компания",
     "hosting": "Хостинг",

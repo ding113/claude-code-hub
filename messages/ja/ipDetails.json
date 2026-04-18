@@ -29,6 +29,7 @@
   "sections": {
     "location": "所在地の詳細",
     "country": "国 / 地域",
+    "countryTimezone": "国とタイムゾーン",
     "network": "ネットワーク詳細",
     "company": "所属組織",
     "hosting": "ホスティング",
