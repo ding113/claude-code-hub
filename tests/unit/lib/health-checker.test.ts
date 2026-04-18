@@ -280,5 +280,17 @@ describe("health/checker", () => {
       expect(result.status).toBe("healthy");
       expect(result.components?.redis?.status).toBe("unchecked");
     });
+
+    it("returns healthy when DB is unchecked in test mode", async () => {
+      mocks.getRedisClient.mockReturnValue({
+        status: "ready",
+        ping: vi.fn().mockResolvedValue("PONG"),
+      });
+      mocks.v1App.request.mockResolvedValue(new Response('{"status":"pong"}', { status: 200 }));
+      const { checkReadiness } = await import("@/lib/health/checker");
+      const result = await checkReadiness();
+      expect(result.status).toBe("healthy");
+      expect(result.components?.database?.status).toBe("unchecked");
+    });
   });
 });

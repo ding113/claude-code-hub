@@ -193,7 +193,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   const internalUpdateRef = useRef(false);
   const resolvedTheme = useResolvedTheme(themeProp);
 
-  const isControlled = viewport !== undefined && onViewportChange !== undefined;
+  const isControlled = viewport !== undefined;
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
@@ -511,12 +511,15 @@ type MarkerPopupProps = {
   className?: string;
   /** Show a close button in the popup (default: false) */
   closeButton?: boolean;
+  /** Accessible label for the close button */
+  closeLabel?: string;
 } & Omit<PopupOptions, "className" | "closeButton">;
 
 function MarkerPopup({
   children,
   className,
   closeButton = false,
+  closeLabel = "Close popup",
   ...popupOptions
 }: MarkerPopupProps) {
   const { marker, map } = useMarkerContext();
@@ -575,10 +578,10 @@ function MarkerPopup({
           type="button"
           onClick={handleClose}
           className="ring-offset-background focus:ring-ring absolute top-1 right-1 z-10 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none"
-          aria-label="Close popup"
+          aria-label={closeLabel}
         >
           <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{closeLabel}</span>
         </button>
       )}
       {children}
@@ -702,6 +705,14 @@ type MapControlsProps = {
   className?: string;
   /** Callback with user coordinates when located */
   onLocate?: (coords: { longitude: number; latitude: number }) => void;
+  /** Accessible labels for control buttons */
+  labels?: {
+    zoomIn?: string;
+    zoomOut?: string;
+    locate?: string;
+    fullscreen?: string;
+    compass?: string;
+  };
 };
 
 const positionClasses = {
@@ -754,9 +765,17 @@ function MapControls({
   showFullscreen = false,
   className,
   onLocate,
+  labels,
 }: MapControlsProps) {
   const { map } = useMap();
   const [waitingForLocation, setWaitingForLocation] = useState(false);
+  const mergedLabels = {
+    zoomIn: labels?.zoomIn ?? "Zoom in",
+    zoomOut: labels?.zoomOut ?? "Zoom out",
+    locate: labels?.locate ?? "Find my location",
+    fullscreen: labels?.fullscreen ?? "Toggle fullscreen",
+    compass: labels?.compass ?? "Reset bearing to north",
+  };
 
   const handleZoomIn = useCallback(() => {
     map?.zoomTo(map.getZoom() + 1, { duration: 300 });
@@ -772,27 +791,30 @@ function MapControls({
 
   const handleLocate = useCallback(() => {
     setWaitingForLocation(true);
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const coords = {
-            longitude: pos.coords.longitude,
-            latitude: pos.coords.latitude,
-          };
-          map?.flyTo({
-            center: [coords.longitude, coords.latitude],
-            zoom: 14,
-            duration: 1500,
-          });
-          onLocate?.(coords);
-          setWaitingForLocation(false);
-        },
-        (error) => {
-          console.error("Error getting location:", error);
-          setWaitingForLocation(false);
-        }
-      );
+    if (!("geolocation" in navigator)) {
+      setWaitingForLocation(false);
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = {
+          longitude: pos.coords.longitude,
+          latitude: pos.coords.latitude,
+        };
+        map?.flyTo({
+          center: [coords.longitude, coords.latitude],
+          zoom: 14,
+          duration: 1500,
+        });
+        onLocate?.(coords);
+        setWaitingForLocation(false);
+      },
+      (error) => {
+        console.error("Error getting location:", error);
+        setWaitingForLocation(false);
+      }
+    );
   }, [map, onLocate]);
 
   const handleFullscreen = useCallback(() => {
@@ -811,24 +833,24 @@ function MapControls({
     >
       {showZoom && (
         <ControlGroup>
-          <ControlButton onClick={handleZoomIn} label="Zoom in">
+          <ControlButton onClick={handleZoomIn} label={mergedLabels.zoomIn}>
             <Plus className="size-4" />
           </ControlButton>
-          <ControlButton onClick={handleZoomOut} label="Zoom out">
+          <ControlButton onClick={handleZoomOut} label={mergedLabels.zoomOut}>
             <Minus className="size-4" />
           </ControlButton>
         </ControlGroup>
       )}
       {showCompass && (
         <ControlGroup>
-          <CompassButton onClick={handleResetBearing} />
+          <CompassButton onClick={handleResetBearing} label={mergedLabels.compass} />
         </ControlGroup>
       )}
       {showLocate && (
         <ControlGroup>
           <ControlButton
             onClick={handleLocate}
-            label="Find my location"
+            label={mergedLabels.locate}
             disabled={waitingForLocation}
           >
             {waitingForLocation ? (
@@ -841,7 +863,7 @@ function MapControls({
       )}
       {showFullscreen && (
         <ControlGroup>
-          <ControlButton onClick={handleFullscreen} label="Toggle fullscreen">
+          <ControlButton onClick={handleFullscreen} label={mergedLabels.fullscreen}>
             <Maximize className="size-4" />
           </ControlButton>
         </ControlGroup>
@@ -850,7 +872,7 @@ function MapControls({
   );
 }
 
-function CompassButton({ onClick }: { onClick: () => void }) {
+function CompassButton({ onClick, label }: { onClick: () => void; label: string }) {
   const { map } = useMap();
   const compassRef = useRef<SVGSVGElement>(null);
 
@@ -876,7 +898,7 @@ function CompassButton({ onClick }: { onClick: () => void }) {
   }, [map]);
 
   return (
-    <ControlButton onClick={onClick} label="Reset bearing to north">
+    <ControlButton onClick={onClick} label={label}>
       <svg
         ref={compassRef}
         viewBox="0 0 24 24"
@@ -905,6 +927,8 @@ type MapPopupProps = {
   className?: string;
   /** Show a close button in the popup (default: false) */
   closeButton?: boolean;
+  /** Accessible label for the close button */
+  closeLabel?: string;
 } & Omit<PopupOptions, "className" | "closeButton">;
 
 function MapPopup({
@@ -914,6 +938,7 @@ function MapPopup({
   children,
   className,
   closeButton = false,
+  closeLabel = "Close popup",
   ...popupOptions
 }: MapPopupProps) {
   const { map } = useMap();
@@ -986,10 +1011,10 @@ function MapPopup({
           type="button"
           onClick={handleClose}
           className="ring-offset-background focus:ring-ring absolute top-1 right-1 z-10 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none"
-          aria-label="Close popup"
+          aria-label={closeLabel}
         >
           <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{closeLabel}</span>
         </button>
       )}
       {children}

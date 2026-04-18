@@ -40,7 +40,10 @@ export async function checkDatabase(): Promise<ComponentHealth> {
   try {
     const dsn = process.env.DSN?.trim();
     if (!dsn) {
-      return { status: "unchecked", message: "Database not configured" };
+      return {
+        status: process.env.NODE_ENV === "test" ? "unchecked" : "down",
+        message: "Database not configured",
+      };
     }
 
     await withTimeout(db.execute(sql`SELECT 1`), DB_CHECK_TIMEOUT_MS, "database");

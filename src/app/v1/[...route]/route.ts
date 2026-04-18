@@ -19,13 +19,19 @@ SessionTracker.initialize().catch((err) => {
   logger.error("[App] SessionTracker initialization failed:", err);
 });
 
-// 无 DSN 时直接跳过预热，避免健康检查在无数据库测试环境里被启动副作用拖成 error。
-if (process.env.DSN?.trim()) {
+// 仅在测试或构建阶段允许跳过预热，避免生产环境静默关闭敏感词拦截。
+const hasDsn = Boolean(process.env.DSN?.trim());
+const canSkipDsnWarmup =
+  process.env.NODE_ENV === "test" || process.env.NEXT_PHASE === "phase-production-build";
+
+if (hasDsn) {
   sensitiveWordDetector.reload().catch((err) => {
     logger.error("[App] SensitiveWordDetector initialization failed:", err);
   });
-} else {
+} else if (canSkipDsnWarmup) {
   logger.info("[App] SensitiveWordDetector warmup skipped: DSN not configured");
+} else {
+  throw new Error("[App] DSN is required for SensitiveWordDetector warmup");
 }
 
 const app = new Hono().basePath("/v1");

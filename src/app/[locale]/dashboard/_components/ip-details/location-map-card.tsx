@@ -1,6 +1,7 @@
 "use client";
 
 import { MapPin } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Map, MapControls, MapPopup } from "@/components/ui/map";
 
 function resolveZoom(accuracyRadiusKm: number | null): number {
@@ -24,6 +25,8 @@ export function LocationMapCard({
   title: string;
   subtitle?: string | null;
 }) {
+  const t = useTranslations("ipDetails");
+
   return (
     <div className="overflow-hidden rounded-xl border bg-background shadow-xs">
       <div className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2">
@@ -37,8 +40,18 @@ export function LocationMapCard({
       </div>
 
       <div className="h-52 sm:h-60">
-        <Map center={[longitude, latitude]} zoom={resolveZoom(accuracyRadiusKm)}>
-          <MapPopup longitude={longitude} latitude={latitude} className="w-56">
+        <Map
+          viewport={{
+            center: [longitude, latitude],
+            zoom: resolveZoom(accuracyRadiusKm),
+          }}
+        >
+          <MapPopup
+            longitude={longitude}
+            latitude={latitude}
+            className="w-56"
+            closeLabel={t("map.closePopup")}
+          >
             <div className="space-y-1">
               <p className="text-sm font-semibold">{title}</p>
               {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
@@ -47,7 +60,19 @@ export function LocationMapCard({
               </p>
             </div>
           </MapPopup>
-          <MapControls position="bottom-right" showZoom showCompass={false} showLocate={false} />
+          <MapControls
+            position="bottom-right"
+            showZoom
+            showCompass={false}
+            showLocate={false}
+            labels={{
+              zoomIn: t("map.zoomIn"),
+              zoomOut: t("map.zoomOut"),
+              locate: t("map.locate"),
+              fullscreen: t("map.fullscreen"),
+              compass: t("map.resetBearing"),
+            }}
+          />
         </Map>
       </div>
     </div>

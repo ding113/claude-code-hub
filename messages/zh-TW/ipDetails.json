@@ -47,6 +47,14 @@
     "unknownOrg": "組織未知",
     "cleanHint": "未偵測到匿名或威脅訊號"
   },
+  "map": {
+    "closePopup": "關閉地圖彈窗",
+    "zoomIn": "放大地圖",
+    "zoomOut": "縮小地圖",
+    "locate": "定位到我的位置",
+    "fullscreen": "切換全螢幕地圖",
+    "resetBearing": "將朝向重設為正北"
+  },
   "fields": {
     "country": "國家/地區",
     "countryNative": "本地名稱",
