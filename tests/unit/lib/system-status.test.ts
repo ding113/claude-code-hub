@@ -221,8 +221,10 @@ describe("getPublicSystemStatusSnapshot", () => {
     expect(snapshot.summary.weightedCostPerMillionTokens).toBeCloseTo(13.542, 3);
     expect(snapshot.summary.weightedCostPerHundredMillionTokens).toBeCloseTo(1354.167, 3);
     expect(mocks.getLeaderboardWithCache).toHaveBeenCalledWith("custom", "USD", "provider", {
-      startDate: "2026-04-09",
+      startDate: "2026-04-08",
       endDate: "2026-04-15",
+      startDateTime: "2026-04-08T12:00:00.000Z",
+      endDateTime: "2026-04-15T12:00:00.000Z",
     });
   });
 });

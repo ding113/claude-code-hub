@@ -479,7 +479,13 @@ export async function deleteKeysBatch(ids: number[]): Promise<number> {
     .where(and(inArray(keys.id, ids), isNull(keys.deletedAt)))
     .returning({ id: keys.id, key: keys.key });
 
-  await Promise.all(result.map((row) => invalidateCachedKey(row.key).catch(() => {})));
+  const invalidationResults = await Promise.allSettled(
+    result.map((row) => invalidateCachedKey(row.key))
+  );
+  const failedInvalidations = invalidationResults.filter((item) => item.status === "rejected");
+  if (failedInvalidations.length > 0) {
+    throw new Error(`Failed to invalidate ${failedInvalidations.length} deleted keys`);
+  }
   return result.length;
 }
 

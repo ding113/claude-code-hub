@@ -1586,11 +1586,11 @@
     "temporaryKeys": {
       "createDialog": {
         "title": "批量生成临时 Key",
-        "description": "选择一个基础 Key，并按当前用户组批量生成临时 API Key。",
+        "description": "选择一个基础 Key，填写分组名称，并批量生成临时 API Key。",
         "baseKeyLabel": "基础 Key",
         "baseKeyPlaceholder": "请选择基础 Key",
         "baseKeyRequired": "请选择基础 Key",
-        "groupNameLabel": "用户组别",
+        "groupNameLabel": "分组名称",
         "groupNamePlaceholder": "例如：渠道A-4月活动",
         "quantityLabel": "生成数量",
         "quantityDescription": "支持快捷生成 5 / 10 / 20 / 50 / 100，也可自定义数量。",
@@ -1603,13 +1603,14 @@
         "submitting": "生成中...",
         "noKeys": "当前用户暂无可用的基础 Key",
         "invalidCount": "请输入有效的生成数量",
+        "invalidGroupName": "请输入有效的分组名称（1-120 个字符）",
         "invalidLimit": "请输入有效的总额度",
         "genericError": "批量生成失败"
       },
       "success": {
         "title": "临时 Key 生成完成",
         "description": "分组 {group} 已成功生成 {count} 个临时 Key，请立即下载保存完整密钥。",
-        "groupName": "用户组别",
+        "groupName": "分组名称",
         "sourceKey": "基础 Key",
         "previewTitle": "预览（前 5 条）",
         "download": "下载纯 Key"
@@ -1626,7 +1627,7 @@
         },
         "temporary": {
           "title": "临时 Key",
-          "description": "额外的临时 CDKey 分组，按当前用户组批量创建、下载和删除。",
+          "description": "额外的临时 Key 分组，可用于批量创建、下载和删除。",
           "empty": "暂无临时 Key 分组"
         }
       },
@@ -1635,7 +1636,8 @@
         "groupBadge": "临时",
         "count": "{count} 个 Key",
         "download": "下载纯 Key",
-        "delete": "删除分组"
+        "delete": "删除分组",
+        "deleteConfirm": "确认删除分组 {group}（{count} 个 Key）吗？该分组内的 Key 会立即失效。"
       },
       "toasts": {
         "createSuccess": "已生成 {count} 个临时 Key",

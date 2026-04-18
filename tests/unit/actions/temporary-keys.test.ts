@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
+import type { Key } from "@/types/key";
 
 const getSessionMock = vi.fn();
 vi.mock("@/lib/auth", () => ({
@@ -54,6 +55,11 @@ let createTemporaryKeysBatch: typeof import("@/actions/keys").createTemporaryKey
 let downloadTemporaryKeyGroup: typeof import("@/actions/keys").downloadTemporaryKeyGroup;
 let removeTemporaryKeyGroup: typeof import("@/actions/keys").removeTemporaryKeyGroup;
 
+type TestKeyRecord = Omit<Key, "expiresAt" | "deletedAt"> & {
+  expiresAt: Date | null;
+  deletedAt: Date | null;
+};
+
 function createAdminSession() {
   return { user: { id: 1, role: "admin" } };
 }
@@ -90,7 +96,7 @@ function createUserRecord(
   };
 }
 
-function createBaseKey() {
+function createBaseKey(): TestKeyRecord {
   return {
     id: 100,
     userId: 10,
@@ -101,7 +107,7 @@ function createBaseKey() {
     canLoginWebUi: true,
     limit5hUsd: 3,
     limitDailyUsd: 6,
-    dailyResetMode: "fixed" as const,
+    dailyResetMode: "fixed",
     dailyResetTime: "08:00",
     limitWeeklyUsd: 12,
     limitMonthlyUsd: 24,
@@ -109,7 +115,7 @@ function createBaseKey() {
     costResetAt: null,
     limitConcurrentSessions: 2,
     providerGroup: "default",
-    cacheTtlPreference: "5m" as const,
+    cacheTtlPreference: "5m",
     temporaryGroupName: null,
     createdAt: new Date("2026-04-10T00:00:00.000Z"),
     updatedAt: new Date("2026-04-10T00:00:00.000Z"),
@@ -118,8 +124,8 @@ function createBaseKey() {
 }
 
 function createKeyRecord(
-  overrides: Partial<ReturnType<typeof createBaseKey>> = {}
-): ReturnType<typeof createBaseKey> {
+  overrides: Partial<TestKeyRecord> = {}
+): TestKeyRecord {
   return {
     ...createBaseKey(),
     ...overrides,
@@ -177,6 +183,7 @@ describe("temporary key actions", () => {
     const result = await createTemporaryKeysBatch({
       userId: 10,
       baseKeyId: 100,
+      groupName: "vip",
       count: 2,
       customLimitTotalUsd: 20,
     });
@@ -211,7 +218,7 @@ describe("temporary key actions", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard");
   });
 
-  test("管理员批量创建临时 key 时应使用用户组别作为临时分组，但继承基础 key 的 provider 逻辑", async () => {
+  test("管理员批量创建临时 key 时应使用传入分组名，但继承基础 key 的 provider 逻辑", async () => {
     findUserByIdMock.mockResolvedValueOnce(createUserRecord({ providerGroup: "beta,alpha" }));
     findKeyByIdMock.mockResolvedValueOnce(
       createKeyRecord({
@@ -222,6 +229,7 @@ describe("temporary key actions", () => {
     const result = await createTemporaryKeysBatch({
       userId: 10,
       baseKeyId: 100,
+      groupName: "alpha,beta",
       count: 1,
     });
 
@@ -261,6 +269,7 @@ describe("temporary key actions", () => {
     const result = await createTemporaryKeysBatch({
       userId: 10,
       baseKeyId: 100,
+      groupName: "vip",
       count: 2,
     });
 
@@ -289,6 +298,7 @@ describe("temporary key actions", () => {
     const result = await createTemporaryKeysBatch({
       userId: 10,
       baseKeyId: 100,
+      groupName: "vip",
       count: 2,
     });
 
@@ -308,6 +318,7 @@ describe("temporary key actions", () => {
     const result = await createTemporaryKeysBatch({
       userId: 10,
       baseKeyId: 100,
+      groupName: "vip",
       count: 1,
     });
 
@@ -325,12 +336,30 @@ describe("temporary key actions", () => {
     const result = await createTemporaryKeysBatch({
       userId: 10,
       baseKeyId: 100,
+      groupName: "vip",
       count: 2,
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errorCode).toBe(ERROR_CODES.PERMISSION_DENIED);
+    }
+    expect(createKeysBatchMock).not.toHaveBeenCalled();
+  });
+
+  test("管理员批量创建临时 key 时应拒绝无效的自定义总额度", async () => {
+    const result = await createTemporaryKeysBatch({
+      userId: 10,
+      baseKeyId: 100,
+      groupName: "vip",
+      count: 2,
+      customLimitTotalUsd: Number.NaN,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errorCode).toBe(ERROR_CODES.INVALID_FORMAT);
+      expect(result.error).toBe("TEMPORARY_KEY_INVALID_TOTAL_LIMIT");
     }
     expect(createKeysBatchMock).not.toHaveBeenCalled();
   });
@@ -359,7 +388,7 @@ describe("temporary key actions", () => {
     expect(deleteKeysBatchMock).not.toHaveBeenCalled();
   });
 
-  test("删除临时分组时应批量删除整个分组且不影响用户原始分组逻辑", async () => {
+  test("删除临时分组时应批量删除整个分组并同步用户原始分组逻辑", async () => {
     findKeyListMock.mockResolvedValueOnce([
       createKeyRecord({
         id: 401,
@@ -399,7 +428,7 @@ describe("temporary key actions", () => {
       });
     }
     expect(deleteKeysBatchMock).toHaveBeenCalledWith([401, 402]);
-    expect(syncUserProviderGroupFromKeysMock).not.toHaveBeenCalled();
+    expect(syncUserProviderGroupFromKeysMock).toHaveBeenCalledWith(10);
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard");
   });
 

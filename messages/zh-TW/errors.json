@@ -72,6 +72,7 @@
   "UPDATE_KEY_FAILED": "更新金鑰失敗，請稍後重試",
   "DELETE_KEY_FAILED": "刪除金鑰失敗，請稍後重試",
   "TEMPORARY_KEY_BATCH_MAX_COUNT": "單次最多只能產生 100 個臨時 Key",
+  "TEMPORARY_KEY_INVALID_TOTAL_LIMIT": "請輸入有效的每個 Key 總額度",
   "TEMPORARY_KEY_GROUP_NAME_TOO_LONG": "臨時分組名稱不能超過 120 個字元",
   "TEMPORARY_KEY_GROUP_NAME_REQUIRED": "臨時分組名稱不能為空",
   "TEMPORARY_KEY_GROUP_NOT_FOUND": "找不到臨時 Key 分組",

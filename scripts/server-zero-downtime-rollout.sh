@@ -210,13 +210,20 @@ set +a
 if [[ -z "$STANDARD_PORT" ]]; then
   STANDARD_PORT="${APP_PORT:-23000}"
 fi
+STANDARD_PORT="$(normalize_numeric_port "STANDARD_PORT" "$STANDARD_PORT")"
 
 if [[ -z "$GREEN_PORT" ]]; then
   GREEN_PORT="$((STANDARD_PORT + 1))"
 fi
+GREEN_PORT="$(normalize_numeric_port "GREEN_PORT" "$GREEN_PORT")"
 
 if [[ -z "$GREEN_NAME" ]]; then
   GREEN_NAME="${COMPOSE_PROJECT_NAME:-claude-code-hub-local}_rollout_green"
+fi
+
+if [[ ! "$HEALTH_PATH" =~ ^/[A-Za-z0-9/_.-]*$ ]]; then
+  printf 'Invalid HEALTH_PATH: %q\n' "$HEALTH_PATH" >&2
+  exit 1
 fi
 
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-claude-code-hub-local}"
@@ -239,6 +246,21 @@ acquire_lock() {
 
 release_lock() {
   rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
+}
+
+normalize_numeric_port() {
+  local name="$1"
+  local raw="$2"
+  local trimmed="${raw//[[:space:]]/}"
+  if [[ ! "$trimmed" =~ ^[0-9]+$ ]]; then
+    printf 'Invalid %s: %q\n' "$name" "$raw" >&2
+    exit 1
+  fi
+  if (( trimmed < 1 || trimmed > 65535 )); then
+    printf 'Invalid %s: %q (must be 1-65535)\n' "$name" "$raw" >&2
+    exit 1
+  fi
+  printf '%s\n' "$trimmed"
 }
 
 get_domain_proxy_port() {
@@ -325,20 +347,20 @@ def rewrite_block(block_text):
 for line in lines:
     stripped = line.strip()
     if not in_server and stripped.startswith("server") and "{" in stripped:
-      in_server = True
-      block = [line]
-      depth = line.count("{") - line.count("}")
-      if depth == 0:
-          output.append(rewrite_block("".join(block)))
-          in_server = False
-      continue
+        in_server = True
+        block = [line]
+        depth = line.count("{") - line.count("}")
+        if depth == 0:
+            output.append(rewrite_block("".join(block)))
+            in_server = False
+        continue
     if in_server:
-      block.append(line)
-      depth += line.count("{") - line.count("}")
-      if depth == 0:
-          output.append(rewrite_block("".join(block)))
-          in_server = False
-      continue
+        block.append(line)
+        depth += line.count("{") - line.count("}")
+        if depth == 0:
+            output.append(rewrite_block("".join(block)))
+            in_server = False
+        continue
     output.append(line)
 
 if in_server:
@@ -495,8 +517,9 @@ start_manual_green() {
     -e REDIS_URL="$redis_url" \
     -e AUTO_MIGRATE=false \
     -e APP_PORT="$candidate_port" \
+    -e HEALTH_PATH="$HEALTH_PATH" \
     -p "127.0.0.1:${candidate_port}:3000" \
-    --health-cmd "node -e \"fetch('http://127.0.0.1:3000${HEALTH_PATH}').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
+    --health-cmd "node -e \"fetch('http://127.0.0.1:3000' + process.env.HEALTH_PATH).then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
     --health-interval 30s \
     --health-timeout 5s \
     --health-retries 3 \

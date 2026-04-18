@@ -72,6 +72,7 @@
   "UPDATE_KEY_FAILED": "Не удалось обновить ключ, попробуйте позже",
   "DELETE_KEY_FAILED": "Не удалось удалить ключ, попробуйте позже",
   "TEMPORARY_KEY_BATCH_MAX_COUNT": "За один раз можно создать не более 100 временных ключей",
+  "TEMPORARY_KEY_INVALID_TOTAL_LIMIT": "Введите корректный общий лимит для каждого ключа",
   "TEMPORARY_KEY_GROUP_NAME_TOO_LONG": "Имя группы временных ключей должно быть не длиннее 120 символов",
   "TEMPORARY_KEY_GROUP_NAME_REQUIRED": "Имя группы временных ключей обязательно",
   "TEMPORARY_KEY_GROUP_NOT_FOUND": "Группа временных ключей не найдена",

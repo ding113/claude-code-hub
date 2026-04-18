@@ -364,7 +364,7 @@ function Write-ComposeFile {
     if (-not $script:ENABLE_CADDY) {
         $appPortsSection = @"
     ports:
-      - "`${APP_PORT:-$($script:APP_PORT)}:`${APP_PORT:-$($script:APP_PORT)}"
+      - "`${APP_PORT:-$($script:APP_PORT)}:3000"
 "@
     }
 

@@ -67,11 +67,13 @@ function toHundredMillionCost(value: number | null | undefined): number | null {
 
 function buildRollingDateRange(now: Date, timezone: string) {
   const start = new Date(
-    now.getTime() - (PUBLIC_SYSTEM_STATUS_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000
+    now.getTime() - PUBLIC_SYSTEM_STATUS_WINDOW_DAYS * 24 * 60 * 60 * 1000
   );
   return {
     startDate: formatInTimeZone(start, timezone, "yyyy-MM-dd"),
     endDate: formatInTimeZone(now, timezone, "yyyy-MM-dd"),
+    startDateTime: start.toISOString(),
+    endDateTime: now.toISOString(),
   };
 }
 

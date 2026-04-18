@@ -998,6 +998,7 @@ export async function getKeysWithStatistics(
 export interface CreateTemporaryKeysBatchParams {
   userId: number;
   baseKeyId: number;
+  groupName: string;
   count: number;
   customLimitTotalUsd?: number;
 }
@@ -1041,6 +1042,34 @@ export async function createTemporaryKeysBatch(
       };
     }
 
+    if (
+      params.customLimitTotalUsd !== undefined &&
+      (!Number.isFinite(params.customLimitTotalUsd) || params.customLimitTotalUsd < 0)
+    ) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_INVALID_TOTAL_LIMIT"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const normalizedGroupName = normalizeTemporaryGroupName(params.groupName);
+    if (!normalizedGroupName) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_GROUP_NAME_REQUIRED"),
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
+    }
+
+    if (normalizedGroupName.length > 120) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_GROUP_NAME_TOO_LONG"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
     const { findUserById } = await import("@/repository/user");
     const user = await findUserById(params.userId);
     if (!user) {
@@ -1048,17 +1077,6 @@ export async function createTemporaryKeysBatch(
         ok: false,
         error: tError("USER_NOT_FOUND"),
         errorCode: ERROR_CODES.NOT_FOUND,
-      };
-    }
-
-    const normalizedGroupName = normalizeProviderGroup(
-      user.providerGroup || PROVIDER_GROUP.DEFAULT
-    );
-    if (normalizedGroupName.length > 120) {
-      return {
-        ok: false,
-        error: tError("TEMPORARY_KEY_GROUP_NAME_TOO_LONG"),
-        errorCode: ERROR_CODES.INVALID_FORMAT,
       };
     }
 
@@ -1144,6 +1162,25 @@ export async function createTemporaryKeysBatch(
 
     revalidatePath("/dashboard");
 
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_batch_create",
+      targetType: "key_group",
+      targetId: `${params.userId}:${normalizedGroupName}`,
+      targetName: normalizedGroupName,
+      after: {
+        userId: params.userId,
+        baseKeyId: params.baseKeyId,
+        sourceKeyName: baseKey.name,
+        groupName: normalizedGroupName,
+        createdCount: createdKeys.length,
+        customLimitTotalUsd:
+          params.customLimitTotalUsd !== undefined ? params.customLimitTotalUsd : null,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
     return {
       ok: true,
       data: {
@@ -1162,6 +1199,15 @@ export async function createTemporaryKeysBatch(
   } catch (error) {
     logger.error("批量创建临时 Key 失败:", error);
     const tError = await getTranslations("errors");
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_batch_create",
+      targetType: "key_group",
+      targetId: String(params.userId),
+      success: false,
+      errorMessage: "TEMP_BATCH_CREATE_FAILED",
+      redactExtraKeys: ["key"],
+    });
     const message =
       error instanceof Error && error.message
         ? error.message
@@ -1218,7 +1264,23 @@ export async function removeTemporaryKeyGroup(params: {
     }
 
     const deletedCount = await deleteKeysBatch(groupKeys.map((key) => key.id));
+    await syncUserProviderGroupFromKeys(params.userId);
     revalidatePath("/dashboard");
+
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_group_delete",
+      targetType: "key_group",
+      targetId: `${params.userId}:${normalizedGroupName}`,
+      targetName: normalizedGroupName,
+      before: {
+        userId: params.userId,
+        deletedCount,
+        enabledCountInGroup,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
 
     return {
       ok: true,
@@ -1230,6 +1292,16 @@ export async function removeTemporaryKeyGroup(params: {
   } catch (error) {
     logger.error("删除临时 Key 分组失败:", error);
     const tError = await getTranslations("errors");
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_group_delete",
+      targetType: "key_group",
+      targetId: `${params.userId}:${params.groupName}`,
+      targetName: params.groupName,
+      success: false,
+      errorMessage: "TEMP_GROUP_DELETE_FAILED",
+      redactExtraKeys: ["key"],
+    });
     const message =
       error instanceof Error && error.message
         ? error.message
@@ -1276,6 +1348,20 @@ export async function downloadTemporaryKeyGroup(params: {
       };
     }
 
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_group_download",
+      targetType: "key_group",
+      targetId: `${params.userId}:${normalizedGroupName}`,
+      targetName: normalizedGroupName,
+      after: {
+        userId: params.userId,
+        downloadCount: groupKeys.length,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
     return {
       ok: true,
       data: buildTemporaryKeyGroupText(groupKeys),
@@ -1283,6 +1369,16 @@ export async function downloadTemporaryKeyGroup(params: {
   } catch (error) {
     logger.error("下载临时 Key 分组失败:", error);
     const tError = await getTranslations("errors");
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_group_download",
+      targetType: "key_group",
+      targetId: `${params.userId}:${params.groupName}`,
+      targetName: params.groupName,
+      success: false,
+      errorMessage: "TEMP_GROUP_DOWNLOAD_FAILED",
+      redactExtraKeys: ["key"],
+    });
     const message =
       error instanceof Error && error.message
         ? error.message

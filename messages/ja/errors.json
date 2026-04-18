@@ -72,6 +72,7 @@
   "UPDATE_KEY_FAILED": "キーの更新に失敗しました。後でもう一度お試しください",
   "DELETE_KEY_FAILED": "キーの削除に失敗しました。後でもう一度お試しください",
   "TEMPORARY_KEY_BATCH_MAX_COUNT": "一度に生成できる一時キーは最大 100 件です",
+  "TEMPORARY_KEY_INVALID_TOTAL_LIMIT": "各キーの合計上限には有効な値を入力してください",
   "TEMPORARY_KEY_GROUP_NAME_TOO_LONG": "一時グループ名は 120 文字以内で入力してください",
   "TEMPORARY_KEY_GROUP_NAME_REQUIRED": "一時グループ名を入力してください",
   "TEMPORARY_KEY_GROUP_NOT_FOUND": "一時キーグループが見つかりません",

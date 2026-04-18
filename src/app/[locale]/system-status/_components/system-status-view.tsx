@@ -16,12 +16,21 @@ import {
 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useTranslations } from "next-intl";
-import { startTransition, useEffect, useEffectEvent, useMemo, useState, type CSSProperties } from "react";
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import type { PublicSystemStatusProvider, PublicSystemStatusSnapshot } from "@/lib/system-status";
 import { cn } from "@/lib/utils";
 
 const REFRESH_INTERVAL_MS = 30_000;
+const SYSTEM_STATUS_TIME_ZONE = "UTC";
 
 const PAGE_VARS: CSSProperties = {
   ["--neo-bg" as string]: "#FFFDF5",
@@ -103,6 +112,7 @@ function formatTimestamp(locale: string, value: string | null | undefined) {
   }
 
   return new Intl.DateTimeFormat(locale, {
+    timeZone: SYSTEM_STATUS_TIME_ZONE,
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -117,6 +127,7 @@ function formatMarkerDate(locale: string, value: string) {
   }
 
   return new Intl.DateTimeFormat(locale, {
+    timeZone: SYSTEM_STATUS_TIME_ZONE,
     month: "numeric",
     day: "numeric",
   }).format(date);
@@ -201,7 +212,7 @@ function getHistoryDayKey(value: string) {
     return value;
   }
 
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
 }
 
 function buildHistorySegments(
@@ -580,8 +591,12 @@ export function SystemStatusView({
   const [data, setData] = useState(initialData);
   const [refreshing, setRefreshing] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
+  const requestSequenceRef = useRef(0);
 
   const refreshSnapshot = useEffectEvent(async (showRefreshing: boolean) => {
+    const requestId = requestSequenceRef.current + 1;
+    requestSequenceRef.current = requestId;
+
     if (showRefreshing) {
       setRefreshing(true);
     }
@@ -593,14 +608,23 @@ export function SystemStatusView({
       }
 
       const snapshot = (await response.json()) as PublicSystemStatusSnapshot;
+      if (requestSequenceRef.current !== requestId) {
+        return;
+      }
+
       startTransition(() => {
         setData(snapshot);
         setError(null);
       });
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : t("states.fetchFailed"));
+      if (requestSequenceRef.current !== requestId) {
+        return;
+      }
+
+      console.error("[SystemStatusView] refresh failed", fetchError);
+      setError(t("states.fetchFailed"));
     } finally {
-      if (showRefreshing) {
+      if (showRefreshing && requestSequenceRef.current === requestId) {
         setRefreshing(false);
       }
     }

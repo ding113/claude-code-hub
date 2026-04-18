@@ -450,7 +450,7 @@ write_compose_file() {
         app_ports_config=""
     else
         app_ports_config="ports:
-      - \"\${APP_PORT:-${APP_PORT}}:\${APP_PORT:-${APP_PORT}}\""
+      - \"\${APP_PORT:-${APP_PORT}}:3000\""
     fi
 
     cat > "$DEPLOY_DIR/docker-compose.yaml" << EOF
@@ -524,7 +524,7 @@ EOF
     if [[ "$ENABLE_CADDY" != true ]]; then
         cat >> "$DEPLOY_DIR/docker-compose.yaml" << EOF
     ports:
-      - "\${APP_PORT:-${APP_PORT}}:\${APP_PORT:-${APP_PORT}}"
+      - "\${APP_PORT:-${APP_PORT}}:3000"
 EOF
     fi
 
@@ -533,7 +533,7 @@ EOF
     networks:
       - claude-code-hub-net-${SUFFIX}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || \${APP_PORT:-${APP_PORT}}) + '/api/actions/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || '\${APP_PORT:-${APP_PORT}}') + '/api/actions/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

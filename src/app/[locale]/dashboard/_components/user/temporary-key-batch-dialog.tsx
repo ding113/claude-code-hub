@@ -68,6 +68,7 @@ export function TemporaryKeyBatchDialog({
   const tCommon = useTranslations("common");
   const [isPending, startTransition] = useTransition();
   const [baseKeyId, setBaseKeyId] = useState("");
+  const [groupName, setGroupName] = useState("");
   const [count, setCount] = useState("5");
   const [customLimitTotalUsd, setCustomLimitTotalUsd] = useState("");
   const [result, setResult] = useState<CreateTemporaryKeysBatchResult | null>(null);
@@ -77,18 +78,19 @@ export function TemporaryKeyBatchDialog({
     [user]
   );
 
-  useEffect(() => {
-    if (!open) return;
-    setBaseKeyId(availableKeys[0] ? String(availableKeys[0].id) : "");
-    setCount("5");
-    setCustomLimitTotalUsd("");
-    setResult(null);
-  }, [open, availableKeys]);
-
   const userTemporaryGroup = useMemo(
     () => normalizeProviderGroup(user?.providerGroup || "default"),
     [user?.providerGroup]
   );
+
+  useEffect(() => {
+    if (!open) return;
+    setBaseKeyId(availableKeys[0] ? String(availableKeys[0].id) : "");
+    setGroupName(userTemporaryGroup);
+    setCount("5");
+    setCustomLimitTotalUsd("");
+    setResult(null);
+  }, [open, availableKeys, userTemporaryGroup]);
 
   const previewText = useMemo(() => {
     if (!result) return "";
@@ -131,6 +133,11 @@ export function TemporaryKeyBatchDialog({
         return;
       }
 
+      if (groupName.trim() === "" || groupName.trim().length > 120) {
+        toast.error(t("createDialog.invalidGroupName"));
+        return;
+      }
+
       if (
         parsedCustomLimit !== undefined &&
         (!Number.isFinite(parsedCustomLimit) || parsedCustomLimit < 0)
@@ -142,6 +149,7 @@ export function TemporaryKeyBatchDialog({
       const response = await createTemporaryKeysBatch({
         userId: user.id,
         baseKeyId: parsedBaseKeyId,
+        groupName,
         count: parsedCount,
         customLimitTotalUsd: parsedCustomLimit,
       });
@@ -240,14 +248,15 @@ export function TemporaryKeyBatchDialog({
               </div>
 
               <div className="space-y-2">
-                  <Label htmlFor="temporary-group-name">{t("createDialog.groupNameLabel")}</Label>
-                  <Input
-                    id="temporary-group-name"
-                    value={userTemporaryGroup}
-                    readOnly
-                    className="bg-muted"
-                  />
-                </div>
+                <Label htmlFor="temporary-group-name">{t("createDialog.groupNameLabel")}</Label>
+                <Input
+                  id="temporary-group-name"
+                  value={groupName}
+                  onChange={(event) => setGroupName(event.target.value)}
+                  placeholder={t("createDialog.groupNamePlaceholder")}
+                  maxLength={120}
+                />
+              </div>
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">

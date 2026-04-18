@@ -1624,6 +1624,7 @@
         "submitting": "生成中...",
         "noKeys": "利用可能なベースキーがありません",
         "invalidCount": "有効な生成数を入力してください",
+        "invalidGroupName": "有効なグループ名を入力してください（1〜120文字）",
         "invalidLimit": "有効な総上限を入力してください",
         "genericError": "一時キーの生成に失敗しました"
       },
@@ -1647,21 +1648,22 @@
         },
         "temporary": {
           "title": "一時キー",
-          "description": "現在のユーザーグループ配下で一括生成・ダウンロード・削除できる一時キーグループです。",
+          "description": "一括生成・ダウンロード・削除に使う追加の一時キーグループです。",
           "empty": "一時キーグループはまだありません"
         }
       },
       "groups": {
         "title": "一時キーグループ",
-        "groupBadge": "Temp",
-        "count": "{count} keys",
+        "groupBadge": "一時",
+        "count": "{count} 件のキー",
         "download": "ダウンロード",
-        "delete": "グループ削除"
+        "delete": "グループ削除",
+        "deleteConfirm": "グループ {group}（{count} 件のキー）を削除しますか？このグループのキーは直ちに無効になります。"
       },
       "toasts": {
         "createSuccess": "{count} 件の一時キーを生成しました",
         "createFailed": "一時キーの生成に失敗しました: {error}",
-        "deleteSuccess": "グループ {group} を削除しました（{count} keys）",
+        "deleteSuccess": "グループ {group} を削除しました（{count} 件のキー）",
         "deleteFailed": "一時キーグループの削除に失敗しました: {error}",
         "downloadFailed": "一時キーのダウンロードに失敗しました: {error}"
       }

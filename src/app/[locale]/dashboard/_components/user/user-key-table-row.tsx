@@ -343,6 +343,17 @@ export function UserKeyTableRow({
   };
 
   const handleDeleteTemporaryGroup = (groupName: string) => {
+    const groupKeyCount = user.keys.filter((key) => key.temporaryGroupName === groupName).length;
+    const confirmed = window.confirm(
+      tTemporaryKeys("groups.deleteConfirm", {
+        group: groupName,
+        count: groupKeyCount,
+      })
+    );
+    if (!confirmed) {
+      return;
+    }
+
     startTransition(async () => {
       const result = await removeTemporaryKeyGroup({ userId: user.id, groupName });
       if (!result.ok) {

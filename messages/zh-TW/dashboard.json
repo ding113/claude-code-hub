@@ -1588,6 +1588,7 @@
         "submitting": "產生中...",
         "noKeys": "目前使用者沒有可用的基礎 Key",
         "invalidCount": "請輸入有效的產生數量",
+        "invalidGroupName": "請輸入有效的分組名稱（1-120 個字元）",
         "invalidLimit": "請輸入有效的總額度",
         "genericError": "批量產生失敗"
       },
@@ -1611,7 +1612,7 @@
         },
         "temporary": {
           "title": "臨時 Key",
-          "description": "目前使用者分組下可批量建立、下載與刪除的臨時 Key 群組。",
+          "description": "可用於批量建立、下載與刪除的額外臨時 Key 群組。",
           "empty": "尚無臨時 Key 群組"
         }
       },
@@ -1620,7 +1621,8 @@
         "groupBadge": "臨時",
         "count": "{count} 個 Key",
         "download": "下載",
-        "delete": "刪除分組"
+        "delete": "刪除分組",
+        "deleteConfirm": "確認刪除分組 {group}（{count} 個 Key）嗎？此分組內的 Key 會立即失效。"
       },
       "toasts": {
         "createSuccess": "已產生 {count} 個臨時 Key",

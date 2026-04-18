@@ -76,6 +76,7 @@
   "UPDATE_KEY_FAILED": "更新密钥失败，请稍后重试",
   "DELETE_KEY_FAILED": "删除密钥失败，请稍后重试",
   "TEMPORARY_KEY_BATCH_MAX_COUNT": "单次最多生成 100 个临时 Key",
+  "TEMPORARY_KEY_INVALID_TOTAL_LIMIT": "请输入有效的每个 Key 总额度",
   "TEMPORARY_KEY_GROUP_NAME_TOO_LONG": "临时分组名称不能超过 120 个字符",
   "TEMPORARY_KEY_GROUP_NAME_REQUIRED": "临时分组名称不能为空",
   "TEMPORARY_KEY_GROUP_NOT_FOUND": "临时 Key 分组不存在",

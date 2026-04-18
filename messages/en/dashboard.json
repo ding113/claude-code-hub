@@ -1585,11 +1585,11 @@
     "temporaryKeys": {
       "createDialog": {
         "title": "Generate Temporary Keys",
-        "description": "Select a base key and generate temporary API keys under the current user group.",
+        "description": "Select a base key, enter a group name, and generate temporary API keys in bulk.",
         "baseKeyLabel": "Base Key",
         "baseKeyPlaceholder": "Select a base key",
         "baseKeyRequired": "Please select a base key",
-        "groupNameLabel": "User Group",
+        "groupNameLabel": "Group Name",
         "groupNamePlaceholder": "For example: campaign-april",
         "quantityLabel": "Quantity",
         "quantityDescription": "Quick generate 5 / 10 / 20 / 50 / 100 keys, or enter a custom amount.",
@@ -1602,13 +1602,14 @@
         "submitting": "Generating...",
         "noKeys": "This user has no available base key",
         "invalidCount": "Please enter a valid quantity",
+        "invalidGroupName": "Please enter a valid group name (1-120 characters)",
         "invalidLimit": "Please enter a valid total limit",
         "genericError": "Failed to generate temporary keys"
       },
       "success": {
         "title": "Temporary Keys Ready",
         "description": "Group {group} now contains {count} temporary keys. Download the full keys now and store them safely.",
-        "groupName": "User Group",
+        "groupName": "Group Name",
         "sourceKey": "Base Key",
         "previewTitle": "Preview (first 5)",
         "download": "Download Keys"
@@ -1625,7 +1626,7 @@
         },
         "temporary": {
           "title": "Temporary Keys",
-          "description": "Extra temporary CDKey groups for batch create, download, and delete under the current user group.",
+          "description": "Extra temporary key groups for bulk create, download, and delete.",
           "empty": "No temporary key groups yet"
         }
       },
@@ -1634,7 +1635,8 @@
         "groupBadge": "Temp",
         "count": "{count} keys",
         "download": "Download Keys",
-        "delete": "Delete Group"
+        "delete": "Delete Group",
+        "deleteConfirm": "Delete group {group} ({count} keys)? This will revoke all keys in this group immediately."
       },
       "toasts": {
         "createSuccess": "Generated {count} temporary keys",
