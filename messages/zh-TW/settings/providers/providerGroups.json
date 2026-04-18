@@ -31,9 +31,16 @@
   "invalidMultiplier": "請輸入有效的非負成本倍率",
   "groupInUse": "該分組仍被供應商引用，無法刪除",
   "groupMembers": "分組成員",
+  "groupMembersHint": "可直接在分組「{groupName}」內管理供應商。",
   "providerName": "供應商名稱",
+  "providerType": "類型",
   "effectivePriority": "本組優先級",
   "noMembers": "暫無成員",
   "savePriorityFailed": "儲存優先級失敗",
-  "savePrioritySuccess": "優先級已更新"
+  "savePrioritySuccess": "優先級已更新",
+  "groupMultiplierLabel": "分組成本倍率",
+  "groupDescriptionLabel": "分組描述",
+  "noDescription": "新增描述",
+  "descriptionTooLong": "描述不能超過500個字元",
+  "openProviderEditor": "編輯供應商"
 }

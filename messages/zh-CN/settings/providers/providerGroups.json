@@ -31,9 +31,16 @@
   "invalidMultiplier": "请输入有效的非负成本倍率",
   "groupInUse": "该分组仍被供应商引用，无法删除",
   "groupMembers": "分组成员",
+  "groupMembersHint": "在分组 \"{groupName}\" 内直接管理供应商。",
   "providerName": "供应商名称",
+  "providerType": "类型",
   "effectivePriority": "本组优先级",
   "noMembers": "暂无成员",
   "savePriorityFailed": "保存优先级失败",
-  "savePrioritySuccess": "优先级已更新"
+  "savePrioritySuccess": "优先级已更新",
+  "groupMultiplierLabel": "分组成本倍率",
+  "groupDescriptionLabel": "分组描述",
+  "noDescription": "添加描述",
+  "descriptionTooLong": "描述不能超过500字符",
+  "openProviderEditor": "编辑供应商"
 }

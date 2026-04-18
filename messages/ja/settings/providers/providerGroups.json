@@ -31,9 +31,16 @@
   "invalidMultiplier": "有効な非負のコスト倍率を入力してください",
   "groupInUse": "プロバイダーから参照されているグループは削除できません",
   "groupMembers": "グループメンバー",
+  "groupMembersHint": "グループ「{groupName}」内でプロバイダーを直接管理できます。",
   "providerName": "プロバイダー名",
+  "providerType": "タイプ",
   "effectivePriority": "グループ内の優先度",
   "noMembers": "メンバーがいません",
   "savePriorityFailed": "優先度の保存に失敗しました",
-  "savePrioritySuccess": "優先度を更新しました"
+  "savePrioritySuccess": "優先度を更新しました",
+  "groupMultiplierLabel": "グループコスト倍率",
+  "groupDescriptionLabel": "グループ説明",
+  "noDescription": "説明を追加",
+  "descriptionTooLong": "説明は500文字以内で入力してください",
+  "openProviderEditor": "プロバイダーを編集"
 }

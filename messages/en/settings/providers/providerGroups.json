@@ -31,9 +31,16 @@
   "invalidMultiplier": "Please enter a valid non-negative cost multiplier",
   "groupInUse": "Cannot delete a group that is still referenced by providers",
   "groupMembers": "Group Members",
+  "groupMembersHint": "Manage providers directly inside group \"{groupName}\".",
   "providerName": "Provider Name",
+  "providerType": "Type",
   "effectivePriority": "Priority in Group",
   "noMembers": "No members yet",
   "savePriorityFailed": "Failed to save priority",
-  "savePrioritySuccess": "Priority updated"
+  "savePrioritySuccess": "Priority updated",
+  "groupMultiplierLabel": "Group Cost Multiplier",
+  "groupDescriptionLabel": "Group Description",
+  "noDescription": "Add description",
+  "descriptionTooLong": "Description must be 500 characters or fewer",
+  "openProviderEditor": "Edit Provider"
 }

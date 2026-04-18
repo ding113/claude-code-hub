@@ -1,4 +1,5 @@
 "use client";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   AlertTriangle,
   Filter,
@@ -12,6 +13,7 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,6 +36,7 @@ import {
   ProviderBatchDialog,
   ProviderBatchToolbar,
 } from "./batch-edit";
+import { ProviderForm } from "./forms/provider-form";
 import { ProviderGroupTab } from "./provider-group-tab";
 import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
@@ -109,6 +112,7 @@ export function ProviderManager({
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<number>>(new Set());
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [batchActionMode, setBatchActionMode] = useState<BatchActionMode>(null);
+  const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
 
   // Helper: check if a provider has any circuit open (key-level or endpoint-level)
   const hasAnyCircuitOpen = useCallback(
@@ -269,6 +273,11 @@ export function ProviderManager({
     hasAnyCircuitOpen,
   ]);
 
+  const editingProvider = useMemo(() => {
+    if (editingProviderId == null) return null;
+    return providers.find((provider) => provider.id === editingProviderId) ?? null;
+  }, [editingProviderId, providers]);
+
   // Batch selection handlers
   const handleSelectAll = useCallback(
     (checked: boolean) => {
@@ -353,6 +362,20 @@ export function ProviderManager({
     setSelectedProviderIds(new Set());
     setIsMultiSelectMode(false);
   }, []);
+
+  const handleOpenProviderEditor = useCallback((provider: ProviderDisplay) => {
+    setViewMode("list");
+    setEditingProviderId(provider.id);
+  }, []);
+
+  const handleRequestEditProvider = useCallback(
+    (providerId: number) => {
+      const provider = providers.find((item) => item.id === providerId);
+      if (!provider) return;
+      handleOpenProviderEditor(provider);
+    },
+    [handleOpenProviderEditor, providers]
+  );
 
   const allSelected =
     filteredProviders.length > 0 && selectedProviderIds.size === filteredProviders.length;
@@ -640,7 +663,11 @@ export function ProviderManager({
 
       {/* Provider list / vendor view / groups tab */}
       {viewMode === "groups" ? (
-        <ProviderGroupTab />
+        <ProviderGroupTab
+          providers={providers}
+          isAdmin={isAdmin}
+          onRequestEditProvider={handleRequestEditProvider}
+        />
       ) : loading && providers.length === 0 ? (
         <ProviderListSkeleton label={tCommon("loading")} />
       ) : (
@@ -661,6 +688,7 @@ export function ProviderManager({
               isMultiSelectMode={isMultiSelectMode}
               selectedProviderIds={selectedProviderIds}
               onSelectProvider={handleSelectProvider}
+              onEditProvider={handleOpenProviderEditor}
               allGroups={allGroups}
               userGroups={userGroups}
               isAdmin={isAdmin}
@@ -694,6 +722,27 @@ export function ProviderManager({
         providers={filteredProviders}
         onSuccess={handleBatchSuccess}
       />
+
+      <Dialog
+        open={editingProvider != null}
+        onOpenChange={(open) => !open && setEditingProviderId(null)}
+      >
+        <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
+          <VisuallyHidden>
+            <DialogTitle>{tStrings("editProvider")}</DialogTitle>
+          </VisuallyHidden>
+          {editingProvider ? (
+            <ProviderForm
+              mode="edit"
+              provider={editingProvider}
+              enableMultiProviderTypes={enableMultiProviderTypes}
+              onSuccess={() => {
+                setEditingProviderId(null);
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
