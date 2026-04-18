@@ -364,7 +364,6 @@ export function ProviderManager({
   }, []);
 
   const handleOpenProviderEditor = useCallback((provider: ProviderDisplay) => {
-    setViewMode("list");
     setEditingProviderId(provider.id);
   }, []);
 

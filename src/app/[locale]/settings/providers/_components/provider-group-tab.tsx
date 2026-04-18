@@ -183,8 +183,13 @@ export function ProviderGroupTab({
     }
 
     const trimmedName = form.name.trim();
+    const trimmedDescription = form.description.trim();
     if (!editingGroup && !trimmedName) {
       toast.error(t("nameRequired"));
+      return;
+    }
+    if (trimmedDescription.length > 500) {
+      toast.error(t("descriptionTooLong"));
       return;
     }
 
@@ -192,7 +197,7 @@ export function ProviderGroupTab({
       if (editingGroup) {
         const ok = await saveGroupPatch(editingGroup.id, {
           costMultiplier,
-          description: form.description.trim() || null,
+          description: trimmedDescription || null,
         });
         if (ok) {
           closeDialog();
@@ -203,7 +208,7 @@ export function ProviderGroupTab({
       const result = await createProviderGroup({
         name: trimmedName,
         costMultiplier,
-        description: form.description.trim() || undefined,
+        description: trimmedDescription || undefined,
       });
       if (result.ok) {
         toast.success(t("createSuccess"));
@@ -273,10 +278,12 @@ export function ProviderGroupTab({
           </div>
           <p className="text-sm text-muted-foreground">{t("description")}</p>
         </div>
-        <Button onClick={openCreateDialog} size="sm">
-          <Plus className="mr-1.5 h-4 w-4" />
-          {t("addGroup")}
-        </Button>
+        {isAdmin ? (
+          <Button onClick={openCreateDialog} size="sm">
+            <Plus className="mr-1.5 h-4 w-4" />
+            {t("addGroup")}
+          </Button>
+        ) : null}
       </div>
 
       {isLoading && groups.length === 0 ? (
@@ -371,27 +378,29 @@ export function ProviderGroupTab({
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEditDialog(group)}
-                            title={t("editGroup")}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => openDeleteConfirm(group)}
-                            disabled={isDefault}
-                            title={isDefault ? t("cannotDeleteDefault") : t("deleteGroup")}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                        {isAdmin ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => openEditDialog(group)}
+                              title={t("editGroup")}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => openDeleteConfirm(group)}
+                              disabled={isDefault}
+                              title={isDefault ? t("cannotDeleteDefault") : t("deleteGroup")}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : null}
                       </TableCell>
                     </TableRow>
 
@@ -770,13 +779,17 @@ function MemberRow({
             <TypeIcon className="h-4 w-4" aria-hidden />
           </div>
           <div className="min-w-0">
-            <button
-              type="button"
-              className="truncate text-left font-medium underline-offset-4 hover:underline"
-              onClick={() => onRequestEditProvider(member.id)}
-            >
-              {member.name}
-            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                className="truncate text-left font-medium underline-offset-4 hover:underline"
+                onClick={() => onRequestEditProvider(member.id)}
+              >
+                {member.name}
+              </button>
+            ) : (
+              <span className="truncate text-left font-medium">{member.name}</span>
+            )}
             <div className="truncate text-xs text-muted-foreground">{member.url}</div>
           </div>
         </div>
@@ -801,15 +814,18 @@ function MemberRow({
         )}
       </TableCell>
       <TableCell>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 px-2"
-          onClick={() => onRequestEditProvider(member.id)}
-          title={t("openProviderEditor")}
-        >
-          <Edit className="h-4 w-4" />
-        </Button>
+        {canEdit ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 px-2"
+            onClick={() => onRequestEditProvider(member.id)}
+            title={t("openProviderEditor")}
+            aria-label={t("openProviderEditor")}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        ) : null}
       </TableCell>
     </TableRow>
   );

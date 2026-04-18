@@ -269,7 +269,7 @@ describe("ProviderManager circuitBrokenCount with endpoint circuits", () => {
     unmount();
   });
 
-  test("switches back to list view and opens the shared editor when group tab requests edit", () => {
+  test("keeps the current groups view and opens the shared editor when group tab requests edit", () => {
     const { unmount, container } = renderWithProviders(
       <ProviderManager providers={providers} healthStatus={{}} enableMultiProviderTypes={true} />
     );
@@ -290,7 +290,7 @@ describe("ProviderManager circuitBrokenCount with endpoint circuits", () => {
       requestButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(container.querySelector('[data-testid="provider-list"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="group-edit-request"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="provider-form"]')?.textContent).toContain(
       "Provider A"
     );

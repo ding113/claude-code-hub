@@ -177,4 +177,37 @@ describe("ProviderGroupTab", () => {
 
     unmount();
   });
+
+  it("hides mutating controls for non-admin users", async () => {
+    const onRequestEditProvider = vi.fn();
+    const { container, unmount } = render(
+      <ProviderGroupTab
+        providers={[makeProvider()]}
+        isAdmin={false}
+        onRequestEditProvider={onRequestEditProvider}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      Array.from(container.querySelectorAll("button")).some((button) =>
+        button.textContent?.includes("addGroup")
+      )
+    ).toBe(false);
+
+    const expandButton = container.querySelector('button[aria-label="groupMembers"]');
+    expect(expandButton).toBeTruthy();
+
+    act(() => {
+      expandButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector('button[aria-label="openProviderEditor"]')).toBeNull();
+    expect(onRequestEditProvider).not.toHaveBeenCalled();
+
+    unmount();
+  });
 });
