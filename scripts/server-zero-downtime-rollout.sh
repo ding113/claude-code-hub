@@ -407,7 +407,15 @@ wait_http_ok() {
   local start
   start="$(date +%s)"
   while true; do
-    if curl -fsS "$url" >/dev/null 2>&1; then
+    local body=""
+    if body="$(curl -fsS "$url" 2>/dev/null)" && printf '%s' "$body" | python3 -c '
+import json, sys
+try:
+    payload = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if payload.get("status") == "healthy" else 1)
+' >/dev/null 2>&1; then
       return 0
     fi
     if (( "$(date +%s)" - start >= timeout )); then
@@ -422,10 +430,10 @@ backup_runtime() {
     log_info "[dry-run] Would create runtime backup: $BACKUP_DIR"
     return 0
   fi
-  mkdir -p "$BACKUP_DIR"
+  install -d -m 700 "$BACKUP_DIR"
   cp "$NGINX_CONFIG" "$NGINX_BACKUP"
   cp "$COMPOSE_FILE" "$BACKUP_DIR/"
-  cp "$ENV_FILE" "$BACKUP_DIR/"
+  install -m 600 "$ENV_FILE" "$BACKUP_DIR/$(basename "$ENV_FILE")"
   docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}' >"$BACKUP_DIR/docker-ps.txt"
   docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}' >"$BACKUP_DIR/docker-images.txt"
   printf '%s\n' "$IMAGE_TAG" >"$BACKUP_DIR/requested-image-tag.txt"
@@ -460,7 +468,12 @@ cutover_proxy() {
     log_error "nginx -t failed after editing config, restored backup"
     exit 1
   fi
-  nginx -s reload >/dev/null
+  if ! nginx -s reload >/dev/null; then
+    cp "$NGINX_BACKUP" "$NGINX_CONFIG"
+    nginx -t >/dev/null 2>&1 && nginx -s reload >/dev/null 2>&1 || true
+    log_error "nginx reload failed after editing config, restored backup"
+    exit 1
+  fi
   CUTOVER_DONE=true
 }
 
@@ -520,6 +533,10 @@ start_manual_green() {
   if [[ "$DRY_RUN" == true ]]; then
     log_info "[dry-run] Would start manual green container ${GREEN_NAME} on ${candidate_port}"
     return 0
+  fi
+  if [[ "${LIVE_CONTAINER:-}" == "$GREEN_NAME" ]]; then
+    log_error "Refusing to remove current live green container: $GREEN_NAME"
+    exit 1
   fi
   docker rm -f "$GREEN_NAME" >/dev/null 2>&1 || true
   docker run -d \
