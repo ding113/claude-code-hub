@@ -36,16 +36,19 @@ function makeAsyncParams(locale: string) {
 }
 
 describe("system-status page metadata", () => {
-  test("generateMetadata awaits params before reading locale", async () => {
+  test.each(["zh-CN", "zh-TW", "en", "ja", "ru"])(
+    "generateMetadata awaits params before reading locale (%s)",
+    async (locale) => {
     const { generateMetadata } = await import("@/app/[locale]/system-status/layout");
 
     const metadata = await generateMetadata({
-      params: makeAsyncParams("en") as unknown as Promise<{ locale: string }>,
+      params: makeAsyncParams(locale) as unknown as Promise<{ locale: string }>,
     });
 
     expect(metadata).toEqual({
-      title: "systemStatus.pageTitle.en",
-      description: "systemStatus.pageDescription.en",
+      title: `systemStatus.pageTitle.${locale}`,
+      description: `systemStatus.pageDescription.${locale}`,
     });
-  });
+    }
+  );
 });

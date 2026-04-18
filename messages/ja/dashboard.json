@@ -1635,6 +1635,22 @@
         "previewTitle": "プレビュー（先頭 5 件）",
         "download": "CSV をダウンロード"
       },
+      "listActions": {
+        "showMore": "残り {count} 件を表示",
+        "showLess": "折りたたむ"
+      },
+      "sections": {
+        "standard": {
+          "title": "通常キー",
+          "description": "既存の挙動を保つメイン業務用キーです。",
+          "empty": "通常キーはまだありません"
+        },
+        "temporary": {
+          "title": "一時キー",
+          "description": "現在のユーザーグループ配下で一括生成・ダウンロード・削除できる一時キーグループです。",
+          "empty": "一時キーグループはまだありません"
+        }
+      },
       "groups": {
         "title": "一時キーグループ",
         "groupBadge": "Temp",

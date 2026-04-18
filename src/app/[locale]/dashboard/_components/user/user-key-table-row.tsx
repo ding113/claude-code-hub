@@ -241,7 +241,7 @@ export function UserKeyTableRow({
       const existing = groups.get(temporaryGroupName);
       if (existing) {
         existing.keys.push(key);
-        if (key.createdAt < existing.createdAt) {
+        if (key.createdAt > existing.createdAt) {
           existing.createdAt = key.createdAt;
         }
       } else {

@@ -64,7 +64,7 @@ export class ProxyAuthenticator {
   private static buildRateLimitResponse(retryAfterSeconds?: number): Response {
     const response = ProxyResponses.buildError(
       429,
-      "Too many authentication failures. Please retry later.",
+      "请求过多，请稍后重试。",
       "rate_limit_error"
     );
     if (retryAfterSeconds == null) {

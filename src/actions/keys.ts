@@ -179,7 +179,10 @@ function extractTemporaryKeySequence(name: string): number | null {
   return value;
 }
 
-function resolveNextTemporaryKeySequence(existingKeys: Key[], normalizedGroupName: string): number {
+function resolveNextTemporaryKeySequence(
+  existingKeys: Array<Pick<Key, "name" | "temporaryGroupName">>,
+  normalizedGroupName: string
+): number {
   let maxSequence = 0;
 
   for (const key of existingKeys) {
@@ -193,12 +196,60 @@ function resolveNextTemporaryKeySequence(existingKeys: Key[], normalizedGroupNam
   return maxSequence + 1;
 }
 
+function allocateTemporaryKeyNames(
+  existingKeys: Array<Pick<Key, "name" | "temporaryGroupName">>,
+  normalizedGroupName: string,
+  count: number
+): string[] {
+  const reservedNames = new Set(
+    existingKeys.map((key) => key.name.trim()).filter((name) => name.length > 0)
+  );
+  const names: string[] = [];
+  let nextSequence = resolveNextTemporaryKeySequence(existingKeys, normalizedGroupName);
+
+  while (names.length < count) {
+    const candidate = buildTemporaryKeyName(nextSequence);
+    nextSequence += 1;
+
+    if (reservedNames.has(candidate)) {
+      continue;
+    }
+
+    reservedNames.add(candidate);
+    names.push(candidate);
+  }
+
+  return names;
+}
+
 function buildTemporaryKeyName(sequence: number): string {
   return String(sequence).padStart(3, "0");
 }
 
 function buildTemporaryKeyGroupText(keys: Array<{ key: string }>): string {
   return keys.map((key) => key.key).join("\n");
+}
+
+function isUniqueViolationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    cause?: { code?: string; message?: string };
+  };
+
+  if (candidate.code === "23505" || candidate.cause?.code === "23505") {
+    return true;
+  }
+
+  return (
+    (typeof candidate.message === "string" && candidate.message.includes("duplicate key value")) ||
+    (typeof candidate.cause?.message === "string" &&
+      candidate.cause.message.includes("duplicate key value"))
+  );
 }
 
 export interface BatchUpdateKeysParams {
@@ -985,7 +1036,7 @@ export async function createTemporaryKeysBatch(
     if (count < 1 || count > 100) {
       return {
         ok: false,
-        error: "单次最多生成 100 个临时 Key",
+        error: tError("TEMPORARY_KEY_BATCH_MAX_COUNT"),
         errorCode: ERROR_CODES.INVALID_FORMAT,
       };
     }
@@ -1006,13 +1057,13 @@ export async function createTemporaryKeysBatch(
     if (normalizedGroupName.length > 120) {
       return {
         ok: false,
-        error: "临时分组名称不能超过 120 个字符",
+        error: tError("TEMPORARY_KEY_GROUP_NAME_TOO_LONG"),
         errorCode: ERROR_CODES.INVALID_FORMAT,
       };
     }
 
     const baseKey = await findKeyById(params.baseKeyId);
-    if (!baseKey || baseKey.userId !== params.userId) {
+    if (!baseKey || baseKey.userId !== params.userId || !!baseKey.temporaryGroupName?.trim()) {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
@@ -1044,34 +1095,52 @@ export async function createTemporaryKeysBatch(
     }
 
     const expiresAt = baseKey.expiresAt instanceof Date ? baseKey.expiresAt : null;
-    const existingKeys = await findKeyList(params.userId);
-    const nextSequence = resolveNextTemporaryKeySequence(existingKeys, normalizedGroupName);
+    let createdKeys: Key[] | null = null;
 
-    const createdKeys = await createKeysBatch(
-      Array.from({ length: count }, (_, index) => ({
-        user_id: params.userId,
-        name: buildTemporaryKeyName(nextSequence + index),
-        key: `sk-${randomBytes(16).toString("hex")}`,
-        is_enabled: baseKey.isEnabled,
-        expires_at: expiresAt,
-        can_login_web_ui: baseKey.canLoginWebUi,
-        limit_5h_usd: baseKey.limit5hUsd,
-        limit_daily_usd: baseKey.limitDailyUsd,
-        daily_reset_mode: baseKey.dailyResetMode,
-        daily_reset_time: baseKey.dailyResetTime,
-        limit_weekly_usd: baseKey.limitWeeklyUsd,
-        limit_monthly_usd: baseKey.limitMonthlyUsd,
-        limit_total_usd:
-          params.customLimitTotalUsd !== undefined
-            ? params.customLimitTotalUsd
-            : (baseKey.limitTotalUsd ?? null),
-        limit_concurrent_sessions: baseKey.limitConcurrentSessions,
-        // 临时 Key 只追加批量管理能力，不改变原始 Key 的 provider 路由逻辑。
-        provider_group: normalizedBaseKeyProviderGroup,
-        cache_ttl_preference: baseKey.cacheTtlPreference ?? undefined,
-        temporary_group_name: normalizedGroupName,
-      }))
-    );
+    for (let attempt = 0; attempt < 3 && createdKeys == null; attempt += 1) {
+      const existingKeys = await findKeyList(params.userId);
+      const allocatedNames = allocateTemporaryKeyNames(existingKeys, normalizedGroupName, count);
+
+      try {
+        createdKeys = await createKeysBatch(
+          allocatedNames.map((name) => ({
+            user_id: params.userId,
+            name,
+            key: `sk-${randomBytes(16).toString("hex")}`,
+            is_enabled: baseKey.isEnabled,
+            expires_at: expiresAt,
+            can_login_web_ui: baseKey.canLoginWebUi,
+            limit_5h_usd: baseKey.limit5hUsd,
+            limit_daily_usd: baseKey.limitDailyUsd,
+            daily_reset_mode: baseKey.dailyResetMode,
+            daily_reset_time: baseKey.dailyResetTime,
+            limit_weekly_usd: baseKey.limitWeeklyUsd,
+            limit_monthly_usd: baseKey.limitMonthlyUsd,
+            limit_total_usd:
+              params.customLimitTotalUsd !== undefined
+                ? params.customLimitTotalUsd
+                : (baseKey.limitTotalUsd ?? null),
+            limit_concurrent_sessions: baseKey.limitConcurrentSessions,
+            // 临时 Key 只追加批量管理能力，不改变原始 Key 的 provider 路由逻辑。
+            provider_group: normalizedBaseKeyProviderGroup,
+            cache_ttl_preference: baseKey.cacheTtlPreference ?? undefined,
+            temporary_group_name: normalizedGroupName,
+          }))
+        );
+      } catch (error) {
+        if (!isUniqueViolationError(error) || attempt === 2) {
+          throw error;
+        }
+      }
+    }
+
+    if (!createdKeys) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_BATCH_CREATE_FAILED"),
+        errorCode: ERROR_CODES.CREATE_FAILED,
+      };
+    }
 
     revalidatePath("/dashboard");
 
@@ -1092,7 +1161,11 @@ export async function createTemporaryKeysBatch(
     };
   } catch (error) {
     logger.error("批量创建临时 Key 失败:", error);
-    const message = error instanceof Error ? error.message : "批量创建临时 Key 失败";
+    const tError = await getTranslations("errors");
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : tError("TEMPORARY_KEY_BATCH_CREATE_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.CREATE_FAILED };
   }
 }
@@ -1117,7 +1190,7 @@ export async function removeTemporaryKeyGroup(params: {
     if (!normalizedGroupName) {
       return {
         ok: false,
-        error: "临时分组名称不能为空",
+        error: tError("TEMPORARY_KEY_GROUP_NAME_REQUIRED"),
         errorCode: ERROR_CODES.REQUIRED_FIELD,
       };
     }
@@ -1127,7 +1200,7 @@ export async function removeTemporaryKeyGroup(params: {
     if (groupKeys.length === 0) {
       return {
         ok: false,
-        error: "临时 Key 分组不存在",
+        error: tError("TEMPORARY_KEY_GROUP_NOT_FOUND"),
         errorCode: ERROR_CODES.NOT_FOUND,
       };
     }
@@ -1156,7 +1229,11 @@ export async function removeTemporaryKeyGroup(params: {
     };
   } catch (error) {
     logger.error("删除临时 Key 分组失败:", error);
-    const message = error instanceof Error ? error.message : "删除临时 Key 分组失败";
+    const tError = await getTranslations("errors");
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : tError("TEMPORARY_KEY_GROUP_DELETE_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }
@@ -1181,7 +1258,7 @@ export async function downloadTemporaryKeyGroup(params: {
     if (!normalizedGroupName) {
       return {
         ok: false,
-        error: "临时分组名称不能为空",
+        error: tError("TEMPORARY_KEY_GROUP_NAME_REQUIRED"),
         errorCode: ERROR_CODES.REQUIRED_FIELD,
       };
     }
@@ -1194,7 +1271,7 @@ export async function downloadTemporaryKeyGroup(params: {
     if (groupKeys.length === 0) {
       return {
         ok: false,
-        error: "临时 Key 分组不存在",
+        error: tError("TEMPORARY_KEY_GROUP_NOT_FOUND"),
         errorCode: ERROR_CODES.NOT_FOUND,
       };
     }
@@ -1205,7 +1282,11 @@ export async function downloadTemporaryKeyGroup(params: {
     };
   } catch (error) {
     logger.error("下载临时 Key 分组失败:", error);
-    const message = error instanceof Error ? error.message : "下载临时 Key 分组失败";
+    const tError = await getTranslations("errors");
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : tError("TEMPORARY_KEY_GROUP_DOWNLOAD_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
   }
 }

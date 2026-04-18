@@ -31,8 +31,8 @@ export interface Key {
   // Cache TTL override (inherit -> follow provider/client)
   cacheTtlPreference: CacheTtlPreference | null;
 
-  // 临时 Key 分组：非空表示该 Key 属于一个批量管理分组
-  temporaryGroupName?: string | null;
+  // 临时 Key 分组：null 表示普通 Key，非空字符串表示该 Key 属于一个批量管理分组
+  temporaryGroupName: string | null;
 
   createdAt: Date;
   updatedAt: Date;

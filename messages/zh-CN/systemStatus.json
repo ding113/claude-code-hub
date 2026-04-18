@@ -5,6 +5,8 @@
     "kicker": "可信公开观测路径",
     "pathLabel": "公开状态路径",
     "title": "系统状态",
+    "titlePrimary": "系统",
+    "titleSecondary": "状态",
     "description": "一个公开路径，集中观察 provider 健康度、缓存命中效率、输出速率与 token 成本效率。",
     "window": "滚动窗口 · 最近 {days} 天",
     "updatedAt": "更新于 {value}",
@@ -38,7 +40,10 @@
   "provider": {
     "sectionEyebrow": "Provider 观察面",
     "sectionTitle": "每个 provider 一张状态卡",
+    "count": "{count} 个 provider",
     "history": "最近可用性轨迹",
+    "live": "在线 {value}",
+    "noData": "无数据",
     "meta": {
       "windowHint": "展示当前状态与最近七天滚动效率指标。",
       "requests": "请求数",

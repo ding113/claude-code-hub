@@ -506,7 +506,7 @@ function ProviderCard({
                 {t("provider.meta.requests")} {formatCompactNumber(locale, provider.totalRequests)}
               </Sticker>
               <Sticker className={cn("bg-white", provider.lastRequestAt ? "" : "bg-[var(--neo-yellow)]")} rotate="-rotate-1">
-                LIVE {formatPercent(locale, latestAvailability)}
+                {t("provider.live", { value: formatPercent(locale, latestAvailability) })}
               </Sticker>
             </div>
           </div>
@@ -544,7 +544,9 @@ function ProviderCard({
                     <div className="relative z-10 flex items-start justify-between gap-3">
                       <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.14em]")}>{segment.label}</div>
                       <div className="border-2 border-black bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]">
-                        {segment.totalRequests > 0 ? formatCompactNumber(locale, segment.totalRequests) : "NO DATA"}
+                        {segment.totalRequests > 0
+                          ? formatCompactNumber(locale, segment.totalRequests)
+                          : t("provider.noData")}
                       </div>
                     </div>
                     <div className="relative z-10">
@@ -686,7 +688,7 @@ export function SystemStatusView({
                   )}
                   style={OUTLINE_TEXT_STYLE}
                 >
-                  SYSTEM
+                  {t("hero.titlePrimary")}
                 </div>
                 <div
                   className={cn(
@@ -694,7 +696,7 @@ export function SystemStatusView({
                     "mt-[-0.4rem] text-[clamp(3rem,9vw,6.5rem)] font-bold uppercase leading-[0.85] tracking-[-0.12em]"
                   )}
                 >
-                  STATUS
+                  {t("hero.titleSecondary")}
                 </div>
               </div>
 
@@ -811,7 +813,9 @@ export function SystemStatusView({
               {t("provider.sectionEyebrow")}
             </Sticker>
             <Sticker className="bg-white" rotate="rotate-1">
-              {orderedProviders.length} providers
+              {t("provider.count", {
+                count: formatNumber(locale, orderedProviders.length, 0),
+              })}
             </Sticker>
           </div>
 

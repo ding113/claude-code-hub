@@ -132,7 +132,12 @@ export interface UserKeyDisplay {
   costResetAt?: string | null; // 软重置时间
   // Provider group override (null = inherit from user)
   providerGroup?: string | null;
-  // Temporary Key batch group
+  /**
+   * Temporary Key batch group semantics:
+   * - undefined: regular key / field omitted by caller
+   * - null: temporary-group field is present but empty after normalization
+   * - string: the key belongs to the named temporary batch group
+   */
   temporaryGroupName?: string | null;
 }
 

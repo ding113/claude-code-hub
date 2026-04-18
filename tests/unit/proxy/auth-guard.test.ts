@@ -152,7 +152,7 @@ describe("ProxyAuthenticator", () => {
     expect(response?.headers.get("Retry-After")).toBe("600");
     await expect(response?.json()).resolves.toEqual({
       error: {
-        message: "Too many authentication failures. Please retry later.",
+        message: "请求过多，请稍后重试。",
         type: "rate_limit_error",
         code: "rate_limit_error",
       },

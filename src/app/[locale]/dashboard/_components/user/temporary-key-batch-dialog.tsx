@@ -126,7 +126,7 @@ export function TemporaryKeyBatchDialog({
         return;
       }
 
-      if (!Number.isFinite(parsedCount) || parsedCount <= 0) {
+      if (!Number.isInteger(parsedCount) || parsedCount < 1 || parsedCount > 100) {
         toast.error(t("createDialog.invalidCount"));
         return;
       }

@@ -5,6 +5,8 @@
     "kicker": "Trusted public observation path",
     "pathLabel": "Public Status Line",
     "title": "System Status",
+    "titlePrimary": "System",
+    "titleSecondary": "Status",
     "description": "A single public path for watching provider health, cache efficiency, output speed, and token cost efficiency.",
     "window": "Rolling window · last {days} days",
     "updatedAt": "Updated {value}",
@@ -38,7 +40,10 @@
   "provider": {
     "sectionEyebrow": "Provider Watch",
     "sectionTitle": "One card per provider",
+    "count": "{count} providers",
     "history": "Recent availability path",
+    "live": "LIVE {value}",
+    "noData": "NO DATA",
     "meta": {
       "windowHint": "Current status plus rolling seven-day efficiency metrics.",
       "requests": "Requests",

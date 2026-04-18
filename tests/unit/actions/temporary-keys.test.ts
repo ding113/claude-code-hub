@@ -164,8 +164,8 @@ describe("temporary key actions", () => {
           cacheTtlPreference:
             (entry.cache_ttl_preference as "inherit" | "5m" | "1h" | null | undefined) ?? null,
           temporaryGroupName: (entry.temporary_group_name as string | null | undefined) ?? null,
-          createdAt: new Date(`2026-04-17T00:00:0${index}.000Z`),
-          updatedAt: new Date(`2026-04-17T00:00:0${index}.000Z`),
+          createdAt: new Date(`2026-04-17T00:00:${String(index).padStart(2, "0")}.000Z`),
+          updatedAt: new Date(`2026-04-17T00:00:${String(index).padStart(2, "0")}.000Z`),
         })
       )
     );
@@ -253,7 +253,7 @@ describe("temporary key actions", () => {
       }),
       createKeyRecord({
         id: 203,
-        name: "003",
+        name: "other-group-key",
         temporaryGroupName: "其他组",
       }),
     ]);
@@ -269,6 +269,54 @@ describe("temporary key actions", () => {
     const payload = createKeysBatchMock.mock.calls.at(-1)?.[0] as Array<Record<string, unknown>>;
     expect(String(payload[0]?.name)).toBe("003");
     expect(String(payload[1]?.name)).toBe("004");
+  });
+
+  test("管理员批量创建临时 key 时应跳过普通 key 已占用的数字名称", async () => {
+    findUserByIdMock.mockResolvedValueOnce(createUserRecord({ providerGroup: "vip" }));
+    findKeyListMock.mockResolvedValueOnce([
+      createKeyRecord({
+        id: 211,
+        name: "001",
+        temporaryGroupName: null,
+      }),
+      createKeyRecord({
+        id: 212,
+        name: "002",
+        temporaryGroupName: "vip",
+      }),
+    ]);
+
+    const result = await createTemporaryKeysBatch({
+      userId: 10,
+      baseKeyId: 100,
+      count: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    const payload = createKeysBatchMock.mock.calls.at(-1)?.[0] as Array<Record<string, unknown>>;
+    expect(String(payload[0]?.name)).toBe("003");
+    expect(String(payload[1]?.name)).toBe("004");
+  });
+
+  test("管理员不可使用临时 key 作为模板继续派生", async () => {
+    findKeyByIdMock.mockResolvedValueOnce(
+      createKeyRecord({
+        temporaryGroupName: "vip",
+      })
+    );
+
+    const result = await createTemporaryKeysBatch({
+      userId: 10,
+      baseKeyId: 100,
+      count: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errorCode).toBe(ERROR_CODES.NOT_FOUND);
+      expect(result.error).toBe("KEY_NOT_FOUND");
+    }
+    expect(createKeysBatchMock).not.toHaveBeenCalled();
   });
 
   test("非管理员不可批量创建临时 key", async () => {

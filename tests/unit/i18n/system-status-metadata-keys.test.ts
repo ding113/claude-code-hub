@@ -18,6 +18,10 @@ describe("messages/<locale>/systemStatus metadata keys", () => {
     for (const systemStatus of all) {
       expect(systemStatus).toHaveProperty("pageTitle");
       expect(systemStatus).toHaveProperty("pageDescription");
+      expect(typeof systemStatus.pageTitle).toBe("string");
+      expect(systemStatus.pageTitle).not.toBe("");
+      expect(typeof systemStatus.pageDescription).toBe("string");
+      expect(systemStatus.pageDescription).not.toBe("");
     }
   });
 });

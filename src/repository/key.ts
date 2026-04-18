@@ -210,10 +210,14 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
   }
 
   if (redisTasks.length > 0) {
-    await Promise.race([
-      Promise.all(redisTasks),
-      new Promise<void>((resolve) => setTimeout(resolve, redisBestEffortTimeoutMs)),
-    ]);
+    if (process.env.REDIS_URL) {
+      await Promise.all(redisTasks);
+    } else {
+      await Promise.race([
+        Promise.all(redisTasks),
+        new Promise<void>((resolve) => setTimeout(resolve, redisBestEffortTimeoutMs)),
+      ]);
+    }
   }
   return created;
 }
@@ -548,10 +552,14 @@ export async function createKeysBatch(keyDataList: CreateKeyData[]): Promise<Key
   }
 
   if (redisTasks.length > 0) {
-    await Promise.race([
-      Promise.all(redisTasks),
-      new Promise<void>((resolve) => setTimeout(resolve, redisBestEffortTimeoutMs)),
-    ]);
+    if (process.env.REDIS_URL) {
+      await Promise.all(redisTasks);
+    } else {
+      await Promise.race([
+        Promise.all(redisTasks),
+        new Promise<void>((resolve) => setTimeout(resolve, redisBestEffortTimeoutMs)),
+      ]);
+    }
   }
 
   return created;

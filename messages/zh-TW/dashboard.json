@@ -1599,6 +1599,22 @@
         "previewTitle": "預覽（前 5 條）",
         "download": "下載 CSV"
       },
+      "listActions": {
+        "showMore": "顯示剩餘 {count} 個",
+        "showLess": "收合"
+      },
+      "sections": {
+        "standard": {
+          "title": "標準 Key",
+          "description": "維持既有行為的主要業務 Key。",
+          "empty": "尚無標準 Key"
+        },
+        "temporary": {
+          "title": "臨時 Key",
+          "description": "目前使用者分組下可批量建立、下載與刪除的臨時 Key 群組。",
+          "empty": "尚無臨時 Key 群組"
+        }
+      },
       "groups": {
         "title": "臨時 Key 分組",
         "groupBadge": "臨時",
