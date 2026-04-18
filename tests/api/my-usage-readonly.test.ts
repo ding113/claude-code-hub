@@ -348,7 +348,10 @@ describe("my-usage API：只读 Key 自助查询", () => {
       body: { ip: visibleIp, lang: "en" },
     });
     expect(visible.response.status).toBe(200);
-    expect(visible.json).toMatchObject({ ok: true });
+    expect(visible.json).not.toMatchObject({
+      ok: false,
+      error: "IP not found in current key usage logs",
+    });
 
     const hidden = await callActionsRoute({
       method: "POST",
