@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // -- mocks --
 
@@ -33,12 +33,29 @@ vi.mock("@/app/v1/[...route]/route", () => ({
 
 // -- tests --
 
+const originalDsn = process.env.DSN;
+const originalRedisUrl = process.env.REDIS_URL;
+
 describe("health/checker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
     delete process.env.DSN;
     delete process.env.REDIS_URL;
+  });
+
+  afterEach(() => {
+    if (originalDsn === undefined) {
+      delete process.env.DSN;
+    } else {
+      process.env.DSN = originalDsn;
+    }
+
+    if (originalRedisUrl === undefined) {
+      delete process.env.REDIS_URL;
+    } else {
+      process.env.REDIS_URL = originalRedisUrl;
+    }
   });
 
   // -- getAppVersion --
@@ -282,6 +299,7 @@ describe("health/checker", () => {
     });
 
     it("returns healthy when DB is unchecked in test mode", async () => {
+      process.env.REDIS_URL = "redis://localhost:6379";
       mocks.getRedisClient.mockReturnValue({
         status: "ready",
         ping: vi.fn().mockResolvedValue("PONG"),
@@ -291,6 +309,7 @@ describe("health/checker", () => {
       const result = await checkReadiness();
       expect(result.status).toBe("healthy");
       expect(result.components?.database?.status).toBe("unchecked");
+      expect(result.components?.redis?.status).toBe("up");
     });
   });
 });

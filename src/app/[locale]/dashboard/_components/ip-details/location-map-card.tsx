@@ -46,12 +46,7 @@ export function LocationMapCard({
             zoom: resolveZoom(accuracyRadiusKm),
           }}
         >
-          <MapPopup
-            longitude={longitude}
-            latitude={latitude}
-            className="w-56"
-            closeLabel={t("map.closePopup")}
-          >
+          <MapPopup longitude={longitude} latitude={latitude} className="w-56">
             <div className="space-y-1">
               <p className="text-sm font-semibold">{title}</p>
               {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}

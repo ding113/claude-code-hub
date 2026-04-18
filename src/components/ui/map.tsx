@@ -189,7 +189,6 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   const [isLoaded, setIsLoaded] = useState(false);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const currentStyleRef = useRef<MapStyleOption | null>(null);
-  const styleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const internalUpdateRef = useRef(false);
   const resolvedTheme = useResolvedTheme(themeProp);
 
@@ -209,13 +208,6 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   // Expose the map instance to the parent component
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
 
-  const clearStyleTimeout = useCallback(() => {
-    if (styleTimeoutRef.current) {
-      clearTimeout(styleTimeoutRef.current);
-      styleTimeoutRef.current = null;
-    }
-  }, []);
-
   // Initialize the map
   useEffect(() => {
     if (!containerRef.current) return;
@@ -234,19 +226,16 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       ...viewport,
     });
 
-    const styleDataHandler = () => {
-      clearStyleTimeout();
-      // Delay to ensure style is fully processed before allowing layer operations
-      // This is a workaround to avoid race conditions with the style loading
-      // else we have to force update every layer on setStyle change
-      styleTimeoutRef.current = setTimeout(() => {
-        setIsStyleLoaded(true);
-        if (projection) {
-          map.setProjection(projection);
-        }
-      }, 100);
-    };
     const loadHandler = () => setIsLoaded(true);
+    const syncStyleReady = () => {
+      if (!map.isStyleLoaded()) return;
+      setIsStyleLoaded(true);
+      if (projection) {
+        map.setProjection(projection);
+      }
+    };
+    const styleDataHandler = () => syncStyleReady();
+    const idleHandler = () => syncStyleReady();
 
     // Viewport change handler - skip if triggered by internal update
     const handleMove = () => {
@@ -255,13 +244,14 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     };
 
     map.on("load", loadHandler);
+    map.on("idle", idleHandler);
     map.on("styledata", styleDataHandler);
     map.on("move", handleMove);
     setMapInstance(map);
 
     return () => {
-      clearStyleTimeout();
       map.off("load", loadHandler);
+      map.off("idle", idleHandler);
       map.off("styledata", styleDataHandler);
       map.off("move", handleMove);
       map.remove();
@@ -308,12 +298,11 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
 
     if (currentStyleRef.current === newStyle) return;
 
-    clearStyleTimeout();
     currentStyleRef.current = newStyle;
     setIsStyleLoaded(false);
 
     mapInstance.setStyle(newStyle, { diff: true });
-  }, [mapInstance, resolvedTheme, mapStyles, clearStyleTimeout]);
+  }, [mapInstance, resolvedTheme, mapStyles]);
 
   const contextValue = useMemo(
     () => ({
@@ -509,17 +498,25 @@ type MarkerPopupProps = {
   children: ReactNode;
   /** Additional CSS classes for the popup container */
   className?: string;
-  /** Show a close button in the popup (default: false) */
-  closeButton?: boolean;
-  /** Accessible label for the close button */
-  closeLabel?: string;
-} & Omit<PopupOptions, "className" | "closeButton">;
+} & (
+  | {
+      /** Show a close button in the popup (default: false) */
+      closeButton?: false;
+      closeLabel?: never;
+    }
+  | {
+      closeButton: true;
+      /** Accessible label for the close button */
+      closeLabel: string;
+    }
+) &
+  Omit<PopupOptions, "className" | "closeButton">;
 
 function MarkerPopup({
   children,
   className,
   closeButton = false,
-  closeLabel = "Close popup",
+  closeLabel,
   ...popupOptions
 }: MarkerPopupProps) {
   const { marker, map } = useMarkerContext();
@@ -706,12 +703,12 @@ type MapControlsProps = {
   /** Callback with user coordinates when located */
   onLocate?: (coords: { longitude: number; latitude: number }) => void;
   /** Accessible labels for control buttons */
-  labels?: {
-    zoomIn?: string;
-    zoomOut?: string;
-    locate?: string;
-    fullscreen?: string;
-    compass?: string;
+  labels: {
+    zoomIn: string;
+    zoomOut: string;
+    locate: string;
+    fullscreen: string;
+    compass: string;
   };
 };
 
@@ -769,13 +766,6 @@ function MapControls({
 }: MapControlsProps) {
   const { map } = useMap();
   const [waitingForLocation, setWaitingForLocation] = useState(false);
-  const mergedLabels = {
-    zoomIn: labels?.zoomIn ?? "Zoom in",
-    zoomOut: labels?.zoomOut ?? "Zoom out",
-    locate: labels?.locate ?? "Find my location",
-    fullscreen: labels?.fullscreen ?? "Toggle fullscreen",
-    compass: labels?.compass ?? "Reset bearing to north",
-  };
 
   const handleZoomIn = useCallback(() => {
     map?.zoomTo(map.getZoom() + 1, { duration: 300 });
@@ -791,7 +781,7 @@ function MapControls({
 
   const handleLocate = useCallback(() => {
     setWaitingForLocation(true);
-    if (!("geolocation" in navigator)) {
+    if (!navigator.geolocation) {
       setWaitingForLocation(false);
       return;
     }
@@ -833,26 +823,22 @@ function MapControls({
     >
       {showZoom && (
         <ControlGroup>
-          <ControlButton onClick={handleZoomIn} label={mergedLabels.zoomIn}>
+          <ControlButton onClick={handleZoomIn} label={labels.zoomIn}>
             <Plus className="size-4" />
           </ControlButton>
-          <ControlButton onClick={handleZoomOut} label={mergedLabels.zoomOut}>
+          <ControlButton onClick={handleZoomOut} label={labels.zoomOut}>
             <Minus className="size-4" />
           </ControlButton>
         </ControlGroup>
       )}
       {showCompass && (
         <ControlGroup>
-          <CompassButton onClick={handleResetBearing} label={mergedLabels.compass} />
+          <CompassButton onClick={handleResetBearing} label={labels.compass} />
         </ControlGroup>
       )}
       {showLocate && (
         <ControlGroup>
-          <ControlButton
-            onClick={handleLocate}
-            label={mergedLabels.locate}
-            disabled={waitingForLocation}
-          >
+          <ControlButton onClick={handleLocate} label={labels.locate} disabled={waitingForLocation}>
             {waitingForLocation ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -863,7 +849,7 @@ function MapControls({
       )}
       {showFullscreen && (
         <ControlGroup>
-          <ControlButton onClick={handleFullscreen} label={mergedLabels.fullscreen}>
+          <ControlButton onClick={handleFullscreen} label={labels.fullscreen}>
             <Maximize className="size-4" />
           </ControlButton>
         </ControlGroup>
@@ -925,11 +911,19 @@ type MapPopupProps = {
   children: ReactNode;
   /** Additional CSS classes for the popup container */
   className?: string;
-  /** Show a close button in the popup (default: false) */
-  closeButton?: boolean;
-  /** Accessible label for the close button */
-  closeLabel?: string;
-} & Omit<PopupOptions, "className" | "closeButton">;
+} & (
+  | {
+      /** Show a close button in the popup (default: false) */
+      closeButton?: false;
+      closeLabel?: never;
+    }
+  | {
+      closeButton: true;
+      /** Accessible label for the close button */
+      closeLabel: string;
+    }
+) &
+  Omit<PopupOptions, "className" | "closeButton">;
 
 function MapPopup({
   longitude,
@@ -938,7 +932,7 @@ function MapPopup({
   children,
   className,
   closeButton = false,
-  closeLabel = "Close popup",
+  closeLabel,
   ...popupOptions
 }: MapPopupProps) {
   const { map } = useMap();
@@ -1103,16 +1097,24 @@ function MapRoute({
 
   // When coordinates change, update the source data
   useEffect(() => {
-    if (!isLoaded || !map || coordinates.length < 2) return;
+    if (!isLoaded || !map) return;
 
     const source = map.getSource(sourceId) as MapLibreGL.GeoJSONSource;
-    if (source) {
+    if (!source) return;
+
+    if (coordinates.length < 2) {
       source.setData({
-        type: "Feature",
-        properties: {},
-        geometry: { type: "LineString", coordinates },
+        type: "FeatureCollection",
+        features: [],
       });
+      return;
     }
+
+    source.setData({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "LineString", coordinates },
+    });
   }, [isLoaded, map, coordinates, sourceId]);
 
   useEffect(() => {
@@ -1288,14 +1290,14 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, map, sourceId]);
 
-  // Update source data when data prop changes (only for non-URL data)
+  // Update source data when data prop changes
   useEffect(() => {
-    if (!isLoaded || !map || typeof data === "string") return;
+    if (!isLoaded || !map) return;
 
     const source = map.getSource(sourceId) as MapLibreGL.GeoJSONSource;
-    if (source) {
-      source.setData(data);
-    }
+    if (!source) return;
+
+    source.setData(data);
   }, [isLoaded, map, data, sourceId]);
 
   // Update layer styles when props change
