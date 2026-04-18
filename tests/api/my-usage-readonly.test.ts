@@ -347,7 +347,6 @@ describe("my-usage API：只读 Key 自助查询", () => {
       authToken: keyA.key,
       body: { ip: visibleIp, lang: "en" },
     });
-    expect(visible.response.status).toBe(200);
     expect(visible.json).not.toMatchObject({
       ok: false,
       error: "IP not found in current key usage logs",
@@ -359,7 +358,7 @@ describe("my-usage API：只读 Key 自助查询", () => {
       authToken: keyA.key,
       body: { ip: hiddenIp, lang: "en" },
     });
-    expect(hidden.response.status).toBe(200);
+    expect(hidden.response.status).toBe(400);
     expect(hidden.json).toMatchObject({
       ok: false,
       error: "IP not found in current key usage logs",

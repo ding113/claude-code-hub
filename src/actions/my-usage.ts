@@ -710,6 +710,11 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
     const ip = params.ip.trim();
     if (!ip) return { ok: false, error: "IP is required" };
 
+    const settings = await getSystemSettings();
+    if (!settings.ipGeoLookupEnabled) {
+      return { ok: false, error: "IP geolocation disabled" };
+    }
+
     // 仅允许查询当前 key 在 my-usage 可见日志中真实出现过的 IP。
     const [visibleLog] = await db
       .select({ id: messageRequest.id })
@@ -717,6 +722,7 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
       .where(
         and(
           isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
           eq(messageRequest.key, session.key.key),
           eq(messageRequest.clientIp, ip)
         )
@@ -725,11 +731,6 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
 
     if (!visibleLog) {
       return { ok: false, error: "IP not found in current key usage logs" };
-    }
-
-    const settings = await getSystemSettings();
-    if (!settings.ipGeoLookupEnabled) {
-      return { ok: false, error: "IP geolocation disabled" };
     }
 
     const result = await lookupIp(ip, { lang: params.lang });

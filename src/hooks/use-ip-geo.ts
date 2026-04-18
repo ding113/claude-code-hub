@@ -27,12 +27,16 @@ export function useIpGeo(ip: string | null | undefined, options?: UseIpGeoOption
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ ip, lang: locale }),
         });
-        if (!response.ok) throw new Error(`my-ip-geo fetch failed: ${response.status}`);
 
         const result = (await response.json()) as ActionResult<IpGeoLookupResponse>;
         if (!result.ok) {
-          throw new Error(result.error);
+          return { status: "error", error: result.error ?? "my-ip-geo fetch failed" };
         }
+
+        if (!response.ok) {
+          return { status: "error", error: `my-ip-geo fetch failed: ${response.status}` };
+        }
+
         return result.data;
       }
 

@@ -114,6 +114,7 @@ describe("getMyIpGeoDetails", () => {
     const result = await getMyIpGeoDetails({ ip: "203.0.113.9", lang: "en" });
 
     expect(result).toEqual({ ok: false, error: "IP geolocation disabled" });
+    expect(mocks.dbLimit).not.toHaveBeenCalled();
     expect(mocks.lookupIp).not.toHaveBeenCalled();
   });
 
