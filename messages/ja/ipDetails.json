@@ -29,6 +29,7 @@
   "sections": {
     "location": "所在地の詳細",
     "country": "国 / 地域",
+    "countryTimezone": "国とタイムゾーン",
     "network": "ネットワーク詳細",
     "company": "所属組織",
     "hosting": "ホスティング",
@@ -45,6 +46,14 @@
     "noAsn": "ASN なし",
     "unknownOrg": "組織不明",
     "cleanHint": "匿名化・脅威の兆候なし"
+  },
+  "map": {
+    "closePopup": "地図ポップアップを閉じる",
+    "zoomIn": "地図を拡大",
+    "zoomOut": "地図を縮小",
+    "locate": "現在地を表示",
+    "fullscreen": "全画面地図に切り替え",
+    "resetBearing": "方位を北向きに戻す"
   },
   "fields": {
     "country": "国 / 地域",

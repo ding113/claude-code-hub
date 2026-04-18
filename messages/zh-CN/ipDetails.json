@@ -29,6 +29,7 @@
   "sections": {
     "location": "地理位置详情",
     "country": "国家 / 地区",
+    "countryTimezone": "国家地区与时区",
     "network": "网络详情",
     "company": "所属公司",
     "hosting": "托管信息",
@@ -45,6 +46,14 @@
     "noAsn": "无 ASN",
     "unknownOrg": "组织未知",
     "cleanHint": "未检测到匿名或威胁信号"
+  },
+  "map": {
+    "closePopup": "关闭地图弹窗",
+    "zoomIn": "放大地图",
+    "zoomOut": "缩小地图",
+    "locate": "定位到我的位置",
+    "fullscreen": "切换全屏地图",
+    "resetBearing": "将朝向重置为正北"
   },
   "fields": {
     "country": "国家/地区",

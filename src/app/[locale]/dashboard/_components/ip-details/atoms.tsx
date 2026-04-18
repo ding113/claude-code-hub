@@ -57,12 +57,12 @@ export function hasAny<T>(obj: T | null | undefined, keys: (keyof T)[]): boolean
 }
 
 /**
- * True when the API actually located the IP. For CGN / bogon / tailscale
- * IPs upstream returns `0,0` with `accuracy_radius_km = null`, which is a
- * "we don't know" signal rather than a real pair of coordinates — hide it.
+ * 坐标展示判定：
+ * 只要上游给出了有效的经纬度数值，且不是 `0,0` 的占位值，就允许展示。
+ * `accuracy_radius_km` 只代表精度补充信息，不再阻断坐标本身的显示。
  */
 export function hasMeaningfulCoordinates(coords: IpGeoCoordinates): boolean {
-  if (coords.accuracy_radius_km === null) return false;
+  if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) return false;
   if (coords.latitude === 0 && coords.longitude === 0) return false;
   return true;
 }

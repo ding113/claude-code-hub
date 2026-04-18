@@ -29,6 +29,7 @@
   "sections": {
     "location": "Location details",
     "country": "Country",
+    "countryTimezone": "Country & timezone",
     "network": "Network details",
     "company": "Company",
     "hosting": "Hosting",
@@ -45,6 +46,14 @@
     "noAsn": "No ASN",
     "unknownOrg": "Unknown organization",
     "cleanHint": "No anonymization or threat signals"
+  },
+  "map": {
+    "closePopup": "Close popup",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "locate": "Find my location",
+    "fullscreen": "Toggle fullscreen",
+    "resetBearing": "Reset bearing to north"
   },
   "fields": {
     "country": "Country",

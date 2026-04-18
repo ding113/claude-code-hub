@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // -- mocks --
 
@@ -33,10 +33,29 @@ vi.mock("@/app/v1/[...route]/route", () => ({
 
 // -- tests --
 
+const originalDsn = process.env.DSN;
+const originalRedisUrl = process.env.REDIS_URL;
+
 describe("health/checker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    delete process.env.DSN;
+    delete process.env.REDIS_URL;
+  });
+
+  afterEach(() => {
+    if (originalDsn === undefined) {
+      delete process.env.DSN;
+    } else {
+      process.env.DSN = originalDsn;
+    }
+
+    if (originalRedisUrl === undefined) {
+      delete process.env.REDIS_URL;
+    } else {
+      process.env.REDIS_URL = originalRedisUrl;
+    }
   });
 
   // -- getAppVersion --
@@ -51,7 +70,16 @@ describe("health/checker", () => {
   // -- checkDatabase --
 
   describe("checkDatabase", () => {
+    it("returns unchecked when DSN is not set", async () => {
+      delete process.env.DSN;
+      const { checkDatabase } = await import("@/lib/health/checker");
+      const result = await checkDatabase();
+      expect(result.status).toBe("unchecked");
+      expect(result.message).toContain("not configured");
+    });
+
     it("returns up when SELECT 1 succeeds", async () => {
+      process.env.DSN = "postgres://test";
       mocks.dbExecute.mockResolvedValue([{ "?column?": 1 }]);
       const { checkDatabase } = await import("@/lib/health/checker");
       const result = await checkDatabase();
@@ -60,6 +88,7 @@ describe("health/checker", () => {
     });
 
     it("returns down when query throws", async () => {
+      process.env.DSN = "postgres://test";
       mocks.dbExecute.mockRejectedValue(new Error("connection refused"));
       const { checkDatabase } = await import("@/lib/health/checker");
       const result = await checkDatabase();
@@ -68,6 +97,7 @@ describe("health/checker", () => {
     });
 
     it("returns down on timeout", async () => {
+      process.env.DSN = "postgres://test";
       mocks.dbExecute.mockImplementation(
         () => new Promise((resolve) => setTimeout(resolve, 5_000))
       );
@@ -90,7 +120,6 @@ describe("health/checker", () => {
       const { checkRedis } = await import("@/lib/health/checker");
       const result = await checkRedis();
       expect(result.status).toBe("up");
-      delete process.env.REDIS_URL;
     });
 
     it("returns unchecked when REDIS_URL is not set", async () => {
@@ -109,7 +138,6 @@ describe("health/checker", () => {
       const result = await checkRedis();
       expect(result.status).toBe("down");
       expect(result.message).toContain("initialization failed");
-      delete process.env.REDIS_URL;
     });
 
     it("returns down when client status is end", async () => {
@@ -119,7 +147,6 @@ describe("health/checker", () => {
       const result = await checkRedis();
       expect(result.status).toBe("down");
       expect(result.message).toContain("end");
-      delete process.env.REDIS_URL;
     });
 
     it("returns down when client status is close", async () => {
@@ -129,7 +156,6 @@ describe("health/checker", () => {
       const result = await checkRedis();
       expect(result.status).toBe("down");
       expect(result.message).toContain("close");
-      delete process.env.REDIS_URL;
     });
 
     it("returns down when ping throws", async () => {
@@ -142,7 +168,6 @@ describe("health/checker", () => {
       const result = await checkRedis();
       expect(result.status).toBe("down");
       expect(result.message).toContain("ECONNRESET");
-      delete process.env.REDIS_URL;
     });
 
     it("returns down on ping timeout", async () => {
@@ -155,7 +180,6 @@ describe("health/checker", () => {
       const result = await checkRedis();
       expect(result.status).toBe("down");
       expect(result.message).toContain("timed out");
-      delete process.env.REDIS_URL;
     }, 10_000);
   });
 
@@ -199,6 +223,7 @@ describe("health/checker", () => {
 
   describe("checkReadiness", () => {
     it("returns healthy when all components are up", async () => {
+      process.env.DSN = "postgres://test";
       process.env.REDIS_URL = "redis://localhost:6379";
       mocks.dbExecute.mockResolvedValue([{ "?column?": 1 }]);
       mocks.getRedisClient.mockReturnValue({
@@ -214,10 +239,10 @@ describe("health/checker", () => {
       expect(result.components?.database?.status).toBe("up");
       expect(result.components?.redis?.status).toBe("up");
       expect(result.components?.proxy?.status).toBe("up");
-      delete process.env.REDIS_URL;
     });
 
     it("returns degraded when Redis is down but DB and proxy are up", async () => {
+      process.env.DSN = "postgres://test";
       process.env.REDIS_URL = "redis://localhost:6379";
       mocks.dbExecute.mockResolvedValue([{ "?column?": 1 }]);
       mocks.getRedisClient.mockReturnValue({
@@ -230,10 +255,10 @@ describe("health/checker", () => {
       expect(result.status).toBe("degraded");
       expect(result.components?.database?.status).toBe("up");
       expect(result.components?.redis?.status).toBe("down");
-      delete process.env.REDIS_URL;
     });
 
     it("returns degraded when proxy is down but DB and Redis are up", async () => {
+      process.env.DSN = "postgres://test";
       process.env.REDIS_URL = "redis://localhost:6379";
       mocks.dbExecute.mockResolvedValue([{ "?column?": 1 }]);
       mocks.getRedisClient.mockReturnValue({
@@ -245,10 +270,10 @@ describe("health/checker", () => {
       const result = await checkReadiness();
       expect(result.status).toBe("degraded");
       expect(result.components?.proxy?.status).toBe("down");
-      delete process.env.REDIS_URL;
     });
 
     it("returns unhealthy when DB is down", async () => {
+      process.env.DSN = "postgres://test";
       process.env.REDIS_URL = "redis://localhost:6379";
       mocks.dbExecute.mockRejectedValue(new Error("connection refused"));
       mocks.getRedisClient.mockReturnValue({
@@ -260,10 +285,10 @@ describe("health/checker", () => {
       const result = await checkReadiness();
       expect(result.status).toBe("unhealthy");
       expect(result.components?.database?.status).toBe("down");
-      delete process.env.REDIS_URL;
     });
 
     it("returns healthy when Redis is unchecked (not configured)", async () => {
+      process.env.DSN = "postgres://test";
       mocks.dbExecute.mockResolvedValue([{ "?column?": 1 }]);
       mocks.getRedisClient.mockReturnValue(null);
       mocks.v1App.request.mockResolvedValue(new Response('{"status":"pong"}', { status: 200 }));
@@ -271,6 +296,20 @@ describe("health/checker", () => {
       const result = await checkReadiness();
       expect(result.status).toBe("healthy");
       expect(result.components?.redis?.status).toBe("unchecked");
+    });
+
+    it("returns healthy when DB is unchecked in test mode", async () => {
+      process.env.REDIS_URL = "redis://localhost:6379";
+      mocks.getRedisClient.mockReturnValue({
+        status: "ready",
+        ping: vi.fn().mockResolvedValue("PONG"),
+      });
+      mocks.v1App.request.mockResolvedValue(new Response('{"status":"pong"}', { status: 200 }));
+      const { checkReadiness } = await import("@/lib/health/checker");
+      const result = await checkReadiness();
+      expect(result.status).toBe("healthy");
+      expect(result.components?.database?.status).toBe("unchecked");
+      expect(result.components?.redis?.status).toBe("up");
     });
   });
 });

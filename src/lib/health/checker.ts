@@ -38,6 +38,14 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 export async function checkDatabase(): Promise<ComponentHealth> {
   const start = performance.now();
   try {
+    const dsn = process.env.DSN?.trim();
+    if (!dsn) {
+      return {
+        status: process.env.NODE_ENV === "test" ? "unchecked" : "down",
+        message: "Database not configured",
+      };
+    }
+
     await withTimeout(db.execute(sql`SELECT 1`), DB_CHECK_TIMEOUT_MS, "database");
     return { status: "up", latencyMs: Math.round(performance.now() - start) };
   } catch (error) {

@@ -146,6 +146,16 @@
   }
 }
 
+@layer components {
+  .maplibregl-popup-content {
+    @apply bg-background/95! text-foreground! shadow-none! p-0! rounded-none!;
+  }
+
+  .maplibregl-popup-tip {
+    @apply hidden!;
+  }
+}
+
 /* 隐藏滚动条但保留滚动功能 */
 @layer utilities {
   .scrollbar-hide {
