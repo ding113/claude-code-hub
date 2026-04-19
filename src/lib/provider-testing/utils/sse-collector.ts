@@ -80,7 +80,10 @@ export function extractTextFromSSE(body: string): string {
           }
         | undefined;
       if (eventType === "response.output_item.done" && item?.content) {
-        assignFallback(3, item.content.map((contentItem) => contentItem.text || "").filter(Boolean));
+        assignFallback(
+          3,
+          item.content.map((contentItem) => contentItem.text || "").filter(Boolean)
+        );
         continue;
       }
 
@@ -232,7 +235,10 @@ export function parseSSEStream(body: string): ParsedResponse {
           }
         | undefined;
       if (eventType === "response.output_item.done" && item?.content) {
-        assignFallback(3, item.content.map((contentItem) => contentItem.text || "").filter(Boolean));
+        assignFallback(
+          3,
+          item.content.map((contentItem) => contentItem.text || "").filter(Boolean)
+        );
       }
 
       const responseOutput = response?.output as
