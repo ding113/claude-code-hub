@@ -126,6 +126,7 @@
     "geoLookupHint": "啟用後，儀表板會透過設定的 IP 歸屬地服務解析出國家/城市/ASN 等資訊。",
     "extractionConfigLabel": "請求標頭提取鏈（JSON）",
     "extractionConfigHint": "留空則使用安全的內建預設鏈：x-real-ip → x-forwarded-for（取最右）。若應用前方有 Cloudflare 等會剝除客戶端偽造標頭的 CDN，請顯式將其專用標頭加到鏈的最前面（範例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。陣列每一項皆含 `name` 以及可選的 `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）。",
+    "extractionConfigHelpLabel": "顯示請求標頭提取 JSON 說明",
     "resetToDefault": "恢復預設"
   },
   "section": {

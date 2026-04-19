@@ -126,6 +126,7 @@
     "geoLookupHint": "有効にすると、ダッシュボードは設定済みの IP 地理情報サービスを用いて IP を国・都市・ASN に解決します。",
     "extractionConfigLabel": "ヘッダー抽出チェーン（JSON）",
     "extractionConfigHint": "空の場合は安全な組み込み既定（x-real-ip → x-forwarded-for の最右値）を使用します。Cloudflare や同等の CDN 経由の場合は、そのヘッダーを明示的に追加してください（例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。各項目には `name` と任意の `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）を含められます。",
+    "extractionConfigHelpLabel": "ヘッダー抽出 JSON のヘルプを表示",
     "resetToDefault": "既定に戻す"
   },
   "section": {
