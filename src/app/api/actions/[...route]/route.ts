@@ -1313,6 +1313,30 @@ const { route: getMyAvailableEndpointsRoute, handler: getMyAvailableEndpointsHan
   });
 app.openapi(getMyAvailableEndpointsRoute, getMyAvailableEndpointsHandler);
 
+const { route: getMyIpGeoDetailsRoute, handler: getMyIpGeoDetailsHandler } = createActionRoute(
+  "my-usage",
+  "getMyIpGeoDetails",
+  myUsageActions.getMyIpGeoDetails,
+  {
+    requestSchema: z.object({
+      ip: z.string().min(1).describe("要查询的客户端 IP"),
+      lang: z.string().optional().describe("界面 locale，用于本地化地理名称"),
+    }),
+    responseSchema: z
+      .object({
+        status: z.enum(["ok", "private", "error"]),
+        data: z.unknown().optional(),
+        error: z.string().optional(),
+      })
+      .passthrough(),
+    description: "仅查询当前 key 使用日志中真实出现过的 IP 详情",
+    summary: "获取我的 IP 详情",
+    tags: ["使用日志"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyIpGeoDetailsRoute, getMyIpGeoDetailsHandler);
+
 const { route: getMyStatsSummaryRoute, handler: getMyStatsSummaryHandler } = createActionRoute(
   "my-usage",
   "getMyStatsSummary",

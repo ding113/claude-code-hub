@@ -153,6 +153,7 @@ describe("OpenAPI 端点完整性检查", () => {
       "/api/actions/my-usage/getMyUsageLogsBatch",
       "/api/actions/my-usage/getMyAvailableModels",
       "/api/actions/my-usage/getMyAvailableEndpoints",
+      "/api/actions/my-usage/getMyIpGeoDetails",
     ];
 
     for (const path of expectedPaths) {
@@ -293,7 +294,7 @@ describe("OpenAPI 端点完整性检查", () => {
 
     for (const [path, methods] of Object.entries(openApiDoc.paths)) {
       const postOperation = methods.post;
-      if (!postOperation || !postOperation.tags) continue;
+      if (!postOperation?.tags) continue;
 
       // 查找对应的标签
       const expectedTag = Object.entries(moduleTagMapping).find(([prefix]) =>

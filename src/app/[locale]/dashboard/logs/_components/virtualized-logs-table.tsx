@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { IpGeoLookupMode } from "@/hooks/use-ip-geo";
 import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
 import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
@@ -111,6 +112,8 @@ interface VirtualizedLogsTableProps {
   queryKeyPrefix?: string;
   /** Disable the detail side-panel dialog on status badge click */
   disableDetailDialog?: boolean;
+  /** Select which IP lookup authorization model the detail dialog should use */
+  ipLookupMode?: IpGeoLookupMode;
 }
 
 export function VirtualizedLogsTable({
@@ -127,6 +130,7 @@ export function VirtualizedLogsTable({
   fetchFn,
   queryKeyPrefix = "usage-logs-batch",
   disableDetailDialog = false,
+  ipLookupMode = "default",
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
   const getPricingSourceLabel = (source: string) =>
@@ -933,7 +937,12 @@ export function VirtualizedLogsTable({
         </Button>
       ) : null}
 
-      <IpDetailsDialog ip={ipDialogValue} open={ipDialogOpen} onOpenChange={setIpDialogOpen} />
+      <IpDetailsDialog
+        ip={ipDialogValue}
+        open={ipDialogOpen}
+        onOpenChange={setIpDialogOpen}
+        lookupMode={ipLookupMode}
+      />
     </div>
   );
 }

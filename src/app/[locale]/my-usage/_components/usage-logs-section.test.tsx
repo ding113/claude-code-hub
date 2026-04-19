@@ -33,6 +33,7 @@ vi.mock("@/app/[locale]/dashboard/logs/_components/virtualized-logs-table", () =
     disableDetailDialog?: boolean;
     fetchFn?: unknown;
     queryKeyPrefix?: string;
+    ipLookupMode?: string;
   }) => (
     <div
       data-testid="virtualized-logs-table"
@@ -40,6 +41,7 @@ vi.mock("@/app/[locale]/dashboard/logs/_components/virtualized-logs-table", () =
       data-disable-detail-dialog={String(props.disableDetailDialog)}
       data-query-key-prefix={props.queryKeyPrefix}
       data-has-fetch-fn={String(!!props.fetchFn)}
+      data-ip-lookup-mode={props.ipLookupMode}
     />
   ),
 }));
@@ -112,6 +114,7 @@ describe("my-usage usage logs section", () => {
     // Verify custom fetch function and query key
     expect(table!.getAttribute("data-has-fetch-fn")).toBe("true");
     expect(table!.getAttribute("data-query-key-prefix")).toBe("my-usage-logs-batch");
+    expect(table!.getAttribute("data-ip-lookup-mode")).toBe("my-usage");
 
     await act(async () => {
       root.unmount();
