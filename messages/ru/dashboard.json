@@ -306,6 +306,7 @@
         "providerMultiplier": "Множитель поставщика",
         "groupMultiplier": "Множитель группы",
         "baseTotal": "Базовый итог",
+        "unitPricePer1M": "@ {price} / 1M",
         "unit": {
           "tokens": "токенов"
         }

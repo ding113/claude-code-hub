@@ -306,6 +306,7 @@
         "providerMultiplier": "Provider Multiplier",
         "groupMultiplier": "Group Multiplier",
         "baseTotal": "Base Total",
+        "unitPricePer1M": "@ {price} / 1M",
         "unit": {
           "tokens": "tokens"
         }

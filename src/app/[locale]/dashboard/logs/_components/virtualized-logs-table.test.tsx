@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import { describe, expect, test, vi } from "vitest";
@@ -15,7 +15,8 @@ let mockIsFetchingNextPage = false;
 const useInfiniteQuerySpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: () => (key: string, values?: Record<string, string>) =>
+    key === "logs.billingDetails.unitPricePer1M" && values?.price ? `@ ${values.price} / 1M` : key,
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -71,11 +72,15 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TooltipContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  TooltipContent: ({ children, className }: ComponentProps<"div">) => (
+    <div data-slot="tooltip-content" className={className}>
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, className, ...props }: React.ComponentProps<"button">) => (
+  Button: ({ children, className, ...props }: ComponentProps<"button">) => (
     <button className={className} {...props}>
       {children}
     </button>
@@ -148,6 +153,33 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     specialSettings: null,
     ...overrides,
   };
+}
+
+function renderTableWithLog(overrides: Partial<UsageLogRow>) {
+  mockIsLoading = false;
+  mockIsError = false;
+  mockError = null;
+  mockHasNextPage = false;
+  mockIsFetchingNextPage = false;
+  mockLogs = [makeLog({ id: 1, ...overrides })];
+
+  return renderToStaticMarkup(<VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />);
+}
+
+function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
+  const html = renderTableWithLog(overrides);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+
+  const tooltip = [...container.querySelectorAll('[data-slot="tooltip-content"]')].find((node) =>
+    node.textContent?.includes("logs.details.billingDetails.title")
+  );
+
+  if (!(tooltip instanceof HTMLDivElement)) {
+    throw new Error("Cost tooltip content not found");
+  }
+
+  return tooltip;
 }
 
 describe("virtualized-logs-table multiplier badge", () => {
@@ -405,6 +437,191 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("5m");
     expect(html).not.toContain("5m ~");
     expect(html).not.toContain("bg-amber-50");
+  });
+
+  test("renders redesigned cost tooltip with positive rows and active multiplier rules only", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.009000",
+      inputTokens: 2000,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheCreation5mInputTokens: 0,
+      cacheCreation1hInputTokens: 0,
+      cacheReadInputTokens: 500,
+      context1mApplied: true,
+      costBreakdown: {
+        input: "0.005",
+        output: "0",
+        cache_creation: "0",
+        cache_creation_5m: "0",
+        cache_creation_1h: "0",
+        cache_read: "0.000125",
+        base_total: "0.005125",
+        provider_multiplier: 1.5,
+        group_multiplier: 1.2,
+        total: "0.009225",
+      },
+    });
+
+    expect(tooltip.textContent).toContain("logs.details.billingDetails.title");
+    expect(tooltip.textContent).toContain("logs.billingDetails.context1m");
+    expect(tooltip.textContent).toContain("logs.billingDetails.input");
+    expect(tooltip.textContent).toContain("logs.billingDetails.cacheRead");
+    expect(tooltip.textContent).toContain("@ $2.50 / 1M");
+    expect(tooltip.textContent).toContain("$0.005000");
+    expect(tooltip.textContent).toContain("@ $0.25 / 1M");
+    expect(tooltip.textContent).toContain("$0.000125");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.output");
+    expect(tooltip.textContent).not.toContain("@ $0.00 / 1M");
+    expect(tooltip.textContent).toContain("logs.billingDetails.baseTotal");
+    expect(tooltip.textContent).toContain("logs.billingDetails.providerMultiplier");
+    expect(tooltip.textContent).toContain("logs.billingDetails.groupMultiplier");
+    expect(tooltip.innerHTML).toContain("line-through");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.pricingProvider");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.pricingSourceLabel");
+  });
+
+  test("keeps cost rows but collapses the summary to a single total row when no multiplier is active", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.005125",
+      inputTokens: 2000,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheCreation5mInputTokens: 0,
+      cacheCreation1hInputTokens: 0,
+      cacheReadInputTokens: 500,
+      costBreakdown: {
+        input: "0.005",
+        output: "0",
+        cache_creation: "0",
+        cache_creation_5m: "0",
+        cache_creation_1h: "0",
+        cache_read: "0.000125",
+        base_total: "0.005125",
+        provider_multiplier: 1,
+        group_multiplier: 1,
+        total: "0.005125",
+      },
+    });
+
+    expect(tooltip.textContent).toContain("logs.billingDetails.input");
+    expect(tooltip.textContent).toContain("logs.billingDetails.cacheRead");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.baseTotal");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.providerMultiplier");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.groupMultiplier");
+    expect(tooltip.innerHTML).not.toContain("line-through");
+  });
+
+  test("ignores zero or negative multipliers in the rules block", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.005125",
+      inputTokens: 2000,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheCreation5mInputTokens: 0,
+      cacheCreation1hInputTokens: 0,
+      cacheReadInputTokens: 500,
+      costBreakdown: {
+        input: "0.005",
+        output: "0",
+        cache_creation: "0",
+        cache_creation_5m: "0",
+        cache_creation_1h: "0",
+        cache_read: "0.000125",
+        base_total: "0.005125",
+        provider_multiplier: 0,
+        group_multiplier: -2,
+        total: "0.005125",
+      },
+    });
+
+    expect(tooltip.textContent).toContain("logs.billingDetails.input");
+    expect(tooltip.textContent).toContain("logs.billingDetails.cacheRead");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.baseTotal");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.providerMultiplier");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.groupMultiplier");
+    expect(tooltip.textContent).not.toContain("0.00x");
+    expect(tooltip.textContent).not.toContain("-2.00x");
+    expect(tooltip.innerHTML).not.toContain("line-through");
+  });
+
+  test("renders legacy aggregate cache creation as a generic cache-write row when ttl is unknown", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.003000",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 1000,
+      cacheCreation5mInputTokens: 0,
+      cacheCreation1hInputTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheTtlApplied: null,
+      costBreakdown: {
+        input: "0",
+        output: "0",
+        cache_creation: "0.003",
+        cache_read: "0",
+        base_total: "0.003",
+        provider_multiplier: 1,
+        group_multiplier: 1,
+        total: "0.003",
+      },
+    });
+
+    expect(tooltip.textContent).toContain("logs.columns.cacheWrite");
+    expect(tooltip.textContent).toContain("@ $3.00 / 1M");
+    expect(tooltip.textContent).toContain("$0.003000");
+    expect(tooltip.innerHTML).not.toContain(">5m<");
+    expect(tooltip.innerHTML).not.toContain(">1h<");
+  });
+
+  test("keeps a ttl chip for aggregate cache creation when ttl is explicitly known", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.003000",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 1000,
+      cacheCreation5mInputTokens: 0,
+      cacheCreation1hInputTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheTtlApplied: "1h",
+      costBreakdown: {
+        input: "0",
+        output: "0",
+        cache_creation: "0.003",
+        cache_read: "0",
+        base_total: "0.003",
+        provider_multiplier: 1,
+        group_multiplier: 1,
+        total: "0.003",
+      },
+    });
+
+    expect(tooltip.textContent).toContain("logs.columns.cacheWrite");
+    expect(tooltip.textContent).toContain("@ $3.00 / 1M");
+    expect(tooltip.innerHTML).toContain(">1h<");
+    expect(tooltip.innerHTML).not.toContain(">5m<");
+  });
+
+  test("falls back to total-only tooltip when cost breakdown is missing", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.010000",
+      inputTokens: 1234,
+      outputTokens: 5678,
+      cacheCreationInputTokens: 999,
+      cacheReadInputTokens: 111,
+      context1mApplied: true,
+      costBreakdown: null,
+    });
+
+    expect(tooltip.textContent).toContain("logs.details.billingDetails.title");
+    expect(tooltip.textContent).toContain("logs.billingDetails.context1m");
+    expect(tooltip.textContent).toContain("logs.billingDetails.totalCost");
+    expect(tooltip.textContent).toContain("$0.010000");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.input");
+    expect(tooltip.textContent).not.toContain("@ $");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.baseTotal");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.providerMultiplier");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.pricingProvider");
   });
 });
 

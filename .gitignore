@@ -89,4 +89,5 @@ tmp/
 .ace-tool/
 .worktrees/
 .omx/
+.opencode/
 bunx-*/

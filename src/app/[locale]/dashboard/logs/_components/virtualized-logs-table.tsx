@@ -5,6 +5,7 @@ import { ArrowUp, GitBranch, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   type MouseEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -27,7 +28,7 @@ import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { formatCurrency } from "@/lib/utils/currency";
+import { Decimal, formatCurrency, toDecimal } from "@/lib/utils/currency";
 import {
   calculateOutputRate,
   formatDuration,
@@ -37,11 +38,8 @@ import {
 import { shouldShowCostBadgeInCell } from "@/lib/utils/provider-chain-display";
 import { getFinalProviderName } from "@/lib/utils/provider-chain-formatter";
 import { isProviderFinalized } from "@/lib/utils/provider-display";
-import {
-  getPricingResolutionSpecialSetting,
-  hasPriorityServiceTierSpecialSetting,
-} from "@/lib/utils/special-settings";
-import type { UsageLogsBatchResult } from "@/repository/usage-logs";
+import { hasPriorityServiceTierSpecialSetting } from "@/lib/utils/special-settings";
+import type { UsageLogRow, UsageLogsBatchResult } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
@@ -133,8 +131,6 @@ export function VirtualizedLogsTable({
   ipLookupMode = "default",
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
-  const getPricingSourceLabel = (source: string) =>
-    t(`logs.billingDetails.pricingSource.${source}`);
   const tChain = useTranslations("provider-chain");
   const [isHistoryBrowsing, setIsHistoryBrowsing] = useState(false);
   const shouldPoll = autoRefreshEnabled && !isHistoryBrowsing;
@@ -262,6 +258,293 @@ export function VirtualizedLogsTable({
   if (allLogs.length === 0) {
     return <div className="text-center py-8 text-muted-foreground">{t("logs.table.noData")}</div>;
   }
+
+  const renderCostTooltip = (log: UsageLogRow) => {
+    const title = t("logs.details.billingDetails.title");
+    const totalCostLabel = t("logs.billingDetails.totalCost");
+    const amountClassName = "font-mono tabular-nums text-right";
+    const headerChip = log.context1mApplied ? (
+      <Badge
+        variant="outline"
+        className="shrink-0 text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+      >
+        {t("logs.billingDetails.context1m")}
+      </Badge>
+    ) : null;
+
+    const resolveCacheCreationRows = () => {
+      const breakdown = log.costBreakdown;
+      if (!breakdown) {
+        return [] as Array<{
+          amount: string;
+          tokens: number | null | undefined;
+          ttl?: "5m" | "1h";
+        }>;
+      }
+
+      const tokens5m = log.cacheCreation5mInputTokens ?? 0;
+      const tokens1h = log.cacheCreation1hInputTokens ?? 0;
+      const totalCacheTokens = log.cacheCreationInputTokens;
+      const has5m = breakdown.cache_creation_5m !== undefined;
+      const has1h = breakdown.cache_creation_1h !== undefined;
+      if (has5m || has1h) {
+        return [
+          {
+            amount: breakdown.cache_creation_5m ?? "0",
+            tokens: tokens5m > 0 ? tokens5m : log.cacheTtlApplied !== "1h" ? totalCacheTokens : 0,
+            ttl: "5m" as const,
+          },
+          {
+            amount: breakdown.cache_creation_1h ?? "0",
+            tokens: tokens1h > 0 ? tokens1h : log.cacheTtlApplied === "1h" ? totalCacheTokens : 0,
+            ttl: "1h" as const,
+          },
+        ];
+      }
+
+      const aggregate = toDecimal(breakdown.cache_creation);
+      if (!aggregate || aggregate.lte(0)) {
+        return [];
+      }
+
+      if (log.cacheTtlApplied === "mixed" && tokens5m + tokens1h > 0) {
+        const totalTokens = new Decimal(tokens5m + tokens1h);
+        const fiveMShare = aggregate.mul(tokens5m).div(totalTokens);
+        return [
+          {
+            amount: fiveMShare.toString(),
+            tokens: tokens5m,
+            ttl: "5m" as const,
+          },
+          {
+            amount: aggregate.minus(fiveMShare).toString(),
+            tokens: tokens1h,
+            ttl: "1h" as const,
+          },
+        ];
+      }
+
+      if (log.cacheTtlApplied === "1h") {
+        return [
+          {
+            amount: aggregate.toString(),
+            tokens: tokens1h > 0 ? tokens1h : totalCacheTokens,
+            ttl: "1h" as const,
+          },
+        ];
+      }
+
+      if (log.cacheTtlApplied === "5m") {
+        return [
+          {
+            amount: aggregate.toString(),
+            tokens: tokens5m > 0 ? tokens5m : totalCacheTokens,
+            ttl: "5m" as const,
+          },
+        ];
+      }
+
+      return [
+        {
+          amount: aggregate.toString(),
+          tokens: totalCacheTokens,
+        },
+      ];
+    };
+
+    const createCostRow = (
+      label: string,
+      amount: string | null | undefined,
+      tokens: number | null | undefined,
+      ttl?: "5m" | "1h"
+    ) => {
+      const parsedAmount = toDecimal(amount);
+      if (!parsedAmount || parsedAmount.lte(0)) return null;
+
+      const tokenCount = tokens ?? 0;
+      const unitPrice = tokenCount > 0 ? parsedAmount.mul(1_000_000).div(tokenCount) : null;
+
+      return {
+        key: `${label}-${ttl ?? "default"}`,
+        label,
+        ttl,
+        unitPrice: unitPrice
+          ? t("logs.billingDetails.unitPricePer1M", {
+              price: formatCurrency(unitPrice, currencyCode, 2),
+            })
+          : null,
+        amount: formatCurrency(parsedAmount, currencyCode, 6),
+      };
+    };
+
+    const renderTtlChip = (ttl: "5m" | "1h") => (
+      <Badge variant="outline" className="px-1 text-[10px] leading-tight text-muted-foreground">
+        {ttl}
+      </Badge>
+    );
+
+    const renderValueBlock = ({
+      primary,
+      secondary,
+      emphasize = false,
+      secondaryClassName,
+    }: {
+      primary: string;
+      secondary?: ReactNode;
+      emphasize?: boolean;
+      secondaryClassName?: string;
+    }) => (
+      <div className={cn("flex flex-col items-end", amountClassName)}>
+        {secondary ? (
+          <span className={cn("text-[11px] text-muted-foreground", secondaryClassName)}>
+            {secondary}
+          </span>
+        ) : null}
+        <span className={cn(emphasize ? "text-sm font-semibold text-emerald-600" : "")}>
+          {primary}
+        </span>
+      </div>
+    );
+
+    const renderSummaryRow = ({
+      label,
+      primary,
+      secondary,
+      emphasize = false,
+      className,
+      secondaryClassName,
+    }: {
+      label: string;
+      primary: string;
+      secondary?: ReactNode;
+      emphasize?: boolean;
+      className?: string;
+      secondaryClassName?: string;
+    }) => (
+      <div className={cn("flex items-start justify-between gap-3", className)}>
+        <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+        {renderValueBlock({ primary, secondary, emphasize, secondaryClassName })}
+      </div>
+    );
+
+    const isActiveMultiplier = (value: number) =>
+      Number.isFinite(value) && value > 0 && value !== 1;
+
+    if (!log.costBreakdown) {
+      return (
+        <TooltipContent align="end" className="max-w-[320px] p-3">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-foreground">{title}</span>
+              {headerChip}
+            </div>
+            <div className="border-t border-border/60 pt-2">
+              {renderSummaryRow({
+                label: totalCostLabel,
+                primary: formatCurrency(log.costUsd, currencyCode, 6),
+                emphasize: true,
+              })}
+            </div>
+          </div>
+        </TooltipContent>
+      );
+    }
+
+    const cacheCreationRows = resolveCacheCreationRows();
+    const costRows = [
+      createCostRow(t("logs.billingDetails.input"), log.costBreakdown.input, log.inputTokens),
+      createCostRow(t("logs.billingDetails.output"), log.costBreakdown.output, log.outputTokens),
+      ...cacheCreationRows.map((row) =>
+        createCostRow(t("logs.columns.cacheWrite"), row.amount, row.tokens, row.ttl)
+      ),
+      createCostRow(
+        t("logs.billingDetails.cacheRead"),
+        log.costBreakdown.cache_read,
+        log.cacheReadInputTokens
+      ),
+    ].filter((row): row is NonNullable<typeof row> => row !== null);
+
+    const activeMultiplierRows = [
+      isActiveMultiplier(log.costBreakdown.provider_multiplier)
+        ? {
+            key: "provider",
+            label: t("logs.billingDetails.providerMultiplier"),
+            value: `${log.costBreakdown.provider_multiplier.toFixed(2)}x`,
+          }
+        : null,
+      isActiveMultiplier(log.costBreakdown.group_multiplier)
+        ? {
+            key: "group",
+            label: t("logs.billingDetails.groupMultiplier"),
+            value: `${log.costBreakdown.group_multiplier.toFixed(2)}x`,
+          }
+        : null,
+    ].filter((row): row is NonNullable<typeof row> => row !== null);
+
+    const hasActiveMultipliers = activeMultiplierRows.length > 0;
+    const baseTotal = formatCurrency(log.costBreakdown.base_total, currencyCode, 6);
+    const finalTotal = formatCurrency(log.costBreakdown.total, currencyCode, 6);
+
+    return (
+      <TooltipContent align="end" className="max-w-[320px] p-3">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-foreground">{title}</span>
+            {headerChip}
+          </div>
+
+          {costRows.length > 0 ? (
+            <div className="space-y-2">
+              {costRows.map((row) => (
+                <div key={row.key} className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-muted-foreground">
+                    <span>{row.label}</span>
+                    {row.ttl ? renderTtlChip(row.ttl) : null}
+                  </div>
+                  {renderValueBlock({ primary: row.amount, secondary: row.unitPrice })}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {hasActiveMultipliers ? (
+            <>
+              {renderSummaryRow({
+                label: t("logs.billingDetails.baseTotal"),
+                primary: baseTotal,
+                className: costRows.length > 0 ? "border-t border-border/60 pt-2" : undefined,
+              })}
+
+              <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-2">
+                {activeMultiplierRows.map((row) => (
+                  <div key={row.key} className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-muted-foreground">{row.label}</span>
+                    <span className={cn(amountClassName, "text-[11px]")}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {renderSummaryRow({
+                label: totalCostLabel,
+                primary: finalTotal,
+                secondary: baseTotal,
+                secondaryClassName: "line-through",
+                emphasize: true,
+                className: "border-t border-border/60 pt-2",
+              })}
+            </>
+          ) : (
+            renderSummaryRow({
+              label: totalCostLabel,
+              primary: finalTotal,
+              emphasize: true,
+              className: costRows.length > 0 ? "border-t border-border/60 pt-2" : undefined,
+            })
+          )}
+        </div>
+      </TooltipContent>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -413,8 +696,6 @@ export function VirtualizedLogsTable({
 
                 const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
                 const _isWarmupSkipped = log.blockedBy === "warmup";
-                const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
-
                 return (
                   <div
                     key={log.id}
@@ -760,40 +1041,7 @@ export function VirtualizedLogsTable({
                                   )}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent
-                                align="end"
-                                className="text-xs space-y-1 max-w-[300px]"
-                              >
-                                {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
-                                  <div className="text-orange-600 dark:text-orange-400 font-medium">
-                                    {t("logs.billingDetails.fastPriority")}
-                                  </div>
-                                )}
-                                {log.context1mApplied && (
-                                  <div className="text-purple-600 dark:text-purple-400 font-medium">
-                                    {t("logs.billingDetails.context1m")}
-                                  </div>
-                                )}
-                                {pricingResolution && (
-                                  <>
-                                    <div>
-                                      {t("logs.billingDetails.pricingProvider")}:{" "}
-                                      <span className="font-mono">
-                                        {pricingResolution.resolvedPricingProviderKey}
-                                      </span>
-                                    </div>
-                                    <div>{getPricingSourceLabel(pricingResolution.source)}</div>
-                                  </>
-                                )}
-                                <div>
-                                  {t("logs.billingDetails.input")}:{" "}
-                                  {formatTokenAmount(log.inputTokens)} tokens
-                                </div>
-                                <div>
-                                  {t("logs.billingDetails.output")}:{" "}
-                                  {formatTokenAmount(log.outputTokens)} tokens
-                                </div>
-                              </TooltipContent>
+                              {renderCostTooltip(log)}
                             </Tooltip>
                           </TooltipProvider>
                         ) : (
