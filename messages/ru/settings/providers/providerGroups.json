@@ -31,9 +31,16 @@
   "invalidMultiplier": "Введите действительный неотрицательный коэффициент стоимости",
   "groupInUse": "Нельзя удалить группу, на которую ссылаются поставщики",
   "groupMembers": "Участники группы",
+  "groupMembersHint": "Управляйте поставщиками прямо внутри группы \"{groupName}\".",
   "providerName": "Имя поставщика",
+  "providerType": "Тип",
   "effectivePriority": "Приоритет в группе",
   "noMembers": "Нет участников",
   "savePriorityFailed": "Не удалось сохранить приоритет",
-  "savePrioritySuccess": "Приоритет обновлён"
+  "savePrioritySuccess": "Приоритет обновлён",
+  "groupMultiplierLabel": "Коэффициент стоимости группы",
+  "groupDescriptionLabel": "Описание группы",
+  "noDescription": "Добавить описание",
+  "descriptionTooLong": "Описание должно содержать не более 500 символов",
+  "openProviderEditor": "Редактировать поставщика"
 }

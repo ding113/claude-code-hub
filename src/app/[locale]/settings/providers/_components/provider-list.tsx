@@ -39,6 +39,7 @@ interface ProviderListProps {
   isMultiSelectMode?: boolean;
   selectedProviderIds?: Set<number>;
   onSelectProvider?: (providerId: number, checked: boolean) => void;
+  onEditProvider?: (provider: ProviderDisplay) => void;
   allGroups?: string[];
   userGroups?: string[];
   isAdmin?: boolean;
@@ -57,6 +58,7 @@ export function ProviderList({
   isMultiSelectMode = false,
   selectedProviderIds = EMPTY_SET,
   onSelectProvider,
+  onEditProvider,
   allGroups = EMPTY_STRING_ARRAY,
   userGroups = EMPTY_STRING_ARRAY,
   isAdmin = false,
@@ -109,6 +111,7 @@ export function ProviderList({
             onSelectChange={
               onSelectProvider ? (checked) => onSelectProvider(provider.id, checked) : undefined
             }
+            onEdit={onEditProvider ? () => onEditProvider(provider) : undefined}
             allGroups={allGroups}
             userGroups={userGroups}
             isAdmin={isAdmin}

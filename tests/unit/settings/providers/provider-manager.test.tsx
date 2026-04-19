@@ -37,6 +37,18 @@ vi.mock("@/app/[locale]/settings/providers/_components/provider-list", () => ({
   ),
 }));
 
+vi.mock("@/app/[locale]/settings/providers/_components/provider-group-tab", () => ({
+  ProviderGroupTab: ({
+    onRequestEditProvider,
+  }: {
+    onRequestEditProvider: (providerId: number) => void;
+  }) => (
+    <button data-testid="group-edit-request" onClick={() => onRequestEditProvider(1)}>
+      open-group-editor
+    </button>
+  ),
+}));
+
 // ProviderVendorView -- not under test
 vi.mock("@/app/[locale]/settings/providers/_components/provider-vendor-view", () => ({
   ProviderVendorView: () => null,
@@ -50,6 +62,23 @@ vi.mock("@/app/[locale]/settings/providers/_components/provider-type-filter", ()
 // ProviderSortDropdown
 vi.mock("@/app/[locale]/settings/providers/_components/provider-sort-dropdown", () => ({
   ProviderSortDropdown: () => null,
+}));
+
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
+    open ? <div data-testid="dialog-root">{children}</div> : null,
+  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock("@radix-ui/react-visually-hidden", () => ({
+  VisuallyHidden: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("@/app/[locale]/settings/providers/_components/forms/provider-form", () => ({
+  ProviderForm: ({ provider }: { provider: ProviderDisplay }) => (
+    <div data-testid="provider-form">mock-provider-form:{provider.name}</div>
+  ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -236,6 +265,35 @@ describe("ProviderManager circuitBrokenCount with endpoint circuits", () => {
     // Count should be 2: Provider A (key open) + Provider B (endpoint open)
     const text = container.textContent || "";
     expect(text).toContain("(2)");
+
+    unmount();
+  });
+
+  test("keeps the current groups view and opens the shared editor when group tab requests edit", () => {
+    const { unmount, container } = renderWithProviders(
+      <ProviderManager providers={providers} healthStatus={{}} enableMultiProviderTypes={true} />
+    );
+
+    const groupsButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.getAttribute("title") === enMessages.settings.providers.viewModeGroups
+    );
+    expect(groupsButton).toBeTruthy();
+
+    act(() => {
+      groupsButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const requestButton = container.querySelector('[data-testid="group-edit-request"]');
+    expect(requestButton).toBeTruthy();
+
+    act(() => {
+      requestButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector('[data-testid="group-edit-request"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="provider-form"]')?.textContent).toContain(
+      "Provider A"
+    );
 
     unmount();
   });
