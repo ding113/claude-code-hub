@@ -38,15 +38,6 @@ function loadMessages() {
   };
 }
 
-function buildSettings(
-  overrides: Partial<Pick<SystemSettings, keyof typeof baseSettings>> = {}
-): Pick<SystemSettings, keyof typeof baseSettings> {
-  return {
-    ...baseSettings,
-    ...overrides,
-  };
-}
-
 const baseSettings = {
   siteTitle: "Claude Code Hub",
   allowGlobalUsageView: true,
@@ -107,6 +98,15 @@ const baseSettings = {
   | "ipGeoLookupEnabled"
   | "ipExtractionConfig"
 >;
+
+function buildSettings(
+  overrides: Partial<Pick<SystemSettings, keyof typeof baseSettings>> = {}
+): Pick<SystemSettings, keyof typeof baseSettings> {
+  return {
+    ...baseSettings,
+    ...overrides,
+  };
+}
 
 function render(node: ReactNode) {
   const container = document.createElement("div");
