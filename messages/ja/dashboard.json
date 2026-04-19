@@ -306,6 +306,7 @@
         "providerMultiplier": "プロバイダー倍率",
         "groupMultiplier": "グループ倍率",
         "baseTotal": "基本合計",
+        "unitPricePer1M": "@ {price} / 1M",
         "unit": {
           "tokens": "トークン"
         }

@@ -368,7 +368,11 @@ export function VirtualizedLogsTable({
         key: `${label}-${ttl ?? "default"}`,
         label,
         ttl,
-        unitPrice: unitPrice ? `@ ${formatCurrency(unitPrice, currencyCode, 2)} / 1M` : null,
+        unitPrice: unitPrice
+          ? t("logs.billingDetails.unitPricePer1M", {
+              price: formatCurrency(unitPrice, currencyCode, 2),
+            })
+          : null,
         amount: formatCurrency(parsedAmount, currencyCode, 6),
       };
     };
