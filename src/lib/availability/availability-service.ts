@@ -329,6 +329,7 @@ export async function queryProviderAvailability(
     .select({
       id: providers.id,
       name: providers.name,
+      weight: providers.weight,
       providerType: providers.providerType,
       enabled: providers.isEnabled,
     })
@@ -497,6 +498,7 @@ export async function queryProviderAvailability(
     providerSummaries.push({
       providerId: provider.id,
       providerName: provider.name,
+      weight: provider.weight ?? 0,
       providerType: provider.providerType ?? "claude",
       isEnabled: provider.enabled ?? true,
       currentStatus,

@@ -745,6 +745,7 @@
     "usageLogs": "使用記錄",
     "leaderboard": "排行",
     "availability": "可用性監控",
+    "systemStatus": "系統狀態",
     "myQuota": "我的額度",
     "quotasManagement": "額度管理",
     "userManagement": "使用者管理",
@@ -1483,7 +1484,8 @@
         "disabled": "已停用"
       },
       "actions": {
-        "addKey": "新增金鑰"
+        "addKey": "新增金鑰",
+        "addTemporaryKey": "臨時 Key"
       }
     },
     "keyFullDisplay": {
@@ -1565,6 +1567,70 @@
     "dialog": {
       "createKeyTitle": "建立 Key",
       "editKeyTitle": "編輯 Key"
+    },
+    "temporaryKeys": {
+      "createDialog": {
+        "title": "批量產生臨時 Key",
+        "description": "選擇一個基礎 Key，並按分組批量產生臨時 API Key。",
+        "baseKeyLabel": "基礎 Key",
+        "baseKeyPlaceholder": "請選擇基礎 Key",
+        "baseKeyRequired": "請選擇基礎 Key",
+        "groupNameLabel": "分組名稱",
+        "groupNamePlaceholder": "例如：渠道A-4月活動",
+        "quantityLabel": "產生數量",
+        "quantityDescription": "支援快速產生 5 / 10 / 20 / 50 / 100，也可自訂數量。",
+        "customLimitLabel": "每個 Key 總額度 (USD)",
+        "customLimitPlaceholder": "留空則沿用基礎 Key 的總額度設定",
+        "customLimitDescription": "僅覆寫總額度，其餘設定保持和基礎 Key 一致。",
+        "baseKeyRequiredHint": "請先選擇基礎 Key 再產生。",
+        "baseKeyRequiredShort": "請選擇基礎 Key",
+        "submit": "立即產生",
+        "submitting": "產生中...",
+        "noKeys": "目前使用者沒有可用的基礎 Key",
+        "invalidCount": "請輸入有效的產生數量",
+        "invalidGroupName": "請輸入有效的分組名稱（1-120 個字元）",
+        "invalidLimit": "請輸入有效的總額度",
+        "genericError": "批量產生失敗"
+      },
+      "success": {
+        "title": "臨時 Key 已產生",
+        "description": "分組 {group} 已成功產生 {count} 個臨時 Key，請立即下載保存完整金鑰。",
+        "groupName": "分組名稱",
+        "sourceKey": "基礎 Key",
+        "previewTitle": "預覽（前 5 條）",
+        "download": "下載 CSV"
+      },
+      "listActions": {
+        "showMore": "顯示剩餘 {count} 個",
+        "showLess": "收合"
+      },
+      "sections": {
+        "standard": {
+          "title": "標準 Key",
+          "description": "維持既有行為的主要業務 Key。",
+          "empty": "尚無標準 Key"
+        },
+        "temporary": {
+          "title": "臨時 Key",
+          "description": "可用於批量建立、下載與刪除的額外臨時 Key 群組。",
+          "empty": "尚無臨時 Key 群組"
+        }
+      },
+      "groups": {
+        "title": "臨時 Key 分組",
+        "groupBadge": "臨時",
+        "count": "{count} 個 Key",
+        "download": "下載",
+        "delete": "刪除分組",
+        "deleteConfirm": "確認刪除分組 {group}（{count} 個 Key）嗎？此分組內的 Key 會立即失效。"
+      },
+      "toasts": {
+        "createSuccess": "已產生 {count} 個臨時 Key",
+        "createFailed": "產生臨時 Key 失敗：{error}",
+        "deleteSuccess": "已刪除分組 {group}（{count} 個 Key）",
+        "deleteFailed": "刪除臨時 Key 分組失敗：{error}",
+        "downloadFailed": "下載臨時 Key 失敗：{error}"
+      }
     },
     "editDialog": {
       "title": "編輯使用者",

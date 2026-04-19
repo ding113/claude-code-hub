@@ -21,7 +21,9 @@ import { toKey } from "@/repository/_shared/transformers";
 import type { KeyStatistics } from "@/repository/key";
 import {
   countActiveKeysByUser,
+  createKeysBatch,
   createKey,
+  deleteKeysBatch,
   deleteKey,
   findActiveKeyByUserIdAndName,
   findKeyById,
@@ -61,6 +63,193 @@ function validateNonAdminProviderGroup(
   }
 
   return requestedProviderGroup;
+}
+
+type TemporaryKeyLimitValidationInput = {
+  limit5hUsd?: number | null;
+  limitDailyUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitTotalUsd?: number | null;
+  limitConcurrentSessions?: number | null;
+};
+
+function validateTemporaryKeyLimitsAgainstUser(
+  user: {
+    limit5hUsd?: number | null;
+    dailyQuota?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+    limitTotalUsd?: number | null;
+    limitConcurrentSessions?: number | null;
+  },
+  limits: TemporaryKeyLimitValidationInput,
+  tError: TranslationFunction
+): string | null {
+  if (
+    limits.limit5hUsd != null &&
+    limits.limit5hUsd > 0 &&
+    user.limit5hUsd != null &&
+    user.limit5hUsd > 0 &&
+    limits.limit5hUsd > user.limit5hUsd
+  ) {
+    return tError("KEY_LIMIT_5H_EXCEEDS_USER_LIMIT", {
+      keyLimit: String(limits.limit5hUsd),
+      userLimit: String(user.limit5hUsd),
+    });
+  }
+
+  if (
+    limits.limitDailyUsd != null &&
+    limits.limitDailyUsd > 0 &&
+    user.dailyQuota != null &&
+    user.dailyQuota > 0 &&
+    limits.limitDailyUsd > user.dailyQuota
+  ) {
+    return tError("KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT", {
+      keyLimit: String(limits.limitDailyUsd),
+      userLimit: String(user.dailyQuota),
+    });
+  }
+
+  if (
+    limits.limitWeeklyUsd != null &&
+    limits.limitWeeklyUsd > 0 &&
+    user.limitWeeklyUsd != null &&
+    user.limitWeeklyUsd > 0 &&
+    limits.limitWeeklyUsd > user.limitWeeklyUsd
+  ) {
+    return tError("KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT", {
+      keyLimit: String(limits.limitWeeklyUsd),
+      userLimit: String(user.limitWeeklyUsd),
+    });
+  }
+
+  if (
+    limits.limitMonthlyUsd != null &&
+    limits.limitMonthlyUsd > 0 &&
+    user.limitMonthlyUsd != null &&
+    user.limitMonthlyUsd > 0 &&
+    limits.limitMonthlyUsd > user.limitMonthlyUsd
+  ) {
+    return tError("KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT", {
+      keyLimit: String(limits.limitMonthlyUsd),
+      userLimit: String(user.limitMonthlyUsd),
+    });
+  }
+
+  if (
+    limits.limitTotalUsd != null &&
+    limits.limitTotalUsd > 0 &&
+    user.limitTotalUsd != null &&
+    user.limitTotalUsd > 0 &&
+    limits.limitTotalUsd > user.limitTotalUsd
+  ) {
+    return tError("KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT", {
+      keyLimit: String(limits.limitTotalUsd),
+      userLimit: String(user.limitTotalUsd),
+    });
+  }
+
+  if (
+    limits.limitConcurrentSessions != null &&
+    limits.limitConcurrentSessions > 0 &&
+    user.limitConcurrentSessions != null &&
+    user.limitConcurrentSessions > 0 &&
+    limits.limitConcurrentSessions > user.limitConcurrentSessions
+  ) {
+    return tError("KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT", {
+      keyLimit: String(limits.limitConcurrentSessions),
+      userLimit: String(user.limitConcurrentSessions),
+    });
+  }
+
+  return null;
+}
+
+function normalizeTemporaryGroupName(value: string): string {
+  return value.trim();
+}
+
+function extractTemporaryKeySequence(name: string): number | null {
+  const match = name.trim().match(/(\d+)$/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isInteger(value) || value < 0) return null;
+  return value;
+}
+
+function resolveNextTemporaryKeySequence(
+  existingKeys: Array<Pick<Key, "name" | "temporaryGroupName">>,
+  normalizedGroupName: string
+): number {
+  let maxSequence = 0;
+
+  for (const key of existingKeys) {
+    if (key.temporaryGroupName?.trim() !== normalizedGroupName) continue;
+    const sequence = extractTemporaryKeySequence(key.name);
+    if (sequence != null && sequence > maxSequence) {
+      maxSequence = sequence;
+    }
+  }
+
+  return maxSequence + 1;
+}
+
+function allocateTemporaryKeyNames(
+  existingKeys: Array<Pick<Key, "name" | "temporaryGroupName">>,
+  normalizedGroupName: string,
+  count: number
+): string[] {
+  const reservedNames = new Set(
+    existingKeys.map((key) => key.name.trim()).filter((name) => name.length > 0)
+  );
+  const names: string[] = [];
+  let nextSequence = resolveNextTemporaryKeySequence(existingKeys, normalizedGroupName);
+
+  while (names.length < count) {
+    const candidate = buildTemporaryKeyName(nextSequence);
+    nextSequence += 1;
+
+    if (reservedNames.has(candidate)) {
+      continue;
+    }
+
+    reservedNames.add(candidate);
+    names.push(candidate);
+  }
+
+  return names;
+}
+
+function buildTemporaryKeyName(sequence: number): string {
+  return String(sequence).padStart(3, "0");
+}
+
+function buildTemporaryKeyGroupText(keys: Array<{ key: string }>): string {
+  return keys.map((key) => key.key).join("\n");
+}
+
+function isUniqueViolationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    cause?: { code?: string; message?: string };
+  };
+
+  if (candidate.code === "23505" || candidate.cause?.code === "23505") {
+    return true;
+  }
+
+  return (
+    (typeof candidate.message === "string" && candidate.message.includes("duplicate key value")) ||
+    (typeof candidate.cause?.message === "string" &&
+      candidate.cause.message.includes("duplicate key value"))
+  );
 }
 
 export interface BatchUpdateKeysParams {
@@ -803,6 +992,398 @@ export async function getKeysWithStatistics(
   } catch (error) {
     logger.error("获取密钥统计失败:", error);
     return { ok: false, error: "获取密钥统计失败" };
+  }
+}
+
+export interface CreateTemporaryKeysBatchParams {
+  userId: number;
+  baseKeyId: number;
+  groupName: string;
+  count: number;
+  customLimitTotalUsd?: number;
+}
+
+export interface TemporaryKeyBatchItem {
+  name: string;
+  key: string;
+  createdAt: string;
+  expiresAt: string | null;
+  limitTotalUsd: number | null;
+}
+
+export interface CreateTemporaryKeysBatchResult {
+  groupName: string;
+  createdCount: number;
+  sourceKeyName: string;
+  keys: TemporaryKeyBatchItem[];
+}
+
+export async function createTemporaryKeysBatch(
+  params: CreateTemporaryKeysBatchParams
+): Promise<ActionResult<CreateTemporaryKeysBatchResult>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const count = Number.isFinite(params.count) ? Math.trunc(params.count) : 0;
+    if (count < 1 || count > 100) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_BATCH_MAX_COUNT"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    if (
+      params.customLimitTotalUsd !== undefined &&
+      (!Number.isFinite(params.customLimitTotalUsd) || params.customLimitTotalUsd < 0)
+    ) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_INVALID_TOTAL_LIMIT"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const normalizedGroupName = normalizeTemporaryGroupName(params.groupName);
+    if (!normalizedGroupName) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_GROUP_NAME_REQUIRED"),
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
+    }
+
+    if (normalizedGroupName.length > 120) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_GROUP_NAME_TOO_LONG"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const { findUserById } = await import("@/repository/user");
+    const user = await findUserById(params.userId);
+    if (!user) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const baseKey = await findKeyById(params.baseKeyId);
+    if (!baseKey || baseKey.userId !== params.userId || !!baseKey.temporaryGroupName?.trim()) {
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const normalizedBaseKeyProviderGroup = normalizeProviderGroup(
+      baseKey.providerGroup || PROVIDER_GROUP.DEFAULT
+    );
+
+    const limitValidationError = validateTemporaryKeyLimitsAgainstUser(
+      user,
+      {
+        limit5hUsd: baseKey.limit5hUsd,
+        limitDailyUsd: baseKey.limitDailyUsd,
+        limitWeeklyUsd: baseKey.limitWeeklyUsd,
+        limitMonthlyUsd: baseKey.limitMonthlyUsd,
+        limitTotalUsd:
+          params.customLimitTotalUsd !== undefined
+            ? params.customLimitTotalUsd
+            : (baseKey.limitTotalUsd ?? null),
+        limitConcurrentSessions: baseKey.limitConcurrentSessions,
+      },
+      tError
+    );
+    if (limitValidationError) {
+      return { ok: false, error: limitValidationError };
+    }
+
+    const expiresAt = baseKey.expiresAt instanceof Date ? baseKey.expiresAt : null;
+    let createdKeys: Key[] | null = null;
+
+    for (let attempt = 0; attempt < 3 && createdKeys == null; attempt += 1) {
+      const existingKeys = await findKeyList(params.userId);
+      const allocatedNames = allocateTemporaryKeyNames(existingKeys, normalizedGroupName, count);
+
+      try {
+        createdKeys = await createKeysBatch(
+          allocatedNames.map((name) => ({
+            user_id: params.userId,
+            name,
+            key: `sk-${randomBytes(16).toString("hex")}`,
+            is_enabled: baseKey.isEnabled,
+            expires_at: expiresAt,
+            can_login_web_ui: baseKey.canLoginWebUi,
+            limit_5h_usd: baseKey.limit5hUsd,
+            limit_daily_usd: baseKey.limitDailyUsd,
+            daily_reset_mode: baseKey.dailyResetMode,
+            daily_reset_time: baseKey.dailyResetTime,
+            limit_weekly_usd: baseKey.limitWeeklyUsd,
+            limit_monthly_usd: baseKey.limitMonthlyUsd,
+            limit_total_usd:
+              params.customLimitTotalUsd !== undefined
+                ? params.customLimitTotalUsd
+                : (baseKey.limitTotalUsd ?? null),
+            limit_concurrent_sessions: baseKey.limitConcurrentSessions,
+            // 临时 Key 只追加批量管理能力，不改变原始 Key 的 provider 路由逻辑。
+            provider_group: normalizedBaseKeyProviderGroup,
+            cache_ttl_preference: baseKey.cacheTtlPreference ?? undefined,
+            temporary_group_name: normalizedGroupName,
+          }))
+        );
+      } catch (error) {
+        if (!isUniqueViolationError(error) || attempt === 2) {
+          throw error;
+        }
+      }
+    }
+
+    if (!createdKeys) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_BATCH_CREATE_FAILED"),
+        errorCode: ERROR_CODES.CREATE_FAILED,
+      };
+    }
+
+    revalidatePath("/dashboard");
+
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_batch_create",
+      targetType: "key_group",
+      targetId: `${params.userId}:${normalizedGroupName}`,
+      targetName: normalizedGroupName,
+      after: {
+        userId: params.userId,
+        baseKeyId: params.baseKeyId,
+        sourceKeyName: baseKey.name,
+        groupName: normalizedGroupName,
+        createdCount: createdKeys.length,
+        customLimitTotalUsd:
+          params.customLimitTotalUsd !== undefined ? params.customLimitTotalUsd : null,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
+    return {
+      ok: true,
+      data: {
+        groupName: normalizedGroupName,
+        createdCount: createdKeys.length,
+        sourceKeyName: baseKey.name,
+        keys: createdKeys.map((key) => ({
+          name: key.name,
+          key: key.key,
+          createdAt: key.createdAt.toISOString(),
+          expiresAt: key.expiresAt?.toISOString() ?? null,
+          limitTotalUsd: key.limitTotalUsd ?? null,
+        })),
+      },
+    };
+  } catch (error) {
+    logger.error("批量创建临时 Key 失败:", error);
+    const tError = await getTranslations("errors");
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_batch_create",
+      targetType: "key_group",
+      targetId: String(params.userId),
+      success: false,
+      errorMessage: "TEMP_BATCH_CREATE_FAILED",
+      redactExtraKeys: ["key"],
+    });
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : tError("TEMPORARY_KEY_BATCH_CREATE_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.CREATE_FAILED };
+  }
+}
+
+export async function removeTemporaryKeyGroup(params: {
+  userId: number;
+  groupName: string;
+}): Promise<ActionResult<{ deletedCount: number; groupName: string }>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const normalizedGroupName = normalizeTemporaryGroupName(params.groupName);
+    if (!normalizedGroupName) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_GROUP_NAME_REQUIRED"),
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
+    }
+
+    const userKeys = await findKeyList(params.userId);
+    const groupKeys = userKeys.filter((key) => key.temporaryGroupName === normalizedGroupName);
+    if (groupKeys.length === 0) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_GROUP_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const enabledCountInGroup = groupKeys.filter((key) => key.isEnabled).length;
+    if (enabledCountInGroup > 0) {
+      const activeKeyCount = await countActiveKeysByUser(params.userId);
+      if (activeKeyCount - enabledCountInGroup < 1) {
+        return {
+          ok: false,
+          error: tError("CANNOT_DISABLE_LAST_KEY"),
+          errorCode: ERROR_CODES.OPERATION_FAILED,
+        };
+      }
+    }
+
+    const deletedCount = await deleteKeysBatch(groupKeys.map((key) => key.id));
+    await syncUserProviderGroupFromKeys(params.userId);
+    revalidatePath("/dashboard");
+
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_group_delete",
+      targetType: "key_group",
+      targetId: `${params.userId}:${normalizedGroupName}`,
+      targetName: normalizedGroupName,
+      before: {
+        userId: params.userId,
+        deletedCount,
+        enabledCountInGroup,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
+    return {
+      ok: true,
+      data: {
+        deletedCount,
+        groupName: normalizedGroupName,
+      },
+    };
+  } catch (error) {
+    logger.error("删除临时 Key 分组失败:", error);
+    const tError = await getTranslations("errors");
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_group_delete",
+      targetType: "key_group",
+      targetId: `${params.userId}:${params.groupName}`,
+      targetName: params.groupName,
+      success: false,
+      errorMessage: "TEMP_GROUP_DELETE_FAILED",
+      redactExtraKeys: ["key"],
+    });
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : tError("TEMPORARY_KEY_GROUP_DELETE_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
+  }
+}
+
+export async function downloadTemporaryKeyGroup(params: {
+  userId: number;
+  groupName: string;
+}): Promise<ActionResult<string>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const normalizedGroupName = normalizeTemporaryGroupName(params.groupName);
+    if (!normalizedGroupName) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_GROUP_NAME_REQUIRED"),
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
+    }
+
+    const userKeys = await findKeyList(params.userId);
+    const groupKeys = userKeys
+      .filter((key) => key.temporaryGroupName === normalizedGroupName)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    if (groupKeys.length === 0) {
+      return {
+        ok: false,
+        error: tError("TEMPORARY_KEY_GROUP_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_group_download",
+      targetType: "key_group",
+      targetId: `${params.userId}:${normalizedGroupName}`,
+      targetName: normalizedGroupName,
+      after: {
+        userId: params.userId,
+        downloadCount: groupKeys.length,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
+    return {
+      ok: true,
+      data: buildTemporaryKeyGroupText(groupKeys),
+    };
+  } catch (error) {
+    logger.error("下载临时 Key 分组失败:", error);
+    const tError = await getTranslations("errors");
+    emitActionAudit({
+      category: "key",
+      action: "key.temp_group_download",
+      targetType: "key_group",
+      targetId: `${params.userId}:${params.groupName}`,
+      targetName: params.groupName,
+      success: false,
+      errorMessage: "TEMP_GROUP_DOWNLOAD_FAILED",
+      redactExtraKeys: ["key"],
+    });
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : tError("TEMPORARY_KEY_GROUP_DOWNLOAD_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
   }
 }
 

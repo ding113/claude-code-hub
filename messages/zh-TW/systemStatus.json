@@ -1,0 +1,60 @@
+{
+  "pageTitle": "系統狀態 - Claude Code Hub",
+  "pageDescription": "Claude Code Hub 公開供應商狀態頁",
+  "hero": {
+    "kicker": "可信公開觀測路徑",
+    "pathLabel": "公開狀態路徑",
+    "title": "系統狀態",
+    "titlePrimary": "系統",
+    "titleSecondary": "狀態",
+    "description": "一個公開路徑，集中觀察 provider 健康度、快取命中效率、輸出速率與 token 成本效率。",
+    "window": "滾動視窗 · 最近 {days} 天",
+    "updatedAt": "更新於 {value}",
+    "awaitingData": "等待第一個快照",
+    "refreshing": "重新整理中",
+    "autoRefresh": "每 30 秒自動重新整理"
+  },
+  "summary": {
+    "systemAvailability": "系統可用性",
+    "providerCoverage": "已追蹤 {providers} 個 provider",
+    "healthyProviders": "健康 provider",
+    "degradedBreakdown": "{degraded} 個異常 · {unknown} 個未知",
+    "weightedCacheHitRate": "加權快取命中率",
+    "cacheHint": "依流量權重彙總活躍 provider",
+    "weightedCostPerMillionTokens": "加權每百萬 Token 成本",
+    "weightedOutputRate": "加權輸出速率 {value}"
+  },
+  "status": {
+    "green": "正常",
+    "red": "異常",
+    "unknown": "未知"
+  },
+  "metrics": {
+    "availability": "可用性",
+    "cacheHitRate": "快取命中率",
+    "outputRate": "平均輸出速率",
+    "outputRateValue": "{value} tok/s",
+    "costPerMillionTokens": "平均每百萬 Token 成本",
+    "costPerHundredMillionTokens": "平均每 1 億 Token 成本"
+  },
+  "provider": {
+    "sectionEyebrow": "Provider 觀測面",
+    "sectionTitle": "每個 provider 一張狀態卡",
+    "count": "{count} 個 provider",
+    "history": "最近可用性軌跡",
+    "live": "在線 {value}",
+    "noData": "無資料",
+    "meta": {
+      "windowHint": "顯示目前狀態與最近七天滾動效率指標。",
+      "requests": "請求數",
+      "successRate": "成功率",
+      "latency": "平均延遲",
+      "lastRequestValue": "最近請求 {value}",
+      "noRecentTraffic": "最近沒有流量"
+    }
+  },
+  "states": {
+    "fetchFailed": "暫時無法重新整理系統狀態",
+    "empty": "目前還沒有 provider 狀態資料。"
+  }
+}

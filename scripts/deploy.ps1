@@ -364,7 +364,7 @@ function Write-ComposeFile {
     if (-not $script:ENABLE_CADDY) {
         $appPortsSection = @"
     ports:
-      - "`${APP_PORT:-$($script:APP_PORT)}:`${APP_PORT:-$($script:APP_PORT)}"
+      - "`${APP_PORT:-$($script:APP_PORT)}:3000"
 "@
     }
 
@@ -424,7 +424,9 @@ services:
       - ./.env
     environment:
       NODE_ENV: production
-      PORT: `${APP_PORT:-$($script:APP_PORT)}
+      HOST: 0.0.0.0
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
       DSN: postgresql://`${DB_USER:-postgres}:`${DB_PASSWORD:-postgres}@claude-code-hub-db-${SUFFIX}:5432/`${DB_NAME:-claude_code_hub}
       REDIS_URL: redis://claude-code-hub-redis-${SUFFIX}:6379
       AUTO_MIGRATE: `${AUTO_MIGRATE:-true}
@@ -436,7 +438,7 @@ $appPortsSection
     networks:
       - claude-code-hub-net-$SUFFIX
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:`${APP_PORT:-$($script:APP_PORT)}/api/actions/health || exit 1"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/actions/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

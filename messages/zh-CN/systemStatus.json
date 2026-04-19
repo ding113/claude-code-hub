@@ -1,0 +1,60 @@
+{
+  "pageTitle": "系统状态 - Claude Code Hub",
+  "pageDescription": "Claude Code Hub 公开供应商状态页",
+  "hero": {
+    "kicker": "可信公开观测路径",
+    "pathLabel": "公开状态路径",
+    "title": "系统状态",
+    "titlePrimary": "系统",
+    "titleSecondary": "状态",
+    "description": "一个公开路径，集中观察 provider 健康度、缓存命中效率、输出速率与 token 成本效率。",
+    "window": "滚动窗口 · 最近 {days} 天",
+    "updatedAt": "更新于 {value}",
+    "awaitingData": "等待首个快照",
+    "refreshing": "刷新中",
+    "autoRefresh": "每 30 秒自动刷新"
+  },
+  "summary": {
+    "systemAvailability": "系统可用性",
+    "providerCoverage": "已跟踪 {providers} 个 provider",
+    "healthyProviders": "健康 provider",
+    "degradedBreakdown": "{degraded} 个异常 · {unknown} 个未知",
+    "weightedCacheHitRate": "加权缓存命中率",
+    "cacheHint": "按流量权重汇总活跃 provider",
+    "weightedCostPerMillionTokens": "加权每百万 Token 成本",
+    "weightedOutputRate": "加权输出速率 {value}"
+  },
+  "status": {
+    "green": "正常",
+    "red": "异常",
+    "unknown": "未知"
+  },
+  "metrics": {
+    "availability": "可用性",
+    "cacheHitRate": "缓存命中率",
+    "outputRate": "平均输出速率",
+    "outputRateValue": "{value} tok/s",
+    "costPerMillionTokens": "平均每百万 Token 成本",
+    "costPerHundredMillionTokens": "平均每 1 亿 Token 成本"
+  },
+  "provider": {
+    "sectionEyebrow": "Provider 观察面",
+    "sectionTitle": "每个 provider 一张状态卡",
+    "count": "{count} 个 provider",
+    "history": "最近可用性轨迹",
+    "live": "在线 {value}",
+    "noData": "无数据",
+    "meta": {
+      "windowHint": "展示当前状态与最近七天滚动效率指标。",
+      "requests": "请求数",
+      "successRate": "成功率",
+      "latency": "平均延迟",
+      "lastRequestValue": "最近请求 {value}",
+      "noRecentTraffic": "最近没有流量"
+    }
+  },
+  "states": {
+    "fetchFailed": "暂时无法刷新系统状态",
+    "empty": "当前还没有 provider 状态数据。"
+  }
+}

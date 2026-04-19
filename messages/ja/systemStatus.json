@@ -1,0 +1,60 @@
+{
+  "pageTitle": "システムステータス - Claude Code Hub",
+  "pageDescription": "Claude Code Hub の公開プロバイダーステータスページ",
+  "hero": {
+    "kicker": "信頼できる公開観測パス",
+    "pathLabel": "公開ステータスライン",
+    "title": "システムステータス",
+    "titlePrimary": "システム",
+    "titleSecondary": "状態",
+    "description": "プロバイダーの健全性、キャッシュ効率、出力速度、トークンコスト効率を監視するための公開パスです。",
+    "window": "ローリングウィンドウ・直近 {days} 日間",
+    "updatedAt": "更新時刻 {value}",
+    "awaitingData": "最初のスナップショットを待機中",
+    "refreshing": "更新中",
+    "autoRefresh": "30 秒ごとに自動更新"
+  },
+  "summary": {
+    "systemAvailability": "システム可用性",
+    "providerCoverage": "{providers} 件の provider を追跡中",
+    "healthyProviders": "正常な provider",
+    "degradedBreakdown": "異常 {degraded} ・不明 {unknown}",
+    "weightedCacheHitRate": "加重キャッシュヒット率",
+    "cacheHint": "アクティブ provider をトラフィック重みで集計",
+    "weightedCostPerMillionTokens": "100 万 Token あたりの加重コスト",
+    "weightedOutputRate": "加重出力速度 {value}"
+  },
+  "status": {
+    "green": "正常稼働",
+    "red": "劣化",
+    "unknown": "不明"
+  },
+  "metrics": {
+    "availability": "可用性",
+    "cacheHitRate": "キャッシュヒット率",
+    "outputRate": "平均出力速度",
+    "outputRateValue": "{value} tok/s",
+    "costPerMillionTokens": "100 万 Token あたりの平均コスト",
+    "costPerHundredMillionTokens": "1 億 Token あたりの平均コスト"
+  },
+  "provider": {
+    "sectionEyebrow": "Provider 監視",
+    "sectionTitle": "各 provider ごとのステータスカード",
+    "count": "{count} 件の provider",
+    "history": "直近の可用性推移",
+    "live": "稼働中 {value}",
+    "noData": "データなし",
+    "meta": {
+      "windowHint": "現在の状態と直近 7 日間のローリング効率指標を表示します。",
+      "requests": "リクエスト数",
+      "successRate": "成功率",
+      "latency": "平均レイテンシ",
+      "lastRequestValue": "最終リクエスト {value}",
+      "noRecentTraffic": "最近のトラフィックなし"
+    }
+  },
+  "states": {
+    "fetchFailed": "現在システムステータスを更新できません",
+    "empty": "まだ provider ステータスデータはありません。"
+  }
+}

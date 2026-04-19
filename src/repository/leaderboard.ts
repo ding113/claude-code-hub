@@ -222,6 +222,8 @@ export type LeaderboardPeriod = "daily" | "weekly" | "monthly" | "allTime" | "cu
 export interface DateRangeParams {
   startDate: string; // YYYY-MM-DD format
   endDate: string; // YYYY-MM-DD format
+  startDateTime?: string; // ISO datetime string
+  endDateTime?: string; // ISO datetime string
 }
 
 /**
@@ -235,6 +237,10 @@ function buildDateCondition(
   const nowLocal = sql`CURRENT_TIMESTAMP AT TIME ZONE ${timezone}`;
 
   if (period === "custom" && dateRange) {
+    if (dateRange.startDateTime && dateRange.endDateTime) {
+      return sql`${usageLedger.createdAt} >= ${dateRange.startDateTime}::timestamptz AND ${usageLedger.createdAt} < ${dateRange.endDateTime}::timestamptz`;
+    }
+
     // 自定义日期范围：startDate <= local_date <= endDate
     const startLocal = sql`(${dateRange.startDate}::date)::timestamp`;
     const endExclusiveLocal = sql`(${dateRange.endDate}::date + INTERVAL '1 day')`;

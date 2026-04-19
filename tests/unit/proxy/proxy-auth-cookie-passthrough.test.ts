@@ -80,4 +80,30 @@ describe("proxy auth cookie passthrough", () => {
 
     expect(response.headers.get("x-test")).toBe("public-ok");
   });
+
+  it("allows system-status without any cookie", async () => {
+    const localeResponse = new Response(null, {
+      status: 200,
+      headers: { "x-test": "system-status-ok" },
+    });
+    mockIntlMiddleware.mockReturnValue(localeResponse);
+
+    const { default: proxyHandler } = await import("@/proxy");
+    const response = proxyHandler(makeRequest("/system-status"));
+
+    expect(response.headers.get("x-test")).toBe("system-status-ok");
+  });
+
+  it("allows locale-prefixed system-status without any cookie", async () => {
+    const localeResponse = new Response(null, {
+      status: 200,
+      headers: { "x-test": "locale-system-status-ok" },
+    });
+    mockIntlMiddleware.mockReturnValue(localeResponse);
+
+    const { default: proxyHandler } = await import("@/proxy");
+    const response = proxyHandler(makeRequest("/zh-CN/system-status"));
+
+    expect(response.headers.get("x-test")).toBe("locale-system-status-ok");
+  });
 });

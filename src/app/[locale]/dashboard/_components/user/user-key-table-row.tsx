@@ -2,19 +2,33 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   CircleOff,
   Clock,
+  Download,
+  FolderClosed,
+  KeyRound,
   Plus,
   SquarePen,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { removeKey } from "@/actions/keys";
+import { downloadTemporaryKeyGroup, removeKey, removeTemporaryKeyGroup } from "@/actions/keys";
 import { toggleUserEnabled } from "@/actions/users";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +59,7 @@ export interface UserKeyTableRowProps {
   onSelectKey?: (keyId: number, checked: boolean) => void;
   onEditUser: () => void;
   onAddKey?: () => void;
+  onAddTemporaryKey?: () => void;
   onQuickRenew?: (user: UserDisplay) => void;
   optimisticExpiresAt?: Date;
   currentUser?: { role: string };
@@ -75,6 +90,7 @@ export interface UserKeyTableRowProps {
       logs: string;
       delete: string;
       addKey?: string;
+      addTemporaryKey?: string;
     };
     userStatus?: {
       disabled: string;
@@ -85,6 +101,7 @@ export interface UserKeyTableRowProps {
 const DEFAULT_GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(7,90px)_80px]";
 const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72小时
 const MAX_VISIBLE_GROUPS = 2; // 最多显示的分组数量
+const MAX_VISIBLE_KEYS = 3;
 
 function splitGroups(value?: string | null): string[] {
   return parseProviderGroups(value);
@@ -128,6 +145,25 @@ function formatExpiry(expiresAt: UserDisplay["expiresAt"], locale: string): stri
   return formatDate(date, "yyyy-MM-dd", locale);
 }
 
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.URL.revokeObjectURL(url);
+}
+
+function sanitizeFilenameFragment(value: string): string {
+  return value
+    .trim()
+    .replace(/[\\/:*?"<>|,，]+/g, "-")
+    .replace(/\s+/g, "-");
+}
+
 export function UserKeyTableRow({
   user,
   isAdmin,
@@ -141,6 +177,7 @@ export function UserKeyTableRow({
   onSelectKey,
   onEditUser,
   onAddKey,
+  onAddTemporaryKey,
   onQuickRenew,
   optimisticExpiresAt,
   currencyCode,
@@ -149,10 +186,12 @@ export function UserKeyTableRow({
 }: UserKeyTableRowProps) {
   const locale = useLocale();
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
+  const tCommon = useTranslations("common");
   const tUserStatus = useTranslations("dashboard.userManagement.userStatus");
+  const tTemporaryKeys = useTranslations("dashboard.userManagement.temporaryKeys");
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [_isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   // 乐观更新：本地状态跟踪启用状态
   const [localIsEnabled, setLocalIsEnabled] = useState(user.isEnabled);
@@ -160,6 +199,17 @@ export function UserKeyTableRow({
   const [localExpiresAt, setLocalExpiresAt] = useState<Date | null | undefined>(user.expiresAt);
   // Key 编辑 Dialog 状态
   const [editingKeyId, setEditingKeyId] = useState<number | null>(null);
+  const [showAllStandardKeys, setShowAllStandardKeys] = useState(false);
+  const [expandedTemporaryGroups, setExpandedTemporaryGroups] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [expandedTemporaryGroupKeyLists, setExpandedTemporaryGroupKeyLists] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [pendingDeleteGroup, setPendingDeleteGroup] = useState<{
+    name: string;
+    count: number;
+  } | null>(null);
   const isExpanded = isMultiSelectMode ? true : expanded;
   const resolvedGridColumnsClass = gridColumnsClass ?? DEFAULT_GRID_COLUMNS_CLASS;
 
@@ -174,10 +224,58 @@ export function UserKeyTableRow({
     setLocalExpiresAt(optimisticExpiresAt ?? user.expiresAt);
   }, [optimisticExpiresAt, user.expiresAt]);
 
+  useEffect(() => {
+    setShowAllStandardKeys(false);
+    setExpandedTemporaryGroups(new Set());
+    setExpandedTemporaryGroupKeyLists(new Set());
+    setPendingDeleteGroup(null);
+  }, [user.id]);
+
   const keyRowTranslations = {
     ...(translations.keyRow ?? {}),
     defaultGroup: translations.defaultGroup,
   };
+
+  const { standardKeys, temporaryKeyGroups } = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        name: string;
+        keys: UserDisplay["keys"];
+        createdAt: Date;
+      }
+    >();
+    const regularKeys: UserDisplay["keys"] = [];
+
+    for (const key of user.keys) {
+      const temporaryGroupName = key.temporaryGroupName?.trim();
+      if (!temporaryGroupName) {
+        regularKeys.push(key);
+        continue;
+      }
+
+      const existing = groups.get(temporaryGroupName);
+      if (existing) {
+        existing.keys.push(key);
+        if (key.createdAt > existing.createdAt) {
+          existing.createdAt = key.createdAt;
+        }
+      } else {
+        groups.set(temporaryGroupName, {
+          name: temporaryGroupName,
+          keys: [key],
+          createdAt: key.createdAt,
+        });
+      }
+    }
+
+    return {
+      standardKeys: regularKeys,
+      temporaryKeyGroups: Array.from(groups.values()).sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      ),
+    };
+  }, [user.keys]);
 
   const expiresText = formatExpiry(localExpiresAt ?? null, locale);
 
@@ -219,6 +317,75 @@ export function UserKeyTableRow({
     });
   };
 
+  const toggleTemporaryGroup = (groupName: string) => {
+    setExpandedTemporaryGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  };
+
+  const toggleTemporaryGroupKeyList = (groupName: string) => {
+    setExpandedTemporaryGroupKeyLists((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  };
+
+  const handleDownloadTemporaryGroup = (groupName: string) => {
+    startTransition(async () => {
+      const result = await downloadTemporaryKeyGroup({ userId: user.id, groupName });
+      if (!result.ok) {
+        toast.error(
+          tTemporaryKeys("toasts.downloadFailed", {
+            error: result.error || tTemporaryKeys("groups.download"),
+          })
+        );
+        return;
+      }
+
+      const filename = `${sanitizeFilenameFragment(groupName)}-temporary-keys.txt`;
+      downloadTextFile(filename, result.data);
+    });
+  };
+
+  const handleDeleteTemporaryGroup = (groupName: string) => {
+    startTransition(async () => {
+      const result = await removeTemporaryKeyGroup({ userId: user.id, groupName });
+      if (!result.ok) {
+        toast.error(
+          tTemporaryKeys("toasts.deleteFailed", {
+            error: result.error || tUserStatus("deleteFailed"),
+          })
+        );
+        return;
+      }
+
+      toast.success(
+        tTemporaryKeys("toasts.deleteSuccess", {
+          group: result.data.groupName,
+          count: result.data.deletedCount,
+        })
+      );
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      router.refresh();
+    });
+  };
+
+  const requestDeleteTemporaryGroup = (groupName: string) => {
+    const count = user.keys.filter((key) => key.temporaryGroupName === groupName).length;
+    setPendingDeleteGroup({ name: groupName, count });
+  };
+
   const handleToggleUserEnabled = async (checked: boolean) => {
     // 乐观更新：立即更新UI
     setLocalIsEnabled(checked);
@@ -247,6 +414,71 @@ export function UserKeyTableRow({
       setIsTogglingEnabled(false);
     }
   };
+
+  const renderKeyList = (keysToRender: UserDisplay["keys"]) => (
+    <div className="overflow-hidden rounded-md border bg-background">
+      {keysToRender.map((key) => (
+        <KeyRowItem
+          key={key.id}
+          keyData={{
+            id: key.id,
+            name: key.name,
+            maskedKey: key.maskedKey,
+            fullKey: key.fullKey,
+            canCopy: key.canCopy,
+            providerGroup: key.providerGroup,
+            todayUsage: key.todayUsage,
+            todayCallCount: key.todayCallCount,
+            todayTokens: key.todayTokens,
+            lastUsedAt: key.lastUsedAt,
+            expiresAt: key.expiresAt,
+            status: key.status,
+            modelStats: key.modelStats,
+          }}
+          userProviderGroup={user.providerGroup ?? null}
+          isMultiSelectMode={isMultiSelectMode}
+          isSelected={selectedKeyIds?.has(key.id) ?? false}
+          onSelect={(checked) => onSelectKey?.(key.id, checked)}
+          onEdit={() => setEditingKeyId(key.id)}
+          onDelete={() => handleDeleteKey(key.id)}
+          onViewLogs={() => router.push(`/dashboard/logs?keyId=${key.id}`)}
+          onViewDetails={() => setEditingKeyId(key.id)}
+          currencyCode={currencyCode}
+          translations={keyRowTranslations}
+          highlight={highlightKeyIds?.has(key.id)}
+        />
+      ))}
+    </div>
+  );
+
+  const renderExpandMoreButton = (
+    hiddenCount: number,
+    expandedState: boolean,
+    onToggle: () => void
+  ) => (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="w-fit"
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      {expandedState
+        ? tTemporaryKeys("listActions.showLess")
+        : tTemporaryKeys("listActions.showMore", { count: hiddenCount })}
+    </Button>
+  );
+
+  const visibleStandardKeys = showAllStandardKeys
+    ? standardKeys
+    : standardKeys.slice(0, MAX_VISIBLE_KEYS);
+  const hiddenStandardKeysCount = Math.max(0, standardKeys.length - visibleStandardKeys.length);
+  const shouldShowStandardSection = standardKeys.length > 0 || Boolean(onAddKey);
+  const shouldShowTemporarySection = temporaryKeyGroups.length > 0 || Boolean(onAddTemporaryKey);
+  const hasVisibleSections = shouldShowStandardSection || shouldShowTemporarySection;
 
   return (
     <div className="border-b">
@@ -317,34 +549,36 @@ export function UserKeyTableRow({
             {userGroups.length > 0 ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 cursor-help">
-                    {visibleGroups.map((group) => {
-                      if (group.toLowerCase() === "default") {
+                  <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 cursor-help">
+                      {visibleGroups.map((group) => {
+                        if (group.toLowerCase() === "default") {
+                          return (
+                            <Badge key={group} variant="outline" className="text-[10px] shrink-0">
+                              {group}
+                            </Badge>
+                          );
+                        }
+                        const bgColor = getGroupColor(group);
                         return (
-                          <Badge key={group} variant="outline" className="text-[10px] shrink-0">
+                          <Badge
+                            key={group}
+                            className="text-[10px] shrink-0"
+                            style={{
+                              backgroundColor: bgColor,
+                              color: getContrastTextColor(bgColor),
+                            }}
+                          >
                             {group}
                           </Badge>
                         );
-                      }
-                      const bgColor = getGroupColor(group);
-                      return (
-                        <Badge
-                          key={group}
-                          className="text-[10px] shrink-0"
-                          style={{
-                            backgroundColor: bgColor,
-                            color: getContrastTextColor(bgColor),
-                          }}
-                        >
-                          {group}
+                      })}
+                      {remainingGroupsCount > 0 && (
+                        <Badge variant="secondary" className="text-[10px] shrink-0">
+                          +{remainingGroupsCount}
                         </Badge>
-                      );
-                    })}
-                    {remainingGroupsCount > 0 && (
-                      <Badge variant="secondary" className="text-[10px] shrink-0">
-                        +{remainingGroupsCount}
-                      </Badge>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="start">
@@ -530,65 +764,217 @@ export function UserKeyTableRow({
         </div>
       </div>
 
-      {isExpanded ? (
+      {isExpanded && hasVisibleSections ? (
         <div className="bg-muted px-3 py-3">
-          {user.keys.length > 0 ? (
-            <div className="overflow-hidden rounded-md border bg-background">
-              {user.keys.map((key) => (
-                <KeyRowItem
-                  key={key.id}
-                  keyData={{
-                    id: key.id,
-                    name: key.name,
-                    maskedKey: key.maskedKey,
-                    fullKey: key.fullKey,
-                    canCopy: key.canCopy,
-                    providerGroup: key.providerGroup,
-                    todayUsage: key.todayUsage,
-                    todayCallCount: key.todayCallCount,
-                    todayTokens: key.todayTokens,
-                    lastUsedAt: key.lastUsedAt,
-                    expiresAt: key.expiresAt,
-                    status: key.status,
-                    modelStats: key.modelStats,
-                  }}
-                  userProviderGroup={user.providerGroup ?? null}
-                  isMultiSelectMode={isMultiSelectMode}
-                  isSelected={selectedKeyIds?.has(key.id) ?? false}
-                  onSelect={(checked) => onSelectKey?.(key.id, checked)}
-                  onEdit={() => setEditingKeyId(key.id)}
-                  onDelete={() => handleDeleteKey(key.id)}
-                  onViewLogs={() => router.push(`/dashboard/logs?keyId=${key.id}`)}
-                  onViewDetails={() => setEditingKeyId(key.id)}
-                  currencyCode={currencyCode}
-                  translations={keyRowTranslations}
-                  highlight={highlightKeyIds?.has(key.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              {translations.noKeys}
-            </div>
-          )}
-          {onAddKey && (
-            <div className="mt-2 flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddKey();
-                }}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                {translations.actions.addKey}
-              </Button>
-            </div>
-          )}
+          <div className="space-y-3">
+            {shouldShowStandardSection ? (
+              <section className="space-y-3 rounded-lg border bg-background p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 text-muted-foreground" />
+                      <h4 className="text-sm font-semibold">
+                        {tTemporaryKeys("sections.standard.title")}
+                      </h4>
+                    </div>
+                    {standardKeys.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {tTemporaryKeys("sections.standard.description")}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {standardKeys.length > MAX_VISIBLE_KEYS
+                      ? renderExpandMoreButton(hiddenStandardKeysCount, showAllStandardKeys, () =>
+                          setShowAllStandardKeys((prev) => !prev)
+                        )
+                      : null}
+                    {onAddKey ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddKey();
+                        }}
+                      >
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        {translations.actions.addKey}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {standardKeys.length > 0 ? renderKeyList(visibleStandardKeys) : null}
+              </section>
+            ) : null}
+
+            {shouldShowTemporarySection ? (
+              <section className="space-y-3 rounded-lg border bg-background p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <FolderClosed className="h-4 w-4 text-muted-foreground" />
+                      <h4 className="text-sm font-semibold">
+                        {tTemporaryKeys("sections.temporary.title")}
+                      </h4>
+                    </div>
+                    {temporaryKeyGroups.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {tTemporaryKeys("sections.temporary.description")}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {onAddTemporaryKey ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddTemporaryKey();
+                      }}
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      {translations.actions.addTemporaryKey}
+                    </Button>
+                  ) : null}
+                </div>
+
+                {temporaryKeyGroups.length > 0 ? (
+                  <div className="space-y-3">
+                    {temporaryKeyGroups.map((group) => {
+                      const isGroupExpanded = expandedTemporaryGroups.has(group.name);
+                      const showAllTemporaryGroupKeys = expandedTemporaryGroupKeyLists.has(
+                        group.name
+                      );
+                      const visibleTemporaryGroupKeys = showAllTemporaryGroupKeys
+                        ? group.keys
+                        : group.keys.slice(0, MAX_VISIBLE_KEYS);
+                      const hiddenTemporaryGroupKeysCount = Math.max(
+                        0,
+                        group.keys.length - visibleTemporaryGroupKeys.length
+                      );
+                      return (
+                        <div
+                          key={group.name}
+                          className="overflow-hidden rounded-md border bg-background"
+                        >
+                          <div className="flex items-center justify-between gap-3 px-3 py-2">
+                            <button
+                              type="button"
+                              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                              onClick={() => toggleTemporaryGroup(group.name)}
+                            >
+                              {isGroupExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              <FolderClosed className="h-4 w-4 text-muted-foreground" />
+                              <Badge variant="secondary">
+                                {tTemporaryKeys("groups.groupBadge")}
+                              </Badge>
+                              <span className="truncate font-medium">{group.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {tTemporaryKeys("groups.count", { count: group.keys.length })}
+                              </span>
+                            </button>
+
+                            <div
+                              className="flex shrink-0 items-center gap-1"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                title={tTemporaryKeys("groups.download")}
+                                aria-label={tTemporaryKeys("groups.download")}
+                                onClick={() => handleDownloadTemporaryGroup(group.name)}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                title={tTemporaryKeys("groups.delete")}
+                                aria-label={tTemporaryKeys("groups.delete")}
+                                onClick={() => requestDeleteTemporaryGroup(group.name)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {isGroupExpanded ? (
+                            <div className="border-t bg-muted/30 p-2">
+                              <div className="space-y-2">
+                                {renderKeyList(visibleTemporaryGroupKeys)}
+                                {group.keys.length > MAX_VISIBLE_KEYS
+                                  ? renderExpandMoreButton(
+                                      hiddenTemporaryGroupKeysCount,
+                                      showAllTemporaryGroupKeys,
+                                      () => toggleTemporaryGroupKeyList(group.name)
+                                    )
+                                  : null}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+          </div>
         </div>
       ) : null}
+
+      <AlertDialog
+        open={pendingDeleteGroup !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteGroup(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tTemporaryKeys("groups.delete")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteGroup
+                ? tTemporaryKeys("groups.deleteConfirm", {
+                    group: pendingDeleteGroup.name,
+                    count: pendingDeleteGroup.count,
+                  })
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>{tCommon("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isPending || !pendingDeleteGroup}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!pendingDeleteGroup) {
+                  return;
+                }
+                const groupName = pendingDeleteGroup.name;
+                setPendingDeleteGroup(null);
+                handleDeleteTemporaryGroup(groupName);
+              }}
+            >
+              {tTemporaryKeys("groups.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Key 编辑 Dialog */}
       {editingKeyId !== null &&

@@ -8,11 +8,10 @@ import { ProxyResponses } from "./responses";
 import type { AuthState, ProxySession } from "./session";
 
 /**
- * Pre-auth rate limiter: throttles repeated authentication failures per IP
- * to prevent brute-force API key enumeration on /v1/* endpoints.
+ * Authentication-failure rate limiter for /v1/* endpoints.
  *
- * Uses the same LoginAbusePolicy as the login route but with separate
- * thresholds appropriate for programmatic API access.
+ * Successful requests bypass the limiter so valid traffic is not penalized,
+ * while repeated failures are still throttled per IP and API key.
  */
 const proxyAuthPolicy = new LoginAbusePolicy({
   maxAttemptsPerIp: 20,
@@ -23,31 +22,8 @@ const proxyAuthPolicy = new LoginAbusePolicy({
 
 export class ProxyAuthenticator {
   static async ensure(session: ProxySession): Promise<Response | null> {
-    // Pre-auth rate limit: block IPs with too many recent auth failures.
-    // Extracted once here and stashed on the session for later consumers
-    // (message-service / audit writer) so we only parse headers once.
     const clientIp = getClientIp(session.headers) ?? "unknown";
     session.clientIp = clientIp === "unknown" ? null : clientIp;
-    const rateLimitDecision = proxyAuthPolicy.check(clientIp);
-    if (!rateLimitDecision.allowed) {
-      const retryAfter = rateLimitDecision.retryAfterSeconds;
-      const response = ProxyResponses.buildError(
-        429,
-        "Too many authentication failures. Please retry later.",
-        "rate_limit_error"
-      );
-      if (retryAfter != null) {
-        const headers = new Headers(response.headers);
-        headers.set("Retry-After", String(retryAfter));
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
-        });
-      }
-      return response;
-    }
-
     const authHeader = session.headers.get("authorization") ?? undefined;
     const apiKeyHeader = session.headers.get("x-api-key") ?? undefined;
     // Gemini CLI 认证：支持 x-goog-api-key 头部和 key 查询参数
@@ -63,15 +39,45 @@ export class ProxyAuthenticator {
     session.setAuthState(authState);
 
     if (authState.success) {
-      proxyAuthPolicy.recordSuccess(clientIp);
+      proxyAuthPolicy.recordSuccess(clientIp, authState.apiKey ?? undefined);
       return null;
     }
 
-    // Record failure for rate limiting
-    proxyAuthPolicy.recordFailure(clientIp);
+    const apiKey = authState.apiKey ?? undefined;
+    proxyAuthPolicy.recordFailure(clientIp, apiKey);
+
+    const rateLimitDecision = proxyAuthPolicy.check(clientIp, apiKey);
+    if (!rateLimitDecision.allowed) {
+      logger.warn("[ProxyAuthenticator] Authentication rate limit triggered", {
+        clientIp,
+        reason: rateLimitDecision.reason,
+        retryAfterSeconds: rateLimitDecision.retryAfterSeconds,
+        hasApiKey: !!apiKey,
+      });
+      return ProxyAuthenticator.buildRateLimitResponse(rateLimitDecision.retryAfterSeconds);
+    }
 
     // 返回详细的错误信息，帮助用户快速定位问题
     return authState.errorResponse ?? ProxyResponses.buildError(401, "认证失败");
+  }
+
+  private static buildRateLimitResponse(retryAfterSeconds?: number): Response {
+    const response = ProxyResponses.buildError(
+      429,
+      "请求过多，请稍后重试。",
+      "rate_limit_error"
+    );
+    if (retryAfterSeconds == null) {
+      return response;
+    }
+
+    const headers = new Headers(response.headers);
+    headers.set("Retry-After", String(retryAfterSeconds));
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   }
 
   private static async validate(headers: {

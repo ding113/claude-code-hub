@@ -134,6 +134,9 @@ export const keys = pgTable('keys', {
   // Cache TTL override：null/NULL 表示遵循供应商或客户端请求
   cacheTtlPreference: varchar('cache_ttl_preference', { length: 10 }),
 
+  // 临时 Key 分组：非空时表示该 Key 属于一个可批量下载/删除的临时分组
+  temporaryGroupName: varchar('temporary_group_name', { length: 120 }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -143,6 +146,9 @@ export const keys = pgTable('keys', {
   keysKeyIdx: index('idx_keys_key').on(table.key),
   keysCreatedAtIdx: index('idx_keys_created_at').on(table.createdAt),
   keysDeletedAtIdx: index('idx_keys_deleted_at').on(table.deletedAt),
+  keysUserTemporaryGroupIdx: index('idx_keys_user_temporary_group')
+    .on(table.userId, table.temporaryGroupName)
+    .where(sql`${table.deletedAt} IS NULL AND ${table.temporaryGroupName} IS NOT NULL`),
 }));
 
 // Provider Vendors table - 以官网域名聚合的供应商实体（与 key/providerGroup 字段无关）
