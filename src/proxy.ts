@@ -12,6 +12,10 @@ const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/a
 
 const API_PROXY_PATH = "/v1";
 
+function matchesPublicPath(pathname: string, pattern: string) {
+  return pathname === pattern || pathname.startsWith(`${pattern}/`);
+}
+
 // Create next-intl middleware for locale detection and routing
 const intlMiddleware = createMiddleware(routing);
 
@@ -48,8 +52,8 @@ function proxyHandler(request: NextRequest) {
     : pathname;
 
   // Check if current path (without locale) is a public path
-  const isPublicPath = PUBLIC_PATH_PATTERNS.some(
-    (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(pattern)
+  const isPublicPath = PUBLIC_PATH_PATTERNS.some((pattern) =>
+    matchesPublicPath(pathWithoutLocale, pattern)
   );
 
   // Public paths don't require authentication
@@ -80,6 +84,8 @@ function proxyHandler(request: NextRequest) {
 
 // Default export required for Next.js 16 proxy file
 export default proxyHandler;
+
+export { matchesPublicPath };
 
 export const config = {
   matcher: [

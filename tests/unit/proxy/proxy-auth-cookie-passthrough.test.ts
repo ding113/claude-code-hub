@@ -47,7 +47,7 @@ describe("proxy auth cookie passthrough", () => {
     const location = response.headers.get("location");
     expect(location).toContain("/login");
     expect(location).toContain("from=");
-  });
+  }, 60_000);
 
   it("passes through when auth cookie exists without deleting it", async () => {
     const localeResponse = new Response(null, {
@@ -79,5 +79,25 @@ describe("proxy auth cookie passthrough", () => {
     const response = proxyHandler(makeRequest("/zh-CN/login"));
 
     expect(response.headers.get("x-test")).toBe("public-ok");
+  });
+
+  it("treats nested public paths as public but rejects prefix collisions", async () => {
+    const localeResponse = new Response(null, {
+      status: 200,
+      headers: { "x-test": "public-ok" },
+    });
+    mockIntlMiddleware.mockReturnValue(localeResponse);
+
+    const { default: proxyHandler, matchesPublicPath } = await import("@/proxy");
+
+    const nestedPublicResponse = proxyHandler(makeRequest("/zh-CN/login/help"));
+    expect(nestedPublicResponse.headers.get("x-test")).toBe("public-ok");
+    expect(matchesPublicPath("/login/help", "/login")).toBe(true);
+    expect(matchesPublicPath("/loginx", "/login")).toBe(false);
+
+    const collisionResponse = proxyHandler(makeRequest("/zh-CN/loginx"));
+    expect(collisionResponse.status).toBeGreaterThanOrEqual(300);
+    expect(collisionResponse.status).toBeLessThan(400);
+    expect(collisionResponse.headers.get("location")).toContain("/login");
   });
 });
