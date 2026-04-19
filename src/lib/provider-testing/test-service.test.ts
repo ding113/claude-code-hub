@@ -203,6 +203,74 @@ describe("executeProviderTest", () => {
     expect(secondBody.stream).toBe(true);
   });
 
+  test("codex 新版 SSE 事件流应正确提取 output_text delta，避免误判为内容不匹配", async () => {
+    const responseBody = `event: response.created
+data: {"type":"response.created","response":{"model":"gpt-5.3-codex","usage":null},"sequence_number":0}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"pong","item_id":"msg_123","output_index":0,"sequence_number":1}
+
+event: response.completed
+data: {"type":"response.completed","response":{"model":"gpt-5.3-codex","usage":{"input_tokens":39,"output_tokens":5,"total_tokens":44}},"sequence_number":2}
+`;
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({
+        "content-type": "text/event-stream",
+      }),
+      text: async () => responseBody,
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://sub.fkcodex.com",
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.subStatus).toBe("success");
+    expect(result.content).toBe("pong");
+    expect(result.model).toBe("gpt-5.3-codex");
+    expect(result.usage).toEqual({
+      inputTokens: 39,
+      outputTokens: 5,
+    });
+  });
+
+  test("codex SSE 若只携带 done 类事件也应提取最终文本", async () => {
+    const responseBody = `event: response.output_text.done
+data: {"type":"response.output_text.done","text":"pong","item_id":"msg_123","output_index":0,"content_index":0,"sequence_number":1}
+
+event: response.completed
+data: {"type":"response.completed","response":{"model":"gpt-5.3-codex","usage":{"input_tokens":39,"output_tokens":5,"total_tokens":44},"output":[{"type":"message","content":[{"type":"output_text","text":"pong"}]}]},"sequence_number":2}
+`;
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({
+        "content-type": "text/event-stream",
+      }),
+      text: async () => responseBody,
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://sub.fkcodex.com",
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.content).toBe("pong");
+    expect(result.model).toBe("gpt-5.3-codex");
+  });
+
   test("内容校验应优先使用解析后的文本，不能被原始 JSON 字段名误判为成功", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
