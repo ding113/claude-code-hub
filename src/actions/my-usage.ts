@@ -6,6 +6,7 @@ import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { lookupIp } from "@/lib/ip-geo/client";
+import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
@@ -716,7 +717,7 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
     }
 
     // 仅允许查询当前 key 在 my-usage 可见日志中真实出现过的 IP。
-    const [visibleLog] = await db
+    const [messageRequestMatch] = await db
       .select({ id: messageRequest.id })
       .from(messageRequest)
       .where(
@@ -729,14 +730,26 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
       )
       .limit(1);
 
-    if (!visibleLog) {
+    let visibleLogId = messageRequestMatch?.id ?? null;
+
+    if (!visibleLogId && (await isLedgerOnlyMode())) {
+      const [ledgerMatch] = await db
+        .select({ id: usageLedger.requestId })
+        .from(usageLedger)
+        .where(and(eq(usageLedger.key, session.key.key), eq(usageLedger.clientIp, ip)))
+        .limit(1);
+
+      visibleLogId = ledgerMatch?.id ?? null;
+    }
+
+    if (!visibleLogId) {
       return { ok: false, error: "IP not found in current key usage logs" };
     }
 
     const result = await lookupIp(ip, { lang: params.lang });
     if (result.status === "error") {
       logger.warn("[my-usage] getMyIpGeoDetails lookup returned error", {
-        ip,
+        messageRequestId: visibleLogId,
         lang: params.lang,
         userId: session.user.id,
         keyId: session.key.id,
@@ -746,7 +759,7 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
 
     return { ok: true, data: result };
   } catch (error) {
-    logger.error("[my-usage] getMyIpGeoDetails failed", { error, ip: params.ip });
+    logger.error("[my-usage] getMyIpGeoDetails failed", { error });
     return { ok: false, error: "Failed to get IP details" };
   }
 }
