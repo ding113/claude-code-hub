@@ -291,14 +291,12 @@ export function VirtualizedLogsTable({
         return [
           {
             amount: breakdown.cache_creation_5m ?? "0",
-            tokens:
-              tokens5m > 0 ? tokens5m : log.cacheTtlApplied !== "1h" ? totalCacheTokens : 0,
+            tokens: tokens5m > 0 ? tokens5m : log.cacheTtlApplied !== "1h" ? totalCacheTokens : 0,
             ttl: "5m" as const,
           },
           {
             amount: breakdown.cache_creation_1h ?? "0",
-            tokens:
-              tokens1h > 0 ? tokens1h : log.cacheTtlApplied === "1h" ? totalCacheTokens : 0,
+            tokens: tokens1h > 0 ? tokens1h : log.cacheTtlApplied === "1h" ? totalCacheTokens : 0,
             ttl: "1h" as const,
           },
         ];
@@ -398,7 +396,9 @@ export function VirtualizedLogsTable({
             {secondary}
           </span>
         ) : null}
-        <span className={cn(emphasize ? "text-sm font-semibold text-emerald-600" : "")}>{primary}</span>
+        <span className={cn(emphasize ? "text-sm font-semibold text-emerald-600" : "")}>
+          {primary}
+        </span>
       </div>
     );
 
@@ -423,7 +423,8 @@ export function VirtualizedLogsTable({
       </div>
     );
 
-    const isActiveMultiplier = (value: number) => Number.isFinite(value) && value > 0 && value !== 1;
+    const isActiveMultiplier = (value: number) =>
+      Number.isFinite(value) && value > 0 && value !== 1;
 
     if (!log.costBreakdown) {
       return (
@@ -452,7 +453,11 @@ export function VirtualizedLogsTable({
       ...cacheCreationRows.map((row) =>
         createCostRow(t("logs.columns.cacheWrite"), row.amount, row.tokens, row.ttl)
       ),
-      createCostRow(t("logs.billingDetails.cacheRead"), log.costBreakdown.cache_read, log.cacheReadInputTokens),
+      createCostRow(
+        t("logs.billingDetails.cacheRead"),
+        log.costBreakdown.cache_read,
+        log.cacheReadInputTokens
+      ),
     ].filter((row): row is NonNullable<typeof row> => row !== null);
 
     const activeMultiplierRows = [
