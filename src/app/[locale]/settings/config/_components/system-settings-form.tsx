@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   ChevronDown,
+  CircleHelp,
   Clock,
   Eye,
   FileCode,
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
@@ -43,7 +45,7 @@ import {
   shouldWarnQuotaLeaseCapZero,
   shouldWarnQuotaLeasePercentZero,
 } from "@/lib/utils/validation/quota-lease-warnings";
-import type { IpExtractionConfig } from "@/types/ip-extraction";
+import { DEFAULT_IP_EXTRACTION_CONFIG, type IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   BillingModelSource,
   CodexPriorityBillingSource,
@@ -88,6 +90,12 @@ function clampQuotaDbRefreshIntervalSeconds(raw: string): number {
   const rounded = Math.round(parsed);
   return Math.min(300, Math.max(1, rounded));
 }
+
+function formatIpExtractionConfig(config: IpExtractionConfig): string {
+  return JSON.stringify(config, null, 2);
+}
+
+const DEFAULT_IP_EXTRACTION_CONFIG_TEXT = formatIpExtractionConfig(DEFAULT_IP_EXTRACTION_CONFIG);
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
   const router = useRouter();
@@ -169,9 +177,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.ipGeoLookupEnabled ?? true
   );
   const [ipExtractionConfigText, setIpExtractionConfigText] = useState<string>(
-    initialSettings.ipExtractionConfig
-      ? JSON.stringify(initialSettings.ipExtractionConfig, null, 2)
-      : ""
+    formatIpExtractionConfig(initialSettings.ipExtractionConfig ?? DEFAULT_IP_EXTRACTION_CONFIG)
   );
   const [isPending, startTransition] = useTransition();
   const [responseFixerOpen, setResponseFixerOpen] = useState(false);
@@ -283,9 +289,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         );
         setIpGeoLookupEnabled(result.data.ipGeoLookupEnabled ?? true);
         setIpExtractionConfigText(
-          result.data.ipExtractionConfig
-            ? JSON.stringify(result.data.ipExtractionConfig, null, 2)
-            : ""
+          formatIpExtractionConfig(result.data.ipExtractionConfig ?? DEFAULT_IP_EXTRACTION_CONFIG)
         );
       }
 
@@ -653,7 +657,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                 {t("enableClaudeMetadataUserIdInjection")}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {t("enableClaudeMetadataUserIdInjectionDesc")}
+                {t.raw("enableClaudeMetadataUserIdInjectionDesc")}
               </p>
             </div>
           </div>
@@ -1013,25 +1017,41 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
 
           {/* Extraction config JSON */}
           <div className="space-y-2 pl-11">
-            <Label htmlFor="ip-extraction-config" className="text-sm font-medium text-foreground">
-              {tIpLogging("extractionConfigLabel")}
-            </Label>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="ip-extraction-config" className="text-sm font-medium text-foreground">
+                {tIpLogging("extractionConfigLabel")}
+              </Label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={tIpLogging("extractionConfigHelpLabel")}
+                    className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <CircleHelp className="size-3.5" aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                  {tIpLogging.raw("extractionConfigHint")}
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <Textarea
               id="ip-extraction-config"
               value={ipExtractionConfigText}
               onChange={(event) => setIpExtractionConfigText(event.target.value)}
+              placeholder={DEFAULT_IP_EXTRACTION_CONFIG_TEXT}
               disabled={isPending}
               rows={5}
               spellCheck={false}
               className={`${inputClassName} font-mono text-xs`}
             />
-            <p className="text-xs text-muted-foreground">{tIpLogging("extractionConfigHint")}</p>
             <div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setIpExtractionConfigText("")}
+                onClick={() => setIpExtractionConfigText(DEFAULT_IP_EXTRACTION_CONFIG_TEXT)}
                 disabled={isPending}
               >
                 {tIpLogging("resetToDefault")}
