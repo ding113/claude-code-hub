@@ -403,6 +403,7 @@
       "cacheTtlSwapped": "Billing TTL (swapped)",
       "multiplier": "Provider Multiplier",
       "totalCost": "Total Cost",
+      "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
       "fastPriority": "Priority service tier (fast mode)",
       "context1m": "1M Context",

@@ -403,6 +403,7 @@
       "cacheTtlSwapped": "TTL биллинга (инверсия)",
       "multiplier": "Множитель поставщика",
       "totalCost": "Общая стоимость",
+      "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
       "fastPriority": "Приоритетный уровень обслуживания (режим fast)",
       "context1m": "1M Контекст",

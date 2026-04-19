@@ -378,7 +378,10 @@ export function VirtualizedLogsTable({
     };
 
     const renderTtlChip = (ttl: "5m" | "1h") => (
-      <Badge variant="outline" className="px-1 text-[10px] leading-tight text-muted-foreground">
+      <Badge
+        variant="outline"
+        className="px-1 text-[10px] leading-tight text-background/80 border-background/30"
+      >
         {ttl}
       </Badge>
     );
@@ -396,11 +399,11 @@ export function VirtualizedLogsTable({
     }) => (
       <div className={cn("flex flex-col items-end", amountClassName)}>
         {secondary ? (
-          <span className={cn("text-[11px] text-muted-foreground", secondaryClassName)}>
+          <span className={cn("text-[11px] text-background/70", secondaryClassName)}>
             {secondary}
           </span>
         ) : null}
-        <span className={cn(emphasize ? "text-sm font-semibold text-emerald-600" : "")}>
+        <span className={cn(emphasize ? "text-sm font-semibold text-emerald-300" : "")}>
           {primary}
         </span>
       </div>
@@ -422,7 +425,7 @@ export function VirtualizedLogsTable({
       secondaryClassName?: string;
     }) => (
       <div className={cn("flex items-start justify-between gap-3", className)}>
-        <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+        <span className="text-[11px] font-medium text-background/70">{label}</span>
         {renderValueBlock({ primary, secondary, emphasize, secondaryClassName })}
       </div>
     );
@@ -435,10 +438,10 @@ export function VirtualizedLogsTable({
         <TooltipContent align="end" className="max-w-[320px] p-3">
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-foreground">{title}</span>
+              <span className="text-xs font-semibold text-background">{title}</span>
               {headerChip}
             </div>
-            <div className="border-t border-border/60 pt-2">
+            <div className="border-t border-background/20 pt-2">
               {renderSummaryRow({
                 label: totalCostLabel,
                 primary: formatCurrency(log.costUsd, currencyCode, 6),
@@ -489,7 +492,7 @@ export function VirtualizedLogsTable({
       <TooltipContent align="end" className="max-w-[320px] p-3">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-foreground">{title}</span>
+            <span className="text-xs font-semibold text-background">{title}</span>
             {headerChip}
           </div>
 
@@ -497,7 +500,7 @@ export function VirtualizedLogsTable({
             <div className="space-y-2">
               {costRows.map((row) => (
                 <div key={row.key} className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-background/70">
                     <span>{row.label}</span>
                     {row.ttl ? renderTtlChip(row.ttl) : null}
                   </div>
@@ -512,13 +515,13 @@ export function VirtualizedLogsTable({
               {renderSummaryRow({
                 label: t("logs.billingDetails.baseTotal"),
                 primary: baseTotal,
-                className: costRows.length > 0 ? "border-t border-border/60 pt-2" : undefined,
+                className: costRows.length > 0 ? "border-t border-background/20 pt-2" : undefined,
               })}
 
-              <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-2">
+              <div className="space-y-2 rounded-md border border-background/20 bg-background/10 p-2">
                 {activeMultiplierRows.map((row) => (
                   <div key={row.key} className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-muted-foreground">{row.label}</span>
+                    <span className="text-[11px] text-background/70">{row.label}</span>
                     <span className={cn(amountClassName, "text-[11px]")}>{row.value}</span>
                   </div>
                 ))}
@@ -530,7 +533,7 @@ export function VirtualizedLogsTable({
                 secondary: baseTotal,
                 secondaryClassName: "line-through",
                 emphasize: true,
-                className: "border-t border-border/60 pt-2",
+                className: "border-t border-background/20 pt-2",
               })}
             </>
           ) : (
@@ -538,7 +541,7 @@ export function VirtualizedLogsTable({
               label: totalCostLabel,
               primary: finalTotal,
               emphasize: true,
-              className: costRows.length > 0 ? "border-t border-border/60 pt-2" : undefined,
+              className: costRows.length > 0 ? "border-t border-background/20 pt-2" : undefined,
             })
           )}
         </div>

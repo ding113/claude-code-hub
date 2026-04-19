@@ -403,6 +403,7 @@
       "cacheTtlSwapped": "计费 TTL (已互换)",
       "multiplier": "供应商倍率",
       "totalCost": "总费用",
+      "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
       "fastPriority": "优先服务等级（fast 模式）",
       "context1m": "1M 上下文",
