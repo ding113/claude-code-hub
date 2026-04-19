@@ -635,6 +635,25 @@ describe("extractUsageMetrics", () => {
       expect(result.usageMetrics?.cache_read_input_tokens).toBe(100);
     });
 
+    it("应识别以 id/retry 开头的合法 SSE 并提取 usage", () => {
+      const sseResponse = [
+        "id: msg_123",
+        "retry: 1000",
+        "event: message_start",
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":123,"cache_creation_input_tokens":10}}}',
+        "",
+        "event: message_delta",
+        'data: {"type":"message_delta","usage":{"output_tokens":45}}',
+        "",
+      ].join("\n");
+
+      const result = parseUsageFromResponseText(sseResponse, "claude");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(123);
+      expect(result.usageMetrics?.output_tokens).toBe(45);
+    });
+
     it("message_delta 的值应优先于 message_start", () => {
       const sseResponse = [
         "event: message_start",

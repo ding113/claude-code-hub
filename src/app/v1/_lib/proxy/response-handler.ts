@@ -39,6 +39,7 @@ import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
+import { shouldRecordProviderCircuitFailure } from "./circuit-breaker-accounting";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
@@ -574,10 +575,12 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
     const chainReason = effectiveStatusCode === 404 ? "resource_not_found" : "retry_failed";
 
-    // 计入熔断器：让后续请求能正确触发故障转移/熔断。
-    //
-    // 注意：404 语义在 forwarder 中属于 RESOURCE_NOT_FOUND，不计入熔断器（避免把“资源/模型不存在”当作供应商故障）。
-    if (effectiveStatusCode !== 404 && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+    // 计入熔断器：仅对 provider/key 侧故障计数；
+    // 客户端可诱发的 4xx（400/404/409/413/415/422）不应把全局 provider 熔断打爆。
+    if (
+      shouldRecordProviderCircuitFailure(effectiveStatusCode) &&
+      session.getEndpointPolicy().allowCircuitBreakerAccounting
+    ) {
       try {
         // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
         const { recordFailure } = await import("@/lib/circuit-breaker");
@@ -626,9 +629,12 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
     const chainReason = effectiveStatusCode === 404 ? "resource_not_found" : "retry_failed";
 
-    // 计入熔断器：让后续请求能正确触发故障转移/熔断。
-    // 注意：与 forwarder 口径保持一致：404 不计入熔断器（资源不存在不是供应商故障）。
-    if (effectiveStatusCode !== 404 && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+    // 计入熔断器：仅对 provider/key 侧故障计数；
+    // 客户端可诱发的 4xx（400/404/409/413/415/422）不应把全局 provider 熔断打爆。
+    if (
+      shouldRecordProviderCircuitFailure(effectiveStatusCode) &&
+      session.getEndpointPolicy().allowCircuitBreakerAccounting
+    ) {
       try {
         const { recordFailure } = await import("@/lib/circuit-breaker");
         await recordFailure(meta.providerId, new Error(errorMessage));
@@ -850,8 +856,11 @@ export class ProxyResponseHandler {
               const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
               errorMessageForFinalize = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
-              // 计入熔断器
-              if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+              // 计入熔断器：仅统计 provider/key 侧故障。
+              if (
+                shouldRecordProviderCircuitFailure(statusCode) &&
+                session.getEndpointPolicy().allowCircuitBreakerAccounting
+              ) {
                 try {
                   const { recordFailure } = await import("@/lib/circuit-breaker");
                   await recordFailure(provider.id, new Error(errorMessageForFinalize));
@@ -1184,8 +1193,11 @@ export class ProxyResponseHandler {
           const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
           const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
-          // 计入熔断器
-          if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+          // 计入熔断器：仅统计 provider/key 侧故障。
+          if (
+            shouldRecordProviderCircuitFailure(statusCode) &&
+            session.getEndpointPolicy().allowCircuitBreakerAccounting
+          ) {
             try {
               const { recordFailure } = await import("@/lib/circuit-breaker");
               await recordFailure(provider.id, new Error(errorMessageForDb));

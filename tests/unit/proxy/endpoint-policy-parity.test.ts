@@ -11,10 +11,9 @@ import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 // Shared constants
 // ---------------------------------------------------------------------------
 
-const RAW_PASSTHROUGH_ENDPOINTS = [
-  V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
-  V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
-] as const;
+const RAW_PASSTHROUGH_ENDPOINTS = [V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS] as const;
+
+const GUARDED_PASSTHROUGH_ENDPOINTS = [V1_ENDPOINT_PATHS.RESPONSES_COMPACT] as const;
 
 const DEFAULT_ENDPOINTS = [
   V1_ENDPOINT_PATHS.MESSAGES,
@@ -23,27 +22,22 @@ const DEFAULT_ENDPOINTS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// T11: Endpoint parity -- count_tokens and responses/compact produce
-//      identical EndpointPolicy objects and exhibit identical behaviour
-//      under provider errors.
+// T11: Endpoint policy separation -- count_tokens stays strict raw passthrough,
+//      while responses/compact keeps raw forwarding but restores normal guards.
 // ---------------------------------------------------------------------------
 
-describe("T11: raw passthrough endpoint parity", () => {
-  test("count_tokens and responses/compact resolve to the exact same EndpointPolicy object", () => {
+describe("T11: passthrough endpoint policy separation", () => {
+  test("count_tokens and responses/compact no longer resolve to the same EndpointPolicy object", () => {
     const countTokensPolicy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS);
     const compactPolicy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
 
-    // Reference equality: same frozen singleton
-    expect(countTokensPolicy).toBe(compactPolicy);
-
-    // Both recognized as raw_passthrough
+    expect(countTokensPolicy).not.toBe(compactPolicy);
     expect(isRawPassthroughEndpointPolicy(countTokensPolicy)).toBe(true);
-    expect(isRawPassthroughEndpointPolicy(compactPolicy)).toBe(true);
+    expect(isRawPassthroughEndpointPolicy(compactPolicy)).toBe(false);
   });
 
-  test("both raw passthrough endpoints have identical strict policy fields", () => {
-    const countTokensPolicy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS);
-    const compactPolicy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
+  test("count_tokens keeps strict raw policy fields", () => {
+    const policy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS);
 
     const expectedPolicy: EndpointPolicy = {
       kind: "raw_passthrough",
@@ -59,11 +53,30 @@ describe("T11: raw passthrough endpoint parity", () => {
       endpointPoolStrictness: "strict",
     };
 
-    expect(countTokensPolicy).toEqual(expectedPolicy);
+    expect(policy).toEqual(expectedPolicy);
+  });
+
+  test("responses/compact keeps passthrough forwarding but restores normal guard fields", () => {
+    const compactPolicy = resolveEndpointPolicy(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
+
+    const expectedPolicy: EndpointPolicy = {
+      kind: "guarded_passthrough",
+      guardPreset: "chat",
+      allowRetry: false,
+      allowProviderSwitch: false,
+      allowCircuitBreakerAccounting: true,
+      trackConcurrentRequests: true,
+      bypassRequestFilters: false,
+      bypassForwarderPreprocessing: true,
+      bypassSpecialSettings: true,
+      bypassResponseRectifier: true,
+      endpointPoolStrictness: "strict",
+    };
+
     expect(compactPolicy).toEqual(expectedPolicy);
   });
 
-  test("under provider error, both endpoints result in no retry, no provider switch, no circuit breaker accounting", () => {
+  test("count_tokens remains fully bypassed under provider error", () => {
     for (const pathname of RAW_PASSTHROUGH_ENDPOINTS) {
       const policy = resolveEndpointPolicy(pathname);
 
@@ -73,9 +86,25 @@ describe("T11: raw passthrough endpoint parity", () => {
     }
   });
 
-  test("isRawPassthroughEndpointPath returns true for both raw passthrough canonical paths", () => {
+  test("responses/compact restores circuit breaker accounting and concurrent tracking", () => {
+    for (const pathname of GUARDED_PASSTHROUGH_ENDPOINTS) {
+      const policy = resolveEndpointPolicy(pathname);
+
+      expect(policy.allowRetry).toBe(false);
+      expect(policy.allowProviderSwitch).toBe(false);
+      expect(policy.allowCircuitBreakerAccounting).toBe(true);
+      expect(policy.trackConcurrentRequests).toBe(true);
+      expect(policy.bypassRequestFilters).toBe(false);
+    }
+  });
+
+  test("isRawPassthroughEndpointPath returns true only for count_tokens canonical path", () => {
     for (const pathname of RAW_PASSTHROUGH_ENDPOINTS) {
       expect(isRawPassthroughEndpointPath(pathname)).toBe(true);
+    }
+
+    for (const pathname of GUARDED_PASSTHROUGH_ENDPOINTS) {
+      expect(isRawPassthroughEndpointPath(pathname)).toBe(false);
     }
   });
 });
@@ -257,10 +286,10 @@ describe("T14: path edge-case normalization", () => {
     expect(policy.kind).toBe("raw_passthrough");
   });
 
-  test("trailing slash: /v1/responses/compact/ -> raw_passthrough", () => {
-    expect(isRawPassthroughEndpointPath("/v1/responses/compact/")).toBe(true);
+  test("trailing slash: /v1/responses/compact/ -> guarded_passthrough", () => {
+    expect(isRawPassthroughEndpointPath("/v1/responses/compact/")).toBe(false);
     const policy = resolveEndpointPolicy("/v1/responses/compact/");
-    expect(policy.kind).toBe("raw_passthrough");
+    expect(policy.kind).toBe("guarded_passthrough");
   });
 
   test("uppercase: /V1/MESSAGES/COUNT_TOKENS -> raw_passthrough", () => {
@@ -269,10 +298,10 @@ describe("T14: path edge-case normalization", () => {
     expect(policy.kind).toBe("raw_passthrough");
   });
 
-  test("uppercase: /V1/RESPONSES/COMPACT -> raw_passthrough", () => {
-    expect(isRawPassthroughEndpointPath("/V1/RESPONSES/COMPACT")).toBe(true);
+  test("uppercase: /V1/RESPONSES/COMPACT -> guarded_passthrough", () => {
+    expect(isRawPassthroughEndpointPath("/V1/RESPONSES/COMPACT")).toBe(false);
     const policy = resolveEndpointPolicy("/V1/RESPONSES/COMPACT");
-    expect(policy.kind).toBe("raw_passthrough");
+    expect(policy.kind).toBe("guarded_passthrough");
   });
 
   test("query string: /v1/messages/count_tokens?foo=bar -> raw_passthrough", () => {
@@ -281,20 +310,20 @@ describe("T14: path edge-case normalization", () => {
     expect(policy.kind).toBe("raw_passthrough");
   });
 
-  test("query string: /v1/responses/compact?foo=bar -> raw_passthrough", () => {
-    expect(isRawPassthroughEndpointPath("/v1/responses/compact?foo=bar")).toBe(true);
+  test("query string: /v1/responses/compact?foo=bar -> guarded_passthrough", () => {
+    expect(isRawPassthroughEndpointPath("/v1/responses/compact?foo=bar")).toBe(false);
     const policy = resolveEndpointPolicy("/v1/responses/compact?foo=bar");
-    expect(policy.kind).toBe("raw_passthrough");
+    expect(policy.kind).toBe("guarded_passthrough");
   });
 
   test("combined edge case: uppercase + trailing slash + query string", () => {
     expect(isRawPassthroughEndpointPath("/V1/MESSAGES/COUNT_TOKENS/?x=1")).toBe(true);
-    expect(isRawPassthroughEndpointPath("/V1/RESPONSES/COMPACT/?x=1")).toBe(true);
+    expect(isRawPassthroughEndpointPath("/V1/RESPONSES/COMPACT/?x=1")).toBe(false);
 
     const policy1 = resolveEndpointPolicy("/V1/MESSAGES/COUNT_TOKENS/?x=1");
     const policy2 = resolveEndpointPolicy("/V1/RESPONSES/COMPACT/?x=1");
     expect(policy1.kind).toBe("raw_passthrough");
-    expect(policy2.kind).toBe("raw_passthrough");
+    expect(policy2.kind).toBe("guarded_passthrough");
   });
 
   test("/v1/messages/ (with trailing slash) -> default, NOT raw_passthrough", () => {

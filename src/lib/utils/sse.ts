@@ -70,6 +70,7 @@ export function parseSSEData(sseText: string): ParsedSSEEvent[] {
  * 只认行首的 `event:` / `data:`（或前置注释行 `:`），避免 JSON 里包含 "data:" 误判。
  */
 export function isSSEText(text: string): boolean {
+  const sseFieldPrefixes = ["event:", "data:", "id:", "retry:"];
   let start = 0;
 
   for (let i = 0; i <= text.length; i += 1) {
@@ -81,7 +82,7 @@ export function isSSEText(text: string): boolean {
     if (!line) continue;
     if (line.startsWith(":")) continue;
 
-    return line.startsWith("event:") || line.startsWith("data:");
+    return sseFieldPrefixes.some((prefix) => line.startsWith(prefix));
   }
 
   return false;
