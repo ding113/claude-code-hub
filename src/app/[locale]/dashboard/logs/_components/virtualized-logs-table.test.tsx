@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import { describe, expect, test, vi } from "vitest";
@@ -15,7 +15,8 @@ let mockIsFetchingNextPage = false;
 const useInfiniteQuerySpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: () => (key: string, values?: Record<string, string>) =>
+    key === "logs.billingDetails.unitPricePer1M" && values?.price ? `@ ${values.price} / 1M` : key,
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -71,7 +72,7 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TooltipContent: ({ children, className }: React.ComponentProps<"div">) => (
+  TooltipContent: ({ children, className }: ComponentProps<"div">) => (
     <div data-slot="tooltip-content" className={className}>
       {children}
     </div>
@@ -79,7 +80,7 @@ vi.mock("@/components/ui/tooltip", () => ({
 }));
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, className, ...props }: React.ComponentProps<"button">) => (
+  Button: ({ children, className, ...props }: ComponentProps<"button">) => (
     <button className={className} {...props}>
       {children}
     </button>
@@ -480,7 +481,7 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(tooltip.textContent).not.toContain("logs.billingDetails.pricingSourceLabel");
   });
 
-  test("collapses to a single total row when no multiplier is active", () => {
+  test("keeps cost rows but collapses the summary to a single total row when no multiplier is active", () => {
     const tooltip = renderCostTooltipWithLog({
       costUsd: "0.005125",
       inputTokens: 2000,
