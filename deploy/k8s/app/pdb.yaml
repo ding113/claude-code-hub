@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: claude-code-hub
+  namespace: {{NAMESPACE}}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: claude-code-hub

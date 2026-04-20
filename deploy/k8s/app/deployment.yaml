@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claude-code-hub
+  namespace: {{NAMESPACE}}
+  labels:
+    app: claude-code-hub
+    app.kubernetes.io/part-of: claude-code-hub
+spec:
+  replicas: {{APP_REPLICAS}}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: claude-code-hub
+  template:
+    metadata:
+      labels:
+        app: claude-code-hub
+    spec:
+      terminationGracePeriodSeconds: 660
+      containers:
+        - name: app
+          image: {{APP_IMAGE}}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DSN
+              valueFrom:
+                secretKeyRef:
+                  name: claude-code-hub-secrets
+                  key: dsn
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: claude-code-hub-secrets
+                  key: redis-url
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: claude-code-hub-secrets
+                  key: admin-token
+            - name: AUTO_MIGRATE
+              value: "true"
+            - name: DB_POOL_MAX
+              value: "30"
+            - name: DB_POOL_IDLE_TIMEOUT
+              value: "20"
+            - name: DB_POOL_CONNECT_TIMEOUT
+              value: "10"
+            - name: FETCH_CONNECT_TIMEOUT
+              value: "30"
+            - name: FETCH_HEADERS_TIMEOUT
+              value: "600"
+            - name: FETCH_BODY_TIMEOUT
+              value: "600"
+            - name: ENABLE_RATE_LIMIT
+              value: "true"
+            - name: ENABLE_API_KEY_REDIS_CACHE
+              value: "true"
+            - name: API_KEY_AUTH_CACHE_TTL_SECONDS
+              value: "60"
+            - name: ENABLE_API_KEY_VACUUM_FILTER
+              value: "true"
+            - name: ENABLE_PROVIDER_CACHE
+              value: "true"
+            - name: SESSION_TTL
+              value: "300"
+            - name: MESSAGE_REQUEST_WRITE_MODE
+              value: "async"
+            - name: MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS
+              value: "250"
+            - name: MESSAGE_REQUEST_ASYNC_BATCH_SIZE
+              value: "200"
+            - name: MAX_RETRY_ATTEMPTS_DEFAULT
+              value: "2"
+            - name: TZ
+              value: {{TIMEZONE}}
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          livenessProbe:
+            httpGet:
+              path: /api/actions/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/actions/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          startupProbe:
+            httpGet:
+              path: /api/actions/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - sleep 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL

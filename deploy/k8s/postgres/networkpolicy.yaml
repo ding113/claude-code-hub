@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-access
+  namespace: {{NAMESPACE}}
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: claude-code-hub
+      ports:
+        - port: 5432
+    - from:
+        - podSelector:
+            matchLabels:
+              component: migration
+      ports:
+        - port: 5432

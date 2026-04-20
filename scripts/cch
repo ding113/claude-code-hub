@@ -1,0 +1,627 @@
+#!/usr/bin/env bash
+# cch - Claude Code Hub Kubernetes Management CLI
+# 兼容 k3s 与标准 Kubernetes,通过 env / ~/.config/cch/config 可覆盖默认值
+# Reference: docs/k8s-deployment.md
+set -euo pipefail
+
+VERSION="1.0.0"
+
+###############################################################################
+# Colors (非 TTY / NO_COLOR 自动禁用)
+###############################################################################
+if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
+    RED=$'\033[0;31m'
+    GREEN=$'\033[0;32m'
+    YELLOW=$'\033[1;33m'
+    CYAN=$'\033[0;36m'
+    NC=$'\033[0m'
+else
+    RED=""; GREEN=""; YELLOW=""; CYAN=""; NC=""
+fi
+
+info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
+ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+
+# 跨平台 base64 decode:GNU coreutils 用 -d,旧版 macOS BSD 只认 -D
+b64d() {
+    if base64 -d </dev/null >/dev/null 2>&1; then
+        base64 -d
+    elif base64 -D </dev/null >/dev/null 2>&1; then
+        base64 -D
+    else
+        # 兜底:openssl 几乎所有平台都有
+        openssl base64 -d
+    fi
+}
+
+###############################################################################
+# 配置解析 (优先级: env > config file > 默认)
+###############################################################################
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# 1. 加载可选配置文件
+CCH_CONFIG_FILE="${CCH_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/cch/config}"
+if [[ -r "$CCH_CONFIG_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$CCH_CONFIG_FILE"
+fi
+
+# 2. 合并默认值
+NAMESPACE="${CCH_NAMESPACE:-claude-code-hub}"
+IMAGE="${CCH_IMAGE:-ghcr.io/ding113/claude-code-hub:latest}"
+RUNTIME_OVERRIDE="${CCH_RUNTIME:-}"
+INGRESS_HOST="${CCH_INGRESS_HOST:-}"
+INGRESS_VARIANT="${CCH_INGRESS_VARIANT:-}"
+
+# Manifest 目录查找顺序
+resolve_deploy_dir() {
+    if [[ -n "${CCH_DEPLOY_DIR:-}" ]] && [[ -d "$CCH_DEPLOY_DIR/k8s" ]]; then
+        echo "$CCH_DEPLOY_DIR"; return
+    fi
+    local cfg_default="${XDG_CONFIG_HOME:-$HOME/.config}/cch"
+    if [[ -d "$cfg_default/k8s" ]]; then echo "$cfg_default"; return; fi
+    if [[ -d "/opt/claude-code-hub/k8s" ]]; then echo "/opt/claude-code-hub"; return; fi
+    if [[ -d "$REPO_ROOT/deploy/k8s" ]];   then echo "$REPO_ROOT"; return; fi
+    if [[ -d "$HOME/claude-code-hub-k8s/k8s" ]]; then echo "$HOME/claude-code-hub-k8s"; return; fi
+    echo ""
+}
+DEPLOY_DIR="$(resolve_deploy_dir)"
+
+###############################################################################
+# Runtime 探测 (决定是否使用 k3s ctr 等 k3s-only 命令)
+###############################################################################
+KUBECTL="kubectl"
+RUNTIME=""
+detect_runtime() {
+    if [[ -n "$RUNTIME_OVERRIDE" ]]; then
+        RUNTIME="$RUNTIME_OVERRIDE"
+        # 即使 override,也要确保 KUBECTL 能真的运行:无 kubectl 时退到 sudo k3s kubectl
+        if ! command -v kubectl &>/dev/null; then
+            if [[ "$RUNTIME" == "k3s" ]] && command -v k3s &>/dev/null; then
+                KUBECTL="sudo k3s kubectl"
+            else
+                err "RUNTIME_OVERRIDE=$RUNTIME 指定,但本机既无 kubectl 也无 k3s 可用"
+                exit 1
+            fi
+        fi
+    elif command -v kubectl &>/dev/null && kubectl cluster-info &>/dev/null; then
+        if kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.kubeletVersion}' 2>/dev/null | grep -q 'k3s'; then
+            RUNTIME="k3s"
+        else
+            RUNTIME="kubectl"
+        fi
+    elif command -v k3s &>/dev/null; then
+        KUBECTL="sudo k3s kubectl"
+        RUNTIME="k3s"
+    else
+        err "未检测到 kubectl 或 k3s。请安装 kubectl 并确保 kubeconfig 可用"
+        exit 1
+    fi
+}
+
+require_cluster() {
+    detect_runtime
+    if ! $KUBECTL get ns "$NAMESPACE" &>/dev/null; then
+        err "命名空间 $NAMESPACE 不存在。请先运行 deploy-k8s.sh,或检查 CCH_NAMESPACE 配置"
+        exit 1
+    fi
+}
+
+###############################################################################
+# Helpers
+###############################################################################
+# 解析应用访问地址,用于 health check
+resolve_access_url() {
+    if [[ -n "$INGRESS_HOST" ]]; then
+        echo "http://$INGRESS_HOST"
+        return
+    fi
+    # 尝试从 Service 拿 NodePort
+    local np node_ip
+    np=$($KUBECTL -n "$NAMESPACE" get svc claude-code-hub -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "")
+    node_ip=$($KUBECTL get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null)
+    if [[ -z "$node_ip" ]]; then
+        node_ip=$($KUBECTL get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+    fi
+    if [[ -n "$np" ]] && [[ -n "$node_ip" ]]; then
+        echo "http://${node_ip}:${np}"
+        return
+    fi
+    echo ""
+}
+
+# 在集群内通过 exec 做健康检查,避免依赖集群外网络
+health_check_in_pod() {
+    local pod
+    pod=$($KUBECTL -n "$NAMESPACE" get pods -l app=claude-code-hub \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+    if [[ -z "$pod" ]]; then
+        warn "没有找到 app Pod"
+        return 1
+    fi
+    local status
+    status=$($KUBECTL -n "$NAMESPACE" exec "$pod" -- \
+        node -e "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>r.json()).then(j=>{console.log(j.status);process.exit(j.components?.database?.status==='up'?0:1)}).catch(()=>process.exit(1))" 2>/dev/null) || true
+    if [[ "$status" == "healthy" ]] || [[ "$status" == "degraded" ]]; then
+        ok "Health check (in-pod): $status"
+        return 0
+    fi
+    warn "Health check not healthy: ${status:-unknown}"
+    return 1
+}
+
+###############################################################################
+# Commands
+###############################################################################
+cmd_update() {
+    require_cluster
+    local TIMESTAMP
+    TIMESTAMP=$(date +%Y%m%d%H%M%S)
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${CYAN}  Claude Code Hub Upgrade - $TIMESTAMP${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    echo ""
+
+    # Step 1: Backup
+    info "Step 1/6: Backing up database..."
+    if cmd_backup; then
+        ok "Database backup complete"
+    else
+        # 非交互场景下 (无 TTY / CCH_NONINTERACTIVE=1) 直接放弃,避免自动化任务卡死
+        if [[ "${CCH_NONINTERACTIVE:-0}" == "1" ]] || [[ ! -t 0 ]]; then
+            err "Backup 失败,且当前非交互式环境 — 中止升级以保护数据"
+            err "请先人工处理 (磁盘、权限、连接数),或设置 CCH_NONINTERACTIVE=0 并在 TTY 下重试"
+            exit 1
+        fi
+        warn "Backup failed, continue without backup?"
+        # read -t 60:60 秒内无输入则退出,避免 CI 卡死
+        if ! read -t 60 -p "输入 yes 继续 (默认 60s 超时后中止): " answer; then
+            echo ""
+            err "超时,中止升级"; exit 1
+        fi
+        if [[ "$answer" != "yes" ]]; then
+            err "已中止"; exit 1
+        fi
+    fi
+    echo ""
+
+    # Step 2: (k3s only) pre-pull image
+    info "Step 2/6: Preparing image..."
+    if [[ "$RUNTIME" == "k3s" ]]; then
+        if sudo k3s ctr images pull "$IMAGE" >/dev/null 2>&1; then
+            ok "Image pre-pulled via k3s ctr"
+        else
+            warn "k3s ctr pull 失败,依赖 Always imagePullPolicy"
+        fi
+    else
+        info "Standard k8s: 依赖 imagePullPolicy=Always 在 rollout 时拉取"
+    fi
+    echo ""
+
+    # Step 3: Scale down to 1 for migration
+    local CURRENT_REPLICAS MIN_REPLICAS
+    CURRENT_REPLICAS=$($KUBECTL -n "$NAMESPACE" get hpa claude-code-hub -o jsonpath='{.status.currentReplicas}' 2>/dev/null || echo "2")
+    MIN_REPLICAS=$($KUBECTL -n "$NAMESPACE" get hpa claude-code-hub -o jsonpath='{.spec.minReplicas}' 2>/dev/null || echo "2")
+    [[ -z "$CURRENT_REPLICAS" || "$CURRENT_REPLICAS" == "null" ]] && CURRENT_REPLICAS=2
+    [[ -z "$MIN_REPLICAS"     || "$MIN_REPLICAS" == "null"     ]] && MIN_REPLICAS=2
+
+    info "Step 3/6: Scaling down to 1 replica for migration (was $CURRENT_REPLICAS)..."
+    if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
+        $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge -p '{"spec":{"minReplicas":1}}' >/dev/null
+    fi
+    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas=1 >/dev/null
+    $KUBECTL -n "$NAMESPACE" rollout status deployment/claude-code-hub --timeout=180s >/dev/null 2>&1
+    ok "Scaled to 1 replica"
+    echo ""
+
+    # Step 4: Update image + migrate
+    info "Step 4/6: Updating image on single instance (auto-migration)..."
+    if [[ "$RUNTIME" == "k3s" ]]; then
+        # k3s: 用 digest 固定,避免 tag 相同导致 no-op rollout
+        local IMAGE_DIGEST IMAGE_BY_DIGEST
+        IMAGE_DIGEST=$(sudo k3s ctr images ls 2>/dev/null | awk -v img="$IMAGE" '$1==img {print $3; exit}')
+        if [[ -n "$IMAGE_DIGEST" ]] && [[ "${IMAGE_DIGEST#sha256:}" != "$IMAGE_DIGEST" ]]; then
+            IMAGE_BY_DIGEST="${IMAGE%:*}@${IMAGE_DIGEST}"
+            info "  digest: $IMAGE_DIGEST"
+            $KUBECTL -n "$NAMESPACE" set image deployment/claude-code-hub app="$IMAGE_BY_DIGEST" >/dev/null
+        else
+            warn "无法解析 digest,回落到 rollout restart"
+            $KUBECTL -n "$NAMESPACE" set image deployment/claude-code-hub app="$IMAGE" >/dev/null || true
+            $KUBECTL -n "$NAMESPACE" rollout restart deployment/claude-code-hub >/dev/null
+        fi
+    else
+        # 标准 k8s: set image 到目标 tag,触发 rollout;相同 tag 时强制 restart 拿最新 digest
+        local CURRENT_IMAGE
+        CURRENT_IMAGE=$($KUBECTL -n "$NAMESPACE" get deployment/claude-code-hub \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+        if [[ "$CURRENT_IMAGE" == "$IMAGE" ]]; then
+            info "镜像 tag 未变 ($IMAGE),执行 rollout restart 重新拉取"
+            $KUBECTL -n "$NAMESPACE" rollout restart deployment/claude-code-hub >/dev/null
+        else
+            $KUBECTL -n "$NAMESPACE" set image deployment/claude-code-hub app="$IMAGE" >/dev/null
+        fi
+    fi
+    $KUBECTL -n "$NAMESPACE" rollout status deployment/claude-code-hub --timeout=600s
+    sleep 3
+
+    if health_check_in_pod; then
+        ok "Migration + startup OK"
+    else
+        err "DB 未通过健康检查,正在回滚..."
+        $KUBECTL -n "$NAMESPACE" rollout undo deployment/claude-code-hub >/dev/null
+        if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
+            $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge \
+                -p "{\"spec\":{\"minReplicas\":$MIN_REPLICAS}}" >/dev/null
+        fi
+        $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$CURRENT_REPLICAS" >/dev/null
+        exit 1
+    fi
+    echo ""
+
+    # Step 5: Scale back
+    info "Step 5/6: Scaling back to $MIN_REPLICAS replicas..."
+    if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
+        $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge \
+            -p "{\"spec\":{\"minReplicas\":$MIN_REPLICAS}}" >/dev/null
+    fi
+    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$MIN_REPLICAS" >/dev/null
+    $KUBECTL -n "$NAMESPACE" rollout status deployment/claude-code-hub --timeout=300s >/dev/null 2>&1
+    ok "Running with $MIN_REPLICAS replicas"
+    echo ""
+
+    # Step 6: Final health check
+    info "Step 6/6: Final health check..."
+    sleep 3
+    if health_check_in_pod; then
+        ok "Upgrade complete"
+    else
+        warn "Upgrade done but health check failed. Check: cch logs"
+    fi
+    echo ""
+    $KUBECTL -n "$NAMESPACE" get pods -o wide
+}
+
+cmd_status() {
+    require_cluster
+    echo -e "${CYAN}Pods:${NC}"
+    $KUBECTL -n "$NAMESPACE" get pods -o wide
+    echo ""
+    echo -e "${CYAN}HPA:${NC}"
+    $KUBECTL -n "$NAMESPACE" get hpa 2>/dev/null || echo "(no HPA)"
+    echo ""
+    echo -e "${CYAN}Resources (top):${NC}"
+    $KUBECTL -n "$NAMESPACE" top pods 2>/dev/null || warn "metrics-server 未就绪,跳过 top"
+}
+
+cmd_logs() {
+    require_cluster
+    local TAIL="${1:-100}"
+    shift 2>/dev/null || true
+    $KUBECTL -n "$NAMESPACE" logs deploy/claude-code-hub --all-containers --tail="$TAIL" "$@"
+}
+
+cmd_follow() {
+    require_cluster
+    $KUBECTL -n "$NAMESPACE" logs -f deploy/claude-code-hub --all-containers --tail=50
+}
+
+cmd_restart() {
+    require_cluster
+    info "Rolling restart..."
+    $KUBECTL -n "$NAMESPACE" rollout restart deployment/claude-code-hub
+    $KUBECTL -n "$NAMESPACE" rollout status  deployment/claude-code-hub --timeout=300s
+    ok "Restart complete"
+}
+
+cmd_rollback() {
+    require_cluster
+    warn "Rolling back to previous revision..."
+    $KUBECTL -n "$NAMESPACE" rollout undo    deployment/claude-code-hub
+    $KUBECTL -n "$NAMESPACE" rollout status  deployment/claude-code-hub --timeout=300s
+    ok "Rollback complete"
+}
+
+cmd_scale() {
+    require_cluster
+    local N="${1:-}"
+    if [[ -z "$N" ]]; then err "Usage: cch scale <replicas>"; exit 1; fi
+    if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -lt 1 ]]; then
+        err "replicas 必须是正整数: $N"; exit 1
+    fi
+    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$N"
+    info "Scaled to $N replicas"
+}
+
+cmd_backup() {
+    require_cluster
+    local backup_dir="${CCH_BACKUP_DIR:-$HOME/backups/claude-code-hub}"
+    mkdir -p "$backup_dir"
+    local ts file
+    ts=$(date +%Y%m%d_%H%M%S)
+    file="$backup_dir/claude_code_hub_${ts}.sql.gz"
+    info "Backing up PostgreSQL -> $file"
+    if ! $KUBECTL -n "$NAMESPACE" exec sts/postgres -- \
+           pg_dump -U claude_code_hub -d claude_code_hub --no-owner --no-privileges \
+           | gzip > "$file"; then
+        err "备份失败"; rm -f "$file"; return 1
+    fi
+    local size
+    size=$(du -h "$file" 2>/dev/null | cut -f1)
+    ok "Backup complete: $file ($size)"
+    # 保留最近 30 份 (BSD xargs 无 -r,用 while read 代替)
+    local keep="${CCH_BACKUP_KEEP:-30}"
+    # shellcheck disable=SC2012
+    ls -t "$backup_dir"/claude_code_hub_*.sql.gz 2>/dev/null \
+        | tail -n +"$((keep+1))" \
+        | while IFS= read -r old; do rm -f "$old"; done
+}
+
+cmd_env() {
+    require_cluster
+    if command -v python3 &>/dev/null; then
+        $KUBECTL -n "$NAMESPACE" get deployment claude-code-hub \
+            -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -m json.tool
+    else
+        $KUBECTL -n "$NAMESPACE" get deployment claude-code-hub \
+            -o jsonpath='{.spec.template.spec.containers[0].env}'
+        echo ""
+    fi
+}
+
+cmd_secret() {
+    require_cluster
+    local KEY="${1:-admin-token}"
+    $KUBECTL -n "$NAMESPACE" get secret claude-code-hub-secrets \
+        -o jsonpath="{.data.$KEY}" | b64d
+    echo ""
+}
+
+cmd_shell() {
+    require_cluster
+    $KUBECTL -n "$NAMESPACE" exec -it deploy/claude-code-hub -- sh
+}
+
+cmd_dbshell() {
+    require_cluster
+    $KUBECTL -n "$NAMESPACE" exec -it sts/postgres -- \
+        psql -U claude_code_hub -d claude_code_hub
+}
+
+cmd_info() {
+    require_cluster
+    local url token img digest
+    url=$(resolve_access_url)
+    token=$($KUBECTL -n "$NAMESPACE" get secret claude-code-hub-secrets \
+        -o jsonpath='{.data.admin-token}' 2>/dev/null | b64d)
+    img=$($KUBECTL -n "$NAMESPACE" get deployment claude-code-hub \
+        -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
+    digest=$($KUBECTL -n "$NAMESPACE" get pods -l app=claude-code-hub \
+        -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null)
+
+    echo -e "${CYAN}Namespace:${NC}      $NAMESPACE"
+    echo -e "${CYAN}Runtime:${NC}        $RUNTIME"
+    echo -e "${CYAN}Image (desired):${NC} $img"
+    echo -e "${CYAN}Image (running):${NC} $digest"
+    if [[ -n "$url" ]]; then
+        echo -e "${CYAN}Access URL:${NC}     $url"
+    else
+        echo -e "${CYAN}Access URL:${NC}     (no ingress/nodeport detected; use 'kubectl port-forward')"
+    fi
+    echo -e "${CYAN}Admin token:${NC}    ${YELLOW}${token}${NC}"
+    echo ""
+    $KUBECTL -n "$NAMESPACE" get deployment,statefulset,hpa,svc,ingress 2>/dev/null || true
+}
+
+cmd_version() {
+    echo "cch v${VERSION}"
+    echo "  runtime     : ${RUNTIME:-(not detected)}"
+    echo "  namespace   : $NAMESPACE"
+    echo "  image       : $IMAGE"
+    echo "  deploy-dir  : ${DEPLOY_DIR:-(not found)}"
+    echo "  config-file : $CCH_CONFIG_FILE"
+}
+
+cmd_doctor() {
+    echo -e "${CYAN}cch doctor${NC}"
+    local pass=0 fail=0 warn_n=0
+
+    check_pass() { ok "$1"; pass=$((pass+1)); }
+    check_warn() { warn "$1"; warn_n=$((warn_n+1)); }
+    check_fail() { err "$1"; fail=$((fail+1)); }
+
+    # kubectl
+    if command -v kubectl &>/dev/null; then
+        check_pass "kubectl installed: $(kubectl version --client -o yaml 2>/dev/null | awk '/gitVersion/{print $2; exit}')"
+    else
+        check_fail "kubectl 未安装"
+    fi
+
+    # Cluster reachable
+    if $KUBECTL cluster-info &>/dev/null; then
+        check_pass "Cluster reachable (runtime=$RUNTIME)"
+    else
+        check_fail "无法连接集群。请检查 kubeconfig / context"
+        echo "Summary: $pass passed, $warn_n warnings, $fail failures"; return
+    fi
+
+    # Namespace
+    if $KUBECTL get ns "$NAMESPACE" &>/dev/null; then
+        check_pass "Namespace $NAMESPACE exists"
+    else
+        check_fail "Namespace $NAMESPACE 不存在 — 请先运行 deploy-k8s.sh"
+    fi
+
+    # Secret
+    if $KUBECTL -n "$NAMESPACE" get secret claude-code-hub-secrets &>/dev/null; then
+        check_pass "Secret claude-code-hub-secrets 存在"
+    else
+        check_fail "Secret 缺失"
+    fi
+
+    # Postgres / Redis / App
+    for comp in postgres redis; do
+        local rs
+        rs=$($KUBECTL -n "$NAMESPACE" get sts "$comp" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "")
+        if [[ "$rs" == "1" ]]; then check_pass "$comp StatefulSet ready"
+        else check_fail "$comp 未就绪 (ready=$rs)"; fi
+    done
+    local app_ready
+    app_ready=$($KUBECTL -n "$NAMESPACE" get deployment claude-code-hub \
+        -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+    if [[ "$app_ready" -gt 0 ]]; then
+        check_pass "App ready replicas: $app_ready"
+    else
+        check_fail "App 没有就绪 Pod"
+    fi
+
+    # HPA
+    if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
+        check_pass "HPA configured"
+    else
+        check_warn "HPA 不存在 (非必需)"
+    fi
+
+    # Ingress
+    if $KUBECTL -n "$NAMESPACE" get ingress claude-code-hub &>/dev/null || \
+       $KUBECTL -n "$NAMESPACE" get ingressroute claude-code-hub &>/dev/null 2>&1; then
+        check_pass "Ingress resource present"
+    else
+        check_warn "未检测到 Ingress (如使用 NodePort 可忽略)"
+    fi
+
+    # StorageClass
+    if [[ "$RUNTIME" == "k3s" ]] && $KUBECTL get sc local-path &>/dev/null; then
+        check_pass "StorageClass local-path (k3s default)"
+    fi
+
+    # In-pod health
+    if health_check_in_pod &>/dev/null; then
+        check_pass "In-pod health check"
+    else
+        check_warn "In-pod health check failed (服务可能启动中)"
+    fi
+
+    echo ""
+    echo "Summary: ${GREEN}$pass passed${NC}, ${YELLOW}$warn_n warnings${NC}, ${RED}$fail failures${NC}"
+}
+
+cmd_install() {
+    # 快捷路径:仅当用户在仓库内运行时有用。复制 manifest 到 deploy-dir 并提示跑 deploy-k8s.sh
+    if [[ -x "$SCRIPT_DIR/deploy-k8s.sh" ]]; then
+        info "转交给 scripts/deploy-k8s.sh (推荐使用完整的安装流程)"
+        exec bash "$SCRIPT_DIR/deploy-k8s.sh" "$@"
+    fi
+    err "scripts/deploy-k8s.sh 未找到。请在仓库内运行或手动调用"
+    exit 1
+}
+
+cmd_uninstall() {
+    detect_runtime
+    # 非交互场景必须显式通过 CCH_CONFIRM_UNINSTALL=<namespace> 授权,避免误删
+    if [[ ! -t 0 ]]; then
+        if [[ "${CCH_CONFIRM_UNINSTALL:-}" != "$NAMESPACE" ]]; then
+            err "非交互环境检测到。要 uninstall 必须显式设置:"
+            err "  CCH_CONFIRM_UNINSTALL=$NAMESPACE cch uninstall"
+            exit 1
+        fi
+        info "已通过 CCH_CONFIRM_UNINSTALL 授权,继续卸载"
+    else
+        echo -e "${RED}!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!${NC}"
+        echo -e "${RED}  即将删除 namespace: $NAMESPACE${NC}"
+        echo -e "${RED}  这会永久删除所有 Pod、PVC(数据库数据)、Secret${NC}"
+        echo -e "${RED}!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!${NC}"
+        if ! read -t 120 -p "确认?输入 namespace 名称 '$NAMESPACE' 继续: " input; then
+            echo ""; info "超时,已取消"; exit 0
+        fi
+        if [[ "$input" != "$NAMESPACE" ]]; then
+            info "已取消"; exit 0
+        fi
+    fi
+    $KUBECTL delete namespace "$NAMESPACE" --timeout=180s
+    ok "Namespace $NAMESPACE 已删除"
+    info "manifest 目录 ($DEPLOY_DIR) 未删除。如需清理: rm -rf $DEPLOY_DIR"
+}
+
+###############################################################################
+# Help
+###############################################################################
+cmd_help() {
+    cat <<EOF
+cch - Claude Code Hub Kubernetes Management CLI v${VERSION}
+
+Usage: cch <command> [args]
+
+Lifecycle:
+  update          Pull latest image, auto-migrate DB, rolling deploy (带回滚)
+  restart         Rolling restart (no image change)
+  rollback        Rollback to previous deployment revision
+  scale <n>       Scale app to n replicas
+
+Install / Teardown:
+  install [opts]  调用 scripts/deploy-k8s.sh (透传参数)
+  uninstall       Delete namespace + PVCs (破坏性,带二次确认)
+
+Observe:
+  status          Show pods, HPA, resource usage
+  logs [n]        Show last n log lines (default 100)
+  follow          Tail logs in real-time
+  env             Show app environment variables (JSON)
+  info            展示访问 URL、Admin Token、镜像 digest
+  doctor          诊断 (kubectl / 集群 / 资源 / 健康)
+  version         显示版本与当前配置
+
+Data:
+  backup          Backup PostgreSQL (gzip, 保留最近 30 份)
+  secret [key]    Show secret value (default: admin-token)
+  dbshell         Open psql shell
+  shell           Open sh in app pod
+
+Config:
+  环境变量(或 ~/.config/cch/config):
+    CCH_NAMESPACE   K8s namespace (default: claude-code-hub)
+    CCH_IMAGE       应用镜像 (default: ghcr.io/ding113/claude-code-hub:latest)
+    CCH_DEPLOY_DIR  manifest 目录 (default: 自动查找)
+    CCH_RUNTIME     覆盖 runtime: k3s | kubectl
+    CCH_INGRESS_HOST Ingress 域名,用于访问 URL 解析
+    CCH_BACKUP_DIR  备份目录 (default: ~/backups/claude-code-hub)
+    CCH_BACKUP_KEEP 保留数量 (default: 30)
+    NO_COLOR        禁用彩色输出
+
+Examples:
+  cch status
+  cch logs 500
+  cch update
+  CCH_NAMESPACE=staging cch status
+  cch install -y                      # 一键部署
+  cch backup
+  cch info
+  cch doctor
+EOF
+}
+
+###############################################################################
+# Dispatch
+###############################################################################
+case "${1:-help}" in
+    update)    shift; cmd_update "$@" ;;
+    status)    shift; cmd_status "$@" ;;
+    logs)      shift; cmd_logs "$@" ;;
+    follow)    cmd_follow ;;
+    restart)   cmd_restart ;;
+    rollback)  cmd_rollback ;;
+    backup)    cmd_backup ;;
+    scale)     shift; cmd_scale "$@" ;;
+    env)       cmd_env ;;
+    secret)    shift; cmd_secret "$@" ;;
+    shell)     cmd_shell ;;
+    dbshell)   cmd_dbshell ;;
+    info)      cmd_info ;;
+    version|--version|-v) cmd_version ;;
+    doctor)    cmd_doctor ;;
+    install)   shift; cmd_install "$@" ;;
+    uninstall) cmd_uninstall ;;
+    help|--help|-h|*) cmd_help ;;
+esac

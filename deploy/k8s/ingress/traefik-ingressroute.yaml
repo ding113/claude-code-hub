@@ -1,0 +1,27 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: streaming-headers
+  namespace: {{NAMESPACE}}
+spec:
+  headers:
+    customResponseHeaders:
+      X-Accel-Buffering: "no"
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: claude-code-hub
+  namespace: {{NAMESPACE}}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{INGRESS_HOST}}`)
+      kind: Rule
+      middlewares:
+        - name: streaming-headers
+      services:
+        - name: claude-code-hub
+          port: 80
+          passHostHeader: true
