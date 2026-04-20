@@ -54,7 +54,11 @@ describe("ProxyAuthenticator pre-auth candidate key lockout", () => {
   });
 
   it("blocks a locked API key before validation and passes candidate key into the check", async () => {
-    policyCheck.mockReturnValue({ allowed: false, retryAfterSeconds: 42, reason: "key_rate_limited" });
+    policyCheck.mockReturnValue({
+      allowed: false,
+      retryAfterSeconds: 42,
+      reason: "key_rate_limited",
+    });
 
     const { ProxyAuthenticator } = await import("@/app/v1/_lib/proxy/auth-guard");
     const session = makeSession("198.51.100.77", "sk-shared");
