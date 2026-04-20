@@ -342,8 +342,8 @@ export function parseSSEStream(body: string): ParsedResponse {
         }
       }
 
-      // OpenAI Responses SSE delta format
-      if (typeof obj.delta === "string") {
+      // OpenAI/Responses generic delta fallback. Codex output_text.delta has already been handled above.
+      if (typeof obj.delta === "string" && eventType !== "response.output_text.delta") {
         texts.push(obj.delta);
       }
 
