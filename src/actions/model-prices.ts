@@ -8,6 +8,7 @@ import {
   fetchCloudPriceTableToml,
   parseCloudPriceTableToml,
 } from "@/lib/price-sync/cloud-price-table";
+import { isPriceLikeFieldPath } from "@/lib/utils/model-price-fields";
 import {
   createModelPrice,
   deleteModelPriceByName,
@@ -605,10 +606,7 @@ function sanitizeExtraPriceData(value: unknown, path = ""): unknown {
   }
 
   if (!isPlainObject(value)) {
-    if (
-      path &&
-      /(cost|price|per_|rate|multiplier|session|query|page|pixel|character|dbu)/i.test(path)
-    ) {
+    if (path && isPriceLikeFieldPath(path)) {
       if (typeof value === "string" && value.trim()) {
         const parsed = Number(value);
         if (Number.isFinite(parsed) && parsed >= 0) {
@@ -625,10 +623,12 @@ function sanitizeExtraPriceData(value: unknown, path = ""): unknown {
   }
 
   return Object.fromEntries(
-    Object.entries(value).map(([key, nestedValue]) => [
-      key,
-      sanitizeExtraPriceData(nestedValue, path ? `${path}.${key}` : key),
-    ])
+    Object.entries(value)
+      .filter(([key]) => key !== "__proto__" && key !== "constructor" && key !== "prototype")
+      .map(([key, nestedValue]) => [
+        key,
+        sanitizeExtraPriceData(nestedValue, path ? `${path}.${key}` : key),
+      ])
   );
 }
 
@@ -715,19 +715,37 @@ export async function upsertSingleModelPrice(
     }
 
     // 构建价格数据
+    const displayName = input.displayName?.trim();
+    const litellmProvider = input.litellmProvider?.trim();
     const priceData: ModelPriceData = {
       ...extraPriceData,
       mode: input.mode,
-      display_name: input.displayName?.trim() || undefined,
-      litellm_provider: input.litellmProvider || undefined,
-      supports_prompt_caching: input.supportsPromptCaching,
-      input_cost_per_token: input.inputCostPerToken,
-      output_cost_per_token: input.outputCostPerToken,
-      output_cost_per_image: input.outputCostPerImage,
-      input_cost_per_request: input.inputCostPerRequest,
-      cache_read_input_token_cost: input.cacheReadInputTokenCost,
-      cache_creation_input_token_cost: input.cacheCreationInputTokenCost,
-      cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr,
+      ...(displayName ? { display_name: displayName } : {}),
+      ...(litellmProvider ? { litellm_provider: litellmProvider } : {}),
+      ...(input.supportsPromptCaching !== undefined
+        ? { supports_prompt_caching: input.supportsPromptCaching }
+        : {}),
+      ...(input.inputCostPerToken !== undefined
+        ? { input_cost_per_token: input.inputCostPerToken }
+        : {}),
+      ...(input.outputCostPerToken !== undefined
+        ? { output_cost_per_token: input.outputCostPerToken }
+        : {}),
+      ...(input.outputCostPerImage !== undefined
+        ? { output_cost_per_image: input.outputCostPerImage }
+        : {}),
+      ...(input.inputCostPerRequest !== undefined
+        ? { input_cost_per_request: input.inputCostPerRequest }
+        : {}),
+      ...(input.cacheReadInputTokenCost !== undefined
+        ? { cache_read_input_token_cost: input.cacheReadInputTokenCost }
+        : {}),
+      ...(input.cacheCreationInputTokenCost !== undefined
+        ? { cache_creation_input_token_cost: input.cacheCreationInputTokenCost }
+        : {}),
+      ...(input.cacheCreationInputTokenCostAbove1hr !== undefined
+        ? { cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr }
+        : {}),
     };
 
     // 捕获 before 快照

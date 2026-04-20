@@ -195,7 +195,7 @@
     "cachePricingTitle": "快取價格",
     "advancedFieldsTitle": "進階欄位",
     "advancedFieldsJson": "額外價格欄位 JSON",
-    "advancedFieldsPlaceholder": "範例：input_cost_per_second = 0.5",
+    "advancedFieldsPlaceholder": "範例：'{\"input_cost_per_second\": 0.5}'",
     "advancedFieldsHint": "使用 JSON 物件保存基礎表單未覆蓋的雲端或本地擴充欄位。"
   },
   "actions": {

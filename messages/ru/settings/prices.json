@@ -195,7 +195,7 @@
     "cachePricingTitle": "Цены кэша",
     "advancedFieldsTitle": "Расширенные поля",
     "advancedFieldsJson": "JSON дополнительных ценовых полей",
-    "advancedFieldsPlaceholder": "Пример: input_cost_per_second = 0.5",
+    "advancedFieldsPlaceholder": "Пример: '{\"input_cost_per_second\": 0.5}'",
     "advancedFieldsHint": "Используйте JSON-объект для сохранения облачных или локальных полей, которых нет в базовой форме."
   },
   "actions": {

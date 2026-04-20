@@ -195,7 +195,7 @@
     "cachePricingTitle": "缓存价格",
     "advancedFieldsTitle": "高级字段",
     "advancedFieldsJson": "额外价格字段 JSON",
-    "advancedFieldsPlaceholder": "示例：input_cost_per_second = 0.5",
+    "advancedFieldsPlaceholder": "示例：'{\"input_cost_per_second\": 0.5}'",
     "advancedFieldsHint": "使用 JSON 对象保存基础表单未覆盖的云端或本地扩展字段。"
   },
   "actions": {

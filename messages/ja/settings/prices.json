@@ -195,7 +195,7 @@
     "cachePricingTitle": "キャッシュ価格",
     "advancedFieldsTitle": "高度なフィールド",
     "advancedFieldsJson": "追加価格フィールド JSON",
-    "advancedFieldsPlaceholder": "例: input_cost_per_second = 0.5",
+    "advancedFieldsPlaceholder": "例: '{\"input_cost_per_second\": 0.5}'",
     "advancedFieldsHint": "基本フォームで扱わないクラウド/ローカル拡張フィールドを JSON オブジェクトで保存します。"
   },
   "actions": {

@@ -195,7 +195,7 @@
     "cachePricingTitle": "Cache Pricing",
     "advancedFieldsTitle": "Advanced fields",
     "advancedFieldsJson": "Additional price fields JSON",
-    "advancedFieldsPlaceholder": "Example: input_cost_per_second = 0.5",
+    "advancedFieldsPlaceholder": "Example: '{\"input_cost_per_second\": 0.5}'",
     "advancedFieldsHint": "Use a JSON object to store extra cloud or local fields not covered by the basic form."
   },
   "actions": {
