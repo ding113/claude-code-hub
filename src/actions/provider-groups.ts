@@ -38,7 +38,6 @@ export type ProviderGroupWithCount = ProviderGroup & {
  * Admin-only.
  */
 export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWithCount[]>> {
-  const t = await getTranslations("settings.providers.providerGroups");
   const tError = await getTranslations("errors");
   try {
     const session = await getSession();
@@ -98,7 +97,11 @@ export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWit
     return { ok: true, data };
   } catch (error) {
     logger.error("Failed to fetch provider groups:", error);
-    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
