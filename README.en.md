@@ -285,6 +285,40 @@ Docker Compose is the **preferred deployment method** — it automatically provi
    ```
    Stop and clean up with `docker compose down` when necessary.
 
+### ☸️ Kubernetes / k3s (Production / HA / Multi-node)
+
+The repo ships a **dual-compatible** (k3s + standard Kubernetes) one-click deploy script `scripts/deploy-k8s.sh` and a management CLI `scripts/cch`. Out of the box you get HPA autoscaling, PodDisruptionBudget, NetworkPolicy, rolling upgrades with automatic rollback on health check failure, and scheduled backups.
+
+Quick start (auto-installs k3s if no cluster is detected):
+
+```bash
+git clone https://github.com/ding113/claude-code-hub.git
+cd claude-code-hub
+bash scripts/deploy-k8s.sh --install-k3s -y
+```
+
+Standard Kubernetes with domain:
+
+```bash
+bash scripts/deploy-k8s.sh \
+  --ingress-host hub.example.com \
+  --ingress-class nginx \
+  --storage-class standard \
+  -y
+```
+
+Day-2 operations with `cch`:
+
+```bash
+cch status            # pods / HPA / resources
+cch update            # rolling upgrade with auto-migrate and rollback on failure
+cch backup            # PostgreSQL backup (gzip, keep 30)
+cch info              # show access URL and admin token
+cch doctor            # diagnose cluster + deployment
+```
+
+See **[docs/k8s-deployment.md](docs/k8s-deployment.md)** for full options, placeholders, cloud provider StorageClass mapping, and troubleshooting.
+
 ### Local development (dev toolchain)
 
 1. Enter the `dev/` folder: `cd dev`.

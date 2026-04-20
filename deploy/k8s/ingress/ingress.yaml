@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: claude-code-hub
+  namespace: {{NAMESPACE}}
+  annotations:
+    # 流式响应需要的长超时和禁用缓冲 (nginx-ingress)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    # Traefik 注解(安装为 Ingress Controller 时生效)
+    traefik.ingress.kubernetes.io/router.middlewares: "{{NAMESPACE}}-streaming-headers@kubernetescrd"
+spec:
+  ingressClassName: "{{INGRESS_CLASS}}"
+  rules:
+    - host: "{{INGRESS_HOST}}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: claude-code-hub
+                port:
+                  number: 80
