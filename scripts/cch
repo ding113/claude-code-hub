@@ -203,13 +203,13 @@ wait_for_deployment_rollout() {
 }
 
 restore_update_scaling() {
-    local current_replicas="$1"
+    local target_replicas="$1"
     local min_replicas="$2"
     if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
         $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge \
             -p "{\"spec\":{\"minReplicas\":$min_replicas}}" >/dev/null || true
     fi
-    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$current_replicas" >/dev/null || true
+    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$target_replicas" >/dev/null || true
 }
 
 ###############################################################################
@@ -331,7 +331,7 @@ cmd_update() {
         desired_replicas="$MIN_REPLICAS"
     fi
     info "Step 5/6: Scaling back to $desired_replicas replicas..."
-    restore_update_scaling "$CURRENT_REPLICAS" "$MIN_REPLICAS"
+    restore_update_scaling "$desired_replicas" "$MIN_REPLICAS"
     if ! wait_for_deployment_rollout 300s "恢复副本"; then
         err "副本恢复失败,当前 deployment 可能仍停留在单副本"
         exit 1

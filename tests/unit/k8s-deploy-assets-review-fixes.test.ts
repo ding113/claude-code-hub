@@ -62,6 +62,7 @@ describe("k8s deploy review regressions", () => {
     expect(cchScript).toContain("wait_for_deployment_rollout()");
     expect(cchScript).toContain('if ! wait_for_deployment_rollout 180s "缩容到 1 副本"; then');
     expect(cchScript).toContain('local desired_replicas="$CURRENT_REPLICAS"');
+    expect(cchScript).toContain('restore_update_scaling "$desired_replicas" "$MIN_REPLICAS"');
     expect(cchScript).toContain("HPA minReplicas=");
     expect(cchScript).toContain("keep=30");
     expect(cchScript).toContain("if detect_runtime; then");
