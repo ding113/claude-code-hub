@@ -87,6 +87,12 @@ const messages = {
         clickStatusCode: "Click status code",
         fake200ForwardedNotice: "Note: payload may have been forwarded",
         fake200DetectedReason: "Detected reason: {reason}",
+        fake200RetryTooltipLabel: "Why no server retry?",
+        fake200RetryTooltipTitle: "Why CCH cannot retry this response on the server",
+        fake200RetryTooltipServerRetry:
+          "The upstream already returned HTTP 200, so CCH had started forwarding the SSE body before the error appeared in-stream. Once that error is recognized, this response can no longer be retried gracefully on the server.",
+        fake200RetryTooltipSessionFallback:
+          "Clients can retry on their side; later requests in the same session will avoid this fake-200 provider and continue fallback.",
         statusCodeInferredBadge: "Inferred",
         statusCodeInferredTooltip: "This status code is inferred from response body content.",
         statusCodeInferredSuffix: "(inferred)",
@@ -288,6 +294,13 @@ describe("provider-chain-popover layout", () => {
     );
 
     expect(html).toContain("Note: payload may have been forwarded");
+    expect(html).toContain("Why CCH cannot retry this response on the server");
+    expect(html).toContain(
+      "The upstream already returned HTTP 200, so CCH had started forwarding the SSE body before the error appeared in-stream. Once that error is recognized, this response can no longer be retried gracefully on the server."
+    );
+    expect(html).toContain(
+      "Clients can retry on their side; later requests in the same session will avoid this fake-200 provider and continue fallback."
+    );
   });
 
   test("renders inferred status code badge when statusCodeInferred=true", () => {

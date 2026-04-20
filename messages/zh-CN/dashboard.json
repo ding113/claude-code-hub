@@ -250,6 +250,10 @@
       "errorMessage": "错误信息",
       "fake200ForwardedNotice": "提示：对于流式请求，该失败可能在流结束后才被识别；响应内容可能已原样透传给客户端。",
       "fake200DetectedReason": "检测原因：{reason}",
+      "fake200RetryTooltipLabel": "为何这次不能服务端重试？",
+      "fake200RetryTooltipTitle": "为什么 CCH 无法在服务端重试这次响应",
+      "fake200RetryTooltipServerRetry": "上游已经先返回了 HTTP 200，CCH 也已开始向客户端透传 SSE 响应体；当后续流事件里才识别到错误时，这次响应已经无法再被服务端优雅重试。",
+      "fake200RetryTooltipSessionFallback": "客户端仍可自行重试；同一 Session 的后续请求会避开刚刚 fake200 的供应商，并继续自动 fallback。",
       "fake200Reasons": {
         "emptyBody": "响应体为空",
         "htmlBody": "返回了 HTML 文档（可能是错误页）",

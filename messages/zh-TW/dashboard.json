@@ -250,6 +250,10 @@
       "errorMessage": "錯誤訊息",
       "fake200ForwardedNotice": "提示：對於串流請求，此失敗可能在串流結束後才被識別；回應內容可能已原樣透傳給用戶端。",
       "fake200DetectedReason": "檢測原因：{reason}",
+      "fake200RetryTooltipLabel": "為何這次不能由伺服器重試？",
+      "fake200RetryTooltipTitle": "為什麼 CCH 無法在伺服器端重試這次回應",
+      "fake200RetryTooltipServerRetry": "上游已先回傳 HTTP 200，CCH 也已開始向用戶端透傳 SSE 回應體；等到後續串流事件才識別出錯誤時，這次回應已無法再由伺服器端優雅重試。",
+      "fake200RetryTooltipSessionFallback": "用戶端仍可自行重試；同一 Session 的後續請求會避開剛剛 fake200 的供應商，並繼續自動 fallback。",
       "fake200Reasons": {
         "emptyBody": "回應本文為空",
         "htmlBody": "回傳了 HTML 文件（可能是錯誤頁）",
