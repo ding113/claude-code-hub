@@ -21,6 +21,7 @@ import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-lis
 import { cn } from "@/lib/utils";
 import type { AuditCategory, AuditLogRow } from "@/types/audit-log";
 import { AuditLogDetailSheet } from "./audit-log-detail-sheet";
+import { getAuditActionLabel, getAuditCategoryLabel } from "./audit-log-labels";
 
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 56;
@@ -109,21 +110,11 @@ export function AuditLogsView() {
   };
 
   const categoryLabel = (cat: string) => {
-    const key = `categories.${cat}` as const;
-    try {
-      return t(key);
-    } catch {
-      return cat;
-    }
+    return getAuditCategoryLabel(t, cat);
   };
 
   const actionLabel = (actionType: string) => {
-    const key = `actions.${actionType}` as const;
-    try {
-      return t(key);
-    } catch {
-      return actionType;
-    }
+    return getAuditActionLabel(t, actionType);
   };
 
   return (

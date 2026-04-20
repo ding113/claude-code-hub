@@ -9,6 +9,7 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { AuditLogRow } from "@/types/audit-log";
+import { getAuditActionLabel, getAuditCategoryLabel } from "./audit-log-labels";
 
 interface AuditLogDetailSheetProps {
   log: AuditLogRow | null;
@@ -59,23 +60,8 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
 
   const operatorName = log.operatorUserName ?? t("adminTokenOperator");
 
-  const categoryLabel = (() => {
-    const key = `categories.${log.actionCategory}` as const;
-    try {
-      return t(key);
-    } catch {
-      return log.actionCategory;
-    }
-  })();
-
-  const actionLabel = (() => {
-    const key = `actions.${log.actionType}` as const;
-    try {
-      return t(key);
-    } catch {
-      return log.actionType;
-    }
-  })();
+  const categoryLabel = getAuditCategoryLabel(t, log.actionCategory);
+  const actionLabel = getAuditActionLabel(t, log.actionType);
 
   const openIpDialog = (ip: string) => {
     setIpDialogValue(ip);

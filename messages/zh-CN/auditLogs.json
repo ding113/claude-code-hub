@@ -30,30 +30,48 @@
     "status": "状态"
   },
   "actions": {
-    "login.success": "登录成功",
-    "login.failure": "登录失败",
-    "login.rate_limited": "登录限流",
-    "user.create": "创建用户",
-    "user.update": "更新用户",
-    "user.delete": "删除用户",
-    "provider.create": "创建供应商",
-    "provider.update": "更新供应商",
-    "provider.delete": "删除供应商",
-    "provider_group.create": "创建供应商分组",
-    "provider_group.update": "更新供应商分组",
-    "provider_group.delete": "删除供应商分组",
-    "system_settings.update": "更新系统设置",
-    "key.create": "创建密钥",
-    "key.update": "更新密钥",
-    "key.delete": "删除密钥",
-    "notification.update": "更新通知",
-    "sensitive_word.create": "创建敏感词",
-    "sensitive_word.update": "更新敏感词",
-    "sensitive_word.delete": "删除敏感词",
-    "model_price.bulk_upload": "批量上传模型价格",
-    "model_price.sync_litellm": "同步 LiteLLM 模型价格",
-    "model_price.upsert": "更新模型价格",
-    "model_price.delete": "删除模型价格"
+    "login": {
+      "success": "登录成功",
+      "failure": "登录失败",
+      "rate_limited": "登录限流"
+    },
+    "user": {
+      "create": "创建用户",
+      "update": "更新用户",
+      "delete": "删除用户"
+    },
+    "provider": {
+      "create": "创建供应商",
+      "update": "更新供应商",
+      "delete": "删除供应商"
+    },
+    "provider_group": {
+      "create": "创建供应商分组",
+      "update": "更新供应商分组",
+      "delete": "删除供应商分组"
+    },
+    "system_settings": {
+      "update": "更新系统设置"
+    },
+    "key": {
+      "create": "创建密钥",
+      "update": "更新密钥",
+      "delete": "删除密钥"
+    },
+    "notification": {
+      "update": "更新通知"
+    },
+    "sensitive_word": {
+      "create": "创建敏感词",
+      "update": "更新敏感词",
+      "delete": "删除敏感词"
+    },
+    "model_price": {
+      "bulk_upload": "批量上传模型价格",
+      "sync_litellm": "同步 LiteLLM 模型价格",
+      "upsert": "更新模型价格",
+      "delete": "删除模型价格"
+    }
   },
   "detail": {
     "title": "审计详情",
