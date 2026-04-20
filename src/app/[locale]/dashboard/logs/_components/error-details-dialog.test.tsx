@@ -31,6 +31,28 @@ vi.mock("@/i18n/routing", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/tooltip", () => {
+  type PropsWithChildren = { children?: ReactNode };
+
+  function TooltipProvider({ children }: PropsWithChildren) {
+    return <div data-slot="tooltip-provider">{children}</div>;
+  }
+
+  function Tooltip({ children }: PropsWithChildren) {
+    return <div data-slot="tooltip-root">{children}</div>;
+  }
+
+  function TooltipTrigger({ children }: PropsWithChildren) {
+    return <div data-slot="tooltip-trigger">{children}</div>;
+  }
+
+  function TooltipContent({ children }: PropsWithChildren) {
+    return <div data-slot="tooltip-content">{children}</div>;
+  }
+
+  return { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent };
+});
+
 // Mock Sheet to render content directly (not via portal)
 vi.mock("@/components/ui/sheet", () => {
   type PropsWithChildren = { children?: ReactNode };
@@ -286,6 +308,12 @@ const messages = {
         errorMessage: "Error message",
         fake200ForwardedNotice: "Note: detected after stream end; payload may have been forwarded",
         fake200DetectedReason: "Detected reason: {reason}",
+        fake200RetryTooltipLabel: "Why no server retry?",
+        fake200RetryTooltipTitle: "Why CCH cannot retry this response on the server",
+        fake200RetryTooltipServerRetry:
+          "The upstream already returned HTTP 200, so CCH had started forwarding the SSE body before the error appeared in-stream. Once that error is recognized, this response can no longer be retried gracefully on the server.",
+        fake200RetryTooltipSessionFallback:
+          "Clients can retry on their side; later requests in the same session will avoid this fake-200 provider and continue fallback.",
         fake200Reasons: {
           emptyBody: "Empty response body",
           htmlBody: "HTML document returned",
@@ -413,6 +441,13 @@ describe("error-details-dialog layout", () => {
     expect(html).toContain("FAKE_200_EMPTY_BODY");
     expect(html).toContain("Note: detected after stream end; payload may have been forwarded");
     expect(html).toContain("Detected reason: Empty response body");
+    expect(html).toContain("Why CCH cannot retry this response on the server");
+    expect(html).toContain(
+      "The upstream already returned HTTP 200, so CCH had started forwarding the SSE body before the error appeared in-stream. Once that error is recognized, this response can no longer be retried gracefully on the server."
+    );
+    expect(html).toContain(
+      "Clients can retry on their side; later requests in the same session will avoid this fake-200 provider and continue fallback."
+    );
   });
 
   test("renders special settings section when specialSettings exists", () => {

@@ -30,6 +30,7 @@ import {
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
 import { getFake200ReasonKey } from "../../fake200-reason";
+import { Fake200RetryTooltip } from "../../fake200-retry-tooltip";
 import {
   calculateOutputRate,
   isInProgressStatus,
@@ -674,7 +675,10 @@ export function SummaryTab({
             {isFake200PostStreamFailure && (
               <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
                 <InfoIcon className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />
-                <span>{t("fake200ForwardedNotice")}</span>
+                <div className="space-y-1">
+                  <div>{t("fake200ForwardedNotice")}</div>
+                  <Fake200RetryTooltip className="text-amber-800 dark:text-amber-200" />
+                </div>
               </div>
             )}
             {errorMessage.length > 200 && onViewLogicTrace && (

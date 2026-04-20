@@ -250,6 +250,10 @@
       "errorMessage": "エラーメッセージ",
       "fake200ForwardedNotice": "注意：ストリーミング要求では、失敗判定がストリーム終了後になる場合があります。応答内容は既にクライアントへ転送されている可能性があります。",
       "fake200DetectedReason": "検出理由：{reason}",
+      "fake200RetryTooltipLabel": "なぜ今回はサーバー側で再試行できないのか？",
+      "fake200RetryTooltipTitle": "なぜ CCH はこの応答をサーバー側で再試行できないのか",
+      "fake200RetryTooltipServerRetry": "アップストリームはすでに HTTP 200 を返しており、CCH も SSE 応答本文の転送を開始しています。後続のストリームイベントでエラーを検出した時点では、この応答をサーバー側で穏当に再試行することはできません。",
+      "fake200RetryTooltipSessionFallback": "クライアント側での再試行は可能です。同じ Session の後続リクエストでは、直前に fake200 を返したプロバイダーを避けて自動 fallback が続行されます。",
       "fake200Reasons": {
         "emptyBody": "レスポンス本文が空です",
         "htmlBody": "HTML ドキュメントが返されました (エラーページの可能性)",

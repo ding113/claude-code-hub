@@ -27,6 +27,7 @@ import {
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderChainItem } from "@/types/message";
 import { getFake200ReasonKey } from "./fake200-reason";
+import { Fake200RetryTooltip } from "./fake200-retry-tooltip";
 
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
@@ -234,6 +235,7 @@ export function ProviderChainPopover({
                         </div>
                       )}
                       <div>{t("logs.details.fake200ForwardedNotice")}</div>
+                      <Fake200RetryTooltip className="text-amber-600 dark:text-amber-300" />
                     </div>
                   </div>
                 )}
@@ -582,7 +584,14 @@ export function ProviderChainPopover({
           {hasFake200PostStreamFailure && (
             <div className="flex items-start justify-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 px-2 pb-1">
               <InfoIcon className="h-3 w-3 shrink-0 mt-0.5" aria-hidden="true" />
-              <span className="text-center">{t("logs.details.fake200ForwardedNotice")}</span>
+              <div className="flex flex-col items-center gap-1 text-center">
+                <span>{t("logs.details.fake200ForwardedNotice")}</span>
+                <Fake200RetryTooltip
+                  className="justify-center text-amber-700 dark:text-amber-300"
+                  side="top"
+                  align="center"
+                />
+              </div>
             </div>
           )}
           <p className="text-[10px] text-muted-foreground text-center">
