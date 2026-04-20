@@ -235,7 +235,13 @@ export function ProviderChainPopover({
                         </div>
                       )}
                       <div>{t("logs.details.fake200ForwardedNotice")}</div>
-                      <Fake200RetryTooltip className="text-amber-600 dark:text-amber-300" />
+                      <div className="space-y-1 pt-1 text-amber-600 dark:text-amber-300">
+                        <div className="font-medium">
+                          {t("logs.details.fake200RetryTooltipTitle")}
+                        </div>
+                        <div>{t("logs.details.fake200RetryTooltipServerRetry")}</div>
+                        <div>{t("logs.details.fake200RetryTooltipSessionFallback")}</div>
+                      </div>
                     </div>
                   </div>
                 )}

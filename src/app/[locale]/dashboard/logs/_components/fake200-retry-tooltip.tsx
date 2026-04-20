@@ -24,10 +24,9 @@ export function Fake200RetryTooltip({
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-1 text-[10px] font-medium underline decoration-dotted underline-offset-2 hover:no-underline focus-visible:outline-none",
+            "inline-flex items-center gap-1 rounded-sm text-[10px] font-medium underline decoration-dotted underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none",
             className
           )}
-          aria-label={t("fake200RetryTooltipLabel")}
         >
           <span>{t("fake200RetryTooltipLabel")}</span>
           <InfoIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
