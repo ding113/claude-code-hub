@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Clock3,
   Gauge,
+  Languages,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -16,21 +17,13 @@ import {
 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useTranslations } from "next-intl";
-import {
-  startTransition,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { startTransition, useEffect, useEffectEvent, useMemo, useState, type CSSProperties } from "react";
+import { Link } from "@/i18n/routing";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import type { PublicSystemStatusProvider, PublicSystemStatusSnapshot } from "@/lib/system-status";
 import { cn } from "@/lib/utils";
 
 const REFRESH_INTERVAL_MS = 30_000;
-const SYSTEM_STATUS_TIME_ZONE = "UTC";
 
 const PAGE_VARS: CSSProperties = {
   ["--neo-bg" as string]: "#FFFDF5",
@@ -42,8 +35,8 @@ const PAGE_VARS: CSSProperties = {
   ["--neo-paper" as string]: "#FFFFFF",
 };
 
-const DISPLAY = "font-[family-name:var(--font-system-status-display)]";
-const MONO = "font-[family-name:var(--font-system-status-mono)]";
+const DISPLAY = "font-[family-name:var(--font-system-status-display-stack)]";
+const MONO = "font-[family-name:var(--font-system-status-mono-stack)]";
 const PANEL = "border-4 border-black bg-[var(--neo-paper)] shadow-[8px_8px_0px_0px_#000]";
 const PANEL_DEEP = "border-4 border-black bg-[var(--neo-paper)] shadow-[12px_12px_0px_0px_#000]";
 const PANEL_PRESSABLE =
@@ -53,6 +46,10 @@ const OUTLINE_TEXT_STYLE: CSSProperties = {
   color: "transparent",
   textShadow: "6px 6px 0px rgba(0,0,0,0.04)",
 };
+const SYSTEM_STATUS_LANGUAGE_OPTIONS = [
+  { locale: "en", key: "en" },
+  { locale: "zh-CN", key: "zhCN" },
+] as const;
 
 function formatPercent(locale: string, value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) {
@@ -112,7 +109,6 @@ function formatTimestamp(locale: string, value: string | null | undefined) {
   }
 
   return new Intl.DateTimeFormat(locale, {
-    timeZone: SYSTEM_STATUS_TIME_ZONE,
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -127,7 +123,6 @@ function formatMarkerDate(locale: string, value: string) {
   }
 
   return new Intl.DateTimeFormat(locale, {
-    timeZone: SYSTEM_STATUS_TIME_ZONE,
     month: "numeric",
     day: "numeric",
   }).format(date);
@@ -212,7 +207,7 @@ function getHistoryDayKey(value: string) {
     return value;
   }
 
-  return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
 function buildHistorySegments(
@@ -361,6 +356,51 @@ function MetricCell({
       <div className={cn(MONO, "text-[10px] font-bold uppercase tracking-[0.16em]")}>{label}</div>
       <div className={cn(DISPLAY, "mt-3 text-2xl font-bold leading-none tracking-[-0.05em]")}>
         {value}
+      </div>
+    </div>
+  );
+}
+
+function LanguageToggle({ locale }: { locale: string }) {
+  const t = useTranslations("systemStatus");
+  const activeLocale = locale === "zh-CN" ? "zh-CN" : "en";
+
+  return (
+    <div className="flex w-full max-w-[420px] flex-col gap-2 lg:items-end">
+      <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em]")}>
+        {t("languageSwitcher.label")}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {SYSTEM_STATUS_LANGUAGE_OPTIONS.map((option) => {
+          const optionKey = option.key;
+          const isActive = option.locale === activeLocale;
+
+          return (
+            <Link
+              key={option.locale}
+              href="/system-status"
+              locale={option.locale}
+              className={cn(
+                PANEL,
+                "group block min-w-[160px] p-3 transition-transform duration-150 ease-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[12px_12px_0px_0px_#000]",
+                isActive ? "bg-[var(--neo-yellow)]" : "bg-white"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className={cn(MONO, "text-[11px] font-bold uppercase tracking-[0.18em]")}>
+                  {t(`languageSwitcher.options.${optionKey}.short`)}
+                </div>
+                <Languages className="h-4 w-4 stroke-[2.75px]" />
+              </div>
+              <div className={cn(DISPLAY, "mt-3 text-[1.65rem] font-bold leading-none tracking-[-0.06em]")}>
+                {t(`languageSwitcher.options.${optionKey}.label`)}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+      <div className={cn(MONO, "text-[10px] font-bold uppercase tracking-[0.14em] text-black/70")}>
+        {t("languageSwitcher.defaultHint")}
       </div>
     </div>
   );
@@ -517,7 +557,7 @@ function ProviderCard({
                 {t("provider.meta.requests")} {formatCompactNumber(locale, provider.totalRequests)}
               </Sticker>
               <Sticker className={cn("bg-white", provider.lastRequestAt ? "" : "bg-[var(--neo-yellow)]")} rotate="-rotate-1">
-                {t("provider.live", { value: formatPercent(locale, latestAvailability) })}
+                {t("provider.liveAvailability")} {formatPercent(locale, latestAvailability)}
               </Sticker>
             </div>
           </div>
@@ -591,12 +631,8 @@ export function SystemStatusView({
   const [data, setData] = useState(initialData);
   const [refreshing, setRefreshing] = useState(!initialData);
   const [error, setError] = useState<string | null>(null);
-  const requestSequenceRef = useRef(0);
 
   const refreshSnapshot = useEffectEvent(async (showRefreshing: boolean) => {
-    const requestId = requestSequenceRef.current + 1;
-    requestSequenceRef.current = requestId;
-
     if (showRefreshing) {
       setRefreshing(true);
     }
@@ -608,23 +644,14 @@ export function SystemStatusView({
       }
 
       const snapshot = (await response.json()) as PublicSystemStatusSnapshot;
-      if (requestSequenceRef.current !== requestId) {
-        return;
-      }
-
       startTransition(() => {
         setData(snapshot);
         setError(null);
       });
     } catch (fetchError) {
-      if (requestSequenceRef.current !== requestId) {
-        return;
-      }
-
-      console.error("[SystemStatusView] refresh failed", fetchError);
-      setError(t("states.fetchFailed"));
+      setError(fetchError instanceof Error ? fetchError.message : t("states.fetchFailed"));
     } finally {
-      if (showRefreshing && requestSequenceRef.current === requestId) {
+      if (showRefreshing) {
         setRefreshing(false);
       }
     }
@@ -704,25 +731,30 @@ export function SystemStatusView({
 
           <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_320px]">
             <div className="min-w-0">
-              <div className="relative">
-                <div
-                  className={cn(
-                    DISPLAY,
-                    "text-[clamp(3.8rem,11vw,8rem)] font-bold uppercase leading-[0.8] tracking-[-0.12em]"
-                  )}
-                  style={OUTLINE_TEXT_STYLE}
-                >
-                  {t("hero.titlePrimary")}
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="relative">
+                  <div
+                    className={cn(
+                      DISPLAY,
+                      "text-[clamp(3.8rem,11vw,8rem)] font-bold uppercase leading-[0.8] tracking-[-0.12em]"
+                    )}
+                    style={OUTLINE_TEXT_STYLE}
+                  >
+                    {t("hero.titleLineOne")}
+                  </div>
+                  <div
+                    className={cn(
+                      DISPLAY,
+                      "mt-[-0.4rem] text-[clamp(3rem,9vw,6.5rem)] font-bold uppercase leading-[0.85] tracking-[-0.12em]"
+                    )}
+                  >
+                    {t("hero.titleLineTwo")}
+                  </div>
                 </div>
-                <div
-                  className={cn(
-                    DISPLAY,
-                    "mt-[-0.4rem] text-[clamp(3rem,9vw,6.5rem)] font-bold uppercase leading-[0.85] tracking-[-0.12em]"
-                  )}
-                >
-                  {t("hero.titleSecondary")}
-                </div>
+                <LanguageToggle locale={locale} />
               </div>
+
+              <p className="mt-4 max-w-3xl text-sm font-bold leading-6 sm:text-base">{t("hero.description")}</p>
 
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <Sticker className="bg-[var(--neo-violet)]" rotate="rotate-2">
@@ -840,6 +872,9 @@ export function SystemStatusView({
               {t("provider.count", {
                 count: formatNumber(locale, orderedProviders.length, 0),
               })}
+            </Sticker>
+            <Sticker className="bg-[var(--neo-violet)]" rotate="-rotate-1">
+              {t("provider.sectionTitle")}
             </Sticker>
           </div>
 

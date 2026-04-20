@@ -34,6 +34,13 @@ function proxyHandler(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Public system status defaults to English when accessed without an explicit locale prefix.
+  if (pathname === "/system-status" || pathname === "/system-status/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/en/system-status";
+    return NextResponse.redirect(url);
+  }
+
   // Skip locale handling for static files and Next.js internals
   if (pathname.startsWith("/_next") || pathname === "/favicon.ico") {
     return NextResponse.next();

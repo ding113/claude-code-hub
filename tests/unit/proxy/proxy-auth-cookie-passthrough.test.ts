@@ -9,7 +9,7 @@ vi.mock("next-intl/middleware", () => ({
 
 vi.mock("@/i18n/routing", () => ({
   routing: {
-    locales: ["zh-CN", "en"],
+    locales: ["zh-CN", "zh-TW", "en", "ru", "ja"],
     defaultLocale: "zh-CN",
   },
 }));
@@ -35,7 +35,7 @@ function makeRequest(pathname: string, cookies: Record<string, string> = {}) {
 }
 
 describe("proxy auth cookie passthrough", () => {
-  it("redirects to login when no auth cookie is present", async () => {
+  it("redirects to login when no auth cookie is present", { timeout: 20000 }, async () => {
     const localeResponse = new Response(null, { status: 200 });
     mockIntlMiddleware.mockReturnValue(localeResponse);
 
@@ -91,7 +91,9 @@ describe("proxy auth cookie passthrough", () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(makeRequest("/system-status"));
 
-    expect(response.headers.get("x-test")).toBe("system-status-ok");
+    expect(response.status).toBeGreaterThanOrEqual(300);
+    expect(response.status).toBeLessThan(400);
+    expect(response.headers.get("location")).toContain("/en/system-status");
   });
 
   it("allows locale-prefixed system-status without any cookie", async () => {

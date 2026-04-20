@@ -5,14 +5,28 @@
     "kicker": "可信公开观测路径",
     "pathLabel": "公开状态路径",
     "title": "系统状态",
-    "titlePrimary": "系统",
-    "titleSecondary": "状态",
+    "titleLineOne": "系统",
+    "titleLineTwo": "状态",
     "description": "一个公开路径，集中观察 provider 健康度、缓存命中效率、输出速率与 token 成本效率。",
     "window": "滚动窗口 · 最近 {days} 天",
     "updatedAt": "更新于 {value}",
     "awaitingData": "等待首个快照",
     "refreshing": "刷新中",
     "autoRefresh": "每 30 秒自动刷新"
+  },
+  "languageSwitcher": {
+    "label": "语言切换",
+    "defaultHint": "默认入口会直接打开英文版。",
+    "options": {
+      "en": {
+        "short": "EN",
+        "label": "English"
+      },
+      "zhCN": {
+        "short": "中文",
+        "label": "简体中文"
+      }
+    }
   },
   "summary": {
     "systemAvailability": "系统可用性",
@@ -40,9 +54,9 @@
   "provider": {
     "sectionEyebrow": "Provider 观察面",
     "sectionTitle": "每个 provider 一张状态卡",
-    "count": "{count} 个 provider",
     "history": "最近可用性轨迹",
-    "live": "在线 {value}",
+    "count": "{count} 个 provider",
+    "liveAvailability": "实时",
     "noData": "无数据",
     "meta": {
       "windowHint": "展示当前状态与最近七天滚动效率指标。",

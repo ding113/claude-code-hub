@@ -5,14 +5,28 @@
     "kicker": "可信公開觀測路徑",
     "pathLabel": "公開狀態路徑",
     "title": "系統狀態",
-    "titlePrimary": "系統",
-    "titleSecondary": "狀態",
+    "titleLineOne": "系統",
+    "titleLineTwo": "狀態",
     "description": "一個公開路徑，集中觀察 provider 健康度、快取命中效率、輸出速率與 token 成本效率。",
     "window": "滾動視窗 · 最近 {days} 天",
     "updatedAt": "更新於 {value}",
     "awaitingData": "等待第一個快照",
     "refreshing": "重新整理中",
     "autoRefresh": "每 30 秒自動重新整理"
+  },
+  "languageSwitcher": {
+    "label": "語言切換",
+    "defaultHint": "預設入口會直接開啟英文版。",
+    "options": {
+      "en": {
+        "short": "EN",
+        "label": "English"
+      },
+      "zhCN": {
+        "short": "中文",
+        "label": "簡體中文"
+      }
+    }
   },
   "summary": {
     "systemAvailability": "系統可用性",
@@ -40,9 +54,9 @@
   "provider": {
     "sectionEyebrow": "Provider 觀測面",
     "sectionTitle": "每個 provider 一張狀態卡",
-    "count": "{count} 個 provider",
     "history": "最近可用性軌跡",
-    "live": "在線 {value}",
+    "count": "{count} 個 provider",
+    "liveAvailability": "即時",
     "noData": "無資料",
     "meta": {
       "windowHint": "顯示目前狀態與最近七天滾動效率指標。",

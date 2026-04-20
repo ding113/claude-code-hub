@@ -24,4 +24,28 @@ describe("messages/<locale>/systemStatus metadata keys", () => {
       expect(systemStatus.pageDescription).not.toBe("");
     }
   });
+
+  test("provides hero, language switcher and provider status keys", () => {
+    const all = [
+      enSystemStatus,
+      jaSystemStatus,
+      ruSystemStatus,
+      zhCNSystemStatus,
+      zhTWSystemStatus,
+    ];
+
+    for (const systemStatus of all) {
+      expect(systemStatus).toHaveProperty("hero.titleLineOne");
+      expect(systemStatus).toHaveProperty("hero.titleLineTwo");
+      expect(systemStatus).toHaveProperty("languageSwitcher.label");
+      expect(systemStatus).toHaveProperty("languageSwitcher.defaultHint");
+      expect(systemStatus).toHaveProperty("languageSwitcher.options.en.short");
+      expect(systemStatus).toHaveProperty("languageSwitcher.options.en.label");
+      expect(systemStatus).toHaveProperty("languageSwitcher.options.zhCN.short");
+      expect(systemStatus).toHaveProperty("languageSwitcher.options.zhCN.label");
+      expect(systemStatus).toHaveProperty("provider.count");
+      expect(systemStatus).toHaveProperty("provider.liveAvailability");
+      expect(systemStatus).toHaveProperty("provider.noData");
+    }
+  });
 });

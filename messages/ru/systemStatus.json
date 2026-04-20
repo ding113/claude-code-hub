@@ -1,60 +1,74 @@
 {
-  "pageTitle": "Статус системы - Claude Code Hub",
-  "pageDescription": "Публичная страница статуса провайдеров Claude Code Hub",
+  "pageTitle": "System Status - Claude Code Hub",
+  "pageDescription": "Claude Code Hub public provider status page",
   "hero": {
-    "kicker": "Надёжный публичный путь наблюдения",
-    "pathLabel": "Публичная линия статуса",
-    "title": "Статус системы",
-    "titlePrimary": "Система",
-    "titleSecondary": "Статус",
-    "description": "Публичный путь для наблюдения за здоровьем провайдеров, эффективностью кеша, скоростью вывода и эффективностью стоимости токенов.",
-    "window": "Скользящее окно · последние {days} дней",
-    "updatedAt": "Обновлено {value}",
-    "awaitingData": "Ожидание первого снимка",
-    "refreshing": "Обновление",
-    "autoRefresh": "Автообновление каждые 30 сек"
+    "kicker": "Trusted public observation path",
+    "pathLabel": "Public Status Line",
+    "title": "System Status",
+    "titleLineOne": "System",
+    "titleLineTwo": "Status",
+    "description": "A public path for monitoring provider health, cache efficiency, output speed, and token cost efficiency.",
+    "window": "Rolling window · last {days} days",
+    "updatedAt": "Updated {value}",
+    "awaitingData": "Waiting for first snapshot",
+    "refreshing": "Refreshing",
+    "autoRefresh": "Auto refresh every 30s"
+  },
+  "languageSwitcher": {
+    "label": "Language Switch",
+    "defaultHint": "Default entry opens in English.",
+    "options": {
+      "en": {
+        "short": "EN",
+        "label": "English"
+      },
+      "zhCN": {
+        "short": "ZH",
+        "label": "简体中文"
+      }
+    }
   },
   "summary": {
-    "systemAvailability": "Доступность системы",
-    "providerCoverage": "Отслеживается {providers} provider",
-    "healthyProviders": "Здоровые provider",
-    "degradedBreakdown": "{degraded} с деградацией · {unknown} неизвестно",
-    "weightedCacheHitRate": "Взвешенный hit rate кеша",
-    "cacheHint": "С учётом трафикового веса активных provider",
-    "weightedCostPerMillionTokens": "Взвешенная стоимость / 1 млн",
-    "weightedOutputRate": "Взвешенная скорость вывода {value}"
+    "systemAvailability": "System Availability",
+    "providerCoverage": "{providers} providers tracked",
+    "healthyProviders": "Healthy Providers",
+    "degradedBreakdown": "{degraded} degraded · {unknown} unknown",
+    "weightedCacheHitRate": "Weighted Cache Hit",
+    "cacheHint": "Traffic-weighted across active providers",
+    "weightedCostPerMillionTokens": "Weighted Cost / 1M",
+    "weightedOutputRate": "Weighted output rate {value}"
   },
   "status": {
-    "green": "Работает",
-    "red": "Деградация",
-    "unknown": "Неизвестно"
+    "green": "Operational",
+    "red": "Degraded",
+    "unknown": "Unknown"
   },
   "metrics": {
-    "availability": "Доступность",
-    "cacheHitRate": "Hit rate кеша",
-    "outputRate": "Средняя скорость вывода",
+    "availability": "Availability",
+    "cacheHitRate": "Cache Hit Rate",
+    "outputRate": "Avg Output Rate",
     "outputRateValue": "{value} tok/s",
-    "costPerMillionTokens": "Средняя стоимость / 1 млн токенов",
-    "costPerHundredMillionTokens": "Средняя стоимость / 100 млн токенов"
+    "costPerMillionTokens": "Avg Cost / 1M Tokens",
+    "costPerHundredMillionTokens": "Avg Cost / 100M Tokens"
   },
   "provider": {
-    "sectionEyebrow": "Наблюдение за provider",
-    "sectionTitle": "Одна карточка на каждый provider",
-    "count": "{count} provider",
-    "history": "Недавняя траектория доступности",
-    "live": "ОНЛАЙН {value}",
-    "noData": "НЕТ ДАННЫХ",
+    "sectionEyebrow": "Provider Watch",
+    "sectionTitle": "One card per provider",
+    "history": "Recent availability path",
+    "count": "{count} providers",
+    "liveAvailability": "Live",
+    "noData": "No data",
     "meta": {
-      "windowHint": "Текущий статус и метрики эффективности за последние 7 дней.",
-      "requests": "Запросы",
-      "successRate": "Успех",
-      "latency": "Средняя задержка",
-      "lastRequestValue": "Последний запрос {value}",
-      "noRecentTraffic": "Недавнего трафика нет"
+      "windowHint": "Current status plus rolling seven-day efficiency metrics.",
+      "requests": "Requests",
+      "successRate": "Success",
+      "latency": "Avg latency",
+      "lastRequestValue": "Last request {value}",
+      "noRecentTraffic": "No recent traffic"
     }
   },
   "states": {
-    "fetchFailed": "Сейчас не удалось обновить статус системы",
-    "empty": "Данные о статусе provider пока недоступны."
+    "fetchFailed": "Unable to refresh system status right now",
+    "empty": "No provider status data is available yet."
   }
 }

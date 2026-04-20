@@ -5,14 +5,28 @@
     "kicker": "Trusted public observation path",
     "pathLabel": "Public Status Line",
     "title": "System Status",
-    "titlePrimary": "System",
-    "titleSecondary": "Status",
+    "titleLineOne": "System",
+    "titleLineTwo": "Status",
     "description": "A single public path for watching provider health, cache efficiency, output speed, and token cost efficiency.",
     "window": "Rolling window · last {days} days",
     "updatedAt": "Updated {value}",
     "awaitingData": "Waiting for first snapshot",
     "refreshing": "Refreshing",
     "autoRefresh": "Auto refresh every 30s"
+  },
+  "languageSwitcher": {
+    "label": "Language Switch",
+    "defaultHint": "Default entry opens in English.",
+    "options": {
+      "en": {
+        "short": "EN",
+        "label": "English"
+      },
+      "zhCN": {
+        "short": "ZH",
+        "label": "简体中文"
+      }
+    }
   },
   "summary": {
     "systemAvailability": "System Availability",
@@ -40,10 +54,10 @@
   "provider": {
     "sectionEyebrow": "Provider Watch",
     "sectionTitle": "One card per provider",
-    "count": "{count} providers",
     "history": "Recent availability path",
-    "live": "LIVE {value}",
-    "noData": "NO DATA",
+    "count": "{count} providers",
+    "liveAvailability": "Live",
+    "noData": "No data",
     "meta": {
       "windowHint": "Current status plus rolling seven-day efficiency metrics.",
       "requests": "Requests",
