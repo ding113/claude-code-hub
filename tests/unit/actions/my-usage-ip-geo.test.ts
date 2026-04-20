@@ -45,8 +45,9 @@ const mocks = vi.hoisted(() => ({
   dbFrom: vi.fn(),
   dbWhere: vi.fn(),
   dbLimit: vi.fn(),
-  getTranslations: vi.fn(async () => (key: string, params?: Record<string, unknown>) =>
-    params?.field ? `${key}:${String(params.field)}` : key
+  getTranslations: vi.fn(
+    async () => (key: string, params?: Record<string, unknown>) =>
+      params?.field ? `${key}:${String(params.field)}` : key
   ),
 }));
 

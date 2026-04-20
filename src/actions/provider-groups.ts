@@ -98,7 +98,11 @@ export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWit
     return { ok: true, data };
   } catch (error) {
     logger.error("Failed to fetch provider groups:", error);
-    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 

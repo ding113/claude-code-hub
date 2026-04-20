@@ -52,7 +52,10 @@ export async function getClientIpWithFreshSettings(
 
   const cachedSettings = getCachedSystemSettingsOnlyCache();
   if (cachedSettings) {
-    return extractClientIp(source, cachedSettings.ipExtractionConfig ?? DEFAULT_IP_EXTRACTION_CONFIG);
+    return extractClientIp(
+      source,
+      cachedSettings.ipExtractionConfig ?? DEFAULT_IP_EXTRACTION_CONFIG
+    );
   }
 
   if (!hasPotentialIpHeader(source)) {
