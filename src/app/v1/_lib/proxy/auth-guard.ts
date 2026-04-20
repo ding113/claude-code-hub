@@ -28,7 +28,18 @@ export class ProxyAuthenticator {
     // (message-service / audit writer) so we only parse headers once.
     const clientIp = getClientIp(session.headers) ?? "unknown";
     session.clientIp = clientIp === "unknown" ? null : clientIp;
-    const rateLimitDecision = proxyAuthPolicy.check(clientIp);
+    const authHeader = session.headers.get("authorization") ?? undefined;
+    const apiKeyHeader = session.headers.get("x-api-key") ?? undefined;
+    // Gemini CLI 认证：支持 x-goog-api-key 头部和 key 查询参数
+    const geminiApiKeyHeader = session.headers.get(GEMINI_PROTOCOL.HEADERS.API_KEY) ?? undefined;
+    const geminiApiKeyQuery = session.requestUrl.searchParams.get("key") ?? undefined;
+    const candidateApiKey = ProxyAuthenticator.resolvePreAuthCandidateKey({
+      authHeader,
+      apiKeyHeader,
+      geminiApiKeyHeader,
+      geminiApiKeyQuery,
+    });
+    const rateLimitDecision = proxyAuthPolicy.check(clientIp, candidateApiKey ?? undefined);
     if (!rateLimitDecision.allowed) {
       const retryAfter = rateLimitDecision.retryAfterSeconds;
       const response = ProxyResponses.buildError(
@@ -48,12 +59,6 @@ export class ProxyAuthenticator {
       return response;
     }
 
-    const authHeader = session.headers.get("authorization") ?? undefined;
-    const apiKeyHeader = session.headers.get("x-api-key") ?? undefined;
-    // Gemini CLI 认证：支持 x-goog-api-key 头部和 key 查询参数
-    const geminiApiKeyHeader = session.headers.get(GEMINI_PROTOCOL.HEADERS.API_KEY) ?? undefined;
-    const geminiApiKeyQuery = session.requestUrl.searchParams.get("key") ?? undefined;
-
     const authState = await ProxyAuthenticator.validate({
       authHeader,
       apiKeyHeader,
@@ -63,15 +68,39 @@ export class ProxyAuthenticator {
     session.setAuthState(authState);
 
     if (authState.success) {
-      proxyAuthPolicy.recordSuccess(clientIp);
+      proxyAuthPolicy.recordSuccess(clientIp, authState.apiKey ?? undefined);
       return null;
     }
 
     // Record failure for rate limiting
-    proxyAuthPolicy.recordFailure(clientIp);
+    proxyAuthPolicy.recordFailure(clientIp, authState.apiKey ?? candidateApiKey ?? undefined);
 
     // 返回详细的错误信息，帮助用户快速定位问题
     return authState.errorResponse ?? ProxyResponses.buildError(401, "认证失败");
+  }
+
+  private static resolvePreAuthCandidateKey(headers: {
+    authHeader?: string;
+    apiKeyHeader?: string;
+    geminiApiKeyHeader?: string;
+    geminiApiKeyQuery?: string;
+  }): string | null {
+    const bearerKey = ProxyAuthenticator.extractKeyFromAuthorization(headers.authHeader);
+    const apiKeyHeader = ProxyAuthenticator.normalizeKey(headers.apiKeyHeader);
+    const geminiApiKey =
+      ProxyAuthenticator.normalizeKey(headers.geminiApiKeyHeader) ||
+      ProxyAuthenticator.normalizeKey(headers.geminiApiKeyQuery);
+
+    const providedKeys = [bearerKey, apiKeyHeader, geminiApiKey].filter(
+      (value): value is string => typeof value === "string" && value.length > 0
+    );
+
+    if (providedKeys.length === 0) {
+      return null;
+    }
+
+    const [firstKey] = providedKeys;
+    return providedKeys.every((key) => key === firstKey) ? firstKey : null;
   }
 
   private static async validate(headers: {
