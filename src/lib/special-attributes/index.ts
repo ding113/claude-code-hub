@@ -15,9 +15,10 @@
 export const CONTEXT_1M_TOKEN_THRESHOLD = 200000;
 
 /**
- * Pricing multipliers for tokens exceeding the threshold
- * - Input: 2x ($3/MTok -> $6/MTok for tokens >200k)
- * - Output: 1.5x ($15/MTok -> $22.50/MTok for tokens >200k)
+ * Legacy 1M context premium multipliers.
+ *
+ * 保留这些常量仅用于兼容旧数据/旧文档引用；当前成本计算已不再直接
+ * 依赖本地硬编码倍数，而是以云端价格表中的显式长上下文字段为准。
  */
 export const CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER = 2.0;
 export const CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER = 1.5;

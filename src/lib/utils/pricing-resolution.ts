@@ -37,10 +37,9 @@ export interface ResolvePricingForModelRecordsInput {
   fallbackRecord: ModelPrice | null;
 }
 
-const DETAIL_FIELDS = [
+const PROVIDER_DETAIL_FIELDS = [
   "input_cost_per_token",
   "output_cost_per_token",
-  "input_cost_per_request",
   "cache_creation_input_token_cost",
   "cache_creation_input_token_cost_above_1hr",
   "cache_read_input_token_cost",
@@ -65,7 +64,11 @@ const DETAIL_FIELDS = [
   "cache_read_input_token_cost_priority",
   "output_cost_per_image",
   "input_cost_per_image",
+  "output_cost_per_image_token",
+  "input_cost_per_image_token",
 ] as const;
+
+const DETAIL_SCORE_OBJECT_FIELDS = ["long_context_pricing"] as const;
 
 const DETAIL_TIE_BREAK_ORDER = [
   "openrouter",
@@ -198,8 +201,16 @@ function mergePriceData(
       : { ...base };
   }
 
+  // 价格节点切换时，先清空上一 provider 遗留的明细价格字段，
+  // 再叠加当前 provider 的 pricing 节点，避免把别家 above_200k/272k
+  // 等字段残留到当前解析结果里。
+  const clearedBase: ModelPriceData = { ...base };
+  for (const field of PROVIDER_DETAIL_FIELDS) {
+    delete clearedBase[field];
+  }
+
   return {
-    ...base,
+    ...clearedBase,
     ...pricingNode,
     pricing: base.pricing,
     selected_pricing_provider: pricingProviderKey,
@@ -207,10 +218,20 @@ function mergePriceData(
 }
 
 function getDetailScore(pricingNode: Record<string, unknown>): number {
-  return DETAIL_FIELDS.reduce((score, field) => {
+  const numericScore = PROVIDER_DETAIL_FIELDS.reduce((score, field) => {
     const value = pricingNode[field];
     return typeof value === "number" && Number.isFinite(value) ? score + 1 : score;
   }, 0);
+
+  const objectScore = DETAIL_SCORE_OBJECT_FIELDS.reduce((score, field) => {
+    const value = pricingNode[field];
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return score;
+    }
+    return Object.keys(value).length > 0 ? score + 1 : score;
+  }, 0);
+
+  return numericScore + objectScore;
 }
 
 function compareDetailKeys(

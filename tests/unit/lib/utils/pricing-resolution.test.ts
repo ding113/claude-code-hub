@@ -143,4 +143,86 @@ describe("resolvePricingForModelRecords", () => {
     expect(resolved?.priceData.input_cost_per_token).toBe(0.0000099);
     expect(resolved?.resolvedPricingProviderKey).toBe("manual-custom");
   });
+
+  test("official anthropic fallback clears stale long-context fields from unrelated provider top-level data", () => {
+    const cloudRecord = makeRecord("claude-sonnet-4-6", {
+      mode: "chat",
+      model_family: "claude-sonnet",
+      litellm_provider: "bedrock_converse",
+      input_cost_per_token: 0.000003,
+      output_cost_per_token: 0.000015,
+      input_cost_per_token_above_200k_tokens: 0.000006,
+      output_cost_per_token_above_200k_tokens: 0.0000225,
+      pricing: {
+        anthropic: {
+          input_cost_per_token: 0.000003,
+          output_cost_per_token: 0.000015,
+        },
+        openrouter: {
+          input_cost_per_token: 0.000003,
+          output_cost_per_token: 0.000015,
+          input_cost_per_token_above_200k_tokens: 0.000006,
+          output_cost_per_token_above_200k_tokens: 0.0000225,
+        },
+      },
+    });
+
+    const resolved = resolvePricingForModelRecords({
+      provider: null,
+      primaryModelName: "claude-sonnet-4-6",
+      fallbackModelName: null,
+      primaryRecord: cloudRecord,
+      fallbackRecord: null,
+    });
+
+    expect(resolved).not.toBeNull();
+    expect(resolved?.source).toBe("official_fallback");
+    expect(resolved?.resolvedPricingProviderKey).toBe("anthropic");
+    expect(resolved?.priceData.input_cost_per_token).toBe(0.000003);
+    expect(resolved?.priceData.input_cost_per_token_above_200k_tokens).toBeUndefined();
+    expect(resolved?.priceData.output_cost_per_token_above_200k_tokens).toBeUndefined();
+  });
+
+  test("provider merge keeps shared top-level request fees and long_context_pricing", () => {
+    const cloudRecord = makeRecord("gpt-5.4", {
+      mode: "responses",
+      model_family: "gpt",
+      litellm_provider: "azure",
+      input_cost_per_request: 0.123,
+      long_context_pricing: {
+        threshold_tokens: 272000,
+        input_cost_per_token: 0.000005,
+      },
+      pricing: {
+        openai: {
+          input_cost_per_token: 0.0000025,
+          output_cost_per_token: 0.000015,
+        },
+        azure: {
+          input_cost_per_token: 0.0000027,
+          output_cost_per_token: 0.000016,
+        },
+      },
+    });
+
+    const resolved = resolvePricingForModelRecords({
+      provider: {
+        id: 4,
+        name: "OpenAI",
+        url: "https://api.openai.com/v1/responses",
+      } as never,
+      primaryModelName: "gpt-5.4",
+      fallbackModelName: null,
+      primaryRecord: cloudRecord,
+      fallbackRecord: null,
+    });
+
+    expect(resolved).not.toBeNull();
+    expect(resolved?.resolvedPricingProviderKey).toBe("openai");
+    expect(resolved?.priceData.input_cost_per_request).toBe(0.123);
+    expect(resolved?.priceData.long_context_pricing).toEqual({
+      threshold_tokens: 272000,
+      input_cost_per_token: 0.000005,
+    });
+  });
 });
