@@ -139,6 +139,7 @@ export async function findUsageLogsBatch(
   filters: UsageLogBatchFilters
 ): Promise<UsageLogsBatchResult> {
   const { userId, keyId, providerId, cursor, limit = 50 } = filters;
+  const safeLimit = Math.min(100, Math.max(1, limit));
 
   // Build query conditions
   const conditions = [isNull(messageRequest.deletedAt)];
@@ -166,7 +167,7 @@ export async function findUsageLogsBatch(
   }
 
   // Fetch limit + 1 to determine if there are more records
-  const fetchLimit = limit + 1;
+  const fetchLimit = safeLimit + 1;
 
   const results = await db
     .select({
@@ -215,8 +216,8 @@ export async function findUsageLogsBatch(
     .limit(fetchLimit);
 
   // Determine if there are more records
-  const hasMore = results.length > limit;
-  const logsToReturn = hasMore ? results.slice(0, limit) : results;
+  const hasMore = results.length > safeLimit;
+  const logsToReturn = hasMore ? results.slice(0, safeLimit) : results;
 
   // Calculate next cursor from the last record
   const lastLog = logsToReturn[logsToReturn.length - 1];

@@ -76,6 +76,14 @@ const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
 // - 'enabled': force inject googleSearch tool
 // - 'disabled': force remove googleSearch tool from request
 const GEMINI_GOOGLE_SEARCH_PREFERENCE = z.enum(["inherit", "enabled", "disabled"]);
+const XFF_PICK_SCHEMA = z.union([
+  z.literal("leftmost"),
+  z.literal("rightmost"),
+  z.object({
+    kind: z.literal("index"),
+    index: z.number().int().min(0),
+  }),
+]);
 
 const CLIENT_PATTERN_SCHEMA = z
   .string()
@@ -1012,7 +1020,7 @@ export const UpdateSystemSettingsSchema = z.object({
         headers: z.array(
           z.object({
             name: z.string(),
-            pick: z.any().optional(),
+            pick: XFF_PICK_SCHEMA.optional(),
           })
         ),
       }),

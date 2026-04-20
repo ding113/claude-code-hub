@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/drizzle/db";
+import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
 import { APP_VERSION } from "@/lib/version";
 import type { ComponentHealth, HealthCheckResponse } from "./types";
@@ -17,6 +18,15 @@ export function getAppVersion(): string {
 
 const DB_CHECK_TIMEOUT_MS = 3_000;
 const REDIS_CHECK_TIMEOUT_MS = 2_000;
+const DATABASE_FAILURE_MESSAGE = "Database connection failed";
+const REDIS_FAILURE_MESSAGE = "Redis connection failed";
+const PROXY_FAILURE_MESSAGE = "Proxy request failed";
+
+function logHealthFailure(component: "database" | "redis" | "proxy", error: unknown): void {
+  logger.warn(`[Health] ${component} check failed`, {
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -49,10 +59,11 @@ export async function checkDatabase(): Promise<ComponentHealth> {
     await withTimeout(db.execute(sql`SELECT 1`), DB_CHECK_TIMEOUT_MS, "database");
     return { status: "up", latencyMs: Math.round(performance.now() - start) };
   } catch (error) {
+    logHealthFailure("database", error);
     return {
       status: "down",
       latencyMs: Math.round(performance.now() - start),
-      message: error instanceof Error ? error.message : String(error),
+      message: DATABASE_FAILURE_MESSAGE,
     };
   }
 }
@@ -85,10 +96,11 @@ export async function checkRedis(): Promise<ComponentHealth> {
     await withTimeout(client.ping(), REDIS_CHECK_TIMEOUT_MS, "redis");
     return { status: "up", latencyMs: Math.round(performance.now() - start) };
   } catch (error) {
+    logHealthFailure("redis", error);
     return {
       status: "down",
       latencyMs: Math.round(performance.now() - start),
-      message: error instanceof Error ? error.message : String(error),
+      message: REDIS_FAILURE_MESSAGE,
     };
   }
 }
@@ -115,10 +127,11 @@ export async function checkProxy(): Promise<ComponentHealth> {
       message: `Proxy returned HTTP ${res.status}`,
     };
   } catch (error) {
+    logHealthFailure("proxy", error);
     return {
       status: "down",
       latencyMs: Math.round(performance.now() - start),
-      message: error instanceof Error ? error.message : String(error),
+      message: PROXY_FAILURE_MESSAGE,
     };
   }
 }

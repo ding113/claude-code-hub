@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { IpGeoLookupResult } from "@/types/ip-geo";
 
+function flagEmoji(...codepoints: number[]): string {
+  return String.fromCodePoint(...codepoints);
+}
+
 const SAMPLE_LOOKUP = {
   ip: "8.8.8.8",
   version: "ipv4",
@@ -255,7 +259,12 @@ describe("lookupIp — partial payloads (CGN / bogon / tailscale IPs)", () => {
         population: 0,
         borders: [],
         is_eu_member: false,
-        flag: { emoji: "🇿🇿", unicode: "U+1F1FF U+1F1FF", svg: null, png: null },
+        flag: {
+          emoji: flagEmoji(0x1f1ff, 0x1f1ff),
+          unicode: "U+1F1FF U+1F1FF",
+          svg: null,
+          png: null,
+        },
         languages: [],
         currencies: [],
       },

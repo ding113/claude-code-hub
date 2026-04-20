@@ -75,8 +75,8 @@ function isValidLookupResult(data: unknown): data is IpGeoLookupResult {
   // upstream drifts into omitting the flag object we'd crash at render
   // time. Reject here instead, falling into the negative-cache path. Note
   // that `flag.svg` and `flag.png` are still allowed to be null — only the
-  // emoji is a hard requirement (the "ZZ" unknown-country payload carries
-  // 🇿🇿 for it).
+  // emoji field itself is a hard requirement for the fallback unknown-country
+  // payload shape.
   const flag = country.flag as Record<string, unknown> | undefined;
   if (!flag || typeof flag !== "object") return false;
   if (typeof flag.emoji !== "string") return false;

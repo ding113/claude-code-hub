@@ -1,9 +1,11 @@
 "use server";
 
+import { getTranslations } from "next-intl/server";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { findAllProvidersFresh } from "@/repository/provider";
 import {
@@ -36,10 +38,12 @@ export type ProviderGroupWithCount = ProviderGroup & {
  * Admin-only.
  */
 export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWithCount[]>> {
+  const t = await getTranslations("settings.providers.providerGroups");
+  const tError = await getTranslations("errors");
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "Unauthorized" };
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
     const [initialGroups, providers] = await Promise.all([
@@ -94,7 +98,7 @@ export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWit
     return { ok: true, data };
   } catch (error) {
     logger.error("Failed to fetch provider groups:", error);
-    return { ok: false, error: "Failed to fetch provider groups" };
+    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
   }
 }
 
@@ -107,15 +111,17 @@ export async function createProviderGroup(input: {
   costMultiplier?: number;
   description?: string;
 }): Promise<ActionResult<ProviderGroup>> {
+  const t = await getTranslations("settings.providers.providerGroups");
+  const tError = await getTranslations("errors");
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "Unauthorized" };
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
     const name = input.name?.trim();
     if (!name) {
-      return { ok: false, error: "Group name is required", errorCode: "NAME_REQUIRED" };
+      return { ok: false, error: t("nameRequired"), errorCode: "NAME_REQUIRED" };
     }
 
     if (
@@ -124,7 +130,7 @@ export async function createProviderGroup(input: {
     ) {
       return {
         ok: false,
-        error: "Cost multiplier must be a finite non-negative number",
+        error: t("invalidMultiplier"),
         errorCode: "INVALID_MULTIPLIER",
       };
     }
@@ -134,7 +140,7 @@ export async function createProviderGroup(input: {
     if (existing) {
       return {
         ok: false,
-        error: "A group with this name already exists",
+        error: t("duplicateName"),
         errorCode: "DUPLICATE_NAME",
       };
     }
@@ -170,7 +176,7 @@ export async function createProviderGroup(input: {
       success: false,
       errorMessage: "CREATE_FAILED",
     });
-    return { ok: false, error: "Failed to create provider group" };
+    return { ok: false, error: t("createFailed"), errorCode: ERROR_CODES.CREATE_FAILED };
   }
 }
 
@@ -182,10 +188,12 @@ export async function updateProviderGroup(
   id: number,
   input: { costMultiplier?: number; description?: string | null }
 ): Promise<ActionResult<ProviderGroup>> {
+  const t = await getTranslations("settings.providers.providerGroups");
+  const tError = await getTranslations("errors");
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "Unauthorized" };
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
     if (
@@ -194,7 +202,7 @@ export async function updateProviderGroup(
     ) {
       return {
         ok: false,
-        error: "Cost multiplier must be a finite non-negative number",
+        error: t("invalidMultiplier"),
         errorCode: "INVALID_MULTIPLIER",
       };
     }
@@ -207,7 +215,7 @@ export async function updateProviderGroup(
     });
 
     if (!updated) {
-      return { ok: false, error: "Provider group not found" };
+      return { ok: false, error: tError("NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
 
     emitActionAudit({
@@ -236,7 +244,7 @@ export async function updateProviderGroup(
       success: false,
       errorMessage: "UPDATE_FAILED",
     });
-    return { ok: false, error: "Failed to update provider group" };
+    return { ok: false, error: t("updateFailed"), errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }
 
@@ -245,22 +253,24 @@ export async function updateProviderGroup(
  * Admin-only. Cannot delete the "default" group.
  */
 export async function deleteProviderGroup(id: number): Promise<ActionResult<void>> {
+  const t = await getTranslations("settings.providers.providerGroups");
+  const tError = await getTranslations("errors");
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "Unauthorized" };
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
     // Pre-check: verify group exists and is not referenced by any provider.
     const existing = await findProviderGroupById(id);
     if (!existing) {
-      return { ok: false, error: "Provider group not found" };
+      return { ok: false, error: tError("NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
 
     if (existing.name === PROVIDER_GROUP.DEFAULT) {
       return {
         ok: false,
-        error: "Cannot delete the default group",
+        error: t("cannotDeleteDefault"),
         errorCode: "CANNOT_DELETE_DEFAULT",
       };
     }
@@ -269,7 +279,7 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
     if (referenceCount > 0) {
       return {
         ok: false,
-        error: "Cannot delete a group that is still referenced by providers",
+        error: t("groupInUse"),
         errorCode: "GROUP_IN_USE",
       };
     }
@@ -297,6 +307,6 @@ export async function deleteProviderGroup(id: number): Promise<ActionResult<void
       success: false,
       errorMessage: "DELETE_FAILED",
     });
-    return { ok: false, error: "Failed to delete provider group" };
+    return { ok: false, error: t("deleteFailed"), errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }

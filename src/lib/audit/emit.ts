@@ -12,7 +12,12 @@ function safeGetScopedAuthSession(): ReturnType<typeof authModule.getScopedAuthS
     const fn = (authModule as { getScopedAuthSession?: typeof authModule.getScopedAuthSession })
       .getScopedAuthSession;
     return typeof fn === "function" ? fn() : null;
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      logger.warn("[Audit] getScopedAuthSession failed, continuing without operator session", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return null;
   }
 }

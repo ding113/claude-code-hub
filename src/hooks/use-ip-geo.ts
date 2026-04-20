@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { ActionResult } from "@/actions/types";
 import type { IpGeoLookupResponse } from "@/types/ip-geo";
 
@@ -15,6 +15,7 @@ export function useIpGeo(ip: string | null | undefined, options?: UseIpGeoOption
   // Pass the dashboard UI locale to the upstream so country / city names come
   // back localized rather than always in English.
   const locale = useLocale();
+  const t = useTranslations("ipDetails");
   const mode = options?.mode ?? "default";
   return useQuery<IpGeoLookupResponse>({
     queryKey: ["ip-geo", mode, ip, locale],
@@ -30,11 +31,11 @@ export function useIpGeo(ip: string | null | undefined, options?: UseIpGeoOption
 
         const result = (await response.json()) as ActionResult<IpGeoLookupResponse>;
         if (!result.ok) {
-          return { status: "error", error: result.error ?? "my-ip-geo fetch failed" };
+          return { status: "error", error: result.error ?? t("error") };
         }
 
         if (!response.ok) {
-          return { status: "error", error: `my-ip-geo fetch failed: ${response.status}` };
+          return { status: "error", error: t("error") };
         }
 
         return result.data;
@@ -42,7 +43,7 @@ export function useIpGeo(ip: string | null | undefined, options?: UseIpGeoOption
 
       const qs = new URLSearchParams({ lang: locale });
       const response = await fetch(`/api/ip-geo/${encodeURIComponent(ip)}?${qs}`);
-      if (!response.ok) throw new Error(`ip-geo fetch failed: ${response.status}`);
+      if (!response.ok) throw new Error(t("error"));
       return (await response.json()) as IpGeoLookupResponse;
     },
     enabled: !!ip,

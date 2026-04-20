@@ -94,4 +94,17 @@ describe("redactSensitive", () => {
     const out = redactSensitive(bare);
     expect(out).toEqual({ apiKey: "[REDACTED]", name: "ok" });
   });
+
+  test("replaces circular references with a stable placeholder", () => {
+    const input: Record<string, unknown> = { id: 1, apiKey: "sk-x" };
+    input.self = input;
+
+    const out = redactSensitive(input) as Record<string, unknown>;
+
+    expect(out).toEqual({
+      id: 1,
+      apiKey: "[REDACTED]",
+      self: "[Circular]",
+    });
+  });
 });

@@ -79,6 +79,7 @@
   "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT": "Key 的總消費上限（{keyLimit}）不能超過使用者限額（{userLimit}）",
   "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT": "Key 的並發 Session 上限（{keyLimit}）不能超過使用者限額（{userLimit}）",
   "EXPIRES_AT_FIELD": "過期時間",
+  "IP_ADDRESS_FIELD": "IP位址",
   "EXPIRES_AT_MUST_BE_FUTURE": "過期時間必須是未來時間",
   "EXPIRES_AT_TOO_FAR": "過期時間不能超過10年",
   "CANNOT_DISABLE_SELF": "不能禁用自己的帳戶",

@@ -10,7 +10,7 @@ import {
   validateKey,
 } from "@/lib/auth";
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { getClientIp } from "@/lib/ip";
+import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
@@ -104,13 +104,13 @@ function shouldIncludeFailureTaxonomy(request: NextRequest): boolean {
   return request.headers.has("x-forwarded-proto");
 }
 
-function resolveClientIp(request: NextRequest): string {
+async function resolveClientIp(request: NextRequest): Promise<string> {
   // Platform-provided IP (Vercel / Next.js managed runtime) takes precedence
   // over header-based extraction because it's not user-controllable.
   const platformIp = (request as unknown as { ip?: string }).ip;
   if (platformIp) return platformIp;
 
-  return getClientIp(request.headers) ?? "unknown";
+  return (await getClientIpWithFreshSettings(request.headers)) ?? "unknown";
 }
 
 let sessionStoreInstance:
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
 
   const locale = getLocaleFromRequest(request);
   const t = await getAuthErrorTranslations(locale);
-  const clientIp = resolveClientIp(request);
+    const clientIp = await resolveClientIp(request);
 
   const userAgent = request.headers.get("user-agent");
   const auditIp = clientIp === "unknown" ? null : clientIp;

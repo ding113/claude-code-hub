@@ -79,6 +79,7 @@
   "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT": "Общий лимит ключа ({keyLimit}) не может превышать лимит пользователя ({userLimit})",
   "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT": "Лимит одновременных сессий ключа ({keyLimit}) не может превышать лимит пользователя ({userLimit})",
   "EXPIRES_AT_FIELD": "Дата истечения",
+  "IP_ADDRESS_FIELD": "IP-адрес",
   "EXPIRES_AT_MUST_BE_FUTURE": "Дата истечения должна быть в будущем",
   "EXPIRES_AT_TOO_FAR": "Дата истечения не может превышать 10 лет",
   "CANNOT_DISABLE_SELF": "Невозможно отключить свой собственный аккаунт",

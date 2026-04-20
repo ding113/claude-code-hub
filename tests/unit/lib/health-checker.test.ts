@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   v1App: {
     request: vi.fn(),
   },
+  loggerWarn: vi.fn(),
+  loggerError: vi.fn(),
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -21,6 +23,13 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("@/lib/redis/client", () => ({
   getRedisClient: mocks.getRedisClient,
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    warn: mocks.loggerWarn,
+    error: mocks.loggerError,
+  },
 }));
 
 vi.mock("@/lib/version", () => ({
@@ -93,7 +102,11 @@ describe("health/checker", () => {
       const { checkDatabase } = await import("@/lib/health/checker");
       const result = await checkDatabase();
       expect(result.status).toBe("down");
-      expect(result.message).toContain("connection refused");
+      expect(result.message).toBe("Database connection failed");
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        "[Health] database check failed",
+        expect.objectContaining({ error: "connection refused" })
+      );
     });
 
     it("returns down on timeout", async () => {
@@ -104,7 +117,11 @@ describe("health/checker", () => {
       const { checkDatabase } = await import("@/lib/health/checker");
       const result = await checkDatabase();
       expect(result.status).toBe("down");
-      expect(result.message).toContain("timed out");
+      expect(result.message).toBe("Database connection failed");
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        "[Health] database check failed",
+        expect.objectContaining({ error: expect.stringContaining("timed out") })
+      );
     }, 10_000);
   });
 
@@ -167,7 +184,11 @@ describe("health/checker", () => {
       const { checkRedis } = await import("@/lib/health/checker");
       const result = await checkRedis();
       expect(result.status).toBe("down");
-      expect(result.message).toContain("ECONNRESET");
+      expect(result.message).toBe("Redis connection failed");
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        "[Health] redis check failed",
+        expect.objectContaining({ error: "ECONNRESET" })
+      );
     });
 
     it("returns down on ping timeout", async () => {
@@ -179,7 +200,11 @@ describe("health/checker", () => {
       const { checkRedis } = await import("@/lib/health/checker");
       const result = await checkRedis();
       expect(result.status).toBe("down");
-      expect(result.message).toContain("timed out");
+      expect(result.message).toBe("Redis connection failed");
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        "[Health] redis check failed",
+        expect.objectContaining({ error: expect.stringContaining("timed out") })
+      );
     }, 10_000);
   });
 
@@ -207,7 +232,11 @@ describe("health/checker", () => {
       const { checkProxy } = await import("@/lib/health/checker");
       const result = await checkProxy();
       expect(result.status).toBe("down");
-      expect(result.message).toContain("middleware crashed");
+      expect(result.message).toBe("Proxy request failed");
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        "[Health] proxy check failed",
+        expect.objectContaining({ error: "middleware crashed" })
+      );
     });
 
     it("returns down on timeout", async () => {
@@ -215,7 +244,11 @@ describe("health/checker", () => {
       const { checkProxy } = await import("@/lib/health/checker");
       const result = await checkProxy();
       expect(result.status).toBe("down");
-      expect(result.message).toContain("timed out");
+      expect(result.message).toBe("Proxy request failed");
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        "[Health] proxy check failed",
+        expect.objectContaining({ error: expect.stringContaining("timed out") })
+      );
     }, 10_000);
   });
 

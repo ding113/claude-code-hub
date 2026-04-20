@@ -10,6 +10,10 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { IpGeoLookupResponse, IpGeoLookupResult } from "@/types/ip-geo";
 import ipDetailsMessages from "../../../../../messages/en/ipDetails.json";
 
+function flagEmoji(...codepoints: number[]): string {
+  return String.fromCodePoint(...codepoints);
+}
+
 const useIpGeoMocks = vi.hoisted(() => ({
   useIpGeo:
     vi.fn<
@@ -89,7 +93,12 @@ const CGN_RESPONSE: IpGeoLookupResponse = {
         population: 0,
         borders: [],
         is_eu_member: false,
-        flag: { emoji: "🇿🇿", unicode: "U+1F1FF U+1F1FF", svg: null, png: null },
+        flag: {
+          emoji: flagEmoji(0x1f1ff, 0x1f1ff),
+          unicode: "U+1F1FF U+1F1FF",
+          svg: null,
+          png: null,
+        },
         languages: [],
         currencies: [],
       },
@@ -323,7 +332,12 @@ const FULL_RESPONSE: IpGeoLookupResponse = {
         population: 340110988,
         borders: ["CA", "MX"],
         is_eu_member: false,
-        flag: { emoji: "🇺🇸", unicode: "U+1F1FA U+1F1F8", svg: null, png: null },
+        flag: {
+          emoji: flagEmoji(0x1f1fa, 0x1f1f8),
+          unicode: "U+1F1FA U+1F1F8",
+          svg: null,
+          png: null,
+        },
         languages: [{ code: "en", name: "English", name_native: "English" }],
         currencies: [
           {
@@ -410,7 +424,12 @@ const NULL_ACCURACY_RESPONSE: IpGeoLookupResponse = {
         population: 0,
         borders: ["CN"],
         is_eu_member: false,
-        flag: { emoji: "🇭🇰", unicode: "U+1F1ED U+1F1F0", svg: null, png: null },
+        flag: {
+          emoji: flagEmoji(0x1f1ed, 0x1f1f0),
+          unicode: "U+1F1ED U+1F1F0",
+          svg: null,
+          png: null,
+        },
         languages: [
           { code: "en", name: "English", name_native: "English" },
           { code: "zh", name: "Chinese", name_native: "Chinese" },

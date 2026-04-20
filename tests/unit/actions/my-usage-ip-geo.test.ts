@@ -1,5 +1,39 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+function sqlToString(sqlObj: unknown): string {
+  const visited = new Set<unknown>();
+
+  const walk = (node: unknown): string => {
+    if (!node || visited.has(node)) return "";
+    visited.add(node);
+
+    if (typeof node === "string") return node;
+
+    if (typeof node === "object") {
+      const anyNode = node as Record<string, unknown>;
+      if (Array.isArray(anyNode)) {
+        return anyNode.map(walk).join("");
+      }
+
+      if (Array.isArray(anyNode.value)) {
+        return anyNode.value.map(String).join("");
+      }
+
+      if (typeof anyNode.value === "string") {
+        return anyNode.value;
+      }
+
+      if ("queryChunks" in anyNode) {
+        return walk(anyNode.queryChunks);
+      }
+    }
+
+    return "";
+  };
+
+  return walk(sqlObj);
+}
+
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getSystemSettings: vi.fn(),
@@ -11,6 +45,9 @@ const mocks = vi.hoisted(() => ({
   dbFrom: vi.fn(),
   dbWhere: vi.fn(),
   dbLimit: vi.fn(),
+  getTranslations: vi.fn(async () => (key: string, params?: Record<string, unknown>) =>
+    params?.field ? `${key}:${String(params.field)}` : key
+  ),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -27,6 +64,10 @@ vi.mock("@/lib/ledger-fallback", () => ({
 
 vi.mock("@/lib/ip-geo/client", () => ({
   lookupIp: mocks.lookupIp,
+}));
+
+vi.mock("next-intl/server", () => ({
+  getTranslations: mocks.getTranslations,
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -74,7 +115,11 @@ describe("getMyIpGeoDetails", () => {
     const { getMyIpGeoDetails } = await import("@/actions/my-usage");
     const result = await getMyIpGeoDetails({ ip: "203.0.113.9", lang: "en" });
 
-    expect(result).toEqual({ ok: false, error: "Unauthorized" });
+    expect(result).toMatchObject({
+      ok: false,
+      error: "UNAUTHORIZED",
+      errorCode: "UNAUTHORIZED",
+    });
     expect(mocks.getSession).toHaveBeenCalledWith({ allowReadOnlyAccess: true });
     expect(mocks.lookupIp).not.toHaveBeenCalled();
   });
@@ -88,7 +133,11 @@ describe("getMyIpGeoDetails", () => {
     const { getMyIpGeoDetails } = await import("@/actions/my-usage");
     const result = await getMyIpGeoDetails({ ip: "   " });
 
-    expect(result).toEqual({ ok: false, error: "IP is required" });
+    expect(result).toMatchObject({
+      ok: false,
+      error: "REQUIRED_FIELD:IP_ADDRESS_FIELD",
+      errorCode: "REQUIRED_FIELD",
+    });
     expect(mocks.lookupIp).not.toHaveBeenCalled();
   });
 
@@ -102,7 +151,11 @@ describe("getMyIpGeoDetails", () => {
     const { getMyIpGeoDetails } = await import("@/actions/my-usage");
     const result = await getMyIpGeoDetails({ ip: "198.51.100.88", lang: "en" });
 
-    expect(result).toEqual({ ok: false, error: "IP not found in current key usage logs" });
+    expect(result).toMatchObject({
+      ok: false,
+      error: "NOT_FOUND",
+      errorCode: "NOT_FOUND",
+    });
     expect(mocks.lookupIp).not.toHaveBeenCalled();
   });
 
@@ -119,7 +172,11 @@ describe("getMyIpGeoDetails", () => {
     const { getMyIpGeoDetails } = await import("@/actions/my-usage");
     const result = await getMyIpGeoDetails({ ip: "203.0.113.9", lang: "en" });
 
-    expect(result).toEqual({ ok: false, error: "IP geolocation disabled" });
+    expect(result).toMatchObject({
+      ok: false,
+      error: "INVALID_STATE",
+      errorCode: "INVALID_STATE",
+    });
     expect(mocks.dbLimit).not.toHaveBeenCalled();
     expect(mocks.lookupIp).not.toHaveBeenCalled();
   });
@@ -161,6 +218,22 @@ describe("getMyIpGeoDetails", () => {
       },
     });
     expect(mocks.lookupIp).toHaveBeenCalledWith("203.0.113.9", { lang: "ja" });
+  });
+
+  it("ledger-only 模式下的可见性校验必须带上计费可见条件", async () => {
+    mocks.getSession.mockResolvedValueOnce({
+      user: { id: 7 },
+      key: { id: 10, key: "sk-readonly" },
+    });
+    mocks.dbLimit.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 99 }]);
+    mocks.isLedgerOnlyMode.mockResolvedValueOnce(true);
+
+    const { getMyIpGeoDetails } = await import("@/actions/my-usage");
+    await getMyIpGeoDetails({ ip: "203.0.113.9", lang: "ja" });
+
+    const ledgerWhere = sqlToString(mocks.dbWhere.mock.calls[1]?.[0]).toLowerCase();
+    expect(ledgerWhere).toContain("is null");
+    expect(ledgerWhere).toContain("sk-readonly");
   });
 
   it("lookup error 日志不记录原始 IP，只记录内部日志 ID", async () => {

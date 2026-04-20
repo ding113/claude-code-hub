@@ -1119,7 +1119,13 @@ async function safeFindUser(userId: number): Promise<Awaited<ReturnType<typeof f
 // biome-ignore lint/suspicious/noExplicitAny: the repository's createUser
 // return type is wider than the action-side User type; we pass it straight
 // to the audit emitter which redacts & serializes unknown fields.
-function emitUserCreateAudit(user: any): void {
+type UserCreateAuditSnapshot = {
+  id: string | number;
+  name: string | null;
+  [key: string]: unknown;
+};
+
+function emitUserCreateAudit(user: UserCreateAuditSnapshot): void {
   emitActionAudit({
     category: "user",
     action: "user.create",

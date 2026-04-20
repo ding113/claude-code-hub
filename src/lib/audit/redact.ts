@@ -16,6 +16,7 @@ const DEFAULT_SENSITIVE_KEYS = new Set([
 ]);
 
 const REDACTED = "[REDACTED]";
+const CIRCULAR = "[Circular]";
 
 /**
  * True only for `{}` / `Object.create(null)` — rejects `Date`, `Map`, `Set`,
@@ -40,21 +41,26 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 export function redactSensitive<T>(value: T, extraKeys: string[] = []): T {
   const keys = new Set([...DEFAULT_SENSITIVE_KEYS, ...extraKeys.map((k) => k.toLowerCase())]);
-  return walk(value, keys) as T;
+  return walk(value, keys, new WeakSet<object>()) as T;
 }
 
-function walk(value: unknown, keys: Set<string>): unknown {
+function walk(value: unknown, keys: Set<string>, seen: WeakSet<object>): unknown {
   if (Array.isArray(value)) {
-    return value.map((item) => walk(item, keys));
+    if (seen.has(value)) return CIRCULAR;
+    seen.add(value);
+    return value.map((item) => walk(item, keys, seen));
   }
   if (isPlainObject(value)) {
+    if (seen.has(value)) return CIRCULAR;
+    // 中文说明：审计快照必须可序列化，循环引用直接替换成稳定占位符。
+    seen.add(value);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
       if (keys.has(k.toLowerCase())) {
         out[k] = REDACTED;
         continue;
       }
-      out[k] = walk(v, keys);
+      out[k] = walk(v, keys, seen);
     }
     return out;
   }

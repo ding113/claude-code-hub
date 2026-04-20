@@ -2,6 +2,7 @@ import "server-only";
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { getClientIp } from "@/lib/ip";
+import { logger } from "@/lib/logger";
 
 export interface AuditRequestContext {
   ip: string | null;
@@ -63,7 +64,12 @@ export async function resolveRequestContext(): Promise<AuditRequestContext> {
       ip: getClientIp(h),
       userAgent: h.get("user-agent") ?? null,
     };
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      logger.warn("[Audit] next/headers request-context fallback failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return fromAls ?? { ip: null, userAgent: null };
   }
 }

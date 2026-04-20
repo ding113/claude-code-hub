@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import type { AuditCategory, AuditLogFilter, AuditLogInput, AuditLogRow } from "@/types/audit-log";
 
 function toRow(row: typeof auditLog.$inferSelect): AuditLogRow {
+  const createdAt = row.createdAt ?? new Date(0);
   return {
     id: row.id,
     actionCategory: row.actionCategory as AuditCategory,
@@ -24,8 +25,28 @@ function toRow(row: typeof auditLog.$inferSelect): AuditLogRow {
     userAgent: row.userAgent,
     success: row.success,
     errorMessage: row.errorMessage,
-    createdAt: row.createdAt ?? new Date(0),
+    createdAt,
   };
+}
+
+function getAuditLogCreatedAt(row: typeof auditLog.$inferSelect): Date {
+  return row.createdAt ?? new Date(0);
+}
+
+function buildAuditLogFilterConditions(filter: AuditLogFilter): ReturnType<typeof eq>[] {
+  const conditions = [];
+  if (filter.category) conditions.push(eq(auditLog.actionCategory, filter.category));
+  if (filter.actionType) conditions.push(eq(auditLog.actionType, filter.actionType));
+  if (filter.operatorUserId !== undefined) {
+    conditions.push(eq(auditLog.operatorUserId, filter.operatorUserId));
+  }
+  if (filter.operatorIp) conditions.push(eq(auditLog.operatorIp, filter.operatorIp));
+  if (filter.targetType) conditions.push(eq(auditLog.targetType, filter.targetType));
+  if (filter.targetId) conditions.push(eq(auditLog.targetId, filter.targetId));
+  if (filter.success !== undefined) conditions.push(eq(auditLog.success, filter.success));
+  if (filter.from) conditions.push(gte(auditLog.createdAt, filter.from));
+  if (filter.to) conditions.push(lte(auditLog.createdAt, filter.to));
+  return conditions;
 }
 
 async function insertAuditLog(entry: AuditLogInput): Promise<void> {
@@ -93,19 +114,7 @@ export async function listAuditLogs(
   const pageSize = Math.min(Math.max(options.pageSize ?? 50, 1), 500);
   const filter = options.filter ?? {};
 
-  const conditions = [];
-
-  if (filter.category) conditions.push(eq(auditLog.actionCategory, filter.category));
-  if (filter.actionType) conditions.push(eq(auditLog.actionType, filter.actionType));
-  if (filter.operatorUserId !== undefined) {
-    conditions.push(eq(auditLog.operatorUserId, filter.operatorUserId));
-  }
-  if (filter.operatorIp) conditions.push(eq(auditLog.operatorIp, filter.operatorIp));
-  if (filter.targetType) conditions.push(eq(auditLog.targetType, filter.targetType));
-  if (filter.targetId) conditions.push(eq(auditLog.targetId, filter.targetId));
-  if (filter.success !== undefined) conditions.push(eq(auditLog.success, filter.success));
-  if (filter.from) conditions.push(gte(auditLog.createdAt, filter.from));
-  if (filter.to) conditions.push(lte(auditLog.createdAt, filter.to));
+  const conditions = buildAuditLogFilterConditions(filter);
 
   if (options.cursor) {
     const cursorCreatedAt = new Date(options.cursor.createdAt);
@@ -131,7 +140,7 @@ export async function listAuditLogs(
   const nextCursor: AuditLogCursor | null =
     hasMore && trimmed.length > 0
       ? {
-          createdAt: trimmed[trimmed.length - 1].createdAt!.toISOString(),
+          createdAt: getAuditLogCreatedAt(trimmed[trimmed.length - 1]).toISOString(),
           id: trimmed[trimmed.length - 1].id,
         }
       : null;
@@ -145,22 +154,7 @@ export async function getAuditLog(id: number): Promise<AuditLogRow | null> {
 }
 
 export async function countAuditLogs(filter: AuditLogFilter = {}): Promise<number> {
-  // Kept in sync with the filter set in `listAuditLogs` — passing the same
-  // filter object to both functions is expected to return consistent pages
-  // and totals. Do not add a filter to one without the other.
-  const conditions = [];
-  if (filter.category) conditions.push(eq(auditLog.actionCategory, filter.category));
-  if (filter.actionType) conditions.push(eq(auditLog.actionType, filter.actionType));
-  if (filter.operatorUserId !== undefined) {
-    conditions.push(eq(auditLog.operatorUserId, filter.operatorUserId));
-  }
-  if (filter.operatorIp) conditions.push(eq(auditLog.operatorIp, filter.operatorIp));
-  if (filter.targetType) conditions.push(eq(auditLog.targetType, filter.targetType));
-  if (filter.targetId) conditions.push(eq(auditLog.targetId, filter.targetId));
-  if (filter.success !== undefined) conditions.push(eq(auditLog.success, filter.success));
-  if (filter.from) conditions.push(gte(auditLog.createdAt, filter.from));
-  if (filter.to) conditions.push(lte(auditLog.createdAt, filter.to));
-
+  const conditions = buildAuditLogFilterConditions(filter);
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(auditLog).where(where);
   return row?.count ?? 0;

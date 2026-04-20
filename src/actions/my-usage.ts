@@ -2,6 +2,7 @@
 
 import { fromZonedTime } from "date-fns-tz";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
@@ -12,6 +13,7 @@ import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-se
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import type { CurrencyCode } from "@/lib/utils";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
@@ -31,6 +33,10 @@ import {
 import type { IpGeoLookupResult, IpGeoPrivateMarker } from "@/types/ip-geo";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
+
+async function getErrorTranslator() {
+  return getTranslations("errors");
+}
 
 /**
  * Parse date range strings to timestamps using server timezone (TZ config).
@@ -654,9 +660,12 @@ export async function getMyUsageLogsBatch(
 export async function getMyUsageLogsBatchFull(
   params: Omit<UsageLogBatchFilters, "userId" | "keyId" | "providerId">
 ): Promise<ActionResult<UsageLogsBatchResult>> {
+  const tError = await getErrorTranslator();
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
-    if (!session) return { ok: false, error: "Unauthorized" };
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
 
     const { userId: _u, keyId: _k, providerId: _p, ...safeParams } = params as UsageLogBatchFilters;
     const result = await findUsageLogsBatch({
@@ -667,33 +676,39 @@ export async function getMyUsageLogsBatchFull(
     return { ok: true, data: result };
   } catch (error) {
     logger.error("[my-usage] getMyUsageLogsBatchFull failed", error);
-    return { ok: false, error: "Failed to get usage logs" };
+    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
   }
 }
 
 export async function getMyAvailableModels(): Promise<ActionResult<string[]>> {
+  const tError = await getErrorTranslator();
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
-    if (!session) return { ok: false, error: "Unauthorized" };
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
 
     const models = await getDistinctModelsForKey(session.key.key);
     return { ok: true, data: models };
   } catch (error) {
     logger.error("[my-usage] getMyAvailableModels failed", error);
-    return { ok: false, error: "Failed to get model list" };
+    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
   }
 }
 
 export async function getMyAvailableEndpoints(): Promise<ActionResult<string[]>> {
+  const tError = await getErrorTranslator();
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
-    if (!session) return { ok: false, error: "Unauthorized" };
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
 
     const endpoints = await getDistinctEndpointsForKey(session.key.key);
     return { ok: true, data: endpoints };
   } catch (error) {
     logger.error("[my-usage] getMyAvailableEndpoints failed", error);
-    return { ok: false, error: "Failed to get endpoint list" };
+    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
   }
 }
 
@@ -704,16 +719,25 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
     error?: string;
   }>
 > {
+  const tError = await getErrorTranslator();
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
-    if (!session) return { ok: false, error: "Unauthorized" };
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
 
     const ip = params.ip.trim();
-    if (!ip) return { ok: false, error: "IP is required" };
+    if (!ip) {
+      return {
+        ok: false,
+        error: tError("REQUIRED_FIELD", { field: tError("IP_ADDRESS_FIELD") }),
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
+    }
 
     const settings = await getSystemSettings();
     if (!settings.ipGeoLookupEnabled) {
-      return { ok: false, error: "IP geolocation disabled" };
+      return { ok: false, error: tError("INVALID_STATE"), errorCode: ERROR_CODES.INVALID_STATE };
     }
 
     // 仅允许查询当前 key 在 my-usage 可见日志中真实出现过的 IP。
@@ -736,14 +760,20 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
       const [ledgerMatch] = await db
         .select({ id: usageLedger.requestId })
         .from(usageLedger)
-        .where(and(eq(usageLedger.key, session.key.key), eq(usageLedger.clientIp, ip)))
+        .where(
+          and(
+            LEDGER_BILLING_CONDITION,
+            eq(usageLedger.key, session.key.key),
+            eq(usageLedger.clientIp, ip)
+          )
+        )
         .limit(1);
 
       visibleLogId = ledgerMatch?.id ?? null;
     }
 
     if (!visibleLogId) {
-      return { ok: false, error: "IP not found in current key usage logs" };
+      return { ok: false, error: tError("NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
 
     const result = await lookupIp(ip, { lang: params.lang });
@@ -760,7 +790,7 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
     return { ok: true, data: result };
   } catch (error) {
     logger.error("[my-usage] getMyIpGeoDetails failed", { error });
-    return { ok: false, error: "Failed to get IP details" };
+    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
   }
 }
 

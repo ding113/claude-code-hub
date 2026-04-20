@@ -1,33 +1,79 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
-// DB mock
-// ---------------------------------------------------------------------------
+function sqlToString(sqlObj: unknown): string {
+  const visited = new Set<unknown>();
+
+  const walk = (node: unknown): string => {
+    if (!node || visited.has(node)) return "";
+    visited.add(node);
+
+    if (typeof node === "string") return node;
+
+    if (typeof node === "object") {
+      const anyNode = node as Record<string, unknown>;
+      if (Array.isArray(anyNode)) {
+        return anyNode.map(walk).join("");
+      }
+
+      if (Array.isArray(anyNode.value)) {
+        return anyNode.value.map(String).join("");
+      }
+
+      if (typeof anyNode.value === "string") {
+        return anyNode.value;
+      }
+
+      if ("queryChunks" in anyNode) {
+        return walk(anyNode.queryChunks);
+      }
+    }
+
+    return "";
+  };
+
+  return walk(sqlObj);
+}
 
 const selectMock = vi.fn();
-const fromMock = vi.fn();
-const whereMock = vi.fn();
-const limitMock = vi.fn();
-const orderByMock = vi.fn();
 const insertMock = vi.fn();
+const updateMock = vi.fn();
+const deleteMock = vi.fn();
 const valuesMock = vi.fn();
 const returningMock = vi.fn();
-const updateMock = vi.fn();
+const onConflictDoNothingMock = vi.fn();
 const setMock = vi.fn();
-const deleteMock = vi.fn();
+const deleteWhereMock = vi.fn();
+
+function createQuery<T>(result: T, whereArgs?: unknown[]) {
+  const query: any = Promise.resolve(result);
+
+  query.from = vi.fn(() => query);
+  query.where = vi.fn((arg: unknown) => {
+    whereArgs?.push(arg);
+    return query;
+  });
+  query.limit = vi.fn(() => query);
+  query.orderBy = vi.fn(() => query);
+  query.returning = vi.fn(() => query);
+
+  return query;
+}
 
 function resetChainMocks() {
-  selectMock.mockReturnValue({ from: fromMock });
-  fromMock.mockReturnValue({ where: whereMock, orderBy: orderByMock });
-  whereMock.mockReturnValue({ limit: limitMock, returning: returningMock });
-  limitMock.mockResolvedValue([]);
-  orderByMock.mockResolvedValue([]);
+  selectMock.mockImplementation(() => createQuery([]));
   insertMock.mockReturnValue({ values: valuesMock });
-  valuesMock.mockReturnValue({ returning: returningMock });
+  valuesMock.mockReturnValue({
+    returning: returningMock,
+    onConflictDoNothing: onConflictDoNothingMock,
+  });
   returningMock.mockResolvedValue([]);
+  onConflictDoNothingMock.mockResolvedValue(undefined);
+
   updateMock.mockReturnValue({ set: setMock });
-  setMock.mockReturnValue({ where: whereMock });
-  deleteMock.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+  setMock.mockImplementation(() => createQuery([]));
+
+  deleteWhereMock.mockResolvedValue(undefined);
+  deleteMock.mockReturnValue({ where: deleteWhereMock });
 }
 
 vi.mock("@/drizzle/db", () => ({
@@ -48,11 +94,11 @@ vi.mock("@/drizzle/schema", () => ({
     createdAt: "created_at",
     updatedAt: "updated_at",
   },
+  providers: {
+    groupTag: "group_tag",
+    deletedAt: "deleted_at",
+  },
 }));
-
-// ---------------------------------------------------------------------------
-// Helper: build a fake DB row matching the drizzle select shape
-// ---------------------------------------------------------------------------
 
 function fakeRow(
   overrides: Partial<{
@@ -74,23 +120,16 @@ function fakeRow(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("provider-groups repository", () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.clearAllMocks();
     resetChainMocks();
   });
 
-  // -----------------------------------------------------------------------
-  // getGroupCostMultiplier
-  // -----------------------------------------------------------------------
-
   describe("getGroupCostMultiplier", () => {
     it("returns 1.0 for an unknown group (no DB row)", async () => {
-      limitMock.mockResolvedValue([]);
+      selectMock.mockImplementationOnce(() => createQuery([]));
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -102,7 +141,9 @@ describe("provider-groups repository", () => {
     });
 
     it("returns the multiplier from the DB row", async () => {
-      limitMock.mockResolvedValue([fakeRow({ name: "premium", costMultiplier: "2.5000" })]);
+      selectMock.mockImplementationOnce(() =>
+        createQuery([fakeRow({ name: "premium", costMultiplier: "2.5000" })])
+      );
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -114,7 +155,9 @@ describe("provider-groups repository", () => {
     });
 
     it("returns cached value on repeated calls without hitting DB again", async () => {
-      limitMock.mockResolvedValue([fakeRow({ name: "cached-group", costMultiplier: "3.0000" })]);
+      selectMock.mockImplementationOnce(() =>
+        createQuery([fakeRow({ name: "cached-group", costMultiplier: "3.0000" })])
+      );
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -124,19 +167,17 @@ describe("provider-groups repository", () => {
       const first = await getGroupCostMultiplier("cached-group");
       expect(first).toBe(3.0);
 
-      // The first call triggers select -> from -> where -> limit.
-      // Record the call count after the first invocation.
       const callsAfterFirst = selectMock.mock.calls.length;
 
       const second = await getGroupCostMultiplier("cached-group");
       expect(second).toBe(3.0);
-
-      // No additional DB call should have been made.
       expect(selectMock.mock.calls.length).toBe(callsAfterFirst);
     });
 
     it("cache is invalidated after calling invalidateGroupMultiplierCache", async () => {
-      limitMock.mockResolvedValue([fakeRow({ name: "flip", costMultiplier: "1.5000" })]);
+      selectMock
+        .mockImplementationOnce(() => createQuery([fakeRow({ name: "flip", costMultiplier: "1.5000" })]))
+        .mockImplementationOnce(() => createQuery([fakeRow({ name: "flip", costMultiplier: "4.0000" })]));
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -148,22 +189,16 @@ describe("provider-groups repository", () => {
 
       const callsAfterFirst = selectMock.mock.calls.length;
 
-      // Invalidate and change the underlying data
       invalidateGroupMultiplierCache();
-      limitMock.mockResolvedValue([fakeRow({ name: "flip", costMultiplier: "4.0000" })]);
-
       const second = await getGroupCostMultiplier("flip");
       expect(second).toBe(4.0);
-
-      // A new DB call must have been made.
       expect(selectMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
     });
 
-    it("resolves comma-separated groups by taking the first matching group", async () => {
-      // First lookup (for "premium") -> miss; second lookup (for "enterprise") -> hit
-      limitMock
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([fakeRow({ name: "enterprise", costMultiplier: "2.0000" })]);
+    it("resolves comma-separated groups by taking the first matching parsed group from a single query", async () => {
+      selectMock.mockImplementationOnce(() =>
+        createQuery([fakeRow({ name: "enterprise", costMultiplier: "2.0000" })])
+      );
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -172,11 +207,16 @@ describe("provider-groups repository", () => {
 
       const result = await getGroupCostMultiplier("premium,enterprise");
       expect(result).toBe(2.0);
+      expect(selectMock).toHaveBeenCalledTimes(1);
     });
 
-    it("first matching group wins even if a later group also matches", async () => {
-      // "premium" matches first and should short-circuit before looking up "enterprise"
-      limitMock.mockResolvedValue([fakeRow({ name: "premium", costMultiplier: "1.5000" })]);
+    it("first matching parsed group wins even if the query returns multiple rows", async () => {
+      selectMock.mockImplementationOnce(() =>
+        createQuery([
+          fakeRow({ name: "enterprise", costMultiplier: "2.0000" }),
+          fakeRow({ name: "premium", costMultiplier: "1.5000" }),
+        ])
+      );
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -187,8 +227,8 @@ describe("provider-groups repository", () => {
       expect(result).toBe(1.5);
     });
 
-    it("falls back to 1.0 when no group in the comma list matches", async () => {
-      limitMock.mockResolvedValue([]);
+    it("falls back to 1.0 when no group in the list matches", async () => {
+      selectMock.mockImplementationOnce(() => createQuery([]));
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -200,8 +240,9 @@ describe("provider-groups repository", () => {
     });
 
     it("does not cache misses (fallback 1.0 is not persisted)", async () => {
-      // First call: miss, returns 1.0
-      limitMock.mockResolvedValue([]);
+      selectMock
+        .mockImplementationOnce(() => createQuery([]))
+        .mockImplementationOnce(() => createQuery([fakeRow({ name: "new-group", costMultiplier: "5.0000" })]));
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -213,36 +254,40 @@ describe("provider-groups repository", () => {
 
       const callsAfterFirst = selectMock.mock.calls.length;
 
-      // Second call: DB now has the row. Cache must NOT have returned the stale 1.0.
-      limitMock.mockResolvedValue([fakeRow({ name: "new-group", costMultiplier: "5.0000" })]);
-
       const second = await getGroupCostMultiplier("new-group");
       expect(second).toBe(5.0);
       expect(selectMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
     });
   });
 
-  // -----------------------------------------------------------------------
-  // deleteProviderGroup
-  // -----------------------------------------------------------------------
+  describe("countProvidersUsingGroup", () => {
+    it("ignores soft-deleted providers when checking references", async () => {
+      const whereArgs: unknown[] = [];
+      selectMock.mockImplementationOnce(() => createQuery([{ groupTag: "premium" }], whereArgs));
+
+      const { countProvidersUsingGroup } = await import("@/repository/provider-groups");
+      const count = await countProvidersUsingGroup("premium");
+
+      expect(count).toBe(1);
+      expect(whereArgs).toHaveLength(1);
+      expect(sqlToString(whereArgs[0]).toLowerCase()).toContain("deleted");
+    });
+  });
 
   describe("deleteProviderGroup", () => {
     it("throws when trying to delete the default group", async () => {
-      limitMock.mockResolvedValue([{ name: "default" }]);
+      selectMock.mockImplementationOnce(() => createQuery([{ name: "default" }]));
 
       const { deleteProviderGroup } = await import("@/repository/provider-groups");
 
-      await expect(deleteProviderGroup(1)).rejects.toThrow(
-        "Cannot delete the default provider group"
-      );
+      await expect(deleteProviderGroup(1)).rejects.toThrow("Cannot delete the default provider group");
     });
 
     it("does not throw for a non-default group", async () => {
-      limitMock.mockResolvedValue([{ name: "premium" }]);
+      selectMock.mockImplementationOnce(() => createQuery([{ name: "premium" }]));
 
       const { deleteProviderGroup } = await import("@/repository/provider-groups");
 
-      // Should not throw
       await expect(deleteProviderGroup(2)).resolves.toBeUndefined();
     });
   });

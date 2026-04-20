@@ -201,6 +201,31 @@ describe("Usage logs sessionId filter", () => {
     );
   });
 
+  test("findUsageLogsBatch: 应将 limit 限制在 100，避免超大批量查询", async () => {
+    vi.resetModules();
+
+    let query: ReturnType<typeof createThenableQuery<[]>> | null = null;
+    const selectMock = vi.fn(() => {
+      query = createThenableQuery([]);
+      return query;
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => false),
+    }));
+
+    const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+    await findUsageLogsBatch({ limit: 1000000 });
+
+    expect(query?.limit).toHaveBeenCalledWith(101);
+  });
+
   test("findUsageLogsForKeyBatch: hasMore 为 true 时缺失 createdAtRaw 应直接报错，避免静默截断", async () => {
     vi.resetModules();
 

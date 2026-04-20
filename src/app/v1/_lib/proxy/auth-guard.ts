@@ -1,4 +1,4 @@
-import { getClientIp } from "@/lib/ip";
+import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
 import { validateApiKeyAndGetUser } from "@/repository/key";
@@ -26,7 +26,7 @@ export class ProxyAuthenticator {
     // Pre-auth rate limit: block IPs with too many recent auth failures.
     // Extracted once here and stashed on the session for later consumers
     // (message-service / audit writer) so we only parse headers once.
-    const clientIp = getClientIp(session.headers) ?? "unknown";
+    const clientIp = (await getClientIpWithFreshSettings(session.headers)) ?? "unknown";
     session.clientIp = clientIp === "unknown" ? null : clientIp;
     const authHeader = session.headers.get("authorization") ?? undefined;
     const apiKeyHeader = session.headers.get("x-api-key") ?? undefined;

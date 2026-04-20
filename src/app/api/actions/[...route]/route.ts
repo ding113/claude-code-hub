@@ -36,6 +36,7 @@ import * as userActions from "@/actions/users";
 import * as webhookTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
+import { logger } from "@/lib/logger";
 import { PROVIDER_MODEL_REDIRECT_RULE_SCHEMA } from "@/lib/provider-model-redirect-schema";
 // 导入 validation schemas
 import {
@@ -2275,7 +2276,10 @@ app.get("/health", async (c) => {
       version: getAppVersion(),
       details: health,
     });
-  } catch {
+  } catch (error) {
+    logger.error("[api/actions] health route failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return c.json({
       status: "error",
       timestamp: new Date().toISOString(),

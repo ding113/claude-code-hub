@@ -1,6 +1,6 @@
 import "server-only";
 
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providerGroups, providers } from "@/drizzle/schema";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
@@ -151,7 +151,10 @@ export async function updateProviderGroup(
  * needed.
  */
 export async function countProvidersUsingGroup(name: string): Promise<number> {
-  const rows = await db.select({ groupTag: providers.groupTag }).from(providers);
+  const rows = await db
+    .select({ groupTag: providers.groupTag })
+    .from(providers)
+    .where(isNull(providers.deletedAt));
 
   let count = 0;
   for (const row of rows) {
@@ -238,18 +241,30 @@ export async function getGroupCostMultiplier(rawGroupString: string): Promise<nu
   if (cached && cached.expiresAt > now) {
     return cached.value;
   }
+  if (cached) {
+    multiplierCache.delete(rawGroupString);
+  }
 
   const parsedGroups = parseProviderGroups(rawGroupString);
   if (parsedGroups.length === 0) {
     return 1.0;
   }
 
-  // Walk the user's declared groups in order; the first matching DB row wins.
+  const rows = await db
+    .select({
+      name: providerGroups.name,
+      costMultiplier: providerGroups.costMultiplier,
+    })
+    .from(providerGroups)
+    .where(inArray(providerGroups.name, parsedGroups));
+
+  const multiplierByName = new Map(rows.map((row) => [row.name, Number(row.costMultiplier)]));
+
   let resolved: number | null = null;
   for (const name of parsedGroups) {
-    const group = await findProviderGroupByName(name);
-    if (group) {
-      resolved = group.costMultiplier;
+    const multiplier = multiplierByName.get(name);
+    if (multiplier !== undefined) {
+      resolved = multiplier;
       break;
     }
   }
