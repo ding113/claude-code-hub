@@ -1296,7 +1296,7 @@ export async function addUser(data: {
     });
 
     revalidatePath("/dashboard");
-    emitUserCreateAudit(newUser);
+    emitUserCreateAudit({ ...newUser });
     return {
       ok: true,
       data: {
@@ -1481,7 +1481,7 @@ export async function createUserOnly(data: {
     });
 
     revalidatePath("/dashboard");
-    emitUserCreateAudit(newUser);
+    emitUserCreateAudit({ ...newUser });
     return {
       ok: true,
       data: {
