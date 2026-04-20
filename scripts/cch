@@ -203,11 +203,15 @@ wait_for_deployment_rollout() {
 restore_update_scaling() {
     local current_replicas="$1"
     local min_replicas="$2"
+    local desired_replicas="$current_replicas"
+    if [[ "$desired_replicas" -lt "$min_replicas" ]]; then
+        desired_replicas="$min_replicas"
+    fi
     if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
         $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge \
-            -p "{\"spec\":{\"minReplicas\":$min_replicas}}" >/dev/null || true
+            -p "{\"spec\":{\"minReplicas\":$desired_replicas}}" >/dev/null || true
     fi
-    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$current_replicas" >/dev/null || true
+    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$desired_replicas" >/dev/null || true
 }
 
 ###############################################################################
@@ -324,17 +328,17 @@ cmd_update() {
     echo ""
 
     # Step 5: Scale back
-    info "Step 5/6: Scaling back to $MIN_REPLICAS replicas..."
-    if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
-        $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge \
-            -p "{\"spec\":{\"minReplicas\":$MIN_REPLICAS}}" >/dev/null
+    local desired_replicas="$CURRENT_REPLICAS"
+    if [[ "$desired_replicas" -lt "$MIN_REPLICAS" ]]; then
+        desired_replicas="$MIN_REPLICAS"
     fi
-    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$MIN_REPLICAS" >/dev/null
+    info "Step 5/6: Scaling back to $desired_replicas replicas..."
+    restore_update_scaling "$CURRENT_REPLICAS" "$MIN_REPLICAS"
     if ! wait_for_deployment_rollout 300s "恢复副本"; then
         err "副本恢复失败,当前 deployment 可能仍停留在单副本"
         exit 1
     fi
-    ok "Running with $MIN_REPLICAS replicas"
+    ok "Running with $desired_replicas replicas"
     echo ""
 
     # Step 6: Final health check
@@ -398,6 +402,22 @@ cmd_scale() {
     if [[ -z "$N" ]]; then err "Usage: cch scale <replicas>"; exit 1; fi
     if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -lt 1 ]]; then
         err "replicas 必须是正整数: $N"; exit 1
+    fi
+    if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
+        local hpa_min hpa_max
+        hpa_min=$($KUBECTL -n "$NAMESPACE" get hpa claude-code-hub -o jsonpath='{.spec.minReplicas}' 2>/dev/null || echo "")
+        hpa_max=$($KUBECTL -n "$NAMESPACE" get hpa claude-code-hub -o jsonpath='{.spec.maxReplicas}' 2>/dev/null || echo "")
+        [[ -z "$hpa_min" || "$hpa_min" == "null" ]] && hpa_min=1
+        [[ -z "$hpa_max" || "$hpa_max" == "null" ]] && hpa_max=0
+
+        if [[ "$N" -lt "$hpa_min" ]]; then
+            err "HPA minReplicas=$hpa_min 阻止缩到 $N。请先调整 HPA 或重新运行 deploy-k8s.sh 传入匹配的 --hpa-min"
+            exit 1
+        fi
+        if [[ "$hpa_max" -gt 0 ]] && [[ "$N" -gt "$hpa_max" ]]; then
+            err "HPA maxReplicas=$hpa_max 阻止扩到 $N。请先调整 HPA 或重新运行 deploy-k8s.sh 传入匹配的 --hpa-max"
+            exit 1
+        fi
     fi
     $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$N"
     info "Scaled to $N replicas"

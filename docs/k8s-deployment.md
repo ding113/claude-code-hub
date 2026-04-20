@@ -361,10 +361,9 @@ gunzip -c ~/backups/claude-code-hub/claude_code_hub_20260101_030000.sql.gz | \
   kubectl -n claude-code-hub exec -i sts/postgres -- \
     psql -U claude_code_hub -d claude_code_hub
 
-# 3. 重新套用 manifest 恢复 HPA / PDB / Service 等资源,再扩回副本
-bash scripts/deploy-k8s.sh -n claude-code-hub --dry-render --deploy-dir /tmp/cch-restore -y
-kubectl apply -R -f /tmp/cch-restore/k8s/app
-cch scale 2
+# 3. 用与初次部署一致的 CLI 参数重跑一次完整部署,恢复 HPA / PDB / Service 等资源
+#    关键:保留原始的 --replicas / --hpa-min / --hpa-max / --storage-class / --ingress-* 参数
+bash scripts/deploy-k8s.sh -n claude-code-hub <repeat-your-original-cli-args> -y
 ```
 
 ---

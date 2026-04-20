@@ -46,6 +46,8 @@ describe("k8s deploy review regressions", () => {
 
     expect(deployScript).toContain("NodePort 模式下跳过 app NetworkPolicy");
     expect(deployScript).toContain("删除 namespace=$NAMESPACE 并重建所有资源");
+    expect(deployScript).toContain("storageclass\\.beta\\.kubernetes\\.io/is-default-class");
+    expect(deployScript).toContain("reclaimPolicy");
   });
 
   it("hardens cch config parsing and rollout diagnostics", () => {
@@ -56,6 +58,8 @@ describe("k8s deploy review regressions", () => {
     expect(cchScript).toContain('if [[ "${1:-}" =~ ^[0-9]+$ ]]; then');
     expect(cchScript).toContain("wait_for_deployment_rollout()");
     expect(cchScript).toContain('if ! wait_for_deployment_rollout 180s "缩容到 1 副本"; then');
+    expect(cchScript).toContain('local desired_replicas="$CURRENT_REPLICAS"');
+    expect(cchScript).toContain("HPA minReplicas=");
     expect(cchScript).toContain("if detect_runtime; then");
   });
 
@@ -63,6 +67,7 @@ describe("k8s deploy review regressions", () => {
     const docs = readRepoFile("docs/k8s-deployment.md");
 
     expect(docs).toContain("kubectl -n claude-code-hub delete hpa claude-code-hub");
+    expect(docs).toContain("<repeat-your-original-cli-args>");
     expect(docs).not.toContain('minReplicas":0');
   });
 });

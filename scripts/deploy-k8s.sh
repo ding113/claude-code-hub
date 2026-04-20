@@ -421,6 +421,9 @@ detect_storage_class() {
     # 尝试找默认 StorageClass
     local default_sc
     default_sc=$($KUBECTL get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1)
+    if [[ -z "$default_sc" ]]; then
+        default_sc=$($KUBECTL get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.beta\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1)
+    fi
     if [[ -n "$default_sc" ]]; then
         STORAGE_CLASS="$default_sc"
         log_info "Storage class (cluster default): $default_sc"
@@ -502,6 +505,7 @@ force_new_reset_existing_namespace() {
     else
         log_warning "--force-new 已启用: 删除 namespace=$NAMESPACE 并重建所有资源"
     fi
+    log_warning "PV 是否真正释放取决于 StorageClass reclaimPolicy; 若为 Retain,旧 PV 会进入 Released,需手动清理"
 
     log_info "删除旧 namespace: $NAMESPACE"
     if ! $KUBECTL delete namespace "$NAMESPACE" --timeout=180s >/dev/null; then
