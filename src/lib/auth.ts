@@ -201,6 +201,7 @@ export async function validateKey(
       limitMonthlyUsd: null,
       limitConcurrentSessions: 0,
       cacheTtlPreference: null,
+      temporaryGroupName: null,
       createdAt: now,
       updatedAt: now,
     };
