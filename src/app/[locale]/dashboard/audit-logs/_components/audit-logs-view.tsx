@@ -7,6 +7,10 @@ import { useCallback, useMemo, useState } from "react";
 import { getAuditLogsBatch } from "@/actions/audit-logs";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
+import {
+  getAuditActionLabel,
+  getAuditCategoryLabel,
+} from "@/app/[locale]/dashboard/audit-logs/_components/audit-log-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -21,7 +25,6 @@ import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-lis
 import { cn } from "@/lib/utils";
 import type { AuditCategory, AuditLogRow } from "@/types/audit-log";
 import { AuditLogDetailSheet } from "./audit-log-detail-sheet";
-import { getAuditActionLabel, getAuditCategoryLabel } from "./audit-log-labels";
 
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 56;

@@ -4,12 +4,15 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
+import {
+  getAuditActionLabel,
+  getAuditCategoryLabel,
+} from "@/app/[locale]/dashboard/audit-logs/_components/audit-log-labels";
 import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { AuditLogRow } from "@/types/audit-log";
-import { getAuditActionLabel, getAuditCategoryLabel } from "./audit-log-labels";
 
 interface AuditLogDetailSheetProps {
   log: AuditLogRow | null;

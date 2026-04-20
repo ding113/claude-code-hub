@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, test, vi } from "vitest";
+import { AuditLogDetailSheet } from "@/app/[locale]/dashboard/audit-logs/_components/audit-log-detail-sheet";
 import type { AuditLogRow } from "@/types/audit-log";
 import auditLogsMessages from "../../../../../../messages/en/auditLogs.json";
 
@@ -59,8 +60,6 @@ vi.mock("@/app/[locale]/dashboard/_components/ip-display-trigger", () => ({
 vi.mock("@/app/[locale]/dashboard/_components/ip-details-dialog", () => ({
   IpDetailsDialog: () => null,
 }));
-
-import { AuditLogDetailSheet } from "./audit-log-detail-sheet";
 
 const messages = { auditLogs: auditLogsMessages };
 
