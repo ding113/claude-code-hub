@@ -1618,6 +1618,7 @@
       "exitMode": "Выйти",
       "selectAll": "Выбрать все",
       "selectedCount": "Выбрано {users} пользователей, {keys} ключей",
+      "downloadSelected": "Скачать Key TXT",
       "editSelected": "Редактировать выбранное",
       "dialog": {
         "title": "Массовое редактирование",
@@ -1640,6 +1641,8 @@
       "toast": {
         "usersUpdated": "Обновлено {count} пользователей",
         "keysUpdated": "Обновлено {count} ключей",
+        "downloadFailed": "Не удалось скачать Key TXT: {error}",
+        "missingFullKey": "У одного из выбранных ключей нет полного значения. Обновите страницу и попробуйте снова.",
         "usersFailed": "Не удалось обновить пользователей: {error}",
         "keysFailed": "Не удалось обновить ключи: {error}",
         "batchFailed": "Массовое обновление не удалось"

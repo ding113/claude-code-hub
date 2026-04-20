@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, X } from "lucide-react";
+import { Download, Pencil, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +15,7 @@ export interface BatchEditToolbarProps {
   onEnterMode: () => void;
   onExitMode: () => void;
   onSelectAll: (checked: boolean) => void;
+  onDownloadSelectedKeys: () => void;
   onEditSelected: () => void;
 }
 
@@ -27,6 +28,7 @@ export function BatchEditToolbar({
   onEnterMode,
   onExitMode,
   onSelectAll,
+  onDownloadSelectedKeys,
   onEditSelected,
 }: BatchEditToolbarProps) {
   const t = useTranslations("dashboard.userManagement.batchEdit");
@@ -64,15 +66,25 @@ export function BatchEditToolbar({
       <Button
         type="button"
         size="sm"
+        variant="outline"
+        onClick={onDownloadSelectedKeys}
+        disabled={selectedKeysCount === 0}
+      >
+        <Download className="mr-2 h-4 w-4" />
+        {t("downloadSelected")}
+      </Button>
+
+      <Button
+        type="button"
+        size="sm"
         onClick={onEditSelected}
         disabled={nothingSelected}
-        className="ml-auto sm:ml-0"
       >
         <Pencil className="mr-2 h-4 w-4" />
         {t("editSelected")}
       </Button>
 
-      <Button type="button" size="sm" variant="outline" onClick={onExitMode}>
+      <Button type="button" size="sm" variant="outline" onClick={onExitMode} className="ml-auto">
         <X className="mr-2 h-4 w-4" />
         {t("exitMode")}
       </Button>

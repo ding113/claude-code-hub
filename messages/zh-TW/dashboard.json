@@ -1621,6 +1621,7 @@
       "exitMode": "離開",
       "selectAll": "全選",
       "selectedCount": "已選 {users} 位使用者，{keys} 個金鑰",
+      "downloadSelected": "下載 Key TXT",
       "editSelected": "編輯選取項目",
       "dialog": {
         "title": "批量編輯",
@@ -1643,6 +1644,8 @@
       "toast": {
         "usersUpdated": "已更新 {count} 位使用者",
         "keysUpdated": "已更新 {count} 個金鑰",
+        "downloadFailed": "下載 Key TXT 失敗：{error}",
+        "missingFullKey": "選中的金鑰裡有完整 Key 不可用，請重新整理後再試",
         "usersFailed": "使用者更新失敗：{error}",
         "keysFailed": "金鑰更新失敗：{error}",
         "batchFailed": "批量更新失敗"
