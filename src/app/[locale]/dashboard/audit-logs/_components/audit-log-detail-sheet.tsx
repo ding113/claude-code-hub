@@ -4,6 +4,10 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
+import {
+  getAuditActionLabel,
+  getAuditCategoryLabel,
+} from "@/app/[locale]/dashboard/audit-logs/_components/audit-log-labels";
 import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Separator } from "@/components/ui/separator";
@@ -59,23 +63,8 @@ export function AuditLogDetailSheet({ log, open, onOpenChange }: AuditLogDetailS
 
   const operatorName = log.operatorUserName ?? t("adminTokenOperator");
 
-  const categoryLabel = (() => {
-    const key = `categories.${log.actionCategory}` as const;
-    try {
-      return t(key);
-    } catch {
-      return log.actionCategory;
-    }
-  })();
-
-  const actionLabel = (() => {
-    const key = `actions.${log.actionType}` as const;
-    try {
-      return t(key);
-    } catch {
-      return log.actionType;
-    }
-  })();
+  const categoryLabel = getAuditCategoryLabel(t, log.actionCategory);
+  const actionLabel = getAuditActionLabel(t, log.actionType);
 
   const openIpDialog = (ip: string) => {
     setIpDialogValue(ip);

@@ -7,6 +7,10 @@ import { useCallback, useMemo, useState } from "react";
 import { getAuditLogsBatch } from "@/actions/audit-logs";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
+import {
+  getAuditActionLabel,
+  getAuditCategoryLabel,
+} from "@/app/[locale]/dashboard/audit-logs/_components/audit-log-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -109,21 +113,11 @@ export function AuditLogsView() {
   };
 
   const categoryLabel = (cat: string) => {
-    const key = `categories.${cat}` as const;
-    try {
-      return t(key);
-    } catch {
-      return cat;
-    }
+    return getAuditCategoryLabel(t, cat);
   };
 
   const actionLabel = (actionType: string) => {
-    const key = `actions.${actionType}` as const;
-    try {
-      return t(key);
-    } catch {
-      return actionType;
-    }
+    return getAuditActionLabel(t, actionType);
   };
 
   return (
