@@ -4,7 +4,7 @@ metadata:
   name: claude-code-hub
   namespace: {{NAMESPACE}}
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: claude-code-hub

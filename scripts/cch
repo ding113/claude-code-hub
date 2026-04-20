@@ -42,12 +42,48 @@ b64d() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+parse_config_value() {
+    local raw="$1"
+    raw="${raw#"${raw%%[![:space:]]*}"}"
+    raw="${raw%"${raw##*[![:space:]]}"}"
+
+    if [[ "$raw" =~ ^\"(.*)\"$ ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+        return
+    fi
+    if [[ "$raw" =~ ^\'(.*)\'$ ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+        return
+    fi
+    printf '%s' "$raw"
+}
+
+load_config_file() {
+    [[ -r "$CCH_CONFIG_FILE" ]] || return 0
+
+    local line key raw value
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+        if [[ ! "$line" =~ ^[[:space:]]*([A-Z0-9_]+)[[:space:]]*=(.*)$ ]]; then
+            warn "跳过无法解析的配置行: $line"
+            continue
+        fi
+
+        key="${BASH_REMATCH[1]}"
+        raw="${BASH_REMATCH[2]}"
+        case "$key" in
+            CCH_NAMESPACE|CCH_IMAGE|CCH_DEPLOY_DIR|CCH_RUNTIME|CCH_INGRESS_HOST|CCH_INGRESS_VARIANT|CCH_BACKUP_DIR|CCH_BACKUP_KEEP)
+                value="$(parse_config_value "$raw")"
+                printf -v "$key" '%s' "$value"
+                ;;
+        esac
+    done < "$CCH_CONFIG_FILE"
+}
+
 # 1. 加载可选配置文件
 CCH_CONFIG_FILE="${CCH_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/cch/config}"
-if [[ -r "$CCH_CONFIG_FILE" ]]; then
-    # shellcheck disable=SC1090
-    source "$CCH_CONFIG_FILE"
-fi
+load_config_file
 
 # 2. 合并默认值
 NAMESPACE="${CCH_NAMESPACE:-claude-code-hub}"
@@ -84,7 +120,7 @@ detect_runtime() {
                 KUBECTL="sudo k3s kubectl"
             else
                 err "RUNTIME_OVERRIDE=$RUNTIME 指定,但本机既无 kubectl 也无 k3s 可用"
-                exit 1
+                return 1
             fi
         fi
     elif command -v kubectl &>/dev/null && kubectl cluster-info &>/dev/null; then
@@ -98,7 +134,7 @@ detect_runtime() {
         RUNTIME="k3s"
     else
         err "未检测到 kubectl 或 k3s。请安装 kubectl 并确保 kubeconfig 可用"
-        exit 1
+        return 1
     fi
 }
 
@@ -151,6 +187,27 @@ health_check_in_pod() {
     fi
     warn "Health check not healthy: ${status:-unknown}"
     return 1
+}
+
+wait_for_deployment_rollout() {
+    local timeout="$1"
+    local stage="$2"
+    if ! $KUBECTL -n "$NAMESPACE" rollout status deployment/claude-code-hub --timeout="$timeout"; then
+        err "$stage 未在 $timeout 内完成"
+        err "排查命令: kubectl -n $NAMESPACE describe deployment/claude-code-hub"
+        err "排查命令: kubectl -n $NAMESPACE logs deploy/claude-code-hub --tail=100"
+        return 1
+    fi
+}
+
+restore_update_scaling() {
+    local current_replicas="$1"
+    local min_replicas="$2"
+    if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
+        $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge \
+            -p "{\"spec\":{\"minReplicas\":$min_replicas}}" >/dev/null || true
+    fi
+    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$current_replicas" >/dev/null || true
 }
 
 ###############################################################################
@@ -213,7 +270,10 @@ cmd_update() {
         $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge -p '{"spec":{"minReplicas":1}}' >/dev/null
     fi
     $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas=1 >/dev/null
-    $KUBECTL -n "$NAMESPACE" rollout status deployment/claude-code-hub --timeout=180s >/dev/null 2>&1
+    if ! wait_for_deployment_rollout 180s "缩容到 1 副本"; then
+        restore_update_scaling "$CURRENT_REPLICAS" "$MIN_REPLICAS"
+        exit 1
+    fi
     ok "Scaled to 1 replica"
     echo ""
 
@@ -244,7 +304,13 @@ cmd_update() {
             $KUBECTL -n "$NAMESPACE" set image deployment/claude-code-hub app="$IMAGE" >/dev/null
         fi
     fi
-    $KUBECTL -n "$NAMESPACE" rollout status deployment/claude-code-hub --timeout=600s
+    if ! wait_for_deployment_rollout 600s "镜像更新 rollout"; then
+        err "新镜像 rollout 失败,正在回滚..."
+        $KUBECTL -n "$NAMESPACE" rollout undo deployment/claude-code-hub >/dev/null || true
+        restore_update_scaling "$CURRENT_REPLICAS" "$MIN_REPLICAS"
+        wait_for_deployment_rollout 300s "回滚后的 deployment" || true
+        exit 1
+    fi
     sleep 3
 
     if health_check_in_pod; then
@@ -252,11 +318,7 @@ cmd_update() {
     else
         err "DB 未通过健康检查,正在回滚..."
         $KUBECTL -n "$NAMESPACE" rollout undo deployment/claude-code-hub >/dev/null
-        if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
-            $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge \
-                -p "{\"spec\":{\"minReplicas\":$MIN_REPLICAS}}" >/dev/null
-        fi
-        $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$CURRENT_REPLICAS" >/dev/null
+        restore_update_scaling "$CURRENT_REPLICAS" "$MIN_REPLICAS"
         exit 1
     fi
     echo ""
@@ -268,7 +330,10 @@ cmd_update() {
             -p "{\"spec\":{\"minReplicas\":$MIN_REPLICAS}}" >/dev/null
     fi
     $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$MIN_REPLICAS" >/dev/null
-    $KUBECTL -n "$NAMESPACE" rollout status deployment/claude-code-hub --timeout=300s >/dev/null 2>&1
+    if ! wait_for_deployment_rollout 300s "恢复副本"; then
+        err "副本恢复失败,当前 deployment 可能仍停留在单副本"
+        exit 1
+    fi
     ok "Running with $MIN_REPLICAS replicas"
     echo ""
 
@@ -298,8 +363,11 @@ cmd_status() {
 
 cmd_logs() {
     require_cluster
-    local TAIL="${1:-100}"
-    shift 2>/dev/null || true
+    local TAIL="100"
+    if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+        TAIL="$1"
+        shift
+    fi
     $KUBECTL -n "$NAMESPACE" logs deploy/claude-code-hub --all-containers --tail="$TAIL" "$@"
 }
 
@@ -432,9 +500,17 @@ cmd_doctor() {
     check_warn() { warn "$1"; warn_n=$((warn_n+1)); }
     check_fail() { err "$1"; fail=$((fail+1)); }
 
+    if detect_runtime; then
+        check_pass "Runtime detected (runtime=$RUNTIME, kubectl=$KUBECTL)"
+    else
+        check_warn "运行时探测失败,将继续尝试默认 kubectl 诊断"
+    fi
+
     # kubectl
     if command -v kubectl &>/dev/null; then
         check_pass "kubectl installed: $(kubectl version --client -o yaml 2>/dev/null | awk '/gitVersion/{print $2; exit}')"
+    elif [[ "$RUNTIME" == "k3s" ]] && command -v k3s &>/dev/null; then
+        check_warn "kubectl 未安装,将使用 sudo k3s kubectl"
     else
         check_fail "kubectl 未安装"
     fi
@@ -566,7 +642,7 @@ Install / Teardown:
 
 Observe:
   status          Show pods, HPA, resource usage
-  logs [n]        Show last n log lines (default 100)
+  logs [n] [args] Show last n log lines (default 100), or pass through kubectl log flags
   follow          Tail logs in real-time
   env             Show app environment variables (JSON)
   info            展示访问 URL、Admin Token、镜像 digest

@@ -26,7 +26,8 @@ spec:
             - |
               cat > /etc/redis/redis.conf << CONF
               requirepass ${REDIS_PASSWORD}
-              maxmemory 4gb
+              # 为 Redis 自身开销预留余量,避免 maxmemory 打满后被容器 OOMKill。
+              maxmemory 3gb
               maxmemory-policy allkeys-lru
               appendonly yes
               appendfsync everysec
@@ -66,7 +67,7 @@ spec:
               command:
                 - sh
                 - -c
-                - redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG
+                - REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli --no-auth-warning ping | grep -q PONG
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
@@ -75,7 +76,7 @@ spec:
               command:
                 - sh
                 - -c
-                - redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG
+                - REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli --no-auth-warning ping | grep -q PONG
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3

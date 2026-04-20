@@ -45,9 +45,9 @@ spec:
             - "-c"
             - "max_connections=200"
             - "-c"
-            - "shared_buffers=2GB"
+            - "shared_buffers=1GB"
             - "-c"
-            - "effective_cache_size=6GB"
+            - "effective_cache_size=3GB"
             - "-c"
             - "work_mem=16MB"
             - "-c"
@@ -60,17 +60,13 @@ spec:
             - "random_page_cost=1.1"
             - "-c"
             - "log_min_duration_statement=1000"
-            - "-c"
-            - "idle_in_transaction_session_timeout=30000"
-            - "-c"
-            - "statement_timeout=60000"
           resources:
             requests:
               cpu: 500m
-              memory: 4Gi
+              memory: 2Gi
             limits:
               cpu: "4"
-              memory: 8Gi
+              memory: 4Gi
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data

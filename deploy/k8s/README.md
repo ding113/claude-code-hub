@@ -9,15 +9,15 @@
 deploy/k8s/
 ├── namespace.yaml                     # 命名空间
 ├── app/                               # 应用层
-│   ├── deployment.yaml                #   Deployment (2 副本基线)
+│   ├── deployment.yaml                #   Deployment (2 副本基线;迁移由 PG advisory lock 串行化)
 │   ├── service.yaml                   #   Service (可渲染为 ClusterIP/NodePort)
 │   ├── hpa.yaml                       #   HPA (CPU 70% / 内存 80%)
-│   ├── pdb.yaml                       #   PodDisruptionBudget
-│   └── networkpolicy.yaml             #   NetworkPolicy (仅允许 Ingress 命名空间访问)
+│   ├── pdb.yaml                       #   PodDisruptionBudget (maxUnavailable=1)
+│   └── networkpolicy.yaml             #   NetworkPolicy (仅在 Ingress 模式应用)
 ├── postgres/                          # PostgreSQL StatefulSet
 │   ├── statefulset.yaml
 │   ├── service.yaml                   #   ClusterIP (不对外)
-│   └── networkpolicy.yaml             #   仅允许 app / migration 访问
+│   └── networkpolicy.yaml             #   仅允许 app 访问
 ├── redis/                             # Redis StatefulSet
 │   ├── statefulset.yaml               #   密码保护 + AOF
 │   ├── service.yaml                   #   ClusterIP (不对外)
@@ -41,6 +41,9 @@ deploy/k8s/
 | `{{INGRESS_HOST}}` | 绑定域名 | 用户参数 |
 | `{{INGRESS_CLASS}}` | Ingress className | 自动探测 |
 | `{{TIMEZONE}}` | 容器时区 | `Asia/Shanghai` |
+
+> NodePort 回落模式下,`scripts/deploy-k8s.sh` 会自动跳过 `app/networkpolicy.yaml`,
+> 避免默认的 Ingress 命名空间白名单阻断外部访问。
 
 ## Secret 约定
 

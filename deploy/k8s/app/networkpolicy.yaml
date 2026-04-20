@@ -10,6 +10,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+    # 仅在 Ingress 模式下由 deploy-k8s.sh 应用;NodePort 回落时会自动跳过该策略。
     # 允许来自 Ingress Controller 所在命名空间的流量
     # kube-system 覆盖 k3s Traefik;若使用 ingress-nginx 请自行调整 namespace label
     - from:

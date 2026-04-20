@@ -18,7 +18,7 @@
                        │
               ┌────────▼─────────┐
               │  Deployment       │  HPA 2~6 副本,CPU 70% / Memory 80%
-              │  claude-code-hub  │  PDB minAvailable=1
+              │  claude-code-hub  │  PDB maxUnavailable=1
               └────┬─────────┬────┘
                    │         │
              ┌─────▼──┐  ┌───▼─────┐
@@ -67,6 +67,9 @@
 # 脚本会在检测不到集群时自动提示安装
 bash scripts/deploy-k8s.sh --install-k3s -y
 ```
+
+> `--install-k3s` 会执行官方安装脚本 `curl -fsSL https://get.k3s.io | sh -`。
+> 生产环境建议先审阅脚本内容,确认来源与变更窗口后再执行。
 
 **选项 B — 已有集群 (EKS / GKE / AKS / 自建标准 K8s)**
 
@@ -169,7 +172,7 @@ kubectl apply --dry-run=client -R -f /tmp/cch-k8s/k8s/
 |  | `--disable-ingress` | off | 跳过 Ingress,使用 NodePort |
 | **Network** | `--disable-networkpolicy` | off | 跳过 NetworkPolicy(非标准 Ingress ns 时需要) |
 | **Deployment** | `-d, --deploy-dir <path>` | auto | manifest + cch 安装目录 |
-|  | `--force-new` | off | 已有部署时强制重装 |
+|  | `--force-new` | off | 删除已有 namespace 后重装(Deployment / StatefulSet / Secret / PVC 全重建) |
 |  | `--install-cch` | off | cch 软链到 `/usr/local/bin/cch` |
 |  | `--dry-render` | off | 只渲染不 apply |
 | **Misc** | `-y, --yes` | 交互 | 非交互模式 |
@@ -207,9 +210,12 @@ bash scripts/deploy-k8s.sh \
 bash scripts/deploy-k8s.sh --replicas 3 --hpa-min 3 --hpa-max 10 -y
 ```
 
+默认模板保留 `replicas=2`,但 `AUTO_MIGRATE` 入口 `src/instrumentation.ts` 会先获取 PostgreSQL advisory lock,
+因此首次多副本启动时迁移会串行执行。如果你更关心首启速度,也可以先用 `--replicas 1` 部署,确认健康后再扩容。
+
 ### NetworkPolicy 自定义
 
-默认 `deploy/k8s/app/networkpolicy.yaml` 只放行以下三个 Ingress Controller namespace:
+默认 `deploy/k8s/app/networkpolicy.yaml` 只在 **Ingress 模式** 下应用,并放行以下三个 Ingress Controller namespace:
 
 - `kube-system` (k3s 内置 Traefik)
 - `ingress-nginx` (社区版 nginx-ingress)
@@ -219,6 +225,9 @@ bash scripts/deploy-k8s.sh --replicas 3 --hpa-min 3 --hpa-max 10 -y
 
 1. 部署时关闭内置 NP:`bash scripts/deploy-k8s.sh --disable-networkpolicy -y`
 2. 编辑 `deploy/k8s/app/networkpolicy.yaml` 加入你的 namespace 标签,再部署
+
+若脚本回落到 NodePort (`--disable-ingress` 或未提供 `--ingress-host`),会自动跳过 app NetworkPolicy,
+避免默认的 Ingress namespace 白名单把外部流量挡掉。
 
 ### 修改应用环境变量
 
@@ -248,6 +257,7 @@ cch scale 3           # 调整副本数
 ```bash
 cch status            # Pod / HPA / 资源使用
 cch logs 500          # 最近 500 行日志
+cch logs --since=10m  # 透传 kubectl logs 参数
 cch follow            # 实时 tail
 cch env               # 展示当前 env (JSON)
 cch info              # 访问 URL + Admin Token + 镜像 digest
@@ -299,7 +309,7 @@ CCH_INGRESS_HOST="hub.example.com"
 ```
 1. PostgreSQL 备份 (失败时询问是否继续)
 2. k3s: 预拉镜像 / 标准 k8s: 依赖 imagePullPolicy=Always
-3. 缩到 1 副本 (避免并发迁移冲突)
+3. 缩到 1 副本 (减少升级等待时间与排障复杂度)
 4. 更新镜像 → 应用启动时通过 AUTO_MIGRATE=true 自动执行 drizzle migrate
    k3s 路径: 用 digest 固定避免 tag 相同导致 rollout 空跑
    标准 k8s 路径: set image(tag 相同则触发 rollout restart)
@@ -311,6 +321,10 @@ CCH_INGRESS_HOST="hub.example.com"
 > 说明: 未使用独立的迁移 Job — 应用镜像在启动时通过 `AUTO_MIGRATE=true` 环境变量触发
 > drizzle migrate(入口 `src/instrumentation.ts`),避免 Job 与应用并发迁移的竞态,且
 > 运行时镜像不再依赖 devDependency 的 drizzle-kit。
+
+> PostgreSQL 默认资源画像: `requests.memory=2Gi`、`limits.memory=4Gi`、`shared_buffers=1GB`、
+> `effective_cache_size=3GB`。这套默认值更适合单节点 8GB RAM 起步环境;如业务量继续增长,
+> 再按节点规格同步上调数据库内存参数和 Pod limit。
 
 ### 回滚
 
@@ -339,18 +353,17 @@ cch backup
 ```bash
 # 1. 停 app (避免写入):直接 kubectl 操作 (cch scale 要求 >=1)
 kubectl -n claude-code-hub scale deployment/claude-code-hub --replicas=0
-# HPA 可能把副本重新拉起,先把 minReplicas 也降到 0
-kubectl -n claude-code-hub patch hpa claude-code-hub \
-  --type merge -p '{"spec":{"minReplicas":0}}' 2>/dev/null || true
+# CPU/内存 HPA 不支持直接把 minReplicas 改成 0,先删掉 HPA
+kubectl -n claude-code-hub delete hpa claude-code-hub 2>/dev/null || true
 
 # 2. 在 postgres pod 内执行恢复
 gunzip -c ~/backups/claude-code-hub/claude_code_hub_20260101_030000.sql.gz | \
   kubectl -n claude-code-hub exec -i sts/postgres -- \
     psql -U claude_code_hub -d claude_code_hub
 
-# 3. 恢复 HPA 下限并扩回副本
-kubectl -n claude-code-hub patch hpa claude-code-hub \
-  --type merge -p '{"spec":{"minReplicas":2}}' 2>/dev/null || true
+# 3. 重新套用 manifest 恢复 HPA / PDB / Service 等资源,再扩回副本
+bash scripts/deploy-k8s.sh -n claude-code-hub --dry-render --deploy-dir /tmp/cch-restore -y
+kubectl apply -R -f /tmp/cch-restore/k8s/app
 cch scale 2
 ```
 
@@ -446,12 +459,12 @@ deploy/k8s/
 │   ├── deployment.yaml        # replicas, env, resources, 3 个 probe, preStop sleep
 │   ├── service.yaml           # ClusterIP / NodePort
 │   ├── hpa.yaml               # CPU 70% / 内存 80%, scaleUp/Down 策略
-│   ├── pdb.yaml               # minAvailable=1
-│   └── networkpolicy.yaml     # 限制只能从 Ingress namespace 访问
+│   ├── pdb.yaml               # maxUnavailable=1
+│   └── networkpolicy.yaml     # 仅在 Ingress 模式应用
 ├── postgres/
-│   ├── statefulset.yaml       # pg18 + 性能参数,50Gi PVC
+│   ├── statefulset.yaml       # pg18 + 保守内存参数,50Gi PVC
 │   ├── service.yaml           # ClusterIP,不对外
-│   └── networkpolicy.yaml     # 仅允许 app / migration 访问
+│   └── networkpolicy.yaml     # 仅允许 app 访问
 ├── redis/
 │   ├── statefulset.yaml       # redis:7-alpine,密码保护,AOF
 │   ├── service.yaml           # ClusterIP,不对外

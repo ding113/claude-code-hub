@@ -10,11 +10,11 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
     # Traefik 注解(安装为 Ingress Controller 时生效)
-    traefik.ingress.kubernetes.io/router.middlewares: {{NAMESPACE}}-streaming-headers@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: "{{NAMESPACE}}-streaming-headers@kubernetescrd"
 spec:
-  ingressClassName: {{INGRESS_CLASS}}
+  ingressClassName: "{{INGRESS_CLASS}}"
   rules:
-    - host: {{INGRESS_HOST}}
+    - host: "{{INGRESS_HOST}}"
       http:
         paths:
           - path: /

@@ -149,7 +149,7 @@ Ingress:
 
 Deployment:
   -d, --deploy-dir <path>       manifest + cch 安装目录 (default: auto)
-      --force-new               存在部署时强制重装 (会提示)
+      --force-new               删除已有 namespace 后强制重装 (会提示)
       --install-cch             把 cch 软链接到 /usr/local/bin/cch (需 sudo)
       --dry-render              只渲染 manifest 不 apply (用于审阅)
 
@@ -315,6 +315,7 @@ install_k3s() {
     if [[ "$NON_INTERACTIVE" != true ]]; then
         echo ""
         log_warning "即将在本机安装 k3s (官方脚本,curl | sh),这会修改系统服务。"
+        log_warning "生产环境请先审阅 https://get.k3s.io 返回的脚本内容后再执行。"
         read -p "继续?(y/N) " -n 1 -r confirm
         echo ""
         if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -400,6 +401,9 @@ resolve_config() {
     log_info "PG storage:      $PG_STORAGE_SIZE"
     log_info "Redis storage:   $REDIS_STORAGE_SIZE"
     log_info "Timezone:        $TIMEZONE"
+    if [[ "$APP_REPLICAS" -gt 1 ]]; then
+        log_info "AUTO_MIGRATE 由 PostgreSQL advisory lock 串行化,首次多副本启动会排队等待迁移完成"
+    fi
 }
 
 detect_storage_class() {
@@ -479,8 +483,37 @@ detect_ingress_variant() {
 ###############################################################################
 # Existing deployment detection
 ###############################################################################
+force_new_reset_existing_namespace() {
+    if ! $KUBECTL get namespace "$NAMESPACE" &>/dev/null; then
+        log_info "--force-new 已启用,但 namespace=$NAMESPACE 当前不存在,将按新装模式继续"
+        return
+    fi
+
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo ""
+        log_warning "--force-new 将删除 namespace=$NAMESPACE 并重建所有资源"
+        log_warning "这会清空 Deployment / StatefulSet / Secret / PVC,现有数据不会保留"
+        read -p "输入 yes 继续: " confirm
+        echo ""
+        if [[ "$confirm" != "yes" ]]; then
+            log_error "已取消"
+            exit 1
+        fi
+    else
+        log_warning "--force-new 已启用: 删除 namespace=$NAMESPACE 并重建所有资源"
+    fi
+
+    log_info "删除旧 namespace: $NAMESPACE"
+    if ! $KUBECTL delete namespace "$NAMESPACE" --timeout=180s >/dev/null; then
+        log_error "删除 namespace 失败: $NAMESPACE"
+        exit 1
+    fi
+    log_success "旧部署已清理,将按新装模式继续"
+}
+
 detect_existing_deployment() {
     if [[ "$FORCE_NEW" == true ]]; then
+        force_new_reset_existing_namespace
         UPDATE_MODE=false
         return
     fi
@@ -656,7 +689,11 @@ apply_manifests() {
     else
         kube_apply "$base/postgres/networkpolicy.yaml"  || log_warning "postgres networkpolicy 应用失败,忽略"
         kube_apply "$base/redis/networkpolicy.yaml"     || log_warning "redis networkpolicy 应用失败,忽略"
-        kube_apply "$base/app/networkpolicy.yaml"       || log_warning "app networkpolicy 应用失败,忽略"
+        if [[ "$INGRESS_VARIANT" == "nodeport" ]]; then
+            log_warning "NodePort 模式下跳过 app NetworkPolicy,避免阻断外部访问"
+        else
+            kube_apply "$base/app/networkpolicy.yaml"   || log_warning "app networkpolicy 应用失败,忽略"
+        fi
     fi
 
     # DB & Cache

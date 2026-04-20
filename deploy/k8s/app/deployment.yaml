@@ -48,6 +48,7 @@ spec:
                 secretKeyRef:
                   name: claude-code-hub-secrets
                   key: admin-token
+            # instrumentation.ts 会先拿 PostgreSQL advisory lock,多副本首次启动时迁移会串行执行。
             - name: AUTO_MIGRATE
               value: "true"
             - name: DB_POOL_MAX
