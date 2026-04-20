@@ -260,7 +260,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       setMapInstance(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [resolvedTheme, mapStyles.light, viewport, projection, props, mapStyles.dark]);
 
   // Sync controlled viewport to map
   useEffect(() => {
@@ -426,7 +426,7 @@ function MapMarker({
     return markerInstance;
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [longitude, markerOptions, draggable, latitude]);
 
   useEffect(() => {
     if (!map) return;
@@ -438,7 +438,7 @@ function MapMarker({
     };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  }, [map, marker.addTo, marker.remove]);
 
   if (marker.getLngLat().lng !== longitude || marker.getLngLat().lat !== latitude) {
     marker.setLngLat([longitude, latitude]);
@@ -534,7 +534,7 @@ function MarkerPopup({
 
     return popupInstance;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [container, popupOptions]);
 
   useEffect(() => {
     if (!map) return;
@@ -546,7 +546,7 @@ function MarkerPopup({
       marker.setPopup(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  }, [map, popup.setDOMContent, marker.setPopup, container, popup]);
 
   if (popup.isOpen()) {
     const prev = prevPopupOptions.current;
@@ -609,7 +609,7 @@ function MarkerTooltip({ children, className, ...popupOptions }: MarkerTooltipPr
 
     return tooltipInstance;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [popupOptions]);
 
   useEffect(() => {
     if (!map) return;
@@ -630,7 +630,15 @@ function MarkerTooltip({ children, className, ...popupOptions }: MarkerTooltipPr
       tooltip.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  }, [
+    map,
+    container,
+    tooltip.remove,
+    marker.getElement,
+    tooltip.setLngLat,
+    tooltip.setDOMContent,
+    marker.getLngLat,
+  ]);
 
   if (tooltip.isOpen()) {
     const prev = prevTooltipOptions.current;
@@ -952,7 +960,7 @@ function MapPopup({
 
     return popupInstance;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [longitude, latitude, popupOptions]);
 
   useEffect(() => {
     if (!map) return;
@@ -971,7 +979,16 @@ function MapPopup({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  }, [
+    map,
+    popup.setDOMContent,
+    popup.remove,
+    popup.on,
+    container,
+    popup.off,
+    popup.isOpen,
+    popup.addTo,
+  ]);
 
   if (popup.isOpen()) {
     const prev = popupOptionsRef.current;
@@ -1093,7 +1110,7 @@ function MapRoute({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, map]);
+  }, [isLoaded, map, color, width, dashArray, layerId, sourceId, opacity]);
 
   // When coordinates change, update the source data
   useEffect(() => {
@@ -1118,7 +1135,7 @@ function MapRoute({
   }, [isLoaded, map, coordinates, sourceId]);
 
   useEffect(() => {
-    if (!isLoaded || !map || !map.getLayer(layerId)) return;
+    if (!isLoaded || !map?.getLayer(layerId)) return;
 
     map.setPaintProperty(layerId, "line-color", color);
     map.setPaintProperty(layerId, "line-width", width);
@@ -1288,7 +1305,20 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, map, sourceId]);
+  }, [
+    isLoaded,
+    map,
+    sourceId,
+    unclusteredLayerId,
+    clusterColors[0],
+    clusterThresholds[1],
+    clusterMaxZoom,
+    clusterRadius,
+    data,
+    pointColor,
+    clusterLayerId,
+    clusterCountLayerId,
+  ]);
 
   // Update source data when data prop changes
   useEffect(() => {

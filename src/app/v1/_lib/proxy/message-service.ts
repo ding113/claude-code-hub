@@ -8,8 +8,7 @@ export class ProxyMessageService {
     const provider = session.provider;
 
     if (
-      !authState ||
-      !authState.success ||
+      !authState?.success ||
       !authState.user ||
       !authState.key ||
       !authState.apiKey ||

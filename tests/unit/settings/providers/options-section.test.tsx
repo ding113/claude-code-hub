@@ -19,10 +19,10 @@ vi.mock(
   })
 );
 vi.mock("@/app/[locale]/settings/providers/_components/adaptive-thinking-editor", () => ({
-  AdaptiveThinkingEditor: (props: any) => <div data-testid="adaptive-thinking-editor" />,
+  AdaptiveThinkingEditor: (_props: any) => <div data-testid="adaptive-thinking-editor" />,
 }));
 vi.mock("@/app/[locale]/settings/providers/_components/thinking-budget-editor", () => ({
-  ThinkingBudgetEditor: (props: any) => <div data-testid="thinking-budget-editor" />,
+  ThinkingBudgetEditor: (_props: any) => <div data-testid="thinking-budget-editor" />,
 }));
 vi.mock("@/components/ui/badge", () => ({
   Badge: ({ children, className }: any) => <span className={className}>{children}</span>,

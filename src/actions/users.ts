@@ -1116,9 +1116,6 @@ async function safeFindUser(userId: number): Promise<Awaited<ReturnType<typeof f
  * path) so every user-creation flow produces an audit row with the full
  * post-creation snapshot.
  */
-// biome-ignore lint/suspicious/noExplicitAny: the repository's createUser
-// return type is wider than the action-side User type; we pass it straight
-// to the audit emitter which redacts & serializes unknown fields.
 type UserCreateAuditSnapshot = {
   id: string | number;
   name: string | null;

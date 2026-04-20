@@ -13,8 +13,8 @@ import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-se
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
-import { ERROR_CODES } from "@/lib/utils/error-messages";
 import type { CurrencyCode } from "@/lib/utils";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
@@ -676,7 +676,11 @@ export async function getMyUsageLogsBatchFull(
     return { ok: true, data: result };
   } catch (error) {
     logger.error("[my-usage] getMyUsageLogsBatchFull failed", error);
-    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
@@ -692,7 +696,11 @@ export async function getMyAvailableModels(): Promise<ActionResult<string[]>> {
     return { ok: true, data: models };
   } catch (error) {
     logger.error("[my-usage] getMyAvailableModels failed", error);
-    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
@@ -708,7 +716,11 @@ export async function getMyAvailableEndpoints(): Promise<ActionResult<string[]>>
     return { ok: true, data: endpoints };
   } catch (error) {
     logger.error("[my-usage] getMyAvailableEndpoints failed", error);
-    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
@@ -790,7 +802,11 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
     return { ok: true, data: result };
   } catch (error) {
     logger.error("[my-usage] getMyIpGeoDetails failed", { error });
-    return { ok: false, error: tError("OPERATION_FAILED"), errorCode: ERROR_CODES.OPERATION_FAILED };
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 

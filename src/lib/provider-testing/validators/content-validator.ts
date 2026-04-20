@@ -56,7 +56,7 @@ export function evaluateContentValidation(
   }
 
   // Empty response = content mismatch
-  if (!responseBody || !responseBody.trim()) {
+  if (!responseBody?.trim()) {
     return {
       status: "red",
       subStatus: "content_mismatch",

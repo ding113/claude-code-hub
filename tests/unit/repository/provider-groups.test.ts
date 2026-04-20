@@ -176,8 +176,12 @@ describe("provider-groups repository", () => {
 
     it("cache is invalidated after calling invalidateGroupMultiplierCache", async () => {
       selectMock
-        .mockImplementationOnce(() => createQuery([fakeRow({ name: "flip", costMultiplier: "1.5000" })]))
-        .mockImplementationOnce(() => createQuery([fakeRow({ name: "flip", costMultiplier: "4.0000" })]));
+        .mockImplementationOnce(() =>
+          createQuery([fakeRow({ name: "flip", costMultiplier: "1.5000" })])
+        )
+        .mockImplementationOnce(() =>
+          createQuery([fakeRow({ name: "flip", costMultiplier: "4.0000" })])
+        );
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -242,7 +246,9 @@ describe("provider-groups repository", () => {
     it("does not cache misses (fallback 1.0 is not persisted)", async () => {
       selectMock
         .mockImplementationOnce(() => createQuery([]))
-        .mockImplementationOnce(() => createQuery([fakeRow({ name: "new-group", costMultiplier: "5.0000" })]));
+        .mockImplementationOnce(() =>
+          createQuery([fakeRow({ name: "new-group", costMultiplier: "5.0000" })])
+        );
 
       const { getGroupCostMultiplier, invalidateGroupMultiplierCache } = await import(
         "@/repository/provider-groups"
@@ -280,7 +286,9 @@ describe("provider-groups repository", () => {
 
       const { deleteProviderGroup } = await import("@/repository/provider-groups");
 
-      await expect(deleteProviderGroup(1)).rejects.toThrow("Cannot delete the default provider group");
+      await expect(deleteProviderGroup(1)).rejects.toThrow(
+        "Cannot delete the default provider group"
+      );
     });
 
     it("does not throw for a non-default group", async () => {

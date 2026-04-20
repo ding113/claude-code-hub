@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
 
   const locale = getLocaleFromRequest(request);
   const t = await getAuthErrorTranslations(locale);
-    const clientIp = await resolveClientIp(request);
+  const clientIp = await resolveClientIp(request);
 
   const userAgent = request.headers.get("user-agent");
   const auditIp = clientIp === "unknown" ? null : clientIp;
