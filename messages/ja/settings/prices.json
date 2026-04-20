@@ -192,13 +192,29 @@
     "prefillEmpty": "一致するモデルが見つかりません",
     "prefillFailed": "検索に失敗しました",
     "promptCachingHint": "モデルがキャッシュに対応している場合のみ有効化し、下のキャッシュ価格を設定してください",
-    "cachePricingTitle": "キャッシュ価格"
+    "cachePricingTitle": "キャッシュ価格",
+    "advancedFieldsTitle": "高度なフィールド",
+    "advancedFieldsJson": "追加価格フィールド JSON",
+    "advancedFieldsPlaceholder": "例: input_cost_per_second = 0.5",
+    "advancedFieldsHint": "基本フォームで扱わないクラウド/ローカル拡張フィールドを JSON オブジェクトで保存します。"
   },
   "actions": {
     "edit": "編集",
     "more": "その他の操作",
     "delete": "削除",
-    "comparePricing": "価格を比較"
+    "comparePricing": "価格を比較",
+    "viewDetails": "詳細を見る"
+  },
+  "details": {
+    "coreFieldsTitle": "主要フィールド",
+    "additionalBillableTitle": "追加の課金フィールド",
+    "additionalMetadataTitle": "追加メタデータ",
+    "providerPricingTitle": "プロバイダー価格ノード",
+    "kindSupported": "課金可能",
+    "kindUnsupported": "要確認",
+    "kindDisplay": "表示のみ",
+    "booleanTrue": "はい",
+    "booleanFalse": "いいえ"
   },
   "toast": {
     "createSuccess": "モデルを追加しました",

@@ -46,6 +46,37 @@ describe("parseCloudPriceTableToml", () => {
     expect(pricing.anthropic?.input_cost_per_token).toBe(0.000001);
   });
 
+  it("preserves newer generic pricing fields from cloud table", () => {
+    const toml = [
+      '[models."m3"]',
+      'mode = "chat"',
+      'litellm_provider = "openai"',
+      "input_cost_per_second = 0.5",
+      "file_search_cost_per_1k_calls = 2",
+      "",
+      '[models."m3".pricing."openai"]',
+      "input_cost_per_second = 0.75",
+      "code_interpreter_cost_per_session = 3",
+    ].join("\n");
+
+    const result = parseCloudPriceTableToml(toml);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.data.models.m3.input_cost_per_second).toBe(0.5);
+    expect(result.data.models.m3.file_search_cost_per_1k_calls).toBe(2);
+
+    const pricing = result.data.models.m3.pricing as {
+      openai?: {
+        input_cost_per_second?: number;
+        code_interpreter_cost_per_session?: number;
+      };
+    };
+    expect(pricing.openai?.input_cost_per_second).toBe(0.75);
+    expect(pricing.openai?.code_interpreter_cost_per_session).toBe(3);
+  });
+
   it("returns an error when models table is missing", () => {
     const toml = ["[metadata]", 'version = "test"'].join("\n");
     const result = parseCloudPriceTableToml(toml);

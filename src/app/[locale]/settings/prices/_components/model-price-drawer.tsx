@@ -33,7 +33,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { getEditableExtraPriceData } from "@/lib/utils/model-price-fields";
 import type { ModelPrice } from "@/types/model-price";
 
 interface ModelPriceDrawerProps {
@@ -99,6 +101,7 @@ export function ModelPriceDrawer({
   const [cacheReadPrice, setCacheReadPrice] = useState("");
   const [cacheCreation5mPrice, setCacheCreation5mPrice] = useState("");
   const [cacheCreation1hPrice, setCacheCreation1hPrice] = useState("");
+  const [extraFieldsJson, setExtraFieldsJson] = useState("");
 
   // 预填充搜索（仅 create 模式显示）
   const [prefillQuery, setPrefillQuery] = useState("");
@@ -118,6 +121,7 @@ export function ModelPriceDrawer({
     setCacheReadPrice("");
     setCacheCreation5mPrice("");
     setCacheCreation1hPrice("");
+    setExtraFieldsJson("");
     setPrefillQuery("");
     setPrefillStatus("idle");
     setPrefillResults([]);
@@ -155,6 +159,10 @@ export function ModelPriceDrawer({
     );
     setCacheCreation1hPrice(
       formatPerTokenPriceToPerMillion(selected.priceData.cache_creation_input_token_cost_above_1hr)
+    );
+    const extraPriceData = getEditableExtraPriceData(selected.priceData);
+    setExtraFieldsJson(
+      Object.keys(extraPriceData).length > 0 ? JSON.stringify(extraPriceData, null, 2) : ""
     );
   }, []);
 
@@ -270,6 +278,7 @@ export function ModelPriceDrawer({
         cacheReadInputTokenCost: cacheReadCostPerToken,
         cacheCreationInputTokenCost: cacheCreation5mCostPerToken,
         cacheCreationInputTokenCostAbove1hr: cacheCreation1hCostPerToken,
+        extraFieldsJson,
       });
 
       if (!result.ok) {
@@ -606,6 +615,24 @@ export function ModelPriceDrawer({
                 </div>
               </div>
             </div>
+
+            <details className="rounded-md border border-white/10 bg-white/[0.02] p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                {t("drawer.advancedFieldsTitle")}
+              </summary>
+              <div className="mt-3 space-y-2">
+                <Label htmlFor="extraFieldsJson">{t("drawer.advancedFieldsJson")}</Label>
+                <Textarea
+                  id="extraFieldsJson"
+                  value={extraFieldsJson}
+                  onChange={(event) => setExtraFieldsJson(event.target.value)}
+                  placeholder={t("drawer.advancedFieldsPlaceholder")}
+                  className="min-h-32 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50 font-mono text-xs"
+                  disabled={loading}
+                />
+                <p className="text-xs text-muted-foreground">{t("drawer.advancedFieldsHint")}</p>
+              </div>
+            </details>
           </div>
         </div>
 

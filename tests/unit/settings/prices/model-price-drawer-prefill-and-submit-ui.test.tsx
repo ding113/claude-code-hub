@@ -50,8 +50,8 @@ async function flushMicrotasks() {
   await Promise.resolve();
 }
 
-function setReactInputValue(input: HTMLInputElement, value: string) {
-  const prototype = Object.getPrototypeOf(input) as HTMLInputElement;
+function setReactInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const prototype = Object.getPrototypeOf(input) as HTMLInputElement | HTMLTextAreaElement;
   const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
   descriptor?.set?.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -296,6 +296,75 @@ describe("ModelPriceDrawer: 预填充与提交", () => {
     expect(payload.cacheReadInputTokenCost).toBeCloseTo(0.0000002);
     expect(payload.cacheCreationInputTokenCost).toBeCloseTo(0.0000025);
     expect(payload.cacheCreationInputTokenCostAbove1hr).toBeCloseTo(0.000004);
+
+    unmount();
+  });
+
+  test("编辑时应预填额外 JSON 字段，并在提交时透传", async () => {
+    const messages = loadMessages();
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const initialData: ModelPrice = {
+      id: 2,
+      modelName: "advanced-model",
+      priceData: {
+        mode: "chat",
+        display_name: "Advanced Model",
+        litellm_provider: "openai",
+        input_cost_per_token: 0.000001,
+        output_cost_per_token: 0.000002,
+        input_cost_per_second: 0.5,
+        file_search_cost_per_1k_calls: 2,
+      },
+      source: "manual",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ModelPriceDrawer mode="edit" initialData={initialData} defaultOpen />
+      </NextIntlClientProvider>
+    );
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const extraFieldsInput = document.getElementById(
+      "extraFieldsJson"
+    ) as HTMLTextAreaElement | null;
+    expect(extraFieldsInput).toBeTruthy();
+    expect(extraFieldsInput?.value).toContain('"input_cost_per_second": 0.5');
+    expect(extraFieldsInput?.value).toContain('"file_search_cost_per_1k_calls": 2');
+
+    await act(async () => {
+      setReactInputValue(
+        extraFieldsInput!,
+        JSON.stringify({
+          input_cost_per_second: 0.75,
+          file_search_cost_per_1k_calls: 3,
+        })
+      );
+    });
+
+    const submit = Array.from(document.querySelectorAll("button")).find(
+      (el) => el.textContent?.trim() === "Confirm"
+    );
+    expect(submit).toBeTruthy();
+
+    await act(async () => {
+      submit?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+      await flushPromises();
+    });
+
+    expect(modelPricesActionMocks.upsertSingleModelPrice).toHaveBeenCalled();
+    const payload = modelPricesActionMocks.upsertSingleModelPrice.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload.extraFieldsJson).toContain('"input_cost_per_second":0.75');
+    expect(payload.extraFieldsJson).toContain('"file_search_cost_per_1k_calls":3');
 
     unmount();
   });

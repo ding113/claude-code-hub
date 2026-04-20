@@ -192,13 +192,29 @@
     "prefillEmpty": "Модели не найдены",
     "prefillFailed": "Ошибка поиска",
     "promptCachingHint": "Включайте только если модель поддерживает кэширование, и задайте цены кэша ниже",
-    "cachePricingTitle": "Цены кэша"
+    "cachePricingTitle": "Цены кэша",
+    "advancedFieldsTitle": "Расширенные поля",
+    "advancedFieldsJson": "JSON дополнительных ценовых полей",
+    "advancedFieldsPlaceholder": "Пример: input_cost_per_second = 0.5",
+    "advancedFieldsHint": "Используйте JSON-объект для сохранения облачных или локальных полей, которых нет в базовой форме."
   },
   "actions": {
     "edit": "Редактировать",
     "more": "Больше действий",
     "delete": "Удалить",
-    "comparePricing": "Сравнить цены"
+    "comparePricing": "Сравнить цены",
+    "viewDetails": "Показать детали"
+  },
+  "details": {
+    "coreFieldsTitle": "Основные поля",
+    "additionalBillableTitle": "Дополнительные тарифицируемые поля",
+    "additionalMetadataTitle": "Дополнительные метаданные",
+    "providerPricingTitle": "Узлы цен провайдеров",
+    "kindSupported": "Тарифицируется",
+    "kindUnsupported": "Требует поддержки",
+    "kindDisplay": "Только показ",
+    "booleanTrue": "Да",
+    "booleanFalse": "Нет"
   },
   "toast": {
     "createSuccess": "Модель добавлена",

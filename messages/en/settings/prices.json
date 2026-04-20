@@ -192,13 +192,29 @@
     "prefillEmpty": "No matching models found",
     "prefillFailed": "Search failed",
     "promptCachingHint": "Enable if the model supports prompt caching",
-    "cachePricingTitle": "Cache Pricing"
+    "cachePricingTitle": "Cache Pricing",
+    "advancedFieldsTitle": "Advanced fields",
+    "advancedFieldsJson": "Additional price fields JSON",
+    "advancedFieldsPlaceholder": "Example: input_cost_per_second = 0.5",
+    "advancedFieldsHint": "Use a JSON object to store extra cloud or local fields not covered by the basic form."
   },
   "actions": {
     "edit": "Edit",
     "more": "More actions",
     "delete": "Delete",
-    "comparePricing": "Compare pricing"
+    "comparePricing": "Compare pricing",
+    "viewDetails": "View details"
+  },
+  "details": {
+    "coreFieldsTitle": "Core fields",
+    "additionalBillableTitle": "Additional billable fields",
+    "additionalMetadataTitle": "Additional metadata",
+    "providerPricingTitle": "Provider pricing nodes",
+    "kindSupported": "Chargeable",
+    "kindUnsupported": "Review",
+    "kindDisplay": "Display",
+    "booleanTrue": "Yes",
+    "booleanFalse": "No"
   },
   "toast": {
     "createSuccess": "Model added",

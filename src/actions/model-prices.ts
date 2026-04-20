@@ -592,6 +592,7 @@ export interface SingleModelPriceInput {
   cacheReadInputTokenCost?: number;
   cacheCreationInputTokenCost?: number;
   cacheCreationInputTokenCostAbove1hr?: number;
+  extraFieldsJson?: string;
 }
 
 /**
@@ -657,8 +658,28 @@ export async function upsertSingleModelPrice(
       return { ok: false, error: "缓存创建(1h)价格必须为非负数" };
     }
 
+    let extraPriceData: Record<string, unknown> = {};
+    if (input.extraFieldsJson?.trim()) {
+      try {
+        const parsed = JSON.parse(input.extraFieldsJson);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return { ok: false, error: "高级字段必须是 JSON 对象" };
+        }
+        extraPriceData = parsed as Record<string, unknown>;
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? `高级字段 JSON 解析失败: ${error.message}`
+              : "高级字段 JSON 解析失败",
+        };
+      }
+    }
+
     // 构建价格数据
     const priceData: ModelPriceData = {
+      ...extraPriceData,
       mode: input.mode,
       display_name: input.displayName?.trim() || undefined,
       litellm_provider: input.litellmProvider || undefined,

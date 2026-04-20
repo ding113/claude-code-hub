@@ -192,13 +192,29 @@
     "prefillEmpty": "找不到符合的模型",
     "prefillFailed": "搜尋失敗",
     "promptCachingHint": "僅當模型支援快取時開啟，並配置下方快取價格",
-    "cachePricingTitle": "快取價格"
+    "cachePricingTitle": "快取價格",
+    "advancedFieldsTitle": "進階欄位",
+    "advancedFieldsJson": "額外價格欄位 JSON",
+    "advancedFieldsPlaceholder": "範例：input_cost_per_second = 0.5",
+    "advancedFieldsHint": "使用 JSON 物件保存基礎表單未覆蓋的雲端或本地擴充欄位。"
   },
   "actions": {
     "edit": "編輯",
     "more": "更多動作",
     "delete": "刪除",
-    "comparePricing": "比較價格"
+    "comparePricing": "比較價格",
+    "viewDetails": "查看詳情"
+  },
+  "details": {
+    "coreFieldsTitle": "核心欄位",
+    "additionalBillableTitle": "額外計費欄位",
+    "additionalMetadataTitle": "額外中繼資料",
+    "providerPricingTitle": "供應商價格節點",
+    "kindSupported": "可計費",
+    "kindUnsupported": "待支援",
+    "kindDisplay": "僅展示",
+    "booleanTrue": "是",
+    "booleanFalse": "否"
   },
   "toast": {
     "createSuccess": "模型已新增",

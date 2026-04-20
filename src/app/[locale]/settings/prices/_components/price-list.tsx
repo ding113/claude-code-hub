@@ -11,6 +11,7 @@ import {
   DollarSign,
   Eye,
   FileText,
+  Info,
   Monitor,
   MoreHorizontal,
   Package,
@@ -46,6 +47,7 @@ import { copyToClipboard } from "@/lib/utils/clipboard";
 import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import type { ModelPrice, ModelPriceSource } from "@/types/model-price";
 import { DeleteModelDialog } from "./delete-model-dialog";
+import { ModelPriceDetailsDialog } from "./model-price-details-dialog";
 import { ModelPriceDrawer } from "./model-price-drawer";
 import { ProviderPricingDialog } from "./provider-pricing-dialog";
 
@@ -633,6 +635,15 @@ export function PriceList({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <ModelPriceDetailsDialog
+                            price={price}
+                            trigger={
+                              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                <Info className="h-4 w-4 mr-2" />
+                                {t("actions.viewDetails")}
+                              </DropdownMenuItem>
+                            }
+                          />
                           {price.priceData.pricing &&
                           Object.keys(price.priceData.pricing).length > 0 ? (
                             <ProviderPricingDialog
