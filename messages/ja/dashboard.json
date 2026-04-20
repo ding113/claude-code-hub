@@ -1613,6 +1613,7 @@
       "exitMode": "終了",
       "selectAll": "すべて選択",
       "selectedCount": "選択済み {users} ユーザー、{keys} キー",
+      "downloadSelected": "Key TXT をダウンロード",
       "editSelected": "選択項目を編集",
       "dialog": {
         "title": "一括編集",
@@ -1635,6 +1636,8 @@
       "toast": {
         "usersUpdated": "{count} ユーザーを更新しました",
         "keysUpdated": "{count} キーを更新しました",
+        "downloadFailed": "Key TXT のダウンロードに失敗しました: {error}",
+        "missingFullKey": "選択したキーの完全な値を取得できません。更新してから再試行してください。",
         "usersFailed": "ユーザーの更新に失敗しました: {error}",
         "keysFailed": "キーの更新に失敗しました: {error}",
         "batchFailed": "一括更新に失敗しました"

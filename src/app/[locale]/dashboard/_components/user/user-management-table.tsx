@@ -37,6 +37,7 @@ export interface UserManagementTableProps {
   onSelectAll?: (checked: boolean) => void;
   onSelectUser?: (user: UserDisplay, checked: boolean) => void;
   onSelectKey?: (keyId: number, checked: boolean) => void;
+  onDownloadSelectedKeys?: () => void;
   onOpenBatchEdit?: () => void;
   translations: {
     table: {
@@ -125,6 +126,7 @@ export function UserManagementTable({
   onSelectAll,
   onSelectUser,
   onSelectKey,
+  onDownloadSelectedKeys,
   onOpenBatchEdit,
   translations,
   onRefresh,
@@ -411,6 +413,7 @@ export function UserManagementTable({
           onEnterMultiSelectMode &&
           onExitMultiSelectMode &&
           onSelectAll &&
+          onDownloadSelectedKeys &&
           onOpenBatchEdit &&
           onSelectUser &&
           onSelectKey ? (
@@ -423,6 +426,7 @@ export function UserManagementTable({
               onEnterMode={onEnterMultiSelectMode}
               onExitMode={onExitMultiSelectMode}
               onSelectAll={onSelectAll}
+              onDownloadSelectedKeys={onDownloadSelectedKeys}
               onEditSelected={onOpenBatchEdit}
             />
           ) : null}

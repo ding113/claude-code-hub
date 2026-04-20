@@ -1635,6 +1635,7 @@
       "exitMode": "Exit",
       "selectAll": "Select All",
       "selectedCount": "Selected {users} users, {keys} keys",
+      "downloadSelected": "Download Key TXT",
       "editSelected": "Edit Selected",
       "dialog": {
         "title": "Batch Edit",
@@ -1657,6 +1658,8 @@
       "toast": {
         "usersUpdated": "Updated {count} users",
         "keysUpdated": "Updated {count} keys",
+        "downloadFailed": "Failed to download key TXT: {error}",
+        "missingFullKey": "A selected key is missing its full value. Refresh and try again.",
         "usersFailed": "User update failed: {error}",
         "keysFailed": "Key update failed: {error}",
         "batchFailed": "Batch update failed"
