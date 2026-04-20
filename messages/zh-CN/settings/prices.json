@@ -214,7 +214,25 @@
     "kindUnsupported": "待支持",
     "kindDisplay": "仅展示",
     "booleanTrue": "是",
-    "booleanFalse": "否"
+    "booleanFalse": "否",
+    "fields": {
+      "mode": "模式",
+      "displayName": "展示名称",
+      "litellmProvider": "LiteLLM 供应商",
+      "selectedPricingProvider": "选中价格提供方",
+      "selectedPricingSourceModel": "选中源模型",
+      "selectedPricingResolution": "选中解析方式",
+      "maxInputTokens": "最大输入 Tokens",
+      "maxOutputTokens": "最大输出 Tokens",
+      "maxTokens": "最大 Tokens",
+      "outputVectorSize": "输出向量维度",
+      "inputCostPerToken": "输入单 Token 价格",
+      "outputCostPerToken": "输出单 Token 价格",
+      "inputCostPerRequest": "按次输入价格",
+      "outputCostPerImage": "按图输出价格",
+      "inputCostPerSecond": "按秒输入价格",
+      "fileSearchCostPer1kCalls": "每千次文件检索价格"
+    }
   },
   "toast": {
     "createSuccess": "模型已添加",

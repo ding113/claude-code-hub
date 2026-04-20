@@ -24,12 +24,33 @@ interface ModelPriceDetailsDialogProps {
   trigger?: React.ReactNode;
 }
 
+const FIELD_LABEL_KEYS: Record<string, string> = {
+  mode: "mode",
+  display_name: "displayName",
+  litellm_provider: "litellmProvider",
+  selected_pricing_provider: "selectedPricingProvider",
+  selected_pricing_source_model: "selectedPricingSourceModel",
+  selected_pricing_resolution: "selectedPricingResolution",
+  max_input_tokens: "maxInputTokens",
+  max_output_tokens: "maxOutputTokens",
+  max_tokens: "maxTokens",
+  output_vector_size: "outputVectorSize",
+  input_cost_per_token: "inputCostPerToken",
+  output_cost_per_token: "outputCostPerToken",
+  input_cost_per_request: "inputCostPerRequest",
+  output_cost_per_image: "outputCostPerImage",
+  input_cost_per_second: "inputCostPerSecond",
+  file_search_cost_per_1k_calls: "fileSearchCostPer1kCalls",
+};
+
 function formatValue(
   value: unknown,
   t: ReturnType<typeof useTranslations<"settings.prices">>
 ): string {
   if (typeof value === "number") {
-    return Number.isFinite(value) ? String(value) : "-";
+    return Number.isFinite(value)
+      ? value.toLocaleString("en-US", { maximumFractionDigits: 10 })
+      : "-";
   }
   if (typeof value === "boolean") {
     return value ? t("details.booleanTrue") : t("details.booleanFalse");
@@ -44,6 +65,18 @@ function formatValue(
     return "-";
   }
   return JSON.stringify(value);
+}
+
+function resolveEntryLabel(
+  entry: ModelPriceFieldEntry,
+  t: ReturnType<typeof useTranslations<"settings.prices">>
+): string {
+  const fieldLabelKey = FIELD_LABEL_KEYS[entry.key];
+  if (fieldLabelKey) {
+    return t(`details.fields.${fieldLabelKey}`);
+  }
+
+  return entry.label;
 }
 
 function kindLabel(
@@ -71,7 +104,7 @@ function FieldRow({
     <div className="rounded-md border border-white/10 bg-white/[0.02] p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-medium text-foreground">{entry.label}</div>
+          <div className="text-sm font-medium text-foreground">{resolveEntryLabel(entry, t)}</div>
           <div className="mt-1 font-mono text-[11px] text-muted-foreground">{entry.path}</div>
         </div>
         <Badge variant="outline" className="shrink-0">
@@ -88,25 +121,42 @@ function FieldRow({
 export function ModelPriceDetailsDialog({ price, trigger }: ModelPriceDetailsDialogProps) {
   const t = useTranslations("settings.prices");
 
-  const entries = useMemo(() => collectModelPriceFieldEntries(price.priceData), [price.priceData]);
-  const coreEntries = entries.filter((entry) => entry.isCore && entry.source === "top_level");
-  const additionalBillableEntries = entries.filter(
-    (entry) => !entry.isCore && entry.kind !== "display" && entry.source === "top_level"
-  );
-  const additionalMetadataEntries = entries.filter(
-    (entry) => !entry.isCore && entry.kind === "display" && entry.source === "top_level"
-  );
-  const providerEntries = entries.filter((entry) => entry.source === "provider_pricing");
-  const providerGroups = useMemo(() => {
-    const groups = new Map<string, ModelPriceFieldEntry[]>();
-    for (const entry of providerEntries) {
-      const key = entry.providerKey ?? "unknown";
-      const bucket = groups.get(key) ?? [];
-      bucket.push(entry);
-      groups.set(key, bucket);
-    }
-    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [providerEntries]);
+  const { coreEntries, additionalBillableEntries, additionalMetadataEntries, providerGroups } =
+    useMemo(() => {
+      const entries = collectModelPriceFieldEntries(price.priceData);
+      const groups = new Map<string, ModelPriceFieldEntry[]>();
+      const core: ModelPriceFieldEntry[] = [];
+      const extraBillable: ModelPriceFieldEntry[] = [];
+      const extraMetadata: ModelPriceFieldEntry[] = [];
+
+      for (const entry of entries) {
+        if (entry.source === "provider_pricing") {
+          const key = entry.providerKey ?? "unknown";
+          const bucket = groups.get(key) ?? [];
+          bucket.push(entry);
+          groups.set(key, bucket);
+          continue;
+        }
+
+        if (entry.isCore) {
+          core.push(entry);
+          continue;
+        }
+
+        if (entry.kind === "display") {
+          extraMetadata.push(entry);
+        } else {
+          extraBillable.push(entry);
+        }
+      }
+
+      return {
+        coreEntries: core,
+        additionalBillableEntries: extraBillable,
+        additionalMetadataEntries: extraMetadata,
+        providerGroups: Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0])),
+      };
+    }, [price.priceData]);
 
   const defaultTrigger = (
     <Button variant="ghost" size="sm">
@@ -117,7 +167,7 @@ export function ModelPriceDetailsDialog({ price, trigger }: ModelPriceDetailsDia
 
   return (
     <Dialog>
-      <DialogTrigger asChild>{trigger || defaultTrigger}</DialogTrigger>
+      <DialogTrigger asChild>{trigger ?? defaultTrigger}</DialogTrigger>
       <DialogContent className="max-w-4xl overflow-y-auto max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>{price.priceData.display_name?.trim() || price.modelName}</DialogTitle>

@@ -50,6 +50,8 @@ type ModelMode = "chat" | "image_generation" | "completion";
 
 type PrefillStatus = "idle" | "loading" | "loaded" | "error";
 
+const EXTRA_FIELDS_JSON_PLACEHOLDER = JSON.stringify({ input_cost_per_second: 0.5 }, null, 2);
+
 function parsePricePerMillionToPerToken(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
@@ -626,7 +628,7 @@ export function ModelPriceDrawer({
                   id="extraFieldsJson"
                   value={extraFieldsJson}
                   onChange={(event) => setExtraFieldsJson(event.target.value)}
-                  placeholder={t("drawer.advancedFieldsPlaceholder")}
+                  placeholder={EXTRA_FIELDS_JSON_PLACEHOLDER}
                   className="min-h-32 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50 font-mono text-xs"
                   disabled={loading}
                 />

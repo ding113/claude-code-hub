@@ -214,7 +214,25 @@
     "kindUnsupported": "Review",
     "kindDisplay": "Display",
     "booleanTrue": "Yes",
-    "booleanFalse": "No"
+    "booleanFalse": "No",
+    "fields": {
+      "mode": "Mode",
+      "displayName": "Display name",
+      "litellmProvider": "LiteLLM provider",
+      "selectedPricingProvider": "Selected pricing provider",
+      "selectedPricingSourceModel": "Selected source model",
+      "selectedPricingResolution": "Selected resolution",
+      "maxInputTokens": "Max input tokens",
+      "maxOutputTokens": "Max output tokens",
+      "maxTokens": "Max tokens",
+      "outputVectorSize": "Output vector size",
+      "inputCostPerToken": "Input Cost Per Token",
+      "outputCostPerToken": "Output Cost Per Token",
+      "inputCostPerRequest": "Input Cost Per Request",
+      "outputCostPerImage": "Output Cost Per Image",
+      "inputCostPerSecond": "Input Cost Per Second",
+      "fileSearchCostPer1kCalls": "File Search Cost Per 1k Calls"
+    }
   },
   "toast": {
     "createSuccess": "Model added",

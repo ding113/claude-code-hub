@@ -214,7 +214,25 @@
     "kindUnsupported": "待支援",
     "kindDisplay": "僅展示",
     "booleanTrue": "是",
-    "booleanFalse": "否"
+    "booleanFalse": "否",
+    "fields": {
+      "mode": "模式",
+      "displayName": "顯示名稱",
+      "litellmProvider": "LiteLLM 供應商",
+      "selectedPricingProvider": "選定價格提供方",
+      "selectedPricingSourceModel": "選定來源模型",
+      "selectedPricingResolution": "選定解析方式",
+      "maxInputTokens": "最大輸入 Tokens",
+      "maxOutputTokens": "最大輸出 Tokens",
+      "maxTokens": "最大 Tokens",
+      "outputVectorSize": "輸出向量維度",
+      "inputCostPerToken": "輸入單 Token 價格",
+      "outputCostPerToken": "輸出單 Token 價格",
+      "inputCostPerRequest": "按次輸入價格",
+      "outputCostPerImage": "按圖輸出價格",
+      "inputCostPerSecond": "按秒輸入價格",
+      "fileSearchCostPer1kCalls": "每千次檔案檢索價格"
+    }
   },
   "toast": {
     "createSuccess": "模型已新增",

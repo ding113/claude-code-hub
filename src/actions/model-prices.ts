@@ -595,6 +595,43 @@ export interface SingleModelPriceInput {
   extraFieldsJson?: string;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeExtraPriceData(value: unknown, path = ""): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => sanitizeExtraPriceData(item, `${path}[${index}]`));
+  }
+
+  if (!isPlainObject(value)) {
+    if (
+      path &&
+      /(cost|price|per_|rate|multiplier|session|query|page|pixel|character|dbu)/i.test(path)
+    ) {
+      if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        throw new Error(`${path} 必须是非负数`);
+      }
+    }
+
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      sanitizeExtraPriceData(nestedValue, path ? `${path}.${key}` : key),
+    ])
+  );
+}
+
 /**
  * 创建或更新单个模型价格（手动维护）
  */
@@ -665,7 +702,7 @@ export async function upsertSingleModelPrice(
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
           return { ok: false, error: "高级字段必须是 JSON 对象" };
         }
-        extraPriceData = parsed as Record<string, unknown>;
+        extraPriceData = sanitizeExtraPriceData(parsed) as Record<string, unknown>;
       } catch (error) {
         return {
           ok: false,

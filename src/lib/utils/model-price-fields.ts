@@ -85,7 +85,6 @@ const NON_EDITABLE_MANAGED_FIELDS = new Set([
   "cache_read_input_token_cost",
   "cache_creation_input_token_cost",
   "cache_creation_input_token_cost_above_1hr",
-  "pricing",
 ]);
 
 const LABEL_OVERRIDES: Record<string, string> = {
@@ -118,6 +117,10 @@ export function isPriceLikeFieldKey(key: string): boolean {
   );
 }
 
+export function isPriceLikeFieldPath(path: string): boolean {
+  return path.split(".").some((segment) => isPriceLikeFieldKey(segment));
+}
+
 function classifyField(path: string, key: string): ModelPriceFieldKind {
   if (
     SUPPORTED_TOP_LEVEL_BILLING_KEYS.has(key) ||
@@ -126,7 +129,7 @@ function classifyField(path: string, key: string): ModelPriceFieldKind {
     return "supported";
   }
 
-  if (isPriceLikeFieldKey(key)) {
+  if (isPriceLikeFieldPath(path) || isPriceLikeFieldKey(key)) {
     return "unsupported";
   }
 
@@ -207,8 +210,7 @@ export function collectModelPriceFieldEntries(priceData: ModelPriceData): ModelP
 
 function collectDynamicPriceLikeNumbers(node: unknown, path = ""): number[] {
   if (typeof node === "number") {
-    const leafKey = path.split(".").pop();
-    if (leafKey && isPriceLikeFieldKey(leafKey) && Number.isFinite(node) && node >= 0) {
+    if (path && isPriceLikeFieldPath(path) && Number.isFinite(node) && node >= 0) {
       return [node];
     }
     return [];

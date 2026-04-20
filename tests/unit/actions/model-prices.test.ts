@@ -205,6 +205,49 @@ describe("Model Price Actions", () => {
       );
     });
 
+    it("should reject invalid extra JSON", async () => {
+      const { upsertSingleModelPrice } = await import("@/actions/model-prices");
+      const result = await upsertSingleModelPrice({
+        modelName: "broken-model",
+        mode: "chat",
+        extraFieldsJson: "{invalid",
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("JSON");
+      expect(upsertModelPriceMock).not.toHaveBeenCalled();
+    });
+
+    it("should let managed form fields override conflicting extra JSON fields", async () => {
+      const mockResult = makeMockPrice("conflict-model", {
+        mode: "chat",
+        input_cost_per_token: 0.000015,
+      });
+      upsertModelPriceMock.mockResolvedValue(mockResult);
+
+      const { upsertSingleModelPrice } = await import("@/actions/model-prices");
+      const result = await upsertSingleModelPrice({
+        modelName: "conflict-model",
+        mode: "chat",
+        inputCostPerToken: 0.000015,
+        extraFieldsJson: JSON.stringify({
+          mode: "image_generation",
+          input_cost_per_token: 999,
+          input_cost_per_second: 0.25,
+        }),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "conflict-model",
+        expect.objectContaining({
+          mode: "chat",
+          input_cost_per_token: 0.000015,
+          input_cost_per_second: 0.25,
+        })
+      );
+    });
+
     it("should handle repository errors gracefully", async () => {
       upsertModelPriceMock.mockRejectedValue(new Error("Database error"));
 

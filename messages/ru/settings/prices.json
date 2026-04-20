@@ -214,7 +214,25 @@
     "kindUnsupported": "Требует поддержки",
     "kindDisplay": "Только показ",
     "booleanTrue": "Да",
-    "booleanFalse": "Нет"
+    "booleanFalse": "Нет",
+    "fields": {
+      "mode": "Режим",
+      "displayName": "Отображаемое имя",
+      "litellmProvider": "Провайдер LiteLLM",
+      "selectedPricingProvider": "Выбранный провайдер цены",
+      "selectedPricingSourceModel": "Выбранная исходная модель",
+      "selectedPricingResolution": "Способ разрешения",
+      "maxInputTokens": "Макс. входные Tokens",
+      "maxOutputTokens": "Макс. выходные Tokens",
+      "maxTokens": "Макс. Tokens",
+      "outputVectorSize": "Размер выходного вектора",
+      "inputCostPerToken": "Цена входного Token",
+      "outputCostPerToken": "Цена выходного Token",
+      "inputCostPerRequest": "Цена за запрос",
+      "outputCostPerImage": "Цена за изображение",
+      "inputCostPerSecond": "Цена за секунду ввода",
+      "fileSearchCostPer1kCalls": "Цена файлового поиска за 1k вызовов"
+    }
   },
   "toast": {
     "createSuccess": "Модель добавлена",

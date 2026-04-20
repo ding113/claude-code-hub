@@ -35,6 +35,9 @@ async function flushPromises() {
 describe("ModelPriceDetailsDialog", () => {
   test("renders core fields and additional billable/provider fields", async () => {
     const messages = loadMessages();
+    const pricingMessages = messages.settings.prices as Record<string, unknown>;
+    const actionMessages = pricingMessages.actions as Record<string, string>;
+    const detailsMessages = pricingMessages.details as Record<string, string>;
     const now = new Date("2026-01-01T00:00:00.000Z");
     const price: ModelPrice = {
       id: 1,
@@ -64,7 +67,7 @@ describe("ModelPriceDetailsDialog", () => {
     );
 
     const trigger = Array.from(document.querySelectorAll("button")).find((element) =>
-      element.textContent?.includes("View details")
+      element.textContent?.includes(actionMessages.viewDetails)
     );
     expect(trigger).toBeTruthy();
 
@@ -74,9 +77,9 @@ describe("ModelPriceDetailsDialog", () => {
       await flushPromises();
     });
 
-    expect(document.body.textContent).toContain("Core fields");
+    expect(document.body.textContent).toContain(detailsMessages.coreFieldsTitle);
     expect(document.body.textContent).toContain("input_cost_per_request");
-    expect(document.body.textContent).toContain("Additional billable fields");
+    expect(document.body.textContent).toContain(detailsMessages.additionalBillableTitle);
     expect(document.body.textContent).toContain("pricing.openai.file_search_cost_per_1k_calls");
 
     unmount();

@@ -214,7 +214,25 @@
     "kindUnsupported": "要確認",
     "kindDisplay": "表示のみ",
     "booleanTrue": "はい",
-    "booleanFalse": "いいえ"
+    "booleanFalse": "いいえ",
+    "fields": {
+      "mode": "モード",
+      "displayName": "表示名",
+      "litellmProvider": "LiteLLM プロバイダー",
+      "selectedPricingProvider": "選択中の価格プロバイダー",
+      "selectedPricingSourceModel": "選択元モデル",
+      "selectedPricingResolution": "選択解決方式",
+      "maxInputTokens": "最大入力 Tokens",
+      "maxOutputTokens": "最大出力 Tokens",
+      "maxTokens": "最大 Tokens",
+      "outputVectorSize": "出力ベクトル次元",
+      "inputCostPerToken": "入力 Token 単価",
+      "outputCostPerToken": "出力 Token 単価",
+      "inputCostPerRequest": "リクエスト単価",
+      "outputCostPerImage": "画像出力単価",
+      "inputCostPerSecond": "秒単位入力価格",
+      "fileSearchCostPer1kCalls": "ファイル検索 1k 回あたりの価格"
+    }
   },
   "toast": {
     "createSuccess": "モデルを追加しました",
