@@ -1122,7 +1122,6 @@ async function safeFindUser(userId: number): Promise<Awaited<ReturnType<typeof f
 type UserCreateAuditSnapshot = {
   id: string | number;
   name: string | null;
-  [key: string]: unknown;
 };
 
 function emitUserCreateAudit(user: UserCreateAuditSnapshot): void {
