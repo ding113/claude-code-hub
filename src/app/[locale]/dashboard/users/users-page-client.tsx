@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { KeyUsageData } from "@/actions/users";
 import {
   getAllUserKeyGroups,
@@ -30,9 +31,11 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { User, UserDisplay } from "@/types/user";
 import { AddKeyDialog } from "../_components/user/add-key-dialog";
+import { buildSelectedKeysExportText } from "../_components/user/batch-edit/utils";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
 import { CreateUserDialog } from "../_components/user/create-user-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
+import { downloadTextFile } from "../_components/user/utils/text-download";
 
 /**
  * Normalize provider-group tags with the shared parser to keep client/server behavior aligned.
@@ -492,6 +495,21 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     setBatchEditDialogOpen(true);
   }, []);
 
+  const handleDownloadSelectedKeys = useCallback(() => {
+    try {
+      const content = buildSelectedKeysExportText(visibleUsers, selectedKeyIds);
+      downloadTextFile("selected-user-keys.txt", content);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message === "missing-full-key"
+          ? tUserMgmt("batchEdit.toast.missingFullKey")
+          : error instanceof Error
+            ? error.message
+            : tCommon("error");
+      toast.error(tUserMgmt("batchEdit.toast.downloadFailed", { error: message }));
+    }
+  }, [selectedKeyIds, tCommon, tUserMgmt, visibleUsers]);
+
   // Memoize translations object to prevent unnecessary re-renders
   const tableTranslations = useMemo(
     () => ({
@@ -781,6 +799,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             onSelectAll={handleSelectAll}
             onSelectUser={handleSelectUser}
             onSelectKey={handleSelectKey}
+            onDownloadSelectedKeys={handleDownloadSelectedKeys}
             onOpenBatchEdit={handleOpenBatchEdit}
             translations={tableTranslations}
             onRefresh={() => {

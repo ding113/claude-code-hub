@@ -1636,6 +1636,7 @@
       "exitMode": "退出",
       "selectAll": "全选",
       "selectedCount": "已选 {users} 个用户，{keys} 个密钥",
+      "downloadSelected": "下载 Key TXT",
       "editSelected": "编辑选中项",
       "dialog": {
         "title": "批量编辑",
@@ -1658,6 +1659,8 @@
       "toast": {
         "usersUpdated": "已更新 {count} 个用户",
         "keysUpdated": "已更新 {count} 个密钥",
+        "downloadFailed": "下载 Key TXT 失败：{error}",
+        "missingFullKey": "选中的密钥里有完整 Key 不可用，请刷新后重试",
         "usersFailed": "用户更新失败：{error}",
         "keysFailed": "密钥更新失败：{error}",
         "batchFailed": "批量更新失败"
