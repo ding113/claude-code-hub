@@ -1,4 +1,5 @@
 import type { ModelPriceData } from "@/types/model-price";
+import { collectAdditionalPriceLikeNumbers } from "./model-price-fields";
 
 function hasValidNumericPrice(values: unknown[]): boolean {
   return values.some((value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
@@ -51,7 +52,12 @@ function collectNumericCosts(priceData: ModelPriceData): unknown[] {
  * 避免把数据库中的 `{}` 或仅包含元信息的记录当成有效价格。
  */
 export function hasValidPriceData(priceData: ModelPriceData): boolean {
-  if (hasValidNumericPrice(collectNumericCosts(priceData))) {
+  if (
+    hasValidNumericPrice([
+      ...collectNumericCosts(priceData),
+      ...collectAdditionalPriceLikeNumbers(priceData),
+    ])
+  ) {
     return true;
   }
 

@@ -41,7 +41,7 @@ vi.mock("@/repository/system-config", () => ({
 }));
 
 vi.mock("@/repository/message", () => ({
-  updateMessageRequestCost: vi.fn(),
+  updateMessageRequestCostWithBreakdown: vi.fn(),
   updateMessageRequestDetails: vi.fn(),
   updateMessageRequestDuration: vi.fn(),
 }));
@@ -84,7 +84,7 @@ import { SessionManager } from "@/lib/session-manager";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionTracker } from "@/lib/session-tracker";
 import {
-  updateMessageRequestCost,
+  updateMessageRequestCostWithBreakdown,
   updateMessageRequestDetails,
   updateMessageRequestDuration,
 } from "@/repository/message";
@@ -328,9 +328,11 @@ async function runScenario({
   vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
   const dbCosts: string[] = [];
-  vi.mocked(updateMessageRequestCost).mockImplementation(async (_id: number, costUsd: unknown) => {
-    dbCosts.push(String(costUsd));
-  });
+  vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
+    async (_id: number, costUsd: unknown) => {
+      dbCosts.push(String(costUsd));
+    }
+  );
 
   const sessionCosts: string[] = [];
   vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
@@ -467,7 +469,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -531,7 +533,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -600,7 +602,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -660,7 +662,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -726,7 +728,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -785,7 +787,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -844,7 +846,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -903,7 +905,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -962,7 +964,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
       async (_id: number, costUsd: unknown) => {
         dbCosts.push(String(costUsd));
       }
@@ -1019,7 +1021,7 @@ describe("价格表缺失/查询失败：不计费放行", () => {
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
-    vi.mocked(updateMessageRequestCost).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
     vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
 
@@ -1039,7 +1041,7 @@ describe("价格表缺失/查询失败：不计费放行", () => {
     await drainAsyncTasks();
 
     return {
-      dbCostCalls: vi.mocked(updateMessageRequestCost).mock.calls.length,
+      dbCostCalls: vi.mocked(updateMessageRequestCostWithBreakdown).mock.calls.length,
       rateLimitCalls: vi.mocked(RateLimitService.trackCost).mock.calls.length,
     };
   }

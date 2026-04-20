@@ -8,6 +8,7 @@ import {
   fetchCloudPriceTableToml,
   parseCloudPriceTableToml,
 } from "@/lib/price-sync/cloud-price-table";
+import { isPriceLikeFieldPath } from "@/lib/utils/model-price-fields";
 import {
   createModelPrice,
   deleteModelPriceByName,
@@ -592,6 +593,43 @@ export interface SingleModelPriceInput {
   cacheReadInputTokenCost?: number;
   cacheCreationInputTokenCost?: number;
   cacheCreationInputTokenCostAbove1hr?: number;
+  extraFieldsJson?: string;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeExtraPriceData(value: unknown, path = ""): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => sanitizeExtraPriceData(item, `${path}[${index}]`));
+  }
+
+  if (!isPlainObject(value)) {
+    if (path && isPriceLikeFieldPath(path)) {
+      if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        throw new Error(`${path} 必须是非负数`);
+      }
+    }
+
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "__proto__" && key !== "constructor" && key !== "prototype")
+      .map(([key, nestedValue]) => [
+        key,
+        sanitizeExtraPriceData(nestedValue, path ? `${path}.${key}` : key),
+      ])
+  );
 }
 
 /**
@@ -657,19 +695,57 @@ export async function upsertSingleModelPrice(
       return { ok: false, error: "缓存创建(1h)价格必须为非负数" };
     }
 
+    let extraPriceData: Record<string, unknown> = {};
+    if (input.extraFieldsJson?.trim()) {
+      try {
+        const parsed = JSON.parse(input.extraFieldsJson);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return { ok: false, error: "高级字段必须是 JSON 对象" };
+        }
+        extraPriceData = sanitizeExtraPriceData(parsed) as Record<string, unknown>;
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? `高级字段 JSON 解析失败: ${error.message}`
+              : "高级字段 JSON 解析失败",
+        };
+      }
+    }
+
     // 构建价格数据
+    const displayName = input.displayName?.trim();
+    const litellmProvider = input.litellmProvider?.trim();
     const priceData: ModelPriceData = {
+      ...extraPriceData,
       mode: input.mode,
-      display_name: input.displayName?.trim() || undefined,
-      litellm_provider: input.litellmProvider || undefined,
-      supports_prompt_caching: input.supportsPromptCaching,
-      input_cost_per_token: input.inputCostPerToken,
-      output_cost_per_token: input.outputCostPerToken,
-      output_cost_per_image: input.outputCostPerImage,
-      input_cost_per_request: input.inputCostPerRequest,
-      cache_read_input_token_cost: input.cacheReadInputTokenCost,
-      cache_creation_input_token_cost: input.cacheCreationInputTokenCost,
-      cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr,
+      ...(displayName ? { display_name: displayName } : {}),
+      ...(litellmProvider ? { litellm_provider: litellmProvider } : {}),
+      ...(input.supportsPromptCaching !== undefined
+        ? { supports_prompt_caching: input.supportsPromptCaching }
+        : {}),
+      ...(input.inputCostPerToken !== undefined
+        ? { input_cost_per_token: input.inputCostPerToken }
+        : {}),
+      ...(input.outputCostPerToken !== undefined
+        ? { output_cost_per_token: input.outputCostPerToken }
+        : {}),
+      ...(input.outputCostPerImage !== undefined
+        ? { output_cost_per_image: input.outputCostPerImage }
+        : {}),
+      ...(input.inputCostPerRequest !== undefined
+        ? { input_cost_per_request: input.inputCostPerRequest }
+        : {}),
+      ...(input.cacheReadInputTokenCost !== undefined
+        ? { cache_read_input_token_cost: input.cacheReadInputTokenCost }
+        : {}),
+      ...(input.cacheCreationInputTokenCost !== undefined
+        ? { cache_creation_input_token_cost: input.cacheCreationInputTokenCost }
+        : {}),
+      ...(input.cacheCreationInputTokenCostAbove1hr !== undefined
+        ? { cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr }
+        : {}),
     };
 
     // 捕获 before 快照

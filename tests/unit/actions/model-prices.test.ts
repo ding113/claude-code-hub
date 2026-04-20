@@ -174,6 +174,80 @@ describe("Model Price Actions", () => {
       );
     });
 
+    it("should merge extra JSON fields into price data", async () => {
+      const mockResult = makeMockPrice("omni-model", {
+        mode: "chat",
+        input_cost_per_second: 0.5,
+        file_search_cost_per_1k_calls: 2,
+      });
+      upsertModelPriceMock.mockResolvedValue(mockResult);
+
+      const { upsertSingleModelPrice } = await import("@/actions/model-prices");
+      const result = await upsertSingleModelPrice({
+        modelName: "omni-model",
+        mode: "chat",
+        inputCostPerToken: 0.000015,
+        extraFieldsJson: JSON.stringify({
+          input_cost_per_second: 0.5,
+          file_search_cost_per_1k_calls: 2,
+        }),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "omni-model",
+        expect.objectContaining({
+          mode: "chat",
+          input_cost_per_token: 0.000015,
+          input_cost_per_second: 0.5,
+          file_search_cost_per_1k_calls: 2,
+        })
+      );
+    });
+
+    it("should reject invalid extra JSON", async () => {
+      const { upsertSingleModelPrice } = await import("@/actions/model-prices");
+      const result = await upsertSingleModelPrice({
+        modelName: "broken-model",
+        mode: "chat",
+        extraFieldsJson: "{invalid",
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("JSON");
+      expect(upsertModelPriceMock).not.toHaveBeenCalled();
+    });
+
+    it("should let managed form fields override conflicting extra JSON fields", async () => {
+      const mockResult = makeMockPrice("conflict-model", {
+        mode: "chat",
+        input_cost_per_token: 0.000015,
+      });
+      upsertModelPriceMock.mockResolvedValue(mockResult);
+
+      const { upsertSingleModelPrice } = await import("@/actions/model-prices");
+      const result = await upsertSingleModelPrice({
+        modelName: "conflict-model",
+        mode: "chat",
+        inputCostPerToken: 0.000015,
+        extraFieldsJson: JSON.stringify({
+          mode: "image_generation",
+          input_cost_per_token: 999,
+          input_cost_per_second: 0.25,
+        }),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "conflict-model",
+        expect.objectContaining({
+          mode: "chat",
+          input_cost_per_token: 0.000015,
+          input_cost_per_second: 0.25,
+        })
+      );
+    });
+
     it("should handle repository errors gracefully", async () => {
       upsertModelPriceMock.mockRejectedValue(new Error("Database error"));
 

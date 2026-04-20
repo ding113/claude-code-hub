@@ -192,13 +192,47 @@
     "prefillEmpty": "一致するモデルが見つかりません",
     "prefillFailed": "検索に失敗しました",
     "promptCachingHint": "モデルがキャッシュに対応している場合のみ有効化し、下のキャッシュ価格を設定してください",
-    "cachePricingTitle": "キャッシュ価格"
+    "cachePricingTitle": "キャッシュ価格",
+    "advancedFieldsTitle": "高度なフィールド",
+    "advancedFieldsJson": "追加価格フィールド JSON",
+    "advancedFieldsPlaceholder": "例: '{\"input_cost_per_second\": 0.5}'",
+    "advancedFieldsHint": "基本フォームで扱わないクラウド/ローカル拡張フィールドを JSON オブジェクトで保存します。"
   },
   "actions": {
     "edit": "編集",
     "more": "その他の操作",
     "delete": "削除",
-    "comparePricing": "価格を比較"
+    "comparePricing": "価格を比較",
+    "viewDetails": "詳細を見る"
+  },
+  "details": {
+    "coreFieldsTitle": "主要フィールド",
+    "additionalBillableTitle": "追加の課金フィールド",
+    "additionalMetadataTitle": "追加メタデータ",
+    "providerPricingTitle": "プロバイダー価格ノード",
+    "kindSupported": "課金可能",
+    "kindUnsupported": "要確認",
+    "kindDisplay": "表示のみ",
+    "booleanTrue": "はい",
+    "booleanFalse": "いいえ",
+    "fields": {
+      "mode": "モード",
+      "displayName": "表示名",
+      "litellmProvider": "LiteLLM プロバイダー",
+      "selectedPricingProvider": "選択中の価格プロバイダー",
+      "selectedPricingSourceModel": "選択元モデル",
+      "selectedPricingResolution": "選択解決方式",
+      "maxInputTokens": "最大入力 Tokens",
+      "maxOutputTokens": "最大出力 Tokens",
+      "maxTokens": "最大 Tokens",
+      "outputVectorSize": "出力ベクトル次元",
+      "inputCostPerToken": "入力 Token 単価",
+      "outputCostPerToken": "出力 Token 単価",
+      "inputCostPerRequest": "リクエスト単価",
+      "outputCostPerImage": "画像出力単価",
+      "inputCostPerSecond": "秒単位入力価格",
+      "fileSearchCostPer1kCalls": "ファイル検索 1k 回あたりの価格"
+    }
   },
   "toast": {
     "createSuccess": "モデルを追加しました",

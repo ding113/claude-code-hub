@@ -192,13 +192,47 @@
     "prefillEmpty": "未找到匹配的模型",
     "prefillFailed": "搜索失败",
     "promptCachingHint": "仅当模型支持缓存时开启，并配置下方缓存价格",
-    "cachePricingTitle": "缓存价格"
+    "cachePricingTitle": "缓存价格",
+    "advancedFieldsTitle": "高级字段",
+    "advancedFieldsJson": "额外价格字段 JSON",
+    "advancedFieldsPlaceholder": "示例：'{\"input_cost_per_second\": 0.5}'",
+    "advancedFieldsHint": "使用 JSON 对象保存基础表单未覆盖的云端或本地扩展字段。"
   },
   "actions": {
     "edit": "编辑",
     "more": "更多操作",
     "delete": "删除",
-    "comparePricing": "对比价格"
+    "comparePricing": "对比价格",
+    "viewDetails": "查看详情"
+  },
+  "details": {
+    "coreFieldsTitle": "核心字段",
+    "additionalBillableTitle": "额外计费字段",
+    "additionalMetadataTitle": "额外元数据",
+    "providerPricingTitle": "供应商价格节点",
+    "kindSupported": "可计费",
+    "kindUnsupported": "待支持",
+    "kindDisplay": "仅展示",
+    "booleanTrue": "是",
+    "booleanFalse": "否",
+    "fields": {
+      "mode": "模式",
+      "displayName": "展示名称",
+      "litellmProvider": "LiteLLM 供应商",
+      "selectedPricingProvider": "选中价格提供方",
+      "selectedPricingSourceModel": "选中源模型",
+      "selectedPricingResolution": "选中解析方式",
+      "maxInputTokens": "最大输入 Tokens",
+      "maxOutputTokens": "最大输出 Tokens",
+      "maxTokens": "最大 Tokens",
+      "outputVectorSize": "输出向量维度",
+      "inputCostPerToken": "输入单 Token 价格",
+      "outputCostPerToken": "输出单 Token 价格",
+      "inputCostPerRequest": "按次输入价格",
+      "outputCostPerImage": "按图输出价格",
+      "inputCostPerSecond": "按秒输入价格",
+      "fileSearchCostPer1kCalls": "每千次文件检索价格"
+    }
   },
   "toast": {
     "createSuccess": "模型已添加",
