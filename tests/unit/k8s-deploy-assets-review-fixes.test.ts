@@ -48,6 +48,8 @@ describe("k8s deploy review regressions", () => {
     expect(deployScript).toContain("删除 namespace=$NAMESPACE 并重建所有资源");
     expect(deployScript).toContain("storageclass\\.beta\\.kubernetes\\.io/is-default-class");
     expect(deployScript).toContain("reclaimPolicy");
+    expect(deployScript).toContain('if ! [[ "$APP_HPA_MIN" =~ ^[0-9]+$ ]]');
+    expect(deployScript).toContain("node_ip=$($KUBECTL get nodes");
   });
 
   it("hardens cch config parsing and rollout diagnostics", () => {
@@ -55,11 +57,13 @@ describe("k8s deploy review regressions", () => {
 
     expect(cchScript).not.toContain('source "$CCH_CONFIG_FILE"');
     expect(cchScript).toContain("load_config_file()");
+    expect(cchScript).toContain('if [[ -z "${!key:-}" ]]; then');
     expect(cchScript).toContain('if [[ "${1:-}" =~ ^[0-9]+$ ]]; then');
     expect(cchScript).toContain("wait_for_deployment_rollout()");
     expect(cchScript).toContain('if ! wait_for_deployment_rollout 180s "缩容到 1 副本"; then');
     expect(cchScript).toContain('local desired_replicas="$CURRENT_REPLICAS"');
     expect(cchScript).toContain("HPA minReplicas=");
+    expect(cchScript).toContain("keep=30");
     expect(cchScript).toContain("if detect_runtime; then");
   });
 
@@ -67,7 +71,10 @@ describe("k8s deploy review regressions", () => {
     const docs = readRepoFile("docs/k8s-deployment.md");
 
     expect(docs).toContain("kubectl -n claude-code-hub delete hpa claude-code-hub");
+    expect(docs).toContain("恢复到 max(升级前实际副本数, HPA minReplicas)");
     expect(docs).toContain("<repeat-your-original-cli-args>");
     expect(docs).not.toContain('minReplicas":0');
+    expect(docs).toContain("```text");
+    expect(docs).toContain("```console");
   });
 });

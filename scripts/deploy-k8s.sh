@@ -391,6 +391,12 @@ resolve_config() {
     if ! [[ "$APP_REPLICAS" =~ ^[0-9]+$ ]] || [[ "$APP_REPLICAS" -lt 1 ]]; then
         log_error "--replicas 必须是正整数: $APP_REPLICAS"; exit 1
     fi
+    if ! [[ "$APP_HPA_MIN" =~ ^[0-9]+$ ]] || [[ "$APP_HPA_MIN" -lt 1 ]]; then
+        log_error "--hpa-min 必须是正整数: $APP_HPA_MIN"; exit 1
+    fi
+    if ! [[ "$APP_HPA_MAX" =~ ^[0-9]+$ ]] || [[ "$APP_HPA_MAX" -lt 1 ]]; then
+        log_error "--hpa-max 必须是正整数: $APP_HPA_MAX"; exit 1
+    fi
     if [[ "$APP_HPA_MIN" -gt "$APP_HPA_MAX" ]]; then
         log_error "--hpa-min ($APP_HPA_MIN) 不能大于 --hpa-max ($APP_HPA_MAX)"; exit 1
     fi
@@ -521,10 +527,14 @@ detect_existing_deployment() {
         UPDATE_MODE=false
         return
     fi
-    if $KUBECTL get namespace "$NAMESPACE" &>/dev/null && \
-       $KUBECTL -n "$NAMESPACE" get deployment claude-code-hub &>/dev/null; then
+    if $KUBECTL get namespace "$NAMESPACE" &>/dev/null && { \
+       $KUBECTL -n "$NAMESPACE" get deployment claude-code-hub &>/dev/null || \
+       $KUBECTL -n "$NAMESPACE" get statefulset postgres &>/dev/null || \
+       $KUBECTL -n "$NAMESPACE" get statefulset redis &>/dev/null || \
+       $KUBECTL -n "$NAMESPACE" get secret claude-code-hub-secrets &>/dev/null; \
+    }; then
         UPDATE_MODE=true
-        log_info "检测到已有部署(namespace=$NAMESPACE),进入升级模式"
+        log_info "检测到已有安装痕迹(namespace=$NAMESPACE),进入升级模式"
     else
         UPDATE_MODE=false
         log_info "未检测到已有部署,进入新装模式"
@@ -791,9 +801,12 @@ EOF
 }
 
 get_node_ip() {
-    $KUBECTL get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null \
-        || $KUBECTL get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null \
-        || echo "<your-node-ip>"
+    local node_ip
+    node_ip=$($KUBECTL get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null || echo "")
+    if [[ -z "$node_ip" ]]; then
+        node_ip=$($KUBECTL get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "")
+    fi
+    echo "${node_ip:-<your-node-ip>}"
 }
 
 print_success_message() {

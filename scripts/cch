@@ -74,8 +74,10 @@ load_config_file() {
         raw="${BASH_REMATCH[2]}"
         case "$key" in
             CCH_NAMESPACE|CCH_IMAGE|CCH_DEPLOY_DIR|CCH_RUNTIME|CCH_INGRESS_HOST|CCH_INGRESS_VARIANT|CCH_BACKUP_DIR|CCH_BACKUP_KEEP)
-                value="$(parse_config_value "$raw")"
-                printf -v "$key" '%s' "$value"
+                if [[ -z "${!key:-}" ]]; then
+                    value="$(parse_config_value "$raw")"
+                    printf -v "$key" '%s' "$value"
+                fi
                 ;;
         esac
     done < "$CCH_CONFIG_FILE"
@@ -203,15 +205,11 @@ wait_for_deployment_rollout() {
 restore_update_scaling() {
     local current_replicas="$1"
     local min_replicas="$2"
-    local desired_replicas="$current_replicas"
-    if [[ "$desired_replicas" -lt "$min_replicas" ]]; then
-        desired_replicas="$min_replicas"
-    fi
     if $KUBECTL -n "$NAMESPACE" get hpa claude-code-hub &>/dev/null; then
         $KUBECTL -n "$NAMESPACE" patch hpa claude-code-hub --type merge \
-            -p "{\"spec\":{\"minReplicas\":$desired_replicas}}" >/dev/null || true
+            -p "{\"spec\":{\"minReplicas\":$min_replicas}}" >/dev/null || true
     fi
-    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$desired_replicas" >/dev/null || true
+    $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$current_replicas" >/dev/null || true
 }
 
 ###############################################################################
@@ -441,6 +439,10 @@ cmd_backup() {
     ok "Backup complete: $file ($size)"
     # 保留最近 30 份 (BSD xargs 无 -r,用 while read 代替)
     local keep="${CCH_BACKUP_KEEP:-30}"
+    if ! [[ "$keep" =~ ^[0-9]+$ ]] || [[ "$keep" -lt 1 ]]; then
+        warn "CCH_BACKUP_KEEP 必须是正整数,当前值: $keep; 使用默认值 30"
+        keep=30
+    fi
     # shellcheck disable=SC2012
     ls -t "$backup_dir"/claude_code_hub_*.sql.gz 2>/dev/null \
         | tail -n +"$((keep+1))" \

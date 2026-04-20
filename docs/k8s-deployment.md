@@ -8,7 +8,7 @@
 
 ### 组件架构
 
-```
+```text
               Ingress / NodePort (可选)
                       │
                       ▼
@@ -104,7 +104,7 @@ bash scripts/deploy-k8s.sh --install-k3s -y
 
 脚本执行完会输出:
 
-```
+```console
 +================================================================+
 |              Claude Code Hub Deployment Complete!              |
 +================================================================+
@@ -306,7 +306,7 @@ CCH_INGRESS_HOST="hub.example.com"
 
 ### 升级流程(`cch update`)
 
-```
+```text
 1. PostgreSQL 备份 (失败时询问是否继续)
 2. k3s: 预拉镜像 / 标准 k8s: 依赖 imagePullPolicy=Always
 3. 缩到 1 副本 (减少升级等待时间与排障复杂度)
@@ -315,7 +315,7 @@ CCH_INGRESS_HOST="hub.example.com"
    标准 k8s 路径: set image(tag 相同则触发 rollout restart)
 5. 健康检查 (in-pod fetch /api/health/ready)
 6. 健康检查失败 → 自动 rollout undo + 恢复原副本数
-7. 健康检查通过 → 扩回 HPA minReplicas
+7. 健康检查通过 → 恢复到 max(升级前实际副本数, HPA minReplicas)
 ```
 
 > 说明: 未使用独立的迁移 Job — 应用镜像在启动时通过 `AUTO_MIGRATE=true` 环境变量触发
@@ -351,10 +351,10 @@ cch backup
 ### 恢复
 
 ```bash
-# 1. 停 app (避免写入):直接 kubectl 操作 (cch scale 要求 >=1)
-kubectl -n claude-code-hub scale deployment/claude-code-hub --replicas=0
-# CPU/内存 HPA 不支持直接把 minReplicas 改成 0,先删掉 HPA
+# 1. 停 app (避免写入):先删掉 HPA,再直接 kubectl 缩到 0 (cch scale 要求 >=1)
+# CPU/内存 HPA 不支持直接把 minReplicas 改成 0
 kubectl -n claude-code-hub delete hpa claude-code-hub 2>/dev/null || true
+kubectl -n claude-code-hub scale deployment/claude-code-hub --replicas=0
 
 # 2. 在 postgres pod 内执行恢复
 gunzip -c ~/backups/claude-code-hub/claude_code_hub_20260101_030000.sql.gz | \
@@ -395,7 +395,7 @@ cch doctor
 
 输出示例:
 
-```
+```console
 [OK]    kubectl installed: v1.31.5
 [OK]    Cluster reachable (runtime=k3s)
 [OK]    Namespace claude-code-hub exists
@@ -451,7 +451,7 @@ kubectl -n claude-code-hub describe pod -l app=claude-code-hub    # 看 Events
 
 ### manifest 目录结构
 
-```
+```text
 deploy/k8s/
 ├── namespace.yaml
 ├── app/
