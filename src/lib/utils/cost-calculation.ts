@@ -797,7 +797,7 @@ export function calculateRequestCost(
   // 检查是否有 200K 分层的缓存价格
   // 注意：只有当价格表中的原始基础价格存在时才启用分层计费，避免派生价格与分层价格混用导致误计费
 
-  // 缓存创建费用（5分钟 TTL）：优先级 explicit long-context > context1m fallback > 普通
+  // 缓存创建费用（5分钟 TTL）：优先级 explicit long-context > 显式分层价格 > 普通
   if (
     longContextPricing &&
     longContextPricing.cacheCreationInputTokenCost != null &&
@@ -815,7 +815,7 @@ export function calculateRequestCost(
     segments.push(multiplyCost(cache5mTokens, cacheCreation5mCost));
   }
 
-  // 缓存创建费用（1小时 TTL）：优先级 explicit long-context > context1m fallback > 普通
+  // 缓存创建费用（1小时 TTL）：优先级 explicit long-context > 显式分层价格 > 普通
   if (
     longContextPricing &&
     longContextPricing.cacheCreationInputTokenCostAbove1hr != null &&
