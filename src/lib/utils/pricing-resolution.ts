@@ -65,6 +65,9 @@ const DETAIL_FIELDS = [
   "cache_read_input_token_cost_priority",
   "output_cost_per_image",
   "input_cost_per_image",
+  "output_cost_per_image_token",
+  "input_cost_per_image_token",
+  "long_context_pricing",
 ] as const;
 
 const DETAIL_TIE_BREAK_ORDER = [
@@ -198,8 +201,16 @@ function mergePriceData(
       : { ...base };
   }
 
+  // 价格节点切换时，先清空上一 provider 遗留的明细价格字段，
+  // 再叠加当前 provider 的 pricing 节点，避免把别家 above_200k/272k
+  // 等字段残留到当前解析结果里。
+  const clearedBase: ModelPriceData = { ...base };
+  for (const field of DETAIL_FIELDS) {
+    delete clearedBase[field];
+  }
+
   return {
-    ...base,
+    ...clearedBase,
     ...pricingNode,
     pricing: base.pricing,
     selected_pricing_provider: pricingProviderKey,

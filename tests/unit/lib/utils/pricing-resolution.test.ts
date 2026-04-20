@@ -143,4 +143,46 @@ describe("resolvePricingForModelRecords", () => {
     expect(resolved?.priceData.input_cost_per_token).toBe(0.0000099);
     expect(resolved?.resolvedPricingProviderKey).toBe("manual-custom");
   });
+
+  test("official anthropic fallback clears stale long-context fields from unrelated provider top-level data", () => {
+    const cloudRecord = makeRecord("claude-sonnet-4-6", {
+      mode: "chat",
+      model_family: "claude-sonnet",
+      litellm_provider: "bedrock_converse",
+      input_cost_per_token: 0.000003,
+      output_cost_per_token: 0.000015,
+      input_cost_per_token_above_200k_tokens: 0.000006,
+      output_cost_per_token_above_200k_tokens: 0.0000225,
+      pricing: {
+        anthropic: {
+          input_cost_per_token: 0.000003,
+          output_cost_per_token: 0.000015,
+        },
+        openrouter: {
+          input_cost_per_token: 0.000003,
+          output_cost_per_token: 0.000015,
+          input_cost_per_token_above_200k_tokens: 0.000006,
+          output_cost_per_token_above_200k_tokens: 0.0000225,
+        },
+      },
+    });
+
+    const resolved = resolvePricingForModelRecords({
+      provider: {
+        id: 3,
+        name: "Anthropic",
+        url: "https://api.anthropic.com/v1/messages",
+      } as never,
+      primaryModelName: "claude-sonnet-4-6",
+      fallbackModelName: null,
+      primaryRecord: cloudRecord,
+      fallbackRecord: null,
+    });
+
+    expect(resolved).not.toBeNull();
+    expect(resolved?.resolvedPricingProviderKey).toBe("anthropic");
+    expect(resolved?.priceData.input_cost_per_token).toBe(0.000003);
+    expect(resolved?.priceData.input_cost_per_token_above_200k_tokens).toBeUndefined();
+    expect(resolved?.priceData.output_cost_per_token_above_200k_tokens).toBeUndefined();
+  });
 });

@@ -1,8 +1,4 @@
-import {
-  CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER,
-  CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER,
-  CONTEXT_1M_TOKEN_THRESHOLD,
-} from "@/lib/special-attributes";
+import { CONTEXT_1M_TOKEN_THRESHOLD } from "@/lib/special-attributes";
 import type { ModelPriceData } from "@/types/model-price";
 import { COST_SCALE, Decimal, toDecimal } from "./currency";
 
@@ -113,62 +109,6 @@ function multiplyCost(quantity: number | undefined, unitCost: number | undefined
   }
 
   return qtyDecimal.mul(costDecimal);
-}
-
-/**
- * 计算阶梯定价费用（用于1M上下文窗口）
- * 超过阈值的token使用溢价费率
- * @param tokens - token数量
- * @param baseCostPerToken - 基础单价
- * @param premiumMultiplier - 溢价倍数
- * @param threshold - 阈值（默认200k）
- * @returns 费用
- */
-function _calculateTieredCost(
-  tokens: number,
-  baseCostPerToken: number,
-  premiumMultiplier: number,
-  threshold: number = CONTEXT_1M_TOKEN_THRESHOLD
-): Decimal {
-  if (tokens <= 0) {
-    return new Decimal(0);
-  }
-
-  const baseCostDecimal = new Decimal(baseCostPerToken);
-
-  if (tokens <= threshold) {
-    return new Decimal(tokens).mul(baseCostDecimal);
-  }
-
-  return new Decimal(tokens).mul(baseCostDecimal).mul(premiumMultiplier);
-}
-
-/**
- * 使用独立价格字段计算分层费用（适用于 Gemini 等模型）
- * @param tokens - token 数量
- * @param baseCostPerToken - 基础单价（<=200K 部分）
- * @param premiumCostPerToken - 溢价单价（>200K 部分）
- * @param threshold - 阈值（默认 200K）
- * @returns 费用
- */
-function __calculateTieredCostWithSeparatePrices(
-  tokens: number,
-  baseCostPerToken: number,
-  premiumCostPerToken: number,
-  threshold: number = CONTEXT_1M_TOKEN_THRESHOLD
-): Decimal {
-  if (tokens <= 0) {
-    return new Decimal(0);
-  }
-
-  const baseCostDecimal = new Decimal(baseCostPerToken);
-  const premiumCostDecimal = new Decimal(premiumCostPerToken);
-
-  if (tokens <= threshold) {
-    return new Decimal(tokens).mul(baseCostDecimal);
-  }
-
-  return new Decimal(tokens).mul(premiumCostDecimal);
 }
 
 function resolveLongContextThreshold(priceData: ModelPriceData): number {
@@ -567,16 +507,6 @@ export function calculateRequestCostBreakdown(
     usage.input_tokens != null
   ) {
     inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputAboveThreshold));
-  } else if (
-    longContextThresholdExceeded &&
-    options.context1mApplied &&
-    !options.priorityServiceTierApplied &&
-    inputCostPerToken != null &&
-    usage.input_tokens != null
-  ) {
-    inputBucket = inputBucket.add(
-      multiplyCost(usage.input_tokens, inputCostPerToken * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
-    );
   } else {
     inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputCostPerToken));
   }
@@ -597,16 +527,6 @@ export function calculateRequestCostBreakdown(
     usage.output_tokens != null
   ) {
     outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputAboveThreshold));
-  } else if (
-    longContextThresholdExceeded &&
-    options.context1mApplied &&
-    !options.priorityServiceTierApplied &&
-    outputCostPerToken != null &&
-    usage.output_tokens != null
-  ) {
-    outputBucket = outputBucket.add(
-      multiplyCost(usage.output_tokens, outputCostPerToken * CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER)
-    );
   } else {
     outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputCostPerToken));
   }
@@ -631,16 +551,6 @@ export function calculateRequestCostBreakdown(
     cacheCreation5mBucket = cacheCreation5mBucket.add(
       multiplyCost(cache5mTokens, cacheCreationAboveThreshold)
     );
-  } else if (
-    longContextThresholdExceeded &&
-    options.context1mApplied &&
-    !options.priorityServiceTierApplied &&
-    cacheCreation5mCost != null &&
-    cache5mTokens != null
-  ) {
-    cacheCreation5mBucket = cacheCreation5mBucket.add(
-      multiplyCost(cache5mTokens, cacheCreation5mCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
-    );
   } else {
     cacheCreation5mBucket = cacheCreation5mBucket.add(
       multiplyCost(cache5mTokens, cacheCreation5mCost)
@@ -664,16 +574,6 @@ export function calculateRequestCostBreakdown(
   ) {
     cacheCreation1hBucket = cacheCreation1hBucket.add(
       multiplyCost(cache1hTokens, cacheCreation1hAboveThreshold)
-    );
-  } else if (
-    longContextThresholdExceeded &&
-    options.context1mApplied &&
-    !options.priorityServiceTierApplied &&
-    cacheCreation1hCost != null &&
-    cache1hTokens != null
-  ) {
-    cacheCreation1hBucket = cacheCreation1hBucket.add(
-      multiplyCost(cache1hTokens, cacheCreation1hCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
     cacheCreation1hBucket = cacheCreation1hBucket.add(
@@ -737,7 +637,7 @@ export function calculateRequestCostBreakdown(
  * @param usage - token使用量
  * @param priceData - 模型价格数据
  * @param multiplier - 成本倍率（默认 1.0，表示官方价格）
- * @param context1mApplied - 是否应用了1M上下文窗口（启用阶梯定价）
+ * @param context1mApplied - 是否应用了1M上下文窗口（保留兼容；不再单独触发本地硬编码加价）
  * @returns 费用（美元），保留 15 位小数
  */
 export function calculateRequestCost(
@@ -872,16 +772,6 @@ export function calculateRequestCost(
     usage.input_tokens != null
   ) {
     segments.push(multiplyCost(usage.input_tokens, inputAboveThreshold));
-  } else if (
-    longContextThresholdExceeded &&
-    options.context1mApplied &&
-    !options.priorityServiceTierApplied &&
-    inputCostPerToken != null &&
-    usage.input_tokens != null
-  ) {
-    segments.push(
-      multiplyCost(usage.input_tokens, inputCostPerToken * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
-    );
   } else {
     segments.push(multiplyCost(usage.input_tokens, inputCostPerToken));
   }
@@ -899,16 +789,6 @@ export function calculateRequestCost(
     usage.output_tokens != null
   ) {
     segments.push(multiplyCost(usage.output_tokens, outputAboveThreshold));
-  } else if (
-    longContextThresholdExceeded &&
-    options.context1mApplied &&
-    !options.priorityServiceTierApplied &&
-    outputCostPerToken != null &&
-    usage.output_tokens != null
-  ) {
-    segments.push(
-      multiplyCost(usage.output_tokens, outputCostPerToken * CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER)
-    );
   } else {
     segments.push(multiplyCost(usage.output_tokens, outputCostPerToken));
   }
@@ -931,16 +811,6 @@ export function calculateRequestCost(
     cache5mTokens != null
   ) {
     segments.push(multiplyCost(cache5mTokens, cacheCreationAboveThreshold));
-  } else if (
-    longContextThresholdExceeded &&
-    options.context1mApplied &&
-    !options.priorityServiceTierApplied &&
-    cacheCreation5mCost != null &&
-    cache5mTokens != null
-  ) {
-    segments.push(
-      multiplyCost(cache5mTokens, cacheCreation5mCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
-    );
   } else {
     segments.push(multiplyCost(cache5mTokens, cacheCreation5mCost));
   }
@@ -961,16 +831,6 @@ export function calculateRequestCost(
     cache1hTokens != null
   ) {
     segments.push(multiplyCost(cache1hTokens, cacheCreation1hAboveThreshold));
-  } else if (
-    longContextThresholdExceeded &&
-    options.context1mApplied &&
-    !options.priorityServiceTierApplied &&
-    cacheCreation1hCost != null &&
-    cache1hTokens != null
-  ) {
-    segments.push(
-      multiplyCost(cache1hTokens, cacheCreation1hCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
-    );
   } else {
     segments.push(multiplyCost(cache1hTokens, cacheCreation1hCost));
   }
