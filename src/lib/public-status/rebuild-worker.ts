@@ -166,15 +166,17 @@ async function acquireDistributedRebuildLock(input: {
 }): Promise<{ lockKey: string; lockId: string } | null> {
   const lockKey = buildPublicStatusRebuildLockKey(input.flightKey);
   const lockId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const result = await (input.redis as unknown as {
-    set: (
-      key: string,
-      value: string,
-      px: "PX",
-      ttlMs: number,
-      nx: "NX"
-    ) => Promise<unknown> | unknown;
-  }).set(lockKey, lockId, "PX", REBUILD_LOCK_TTL_MS, "NX");
+  const result = await (
+    input.redis as unknown as {
+      set: (
+        key: string,
+        value: string,
+        px: "PX",
+        ttlMs: number,
+        nx: "NX"
+      ) => Promise<unknown> | unknown;
+    }
+  ).set(lockKey, lockId, "PX", REBUILD_LOCK_TTL_MS, "NX");
 
   if (result !== "OK") {
     return null;
@@ -279,32 +281,32 @@ export async function rebuildPublicStatusProjection(input: {
       }
 
       try {
-      const requests = await queryPublicStatusRequests({
-        groups,
-        coveredFrom: new Date(coveredFrom),
-        coveredTo: new Date(coveredTo),
-      });
-      const aggregation = buildPublicStatusPayloadFromRequests({
-        rangeHours: input.rangeHours,
-        intervalMinutes: input.intervalMinutes,
-        now: new Date(coveredTo),
-        groups,
-        requests,
-      });
+        const requests = await queryPublicStatusRequests({
+          groups,
+          coveredFrom: new Date(coveredFrom),
+          coveredTo: new Date(coveredTo),
+        });
+        const aggregation = buildPublicStatusPayloadFromRequests({
+          rangeHours: input.rangeHours,
+          intervalMinutes: input.intervalMinutes,
+          now: new Date(coveredTo),
+          groups,
+          requests,
+        });
 
-      await publishPublicStatusProjection({
-        redis,
-        configVersion: configSnapshot.configVersion,
-        intervalMinutes: input.intervalMinutes,
-        rangeHours: input.rangeHours,
-        sourceGeneration,
-        generatedAt: aggregation.generatedAt,
-        coveredFrom: aggregation.coveredFrom,
-        coveredTo: aggregation.coveredTo,
-        groups: aggregation.groups,
-      });
+        await publishPublicStatusProjection({
+          redis,
+          configVersion: configSnapshot.configVersion,
+          intervalMinutes: input.intervalMinutes,
+          rangeHours: input.rangeHours,
+          sourceGeneration,
+          generatedAt: aggregation.generatedAt,
+          coveredFrom: aggregation.coveredFrom,
+          coveredTo: aggregation.coveredTo,
+          groups: aggregation.groups,
+        });
 
-      return { sourceGeneration };
+        return { sourceGeneration };
       } finally {
         await releaseDistributedRebuildLock({
           redis: redisReader,

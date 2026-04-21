@@ -6,6 +6,8 @@
     "windowHoursDesc": "控制公开页面聚合覆盖的时间窗口。默认 24 小时。",
     "aggregationIntervalMinutes": "聚合间隔（分钟）",
     "aggregationIntervalMinutesDesc": "定时聚合写快照的周期。只有配置了公开分组和模型后才会生效。",
+    "aggregationIntervalMinutesInvalid": "公开状态聚合间隔只能是 5、15、30、60 分钟之一。",
+    "intervalOption": "{minutes} 分钟",
     "groupsTitle": "公开分组与模型",
     "groupsDesc": "只有勾选并填写模型 ID 的分组，才会启用公开状态聚合。",
     "groupName": "分组",

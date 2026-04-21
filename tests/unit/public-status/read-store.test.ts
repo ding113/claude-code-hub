@@ -87,6 +87,48 @@ describe("public-status read store", () => {
     expect(triggerRebuildHint).toHaveBeenCalledWith("snapshot-missing");
   });
 
+  it("serves current manifest as stale fallback when the requested config version is not ready", async () => {
+    const triggerRebuildHint = vi.fn();
+    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
+
+    const redis = createRedisClientSpy({
+      status: "ready",
+      get: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            configVersion: "cfg-old",
+            generation: "gen-old",
+            freshUntil: "2026-04-21T10:05:00.000Z",
+            lastCompleteGeneration: "gen-old",
+            rebuildState: "idle",
+          })
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            sourceGeneration: "gen-old",
+            generatedAt: "2026-04-21T10:00:00.000Z",
+            freshUntil: "2026-04-21T10:05:00.000Z",
+            groups: [],
+          })
+        ),
+    });
+
+    const result = await mod.readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      configVersion: "cfg-new",
+      nowIso: "2026-04-21T10:00:00.000Z",
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(result.rebuildState).toBe("stale");
+    expect(result.sourceGeneration).toBe("gen-old");
+    expect(triggerRebuildHint).toHaveBeenCalledWith("config-version-mismatch");
+  });
+
   it("treats malformed redis records as rebuilding instead of throwing", async () => {
     const triggerRebuildHint = vi.fn();
     const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
@@ -150,6 +192,14 @@ describe("public-status read store", () => {
       status: "ready",
       get: vi
         .fn()
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            generation: "gen-1",
+            freshUntil: "2026-04-21T10:00:00.000Z",
+            lastCompleteGeneration: "gen-1",
+            rebuildState: "idle",
+          })
+        )
         .mockResolvedValueOnce(
           JSON.stringify({
             generation: "gen-1",

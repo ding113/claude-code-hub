@@ -36,6 +36,7 @@
     "cleanupSchedulePlaceholder": "0 2 * * *",
     "cleanupScheduleRequired": "執行時間（Cron） *",
     "configUpdated": "系統設定已更新，頁面將重新整理以應用貨幣顯示變更。",
+    "publicStatusProjectionWarning": "系統設定已儲存，但 public status Redis 投影尚未刷新。",
     "currencies": {
       "CNY": "¥ 人民幣（CNY）",
       "EUR": "€ 歐元（EUR）",

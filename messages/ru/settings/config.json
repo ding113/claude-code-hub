@@ -36,6 +36,7 @@
     "cleanupSchedulePlaceholder": "0 2 * * *",
     "cleanupScheduleRequired": "Время выполнения (Cron) *",
     "configUpdated": "Параметры системы обновлены. Страница обновится для применения изменений валюты.",
+    "publicStatusProjectionWarning": "Системные настройки сохранены, но Redis-проекция public status не была обновлена.",
     "currencies": {
       "CNY": "¥ Китайский юань (CNY)",
       "EUR": "€ Евро (EUR)",

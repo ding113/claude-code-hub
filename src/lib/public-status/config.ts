@@ -129,12 +129,20 @@ export function serializePublicStatusDescription(
   const publicGroupSlug = sanitizeString(input.publicStatus?.publicGroupSlug);
   const explanatoryCopy = sanitizeString(input.publicStatus?.explanatoryCopy) ?? null;
   const sortOrder =
-    typeof input.publicStatus?.sortOrder === "number" && Number.isFinite(input.publicStatus.sortOrder)
+    typeof input.publicStatus?.sortOrder === "number" &&
+    Number.isFinite(input.publicStatus.sortOrder)
       ? input.publicStatus.sortOrder
       : undefined;
   const publicModelKeys = sanitizePublicModelKeys(input.publicStatus?.publicModelKeys);
 
-  if (!note && !displayName && !publicGroupSlug && !explanatoryCopy && sortOrder === undefined && publicModelKeys.length === 0) {
+  if (
+    !note &&
+    !displayName &&
+    !publicGroupSlug &&
+    !explanatoryCopy &&
+    sortOrder === undefined &&
+    publicModelKeys.length === 0
+  ) {
     return null;
   }
 

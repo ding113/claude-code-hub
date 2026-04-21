@@ -1,17 +1,14 @@
 import { findLatestPricesByModels } from "@/repository/model-price";
 import { findAllProviderGroups } from "@/repository/provider-groups";
 import { getSystemSettings } from "@/repository/system-config";
+import { collectEnabledPublicStatusGroups, parsePublicStatusDescription } from "./config";
 import {
-  buildPublicStatusConfigSnapshot,
   buildInternalPublicStatusConfigSnapshot,
+  buildPublicStatusConfigSnapshot,
   publishInternalPublicStatusConfigSnapshot,
   publishPublicStatusConfigSnapshot,
 } from "./config-snapshot";
-import {
-  MAX_PUBLIC_STATUS_RANGE_HOURS,
-  PUBLIC_STATUS_INTERVAL_SET,
-} from "./constants";
-import { collectEnabledPublicStatusGroups, parsePublicStatusDescription } from "./config";
+import { MAX_PUBLIC_STATUS_RANGE_HOURS, PUBLIC_STATUS_INTERVAL_SET } from "./constants";
 
 function resolvePublicVendorIconKey(modelName: string, raw?: string): string {
   const PUBLIC_VENDOR_ICON_KEYS = new Set([
@@ -140,12 +137,12 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
     })),
   });
 
+  const internalResult = await publishInternalPublicStatusConfigSnapshot({
+    snapshot: internalSnapshot,
+  });
   const result = await publishPublicStatusConfigSnapshot({
     reason: input.reason,
     snapshot,
-  });
-  const internalResult = await publishInternalPublicStatusConfigSnapshot({
-    snapshot: internalSnapshot,
   });
 
   return {

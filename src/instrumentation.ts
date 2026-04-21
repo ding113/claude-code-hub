@@ -419,9 +419,7 @@ export async function register() {
       }
 
       try {
-        const { startPublicStatusRebuildScheduler } = await import(
-          "@/lib/public-status/scheduler"
-        );
+        const { startPublicStatusRebuildScheduler } = await import("@/lib/public-status/scheduler");
         startPublicStatusRebuildScheduler();
       } catch (error) {
         logger.warn("[Instrumentation] Failed to start public status rebuild scheduler", {

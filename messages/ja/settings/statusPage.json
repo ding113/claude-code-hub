@@ -6,6 +6,8 @@
     "windowHoursDesc": "公開ページが集計する履歴期間を指定します。既定値は 24 時間です。",
     "aggregationIntervalMinutes": "集計間隔（分）",
     "aggregationIntervalMinutesDesc": "バックグラウンド集計がスナップショットを更新する周期です。公開グループとモデルが設定された場合のみ有効になります。",
+    "aggregationIntervalMinutesInvalid": "公開ステータスの集計間隔は 5、15、30、60 分のいずれかである必要があります。",
+    "intervalOption": "{minutes} 分",
     "groupsTitle": "公開グループとモデル",
     "groupsDesc": "公開を有効にし、かつモデル ID が入力されたグループだけが公開ステータス集計を有効化します。",
     "groupName": "グループ",

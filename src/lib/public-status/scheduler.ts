@@ -1,5 +1,4 @@
 import { logger } from "@/lib/logger";
-import { scanPattern } from "@/lib/redis/scan-helper";
 import {
   acquireLeaderLock,
   type LeaderLock,
@@ -8,6 +7,7 @@ import {
   startLeaderLockKeepAlive,
 } from "@/lib/provider-endpoints/leader-lock";
 import { getRedisClient } from "@/lib/redis";
+import { scanPattern } from "@/lib/redis/scan-helper";
 import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import { rebuildPublicStatusProjection } from "./rebuild-worker";
 import { buildPublicStatusManifestKey } from "./redis-contract";

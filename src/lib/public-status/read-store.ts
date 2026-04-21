@@ -1,11 +1,11 @@
 import { getRedisClient } from "@/lib/redis";
+import type { PublicStatusPayload } from "./payload";
 import {
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
-  resolvePublicStatusManifestState,
   type PublicStatusManifest,
+  resolvePublicStatusManifestState,
 } from "./redis-contract";
-import type { PublicStatusPayload } from "./payload";
 
 interface RedisReader {
   get(key: string): Promise<string | null> | string | null;
@@ -60,7 +60,22 @@ export async function readPublicStatusPayload(input: {
     rangeHours: input.rangeHours,
   });
   const manifest = parseJson<PublicStatusManifest>(await redis.get(manifestKey));
-  const resolution = resolvePublicStatusManifestState(manifest, input.nowIso);
+  const currentManifestKey = buildPublicStatusManifestKey({
+    configVersion: "current",
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+  });
+  const currentManifest = parseJson<PublicStatusManifest>(await redis.get(currentManifestKey));
+
+  let selectedManifest = manifest;
+  let resolution = resolvePublicStatusManifestState(selectedManifest, input.nowIso);
+  if (!resolution.sourceGeneration && currentManifest) {
+    selectedManifest = currentManifest;
+    resolution = {
+      ...resolvePublicStatusManifestState(currentManifest, input.nowIso),
+      rebuildState: "stale",
+    };
+  }
 
   if (!resolution.sourceGeneration) {
     await input.triggerRebuildHint("manifest-missing");
@@ -80,6 +95,13 @@ export async function readPublicStatusPayload(input: {
 
   if (resolution.rebuildState !== "fresh") {
     await input.triggerRebuildHint("stale-generation");
+  }
+  if (input.configVersion && selectedManifest?.configVersion !== input.configVersion) {
+    await input.triggerRebuildHint("config-version-mismatch");
+    resolution = {
+      ...resolution,
+      rebuildState: "stale",
+    };
   }
 
   return {
