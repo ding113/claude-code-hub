@@ -18,10 +18,7 @@ interface PublicStatusSnapshotRecord extends PublicStatusPayload {
   freshUntil: string;
 }
 
-async function safeGet(
-  redis: RedisReader,
-  key: string
-): Promise<string | null> {
+async function safeGet(redis: RedisReader, key: string): Promise<string | null> {
   try {
     return await redis.get(key);
   } catch {
