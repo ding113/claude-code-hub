@@ -160,6 +160,14 @@ describe("buildProxyUrl", () => {
     );
   });
 
+  test("完整子端点：baseUrl 已包含 /v1/messages/count_tokens 时不应重复拼接", () => {
+    expectBuiltUrl(
+      "https://proxy.example.com/anthropic/v1/messages/count_tokens",
+      "/v1/messages/count_tokens?x=1",
+      "https://proxy.example.com/anthropic/v1/messages/count_tokens?x=1"
+    );
+  });
+
   test("无版本 endpoint 根路径：baseUrl=/openai/responses + /v1/responses/abc 应只追加 suffix", () => {
     expectBuiltUrl(
       "https://relay.example.com/openai/responses",

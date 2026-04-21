@@ -95,6 +95,25 @@ describe("UrlPreview full-path compatibility", () => {
     unmount();
   });
 
+  test("完整子端点 base URL 只应预览当前子端点，不应重复追加 suffix", () => {
+    const { container, unmount } = renderWithIntl(
+      <UrlPreview
+        baseUrl="https://proxy.example.com/anthropic/v1/messages/count_tokens"
+        providerType="claude"
+      />
+    );
+
+    expect(container.textContent).toContain(
+      "https://proxy.example.com/anthropic/v1/messages/count_tokens"
+    );
+    expect(container.textContent).not.toContain("Claude Messages");
+    expect(container.textContent).not.toContain(
+      "https://proxy.example.com/anthropic/v1/messages/count_tokens/v1/messages/count_tokens"
+    );
+
+    unmount();
+  });
+
   test("版本根路径预览应只追加 endpoint，不重复拼接 /v1", () => {
     const { container, unmount } = renderWithIntl(
       <UrlPreview baseUrl="https://relay.example.com/openai/v1" providerType="openai-compatible" />

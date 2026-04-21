@@ -125,16 +125,21 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
       const versionPrefix = endpointMatch[1];
       const requestRoot = `/${versionPrefix}${endpoint}`;
       const suffix = endpointMatch.groups?.suffix ?? "";
+      const requestEndpoint = `${requestRoot}${suffix}`;
+      const endpointWithSuffix = `${endpoint}${suffix}`;
+      const hasFullEndpoint =
+        suffix.length > 0 &&
+        (basePath.endsWith(requestEndpoint) || basePath.endsWith(endpointWithSuffix));
 
-      if (basePath.endsWith(endpoint) || basePath.endsWith(requestRoot)) {
-        baseUrlObj.pathname = basePath + suffix;
+      if (hasFullEndpoint || basePath.endsWith(endpoint) || basePath.endsWith(requestRoot)) {
+        baseUrlObj.pathname = hasFullEndpoint ? basePath : basePath + suffix;
         baseUrlObj.search = requestUrl.search;
 
         logger.debug("[buildProxyUrl] Detected endpoint root in baseUrl", {
           basePath,
           requestPath,
           endpoint,
-          action: "append_suffix",
+          action: hasFullEndpoint ? "reuse_full_endpoint" : "append_suffix",
         });
 
         return baseUrlObj.toString();
@@ -176,7 +181,15 @@ function matchesEndpointRoot(basePath: string, requestPath: string): boolean {
     }
 
     const requestRoot = `/${match[1]}${endpoint}`;
-    return basePath.endsWith(endpoint) || basePath.endsWith(requestRoot);
+    const suffix = match.groups?.suffix ?? "";
+    const requestEndpoint = `${requestRoot}${suffix}`;
+    const endpointWithSuffix = `${endpoint}${suffix}`;
+    return (
+      basePath.endsWith(endpoint) ||
+      basePath.endsWith(requestRoot) ||
+      (suffix.length > 0 &&
+        (basePath.endsWith(requestEndpoint) || basePath.endsWith(endpointWithSuffix)))
+    );
   }
 
   return false;
@@ -217,22 +230,24 @@ export function hasDuplicatedEndpointPath(baseUrl: string, requestPath: string):
       }
 
       const endpointSegments = splitPathSegments(endpoint);
+      const suffixSegments = splitPathSegments(match.groups?.suffix ?? "");
+      const endpointWithSuffixSegments = [...endpointSegments, ...suffixSegments];
       const requestRootSegments = [match[1], ...endpointSegments];
+      const requestPathSegments = [match[1], ...endpointWithSuffixSegments];
+      const duplicateCandidates = [
+        requestPathSegments,
+        endpointWithSuffixSegments,
+        requestRootSegments,
+        endpointSegments,
+      ];
 
-      if (endsWithSegments(basePathSegments, requestRootSegments)) {
-        const prefixSegments = basePathSegments.slice(0, -requestRootSegments.length);
-        return (
-          endsWithSegments(prefixSegments, requestRootSegments) ||
-          endsWithSegments(prefixSegments, endpointSegments)
-        );
-      }
-
-      if (endsWithSegments(basePathSegments, endpointSegments)) {
-        const prefixSegments = basePathSegments.slice(0, -endpointSegments.length);
-        return (
-          endsWithSegments(prefixSegments, requestRootSegments) ||
-          endsWithSegments(prefixSegments, endpointSegments)
-        );
+      for (const candidateSegments of duplicateCandidates) {
+        if (endsWithSegments(basePathSegments, candidateSegments)) {
+          const prefixSegments = basePathSegments.slice(0, -candidateSegments.length);
+          return duplicateCandidates.some((prefixCandidate) =>
+            endsWithSegments(prefixSegments, prefixCandidate)
+          );
+        }
       }
     }
 
