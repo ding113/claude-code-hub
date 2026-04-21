@@ -73,6 +73,10 @@ export function buildPublicStatusInternalConfigSnapshotKey(configVersion = "curr
   return `${PUBLIC_STATUS_REDIS_PREFIX}:config-internal:${encodeKeyPart(configVersion)}`;
 }
 
+export function buildPublicStatusConfigVersionPointerKey(): string {
+  return `${PUBLIC_STATUS_REDIS_PREFIX}:config-version:current`;
+}
+
 export function buildPublicStatusManifestKey(input: {
   configVersion: string;
   intervalMinutes: number;

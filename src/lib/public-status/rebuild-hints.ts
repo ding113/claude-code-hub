@@ -6,9 +6,26 @@ const REBUILD_HINT_TTL_SECONDS = 60 * 5;
 
 interface RedisHintWriter {
   get(key: string): Promise<string | null> | string | null;
+  pttl?(key: string): Promise<number> | number;
   set(key: string, value: string, mode: "EX", seconds: number): Promise<unknown> | unknown;
+  set(key: string, value: string, mode: "PX", milliseconds: number): Promise<unknown> | unknown;
   set(key: string, value: string): Promise<unknown> | unknown;
   status?: string;
+}
+
+async function writeManifestPreservingTtl(
+  redis: RedisHintWriter,
+  key: string,
+  value: string
+): Promise<void> {
+  const ttlMs = typeof redis.pttl === "function" ? Number(await redis.pttl(key)) : Number.NaN;
+
+  if (Number.isFinite(ttlMs) && ttlMs > 0) {
+    await redis.set(key, value, "PX", ttlMs);
+    return;
+  }
+
+  await redis.set(key, value);
 }
 
 function getReadyRedisClient(redis?: RedisHintWriter | null): RedisHintWriter | null {
@@ -75,7 +92,8 @@ export async function schedulePublicStatusRebuild(input: {
 
     try {
       const manifest = JSON.parse(manifestRaw) as Record<string, unknown>;
-      await redis.set(
+      await writeManifestPreservingTtl(
+        redis,
         manifestKey,
         JSON.stringify({
           ...manifest,

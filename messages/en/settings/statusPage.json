@@ -26,7 +26,8 @@
     "empty": "No provider groups available",
     "save": "Save public status settings",
     "saveSuccess": "Public status settings saved",
-    "saveFailed": "Failed to save public status settings"
+    "saveFailed": "Failed to save public status settings",
+    "backgroundRefreshPending": "Settings saved, but the public status page may stay stale until the background refresh succeeds."
   },
   "public": {
     "systemStatus": "System Status",

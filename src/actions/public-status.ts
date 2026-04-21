@@ -141,11 +141,28 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
     });
 
     const configVersion = `cfg-${Date.now()}`;
-    const publishResult = await publishCurrentPublicStatusConfigProjection({
-      reason: "save-public-status-settings",
+    let publishResult: {
+      configVersion: string;
+      key: string;
+      written: boolean;
+      groupCount: number;
+    } = {
       configVersion,
-    });
+      key: "",
+      written: false,
+      groupCount: normalizedEnabledGroups.length,
+    };
     let publicStatusProjectionWarningCode: string | null = null;
+    try {
+      publishResult = await publishCurrentPublicStatusConfigProjection({
+        reason: "save-public-status-settings",
+        configVersion,
+      });
+    } catch (error) {
+      logger.warn("[PublicStatus] DB truth saved but failed to publish Redis projection", error);
+      publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+    }
+
     if (!publishResult.written) {
       publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
     } else {
@@ -184,7 +201,7 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
     const t = await getTranslations("settings");
     return {
       ok: false,
-      error: error instanceof Error ? error.message : t("statusPage.form.saveFailed"),
+      error: t("statusPage.form.saveFailed"),
     };
   }
 }

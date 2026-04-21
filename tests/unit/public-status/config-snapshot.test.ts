@@ -43,6 +43,13 @@ interface ConfigSnapshotModule {
       get: (key: string) => Promise<string | null>;
     };
   }): Promise<{ siteTitle: string; siteDescription: string } | null>;
+  publishCurrentPublicStatusConfigPointers(input: {
+    configVersion: string;
+    redis: {
+      set: (key: string, value: string) => Promise<unknown>;
+      eval: (script: string, numKeys: number, ...args: string[]) => Promise<unknown>;
+    };
+  }): Promise<boolean>;
   readPublicStatusTimeZone(input: {
     redis: {
       status: string;
@@ -143,5 +150,24 @@ describe("public-status config snapshot", () => {
     };
 
     await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toBeNull();
+  });
+
+  it("does not let an older configVersion overwrite the current pointer", async () => {
+    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
+      "@/lib/public-status/config-snapshot"
+    );
+
+    const redis = {
+      set: vi.fn().mockResolvedValue("OK"),
+      eval: vi.fn().mockResolvedValue(0),
+    };
+
+    await expect(
+      mod.publishCurrentPublicStatusConfigPointers({
+        configVersion: "cfg-1",
+        redis,
+      })
+    ).resolves.toBe(false);
+    expect(redis.set).not.toHaveBeenCalled();
   });
 });

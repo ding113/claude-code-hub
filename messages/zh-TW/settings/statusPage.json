@@ -26,7 +26,8 @@
     "empty": "暫無可設定分組",
     "save": "儲存公開狀態設定",
     "saveSuccess": "公開狀態設定已儲存",
-    "saveFailed": "儲存公開狀態設定失敗"
+    "saveFailed": "儲存公開狀態設定失敗",
+    "backgroundRefreshPending": "設定已儲存，但公開狀態頁可能會在背景刷新成功前暫時維持舊資料。"
   },
   "public": {
     "systemStatus": "系統狀態",

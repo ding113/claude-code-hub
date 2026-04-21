@@ -9,6 +9,7 @@ const mockRedisSet = vi.hoisted(() => vi.fn());
 const mockRedisDel = vi.hoisted(() => vi.fn());
 const mockRedisGet = vi.hoisted(() => vi.fn());
 const mockRedisEval = vi.hoisted(() => vi.fn());
+const mockRedisPttl = vi.hoisted(() => vi.fn());
 const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockQueryPublicStatusRequests = vi.hoisted(() => vi.fn());
 const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
@@ -16,6 +17,7 @@ const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/redis", () => ({
   getRedisClient: () => ({
     get: mockRedisGet,
+    pttl: mockRedisPttl,
     set: mockRedisSet,
     del: mockRedisDel,
     eval: mockRedisEval,
@@ -38,6 +40,7 @@ describe("public-status rebuild worker", () => {
     vi.clearAllMocks();
     mockRedisGet.mockResolvedValue(null);
     mockRedisEval.mockResolvedValue(1);
+    mockRedisPttl.mockResolvedValue(-1);
   });
 
   it("collapses concurrent rebuild requests into a single in-flight computation", async () => {
@@ -219,6 +222,45 @@ describe("public-status rebuild worker", () => {
       expect.stringContaining("manifest-missing"),
       "EX",
       300
+    );
+  });
+
+  it("preserves manifest ttl when marking rebuildState as rebuilding", async () => {
+    const mod = await import("@/lib/public-status/rebuild-hints");
+
+    mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+    });
+    mockRedisGet
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          configVersion: "cfg-1",
+          rebuildState: "idle",
+        })
+      )
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          configVersion: "cfg-1",
+          rebuildState: "idle",
+        })
+      );
+    mockRedisPttl.mockResolvedValueOnce(2_592_000_000).mockResolvedValueOnce(-1);
+
+    await mod.schedulePublicStatusRebuild({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "stale-generation",
+    });
+
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      "public-status:v1:manifest:cfg-1:5m:24h",
+      expect.stringContaining('"rebuildState":"rebuilding"'),
+      "PX",
+      2_592_000_000
+    );
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      "public-status:v1:manifest:current:5m:24h",
+      expect.stringContaining('"rebuildState":"rebuilding"')
     );
   });
 });

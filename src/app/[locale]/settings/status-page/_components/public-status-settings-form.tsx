@@ -105,7 +105,7 @@ export function PublicStatusSettingsForm({
 
       toast.success(t("statusPage.form.saveSuccess"));
       if (result.data?.publicStatusProjectionWarningCode) {
-        toast.error(t("statusPage.form.projectionPublishFailed"));
+        toast.warning(t("statusPage.form.backgroundRefreshPending"));
       }
       router.refresh();
     });

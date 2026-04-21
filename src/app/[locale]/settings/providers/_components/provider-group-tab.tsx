@@ -49,6 +49,10 @@ import {
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import {
+  parsePublicStatusDescription,
+  serializePublicStatusDescription,
+} from "@/lib/public-status/config";
 import { cn } from "@/lib/utils";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay } from "@/types/provider";
@@ -73,6 +77,21 @@ const INITIAL_FORM: GroupFormState = {
   costMultiplier: "1.0",
   description: "",
 };
+
+function getProviderGroupDescriptionNote(description: string | null | undefined): string {
+  return parsePublicStatusDescription(description).note ?? "";
+}
+
+function mergeProviderGroupDescription(input: {
+  existingDescription: string | null | undefined;
+  nextNote: string | null;
+}): string | null {
+  const parsed = parsePublicStatusDescription(input.existingDescription);
+  return serializePublicStatusDescription({
+    note: input.nextNote,
+    publicStatus: parsed.publicStatus,
+  });
+}
 
 export function ProviderGroupTab({
   providers,
@@ -128,7 +147,7 @@ export function ProviderGroupTab({
     setForm({
       name: group.name,
       costMultiplier: String(group.costMultiplier),
-      description: group.description ?? "",
+      description: getProviderGroupDescriptionNote(group.description),
     });
     setDialogOpen(true);
   }, []);
@@ -197,7 +216,10 @@ export function ProviderGroupTab({
       if (editingGroup) {
         const ok = await saveGroupPatch(editingGroup.id, {
           costMultiplier,
-          description: trimmedDescription || null,
+          description: mergeProviderGroupDescription({
+            existingDescription: editingGroup.description,
+            nextNote: trimmedDescription || null,
+          }),
         });
         if (ok) {
           closeDialog();
@@ -357,17 +379,24 @@ export function ProviderGroupTab({
                       <TableCell className="max-w-[360px]">
                         {isAdmin ? (
                           <InlineTextEditPopover
-                            value={group.description ?? ""}
+                            value={getProviderGroupDescriptionNote(group.description)}
                             emptyLabel={t("noDescription")}
                             label={t("groupDescriptionLabel")}
                             placeholder={t("descriptionPlaceholder")}
                             validator={validateDescription}
                             onSave={(value) =>
-                              saveGroupPatch(group.id, { description: value || null })
+                              saveGroupPatch(group.id, {
+                                description: mergeProviderGroupDescription({
+                                  existingDescription: group.description,
+                                  nextNote: value || null,
+                                }),
+                              })
                             }
                           />
-                        ) : group.description ? (
-                          <span className="text-muted-foreground">{group.description}</span>
+                        ) : getProviderGroupDescriptionNote(group.description) ? (
+                          <span className="text-muted-foreground">
+                            {getProviderGroupDescriptionNote(group.description)}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">{t("noDescription")}</span>
                         )}

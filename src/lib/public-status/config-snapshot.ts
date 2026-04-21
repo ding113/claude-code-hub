@@ -1,6 +1,7 @@
 import { getRedisClient } from "@/lib/redis";
 import {
   buildPublicStatusConfigSnapshotKey,
+  buildPublicStatusConfigVersionPointerKey,
   buildPublicStatusInternalConfigSnapshotKey,
 } from "./redis-contract";
 
@@ -64,10 +65,8 @@ interface BuildPublicStatusConfigSnapshotInput {
 
 interface RedisWriter {
   set(key: string, value: string): Promise<unknown> | unknown;
-  multi?: () => {
-    set(key: string, value: string): unknown;
-    exec(): Promise<unknown> | unknown;
-  };
+  get?(key: string): Promise<string | null> | string | null;
+  eval?(script: string, numKeys: number, ...args: string[]): Promise<unknown> | unknown;
 }
 
 interface RedisReader {
@@ -93,6 +92,24 @@ async function safeGet(redis: RedisReader, key: string): Promise<string | null> 
   } catch {
     return null;
   }
+}
+
+function extractCurrentConfigVersion(pointerRaw: string | null): string | null {
+  if (!pointerRaw) {
+    return null;
+  }
+
+  const pointer = safeParseJson<{ key?: string; configVersion?: string }>(pointerRaw);
+  if (pointer?.configVersion) {
+    return pointer.configVersion;
+  }
+  if (pointer?.key) {
+    const match = pointer.key.match(/:config(?::internal)?:([^:]+)$/);
+    if (match?.[1]) {
+      return decodeURIComponent(match[1]);
+    }
+  }
+  return null;
 }
 
 export function buildPublicStatusConfigSnapshot(
@@ -214,25 +231,29 @@ export async function publishCurrentPublicStatusConfigPointers(input: {
     return false;
   }
 
-  const publicPointer = JSON.stringify({
-    key: buildPublicStatusConfigSnapshotKey(input.configVersion),
-    configVersion: input.configVersion,
-  });
-  const internalPointer = JSON.stringify({
-    key: buildPublicStatusInternalConfigSnapshotKey(input.configVersion),
-    configVersion: input.configVersion,
-  });
-
-  if (typeof redis.multi === "function") {
-    const multi = redis.multi();
-    multi.set(buildPublicStatusConfigSnapshotKey(), publicPointer);
-    multi.set(buildPublicStatusInternalConfigSnapshotKey(), internalPointer);
-    await multi.exec();
-    return true;
+  const pointerKey = buildPublicStatusConfigVersionPointerKey();
+  if (typeof redis.eval === "function") {
+    const luaScript = `
+      local current = redis.call('GET', KEYS[1])
+      if (not current) or current <= ARGV[1] then
+        redis.call('SET', KEYS[1], ARGV[1])
+        return 1
+      end
+      return 0
+    `;
+    const result = await redis.eval(luaScript, 1, pointerKey, input.configVersion);
+    return result === 1;
   }
 
-  await redis.set(buildPublicStatusConfigSnapshotKey(), publicPointer);
-  await redis.set(buildPublicStatusInternalConfigSnapshotKey(), internalPointer);
+  const currentVersion =
+    typeof redis.get === "function"
+      ? extractCurrentConfigVersion(await redis.get(pointerKey))
+      : null;
+  if (currentVersion && currentVersion > input.configVersion) {
+    return false;
+  }
+
+  await redis.set(pointerKey, input.configVersion);
   return true;
 }
 
@@ -244,12 +265,19 @@ export async function readCurrentPublicStatusConfigSnapshot(input?: {
     return null;
   }
 
+  const currentVersion = extractCurrentConfigVersion(
+    await safeGet(redis, buildPublicStatusConfigVersionPointerKey())
+  );
+  if (currentVersion) {
+    const snapshotRaw = await safeGet(redis, buildPublicStatusConfigSnapshotKey(currentVersion));
+    return safeParseJson<PublicStatusConfigSnapshot>(snapshotRaw);
+  }
+
   const pointerRaw = await safeGet(redis, buildPublicStatusConfigSnapshotKey());
   const pointer = safeParseJson<{ key?: string }>(pointerRaw);
   if (!pointer?.key) {
     return null;
   }
-
   const snapshotRaw = await safeGet(redis, pointer.key);
   return safeParseJson<PublicStatusConfigSnapshot>(snapshotRaw);
 }
@@ -262,12 +290,22 @@ export async function readCurrentInternalPublicStatusConfigSnapshot(input?: {
     return null;
   }
 
+  const currentVersion = extractCurrentConfigVersion(
+    await safeGet(redis, buildPublicStatusConfigVersionPointerKey())
+  );
+  if (currentVersion) {
+    const snapshotRaw = await safeGet(
+      redis,
+      buildPublicStatusInternalConfigSnapshotKey(currentVersion)
+    );
+    return safeParseJson<InternalPublicStatusConfigSnapshot>(snapshotRaw);
+  }
+
   const pointerRaw = await safeGet(redis, buildPublicStatusInternalConfigSnapshotKey());
   const pointer = safeParseJson<{ key?: string }>(pointerRaw);
   if (!pointer?.key) {
     return null;
   }
-
   const snapshotRaw = await safeGet(redis, pointer.key);
   return safeParseJson<InternalPublicStatusConfigSnapshot>(snapshotRaw);
 }

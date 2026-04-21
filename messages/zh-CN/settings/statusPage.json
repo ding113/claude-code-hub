@@ -26,7 +26,8 @@
     "empty": "暂无可配置分组",
     "save": "保存公开状态配置",
     "saveSuccess": "公开状态配置已保存",
-    "saveFailed": "保存公开状态配置失败"
+    "saveFailed": "保存公开状态配置失败",
+    "backgroundRefreshPending": "配置已保存，但公开状态页可能会在后台刷新成功前暂时保持旧数据。"
   },
   "public": {
     "systemStatus": "系统状态",

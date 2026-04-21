@@ -143,23 +143,39 @@ export async function saveSystemSettings(formData: {
 
     let publicStatusProjectionWarningCode: string | null = null;
     if (shouldRepublishPublicStatusProjection) {
-      const publishResult = await publishCurrentPublicStatusConfigProjection({
-        reason: "save-system-settings",
-      });
+      try {
+        const publishResult = await publishCurrentPublicStatusConfigProjection({
+          reason: "save-system-settings",
+        });
 
-      if (!publishResult.written) {
+        if (!publishResult.written) {
+          logger.warn(
+            "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection"
+          );
+          publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+        } else {
+          try {
+            await schedulePublicStatusRebuild({
+              intervalMinutes:
+                validated.publicStatusAggregationIntervalMinutes ??
+                updated.publicStatusAggregationIntervalMinutes,
+              rangeHours: validated.publicStatusWindowHours ?? updated.publicStatusWindowHours,
+              reason: "system-settings-updated",
+            });
+          } catch (error) {
+            logger.warn(
+              "[SystemSettings] Saved DB truth but failed to schedule public-status rebuild",
+              error
+            );
+            publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+          }
+        }
+      } catch (error) {
         logger.warn(
-          "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection"
+          "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection",
+          error
         );
         publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
-      } else {
-        await schedulePublicStatusRebuild({
-          intervalMinutes:
-            validated.publicStatusAggregationIntervalMinutes ??
-            updated.publicStatusAggregationIntervalMinutes,
-          rangeHours: validated.publicStatusWindowHours ?? updated.publicStatusWindowHours,
-          reason: "system-settings-updated",
-        });
       }
     }
 
