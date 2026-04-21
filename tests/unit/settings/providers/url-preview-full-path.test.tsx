@@ -139,4 +139,17 @@ describe("UrlPreview full-path compatibility", () => {
 
     unmount();
   });
+
+  test("双版本前缀也应触发 duplicate warning", () => {
+    const { container, unmount } = renderWithIntl(
+      <UrlPreview
+        baseUrl="https://relay.example.com/openai/v1/v1/chat/completions"
+        providerType="openai-compatible"
+      />
+    );
+
+    expect(container.textContent).toContain("Duplicate path detected");
+
+    unmount();
+  });
 });

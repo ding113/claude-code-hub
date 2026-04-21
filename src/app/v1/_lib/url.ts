@@ -232,6 +232,7 @@ export function hasDuplicatedEndpointPath(baseUrl: string, requestPath: string):
       const endpointSegments = splitPathSegments(endpoint);
       const suffixSegments = splitPathSegments(match.groups?.suffix ?? "");
       const endpointWithSuffixSegments = [...endpointSegments, ...suffixSegments];
+      const versionSegments = [match[1]];
       const requestRootSegments = [match[1], ...endpointSegments];
       const requestPathSegments = [match[1], ...endpointWithSuffixSegments];
       const duplicateCandidates = [
@@ -239,6 +240,7 @@ export function hasDuplicatedEndpointPath(baseUrl: string, requestPath: string):
         endpointWithSuffixSegments,
         requestRootSegments,
         endpointSegments,
+        versionSegments,
       ];
 
       for (const candidateSegments of duplicateCandidates) {
