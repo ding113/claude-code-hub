@@ -295,7 +295,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       }
 
       toast.success(t("configUpdated"));
-      if (result.data?.publicStatusProjectionWarningCode === "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED") {
+      if (
+        result.data?.publicStatusProjectionWarningCode === "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED"
+      ) {
         toast.warning(tSettings("config.form.publicStatusProjectionWarning"));
       }
       router.refresh();

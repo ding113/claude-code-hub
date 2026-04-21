@@ -1019,10 +1019,7 @@ export const UpdateSystemSettingsSchema = z.object({
     .number()
     .int("PUBLIC_STATUS_WINDOW_INVALID_INT")
     .min(1, "PUBLIC_STATUS_WINDOW_TOO_SMALL")
-    .max(
-      MAX_PUBLIC_STATUS_RANGE_HOURS,
-      "PUBLIC_STATUS_WINDOW_TOO_LARGE"
-    )
+    .max(MAX_PUBLIC_STATUS_RANGE_HOURS, "PUBLIC_STATUS_WINDOW_TOO_LARGE")
     .optional(),
   publicStatusAggregationIntervalMinutes: z.coerce
     .number()
