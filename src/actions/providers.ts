@@ -874,7 +874,13 @@ export async function editProvider(
       payload.limit_5h_reset_mode !== currentProvider.limit5hResetMode
     ) {
       const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
-      await clearSingleProviderCostCache({ providerId }).catch(() => null);
+      await clearSingleProviderCostCache({ providerId }).catch((error) => {
+        logger.warn("editProvider:clear_provider_cost_cache_failed", {
+          providerId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
     }
 
     // 同步熔断器配置到 Redis（如果配置有变化）
@@ -2107,7 +2113,13 @@ export async function applyProviderBatchPatch(
       const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
       await Promise.all(
         effectiveProviderIds.map((providerId) =>
-          clearSingleProviderCostCache({ providerId }).catch(() => null)
+          clearSingleProviderCostCache({ providerId }).catch((error) => {
+            logger.warn("applyProviderBatchPatch:clear_provider_cost_cache_failed", {
+              providerId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+          })
         )
       );
     }
@@ -2445,7 +2457,13 @@ export async function batchUpdateProviders(
       const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
       await Promise.all(
         providerIds.map((providerId) =>
-          clearSingleProviderCostCache({ providerId }).catch(() => null)
+          clearSingleProviderCostCache({ providerId }).catch((error) => {
+            logger.warn("batchUpdateProviders:clear_provider_cost_cache_failed", {
+              providerId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+          })
         )
       );
     }
@@ -2714,9 +2732,9 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     ]);
 
     // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
-    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+      const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
       limit5hResetMode === "fixed"
-        ? RateLimitService.getCurrentCost(providerId, "provider", "5h", "00:00", limit5hResetMode)
+        ? RateLimitService.getCurrentCost(providerId, "provider", "5h", undefined, limit5hResetMode)
         : sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
       sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
       sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
@@ -2855,11 +2873,11 @@ export async function getProviderLimitUsageBatch(
       // 并行查询该供应商的各周期消费（直接查询数据库）
       const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly] = await Promise.all([
         limit5hResetMode === "fixed"
-          ? RateLimitService.getCurrentCost(
+        ? RateLimitService.getCurrentCost(
               provider.id,
               "provider",
               "5h",
-              "00:00",
+              undefined,
               limit5hResetMode
             )
           : sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),

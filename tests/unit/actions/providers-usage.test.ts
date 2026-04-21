@@ -305,7 +305,7 @@ describe("getProviderLimitUsage", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(getCurrentCostMock).toHaveBeenCalledWith(1, "provider", "5h", "00:00", "fixed");
+    expect(getCurrentCostMock).toHaveBeenCalledWith(1, "provider", "5h", undefined, "fixed");
     expect(result.data.cost5h.current).toBe(7.5);
     expect(result.data.cost5h.resetInfo).toContain("固定窗口");
   });
@@ -505,7 +505,7 @@ describe("getProviderLimitUsageBatch", () => {
     const { getProviderLimitUsageBatch } = await import("@/actions/providers");
     const result = await getProviderLimitUsageBatch(providersWithFixed);
 
-    expect(getCurrentCostMock).toHaveBeenCalledWith(1, "provider", "5h", "00:00", "fixed");
+    expect(getCurrentCostMock).toHaveBeenCalledWith(1, "provider", "5h", undefined, "fixed");
     expect(result.get(1)?.cost5h.current).toBe(9.5);
     expect(result.get(1)?.cost5h.resetInfo).toContain("固定窗口");
   });
