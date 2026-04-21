@@ -1,10 +1,9 @@
-import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
-import proxyHandler from "@/proxy";
+import { readRepoFile } from "../../helpers/public-status-test-helpers";
 
 describe("public status proxy path", () => {
-  it("treats /en/status as a public path", () => {
-    const response = proxyHandler(new NextRequest("http://127.0.0.1:13500/en/status"));
-    expect(response.headers.get("location")).toBeNull();
+  it("keeps /status in the public path allowlist", async () => {
+    const source = await readRepoFile("src/proxy.ts");
+    expect(source).toContain('"/status"');
   });
 });

@@ -9,6 +9,7 @@ import type { PublicStatusPayload } from "./payload";
 
 interface RedisReader {
   get(key: string): Promise<string | null> | string | null;
+  status?: string;
 }
 
 interface PublicStatusSnapshotRecord extends PublicStatusPayload {
@@ -44,7 +45,7 @@ export async function readPublicStatusPayload(input: {
   triggerRebuildHint: (reason: string) => Promise<void> | void;
 }): Promise<PublicStatusPayload> {
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
-  if (!redis) {
+  if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
     await input.triggerRebuildHint("redis-unavailable");
     return buildRebuildingPayload();
   }
