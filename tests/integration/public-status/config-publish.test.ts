@@ -1,24 +1,134 @@
-import { describe, expect, it } from "vitest";
-import { importPublicStatusModule } from "../../helpers/public-status-test-helpers";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-interface ConfigPublisherModule {
-  publishPublicStatusConfigSnapshot(input: {
-    reason: string;
-  }): Promise<{
-    configVersion: string;
-  }>;
-}
+const mockGetSession = vi.hoisted(() => vi.fn());
+const mockUpdateSystemSettings = vi.hoisted(() => vi.fn());
+const mockFindAllProviderGroups = vi.hoisted(() => vi.fn());
+const mockUpdateProviderGroup = vi.hoisted(() => vi.fn());
+const mockFindLatestPricesByModels = vi.hoisted(() => vi.fn());
+const mockPublishPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
+const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
+const mockInvalidateSystemSettingsCache = vi.hoisted(() => vi.fn());
+const mockRevalidatePath = vi.hoisted(() => vi.fn());
+const mockLoggerError = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/auth", () => ({
+  getSession: mockGetSession,
+}));
+
+vi.mock("@/repository/system-config", () => ({
+  updateSystemSettings: mockUpdateSystemSettings,
+}));
+
+vi.mock("@/repository/provider-groups", () => ({
+  findAllProviderGroups: mockFindAllProviderGroups,
+  updateProviderGroup: mockUpdateProviderGroup,
+}));
+
+vi.mock("@/repository/model-price", () => ({
+  findLatestPricesByModels: mockFindLatestPricesByModels,
+}));
+
+vi.mock("@/lib/public-status/config-snapshot", () => ({
+  buildPublicStatusConfigSnapshot: vi.fn((input) => input),
+  publishPublicStatusConfigSnapshot: mockPublishPublicStatusConfigSnapshot,
+}));
+
+vi.mock("@/lib/public-status/rebuild-worker", () => ({
+  schedulePublicStatusRebuild: mockSchedulePublicStatusRebuild,
+}));
+
+vi.mock("@/lib/config", () => ({
+  invalidateSystemSettingsCache: mockInvalidateSystemSettingsCache,
+}));
+
+vi.mock("next/cache", () => ({
+  revalidatePath: mockRevalidatePath,
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    error: mockLoggerError,
+  },
+}));
 
 describe("public-status config publish integration", () => {
-  it("requires a control-plane publisher for public-safe config snapshots", async () => {
-    const mod = await importPublicStatusModule<ConfigPublisherModule>(
-      "@/lib/public-status/config-snapshot"
-    );
+  beforeEach(() => {
+    vi.clearAllMocks();
 
-    const result = await mod.publishPublicStatusConfigSnapshot({
-      reason: "task-1-red-test",
+    mockGetSession.mockResolvedValue({
+      user: {
+        id: 1,
+        role: "admin",
+      },
+    });
+    mockUpdateSystemSettings.mockResolvedValue({
+      id: 1,
+      siteTitle: "Claude Code Hub",
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+    });
+    mockFindAllProviderGroups.mockResolvedValue([
+      {
+        id: 10,
+        name: "openai",
+        description: null,
+      },
+    ]);
+    mockUpdateProviderGroup.mockResolvedValue(undefined);
+    mockFindLatestPricesByModels.mockResolvedValue(
+      new Map([
+        [
+          "gpt-4.1",
+          {
+            modelName: "gpt-4.1",
+            priceData: {
+              display_name: "GPT-4.1",
+              litellm_provider: "openai",
+            },
+          },
+        ],
+      ])
+    );
+    mockPublishPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+      key: "public-status:v1:config:cfg-1",
+      written: true,
+    });
+    mockSchedulePublicStatusRebuild.mockResolvedValue({
+      accepted: true,
+      rebuildState: "rebuilding",
+    });
+  });
+
+  it("updates DB truth, republishes Redis snapshot, and queues rebuild metadata", async () => {
+    const { savePublicStatusSettings } = await import("@/actions/public-status");
+
+    const result = await savePublicStatusSettings({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+      groups: [
+        {
+          groupName: "openai",
+          displayName: "OpenAI",
+          publicGroupSlug: "openai",
+          publicModelKeys: ["gpt-4.1"],
+        },
+      ],
     });
 
-    expect(result.configVersion).toBeTruthy();
+    expect(result.ok).toBe(true);
+    expect(mockUpdateSystemSettings).toHaveBeenCalledWith({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+    });
+    expect(mockUpdateProviderGroup).toHaveBeenCalledTimes(1);
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledTimes(1);
+    expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "config-updated",
+    });
+    expect(mockInvalidateSystemSettingsCache).toHaveBeenCalledTimes(1);
+    expect(mockRevalidatePath).toHaveBeenCalled();
   });
 });

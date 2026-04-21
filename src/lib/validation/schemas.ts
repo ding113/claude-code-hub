@@ -1011,6 +1011,18 @@ export const UpdateSystemSettingsSchema = z.object({
     .max(1, "Lease percent cannot exceed 1")
     .optional(),
   quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
+  publicStatusWindowHours: z.coerce
+    .number()
+    .int("Public status window must be an integer")
+    .min(1, "Public status window cannot be less than 1 hour")
+    .max(168, "Public status window cannot exceed 168 hours")
+    .optional(),
+  publicStatusAggregationIntervalMinutes: z.coerce
+    .number()
+    .int("Public status aggregation interval must be an integer")
+    .min(1, "Public status aggregation interval cannot be less than 1 minute")
+    .max(60, "Public status aggregation interval cannot exceed 60 minutes")
+    .optional(),
 
   // 客户端 IP 提取链（可选；null 表示使用内置默认）
   ipExtractionConfig: z

@@ -809,6 +809,11 @@ export const systemSettings = pgTable('system_settings', {
   ipExtractionConfig: jsonb('ip_extraction_config').$type<IpExtractionConfig>(),
   // 是否启用 IP 归属地查询（默认开启）
   ipGeoLookupEnabled: boolean('ip_geo_lookup_enabled').notNull().default(true),
+  // Public Status 全局配置
+  publicStatusWindowHours: integer('public_status_window_hours').notNull().default(24),
+  publicStatusAggregationIntervalMinutes: integer('public_status_aggregation_interval_minutes')
+    .notNull()
+    .default(5),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

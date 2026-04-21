@@ -171,6 +171,8 @@ function createFallbackSettings(): SystemSettings {
     quotaLeasePercentWeekly: 0.05,
     quotaLeasePercentMonthly: 0.05,
     quotaLeaseCapUsd: null,
+    publicStatusWindowHours: 24,
+    publicStatusAggregationIntervalMinutes: 5,
     ipExtractionConfig: null,
     ipGeoLookupEnabled: true,
     createdAt: now,
@@ -213,6 +215,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+      publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
@@ -245,6 +249,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+      publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
@@ -333,6 +339,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           billingModelSource: "original",
           codexPriorityBillingSource: "requested",
           enableHighConcurrencyMode: false,
+          publicStatusWindowHours: 24,
+          publicStatusAggregationIntervalMinutes: 5,
         })
         .onConflictDoNothing();
     } catch (error) {
@@ -351,6 +359,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           allowGlobalUsageView: false,
           currencyDisplay: "USD",
           billingModelSource: "original",
+          publicStatusWindowHours: 24,
+          publicStatusAggregationIntervalMinutes: 5,
         })
         .onConflictDoNothing();
     }
@@ -406,6 +416,8 @@ export async function updateSystemSettings(
     quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
     quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
     quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+    publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+    publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
     createdAt: systemSettings.createdAt,
     updatedAt: systemSettings.updatedAt,
   };
@@ -438,6 +450,8 @@ export async function updateSystemSettings(
     quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
     quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
     quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+    publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+    publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
     createdAt: systemSettings.createdAt,
     updatedAt: systemSettings.updatedAt,
   };
@@ -583,6 +597,13 @@ export async function updateSystemSettings(
       updates.quotaLeaseCapUsd =
         payload.quotaLeaseCapUsd === null ? null : String(payload.quotaLeaseCapUsd);
     }
+    if (payload.publicStatusWindowHours !== undefined) {
+      updates.publicStatusWindowHours = payload.publicStatusWindowHours;
+    }
+    if (payload.publicStatusAggregationIntervalMinutes !== undefined) {
+      updates.publicStatusAggregationIntervalMinutes =
+        payload.publicStatusAggregationIntervalMinutes;
+    }
 
     // 客户端 IP 提取链（如果提供；null 表示显式清空走默认）
     if (payload.ipExtractionConfig !== undefined) {
@@ -610,6 +631,8 @@ export async function updateSystemSettings(
 
       const downgradedUpdates = { ...updates };
       delete downgradedUpdates.enableHighConcurrencyMode;
+      delete downgradedUpdates.publicStatusWindowHours;
+      delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
       delete downgradedUpdates.ipExtractionConfig;
       delete downgradedUpdates.ipGeoLookupEnabled;
 

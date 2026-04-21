@@ -1,0 +1,198 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { locales } from "@/i18n/config";
+import { getSession } from "@/lib/auth";
+import { invalidateSystemSettingsCache } from "@/lib/config";
+import { logger } from "@/lib/logger";
+import {
+  collectEnabledPublicStatusGroups,
+  type EnabledPublicStatusGroup,
+  invalidateConfiguredPublicStatusGroupsCache,
+  parsePublicStatusDescription,
+  serializePublicStatusDescription,
+} from "@/lib/public-status/config";
+import {
+  buildPublicStatusConfigSnapshot,
+  publishPublicStatusConfigSnapshot,
+} from "@/lib/public-status/config-snapshot";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-worker";
+import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
+import { findLatestPricesByModels } from "@/repository/model-price";
+import { findAllProviderGroups, updateProviderGroup } from "@/repository/provider-groups";
+import { updateSystemSettings } from "@/repository/system-config";
+import type { ActionResult } from "./types";
+
+export interface SavePublicStatusSettingsInput {
+  publicStatusWindowHours: number;
+  publicStatusAggregationIntervalMinutes: number;
+  groups: Array<{
+    groupName: string;
+    displayName?: string;
+    publicGroupSlug?: string;
+    explanatoryCopy?: string | null;
+    sortOrder?: number;
+    publicModelKeys: string[];
+  }>;
+}
+
+function resolveRequestTypeBadge(modelName: string): string {
+  const normalized = modelName.toLowerCase();
+  if (normalized.includes("codex")) {
+    return "codex";
+  }
+  if (normalized.includes("claude")) {
+    return "anthropic";
+  }
+  if (normalized.includes("gemini")) {
+    return "gemini";
+  }
+  return "openaiCompatible";
+}
+
+function normalizeEnabledGroups(
+  groups: SavePublicStatusSettingsInput["groups"]
+): EnabledPublicStatusGroup[] {
+  return collectEnabledPublicStatusGroups(
+    groups.map((group) => ({
+      groupName: group.groupName,
+      note: null,
+      publicStatus: {
+        displayName: group.displayName,
+        publicGroupSlug: group.publicGroupSlug,
+        explanatoryCopy: group.explanatoryCopy,
+        sortOrder: group.sortOrder,
+        publicModelKeys: group.publicModelKeys,
+      },
+    }))
+  );
+}
+
+export async function savePublicStatusSettings(
+  input: SavePublicStatusSettingsInput
+): Promise<ActionResult<{ updatedGroupCount: number; configVersion: string }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const validatedSettings = UpdateSystemSettingsSchema.parse({
+      publicStatusWindowHours: input.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: input.publicStatusAggregationIntervalMinutes,
+    });
+    const normalizedEnabledGroups = normalizeEnabledGroups(input.groups);
+
+    const allGroups = await findAllProviderGroups();
+    const enabledByName = new Map(
+      normalizedEnabledGroups.map((group) => [group.groupName, group] as const)
+    );
+    const groupUpdates: Array<{ id: number; description: string | null }> = [];
+
+    for (const group of allGroups) {
+      const existing = parsePublicStatusDescription(group.description);
+      const configured = enabledByName.get(group.name);
+      const nextDescription = serializePublicStatusDescription({
+        note: existing.note,
+        publicStatus: configured
+          ? {
+              displayName: configured.displayName,
+              publicGroupSlug: configured.publicGroupSlug,
+              explanatoryCopy: configured.explanatoryCopy,
+              sortOrder: configured.sortOrder,
+              publicModelKeys: configured.publicModelKeys,
+            }
+          : null,
+      });
+
+      if (nextDescription && nextDescription.length > 500) {
+        return {
+          ok: false,
+          error: "公开状态配置超过 provider_groups.description 的 500 字符限制",
+        };
+      }
+
+      if ((group.description ?? null) !== nextDescription) {
+        groupUpdates.push({
+          id: group.id,
+          description: nextDescription,
+        });
+      }
+    }
+
+    const settings = await updateSystemSettings({
+      publicStatusWindowHours: validatedSettings.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes:
+        validatedSettings.publicStatusAggregationIntervalMinutes,
+    });
+
+    for (const groupUpdate of groupUpdates) {
+      await updateProviderGroup(groupUpdate.id, {
+        description: groupUpdate.description,
+      });
+    }
+
+    const latestPrices = await findLatestPricesByModels(
+      normalizedEnabledGroups.flatMap((group) => group.publicModelKeys)
+    );
+    const configVersion = `cfg-${Date.now()}`;
+
+    const snapshot = buildPublicStatusConfigSnapshot({
+      configVersion,
+      siteTitle: settings.siteTitle,
+      siteDescription: settings.siteTitle,
+      defaultIntervalMinutes: settings.publicStatusAggregationIntervalMinutes,
+      defaultRangeHours: settings.publicStatusWindowHours,
+      groups: normalizedEnabledGroups.map((group) => ({
+        slug: group.publicGroupSlug,
+        displayName: group.displayName,
+        sortOrder: group.sortOrder,
+        description: group.explanatoryCopy,
+        models: group.publicModelKeys.map((modelName) => {
+          const price = latestPrices.get(modelName);
+          return {
+            publicModelKey: modelName,
+            label: price?.priceData.display_name?.trim() || modelName,
+            vendorIconKey:
+              price?.priceData.litellm_provider?.trim() || resolveRequestTypeBadge(modelName),
+            requestTypeBadge: resolveRequestTypeBadge(modelName),
+          };
+        }),
+      })),
+    });
+
+    await publishPublicStatusConfigSnapshot({
+      reason: "save-public-status-settings",
+      snapshot,
+    });
+    await schedulePublicStatusRebuild({
+      intervalMinutes: settings.publicStatusAggregationIntervalMinutes,
+      rangeHours: settings.publicStatusWindowHours,
+      reason: "config-updated",
+    });
+
+    invalidateSystemSettingsCache();
+    invalidateConfiguredPublicStatusGroupsCache();
+
+    for (const locale of locales) {
+      revalidatePath(`/${locale}/settings/config`);
+      revalidatePath(`/${locale}/settings/providers`);
+      revalidatePath(`/${locale}/status`);
+    }
+    revalidatePath("/", "layout");
+
+    return {
+      ok: true,
+      data: {
+        updatedGroupCount: groupUpdates.length,
+        configVersion,
+      },
+    };
+  } catch (error) {
+    logger.error("[PublicStatus] savePublicStatusSettings failed", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "保存公开状态设置失败",
+    };
+  }
+}

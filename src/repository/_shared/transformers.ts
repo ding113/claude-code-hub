@@ -239,6 +239,8 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       ? parseFloat(dbSettings.quotaLeasePercentMonthly)
       : 0.05,
     quotaLeaseCapUsd: dbSettings?.quotaLeaseCapUsd ? parseFloat(dbSettings.quotaLeaseCapUsd) : null,
+    publicStatusWindowHours: dbSettings?.publicStatusWindowHours ?? 24,
+    publicStatusAggregationIntervalMinutes: dbSettings?.publicStatusAggregationIntervalMinutes ?? 5,
     ipExtractionConfig: dbSettings?.ipExtractionConfig ?? null,
     ipGeoLookupEnabled: dbSettings?.ipGeoLookupEnabled ?? true,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
