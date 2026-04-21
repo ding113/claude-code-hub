@@ -32,7 +32,7 @@ vi.mock("@/lib/public-status/config-publisher", () => ({
   publishCurrentPublicStatusConfigProjection: mockPublishCurrentPublicStatusConfigProjection,
 }));
 
-vi.mock("@/lib/public-status/rebuild-worker", () => ({
+vi.mock("@/lib/public-status/rebuild-hints", () => ({
   schedulePublicStatusRebuild: mockSchedulePublicStatusRebuild,
 }));
 

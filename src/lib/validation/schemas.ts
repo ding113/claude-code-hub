@@ -7,6 +7,10 @@ import {
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { PROVIDER_ALLOWED_MODEL_RULES_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_MODEL_REDIRECT_RULES_SCHEMA } from "@/lib/provider-model-redirect-schema";
+import {
+  MAX_PUBLIC_STATUS_RANGE_HOURS,
+  PUBLIC_STATUS_INTERVAL_OPTIONS,
+} from "@/lib/public-status/constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 import { isValidIANATimezone } from "@/lib/utils/timezone";
 
@@ -1015,13 +1019,20 @@ export const UpdateSystemSettingsSchema = z.object({
     .number()
     .int("Public status window must be an integer")
     .min(1, "Public status window cannot be less than 1 hour")
-    .max(168, "Public status window cannot exceed 168 hours")
+    .max(
+      MAX_PUBLIC_STATUS_RANGE_HOURS,
+      `Public status window cannot exceed ${MAX_PUBLIC_STATUS_RANGE_HOURS} hours`
+    )
     .optional(),
   publicStatusAggregationIntervalMinutes: z.coerce
     .number()
     .int("Public status aggregation interval must be an integer")
-    .min(1, "Public status aggregation interval cannot be less than 1 minute")
-    .max(60, "Public status aggregation interval cannot exceed 60 minutes")
+    .refine(
+      (value) => PUBLIC_STATUS_INTERVAL_OPTIONS.includes(value as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]),
+      {
+        message: `Public status aggregation interval must be one of ${PUBLIC_STATUS_INTERVAL_OPTIONS.join(", ")}`,
+      }
+    )
     .optional(),
 
   // 客户端 IP 提取链（可选；null 表示使用内置默认）

@@ -16,7 +16,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PUBLIC_STATUS_INTERVAL_OPTIONS } from "@/lib/public-status/constants";
 
 export interface PublicStatusSettingsFormGroup {
   groupName: string;
@@ -126,15 +134,22 @@ export function PublicStatusSettingsForm({
             <Label htmlFor="public-status-aggregation-interval">
               {t("statusPage.form.aggregationIntervalMinutes")}
             </Label>
-            <Input
-              id="public-status-aggregation-interval"
-              type="number"
-              min={1}
-              max={60}
+            <Select
               value={aggregationIntervalMinutes}
-              onChange={(event) => setAggregationIntervalMinutes(event.target.value)}
+              onValueChange={setAggregationIntervalMinutes}
               disabled={isPending}
-            />
+            >
+              <SelectTrigger id="public-status-aggregation-interval">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PUBLIC_STATUS_INTERVAL_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={String(option)}>
+                    {option} min
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-sm text-muted-foreground">
               {t("statusPage.form.aggregationIntervalMinutesDesc")}
             </p>

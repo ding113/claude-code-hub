@@ -12,7 +12,7 @@ vi.mock("@/lib/public-status/read-store", () => ({
   readPublicStatusPayload: mockReadPublicStatusPayload,
 }));
 
-vi.mock("@/lib/public-status/rebuild-worker", () => ({
+vi.mock("@/lib/public-status/rebuild-hints", () => ({
   schedulePublicStatusRebuild: mockSchedulePublicStatusRebuild,
 }));
 

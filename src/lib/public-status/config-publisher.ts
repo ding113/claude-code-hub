@@ -7,10 +7,11 @@ import {
   publishInternalPublicStatusConfigSnapshot,
   publishPublicStatusConfigSnapshot,
 } from "./config-snapshot";
+import {
+  MAX_PUBLIC_STATUS_RANGE_HOURS,
+  PUBLIC_STATUS_INTERVAL_SET,
+} from "./constants";
 import { collectEnabledPublicStatusGroups, parsePublicStatusDescription } from "./config";
-
-const PUBLIC_INTERVALS = new Set([5, 15, 30, 60]);
-const MAX_PUBLIC_RANGE_HOURS = 168;
 
 function resolvePublicVendorIconKey(modelName: string, raw?: string): string {
   const PUBLIC_VENDOR_ICON_KEYS = new Set([
@@ -49,11 +50,11 @@ function resolveRequestTypeBadge(modelName: string): string {
 }
 
 function normalizePublicInterval(value: number | undefined): number {
-  return value && PUBLIC_INTERVALS.has(value) ? value : 5;
+  return value && PUBLIC_STATUS_INTERVAL_SET.has(value) ? value : 5;
 }
 
 function normalizePublicRange(value: number | undefined): number {
-  return value && value >= 1 && value <= MAX_PUBLIC_RANGE_HOURS ? value : 24;
+  return value && value >= 1 && value <= MAX_PUBLIC_STATUS_RANGE_HOURS ? value : 24;
 }
 
 export async function publishCurrentPublicStatusConfigProjection(input: {

@@ -294,6 +294,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       }
 
       toast.success(t("configUpdated"));
+      if (result.data?.publicStatusProjectionWarning) {
+        toast.warning(result.data.publicStatusProjectionWarning);
+      }
       router.refresh();
     });
   };

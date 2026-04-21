@@ -10,14 +10,12 @@ import {
   buildGenerationFingerprint,
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
-  buildPublicStatusRebuildHintKey,
   buildPublicStatusRebuildLockKey,
   buildPublicStatusSeriesChunkKey,
   buildPublicStatusTempKey,
 } from "./redis-contract";
 
 const inFlightRebuilds = new Map<string, Promise<{ sourceGeneration: string }>>();
-const REBUILD_HINT_TTL_SECONDS = 60 * 5;
 const REBUILD_LOCK_TTL_MS = 60_000;
 
 interface RedisHintWriter {
@@ -34,6 +32,38 @@ function getReadyRedisClient(redis?: RedisHintWriter | null): RedisHintWriter | 
     return null;
   }
   return client;
+}
+
+function parseConfigVersionOrder(configVersion: string): number {
+  const digits = configVersion.replace(/\D+/g, "");
+  return Number.parseInt(digits || "0", 10);
+}
+
+function shouldPromoteCurrentManifest(
+  existing: { configVersion?: string; coveredTo?: string } | null,
+  candidate: { configVersion: string; coveredTo: string }
+): boolean {
+  if (!existing) {
+    return true;
+  }
+
+  const existingVersion = typeof existing.configVersion === "string" ? existing.configVersion : "";
+  const candidateVersionOrder = parseConfigVersionOrder(candidate.configVersion);
+  const existingVersionOrder = parseConfigVersionOrder(existingVersion);
+
+  if (existingVersionOrder > candidateVersionOrder) {
+    return false;
+  }
+
+  if (
+    existingVersionOrder === candidateVersionOrder &&
+    typeof existing.coveredTo === "string" &&
+    Date.parse(existing.coveredTo) > Date.parse(candidate.coveredTo)
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 async function publishPublicStatusProjection(input: {
@@ -108,7 +138,23 @@ async function publishPublicStatusProjection(input: {
   await input.redis.set(snapshotKey, JSON.stringify(snapshotRecord));
   await input.redis.set(seriesKey, JSON.stringify(seriesRecord));
   await input.redis.set(versionedManifestKey, JSON.stringify(manifestRecord));
-  await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+  if (typeof input.redis.get === "function") {
+    let existingCurrentManifest: { configVersion?: string; coveredTo?: string } | null = null;
+    try {
+      const existingCurrentManifestRaw = await input.redis.get(currentManifestKey);
+      existingCurrentManifest = existingCurrentManifestRaw
+        ? (JSON.parse(existingCurrentManifestRaw) as { configVersion?: string; coveredTo?: string })
+        : null;
+    } catch {
+      existingCurrentManifest = null;
+    }
+
+    if (shouldPromoteCurrentManifest(existingCurrentManifest, manifestRecord)) {
+      await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+    }
+  } else {
+    await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+  }
   if (input.redis.del) {
     await input.redis.del(snapshotTempKey, seriesTempKey);
   }
@@ -280,84 +326,5 @@ export async function rebuildPublicStatusProjection(input: {
   return {
     status: "updated",
     sourceGeneration: result.sourceGeneration,
-  };
-}
-
-export async function schedulePublicStatusRebuild(input: {
-  intervalMinutes: number;
-  rangeHours: number;
-  reason: string;
-  redis?: RedisHintWriter | null;
-}): Promise<{
-  accepted: boolean;
-  rebuildState: string;
-  key?: string;
-}> {
-  const redis = getReadyRedisClient(input.redis);
-  if (!redis) {
-    return {
-      accepted: false,
-      rebuildState: "rebuilding",
-    };
-  }
-
-  const key = buildPublicStatusRebuildHintKey({
-    intervalMinutes: input.intervalMinutes,
-    rangeHours: input.rangeHours,
-  });
-  await redis.set(
-    key,
-    JSON.stringify({
-      reason: input.reason,
-      requestedAt: new Date().toISOString(),
-      intervalMinutes: input.intervalMinutes,
-      rangeHours: input.rangeHours,
-    }),
-    "EX",
-    REBUILD_HINT_TTL_SECONDS
-  );
-
-  if (typeof redis.get === "function") {
-    const configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
-      redis: redis as RedisHintWriter & {
-        get(key: string): Promise<string | null> | string | null;
-      },
-    });
-    const versionedManifestKey = buildPublicStatusManifestKey({
-      configVersion: configSnapshot?.configVersion ?? "current",
-      intervalMinutes: input.intervalMinutes,
-      rangeHours: input.rangeHours,
-    });
-    const currentManifestKey = buildPublicStatusManifestKey({
-      configVersion: "current",
-      intervalMinutes: input.intervalMinutes,
-      rangeHours: input.rangeHours,
-    });
-
-    for (const manifestKey of [versionedManifestKey, currentManifestKey]) {
-      const manifestRaw = await redis.get(manifestKey);
-      if (!manifestRaw) {
-        continue;
-      }
-
-      try {
-        const manifest = JSON.parse(manifestRaw) as Record<string, unknown>;
-        await redis.set(
-          manifestKey,
-          JSON.stringify({
-            ...manifest,
-            rebuildState: "rebuilding",
-          })
-        );
-      } catch {
-        // 忽略坏 manifest；读侧会走安全降级。
-      }
-    }
-  }
-
-  return {
-    accepted: true,
-    rebuildState: "rebuilding",
-    key,
   };
 }

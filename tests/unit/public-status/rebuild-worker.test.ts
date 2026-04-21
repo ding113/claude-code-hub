@@ -143,7 +143,7 @@ describe("public-status rebuild worker", () => {
   });
 
   it("writes rebuild hints with ttl and reason payload", async () => {
-    const mod = await import("@/lib/public-status/rebuild-worker");
+    const mod = await import("@/lib/public-status/rebuild-hints");
 
     await mod.schedulePublicStatusRebuild({
       intervalMinutes: 15,

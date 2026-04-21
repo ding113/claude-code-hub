@@ -7,7 +7,7 @@ import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
-import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-worker";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
@@ -86,7 +86,7 @@ export async function saveSystemSettings(formData: {
   // IP 提取 / 归属地查询
   ipExtractionConfig?: IpExtractionConfig | null;
   ipGeoLookupEnabled?: boolean;
-}): Promise<ActionResult<SystemSettings>> {
+}): Promise<ActionResult<SystemSettings & { publicStatusProjectionWarning?: string | null }>> {
   let before: SystemSettings | null = null;
   try {
     const session = await getSession();
@@ -141,6 +141,7 @@ export async function saveSystemSettings(formData: {
       validated.publicStatusWindowHours !== undefined ||
       validated.publicStatusAggregationIntervalMinutes !== undefined;
 
+    let publicStatusProjectionWarning: string | null = null;
     if (shouldRepublishPublicStatusProjection) {
       const publishResult = await publishCurrentPublicStatusConfigProjection({
         reason: "save-system-settings",
@@ -150,6 +151,7 @@ export async function saveSystemSettings(formData: {
         logger.warn(
           "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection"
         );
+        publicStatusProjectionWarning = "系统设置已保存，但 public status Redis 投影发布失败";
       } else {
         await schedulePublicStatusRebuild({
           intervalMinutes:
@@ -179,7 +181,7 @@ export async function saveSystemSettings(formData: {
       success: true,
     });
 
-    return { ok: true, data: updated };
+    return { ok: true, data: { ...updated, publicStatusProjectionWarning } };
   } catch (error) {
     logger.error("更新系统设置失败:", error);
     const message = error instanceof Error ? error.message : "更新系统设置失败";

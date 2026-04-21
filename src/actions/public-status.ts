@@ -15,7 +15,7 @@ import {
 import {
   publishCurrentPublicStatusConfigProjection,
 } from "@/lib/public-status/config-publisher";
-import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-worker";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { findAllProviderGroups, updateProviderGroup } from "@/repository/provider-groups";
 import { updateSystemSettings } from "@/repository/system-config";

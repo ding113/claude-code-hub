@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
+import {
+  MAX_PUBLIC_STATUS_RANGE_HOURS,
+  PUBLIC_STATUS_INTERVAL_SET,
+} from "@/lib/public-status/constants";
 import { readCurrentPublicStatusConfigSnapshot } from "@/lib/public-status/config-snapshot";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { readPublicStatusPayload } from "@/lib/public-status/read-store";
-import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-worker";
-
-const PUBLIC_INTERVALS = new Set([5, 15, 30, 60]);
-const MAX_PUBLIC_RANGE_HOURS = 168;
 
 function clampInterval(value: string | null, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isInteger(parsed) && PUBLIC_INTERVALS.has(parsed) ? parsed : fallback;
+  return Number.isInteger(parsed) && PUBLIC_STATUS_INTERVAL_SET.has(parsed) ? parsed : fallback;
 }
 
 function clampRange(value: string | null, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_PUBLIC_RANGE_HOURS
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_PUBLIC_STATUS_RANGE_HOURS
     ? parsed
     : fallback;
 }

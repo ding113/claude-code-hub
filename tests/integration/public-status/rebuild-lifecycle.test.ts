@@ -4,6 +4,7 @@ const mockRedisSet = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/redis", () => ({
   getRedisClient: () => ({
+    get: vi.fn().mockResolvedValue(null),
     set: mockRedisSet,
     status: "ready",
   }),
@@ -11,7 +12,7 @@ vi.mock("@/lib/redis", () => ({
 
 describe("public-status rebuild lifecycle", () => {
   it("persists a rebuild hint for widened ranges and cold starts", async () => {
-    const mod = await import("@/lib/public-status/rebuild-worker");
+    const mod = await import("@/lib/public-status/rebuild-hints");
 
     const result = await mod.schedulePublicStatusRebuild({
       intervalMinutes: 5,
