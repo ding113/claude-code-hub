@@ -4,6 +4,7 @@ import {
   getConfiguredPublicStatusGroups,
   queryPublicStatusRequests,
 } from "./aggregation";
+import { publishCurrentPublicStatusConfigProjection } from "./config-publisher";
 import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import {
   alignBucketStartUtc,
@@ -290,9 +291,23 @@ export async function rebuildPublicStatusProjection(input: {
     get(key: string): Promise<string | null> | string | null;
   };
 
-  const configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
+  let configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
     redis: redisReader,
   });
+  if (!configSnapshot) {
+    try {
+      const publishResult = await publishCurrentPublicStatusConfigProjection({
+        reason: "rebuild-bootstrap",
+      });
+      if (publishResult.written) {
+        configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
+          redis: redisReader,
+        });
+      }
+    } catch {
+      // 忽略自举失败，让调用方继续沿用 missing-config 语义。
+    }
+  }
   if (!configSnapshot) {
     return { status: "disabled", reason: "missing-config" };
   }

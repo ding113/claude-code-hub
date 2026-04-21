@@ -13,6 +13,7 @@ const mockRedisPttl = vi.hoisted(() => vi.fn());
 const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockQueryPublicStatusRequests = vi.hoisted(() => vi.fn());
 const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
+const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/redis", () => ({
   getRedisClient: () => ({
@@ -29,6 +30,10 @@ vi.mock("@/lib/public-status/config-snapshot", () => ({
   readCurrentInternalPublicStatusConfigSnapshot: mockReadCurrentInternalPublicStatusConfigSnapshot,
 }));
 
+vi.mock("@/lib/public-status/config-publisher", () => ({
+  publishCurrentPublicStatusConfigProjection: mockPublishCurrentPublicStatusConfigProjection,
+}));
+
 vi.mock("@/lib/public-status/aggregation", () => ({
   getConfiguredPublicStatusGroups: (snapshot: { groups: unknown[] }) => snapshot.groups,
   queryPublicStatusRequests: mockQueryPublicStatusRequests,
@@ -41,6 +46,12 @@ describe("public-status rebuild worker", () => {
     mockRedisGet.mockResolvedValue(null);
     mockRedisEval.mockResolvedValue(1);
     mockRedisPttl.mockResolvedValue(-1);
+    mockPublishCurrentPublicStatusConfigProjection.mockResolvedValue({
+      configVersion: "cfg-1",
+      key: "public-status:v1:config:cfg-1",
+      written: true,
+      groupCount: 1,
+    });
   });
 
   it("collapses concurrent rebuild requests into a single in-flight computation", async () => {
@@ -202,6 +213,58 @@ describe("public-status rebuild worker", () => {
       "EX",
       60 * 60 * 24 * 30
     );
+  });
+
+  it("re-publishes config projection before rebuild when redis config keys are missing", async () => {
+    const mod = await import("@/lib/public-status/rebuild-worker");
+
+    mockReadCurrentInternalPublicStatusConfigSnapshot
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        configVersion: "cfg-1",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        siteTitle: "Claude Code Hub Status",
+        siteDescription: "Request-derived public status",
+        defaultIntervalMinutes: 5,
+        defaultRangeHours: 24,
+        groups: [
+          {
+            sourceGroupName: "openai",
+            publicGroupSlug: "openai",
+            displayName: "OpenAI",
+            explanatoryCopy: "Primary fleet",
+            sortOrder: 1,
+            models: [
+              {
+                publicModelKey: "gpt-4.1",
+                label: "GPT-4.1",
+                vendorIconKey: "openai",
+                requestTypeBadge: "openaiCompatible",
+              },
+            ],
+          },
+        ],
+      });
+    mockQueryPublicStatusRequests.mockResolvedValue([]);
+    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      coveredFrom: "2026-04-20T10:00:00.000Z",
+      coveredTo: "2026-04-21T10:00:00.000Z",
+      groups: [],
+    });
+    mockRedisSet.mockReset();
+    mockRedisSet.mockResolvedValueOnce("OK");
+
+    const result = await mod.rebuildPublicStatusProjection({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      now: new Date("2026-04-21T10:02:00.000Z"),
+    });
+
+    expect(result.status).toBe("updated");
+    expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledWith({
+      reason: "rebuild-bootstrap",
+    });
   });
 
   it("writes rebuild hints with ttl and reason payload", async () => {
