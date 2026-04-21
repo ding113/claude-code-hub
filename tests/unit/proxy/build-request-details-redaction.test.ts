@@ -42,15 +42,21 @@ const { buildRequestDetails, sanitizeUrl, truncateRequestBody } = await import(
 
 // Create a minimal mock session for testing
 function createMockSession(requestLog: string) {
-  const headerLog = "content-type: application/json\nauthorization: Bearer sk-1234";
-
-  return {
-    requestUrl: new URL("https://api.example.com/v1/messages"),
-    method: "POST",
-    headers: new Headers([
+  return createMockSessionWithHeaders(
+    requestLog,
+    new Headers([
       ["content-type", "application/json"],
       ["authorization", "Bearer sk-1234"],
     ]),
+    "content-type: application/json\nauthorization: Bearer sk-1234"
+  );
+}
+
+function createMockSessionWithHeaders(requestLog: string, headers: Headers, headerLog: string) {
+  return {
+    requestUrl: new URL("https://api.example.com/v1/messages"),
+    method: "POST",
+    headers,
     headerLog,
     request: {
       log: requestLog,
@@ -173,10 +179,9 @@ describe("buildRequestDetails - Redaction based on STORE_SESSION_MESSAGES", () =
     it("should reflect removed header from live session headers", () => {
       mockStoreMessages = false;
 
-      const session = createMockSession("{}");
-      session.headerLog = "x-removed: 1";
-      session.headers = new Headers([["x-removed", "1"]]);
-      session.headers.delete("x-removed");
+      const headers = new Headers([["x-removed", "1"]]);
+      headers.delete("x-removed");
+      const session = createMockSessionWithHeaders("{}", headers, "x-removed: 1");
       const result = buildRequestDetails(session);
 
       expect(result.headers).toBe("(empty)");
@@ -185,10 +190,9 @@ describe("buildRequestDetails - Redaction based on STORE_SESSION_MESSAGES", () =
     it("should reflect override header from live session headers", () => {
       mockStoreMessages = false;
 
-      const session = createMockSession("{}");
-      session.headerLog = "x-mode: old";
-      session.headers = new Headers([["x-mode", "old"]]);
-      session.headers.set("x-mode", "new");
+      const headers = new Headers([["x-mode", "old"]]);
+      headers.set("x-mode", "new");
+      const session = createMockSessionWithHeaders("{}", headers, "x-mode: old");
       const result = buildRequestDetails(session);
 
       expect(result.headers).toBe("x-mode: new");
@@ -198,10 +202,13 @@ describe("buildRequestDetails - Redaction based on STORE_SESSION_MESSAGES", () =
     it("should redact authorization live header after filters mutate session headers", () => {
       mockStoreMessages = false;
 
-      const session = createMockSession("{}");
-      session.headerLog = "authorization: Bearer stale-token";
-      session.headers = new Headers([["authorization", "Bearer stale-token"]]);
-      session.headers.set("authorization", "Bearer sk-1234");
+      const headers = new Headers([["authorization", "Bearer stale-token"]]);
+      headers.set("authorization", "Bearer sk-1234");
+      const session = createMockSessionWithHeaders(
+        "{}",
+        headers,
+        "authorization: Bearer stale-token"
+      );
       const result = buildRequestDetails(session);
 
       expect(result.headers).toBe("authorization: Bearer [REDACTED]");

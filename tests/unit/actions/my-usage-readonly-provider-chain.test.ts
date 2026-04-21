@@ -64,6 +64,21 @@ describe("getMyUsageLogsBatchFull", () => {
               errorDetails: null,
             },
           ],
+          _liveChain: {
+            chain: [
+              {
+                id: 3,
+                name: "live-provider",
+                errorDetails: {
+                  request: {
+                    headers: "x-api-key: live-secret",
+                  },
+                },
+              },
+            ],
+            phase: "provider",
+            updatedAt: 123,
+          },
         },
       ],
       nextCursor: null,
@@ -81,9 +96,9 @@ describe("getMyUsageLogsBatchFull", () => {
         hasMore: false,
       },
     });
-    expect(
-      result.ok && result.data.logs[0]?.providerChain?.[0]?.errorDetails?.request
-    ).toBeUndefined();
+    const scrubbedProviderErrorDetails =
+      result.ok && result.data.logs[0]?.providerChain?.[0]?.errorDetails;
+    expect(scrubbedProviderErrorDetails && "request" in scrubbedProviderErrorDetails).toBe(false);
     expect(result.ok && result.data.logs[0]?.providerChain?.[0]?.errorDetails?.response).toEqual({
       statusCode: 500,
     });
@@ -92,5 +107,8 @@ describe("getMyUsageLogsBatchFull", () => {
       name: "provider-b",
       errorDetails: null,
     });
+    const scrubbedLiveChainErrorDetails =
+      result.ok && result.data.logs[0]?._liveChain?.chain[0]?.errorDetails;
+    expect(scrubbedLiveChainErrorDetails && "request" in scrubbedLiveChainErrorDetails).toBe(false);
   });
 });

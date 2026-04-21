@@ -48,12 +48,11 @@ function scrubProviderChainRequestForReadonly(
         return item;
       }
 
+      const { request: _request, ...errorDetailsWithoutRequest } = item.errorDetails;
+
       return {
         ...item,
-        errorDetails: {
-          ...item.errorDetails,
-          request: undefined,
-        },
+        errorDetails: errorDetailsWithoutRequest,
       };
     }) ?? null
   );
@@ -65,6 +64,12 @@ function scrubUsageLogsBatchForReadonly(result: UsageLogsBatchResult): UsageLogs
     logs: result.logs.map((log) => ({
       ...log,
       providerChain: scrubProviderChainRequestForReadonly(log.providerChain),
+      _liveChain: log._liveChain
+        ? {
+            ...log._liveChain,
+            chain: scrubProviderChainRequestForReadonly(log._liveChain.chain) ?? [],
+          }
+        : log._liveChain,
     })),
   };
 }
