@@ -2732,7 +2732,7 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     ]);
 
     // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
-      const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
       limit5hResetMode === "fixed"
         ? RateLimitService.getCurrentCost(providerId, "provider", "5h", undefined, limit5hResetMode)
         : sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
@@ -2873,7 +2873,7 @@ export async function getProviderLimitUsageBatch(
       // 并行查询该供应商的各周期消费（直接查询数据库）
       const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly] = await Promise.all([
         limit5hResetMode === "fixed"
-        ? RateLimitService.getCurrentCost(
+          ? RateLimitService.getCurrentCost(
               provider.id,
               "provider",
               "5h",
