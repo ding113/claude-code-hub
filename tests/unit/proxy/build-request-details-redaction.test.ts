@@ -36,16 +36,22 @@ vi.mock("@/lib/error-rule-detector", () => ({
 }));
 
 // Import after mocks
-const { buildRequestDetails, sanitizeUrl, sanitizeHeaders, truncateRequestBody } = await import(
+const { buildRequestDetails, sanitizeUrl, truncateRequestBody } = await import(
   "@/app/v1/_lib/proxy/errors"
 );
 
 // Create a minimal mock session for testing
 function createMockSession(requestLog: string) {
+  const headerLog = "content-type: application/json\nauthorization: Bearer sk-1234";
+
   return {
     requestUrl: new URL("https://api.example.com/v1/messages"),
     method: "POST",
-    headerLog: "content-type: application/json\nauthorization: Bearer sk-1234",
+    headers: new Headers([
+      ["content-type", "application/json"],
+      ["authorization", "Bearer sk-1234"],
+    ]),
+    headerLog,
     request: {
       log: requestLog,
     },
@@ -162,6 +168,44 @@ describe("buildRequestDetails - Redaction based on STORE_SESSION_MESSAGES", () =
 
       expect(result.bodyTruncated).toBe(true);
       expect(result.body.length).toBe(2000);
+    });
+
+    it("should reflect removed header from live session headers", () => {
+      mockStoreMessages = false;
+
+      const session = createMockSession("{}");
+      session.headerLog = "x-removed: 1";
+      session.headers = new Headers([["x-removed", "1"]]);
+      session.headers.delete("x-removed");
+      const result = buildRequestDetails(session);
+
+      expect(result.headers).toBe("(empty)");
+    });
+
+    it("should reflect override header from live session headers", () => {
+      mockStoreMessages = false;
+
+      const session = createMockSession("{}");
+      session.headerLog = "x-mode: old";
+      session.headers = new Headers([["x-mode", "old"]]);
+      session.headers.set("x-mode", "new");
+      const result = buildRequestDetails(session);
+
+      expect(result.headers).toBe("x-mode: new");
+      expect(result.headers).not.toContain("x-mode: old");
+    });
+
+    it("should redact authorization live header after filters mutate session headers", () => {
+      mockStoreMessages = false;
+
+      const session = createMockSession("{}");
+      session.headerLog = "authorization: Bearer stale-token";
+      session.headers = new Headers([["authorization", "Bearer stale-token"]]);
+      session.headers.set("authorization", "Bearer sk-1234");
+      const result = buildRequestDetails(session);
+
+      expect(result.headers).toBe("authorization: Bearer [REDACTED]");
+      expect(result.headers).not.toContain("stale-token");
     });
   });
 });

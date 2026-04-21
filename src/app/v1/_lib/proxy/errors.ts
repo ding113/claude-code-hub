@@ -1327,7 +1327,7 @@ export function buildRequestDetails(
   return {
     url: sanitizeUrl(session.requestUrl),
     method: session.method,
-    headers: sanitizeHeaders(session.headerLog),
+    headers: sanitizeHeaders(session.headers),
     body,
     bodyTruncated: truncated,
   };
