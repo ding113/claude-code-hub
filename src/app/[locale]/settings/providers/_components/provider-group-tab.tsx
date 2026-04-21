@@ -153,6 +153,8 @@ export function ProviderGroupTab({
           return t("duplicateName");
         case "INVALID_MULTIPLIER":
           return t("invalidMultiplier");
+        case "DESCRIPTION_TOO_LONG":
+          return t("descriptionTooLong");
         default:
           return fallback;
       }

@@ -222,6 +222,13 @@ export async function updateProviderGroup(
             publicStatus: parsePublicStatusDescription(beforeGroup?.description).publicStatus,
           })
         : input.description;
+    if (nextDescription && nextDescription.length > 500) {
+      return {
+        ok: false,
+        error: t("descriptionTooLong"),
+        errorCode: "DESCRIPTION_TOO_LONG",
+      };
+    }
 
     const updated = await repoUpdateProviderGroup(id, {
       costMultiplier: input.costMultiplier,

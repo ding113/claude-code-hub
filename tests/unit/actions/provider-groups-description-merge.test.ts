@@ -90,4 +90,18 @@ describe("provider-groups action description merge", () => {
       }),
     });
   });
+
+  it("rejects descriptionNote when merged payload would exceed the column limit", async () => {
+    const { updateProviderGroup } = await import("@/actions/provider-groups");
+
+    const result = await updateProviderGroup(11, {
+      descriptionNote: "x".repeat(430),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      errorCode: "DESCRIPTION_TOO_LONG",
+    });
+    expect(mockRepoUpdateProviderGroup).not.toHaveBeenCalled();
+  });
 });
