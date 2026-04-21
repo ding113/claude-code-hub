@@ -31,11 +31,47 @@ import {
   type UsageLogsBatchResult,
 } from "@/repository/usage-logs";
 import type { IpGeoLookupResult, IpGeoPrivateMarker } from "@/types/ip-geo";
+import type { ProviderChainItem } from "@/types/message";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
 async function getErrorTranslator() {
   return getTranslations("errors");
+}
+
+function scrubProviderChainRequestForReadonly(
+  providerChain: ProviderChainItem[] | null
+): ProviderChainItem[] | null {
+  return (
+    providerChain?.map((item) => {
+      if (!item.errorDetails?.request) {
+        return item;
+      }
+
+      const { request: _request, ...errorDetailsWithoutRequest } = item.errorDetails;
+
+      return {
+        ...item,
+        errorDetails: errorDetailsWithoutRequest,
+      };
+    }) ?? null
+  );
+}
+
+function scrubUsageLogsBatchForReadonly(result: UsageLogsBatchResult): UsageLogsBatchResult {
+  return {
+    ...result,
+    logs: result.logs.map((log) => ({
+      ...log,
+      providerChain: scrubProviderChainRequestForReadonly(log.providerChain),
+      _liveChain: log._liveChain
+        ? {
+            ...log._liveChain,
+            chain: scrubProviderChainRequestForReadonly(log._liveChain.chain) ?? [],
+          }
+        : log._liveChain,
+    })),
+  };
 }
 
 /**
@@ -673,7 +709,7 @@ export async function getMyUsageLogsBatchFull(
       keyId: session.key.id,
     });
 
-    return { ok: true, data: result };
+    return { ok: true, data: scrubUsageLogsBatchForReadonly(result) };
   } catch (error) {
     logger.error("[my-usage] getMyUsageLogsBatchFull failed", error);
     return {
