@@ -70,6 +70,9 @@ function ProviderFormContent({
   const t = useTranslations("settings.providers.form");
   const tBatchEdit = useTranslations("settings.providers.batchEdit");
   const { state, dispatch, mode, provider, hideUrl } = useProviderForm();
+  const rateLimit = state.rateLimit as typeof state.rateLimit & {
+    limit5hResetMode?: "fixed" | "rolling";
+  };
   const [isPending, startTransition] = useTransition();
   const isEdit = mode === "edit";
 
@@ -327,6 +330,7 @@ function ProviderFormContent({
           active_time_start: state.routing.activeTimeStart || null,
           active_time_end: state.routing.activeTimeEnd || null,
           limit_5h_usd: state.rateLimit.limit5hUsd,
+          limit_5h_reset_mode: rateLimit.limit5hResetMode ?? "rolling",
           limit_daily_usd: state.rateLimit.limitDailyUsd,
           daily_reset_mode: state.rateLimit.dailyResetMode,
           daily_reset_time: state.rateLimit.dailyResetTime,
@@ -520,7 +524,10 @@ function ProviderFormContent({
     // Limits - configured if any rate limit set
     if (
       state.rateLimit.limit5hUsd ||
+      rateLimit.limit5hResetMode !== "rolling" ||
       state.rateLimit.limitDailyUsd ||
+      state.rateLimit.dailyResetMode !== "fixed" ||
+      state.rateLimit.dailyResetTime !== "00:00" ||
       state.rateLimit.limitWeeklyUsd ||
       state.rateLimit.limitMonthlyUsd ||
       state.rateLimit.limitTotalUsd ||
@@ -544,6 +551,7 @@ function ProviderFormContent({
     state.basic,
     state.routing,
     state.rateLimit,
+    rateLimit.limit5hResetMode,
     state.network,
     state.mcp,
     hideUrl,

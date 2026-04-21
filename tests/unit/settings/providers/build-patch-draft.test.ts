@@ -36,6 +36,7 @@ function createBatchState(): ProviderFormState {
     },
     rateLimit: {
       limit5hUsd: null,
+      limit5hResetMode: "rolling",
       limitDailyUsd: null,
       dailyResetMode: "fixed",
       dailyResetTime: "00:00",
@@ -43,6 +44,8 @@ function createBatchState(): ProviderFormState {
       limitMonthlyUsd: null,
       limitTotalUsd: null,
       limitConcurrentSessions: null,
+    } as ProviderFormState["rateLimit"] & {
+      limit5hResetMode: "fixed" | "rolling";
     },
     circuitBreaker: {
       failureThreshold: undefined,
@@ -225,6 +228,20 @@ describe("buildPatchDraftFromFormState", () => {
     const draft = buildPatchDraftFromFormState(state, dirty);
 
     expect(draft.cache_ttl_preference).toEqual({ set: "5m" });
+  });
+
+  it("sets limit5hResetMode when dirty", () => {
+    const state = createBatchState() as ProviderFormState & {
+      rateLimit: ProviderFormState["rateLimit"] & {
+        limit5hResetMode: "fixed" | "rolling";
+      };
+    };
+    state.rateLimit.limit5hResetMode = "fixed";
+    const dirty = new Set(["rateLimit.limit5hResetMode"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.limit_5h_reset_mode).toEqual({ set: "fixed" });
   });
 
   it("sets preserveClientIp when dirty", () => {

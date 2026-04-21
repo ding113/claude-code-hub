@@ -305,6 +305,7 @@ export async function simulateDispatchDecisionTree(
 
     const costCheck = await RateLimitService.checkCostLimits(provider.id, "provider", {
       limit_5h_usd: provider.limit5hUsd,
+      limit_5h_reset_mode: provider.limit5hResetMode,
       limit_daily_usd: provider.limitDailyUsd,
       daily_reset_mode: provider.dailyResetMode,
       daily_reset_time: provider.dailyResetTime,

@@ -36,6 +36,7 @@ export interface UserEditSectionProps {
     // 所有限额字段
     rpm?: number | null;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     dailyQuota?: number | null; // 新增：用户每日限额
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -209,7 +210,9 @@ export function UserEditSection({
 
     // RPM: user.rpm > 0 表示有限制
     add("limitRpm", user.rpm);
-    add("limit5h", user.limit5hUsd);
+    add("limit5h", user.limit5hUsd, {
+      mode: user.limit5hResetMode ?? "rolling",
+    });
     // 新增：添加每日限额到 rules
     add("limitDaily", user.dailyQuota, {
       mode: user.dailyResetMode ?? "fixed",
@@ -224,6 +227,7 @@ export function UserEditSection({
   }, [
     user.rpm,
     user.limit5hUsd,
+    user.limit5hResetMode,
     user.dailyQuota,
     user.dailyResetMode,
     user.dailyResetTime,
@@ -239,16 +243,8 @@ export function UserEditSection({
   }, [rules]);
 
   const limitRuleTranslations = useMemo(() => {
-    return {
-      title: translations.limitRules.addRule,
-      limitTypes: translations.limitRules.ruleTypes,
-      quickValues: translations.limitRules.quickValues,
-    } satisfies Record<string, unknown>;
-  }, [
-    translations.limitRules.addRule,
-    translations.limitRules.ruleTypes,
-    translations.limitRules.quickValues,
-  ]);
+    return translations.limitRules satisfies Record<string, unknown>;
+  }, [translations.limitRules]);
 
   const handleRemoveRule = (type: string) => {
     switch (type) {
@@ -256,7 +252,10 @@ export function UserEditSection({
         emitChange("rpm", 0); // 0 = 无限制
         return;
       case "limit5h":
-        emitChange("limit5hUsd", null);
+        emitChange({
+          limit5hUsd: null,
+          limit5hResetMode: "rolling",
+        });
         return;
       case "limitDaily":
         // Batch update to avoid race condition
@@ -289,7 +288,10 @@ export function UserEditSection({
         emitChange("rpm", Math.floor(value)); // RPM 应为整数
         return;
       case "limit5h":
-        emitChange("limit5hUsd", value);
+        emitChange({
+          limit5hUsd: value,
+          limit5hResetMode: mode || "rolling",
+        });
         return;
       case "limitDaily":
         // Batch update to avoid race condition

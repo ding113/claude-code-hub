@@ -1028,6 +1028,17 @@
       "userIdMissing": "User ID does not exist",
       "createFailed": "Failed to create, please try again later",
       "noKeyReturned": "Created successfully but key was not returned"
+    },
+    "limit5hResetMode": {
+      "label": "5-Hour Reset Mode",
+      "options": {
+        "fixed": "Fixed window",
+        "rolling": "Rolling Window (5h)"
+      },
+      "desc": {
+        "fixed": "Use natural 5-hour buckets based on wall-clock time",
+        "rolling": "Use a rolling 5-hour window from the latest usage"
+      }
     }
   },
   "userForm": {
@@ -2095,5 +2106,77 @@
     "autoDetected": "Auto-detected",
     "selectPlatform": "Select platform",
     "successStats": "Created {targets} targets, {bindings} bindings"
+  },
+  "limitRules": {
+    "addRule": "Add limit rule",
+    "title": "Add Limit Rule",
+    "description": "Select limit type and set value",
+    "cancel": "Cancel",
+    "confirm": "Save",
+    "fields": {
+      "type": {
+        "label": "Limit Type",
+        "placeholder": "Select"
+      },
+      "value": {
+        "label": "Value",
+        "placeholder": "Enter"
+      }
+    },
+    "limit5h": {
+      "mode": {
+        "label": "5-Hour Reset Mode",
+        "fixed": "Fixed window",
+        "rolling": "Rolling window (5h)",
+        "helperFixed": "Use natural 5-hour buckets based on wall-clock time.",
+        "helperRolling": "Use a rolling 5-hour window from the latest usage."
+      }
+    },
+    "daily": {
+      "mode": {
+        "label": "Daily Reset Mode",
+        "fixed": "Fixed time reset",
+        "rolling": "Rolling window (24h)",
+        "helperFixed": "Reset quota at a specific time each day.",
+        "helperRolling": "Rolling 24-hour window from first request"
+      },
+      "time": {
+        "label": "Reset Time",
+        "placeholder": "HH:mm"
+      }
+    },
+    "limitTypes": {
+      "limitRpm": "RPM Limit",
+      "limit5h": "5-Hour Limit",
+      "limitDaily": "Daily Limit",
+      "limitWeekly": "Weekly Limit",
+      "limitMonthly": "Monthly Limit",
+      "limitTotal": "Total Limit",
+      "limitSessions": "Concurrent Sessions"
+    },
+    "ruleTypes": {
+      "limitRpm": "RPM limit",
+      "limit5h": "5-hour limit",
+      "limitDaily": "Daily limit",
+      "limitWeekly": "Weekly limit",
+      "limitMonthly": "Monthly limit",
+      "limitTotal": "Total limit",
+      "limitSessions": "Concurrent sessions"
+    },
+    "errors": {
+      "missingType": "Please select a limit type",
+      "invalidValue": "Please enter a valid value",
+      "invalidTime": "Please enter a valid time (HH:mm)"
+    },
+    "overwriteHint": "This type already exists, saving will overwrite the existing value",
+    "quickValues": {
+      "10": "$10",
+      "50": "$50",
+      "100": "$100",
+      "500": "$500",
+      "unlimited": "Unlimited"
+    },
+    "alreadySet": "Configured",
+    "confirmAdd": "Add"
   }
 }

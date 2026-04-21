@@ -22,8 +22,29 @@ import type {
   ProviderFormState,
 } from "./provider-form-types";
 
+type Limit5hResetMode = "fixed" | "rolling";
+
+type ProviderFormRateLimitWith5hResetMode = ProviderFormState["rateLimit"] & {
+  limit5hResetMode: Limit5hResetMode;
+};
+
+type ProviderFormStateWith5hResetMode = Omit<ProviderFormState, "rateLimit"> & {
+  rateLimit: ProviderFormRateLimitWith5hResetMode;
+};
+
+type Limit5hResetModeAction = {
+  type: "SET_LIMIT_5H_RESET_MODE";
+  payload: Limit5hResetMode;
+};
+
+type ProviderFormActionWith5hResetMode = ProviderFormAction | Limit5hResetModeAction;
+
+function withLimit5hResetMode(state: ProviderFormState): ProviderFormStateWith5hResetMode {
+  return state as ProviderFormStateWith5hResetMode;
+}
+
 // Maps action types to dirty field paths for batch mode tracking
-const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> = {
+const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormActionWith5hResetMode["type"], string>> = {
   SET_BATCH_IS_ENABLED: "batch.isEnabled",
   SET_PRIORITY: "routing.priority",
   SET_WEIGHT: "routing.weight",
@@ -53,6 +74,7 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> 
   SET_ACTIVE_TIME_START: "routing.activeTimeStart",
   SET_ACTIVE_TIME_END: "routing.activeTimeEnd",
   SET_LIMIT_5H_USD: "rateLimit.limit5hUsd",
+  SET_LIMIT_5H_RESET_MODE: "rateLimit.limit5hResetMode",
   SET_LIMIT_DAILY_USD: "rateLimit.limitDailyUsd",
   SET_DAILY_RESET_MODE: "rateLimit.dailyResetMode",
   SET_DAILY_RESET_TIME: "rateLimit.dailyResetTime",
@@ -194,6 +216,10 @@ export function createInitialState(
           analysis.rateLimit.limit5hUsd.status === "uniform"
             ? analysis.rateLimit.limit5hUsd.value
             : null,
+        limit5hResetMode:
+          analysis.rateLimit.limit5hResetMode.status === "uniform"
+            ? analysis.rateLimit.limit5hResetMode.value
+            : "rolling",
         limitDailyUsd:
           analysis.rateLimit.limitDailyUsd.status === "uniform"
             ? analysis.rateLimit.limitDailyUsd.value
@@ -222,7 +248,7 @@ export function createInitialState(
           analysis.rateLimit.limitConcurrentSessions.status === "uniform"
             ? analysis.rateLimit.limitConcurrentSessions.value
             : null,
-      },
+      } as ProviderFormRateLimitWith5hResetMode,
       circuitBreaker: {
         failureThreshold:
           analysis.circuitBreaker.failureThreshold.status === "uniform"
@@ -314,6 +340,7 @@ export function createInitialState(
       },
       rateLimit: {
         limit5hUsd: null,
+        limit5hResetMode: "rolling",
         limitDailyUsd: null,
         dailyResetMode: "fixed",
         dailyResetTime: "00:00",
@@ -321,7 +348,7 @@ export function createInitialState(
         limitMonthlyUsd: null,
         limitTotalUsd: null,
         limitConcurrentSessions: null,
-      },
+      } as ProviderFormRateLimitWith5hResetMode,
       circuitBreaker: {
         failureThreshold: undefined,
         openDurationMinutes: undefined,
@@ -391,6 +418,7 @@ export function createInitialState(
     },
     rateLimit: {
       limit5hUsd: sourceProvider?.limit5hUsd ?? null,
+      limit5hResetMode: sourceProvider?.limit5hResetMode ?? "rolling",
       limitDailyUsd: sourceProvider?.limitDailyUsd ?? null,
       dailyResetMode: sourceProvider?.dailyResetMode ?? "fixed",
       dailyResetTime: sourceProvider?.dailyResetTime ?? "00:00",
@@ -398,7 +426,7 @@ export function createInitialState(
       limitMonthlyUsd: sourceProvider?.limitMonthlyUsd ?? null,
       limitTotalUsd: sourceProvider?.limitTotalUsd ?? null,
       limitConcurrentSessions: sourceProvider?.limitConcurrentSessions ?? null,
-    },
+    } as ProviderFormRateLimitWith5hResetMode,
     circuitBreaker: {
       failureThreshold: sourceProvider?.circuitBreakerFailureThreshold,
       openDurationMinutes: sourceProvider?.circuitBreakerOpenDuration
@@ -443,8 +471,10 @@ const defaultInitialState: ProviderFormState = createInitialState("create");
 // Reducer function
 export function providerFormReducer(
   state: ProviderFormState,
-  action: ProviderFormAction
+  action: ProviderFormActionWith5hResetMode
 ): ProviderFormState {
+  const stateWith5hResetMode = withLimit5hResetMode(state);
+
   switch (action.type) {
     // Basic info
     case "SET_NAME":
@@ -593,6 +623,16 @@ export function providerFormReducer(
     // Rate limit
     case "SET_LIMIT_5H_USD":
       return { ...state, rateLimit: { ...state.rateLimit, limit5hUsd: action.payload } };
+    case "SET_LIMIT_5H_RESET_MODE": {
+      const nextRateLimit: ProviderFormRateLimitWith5hResetMode = {
+        ...stateWith5hResetMode.rateLimit,
+        limit5hResetMode: action.payload,
+      };
+      return {
+        ...state,
+        rateLimit: nextRateLimit,
+      };
+    }
     case "SET_LIMIT_DAILY_USD":
       return { ...state, rateLimit: { ...state.rateLimit, limitDailyUsd: action.payload } };
     case "SET_DAILY_RESET_MODE":
@@ -744,8 +784,8 @@ export function ProviderFormProvider({
   }, [isBatch, batchProviders]);
 
   // Wrap dispatch for batch mode to auto-track dirty fields
-  const dispatch: Dispatch<ProviderFormAction> = useCallback(
-    (action: ProviderFormAction) => {
+  const dispatch: Dispatch<ProviderFormActionWith5hResetMode> = useCallback(
+    (action: ProviderFormActionWith5hResetMode) => {
       if (isBatch) {
         const fieldPath = ACTION_TO_FIELD_PATH[action.type];
         if (fieldPath) {
@@ -760,7 +800,7 @@ export function ProviderFormProvider({
   const contextValue = useMemo<ProviderFormContextValue>(
     () => ({
       state,
-      dispatch,
+      dispatch: dispatch as Dispatch<ProviderFormAction>,
       mode,
       provider,
       enableMultiProviderTypes,

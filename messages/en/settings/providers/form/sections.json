@@ -120,7 +120,8 @@
       }
     },
     "dailyResetTime": {
-      "label": "Daily Reset Time (HH:mm)"
+      "label": "Daily Reset Time (HH:mm)",
+      "placeholder": "HH:mm"
     },
     "desc": "Configure spending limits to control costs across different time windows",
     "limit5h": {
@@ -156,12 +157,24 @@
       "total": "Total: ${amount}",
       "weekly": "Week: ${amount}"
     },
-    "title": "Rate Limit"
+    "title": "Rate Limit",
+    "limit5hResetMode": {
+      "label": "5-Hour Reset Mode",
+      "options": {
+        "fixed": "Fixed window",
+        "rolling": "Rolling Window (5h)"
+      },
+      "desc": {
+        "fixed": "Use natural 5-hour buckets based on wall-clock time",
+        "rolling": "Use a rolling 5-hour window from the latest usage"
+      }
+    }
   },
   "limits": {
     "timeBased": "Time-based Limits",
     "dailyReset": "Daily Reset Settings",
-    "otherLimits": "Other Limits"
+    "otherLimits": "Other Limits",
+    "windowReset": "Window Reset Behavior"
   },
   "routing": {
     "cacheTtl": {
@@ -299,11 +312,11 @@
       "label": "Model Redirects",
       "optional": "(optional)"
     },
-  "modelWhitelist": {
-    "allowAll": "✓ Allow all models (recommended)",
-    "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
-    "legacyExactOnlyWarning": "This legacy form only shows exact-match allowlist rules. Saving here will discard prefix, suffix, keyword, or regex rules. Use the new provider form to edit advanced rules safely.",
-    "label": "Allowed Models",
+    "modelWhitelist": {
+      "allowAll": "✓ Allow all models (recommended)",
+      "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
+      "legacyExactOnlyWarning": "This legacy form only shows exact-match allowlist rules. Saving here will discard prefix, suffix, keyword, or regex rules. Use the new provider form to edit advanced rules safely.",
+      "label": "Allowed Models",
       "moreModels": "+{count} more",
       "optional": "(optional)",
       "selectedOnly": "Only models matching the configured {count} rules are allowed. Other models will not be routed to this provider.",

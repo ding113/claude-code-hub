@@ -315,6 +315,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         mcpPassthroughType: provider.mcpPassthroughType,
         mcpPassthroughUrl: provider.mcpPassthroughUrl,
         limit5hUsd: provider.limit5hUsd,
+        limit5hResetMode: provider.limit5hResetMode,
         limitDailyUsd: provider.limitDailyUsd,
         dailyResetMode: provider.dailyResetMode,
         dailyResetTime: provider.dailyResetTime,
@@ -515,6 +516,7 @@ export async function addProvider(data: {
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   limit_5h_usd?: number | null;
+  limit_5h_reset_mode?: "fixed" | "rolling";
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
@@ -594,6 +596,7 @@ export async function addProvider(data: {
       ...validated,
       group_tag: normalizeProviderGroupTag(validated.group_tag),
       limit_5h_usd: validated.limit_5h_usd ?? null,
+      limit_5h_reset_mode: validated.limit_5h_reset_mode ?? "rolling",
       limit_daily_usd: validated.limit_daily_usd ?? null,
       daily_reset_mode: validated.daily_reset_mode ?? "fixed",
       daily_reset_time: validated.daily_reset_time ?? "00:00",
@@ -726,7 +729,9 @@ export async function editProvider(
     allowed_clients?: string[] | null;
     blocked_clients?: string[] | null;
     limit_5h_usd?: number | null;
+    limit_5h_reset_mode?: "fixed" | "rolling";
     limit_daily_usd?: number | null;
+    daily_reset_mode?: "fixed" | "rolling";
     daily_reset_time?: string;
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
@@ -862,6 +867,14 @@ export async function editProvider(
 
     if (shouldInvalidateStickySessionsOnProviderEdit(preimageFields)) {
       await SessionManager.terminateStickySessionsForProviders([providerId], "editProvider");
+    }
+
+    if (
+      payload.limit_5h_reset_mode !== undefined &&
+      payload.limit_5h_reset_mode !== currentProvider.limit5hResetMode
+    ) {
+      const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await clearSingleProviderCostCache({ providerId }).catch(() => null);
     }
 
     // 同步熔断器配置到 Redis（如果配置有变化）
@@ -1409,6 +1422,7 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   allowed_clients: "allowedClients",
   blocked_clients: "blockedClients",
   limit_5h_usd: "limit5hUsd",
+  limit_5h_reset_mode: "limit5hResetMode",
   limit_daily_usd: "limitDailyUsd",
   daily_reset_mode: "dailyResetMode",
   daily_reset_time: "dailyResetTime",
@@ -1614,6 +1628,9 @@ function mapApplyUpdatesToRepositoryFormat(
     result.limit5hUsd =
       applyUpdates.limit_5h_usd != null ? applyUpdates.limit_5h_usd.toString() : null;
   }
+  if (applyUpdates.limit_5h_reset_mode !== undefined) {
+    result.limit5hResetMode = applyUpdates.limit_5h_reset_mode;
+  }
   if (applyUpdates.limit_daily_usd !== undefined) {
     result.limitDailyUsd =
       applyUpdates.limit_daily_usd != null ? applyUpdates.limit_daily_usd.toString() : null;
@@ -1704,6 +1721,7 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
   gemini_google_search_preference: "geminiGoogleSearchPreference",
   limit_5h_usd: "limit5hUsd",
+  limit_5h_reset_mode: "limit5hResetMode",
   limit_daily_usd: "limitDailyUsd",
   daily_reset_mode: "dailyResetMode",
   daily_reset_time: "dailyResetTime",
@@ -2085,6 +2103,15 @@ export async function applyProviderBatchPatch(
       }
     }
 
+    if (repositoryUpdates.limit5hResetMode !== undefined) {
+      const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await Promise.all(
+        effectiveProviderIds.map((providerId) =>
+          clearSingleProviderCostCache({ providerId }).catch(() => null)
+        )
+      );
+    }
+
     await publishProviderCacheInvalidation();
 
     const hasCbFieldChange = changedFields.some(
@@ -2297,6 +2324,11 @@ export interface BatchUpdateProvidersParams {
     allowed_models?: AllowedModelRuleInput[] | null;
     allowed_clients?: string[];
     blocked_clients?: string[];
+    limit_5h_usd?: number | null;
+    limit_5h_reset_mode?: "fixed" | "rolling";
+    limit_daily_usd?: number | null;
+    daily_reset_mode?: "fixed" | "rolling";
+    daily_reset_time?: string;
     codex_service_tier_preference?: CodexServiceTierPreference | null;
     anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
     anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
@@ -2379,6 +2411,23 @@ export async function batchUpdateProviders(
     if (updates.blocked_clients !== undefined) {
       repositoryUpdates.blockedClients = updates.blocked_clients;
     }
+    if (updates.limit_5h_usd !== undefined) {
+      repositoryUpdates.limit5hUsd =
+        updates.limit_5h_usd === null ? null : updates.limit_5h_usd.toString();
+    }
+    if (updates.limit_5h_reset_mode !== undefined) {
+      repositoryUpdates.limit5hResetMode = updates.limit_5h_reset_mode;
+    }
+    if (updates.limit_daily_usd !== undefined) {
+      repositoryUpdates.limitDailyUsd =
+        updates.limit_daily_usd === null ? null : updates.limit_daily_usd.toString();
+    }
+    if (updates.daily_reset_mode !== undefined) {
+      repositoryUpdates.dailyResetMode = updates.daily_reset_mode;
+    }
+    if (updates.daily_reset_time !== undefined) {
+      repositoryUpdates.dailyResetTime = updates.daily_reset_time;
+    }
     if (updates.codex_service_tier_preference !== undefined) {
       repositoryUpdates.codexServiceTierPreference = updates.codex_service_tier_preference;
     }
@@ -2391,6 +2440,15 @@ export async function batchUpdateProviders(
     }
 
     const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
+
+    if (repositoryUpdates.limit5hResetMode !== undefined) {
+      const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await Promise.all(
+        providerIds.map((providerId) =>
+          clearSingleProviderCostCache({ providerId }).catch(() => null)
+        )
+      );
+    }
 
     // 同步 provider_groups 表（系统级，失败不影响主流程）
     if (repositoryUpdates.groupTag !== undefined) {
@@ -2636,11 +2694,16 @@ export async function getProviderLimitUsage(providerId: number): Promise<
       getTimeRangeForPeriod,
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
+    const { RateLimitService } = await import("@/lib/rate-limit");
     const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
+    const limit5hResetMode = provider.limit5hResetMode ?? "rolling";
 
     // 计算各周期的时间范围
-    const [range5h, rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
+    const [range5h, resetAt5h, rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
       getTimeRangeForPeriod("5h"),
+      limit5hResetMode === "fixed"
+        ? RateLimitService.get5hWindowResetAt(providerId, "provider", limit5hResetMode)
+        : Promise.resolve(null),
       getTimeRangeForPeriodWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
@@ -2652,7 +2715,9 @@ export async function getProviderLimitUsage(providerId: number): Promise<
 
     // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
     const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
-      sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
+      limit5hResetMode === "fixed"
+        ? RateLimitService.getCurrentCost(providerId, "provider", "5h", "00:00", limit5hResetMode)
+        : sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
       sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
       sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
       sumProviderCostInTimeRange(providerId, rangeMonthly.startTime, rangeMonthly.endTime),
@@ -2660,7 +2725,6 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     ]);
 
     // 获取重置时间信息
-    const reset5h = await getResetInfo("5h");
     const resetDaily = await getResetInfoWithMode(
       "daily",
       provider.dailyResetTime,
@@ -2675,7 +2739,12 @@ export async function getProviderLimitUsage(providerId: number): Promise<
         cost5h: {
           current: cost5h,
           limit: provider.limit5hUsd,
-          resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+          resetInfo:
+            limit5hResetMode === "rolling"
+              ? "滚动窗口（5 小时）"
+              : resetAt5h
+                ? `固定窗口（重置于 ${resetAt5h.toISOString()}）`
+                : "固定窗口（等待首次成功记账）",
         },
         costDaily: {
           current: costDaily,
@@ -2728,6 +2797,7 @@ export async function getProviderLimitUsageBatch(
     id: number;
     dailyResetTime?: string | null;
     dailyResetMode?: string | null;
+    limit5hResetMode?: string | null;
     limit5hUsd?: number | null;
     limitDailyUsd?: number | null;
     limitWeeklyUsd?: number | null;
@@ -2756,6 +2826,7 @@ export async function getProviderLimitUsageBatch(
       getTimeRangeForPeriod,
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
+    const { RateLimitService } = await import("@/lib/rate-limit");
     const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
 
     const providerIds = providers.map((p) => p.id);
@@ -2774,6 +2845,7 @@ export async function getProviderLimitUsageBatch(
     for (const provider of providers) {
       // 获取该供应商的 daily 时间范围（根据其 dailyResetMode 配置）
       const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
+      const limit5hResetMode = (provider.limit5hResetMode ?? "rolling") as "fixed" | "rolling";
       const rangeDaily = await getTimeRangeForPeriodWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
@@ -2781,8 +2853,19 @@ export async function getProviderLimitUsageBatch(
       );
 
       // 并行查询该供应商的各周期消费（直接查询数据库）
-      const [cost5h, costDaily, costWeekly, costMonthly] = await Promise.all([
-        sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),
+      const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly] = await Promise.all([
+        limit5hResetMode === "fixed"
+          ? RateLimitService.getCurrentCost(
+              provider.id,
+              "provider",
+              "5h",
+              "00:00",
+              limit5hResetMode
+            )
+          : sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),
+        limit5hResetMode === "fixed"
+          ? RateLimitService.get5hWindowResetAt(provider.id, "provider", limit5hResetMode)
+          : Promise.resolve(null),
         sumProviderCostInTimeRange(provider.id, rangeDaily.startTime, rangeDaily.endTime),
         sumProviderCostInTimeRange(provider.id, rangeWeekly.startTime, rangeWeekly.endTime),
         sumProviderCostInTimeRange(provider.id, rangeMonthly.startTime, rangeMonthly.endTime),
@@ -2791,7 +2874,6 @@ export async function getProviderLimitUsageBatch(
       const sessionCount = sessionCountMap.get(provider.id) || 0;
 
       // 获取重置时间信息
-      const reset5h = await getResetInfo("5h");
       const resetDaily = await getResetInfoWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
@@ -2804,7 +2886,12 @@ export async function getProviderLimitUsageBatch(
         cost5h: {
           current: cost5h,
           limit: provider.limit5hUsd ?? null,
-          resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+          resetInfo:
+            limit5hResetMode === "rolling"
+              ? "滚动窗口（5 小时）"
+              : resetAt5h
+                ? `固定窗口（重置于 ${resetAt5h.toISOString()}）`
+                : "固定窗口（等待首次成功记账）",
         },
         costDaily: {
           current: costDaily,

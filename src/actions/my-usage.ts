@@ -295,6 +295,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
       "@/lib/rate-limit/time-utils"
     );
+    const { RateLimitService } = await import("@/lib/rate-limit");
     const { sumKeyQuotaCostsById, sumUserQuotaCosts } = await import("@/repository/statistics");
 
     // 计算各周期的时间范围
@@ -367,7 +368,14 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       user.limitConcurrentSessions ?? null
     );
 
-    const [keyCosts, keyConcurrent, userCosts, userKeyConcurrent] = await Promise.all([
+    const [
+      keyCosts,
+      keyCurrent5hUsd,
+      keyConcurrent,
+      userCosts,
+      userCurrent5hUsd,
+      userKeyConcurrent,
+    ] = await Promise.all([
       // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
       sumKeyQuotaCostsById(
         key.id,
@@ -379,6 +387,13 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
         },
         ALL_TIME_MAX_AGE_DAYS,
         keyCostResetAtResolved
+      ),
+      RateLimitService.getCurrentCost(
+        key.id,
+        "key",
+        "5h",
+        "00:00",
+        key.limit5hResetMode ?? "rolling"
       ),
       SessionTracker.getKeySessionCount(key.id),
       // User 配额：直接查 DB
@@ -393,18 +408,23 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
         ALL_TIME_MAX_AGE_DAYS,
         userCostResetAt
       ),
+      RateLimitService.getCurrentCost(
+        user.id,
+        "user",
+        "5h",
+        "00:00",
+        user.limit5hResetMode ?? "rolling"
+      ),
       getUserConcurrentSessions(user.id),
     ]);
 
     const {
-      cost5h: keyCost5h,
       costDaily: keyCostDaily,
       costWeekly: keyCostWeekly,
       costMonthly: keyCostMonthly,
       costTotal: keyTotalCost,
     } = keyCosts;
     const {
-      cost5h: userCost5h,
       costDaily: userCostDaily,
       costWeekly: userCostWeekly,
       costMonthly: userCostMonthly,
@@ -418,7 +438,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyLimitMonthlyUsd: key.limitMonthlyUsd ?? null,
       keyLimitTotalUsd: key.limitTotalUsd ?? null,
       keyLimitConcurrentSessions: effectiveKeyConcurrentLimit,
-      keyCurrent5hUsd: keyCost5h,
+      keyCurrent5hUsd,
       keyCurrentDailyUsd: keyCostDaily,
       keyCurrentWeeklyUsd: keyCostWeekly,
       keyCurrentMonthlyUsd: keyCostMonthly,
@@ -431,7 +451,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userLimitTotalUsd: user.limitTotalUsd ?? null,
       userLimitConcurrentSessions: user.limitConcurrentSessions ?? null,
       userRpmLimit: user.rpm ?? null,
-      userCurrent5hUsd: userCost5h,
+      userCurrent5hUsd,
       userCurrentDailyUsd: userCostDaily,
       userCurrentWeeklyUsd: userCostWeekly,
       userCurrentMonthlyUsd: userCostMonthly,

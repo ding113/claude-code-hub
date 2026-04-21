@@ -215,6 +215,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     mcpPassthroughType: providerData.mcp_passthrough_type ?? "none",
     mcpPassthroughUrl: providerData.mcp_passthrough_url ?? null,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
+    limit5hResetMode: providerData.limit_5h_reset_mode ?? "rolling",
     limitDailyUsd:
       providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null,
     dailyResetMode: providerData.daily_reset_mode ?? "fixed",
@@ -301,6 +302,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
+        limit5hResetMode: providers.limit5hResetMode,
         limitDailyUsd: providers.limitDailyUsd,
         dailyResetMode: providers.dailyResetMode,
         dailyResetTime: providers.dailyResetTime,
@@ -387,6 +389,7 @@ export async function findProviderList(
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
+      limit5hResetMode: providers.limit5hResetMode,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,
       dailyResetTime: providers.dailyResetTime,
@@ -473,6 +476,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
+      limit5hResetMode: providers.limit5hResetMode,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,
       dailyResetTime: providers.dailyResetTime,
@@ -563,6 +567,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
+      limit5hResetMode: providers.limit5hResetMode,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,
       dailyResetTime: providers.dailyResetTime,
@@ -657,6 +662,8 @@ export async function updateProvider(
   if (providerData.limit_5h_usd !== undefined)
     dbData.limit5hUsd =
       providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null;
+  if (providerData.limit_5h_reset_mode !== undefined)
+    dbData.limit5hResetMode = providerData.limit_5h_reset_mode;
   if (providerData.limit_daily_usd !== undefined)
     dbData.limitDailyUsd =
       providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null;
@@ -805,6 +812,7 @@ export async function updateProvider(
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
+        limit5hResetMode: providers.limit5hResetMode,
         limitDailyUsd: providers.limitDailyUsd,
         dailyResetMode: providers.dailyResetMode,
         dailyResetTime: providers.dailyResetTime,
@@ -1074,6 +1082,7 @@ export interface BatchProviderUpdates {
   geminiGoogleSearchPreference?: string | null;
   // Rate Limit
   limit5hUsd?: string | null;
+  limit5hResetMode?: string;
   limitDailyUsd?: string | null;
   dailyResetMode?: string;
   dailyResetTime?: string;
@@ -1191,6 +1200,9 @@ export async function updateProvidersBatch(
   // Rate Limit
   if (updates.limit5hUsd !== undefined) {
     setClauses.limit5hUsd = updates.limit5hUsd;
+  }
+  if (updates.limit5hResetMode !== undefined) {
+    setClauses.limit5hResetMode = updates.limit5hResetMode;
   }
   if (updates.limitDailyUsd !== undefined) {
     setClauses.limitDailyUsd = updates.limitDailyUsd;

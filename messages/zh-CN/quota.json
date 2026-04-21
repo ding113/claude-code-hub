@@ -247,7 +247,18 @@
       "clearSuccess": "限额已清除",
       "error": "设置失败",
       "clearError": "清除失败",
-      "retryError": "设置失败,请稍后重试"
+      "retryError": "设置失败,请稍后重试",
+      "limit5hResetMode": {
+        "label": "5小时重置模式",
+        "options": {
+          "fixed": "固定窗口",
+          "rolling": "滚动窗口（5小时）"
+        },
+        "desc": {
+          "fixed": "按自然 5 小时时间窗口统计额度",
+          "rolling": "按最近 5 小时滚动窗口统计额度"
+        }
+      }
     },
     "editUserDialog": {
       "title": "设置用户限额",
@@ -360,6 +371,17 @@
         "error": "重置限额失败",
         "success": "所有限额已重置",
         "lastResetAt": "上次重置: {date}"
+      },
+      "limit5hResetMode": {
+        "label": "5小时重置模式",
+        "options": {
+          "fixed": "固定窗口",
+          "rolling": "滚动窗口（5小时）"
+        },
+        "desc": {
+          "fixed": "按自然 5 小时时间窗口统计额度",
+          "rolling": "按最近 5 小时滚动窗口统计额度"
+        }
       }
     }
   }

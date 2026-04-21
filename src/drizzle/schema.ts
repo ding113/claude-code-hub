@@ -52,6 +52,9 @@ export const users = pgTable('users', {
 
   // New user-level quota fields (nullable for backward compatibility)
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limit5hResetMode: dailyResetModeEnum('limit_5h_reset_mode')
+    .default('rolling')
+    .notNull(),
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
@@ -115,6 +118,9 @@ export const keys = pgTable('keys', {
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limit5hResetMode: dailyResetModeEnum('limit_5h_reset_mode')
+    .default('rolling')
+    .notNull(), // fixed: 首次成功记账后 5 小时整窗, rolling: 过去 5 小时滑窗
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
   dailyResetMode: dailyResetModeEnum('daily_reset_mode')
     .default('fixed')
@@ -252,6 +258,9 @@ export const providers = pgTable('providers', {
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limit5hResetMode: dailyResetModeEnum('limit_5h_reset_mode')
+    .default('rolling')
+    .notNull(), // fixed: 首次成功记账后 5 小时整窗, rolling: 过去 5 小时滑窗
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
   dailyResetMode: dailyResetModeEnum('daily_reset_mode')
     .default('fixed')

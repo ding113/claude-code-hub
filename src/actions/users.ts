@@ -394,6 +394,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          limit5hResetMode: user.limit5hResetMode,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -438,6 +439,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
               canLoginWebUi: key.canLoginWebUi,
               // 限额配置
               limit5hUsd: key.limit5hUsd,
+              limit5hResetMode: key.limit5hResetMode,
               limitDailyUsd: key.limitDailyUsd,
               dailyResetMode: key.dailyResetMode,
               dailyResetTime: key.dailyResetTime,
@@ -462,6 +464,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          limit5hResetMode: user.limit5hResetMode,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -671,6 +674,7 @@ export async function getUsersBatch(
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          limit5hResetMode: user.limit5hResetMode,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -712,6 +716,7 @@ export async function getUsersBatch(
               modelStats: stats?.modelStats ?? [],
               canLoginWebUi: key.canLoginWebUi,
               limit5hUsd: key.limit5hUsd,
+              limit5hResetMode: key.limit5hResetMode,
               limitDailyUsd: key.limitDailyUsd,
               dailyResetMode: key.dailyResetMode,
               dailyResetTime: key.dailyResetTime,
@@ -736,6 +741,7 @@ export async function getUsersBatch(
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          limit5hResetMode: user.limit5hResetMode,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -817,6 +823,7 @@ export async function getUsersBatchCore(
         providerGroup: user.providerGroup || undefined,
         tags: user.tags || [],
         limit5hUsd: user.limit5hUsd ?? null,
+        limit5hResetMode: user.limit5hResetMode,
         limitWeeklyUsd: user.limitWeeklyUsd ?? null,
         limitMonthlyUsd: user.limitMonthlyUsd ?? null,
         limitTotalUsd: user.limitTotalUsd ?? null,
@@ -854,6 +861,7 @@ export async function getUsersBatchCore(
           modelStats: [],
           canLoginWebUi: key.canLoginWebUi,
           limit5hUsd: key.limit5hUsd,
+          limit5hResetMode: key.limit5hResetMode,
           limitDailyUsd: key.limitDailyUsd,
           dailyResetMode: key.dailyResetMode,
           dailyResetTime: key.dailyResetTime,
@@ -1010,6 +1018,7 @@ export async function batchUpdateUsers(
       rpm: true,
       dailyQuota: true,
       limit5hUsd: true,
+      limit5hResetMode: true,
       limitWeeklyUsd: true,
       limitMonthlyUsd: true,
     });
@@ -1056,6 +1065,8 @@ export async function batchUpdateUsers(
           updates.dailyQuota === null ? null : updates.dailyQuota.toString();
       if (updates.limit5hUsd !== undefined)
         dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
+      if (updates.limit5hResetMode !== undefined)
+        dbUpdates.limit5hResetMode = updates.limit5hResetMode;
       if (updates.limitWeeklyUsd !== undefined)
         dbUpdates.limitWeeklyUsd =
           updates.limitWeeklyUsd === null ? null : updates.limitWeeklyUsd.toString();
@@ -1075,6 +1086,22 @@ export async function batchUpdateUsers(
         throw new BatchUpdateError("批量更新失败：更新行数不匹配", ERROR_CODES.UPDATE_FAILED);
       }
     });
+
+    if (updates.limit5hResetMode !== undefined && updatedIds.length > 0) {
+      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      const keysMap = await findKeyListBatch(updatedIds);
+      await Promise.all(
+        updatedIds.map(async (userId) => {
+          const keys = keysMap.get(userId) ?? [];
+          await invalidateCachedUser(userId).catch(() => null);
+          await clearUserCostCache({
+            userId,
+            keyIds: keys.map((item) => item.id),
+            keyHashes: keys.map((item) => item.key),
+          }).catch(() => null);
+        })
+      );
+    }
 
     revalidatePath("/dashboard");
 
@@ -1148,6 +1175,7 @@ export async function addUser(data: {
   rpm?: number | null;
   dailyQuota?: number | null;
   limit5hUsd?: number | null;
+  limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -1173,6 +1201,7 @@ export async function addUser(data: {
       providerGroup?: string;
       tags: string[];
       limit5hUsd: number | null;
+      limit5hResetMode: "fixed" | "rolling";
       limitWeeklyUsd: number | null;
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
@@ -1209,6 +1238,7 @@ export async function addUser(data: {
       rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
       limit5hUsd: data.limit5hUsd,
+      limit5hResetMode: data.limit5hResetMode,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
@@ -1269,6 +1299,7 @@ export async function addUser(data: {
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
@@ -1310,6 +1341,7 @@ export async function addUser(data: {
           providerGroup: newUser.providerGroup || undefined,
           tags: newUser.tags || [],
           limit5hUsd: newUser.limit5hUsd ?? null,
+          limit5hResetMode: newUser.limit5hResetMode,
           limitWeeklyUsd: newUser.limitWeeklyUsd ?? null,
           limitMonthlyUsd: newUser.limitMonthlyUsd ?? null,
           limitTotalUsd: newUser.limitTotalUsd ?? null,
@@ -1352,6 +1384,7 @@ export async function createUserOnly(data: {
   rpm?: number | null;
   dailyQuota?: number | null;
   limit5hUsd?: number | null;
+  limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -1377,6 +1410,7 @@ export async function createUserOnly(data: {
       providerGroup?: string;
       tags: string[];
       limit5hUsd: number | null;
+      limit5hResetMode: "fixed" | "rolling";
       limitWeeklyUsd: number | null;
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
@@ -1406,6 +1440,7 @@ export async function createUserOnly(data: {
       rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
       limit5hUsd: data.limit5hUsd,
+      limit5hResetMode: data.limit5hResetMode,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
@@ -1465,6 +1500,7 @@ export async function createUserOnly(data: {
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
@@ -1495,6 +1531,7 @@ export async function createUserOnly(data: {
           providerGroup: newUser.providerGroup || undefined,
           tags: newUser.tags || [],
           limit5hUsd: newUser.limit5hUsd ?? null,
+          limit5hResetMode: newUser.limit5hResetMode,
           limitWeeklyUsd: newUser.limitWeeklyUsd ?? null,
           limitMonthlyUsd: newUser.limitMonthlyUsd ?? null,
           limitTotalUsd: newUser.limitTotalUsd ?? null,
@@ -1533,6 +1570,7 @@ export async function editUser(
     rpm?: number | null;
     dailyQuota?: number | null;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
@@ -1640,6 +1678,7 @@ export async function editUser(
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
       limit5hUsd: validatedData.limit5hUsd,
+      limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd,
       limitMonthlyUsd: validatedData.limitMonthlyUsd,
       limitTotalUsd: validatedData.limitTotalUsd,
@@ -1652,6 +1691,21 @@ export async function editUser(
       blockedClients: validatedData.blockedClients,
       allowedModels: validatedData.allowedModels,
     });
+
+    if (
+      validatedData.limit5hResetMode !== undefined &&
+      beforeUser &&
+      validatedData.limit5hResetMode !== beforeUser.limit5hResetMode
+    ) {
+      const { findKeyList } = await import("@/repository/key");
+      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      const keys = await findKeyList(userId);
+      await clearUserCostCache({
+        userId,
+        keyIds: keys.map((item) => item.id),
+        keyHashes: keys.map((item) => item.key),
+      }).catch(() => null);
+    }
 
     // 用户分组由 Key 分组自动计算，不再需要级联更新 Key 的 providerGroup
 
@@ -1993,7 +2047,9 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const { getTimeRangeForPeriod, getTimeRangeForPeriodWithMode } = await import(
       "@/lib/rate-limit/time-utils"
     );
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
     const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
+    const limit5hResetMode = user.limit5hResetMode ?? "rolling";
 
     // 获取各时间范围
     const range5h = await getTimeRangeForPeriod("5h");
@@ -2012,7 +2068,9 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     // 并行查询各时间范围的消费
     // Note: sumUserTotalCost uses ALL_TIME_MAX_AGE_DAYS for all-time semantics
     const [usage5h, usageDaily, usageWeekly, usageMonthly, usageTotal] = await Promise.all([
-      sumUserCostInTimeRange(userId, clipStart(range5h.startTime), range5h.endTime),
+      limit5hResetMode === "fixed"
+        ? RateLimitService.getCurrentCost(userId, "user", "5h", "00:00", limit5hResetMode)
+        : sumUserCostInTimeRange(userId, clipStart(range5h.startTime), range5h.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeDaily.startTime), rangeDaily.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),

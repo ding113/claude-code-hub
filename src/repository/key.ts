@@ -30,6 +30,7 @@ export async function findKeyById(id: number): Promise<Key | null> {
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limit5hResetMode: keys.limit5hResetMode,
       limitDailyUsd: keys.limitDailyUsd,
       dailyResetMode: keys.dailyResetMode,
       dailyResetTime: keys.dailyResetTime,
@@ -62,6 +63,7 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limit5hResetMode: keys.limit5hResetMode,
       limitDailyUsd: keys.limitDailyUsd,
       dailyResetMode: keys.dailyResetMode,
       dailyResetTime: keys.dailyResetTime,
@@ -102,6 +104,7 @@ export async function findKeyListBatch(userIds: number[]): Promise<Map<number, K
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limit5hResetMode: keys.limit5hResetMode,
       limitDailyUsd: keys.limitDailyUsd,
       dailyResetMode: keys.dailyResetMode,
       dailyResetTime: keys.dailyResetTime,
@@ -145,6 +148,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     expiresAt: keyData.expires_at,
     canLoginWebUi: keyData.can_login_web_ui ?? true,
     limit5hUsd: keyData.limit_5h_usd != null ? keyData.limit_5h_usd.toString() : null,
+    limit5hResetMode: keyData.limit_5h_reset_mode ?? "rolling",
     limitDailyUsd: keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null,
     dailyResetMode: keyData.daily_reset_mode ?? "fixed",
     dailyResetTime: keyData.daily_reset_time ?? "00:00",
@@ -167,6 +171,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     expiresAt: keys.expiresAt,
     canLoginWebUi: keys.canLoginWebUi,
     limit5hUsd: keys.limit5hUsd,
+    limit5hResetMode: keys.limit5hResetMode,
     limitDailyUsd: keys.limitDailyUsd,
     dailyResetMode: keys.dailyResetMode,
     dailyResetTime: keys.dailyResetTime,
@@ -228,6 +233,8 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (keyData.can_login_web_ui !== undefined) dbData.canLoginWebUi = keyData.can_login_web_ui;
   if (keyData.limit_5h_usd !== undefined)
     dbData.limit5hUsd = keyData.limit_5h_usd != null ? keyData.limit_5h_usd.toString() : null;
+  if (keyData.limit_5h_reset_mode !== undefined)
+    dbData.limit5hResetMode = keyData.limit_5h_reset_mode;
   if (keyData.limit_daily_usd !== undefined)
     dbData.limitDailyUsd =
       keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null;
@@ -262,6 +269,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limit5hResetMode: keys.limit5hResetMode,
       limitDailyUsd: keys.limitDailyUsd,
       dailyResetMode: keys.dailyResetMode,
       dailyResetTime: keys.dailyResetTime,
@@ -305,6 +313,7 @@ export async function findActiveKeyByUserIdAndName(
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limit5hResetMode: keys.limit5hResetMode,
       limitDailyUsd: keys.limitDailyUsd,
       dailyResetMode: keys.dailyResetMode,
       dailyResetTime: keys.dailyResetTime,
@@ -501,6 +510,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limit5hResetMode: keys.limit5hResetMode,
       limitDailyUsd: keys.limitDailyUsd,
       dailyResetMode: keys.dailyResetMode,
       dailyResetTime: keys.dailyResetTime,
@@ -566,6 +576,7 @@ export async function validateApiKeyAndGetUser(
         updatedAt: users.updatedAt,
         deletedAt: users.deletedAt,
         limit5hUsd: users.limit5hUsd,
+        limit5hResetMode: users.limit5hResetMode,
         limitWeeklyUsd: users.limitWeeklyUsd,
         limitMonthlyUsd: users.limitMonthlyUsd,
         limitTotalUsd: users.limitTotalUsd,
@@ -609,6 +620,7 @@ export async function validateApiKeyAndGetUser(
       keyExpiresAt: keys.expiresAt,
       keyCanLoginWebUi: keys.canLoginWebUi,
       keyLimit5hUsd: keys.limit5hUsd,
+      keyLimit5hResetMode: keys.limit5hResetMode,
       keyLimitDailyUsd: keys.limitDailyUsd,
       keyDailyResetMode: keys.dailyResetMode,
       keyDailyResetTime: keys.dailyResetTime,
@@ -631,6 +643,7 @@ export async function validateApiKeyAndGetUser(
       userDailyQuota: users.dailyLimitUsd,
       userProviderGroup: users.providerGroup,
       userLimit5hUsd: users.limit5hUsd,
+      userLimit5hResetMode: users.limit5hResetMode,
       userLimitWeeklyUsd: users.limitWeeklyUsd,
       userLimitMonthlyUsd: users.limitMonthlyUsd,
       userLimitTotalUsd: users.limitTotalUsd,
@@ -673,6 +686,7 @@ export async function validateApiKeyAndGetUser(
     dailyQuota: row.userDailyQuota,
     providerGroup: row.userProviderGroup,
     limit5hUsd: row.userLimit5hUsd,
+    limit5hResetMode: row.userLimit5hResetMode,
     limitWeeklyUsd: row.userLimitWeeklyUsd,
     limitMonthlyUsd: row.userLimitMonthlyUsd,
     limitTotalUsd: row.userLimitTotalUsd,
@@ -698,6 +712,7 @@ export async function validateApiKeyAndGetUser(
     expiresAt: row.keyExpiresAt,
     canLoginWebUi: row.keyCanLoginWebUi,
     limit5hUsd: row.keyLimit5hUsd,
+    limit5hResetMode: row.keyLimit5hResetMode,
     limitDailyUsd: row.keyLimitDailyUsd,
     dailyResetMode: row.keyDailyResetMode,
     dailyResetTime: row.keyDailyResetTime,

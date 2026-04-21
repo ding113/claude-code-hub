@@ -136,8 +136,12 @@ interface LimitsSectionProps {
 export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
   const t = useTranslations("settings.providers.form");
   const { state, dispatch, mode, batchAnalysis } = useProviderForm();
+  const rateLimit = state.rateLimit as typeof state.rateLimit & {
+    limit5hResetMode?: "fixed" | "rolling";
+  };
   const isEdit = mode === "edit";
   const isBatch = mode === "batch";
+  const limit5hResetMode = rateLimit.limit5hResetMode ?? "rolling";
 
   return (
     <motion.div
@@ -225,9 +229,46 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
             </div>
           </FieldGroup>
 
-          {/* Daily Reset Settings */}
-          <FieldGroup label={t("sections.limits.dailyReset")}>
+          {/* Window Reset Settings */}
+          <FieldGroup label={t("sections.limits.windowReset")}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <SmartInputWrapper
+                label={t("sections.rateLimit.limit5hResetMode.label")}
+                description={
+                  limit5hResetMode === "fixed"
+                    ? t("sections.rateLimit.limit5hResetMode.desc.fixed")
+                    : t("sections.rateLimit.limit5hResetMode.desc.rolling")
+                }
+              >
+                <Select
+                  value={limit5hResetMode}
+                  onValueChange={(value: "fixed" | "rolling") =>
+                    (
+                      dispatch as unknown as (action: {
+                        type: "SET_LIMIT_5H_RESET_MODE";
+                        payload: "fixed" | "rolling";
+                      }) => void
+                    )({ type: "SET_LIMIT_5H_RESET_MODE", payload: value })
+                  }
+                  disabled={state.ui.isPending}
+                >
+                  <SelectTrigger id={isEdit ? "edit-limit-5h-reset-mode" : "limit-5h-reset-mode"}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">
+                      {t("sections.rateLimit.limit5hResetMode.options.fixed")}
+                    </SelectItem>
+                    <SelectItem value="rolling">
+                      {t("sections.rateLimit.limit5hResetMode.options.rolling")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {isBatch && batchAnalysis?.rateLimit.limit5hResetMode.status === "mixed" && (
+                  <MixedValueIndicator values={batchAnalysis.rateLimit.limit5hResetMode.values} />
+                )}
+              </SmartInputWrapper>
+
               <SmartInputWrapper
                 label={t("sections.rateLimit.dailyResetMode.label")}
                 description={
@@ -266,7 +307,7 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
                     onChange={(e) =>
                       dispatch({ type: "SET_DAILY_RESET_TIME", payload: e.target.value || "00:00" })
                     }
-                    placeholder="00:00"
+                    placeholder={t("sections.rateLimit.dailyResetTime.placeholder")}
                     disabled={state.ui.isPending}
                     step="60"
                   />

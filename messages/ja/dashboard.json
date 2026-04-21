@@ -1020,6 +1020,17 @@
       "userIdMissing": "ユーザーIDが存在しません",
       "createFailed": "作成に失敗しました。後でもう一度お試しください",
       "noKeyReturned": "作成に成功しましたが、キーが返されませんでした"
+    },
+    "limit5hResetMode": {
+      "label": "5時間リセットモード",
+      "options": {
+        "fixed": "固定ウィンドウ",
+        "rolling": "ローリングウィンドウ (5時間)"
+      },
+      "desc": {
+        "fixed": "自然な5時間区切りで集計します",
+        "rolling": "直近5時間のローリングウィンドウで集計します"
+      }
     }
   },
   "userForm": {
@@ -2024,5 +2035,77 @@
     "autoDetected": "自動検出",
     "selectPlatform": "プラットフォームを選択",
     "successStats": "{targets} 個のターゲット、{bindings} 個のバインディングを作成しました"
+  },
+  "limitRules": {
+    "addRule": "上限ルールを追加",
+    "title": "上限ルールを追加",
+    "description": "上限の種類を選び、値を設定します",
+    "cancel": "キャンセル",
+    "confirm": "保存",
+    "fields": {
+      "type": {
+        "label": "上限タイプ",
+        "placeholder": "選択してください"
+      },
+      "value": {
+        "label": "値",
+        "placeholder": "入力してください"
+      }
+    },
+    "limit5h": {
+      "mode": {
+        "label": "5時間リセットモード",
+        "fixed": "固定ウィンドウ",
+        "rolling": "ローリングウィンドウ (5時間)",
+        "helperFixed": "自然な5時間区切りで集計します。",
+        "helperRolling": "直近5時間のローリングウィンドウで集計します。"
+      }
+    },
+    "daily": {
+      "mode": {
+        "label": "日次リセットモード",
+        "fixed": "固定時刻リセット",
+        "rolling": "ローリングウィンドウ (24時間)",
+        "helperFixed": "毎日指定した時刻にクォータをリセットします。",
+        "helperRolling": "最初のリクエストから24時間のローリングウィンドウで計算します。"
+      },
+      "time": {
+        "label": "リセット時刻",
+        "placeholder": "HH:mm"
+      }
+    },
+    "limitTypes": {
+      "limitRpm": "RPM 上限",
+      "limit5h": "5時間上限",
+      "limitDaily": "日次上限",
+      "limitWeekly": "週次上限",
+      "limitMonthly": "月次上限",
+      "limitTotal": "総上限",
+      "limitSessions": "同時セッション"
+    },
+    "ruleTypes": {
+      "limitRpm": "RPM 上限",
+      "limit5h": "5時間上限",
+      "limitDaily": "日次上限",
+      "limitWeekly": "週次上限",
+      "limitMonthly": "月次上限",
+      "limitTotal": "総上限",
+      "limitSessions": "同時セッション"
+    },
+    "errors": {
+      "missingType": "上限タイプを選択してください",
+      "invalidValue": "有効な値を入力してください",
+      "invalidTime": "有効な時刻を入力してください (HH:mm)"
+    },
+    "overwriteHint": "このタイプは既に存在します。保存すると既存の設定を上書きします",
+    "quickValues": {
+      "10": "$10",
+      "50": "$50",
+      "100": "$100",
+      "500": "$500",
+      "unlimited": "無制限"
+    },
+    "alreadySet": "設定済み",
+    "confirmAdd": "追加"
   }
 }

@@ -103,6 +103,7 @@ export type ProviderBatchPatchField =
   | "gemini_google_search_preference"
   // Rate Limit
   | "limit_5h_usd"
+  | "limit_5h_reset_mode"
   | "limit_daily_usd"
   | "daily_reset_mode"
   | "daily_reset_time"
@@ -156,6 +157,7 @@ export interface ProviderBatchPatchDraft {
   gemini_google_search_preference?: ProviderPatchDraftInput<GeminiGoogleSearchPreference>;
   // Rate Limit
   limit_5h_usd?: ProviderPatchDraftInput<number>;
+  limit_5h_reset_mode?: ProviderPatchDraftInput<"fixed" | "rolling">;
   limit_daily_usd?: ProviderPatchDraftInput<number>;
   daily_reset_mode?: ProviderPatchDraftInput<"fixed" | "rolling">;
   daily_reset_time?: ProviderPatchDraftInput<string>;
@@ -210,6 +212,7 @@ export interface ProviderBatchPatch {
   gemini_google_search_preference: ProviderPatchOperation<GeminiGoogleSearchPreference>;
   // Rate Limit
   limit_5h_usd: ProviderPatchOperation<number>;
+  limit_5h_reset_mode: ProviderPatchOperation<"fixed" | "rolling">;
   limit_daily_usd: ProviderPatchOperation<number>;
   daily_reset_mode: ProviderPatchOperation<"fixed" | "rolling">;
   daily_reset_time: ProviderPatchOperation<string>;
@@ -264,6 +267,7 @@ export interface ProviderBatchApplyUpdates {
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
   // Rate Limit
   limit_5h_usd?: number | null;
+  limit_5h_reset_mode?: "fixed" | "rolling";
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
@@ -348,6 +352,7 @@ export interface Provider {
 
   // 金额限流配置
   limit5hUsd: number | null;
+  limit5hResetMode: "fixed" | "rolling";
   limitDailyUsd: number | null;
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
@@ -452,6 +457,7 @@ export interface ProviderDisplay {
   mcpPassthroughUrl: string | null;
   // 金额限流配置
   limit5hUsd: number | null;
+  limit5hResetMode: "fixed" | "rolling";
   limitDailyUsd: number | null;
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
@@ -546,6 +552,7 @@ export interface CreateProviderData {
 
   // 金额限流配置
   limit_5h_usd?: number | null;
+  limit_5h_reset_mode?: "fixed" | "rolling";
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
@@ -626,6 +633,7 @@ export interface UpdateProviderData {
 
   // 金额限流配置
   limit_5h_usd?: number | null;
+  limit_5h_reset_mode?: "fixed" | "rolling";
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;

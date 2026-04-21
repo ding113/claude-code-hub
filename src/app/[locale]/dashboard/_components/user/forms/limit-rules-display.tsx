@@ -20,6 +20,7 @@ export interface LimitRulesDisplayProps {
    * i18n strings passed from parent.
    * Expected keys (optional):
    * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions}
+   * - limit5h.mode.fixed, limit5h.mode.rolling
    * - daily.mode.fixed, daily.mode.rolling
    * - actions.remove
    */
@@ -51,13 +52,19 @@ export function LimitRulesDisplay({ rules, onRemove, translations }: LimitRulesD
         const typeLabel = getTranslation(translations, `limitTypes.${rule.type}`, rule.type);
         const formattedValue = formatValue(rule.value);
 
-        const isDaily = rule.type === "limitDaily";
-        const dailyMode = rule.mode;
-        const dailyDetail =
-          isDaily && dailyMode
-            ? dailyMode === "fixed"
-              ? `${getTranslation(translations, "daily.mode.fixed", "fixed")} ${rule.time || "00:00"}`
-              : `${getTranslation(translations, "daily.mode.rolling", "rolling")} 24h`
+        const resetModePath =
+          rule.type === "limit5h"
+            ? "limit5h.mode"
+            : rule.type === "limitDaily"
+              ? "daily.mode"
+              : null;
+        const resetDetail =
+          resetModePath && rule.mode
+            ? rule.mode === "fixed"
+              ? rule.type === "limitDaily"
+                ? `${getTranslation(translations, `${resetModePath}.fixed`, "fixed")} ${rule.time || "00:00"}`
+                : getTranslation(translations, `${resetModePath}.fixed`, "fixed")
+              : getTranslation(translations, `${resetModePath}.rolling`, "rolling")
             : null;
 
         return (
@@ -68,7 +75,7 @@ export function LimitRulesDisplay({ rules, onRemove, translations }: LimitRulesD
                   {typeLabel}
                 </Badge>
                 <div className="text-sm font-medium tabular-nums">{formattedValue}</div>
-                {dailyDetail && <div className="text-xs text-muted-foreground">{dailyDetail}</div>}
+                {resetDetail && <div className="text-xs text-muted-foreground">{resetDetail}</div>}
               </div>
 
               <Button

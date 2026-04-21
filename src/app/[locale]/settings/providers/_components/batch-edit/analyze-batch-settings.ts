@@ -54,6 +54,7 @@ export interface BatchSettingsAnalysis {
   };
   rateLimit: {
     limit5hUsd: FieldAnalysisResult<number | null>;
+    limit5hResetMode: FieldAnalysisResult<"fixed" | "rolling">;
     limitDailyUsd: FieldAnalysisResult<number | null>;
     dailyResetMode: FieldAnalysisResult<"fixed" | "rolling">;
     dailyResetTime: FieldAnalysisResult<string>;
@@ -175,6 +176,7 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
     },
     rateLimit: {
       limit5hUsd: analyzeField(providers, (p) => p.limit5hUsd ?? null),
+      limit5hResetMode: analyzeField(providers, (p) => p.limit5hResetMode ?? "rolling"),
       limitDailyUsd: analyzeField(providers, (p) => p.limitDailyUsd ?? null),
       dailyResetMode: analyzeField(providers, (p) => p.dailyResetMode ?? "fixed"),
       dailyResetTime: analyzeField(providers, (p) => p.dailyResetTime ?? "00:00"),

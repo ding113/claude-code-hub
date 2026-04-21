@@ -247,7 +247,18 @@
       "clearSuccess": "Quota cleared",
       "error": "Failed to set",
       "clearError": "Failed to clear",
-      "retryError": "Failed to set, please try again later"
+      "retryError": "Failed to set, please try again later",
+      "limit5hResetMode": {
+        "label": "5-Hour Reset Mode",
+        "options": {
+          "fixed": "Fixed window",
+          "rolling": "Rolling Window (5h)"
+        },
+        "desc": {
+          "fixed": "Use natural 5-hour buckets based on wall-clock time",
+          "rolling": "Use a rolling 5-hour window from the latest usage"
+        }
+      }
     },
     "editUserDialog": {
       "title": "Set User Quota",
@@ -360,6 +371,17 @@
         "error": "Failed to reset quota",
         "success": "Quota has been reset successfully",
         "lastResetAt": "Last reset: {date}"
+      },
+      "limit5hResetMode": {
+        "label": "5-Hour Reset Mode",
+        "options": {
+          "fixed": "Fixed window",
+          "rolling": "Rolling Window (5h)"
+        },
+        "desc": {
+          "fixed": "Use natural 5-hour buckets based on wall-clock time",
+          "rolling": "Use a rolling 5-hour window from the latest usage"
+        }
       }
     }
   }
