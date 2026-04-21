@@ -48,14 +48,29 @@ function buildRebuildingPayload(): PublicStatusPayload {
   };
 }
 
+function buildNoDataPayload(): PublicStatusPayload {
+  return {
+    rebuildState: "no-data",
+    sourceGeneration: "",
+    generatedAt: null,
+    freshUntil: null,
+    groups: [],
+  };
+}
+
 export async function readPublicStatusPayload(input: {
   intervalMinutes: number;
   rangeHours: number;
   nowIso: string;
   configVersion?: string;
+  hasConfiguredGroups?: boolean;
   redis?: RedisReader | null;
   triggerRebuildHint: (reason: string) => Promise<void> | void;
 }): Promise<PublicStatusPayload> {
+  if (input.hasConfiguredGroups === false) {
+    return buildNoDataPayload();
+  }
+
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
   if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
     await input.triggerRebuildHint("redis-unavailable");

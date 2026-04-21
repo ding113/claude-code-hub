@@ -64,6 +64,10 @@ interface BuildPublicStatusConfigSnapshotInput {
 
 interface RedisWriter {
   set(key: string, value: string): Promise<unknown> | unknown;
+  multi?: () => {
+    set(key: string, value: string): unknown;
+    exec(): Promise<unknown> | unknown;
+  };
 }
 
 interface RedisReader {
@@ -126,6 +130,7 @@ export async function publishPublicStatusConfigSnapshot(input: {
   reason: string;
   snapshot?: PublicStatusConfigSnapshot;
   redis?: RedisWriter | null;
+  setCurrentPointer?: boolean;
 }): Promise<{
   configVersion: string;
   key: string;
@@ -148,10 +153,12 @@ export async function publishPublicStatusConfigSnapshot(input: {
 
   if (redis) {
     await redis.set(key, JSON.stringify(snapshot));
-    await redis.set(
-      buildPublicStatusConfigSnapshotKey(),
-      JSON.stringify({ key, configVersion: snapshot.configVersion })
-    );
+    if (input.setCurrentPointer !== false) {
+      await redis.set(
+        buildPublicStatusConfigSnapshotKey(),
+        JSON.stringify({ key, configVersion: snapshot.configVersion })
+      );
+    }
   }
 
   return {
@@ -176,16 +183,19 @@ export function buildInternalPublicStatusConfigSnapshot(
 export async function publishInternalPublicStatusConfigSnapshot(input: {
   snapshot: InternalPublicStatusConfigSnapshot;
   redis?: RedisWriter | null;
+  setCurrentPointer?: boolean;
 }): Promise<{ configVersion: string; key: string; written: boolean }> {
   const key = buildPublicStatusInternalConfigSnapshotKey(input.snapshot.configVersion);
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis) {
     await redis.set(key, JSON.stringify(input.snapshot));
-    await redis.set(
-      buildPublicStatusInternalConfigSnapshotKey(),
-      JSON.stringify({ key, configVersion: input.snapshot.configVersion })
-    );
+    if (input.setCurrentPointer !== false) {
+      await redis.set(
+        buildPublicStatusInternalConfigSnapshotKey(),
+        JSON.stringify({ key, configVersion: input.snapshot.configVersion })
+      );
+    }
   }
 
   return {
@@ -193,6 +203,37 @@ export async function publishInternalPublicStatusConfigSnapshot(input: {
     key,
     written: Boolean(redis),
   };
+}
+
+export async function publishCurrentPublicStatusConfigPointers(input: {
+  configVersion: string;
+  redis?: RedisWriter | null;
+}): Promise<boolean> {
+  const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (!redis) {
+    return false;
+  }
+
+  const publicPointer = JSON.stringify({
+    key: buildPublicStatusConfigSnapshotKey(input.configVersion),
+    configVersion: input.configVersion,
+  });
+  const internalPointer = JSON.stringify({
+    key: buildPublicStatusInternalConfigSnapshotKey(input.configVersion),
+    configVersion: input.configVersion,
+  });
+
+  if (typeof redis.multi === "function") {
+    const multi = redis.multi();
+    multi.set(buildPublicStatusConfigSnapshotKey(), publicPointer);
+    multi.set(buildPublicStatusInternalConfigSnapshotKey(), internalPointer);
+    await multi.exec();
+    return true;
+  }
+
+  await redis.set(buildPublicStatusConfigSnapshotKey(), publicPointer);
+  await redis.set(buildPublicStatusInternalConfigSnapshotKey(), internalPointer);
+  return true;
 }
 
 export async function readCurrentPublicStatusConfigSnapshot(input?: {

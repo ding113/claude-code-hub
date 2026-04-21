@@ -1,3 +1,4 @@
+import { getRedisClient } from "@/lib/redis";
 import { findLatestPricesByModels } from "@/repository/model-price";
 import { findAllProviderGroups } from "@/repository/provider-groups";
 import { getSystemSettings } from "@/repository/system-config";
@@ -5,6 +6,7 @@ import { collectEnabledPublicStatusGroups, parsePublicStatusDescription } from "
 import {
   buildInternalPublicStatusConfigSnapshot,
   buildPublicStatusConfigSnapshot,
+  publishCurrentPublicStatusConfigPointers,
   publishInternalPublicStatusConfigSnapshot,
   publishPublicStatusConfigSnapshot,
 } from "./config-snapshot";
@@ -137,17 +139,29 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
     })),
   });
 
+  const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
   const internalResult = await publishInternalPublicStatusConfigSnapshot({
     snapshot: internalSnapshot,
+    redis,
+    setCurrentPointer: false,
   });
   const result = await publishPublicStatusConfigSnapshot({
     reason: input.reason,
     snapshot,
+    redis,
+    setCurrentPointer: false,
   });
+  const pointersWritten =
+    internalResult.written && result.written
+      ? await publishCurrentPublicStatusConfigPointers({
+          configVersion: snapshot.configVersion,
+          redis,
+        })
+      : false;
 
   return {
     ...result,
-    written: result.written && internalResult.written,
+    written: result.written && internalResult.written && pointersWritten,
     groupCount: enabledGroups.length,
   };
 }

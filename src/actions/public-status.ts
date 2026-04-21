@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
+import { db } from "@/drizzle/db";
 import { locales } from "@/i18n/config";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
@@ -52,9 +53,13 @@ function normalizeEnabledGroups(
   );
 }
 
-export async function savePublicStatusSettings(
-  input: SavePublicStatusSettingsInput
-): Promise<ActionResult<{ updatedGroupCount: number; configVersion: string }>> {
+export async function savePublicStatusSettings(input: SavePublicStatusSettingsInput): Promise<
+  ActionResult<{
+    updatedGroupCount: number;
+    configVersion: string;
+    publicStatusProjectionWarningCode: string | null;
+  }>
+> {
   try {
     const t = await getTranslations("settings");
     const tError = await getTranslations("errors");
@@ -112,34 +117,49 @@ export async function savePublicStatusSettings(
       }
     }
 
-    const settings = await updateSystemSettings({
-      publicStatusWindowHours: validatedSettings.publicStatusWindowHours,
-      publicStatusAggregationIntervalMinutes:
-        validatedSettings.publicStatusAggregationIntervalMinutes,
-    });
+    const settings = await db.transaction(async (tx) => {
+      const updatedSettings = await updateSystemSettings(
+        {
+          publicStatusWindowHours: validatedSettings.publicStatusWindowHours,
+          publicStatusAggregationIntervalMinutes:
+            validatedSettings.publicStatusAggregationIntervalMinutes,
+        },
+        tx
+      );
 
-    for (const groupUpdate of groupUpdates) {
-      await updateProviderGroup(groupUpdate.id, {
-        description: groupUpdate.description,
-      });
-    }
+      for (const groupUpdate of groupUpdates) {
+        await updateProviderGroup(
+          groupUpdate.id,
+          {
+            description: groupUpdate.description,
+          },
+          tx
+        );
+      }
+
+      return updatedSettings;
+    });
 
     const configVersion = `cfg-${Date.now()}`;
     const publishResult = await publishCurrentPublicStatusConfigProjection({
       reason: "save-public-status-settings",
       configVersion,
     });
+    let publicStatusProjectionWarningCode: string | null = null;
     if (!publishResult.written) {
-      return {
-        ok: false,
-        error: t("statusPage.form.projectionPublishFailed"),
-      };
+      publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+    } else {
+      try {
+        await schedulePublicStatusRebuild({
+          intervalMinutes: settings.publicStatusAggregationIntervalMinutes,
+          rangeHours: settings.publicStatusWindowHours,
+          reason: "config-updated",
+        });
+      } catch (error) {
+        logger.warn("[PublicStatus] DB truth saved but failed to schedule rebuild hint", error);
+        publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+      }
     }
-    await schedulePublicStatusRebuild({
-      intervalMinutes: settings.publicStatusAggregationIntervalMinutes,
-      rangeHours: settings.publicStatusWindowHours,
-      reason: "config-updated",
-    });
 
     invalidateSystemSettingsCache();
     invalidateConfiguredPublicStatusGroupsCache();
@@ -156,13 +176,15 @@ export async function savePublicStatusSettings(
       data: {
         updatedGroupCount: groupUpdates.length,
         configVersion: publishResult.configVersion,
+        publicStatusProjectionWarningCode,
       },
     };
   } catch (error) {
     logger.error("[PublicStatus] savePublicStatusSettings failed", error);
+    const t = await getTranslations("settings");
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "保存公开状态设置失败",
+      error: error instanceof Error ? error.message : t("statusPage.form.saveFailed"),
     };
   }
 }

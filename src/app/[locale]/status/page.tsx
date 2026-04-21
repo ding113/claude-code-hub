@@ -17,6 +17,7 @@ export default async function PublicStatusPage({
     intervalMinutes: configSnapshot?.defaultIntervalMinutes ?? 5,
     rangeHours: configSnapshot?.defaultRangeHours ?? 24,
     configVersion: configSnapshot?.configVersion,
+    hasConfiguredGroups: configSnapshot ? configSnapshot.groups.length > 0 : undefined,
     nowIso: new Date().toISOString(),
     triggerRebuildHint: async () => {},
   });

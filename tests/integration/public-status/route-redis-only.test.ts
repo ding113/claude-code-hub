@@ -45,6 +45,7 @@ describe("GET /api/public-status", () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       defaultIntervalMinutes: 5,
       defaultRangeHours: 24,
+      groups: [{ slug: "openai" }],
     });
     mockReadPublicStatusPayload.mockResolvedValue({
       rebuildState: "fresh",
@@ -66,11 +67,43 @@ describe("GET /api/public-status", () => {
     });
   });
 
+  it("returns 200 with no-data payload when no public groups are configured", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-empty",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [],
+    });
+    mockReadPublicStatusPayload.mockResolvedValue({
+      rebuildState: "no-data",
+      sourceGeneration: "",
+      generatedAt: null,
+      freshUntil: null,
+      groups: [],
+    });
+
+    const { GET } = await import("@/app/api/public-status/route");
+    const response = await GET(new Request("http://localhost/api/public-status"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      rebuildState: "no-data",
+      groups: [],
+    });
+    expect(mockReadPublicStatusPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasConfiguredGroups: false,
+      })
+    );
+    expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
+  });
+
   it("does not trigger rebuild for non-default public queries", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-1",
       defaultIntervalMinutes: 5,
       defaultRangeHours: 24,
+      groups: [{ slug: "openai" }],
     });
     mockReadPublicStatusPayload.mockImplementation(
       async ({ triggerRebuildHint }: { triggerRebuildHint: (reason: string) => Promise<void> }) => {

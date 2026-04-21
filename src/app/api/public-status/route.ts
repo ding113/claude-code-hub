@@ -32,6 +32,7 @@ export async function GET(request: Request): Promise<Response> {
     intervalMinutes,
     rangeHours,
     configVersion: configSnapshot?.configVersion,
+    hasConfiguredGroups: configSnapshot ? configSnapshot.groups.length > 0 : undefined,
     nowIso: new Date().toISOString(),
     triggerRebuildHint: async (reason) => {
       if (!canTriggerRebuild) {

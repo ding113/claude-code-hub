@@ -10,6 +10,9 @@ const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
 const mockInvalidateSystemSettingsCache = vi.hoisted(() => vi.fn());
 const mockRevalidatePath = vi.hoisted(() => vi.fn());
 const mockLoggerError = vi.hoisted(() => vi.fn());
+const mockDbTransaction = vi.hoisted(() =>
+  vi.fn(async (callback: (tx: object) => unknown) => callback({}))
+);
 
 vi.mock("@/lib/auth", () => ({
   getSession: mockGetSession,
@@ -17,6 +20,12 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/repository/system-config", () => ({
   updateSystemSettings: mockUpdateSystemSettings,
+}));
+
+vi.mock("@/drizzle/db", () => ({
+  db: {
+    transaction: mockDbTransaction,
+  },
 }));
 
 vi.mock("@/repository/provider-groups", () => ({
@@ -102,6 +111,7 @@ describe("public-status config publish integration", () => {
       accepted: true,
       rebuildState: "rebuilding",
     });
+    mockDbTransaction.mockImplementation(async (callback: (tx: object) => unknown) => callback({}));
   });
 
   it("updates DB truth, republishes Redis snapshot, and queues rebuild metadata", async () => {
@@ -121,10 +131,14 @@ describe("public-status config publish integration", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(mockUpdateSystemSettings).toHaveBeenCalledWith({
-      publicStatusWindowHours: 24,
-      publicStatusAggregationIntervalMinutes: 5,
-    });
+    expect(mockDbTransaction).toHaveBeenCalledTimes(1);
+    expect(mockUpdateSystemSettings).toHaveBeenCalledWith(
+      {
+        publicStatusWindowHours: 24,
+        publicStatusAggregationIntervalMinutes: 5,
+      },
+      {}
+    );
     expect(mockUpdateProviderGroup).toHaveBeenCalledTimes(1);
     expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledTimes(1);
     expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
@@ -134,6 +148,38 @@ describe("public-status config publish integration", () => {
     });
     expect(mockInvalidateSystemSettingsCache).toHaveBeenCalledTimes(1);
     expect(mockRevalidatePath).toHaveBeenCalled();
+  });
+
+  it("returns success with a warning when DB truth is saved but Redis projection is unavailable", async () => {
+    mockPublishCurrentPublicStatusConfigProjection.mockResolvedValue({
+      configVersion: "cfg-2",
+      key: "public-status:v1:config:cfg-2",
+      written: false,
+      groupCount: 1,
+    });
+
+    const { savePublicStatusSettings } = await import("@/actions/public-status");
+
+    const result = await savePublicStatusSettings({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+      groups: [
+        {
+          groupName: "openai",
+          displayName: "OpenAI",
+          publicGroupSlug: "openai",
+          publicModelKeys: ["gpt-4.1"],
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        publicStatusProjectionWarningCode: "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED",
+      },
+    });
+    expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
   });
 
   it("rejects aggregation intervals outside the public allowlist", async () => {

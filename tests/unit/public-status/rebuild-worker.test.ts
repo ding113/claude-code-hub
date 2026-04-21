@@ -7,15 +7,18 @@ import {
 
 const mockRedisSet = vi.hoisted(() => vi.fn());
 const mockRedisDel = vi.hoisted(() => vi.fn());
+const mockRedisGet = vi.hoisted(() => vi.fn());
+const mockRedisEval = vi.hoisted(() => vi.fn());
 const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockQueryPublicStatusRequests = vi.hoisted(() => vi.fn());
 const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/redis", () => ({
   getRedisClient: () => ({
-    get: vi.fn(),
+    get: mockRedisGet,
     set: mockRedisSet,
     del: mockRedisDel,
+    eval: mockRedisEval,
     status: "ready",
   }),
 }));
@@ -33,6 +36,8 @@ vi.mock("@/lib/public-status/aggregation", () => ({
 describe("public-status rebuild worker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRedisGet.mockResolvedValue(null);
+    mockRedisEval.mockResolvedValue(1);
   });
 
   it("collapses concurrent rebuild requests into a single in-flight computation", async () => {
@@ -72,6 +77,47 @@ describe("public-status rebuild worker", () => {
       { sourceGeneration: "generation-1" },
       { sourceGeneration: "generation-1" },
       { sourceGeneration: "generation-1" },
+    ]);
+  });
+
+  it("propagates distributed-lock skip state to piggyback callers", async () => {
+    const mod = await import("@/lib/public-status/rebuild-worker");
+
+    let releaseCompute: (() => void) | undefined;
+    const computeGate = new Promise<void>((resolve) => {
+      releaseCompute = resolve;
+    });
+    const computeGeneration = vi.fn(async () => {
+      await computeGate;
+      return {
+        sourceGeneration: "generation-2",
+        skippedDueToDistributedLock: true,
+      };
+    });
+
+    const first = mod.runPublicStatusRebuild({
+      flightKey: "cfg-2:15m:48h",
+      computeGeneration,
+    });
+    const second = mod.runPublicStatusRebuild({
+      flightKey: "cfg-2:15m:48h",
+      computeGeneration,
+    });
+
+    await Promise.resolve();
+    expect(computeGeneration).toHaveBeenCalledTimes(1);
+
+    releaseCompute?.();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      {
+        sourceGeneration: "generation-2",
+        skippedDueToDistributedLock: true,
+      },
+      {
+        sourceGeneration: "generation-2",
+        skippedDueToDistributedLock: true,
+      },
     ]);
   });
 
@@ -134,6 +180,12 @@ describe("public-status rebuild worker", () => {
     const manifestValue = JSON.parse(String(versionedManifestCall?.[1]));
     expect(manifestValue.configVersion).toBe("cfg-1");
     expect(manifestValue.lastCompleteGeneration).toBeTruthy();
+    expect(mockRedisEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DEL', KEYS[1])"),
+      1,
+      expect.stringContaining("public-status:v1:rebuild-lock:"),
+      expect.any(String)
+    );
     expect(mockRedisDel).toHaveBeenCalled();
 
     const snapshotKey = buildPublicStatusCurrentSnapshotKey({
@@ -141,7 +193,12 @@ describe("public-status rebuild worker", () => {
       rangeHours: 24,
       generation: manifestValue.lastCompleteGeneration,
     });
-    expect(mockRedisSet).toHaveBeenCalledWith(snapshotKey, expect.any(String));
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      snapshotKey,
+      expect.any(String),
+      "EX",
+      60 * 60 * 24 * 30
+    );
   });
 
   it("writes rebuild hints with ttl and reason payload", async () => {

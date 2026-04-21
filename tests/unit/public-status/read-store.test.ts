@@ -10,6 +10,7 @@ interface ReadStoreModule {
     intervalMinutes: number;
     rangeHours: number;
     nowIso: string;
+    hasConfiguredGroups?: boolean;
     redis: ReturnType<typeof createRedisClientSpy>;
     triggerRebuildHint: (reason: string) => Promise<void> | void;
   }): Promise<{
@@ -33,6 +34,29 @@ describe("public-status read store", () => {
 
     expect(result.rebuildState).toBe("rebuilding");
     expect(triggerRebuildHint).toHaveBeenCalledWith("redis-unavailable");
+  });
+
+  it("returns no-data when public status has no configured groups", async () => {
+    const triggerRebuildHint = vi.fn();
+    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
+
+    const redis = createRedisClientSpy({
+      status: "ready",
+      get: vi.fn(),
+    });
+
+    const result = await mod.readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      nowIso: "2026-04-21T10:05:00.000Z",
+      hasConfiguredGroups: false,
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(result.rebuildState).toBe("no-data");
+    expect(triggerRebuildHint).not.toHaveBeenCalled();
+    expect(redis.get).not.toHaveBeenCalled();
   });
 
   it("returns rebuilding when manifest is missing", async () => {

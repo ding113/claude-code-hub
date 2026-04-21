@@ -233,10 +233,11 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     const rejectedInsertQuery = createThenableQuery([] as unknown[]);
     rejectedInsertQuery.onConflictDoNothing = vi.fn(() => Promise.reject({ code: "42703" }));
 
+    const legacyInsertQuery = createThenableQuery([]);
     const insertMock = vi
       .fn()
       .mockReturnValueOnce(rejectedInsertQuery)
-      .mockReturnValueOnce(createThenableQuery([]));
+      .mockReturnValueOnce(legacyInsertQuery);
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -254,6 +255,24 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     expect(result.siteTitle).toBe("Claude Code Hub");
     expect(result.codexPriorityBillingSource).toBe("requested");
     expect(insertMock).toHaveBeenCalledTimes(2);
+    expect(legacyInsertQuery.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        siteTitle: "Claude Code Hub",
+        allowGlobalUsageView: false,
+        currencyDisplay: "USD",
+        billingModelSource: "original",
+      })
+    );
+    expect(legacyInsertQuery.values).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicStatusWindowHours: expect.anything(),
+      })
+    );
+    expect(legacyInsertQuery.values).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicStatusAggregationIntervalMinutes: expect.anything(),
+      })
+    );
 
     vi.useRealTimers();
   });

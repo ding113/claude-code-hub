@@ -8,6 +8,8 @@ import type { SystemSettings, UpdateSystemSettingsInput } from "@/types/system-c
 import { toSystemSettings } from "./_shared/transformers";
 
 const DEFAULT_SITE_TITLE = "Claude Code Hub";
+type TransactionExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type SystemSettingsMutationExecutor = Pick<TransactionExecutor, "update">;
 
 function isTableMissingError(error: unknown, depth = 0): boolean {
   if (!error || depth > 5) {
@@ -359,8 +361,6 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           allowGlobalUsageView: false,
           currencyDisplay: "USD",
           billingModelSource: "original",
-          publicStatusWindowHours: 24,
-          publicStatusAggregationIntervalMinutes: 5,
         })
         .onConflictDoNothing();
     }
@@ -384,7 +384,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
  * 更新系统设置
  */
 export async function updateSystemSettings(
-  payload: UpdateSystemSettingsInput
+  payload: UpdateSystemSettingsInput,
+  executor: SystemSettingsMutationExecutor = db
 ): Promise<SystemSettings> {
   const returningWithoutHighConcurrencyMode = {
     id: systemSettings.id,
@@ -615,7 +616,7 @@ export async function updateSystemSettings(
 
     let updated;
     try {
-      [updated] = await db
+      [updated] = await executor
         .update(systemSettings)
         .set(updates)
         .where(eq(systemSettings.id, current.id))
@@ -637,7 +638,7 @@ export async function updateSystemSettings(
       delete downgradedUpdates.ipGeoLookupEnabled;
 
       try {
-        [updated] = await db
+        [updated] = await executor
           .update(systemSettings)
           .set(downgradedUpdates)
           .where(eq(systemSettings.id, current.id))
@@ -650,7 +651,7 @@ export async function updateSystemSettings(
         const legacyUpdates = { ...downgradedUpdates };
         delete legacyUpdates.codexPriorityBillingSource;
 
-        [updated] = await db
+        [updated] = await executor
           .update(systemSettings)
           .set(legacyUpdates)
           .where(eq(systemSettings.id, current.id))

@@ -15,15 +15,32 @@ import {
   buildPublicStatusTempKey,
 } from "./redis-contract";
 
-const inFlightRebuilds = new Map<string, Promise<{ sourceGeneration: string }>>();
+interface PublicStatusRebuildResult {
+  sourceGeneration: string;
+  skippedDueToDistributedLock?: boolean;
+}
+
+const inFlightRebuilds = new Map<string, Promise<PublicStatusRebuildResult>>();
 const REBUILD_LOCK_TTL_MS = 60_000;
+const TEMP_PROJECTION_TTL_SECONDS = 300;
+const GENERATION_PROJECTION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 interface RedisHintWriter {
   get?(key: string): Promise<string | null> | string | null;
   set(key: string, value: string, mode: "EX", seconds: number): Promise<unknown> | unknown;
   set(key: string, value: string): Promise<unknown> | unknown;
   del?(...keys: string[]): Promise<unknown> | unknown;
+  eval?(script: string, numKeys: number, ...args: string[]): Promise<unknown> | unknown;
   status?: string;
+}
+
+async function setWithTtl(
+  redis: RedisHintWriter,
+  key: string,
+  value: string,
+  ttlSeconds: number
+): Promise<void> {
+  await redis.set(key, value, "EX", ttlSeconds);
 }
 
 function getReadyRedisClient(redis?: RedisHintWriter | null): RedisHintWriter | null {
@@ -133,11 +150,36 @@ async function publishPublicStatusProjection(input: {
     lastCompleteGeneration: input.sourceGeneration,
   };
 
-  await input.redis.set(snapshotTempKey, JSON.stringify(snapshotRecord));
-  await input.redis.set(seriesTempKey, JSON.stringify(seriesRecord));
-  await input.redis.set(snapshotKey, JSON.stringify(snapshotRecord));
-  await input.redis.set(seriesKey, JSON.stringify(seriesRecord));
-  await input.redis.set(versionedManifestKey, JSON.stringify(manifestRecord));
+  await setWithTtl(
+    input.redis,
+    snapshotTempKey,
+    JSON.stringify(snapshotRecord),
+    TEMP_PROJECTION_TTL_SECONDS
+  );
+  await setWithTtl(
+    input.redis,
+    seriesTempKey,
+    JSON.stringify(seriesRecord),
+    TEMP_PROJECTION_TTL_SECONDS
+  );
+  await setWithTtl(
+    input.redis,
+    snapshotKey,
+    JSON.stringify(snapshotRecord),
+    GENERATION_PROJECTION_TTL_SECONDS
+  );
+  await setWithTtl(
+    input.redis,
+    seriesKey,
+    JSON.stringify(seriesRecord),
+    GENERATION_PROJECTION_TTL_SECONDS
+  );
+  await setWithTtl(
+    input.redis,
+    versionedManifestKey,
+    JSON.stringify(manifestRecord),
+    GENERATION_PROJECTION_TTL_SECONDS
+  );
   if (typeof input.redis.get === "function") {
     let existingCurrentManifest: { configVersion?: string; coveredTo?: string } | null = null;
     try {
@@ -190,6 +232,18 @@ async function releaseDistributedRebuildLock(input: {
   lockKey: string;
   lockId: string;
 }): Promise<void> {
+  if (typeof input.redis.eval === "function") {
+    const luaScript = `
+      if redis.call('GET', KEYS[1]) == ARGV[1] then
+        return redis.call('DEL', KEYS[1])
+      else
+        return 0
+      end
+    `;
+    await input.redis.eval(luaScript, 1, input.lockKey, input.lockId);
+    return;
+  }
+
   const current = await input.redis.get(input.lockKey);
   if (current === input.lockId && input.redis.del) {
     await input.redis.del(input.lockKey);
@@ -198,8 +252,8 @@ async function releaseDistributedRebuildLock(input: {
 
 export async function runPublicStatusRebuild(input: {
   flightKey: string;
-  computeGeneration: () => Promise<{ sourceGeneration: string }>;
-}): Promise<{ sourceGeneration: string }> {
+  computeGeneration: () => Promise<PublicStatusRebuildResult>;
+}): Promise<PublicStatusRebuildResult> {
   const existing = inFlightRebuilds.get(input.flightKey);
   if (existing) {
     return existing;
@@ -267,7 +321,6 @@ export async function rebuildPublicStatusProjection(input: {
     sourceGeneration,
   ].join(":");
 
-  let skippedDueToDistributedLock = false;
   const result = await runPublicStatusRebuild({
     flightKey,
     computeGeneration: async () => {
@@ -276,8 +329,7 @@ export async function rebuildPublicStatusProjection(input: {
         flightKey,
       });
       if (!distributedLock) {
-        skippedDueToDistributedLock = true;
-        return { sourceGeneration };
+        return { sourceGeneration, skippedDueToDistributedLock: true };
       }
 
       try {
@@ -317,7 +369,7 @@ export async function rebuildPublicStatusProjection(input: {
     },
   });
 
-  if (skippedDueToDistributedLock) {
+  if (result.skippedDueToDistributedLock) {
     return {
       status: "skipped",
       reason: "distributed-lock-held",
