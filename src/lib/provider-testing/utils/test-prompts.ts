@@ -4,6 +4,7 @@
  * 这里保留协议级兜底默认值；真正执行时会优先使用 presets.ts 里的模板定义。
  */
 
+import { buildProxyUrl } from "@/app/v1/_lib/url";
 import type { ProviderType } from "@/types/provider";
 import type { ClaudeTestBody, CodexTestBody, GeminiTestBody, OpenAITestBody } from "../types";
 
@@ -251,14 +252,10 @@ export function getTestUrl(
   model?: string,
   pathOverride?: string
 ): string {
-  const cleanBaseUrl = baseUrl.replace(/\/$/, "");
-  const endpoint = pathOverride || API_ENDPOINTS[providerType];
   const targetModel = model || DEFAULT_MODELS[providerType];
-  let url = `${cleanBaseUrl}${endpoint}`;
+  const requestPath = (pathOverride || API_ENDPOINTS[providerType]).replace("{model}", targetModel);
+  const requestUrl = new URL(`https://provider-test.local${requestPath}`);
 
-  if (providerType === "gemini" || providerType === "gemini-cli") {
-    url = url.replace("{model}", targetModel);
-  }
-
-  return url;
+  // 与真实代理转发共用同一 URL 语义，避免 provider testing 再次分叉出一套拼接规则。
+  return buildProxyUrl(baseUrl, requestUrl);
 }

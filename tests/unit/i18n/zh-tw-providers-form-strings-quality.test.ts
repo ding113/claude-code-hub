@@ -25,3 +25,20 @@ describe("messages/zh-TW/settings/providers/form/strings.json", () => {
     }
   });
 });
+
+describe("messages/zh-TW/settings/providers/form/url.json", () => {
+  test("does not contain placeholder markers and uses fullwidth parentheses", () => {
+    const zhTW = readJson("messages/zh-TW/settings/providers/form/url.json");
+
+    for (const value of Object.values(zhTW)) {
+      expect(value).not.toContain("（繁）");
+      expect(value).not.toContain("[JA]");
+      expect(value).not.toContain("(TW)");
+      expect(value).not.toContain("(繁)");
+      expect(value).not.toContain("（TW）");
+
+      expect(value).not.toContain("(");
+      expect(value).not.toContain(")");
+    }
+  });
+});

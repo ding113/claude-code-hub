@@ -1,8 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { LucideIcon } from "lucide-react";
+import { Info, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface SectionCardProps {
@@ -140,6 +141,7 @@ export function SmartInputWrapper({
   description,
   error,
   required,
+  tooltip,
   children,
   className,
 }: SmartInputWrapperProps) {
@@ -150,6 +152,27 @@ export function SmartInputWrapper({
           {label}
           {required && <span className="text-destructive ml-0.5">*</span>}
         </label>
+        {tooltip ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={tooltip}
+                data-smart-input-tooltip
+                className={cn(
+                  "inline-flex items-center justify-center rounded-sm text-muted-foreground",
+                  "transition-colors hover:text-foreground focus:outline-none focus:ring-2",
+                  "focus:ring-ring focus:ring-offset-2"
+                )}
+              >
+                <Info className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <p className="text-sm">{tooltip}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
       </div>
       {children}
       {error ? (

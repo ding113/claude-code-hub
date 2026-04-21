@@ -1,4 +1,6 @@
 {
   "label": "API 位址",
-  "placeholder": "例如：https://open.bigmodel.cn/api/anthropic"
+  "placeholder": "例如：https://open.bigmodel.cn/api/anthropic",
+  "description": "填入供應商的基礎位址即可。在請求轉發、預覽與 provider testing 中，這裡也支援版本路徑或完整介面位址。",
+  "tooltip": "例如：https://relay.example.com/openai、https://relay.example.com/openai/v1、https://relay.example.com/openai/v1/responses。Claude Code Hub 會重用你提供的路徑，不會把同一個 endpoint 再追加一次。"
 }
