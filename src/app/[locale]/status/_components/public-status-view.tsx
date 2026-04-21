@@ -9,6 +9,7 @@ interface PublicStatusViewProps {
   initialPayload: PublicStatusPayload;
   intervalMinutes: number;
   rangeHours: number;
+  followServerDefaults?: boolean;
   locale: string;
   timeZone: string;
   labels: {
@@ -79,6 +80,7 @@ export function PublicStatusView({
   initialPayload,
   intervalMinutes,
   rangeHours,
+  followServerDefaults = false,
   locale,
   timeZone,
   labels,
@@ -90,7 +92,9 @@ export function PublicStatusView({
     const refresh = async () => {
       try {
         const response = await fetch(
-          `/api/public-status?interval=${intervalMinutes}&rangeHours=${rangeHours}`,
+          followServerDefaults
+            ? "/api/public-status"
+            : `/api/public-status?interval=${intervalMinutes}&rangeHours=${rangeHours}`,
           {
             cache: "no-store",
           }
@@ -104,6 +108,10 @@ export function PublicStatusView({
         // 保持最后一版 payload，等待下一个轮询周期。
       }
     };
+
+    if (followServerDefaults || initialPayload.rebuildState === "rebuilding") {
+      void refresh();
+    }
 
     const pollId = window.setInterval(() => {
       void refresh();
@@ -119,7 +127,13 @@ export function PublicStatusView({
       window.clearInterval(pollId);
       window.clearInterval(countdownId);
     };
-  }, [intervalMinutes, payload.freshUntil, rangeHours]);
+  }, [
+    followServerDefaults,
+    initialPayload.rebuildState,
+    intervalMinutes,
+    payload.freshUntil,
+    rangeHours,
+  ]);
 
   const groups =
     payload.groups.length > 0

@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { readCurrentPublicStatusConfigSnapshot } from "@/lib/public-status/config-snapshot";
 import { readPublicStatusPayload } from "@/lib/public-status/read-store";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { PublicStatusView } from "./_components/public-status-view";
 
 export const dynamic = "force-dynamic";
@@ -13,20 +14,32 @@ export default async function PublicStatusPage({
   const { locale } = await params;
   const t = await getTranslations("settings");
   const configSnapshot = await readCurrentPublicStatusConfigSnapshot();
+  const intervalMinutes = configSnapshot?.defaultIntervalMinutes ?? 5;
+  const rangeHours = configSnapshot?.defaultRangeHours ?? 24;
+  const followServerDefaults = !configSnapshot;
   const payload = await readPublicStatusPayload({
-    intervalMinutes: configSnapshot?.defaultIntervalMinutes ?? 5,
-    rangeHours: configSnapshot?.defaultRangeHours ?? 24,
+    intervalMinutes,
+    rangeHours,
     configVersion: configSnapshot?.configVersion,
     hasConfiguredGroups: configSnapshot ? configSnapshot.groups.length > 0 : undefined,
     nowIso: new Date().toISOString(),
-    triggerRebuildHint: async () => {},
+    triggerRebuildHint: async (reason) => {
+      if (followServerDefaults) {
+        await schedulePublicStatusRebuild({
+          intervalMinutes,
+          rangeHours,
+          reason,
+        });
+      }
+    },
   });
 
   return (
     <PublicStatusView
       initialPayload={payload}
-      intervalMinutes={configSnapshot?.defaultIntervalMinutes ?? 5}
-      rangeHours={configSnapshot?.defaultRangeHours ?? 24}
+      intervalMinutes={intervalMinutes}
+      rangeHours={rangeHours}
+      followServerDefaults={followServerDefaults}
       locale={locale}
       timeZone={configSnapshot?.timeZone ?? "UTC"}
       labels={{
