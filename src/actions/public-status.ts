@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import {
+  collectEnabledPublicStatusGroups,
   type EnabledPublicStatusGroup,
   invalidateConfiguredPublicStatusGroupsCache,
   parsePublicStatusDescription,
@@ -16,6 +17,7 @@ import {
   stopPublicStatusScheduler,
 } from "@/lib/public-status/scheduler";
 import { refreshPublicStatusSnapshot } from "@/lib/public-status/service";
+import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { findAllProviderGroups, updateProviderGroup } from "@/repository/provider-groups";
 import { clearPublicStatusSnapshot } from "@/repository/public-status-snapshot";
 import { updateSystemSettings } from "@/repository/system-config";
@@ -36,8 +38,29 @@ export async function savePublicStatusSettings(
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    const validatedSettings = UpdateSystemSettingsSchema.pick({
+      publicStatusWindowHours: true,
+      publicStatusAggregationIntervalMinutes: true,
+    }).parse({
+      publicStatusWindowHours: input.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: input.publicStatusAggregationIntervalMinutes,
+    });
+
+    const normalizedEnabledGroups = collectEnabledPublicStatusGroups(
+      input.groups.map((group) => ({
+        groupName: group.groupName,
+        note: null,
+        publicStatus: {
+          displayName: group.displayName,
+          modelIds: group.modelIds,
+        },
+      }))
+    );
+
     const allGroups = await findAllProviderGroups();
-    const enabledByName = new Map(input.groups.map((group) => [group.groupName, group]));
+    const enabledByName = new Map(
+      normalizedEnabledGroups.map((group) => [group.groupName, group] as const)
+    );
     const groupUpdates: Array<{ id: number; description: string | null }> = [];
 
     for (const group of allGroups) {
@@ -69,8 +92,9 @@ export async function savePublicStatusSettings(
     }
 
     await updateSystemSettings({
-      publicStatusWindowHours: input.publicStatusWindowHours,
-      publicStatusAggregationIntervalMinutes: input.publicStatusAggregationIntervalMinutes,
+      publicStatusWindowHours: validatedSettings.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes:
+        validatedSettings.publicStatusAggregationIntervalMinutes,
     });
 
     for (const groupUpdate of groupUpdates) {
@@ -79,12 +103,11 @@ export async function savePublicStatusSettings(
       });
     }
 
-    const hasConfiguredTargets = input.groups.some((group) => group.modelIds.length > 0);
     invalidateSystemSettingsCache();
     invalidateConfiguredPublicStatusGroupsCache();
 
-    if (hasConfiguredTargets) {
-      await refreshPublicStatusSnapshot({ force: true });
+    const refreshResult = await refreshPublicStatusSnapshot({ force: true });
+    if (refreshResult.status === "updated") {
       startPublicStatusScheduler();
     } else {
       await clearPublicStatusSnapshot();

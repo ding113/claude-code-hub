@@ -8,6 +8,8 @@ export interface PublicStatusSnapshotRecord {
   payload: PublicStatusSnapshotPayload;
 }
 
+const SNAPSHOT_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 async function readSnapshotFromRedis(): Promise<PublicStatusSnapshotRecord | null> {
   const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
   if (!redis || redis.status !== "ready") {
@@ -43,7 +45,7 @@ async function writeSnapshotToRedis(record: PublicStatusSnapshotRecord): Promise
     return;
   }
 
-  await redis.set(SNAPSHOT_CACHE_KEY, JSON.stringify(record));
+  await redis.set(SNAPSHOT_CACHE_KEY, JSON.stringify(record), "EX", SNAPSHOT_TTL_SECONDS);
 }
 
 async function clearSnapshotRedisCache(): Promise<void> {

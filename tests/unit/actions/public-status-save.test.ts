@@ -148,6 +148,11 @@ describe("savePublicStatusSettings", () => {
   });
 
   it("clears runtime scheduling when no public groups remain configured", async () => {
+    refreshPublicStatusSnapshotMock.mockResolvedValueOnce({
+      status: "disabled",
+      reason: "no-configured-targets",
+    });
+
     const result = await savePublicStatusSettings({
       publicStatusWindowHours: 24,
       publicStatusAggregationIntervalMinutes: 5,
@@ -175,6 +180,18 @@ describe("savePublicStatusSettings", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain("500");
+    expect(updateProviderGroupMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects out-of-range numeric settings before writing any data", async () => {
+    const result = await savePublicStatusSettings({
+      publicStatusWindowHours: 0,
+      publicStatusAggregationIntervalMinutes: 0,
+      groups: [],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(updateSystemSettingsMock).not.toHaveBeenCalled();
     expect(updateProviderGroupMock).not.toHaveBeenCalled();
   });
 });

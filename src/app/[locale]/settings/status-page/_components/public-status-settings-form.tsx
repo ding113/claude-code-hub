@@ -107,7 +107,10 @@ export function PublicStatusSettingsForm({
             <Label htmlFor="public-status-window-hours">{t("statusPage.form.windowHours")}</Label>
             <Input
               id="public-status-window-hours"
+              type="number"
               inputMode="numeric"
+              min={1}
+              max={168}
               value={windowHours}
               onChange={(event) => setWindowHours(event.target.value)}
             />
@@ -120,7 +123,10 @@ export function PublicStatusSettingsForm({
             </Label>
             <Input
               id="public-status-aggregation-interval"
+              type="number"
               inputMode="numeric"
+              min={1}
+              max={60}
               value={aggregationIntervalMinutes}
               onChange={(event) => setAggregationIntervalMinutes(event.target.value)}
             />
