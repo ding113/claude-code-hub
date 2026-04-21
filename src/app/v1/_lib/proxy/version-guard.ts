@@ -36,7 +36,7 @@ export class ProxyVersionGuard {
       }
 
       // 2. 确保已认证（authState 在认证后设置）
-      if (!session.authState || !session.authState.user) {
+      if (!session.authState?.user) {
         logger.debug("[ProxyVersionGuard] 未认证用户，跳过版本检查");
         return null; // 未认证，放行（不应该发生，因为在认证后执行）
       }

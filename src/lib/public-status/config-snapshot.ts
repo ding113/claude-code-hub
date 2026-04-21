@@ -230,7 +230,7 @@ export async function readPublicStatusSiteMetadata(input?: {
   siteDescription: string;
 } | null> {
   const snapshot = await readCurrentPublicStatusConfigSnapshot(input);
-  if (!snapshot || !snapshot.siteTitle || !snapshot.siteDescription) {
+  if (!snapshot?.siteTitle || !snapshot.siteDescription) {
     return null;
   }
 

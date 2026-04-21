@@ -371,7 +371,7 @@ export function isSSEResponse(body: string, contentType?: string): boolean {
  * Key feature: Falls back to raw body if SSE parsing fails
  */
 export function aggregateResponseText(body: string, _contentType?: string): string {
-  if (!body || !body.trim()) {
+  if (!body?.trim()) {
     return "";
   }
 

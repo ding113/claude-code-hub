@@ -74,7 +74,7 @@ export function RateLimitTypeBreakdown({ data }: RateLimitTypeBreakdownProps) {
                 cursor={false}
                 wrapperStyle={{ zIndex: 1000 }}
                 content={({ active, payload }) => {
-                  if (!active || !payload || !payload.length) return <div className="hidden" />;
+                  if (!active || !payload?.length) return <div className="hidden" />;
 
                   const data = payload[0].payload;
                   const percentage =
