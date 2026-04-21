@@ -8,11 +8,10 @@ import { Footer } from "@/components/customs/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { type Locale, locales } from "@/i18n/config";
 import { logger } from "@/lib/logger";
-import { resolveSiteMetadataSource } from "@/lib/public-status/layout-metadata";
 import {
-  readPublicStatusTimeZone,
-} from "@/lib/public-status/config-snapshot";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+  resolveLayoutTimeZone,
+  resolveSiteMetadataSource,
+} from "@/lib/public-status/layout-metadata";
 import { AppProviders } from "../providers";
 
 const FALLBACK_TITLE = "Claude Code Hub";
@@ -80,9 +79,7 @@ export default async function RootLayout({
 
   // Load translation messages
   const messages = await getMessages();
-  const timeZone = isPublicStatusRequest
-    ? (await readPublicStatusTimeZone()) || "UTC"
-    : await resolveSystemTimezone();
+  const timeZone = await resolveLayoutTimeZone({ isPublicStatusRequest });
   // Create a stable `now` timestamp to avoid SSR/CSR hydration mismatch for relative time
   const now = new Date();
 

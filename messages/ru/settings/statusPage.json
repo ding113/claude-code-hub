@@ -29,6 +29,7 @@
     "ttfb": "TTFB",
     "tps": "TPS",
     "history": "История",
+    "freshnessWindow": "Свежесть снимка",
     "availability": "Доступность",
     "noData": "Нет данных",
     "operational": "Доступно",

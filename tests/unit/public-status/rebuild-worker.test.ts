@@ -7,7 +7,7 @@ import {
 
 const mockRedisSet = vi.hoisted(() => vi.fn());
 const mockRedisDel = vi.hoisted(() => vi.fn());
-const mockReadCurrentPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
+const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockQueryPublicStatusRequests = vi.hoisted(() => vi.fn());
 const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
 
@@ -21,7 +21,7 @@ vi.mock("@/lib/redis", () => ({
 }));
 
 vi.mock("@/lib/public-status/config-snapshot", () => ({
-  readCurrentPublicStatusConfigSnapshot: mockReadCurrentPublicStatusConfigSnapshot,
+  readCurrentInternalPublicStatusConfigSnapshot: mockReadCurrentInternalPublicStatusConfigSnapshot,
 }));
 
 vi.mock("@/lib/public-status/aggregation", () => ({
@@ -78,7 +78,7 @@ describe("public-status rebuild worker", () => {
   it("publishes snapshot and manifest records for a rebuilt generation", async () => {
     const mod = await import("@/lib/public-status/rebuild-worker");
 
-    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+    mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-1",
       generatedAt: "2026-04-21T10:00:00.000Z",
       siteTitle: "Claude Code Hub Status",

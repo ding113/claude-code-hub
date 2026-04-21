@@ -29,6 +29,7 @@
     "ttfb": "TTFB",
     "tps": "TPS",
     "history": "履歴",
+    "freshnessWindow": "スナップショット有効期限",
     "availability": "可用率",
     "noData": "データなし",
     "operational": "正常",

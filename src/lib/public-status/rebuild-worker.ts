@@ -4,7 +4,7 @@ import {
   getConfiguredPublicStatusGroups,
   queryPublicStatusRequests,
 } from "./aggregation";
-import { readCurrentPublicStatusConfigSnapshot } from "./config-snapshot";
+import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import {
   alignBucketStartUtc,
   buildGenerationFingerprint,
@@ -174,6 +174,7 @@ export async function rebuildPublicStatusProjection(input: {
   now?: Date;
 }): Promise<
   | { status: "disabled"; reason: "redis-unavailable" | "missing-config" | "no-configured-groups" }
+  | { status: "skipped"; reason: "distributed-lock-held"; sourceGeneration: string }
   | { status: "updated"; sourceGeneration: string }
 > {
   const redis = getReadyRedisClient(input.redis);
@@ -187,7 +188,7 @@ export async function rebuildPublicStatusProjection(input: {
     get(key: string): Promise<string | null> | string | null;
   };
 
-  const configSnapshot = await readCurrentPublicStatusConfigSnapshot({
+  const configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
     redis: redisReader,
   });
   if (!configSnapshot) {
@@ -218,6 +219,7 @@ export async function rebuildPublicStatusProjection(input: {
     sourceGeneration,
   ].join(":");
 
+  let skippedDueToDistributedLock = false;
   const result = await runPublicStatusRebuild({
     flightKey,
     computeGeneration: async () => {
@@ -226,6 +228,7 @@ export async function rebuildPublicStatusProjection(input: {
         flightKey,
       });
       if (!distributedLock) {
+        skippedDueToDistributedLock = true;
         return { sourceGeneration };
       }
 
@@ -266,6 +269,14 @@ export async function rebuildPublicStatusProjection(input: {
     },
   });
 
+  if (skippedDueToDistributedLock) {
+    return {
+      status: "skipped",
+      reason: "distributed-lock-held",
+      sourceGeneration: result.sourceGeneration,
+    };
+  }
+
   return {
     status: "updated",
     sourceGeneration: result.sourceGeneration,
@@ -305,6 +316,44 @@ export async function schedulePublicStatusRebuild(input: {
     "EX",
     REBUILD_HINT_TTL_SECONDS
   );
+
+  if (typeof redis.get === "function") {
+    const configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
+      redis: redis as RedisHintWriter & {
+        get(key: string): Promise<string | null> | string | null;
+      },
+    });
+    const versionedManifestKey = buildPublicStatusManifestKey({
+      configVersion: configSnapshot?.configVersion ?? "current",
+      intervalMinutes: input.intervalMinutes,
+      rangeHours: input.rangeHours,
+    });
+    const currentManifestKey = buildPublicStatusManifestKey({
+      configVersion: "current",
+      intervalMinutes: input.intervalMinutes,
+      rangeHours: input.rangeHours,
+    });
+
+    for (const manifestKey of [versionedManifestKey, currentManifestKey]) {
+      const manifestRaw = await redis.get(manifestKey);
+      if (!manifestRaw) {
+        continue;
+      }
+
+      try {
+        const manifest = JSON.parse(manifestRaw) as Record<string, unknown>;
+        await redis.set(
+          manifestKey,
+          JSON.stringify({
+            ...manifest,
+            rebuildState: "rebuilding",
+          })
+        );
+      } catch {
+        // 忽略坏 manifest；读侧会走安全降级。
+      }
+    }
+  }
 
   return {
     accepted: true,

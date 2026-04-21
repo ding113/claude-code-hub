@@ -108,6 +108,37 @@ describe("public-status read store", () => {
     expect(triggerRebuildHint).toHaveBeenCalledWith("manifest-missing");
   });
 
+  it("treats malformed snapshot payload as rebuilding instead of throwing", async () => {
+    const triggerRebuildHint = vi.fn();
+    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
+
+    const redis = createRedisClientSpy({
+      status: "ready",
+      get: vi
+        .fn()
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            generation: "gen-1",
+            freshUntil: "2026-04-21T10:05:00.000Z",
+            lastCompleteGeneration: "gen-1",
+            rebuildState: "idle",
+          })
+        )
+        .mockResolvedValueOnce("{broken-json"),
+    });
+
+    const result = await mod.readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      nowIso: "2026-04-21T10:00:00.000Z",
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(result.rebuildState).toBe("rebuilding");
+    expect(triggerRebuildHint).toHaveBeenCalledWith("snapshot-missing");
+  });
+
   it("serves stale data and requests a background rebuild without DB reads", async () => {
     const forbiddenDbRead = createForbiddenCallSpy("db-read");
     const forbiddenPriceLookup = createForbiddenCallSpy("findLatestPriceByModel");

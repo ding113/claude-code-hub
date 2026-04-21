@@ -27,6 +27,7 @@ export default async function PublicStatusPage({
       intervalMinutes={configSnapshot?.defaultIntervalMinutes ?? 5}
       rangeHours={configSnapshot?.defaultRangeHours ?? 24}
       locale={locale}
+      timeZone={configSnapshot?.timeZone ?? "UTC"}
       labels={{
         systemStatus: t("statusPage.public.systemStatus"),
         heroPrimary: t("statusPage.public.heroPrimary"),
@@ -35,6 +36,7 @@ export default async function PublicStatusPage({
         history: t("statusPage.public.history"),
         availability: t("statusPage.public.availability"),
         ttfb: t("statusPage.public.ttfb"),
+        freshnessWindow: t("statusPage.public.freshnessWindow"),
         fresh: t("statusPage.public.fresh"),
         stale: t("statusPage.public.stale"),
         rebuilding: t("statusPage.public.rebuilding"),

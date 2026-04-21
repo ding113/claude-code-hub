@@ -104,6 +104,7 @@ describe("public-status config snapshot", () => {
     });
     expect(JSON.stringify(snapshot)).not.toContain("internalProviderName");
     expect(JSON.stringify(snapshot)).not.toContain("endpointUrl");
+    expect(JSON.stringify(snapshot)).not.toContain("sourceGroupName");
   });
 
   it("reads site metadata from the redis config projection", async () => {

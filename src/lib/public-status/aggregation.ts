@@ -4,10 +4,10 @@ import { messageRequest } from "@/drizzle/schema";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import type { PublicStatusPayload, PublicStatusTimelineBucket } from "./payload";
-import type { PublicStatusConfigSnapshot } from "./config-snapshot";
+import type { InternalPublicStatusConfigSnapshot } from "./config-snapshot";
 
 export interface PublicStatusFailureSignal {
-  statusCode?: number;
+  statusCode?: number | null;
   reason?: string;
   errorMessage?: string;
   matchedRule?: {
@@ -60,7 +60,7 @@ export interface PublicStatusAggregationResult {
 }
 
 export function getConfiguredPublicStatusGroups(
-  snapshot: PublicStatusConfigSnapshot
+  snapshot: InternalPublicStatusConfigSnapshot
 ): PublicStatusConfiguredGroup[] {
   return snapshot.groups
     .filter(
@@ -145,12 +145,12 @@ export function isExcludedFromPublicStatusFailure(signal: PublicStatusFailureSig
   return false;
 }
 
-function isSuccessReason(reason: string | undefined, statusCode?: number): boolean {
+function isSuccessReason(reason: string | undefined, statusCode?: number | null): boolean {
   if (reason === "request_success" || reason === "retry_success" || reason === "hedge_winner") {
     return true;
   }
 
-  return statusCode !== undefined && statusCode >= 200 && statusCode < 400;
+  return statusCode != null && statusCode >= 200 && statusCode < 400;
 }
 
 function alignWindowEnd(now: Date, intervalMinutes: number): Date {

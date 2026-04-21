@@ -29,6 +29,7 @@
     "ttfb": "TTFB",
     "tps": "TPS",
     "history": "History",
+    "freshnessWindow": "Snapshot freshness",
     "availability": "Availability",
     "noData": "No data",
     "operational": "Operational",

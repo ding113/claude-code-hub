@@ -8,7 +8,7 @@ import {
   startLeaderLockKeepAlive,
 } from "@/lib/provider-endpoints/leader-lock";
 import { getRedisClient } from "@/lib/redis";
-import { readCurrentPublicStatusConfigSnapshot } from "./config-snapshot";
+import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import { rebuildPublicStatusProjection } from "./rebuild-worker";
 import { buildPublicStatusManifestKey } from "./redis-contract";
 
@@ -70,7 +70,7 @@ async function collectTargets(): Promise<
   }
 
   const targets = new Map<string, { intervalMinutes: number; rangeHours: number }>();
-  const configSnapshot = await readCurrentPublicStatusConfigSnapshot({ redis });
+  const configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({ redis });
   if (configSnapshot && configSnapshot.groups.length > 0) {
     const manifestKey = buildPublicStatusManifestKey({
       configVersion: "current",
@@ -85,8 +85,15 @@ async function collectTargets(): Promise<
         rangeHours: configSnapshot.defaultRangeHours,
       });
     } else {
-      const manifest = JSON.parse(manifestRaw) as { freshUntil?: string };
-      if (!manifest.freshUntil || Date.now() >= Date.parse(manifest.freshUntil)) {
+      const manifest = JSON.parse(manifestRaw) as {
+        freshUntil?: string;
+        configVersion?: string;
+      };
+      if (
+        manifest.configVersion !== configSnapshot.configVersion ||
+        !manifest.freshUntil ||
+        Date.now() >= Date.parse(manifest.freshUntil)
+      ) {
         const key = `${configSnapshot.defaultIntervalMinutes}:${configSnapshot.defaultRangeHours}`;
         targets.set(key, {
           intervalMinutes: configSnapshot.defaultIntervalMinutes,
@@ -120,6 +127,7 @@ async function runCycle(): Promise<void> {
 
   schedulerState.__CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_RUNNING__ = true;
   let stopKeepAlive: (() => void) | undefined;
+  let leadershipLost = false;
 
   try {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
@@ -141,12 +149,16 @@ async function runCycle(): Promise<void> {
       ttlMs: LOCK_TTL_MS,
       logTag: "PublicStatusScheduler",
       onLost: () => {
+        leadershipLost = true;
         logger.warn("[PublicStatusScheduler] Lost leader lock");
       },
     }).stop;
 
     const targets = await collectTargets();
     for (const target of targets) {
+      if (leadershipLost) {
+        break;
+      }
       const result = await rebuildPublicStatusProjection({
         intervalMinutes: target.intervalMinutes,
         rangeHours: target.rangeHours,

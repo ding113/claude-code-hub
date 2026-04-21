@@ -29,6 +29,7 @@
     "ttfb": "TTFB",
     "tps": "TPS",
     "history": "历史",
+    "freshnessWindow": "快照新鲜期剩余",
     "availability": "在线率",
     "noData": "暂无数据",
     "operational": "可用",

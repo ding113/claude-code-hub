@@ -10,6 +10,7 @@ interface PublicStatusViewProps {
   intervalMinutes: number;
   rangeHours: number;
   locale: string;
+  timeZone: string;
   labels: {
     systemStatus: string;
     heroPrimary: string;
@@ -18,6 +19,7 @@ interface PublicStatusViewProps {
     history: string;
     availability: string;
     ttfb: string;
+    freshnessWindow: string;
     fresh: string;
     stale: string;
     rebuilding: string;
@@ -77,6 +79,7 @@ export function PublicStatusView({
   intervalMinutes,
   rangeHours,
   locale,
+  timeZone,
   labels,
 }: PublicStatusViewProps) {
   const [payload, setPayload] = useState(initialPayload);
@@ -181,13 +184,21 @@ export function PublicStatusView({
             <span>
               {labels.generatedAt}:{" "}
               {payload.generatedAt
-                ? new Date(payload.generatedAt).toLocaleString(locale)
+                ? new Intl.DateTimeFormat(locale, {
+                    dateStyle: "medium",
+                    timeStyle: "medium",
+                    timeZone,
+                  }).format(new Date(payload.generatedAt))
                 : labels.rebuilding}
             </span>
             <span>
               {labels.history}: 60
             </span>
-            {countdown ? <span>Next refresh: {countdown}</span> : null}
+            {countdown ? (
+              <span>
+                {labels.freshnessWindow}: {countdown}
+              </span>
+            ) : null}
           </div>
         </header>
 

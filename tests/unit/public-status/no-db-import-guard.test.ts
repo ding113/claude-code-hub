@@ -8,6 +8,8 @@ import {
 const guardedFiles = [
   "src/app/api/public-status/route.ts",
   "src/lib/public-status/read-store.ts",
+  "src/lib/public-status/config-snapshot.ts",
+  "src/lib/public-status/layout-metadata.ts",
   "src/app/[locale]/status/page.tsx",
   "src/app/[locale]/layout.tsx",
 ];
@@ -21,6 +23,12 @@ const bannedImports = [
 ];
 
 const bannedTokens = ["findLatestPriceByModel", "getSystemSettings", "queryProviderAvailability"];
+const directTokenGuardFiles = new Set([
+  "src/app/api/public-status/route.ts",
+  "src/lib/public-status/read-store.ts",
+  "src/app/[locale]/status/page.tsx",
+  "src/app/[locale]/layout.tsx",
+]);
 
 describe("public-status no-db import guard", () => {
   it("keeps public request-path files away from DB-backed modules", async () => {
@@ -34,10 +42,13 @@ describe("public-status no-db import guard", () => {
         );
       }
 
-      for (const bannedToken of bannedTokens) {
-        expect(source, `${repoPath(relativePath)} must not reference ${bannedToken}`).not.toContain(
-          bannedToken
-        );
+      if (directTokenGuardFiles.has(relativePath)) {
+        for (const bannedToken of bannedTokens) {
+          expect(
+            source,
+            `${repoPath(relativePath)} must not reference ${bannedToken}`
+          ).not.toContain(bannedToken);
+        }
       }
     }
   });

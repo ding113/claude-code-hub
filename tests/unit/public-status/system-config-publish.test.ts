@@ -17,7 +17,7 @@ vi.mock("@/repository/system-config", () => ({
   updateSystemSettings: mockUpdateSystemSettings,
 }));
 
-vi.mock("@/lib/public-status/config-snapshot", () => ({
+vi.mock("@/lib/public-status/config-publisher", () => ({
   publishCurrentPublicStatusConfigProjection: mockPublishCurrentPublicStatusConfigProjection,
 }));
 

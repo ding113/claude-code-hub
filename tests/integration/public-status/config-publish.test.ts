@@ -28,7 +28,7 @@ vi.mock("@/repository/model-price", () => ({
   findLatestPricesByModels: mockFindLatestPricesByModels,
 }));
 
-vi.mock("@/lib/public-status/config-snapshot", () => ({
+vi.mock("@/lib/public-status/config-publisher", () => ({
   publishCurrentPublicStatusConfigProjection: mockPublishCurrentPublicStatusConfigProjection,
 }));
 

@@ -1,12 +1,8 @@
 import { getRedisClient } from "@/lib/redis";
-import { findLatestPricesByModels } from "@/repository/model-price";
-import { findAllProviderGroups } from "@/repository/provider-groups";
-import { getSystemSettings } from "@/repository/system-config";
 import {
-  collectEnabledPublicStatusGroups,
-  parsePublicStatusDescription,
-} from "./config";
-import { buildPublicStatusConfigSnapshotKey } from "./redis-contract";
+  buildPublicStatusConfigSnapshotKey,
+  buildPublicStatusInternalConfigSnapshotKey,
+} from "./redis-contract";
 
 export interface PublicStatusModelSnapshot {
   publicModelKey: string;
@@ -16,12 +12,15 @@ export interface PublicStatusModelSnapshot {
 }
 
 export interface PublicStatusGroupSnapshot {
-  sourceGroupName?: string;
   slug: string;
   displayName: string;
   sortOrder: number;
   description: string | null;
   models: PublicStatusModelSnapshot[];
+}
+
+export interface InternalPublicStatusGroupSnapshot extends PublicStatusGroupSnapshot {
+  sourceGroupName: string;
 }
 
 export interface PublicStatusConfigSnapshot {
@@ -35,6 +34,11 @@ export interface PublicStatusConfigSnapshot {
   groups: PublicStatusGroupSnapshot[];
 }
 
+export interface InternalPublicStatusConfigSnapshot
+  extends Omit<PublicStatusConfigSnapshot, "groups"> {
+  groups: InternalPublicStatusGroupSnapshot[];
+}
+
 interface BuildPublicStatusConfigSnapshotInput {
   configVersion: string;
   siteTitle: string;
@@ -43,7 +47,6 @@ interface BuildPublicStatusConfigSnapshotInput {
   defaultIntervalMinutes: number;
   defaultRangeHours: number;
   groups: Array<{
-    sourceGroupName?: string;
     slug: string;
     displayName: string;
     sortOrder: number;
@@ -95,7 +98,6 @@ export function buildPublicStatusConfigSnapshot(
     groups: [...input.groups]
       .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug))
       .map((group) => ({
-        sourceGroupName: group.sourceGroupName,
         slug: group.slug,
         displayName: group.displayName,
         sortOrder: group.sortOrder,
@@ -135,12 +137,47 @@ export async function publishPublicStatusConfigSnapshot(input: {
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis) {
-    await redis.set(key, JSON.stringify({ ...snapshot, publishReason: input.reason }));
+    await redis.set(key, JSON.stringify(snapshot));
     await redis.set(buildPublicStatusConfigSnapshotKey(), JSON.stringify({ key, configVersion: snapshot.configVersion }));
   }
 
   return {
     configVersion: snapshot.configVersion,
+    key,
+    written: Boolean(redis),
+  };
+}
+
+export function buildInternalPublicStatusConfigSnapshot(input: Omit<
+  InternalPublicStatusConfigSnapshot,
+  "generatedAt"
+>): InternalPublicStatusConfigSnapshot {
+  return {
+    ...input,
+    generatedAt: new Date().toISOString(),
+    groups: [...input.groups].sort(
+      (left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug)
+    ),
+  };
+}
+
+export async function publishInternalPublicStatusConfigSnapshot(input: {
+  snapshot: InternalPublicStatusConfigSnapshot;
+  redis?: RedisWriter | null;
+}): Promise<{ configVersion: string; key: string; written: boolean }> {
+  const key = buildPublicStatusInternalConfigSnapshotKey(input.snapshot.configVersion);
+  const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
+
+  if (redis) {
+    await redis.set(key, JSON.stringify(input.snapshot));
+    await redis.set(
+      buildPublicStatusInternalConfigSnapshotKey(),
+      JSON.stringify({ key, configVersion: input.snapshot.configVersion })
+    );
+  }
+
+  return {
+    configVersion: input.snapshot.configVersion,
     key,
     written: Boolean(redis),
   };
@@ -162,6 +199,24 @@ export async function readCurrentPublicStatusConfigSnapshot(input?: {
 
   const snapshotRaw = await redis.get(pointer.key);
   return safeParseJson<PublicStatusConfigSnapshot>(snapshotRaw);
+}
+
+export async function readCurrentInternalPublicStatusConfigSnapshot(input?: {
+  redis?: RedisReader | null;
+}): Promise<InternalPublicStatusConfigSnapshot | null> {
+  const redis = input?.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
+    return null;
+  }
+
+  const pointerRaw = await redis.get(buildPublicStatusInternalConfigSnapshotKey());
+  const pointer = safeParseJson<{ key?: string }>(pointerRaw);
+  if (!pointer?.key) {
+    return null;
+  }
+
+  const snapshotRaw = await redis.get(pointer.key);
+  return safeParseJson<InternalPublicStatusConfigSnapshot>(snapshotRaw);
 }
 
 export async function readPublicStatusSiteMetadata(input?: {
@@ -186,102 +241,4 @@ export async function readPublicStatusTimeZone(input?: {
 }): Promise<string | null> {
   const snapshot = await readCurrentPublicStatusConfigSnapshot(input);
   return snapshot?.timeZone ?? null;
-}
-
-function resolvePublicVendorIconKey(modelName: string, raw?: string): string {
-  const PUBLIC_VENDOR_ICON_KEYS = new Set([
-    "openai",
-    "anthropic",
-    "gemini",
-    "azure",
-    "bedrock",
-    "generic",
-  ]);
-
-  const normalized = raw?.trim().toLowerCase();
-  if (normalized && PUBLIC_VENDOR_ICON_KEYS.has(normalized)) {
-    return normalized;
-  }
-
-  const lowerModelName = modelName.toLowerCase();
-  if (lowerModelName.includes("codex")) return "openai";
-  if (lowerModelName.includes("claude")) return "anthropic";
-  if (lowerModelName.includes("gemini")) return "gemini";
-  return "generic";
-}
-
-function resolveRequestTypeBadge(modelName: string): string {
-  const normalized = modelName.toLowerCase();
-  if (normalized.includes("codex")) {
-    return "codex";
-  }
-  if (normalized.includes("claude")) {
-    return "anthropic";
-  }
-  if (normalized.includes("gemini")) {
-    return "gemini";
-  }
-  return "openaiCompatible";
-}
-
-export async function publishCurrentPublicStatusConfigProjection(input: {
-  reason: string;
-  configVersion?: string;
-}): Promise<{
-  configVersion: string;
-  key: string;
-  written: boolean;
-  groupCount: number;
-}> {
-  const settings = await getSystemSettings();
-  const providerGroups = await findAllProviderGroups();
-  const enabledGroups = collectEnabledPublicStatusGroups(
-    providerGroups.map((group) => ({
-      groupName: group.name,
-      ...parsePublicStatusDescription(group.description),
-    }))
-  );
-  const latestPrices = await findLatestPricesByModels(
-    enabledGroups.flatMap((group) => group.publicModelKeys)
-  );
-
-  const snapshot = buildPublicStatusConfigSnapshot({
-    configVersion: input.configVersion ?? `cfg-${Date.now()}`,
-    siteTitle: settings.siteTitle,
-    siteDescription: settings.siteTitle,
-    timeZone: settings.timezone,
-    defaultIntervalMinutes: settings.publicStatusAggregationIntervalMinutes,
-    defaultRangeHours: settings.publicStatusWindowHours,
-    groups: enabledGroups.map((group) => ({
-      sourceGroupName: group.groupName,
-      slug: group.publicGroupSlug,
-      displayName: group.displayName,
-      sortOrder: group.sortOrder,
-      description: group.explanatoryCopy,
-      models: group.publicModelKeys.map((modelName) => {
-        const price = latestPrices.get(modelName);
-        return {
-          publicModelKey: modelName,
-          label: price?.priceData.display_name?.trim() || modelName,
-          vendorIconKey: resolvePublicVendorIconKey(
-            modelName,
-            typeof price?.priceData.litellm_provider === "string"
-              ? price.priceData.litellm_provider
-              : undefined
-          ),
-          requestTypeBadge: resolveRequestTypeBadge(modelName),
-        };
-      }),
-    })),
-  });
-
-  const result = await publishPublicStatusConfigSnapshot({
-    reason: input.reason,
-    snapshot,
-  });
-
-  return {
-    ...result,
-    groupCount: enabledGroups.length,
-  };
 }

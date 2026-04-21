@@ -105,7 +105,7 @@ describe("public-status aggregation", () => {
               name: "provider-1",
               groupTag: "openai",
               reason: "system_error",
-              statusCode: undefined,
+              statusCode: null,
               errorMessage: "fetch failed",
             },
           ],
