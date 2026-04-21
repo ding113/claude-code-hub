@@ -1,4 +1,6 @@
 {
   "label": "API Address",
-  "placeholder": "e.g. https://open.bigmodel.cn/api/anthropic"
+  "placeholder": "e.g. https://open.bigmodel.cn/api/anthropic",
+  "description": "Use your provider's base address. For request forwarding, preview, and provider testing, you can also paste a version path or exact endpoint here.",
+  "tooltip": "Examples: https://relay.example.com/openai, https://relay.example.com/openai/v1, https://relay.example.com/openai/v1/responses. Claude Code Hub reuses the path you provide instead of appending the same endpoint twice."
 }

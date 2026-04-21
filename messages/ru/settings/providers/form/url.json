@@ -1,4 +1,6 @@
 {
   "label": "Адрес API",
-  "placeholder": "например: https://open.bigmodel.cn/api/anthropic"
+  "placeholder": "например: https://open.bigmodel.cn/api/anthropic",
+  "description": "Обычно сюда вводят базовый адрес провайдера. Для маршрутизации запросов, предпросмотра и provider testing поле также принимает путь с версией или полный URL конечной точки.",
+  "tooltip": "Примеры: https://relay.example.com/openai, https://relay.example.com/openai/v1, https://relay.example.com/openai/v1/responses. Claude Code Hub переиспользует указанный путь и не дописывает тот же endpoint повторно."
 }

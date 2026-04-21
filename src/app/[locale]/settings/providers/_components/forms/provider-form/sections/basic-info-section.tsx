@@ -208,7 +208,12 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
           icon={Link2}
         >
           <div className="space-y-4">
-            <SmartInputWrapper label={t("url.label")} required>
+            <SmartInputWrapper
+              label={t("url.label")}
+              description={t("url.description")}
+              tooltip={t("url.tooltip")}
+              required
+            >
               <div className="relative">
                 <Input
                   id={isEdit ? "edit-url" : "url"}
