@@ -13,8 +13,8 @@ import {
   parsePublicStatusDescription,
   serializePublicStatusDescription,
 } from "@/lib/public-status/config";
-import { PUBLIC_STATUS_INTERVAL_SET } from "@/lib/public-status/constants";
 import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
+import { PUBLIC_STATUS_INTERVAL_SET } from "@/lib/public-status/constants";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { findAllProviderGroups, updateProviderGroup } from "@/repository/provider-groups";

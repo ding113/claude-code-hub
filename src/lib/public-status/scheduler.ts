@@ -69,7 +69,10 @@ async function collectTargets(): Promise<
     return [];
   }
 
-  const targets = new Map<string, { intervalMinutes: number; rangeHours: number; hintKey?: string }>();
+  const targets = new Map<
+    string,
+    { intervalMinutes: number; rangeHours: number; hintKey?: string }
+  >();
   const configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({ redis });
   if (configSnapshot && configSnapshot.groups.length > 0) {
     const manifestKey = buildPublicStatusManifestKey({
