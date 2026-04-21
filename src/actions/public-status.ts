@@ -36,15 +36,9 @@ export async function savePublicStatusSettings(
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    await updateSystemSettings({
-      publicStatusWindowHours: input.publicStatusWindowHours,
-      publicStatusAggregationIntervalMinutes: input.publicStatusAggregationIntervalMinutes,
-    });
-
     const allGroups = await findAllProviderGroups();
     const enabledByName = new Map(input.groups.map((group) => [group.groupName, group]));
-
-    let updatedGroupCount = 0;
+    const groupUpdates: Array<{ id: number; description: string | null }> = [];
 
     for (const group of allGroups) {
       const existing = parsePublicStatusDescription(group.description);
@@ -66,14 +60,23 @@ export async function savePublicStatusSettings(
         };
       }
 
-      if ((group.description ?? null) === nextDescription) {
-        continue;
+      if ((group.description ?? null) !== nextDescription) {
+        groupUpdates.push({
+          id: group.id,
+          description: nextDescription,
+        });
       }
+    }
 
-      await updateProviderGroup(group.id, {
-        description: nextDescription,
+    await updateSystemSettings({
+      publicStatusWindowHours: input.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: input.publicStatusAggregationIntervalMinutes,
+    });
+
+    for (const groupUpdate of groupUpdates) {
+      await updateProviderGroup(groupUpdate.id, {
+        description: groupUpdate.description,
       });
-      updatedGroupCount++;
     }
 
     const hasConfiguredTargets = input.groups.some((group) => group.modelIds.length > 0);
@@ -93,7 +96,7 @@ export async function savePublicStatusSettings(
     }
     revalidatePath("/", "layout");
 
-    return { ok: true, data: { updatedGroupCount } };
+    return { ok: true, data: { updatedGroupCount: groupUpdates.length } };
   } catch (error) {
     logger.error("[PublicStatus] savePublicStatusSettings failed", error);
     return {

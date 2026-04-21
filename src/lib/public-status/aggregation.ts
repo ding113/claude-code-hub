@@ -472,7 +472,8 @@ export async function aggregatePublicStatusSnapshot(
   input: AggregatePublicStatusSnapshotInput
 ): Promise<PublicStatusSnapshotPayload> {
   const now = new Date();
-  const windowStart = new Date(now.getTime() - input.windowHours * 60 * 60 * 1000);
+  const alignedWindowEnd = alignWindowEnd(now, input.bucketMinutes);
+  const windowStart = new Date(alignedWindowEnd.getTime() - input.windowHours * 60 * 60 * 1000);
   const targetModelIds = Array.from(new Set(input.groups.flatMap((group) => group.modelIds)));
   const latestPricesByModel = await findLatestPricesByModels(targetModelIds);
 
@@ -558,7 +559,7 @@ export async function aggregatePublicStatusSnapshot(
     bucketMinutes: input.bucketMinutes,
     groups: input.groups,
     requests,
-    now,
+    now: alignedWindowEnd,
   });
 
   return {

@@ -579,6 +579,17 @@ export const messageRequest = pgTable('message_request', {
   ).where(sql`${table.deletedAt} IS NULL`),
   // #779：筛选器 DISTINCT model / status_code 加速（admin usage logs）
   messageRequestModelActiveIdx: index('idx_message_request_model_active').on(table.model).where(sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL`),
+  // Public status 聚合热路径：按 model + 时间窗回放历史请求
+  messageRequestModelCreatedAtFinalizedActiveIdx: index(
+    'idx_message_request_model_created_at_finalized_active'
+  ).on(table.model, table.createdAt.desc()).where(
+    sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL AND ${table.statusCode} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+  ),
+  messageRequestOriginalModelCreatedAtFinalizedActiveIdx: index(
+    'idx_message_request_original_model_created_at_finalized_active'
+  ).on(table.originalModel, table.createdAt.desc()).where(
+    sql`${table.deletedAt} IS NULL AND ${table.originalModel} IS NOT NULL AND ${table.statusCode} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+  ),
   messageRequestStatusCodeActiveIdx: index('idx_message_request_status_code_active').on(table.statusCode).where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
   messageRequestCreatedAtIdx: index('idx_message_request_created_at').on(table.createdAt),
   messageRequestDeletedAtIdx: index('idx_message_request_deleted_at').on(table.deletedAt),
