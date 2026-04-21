@@ -144,6 +144,7 @@ export async function savePublicStatusSettings(
       defaultIntervalMinutes: settings.publicStatusAggregationIntervalMinutes,
       defaultRangeHours: settings.publicStatusWindowHours,
       groups: normalizedEnabledGroups.map((group) => ({
+        sourceGroupName: group.groupName,
         slug: group.publicGroupSlug,
         displayName: group.displayName,
         sortOrder: group.sortOrder,

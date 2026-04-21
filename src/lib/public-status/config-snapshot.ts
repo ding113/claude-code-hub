@@ -9,6 +9,7 @@ export interface PublicStatusModelSnapshot {
 }
 
 export interface PublicStatusGroupSnapshot {
+  sourceGroupName?: string;
   slug: string;
   displayName: string;
   sortOrder: number;
@@ -33,6 +34,7 @@ interface BuildPublicStatusConfigSnapshotInput {
   defaultIntervalMinutes: number;
   defaultRangeHours: number;
   groups: Array<{
+    sourceGroupName?: string;
     slug: string;
     displayName: string;
     sortOrder: number;
@@ -71,6 +73,7 @@ export function buildPublicStatusConfigSnapshot(
     groups: [...input.groups]
       .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug))
       .map((group) => ({
+        sourceGroupName: group.sourceGroupName,
         slug: group.slug,
         displayName: group.displayName,
         sortOrder: group.sortOrder,
@@ -120,12 +123,9 @@ export async function publishPublicStatusConfigSnapshot(input: {
   };
 }
 
-export async function readPublicStatusSiteMetadata(input?: {
+export async function readCurrentPublicStatusConfigSnapshot(input?: {
   redis?: RedisReader | null;
-}): Promise<{
-  siteTitle: string;
-  siteDescription: string;
-} | null> {
+}): Promise<PublicStatusConfigSnapshot | null> {
   const redis = input?.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
   if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
     return null;
@@ -146,8 +146,17 @@ export async function readPublicStatusSiteMetadata(input?: {
     return null;
   }
 
-  const snapshot = JSON.parse(snapshotRaw) as Partial<PublicStatusConfigSnapshot>;
-  if (!snapshot.siteTitle || !snapshot.siteDescription) {
+  return JSON.parse(snapshotRaw) as PublicStatusConfigSnapshot;
+}
+
+export async function readPublicStatusSiteMetadata(input?: {
+  redis?: RedisReader | null;
+}): Promise<{
+  siteTitle: string;
+  siteDescription: string;
+} | null> {
+  const snapshot = await readCurrentPublicStatusConfigSnapshot(input);
+  if (!snapshot || !snapshot.siteTitle || !snapshot.siteDescription) {
     return null;
   }
 

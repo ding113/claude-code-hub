@@ -638,6 +638,13 @@
       "when": 1776421578713,
       "tag": "0090_demonic_captain_universe",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1776767493777,
+      "tag": "0091_daily_carnage",
+      "breakpoints": true
     }
   ]
 }

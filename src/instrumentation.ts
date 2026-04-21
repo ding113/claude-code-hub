@@ -206,6 +206,17 @@ export async function register() {
         }
 
         try {
+          const { stopPublicStatusRebuildScheduler } = await import(
+            "@/lib/public-status/scheduler"
+          );
+          await stopPublicStatusRebuildScheduler();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to stop public status rebuild scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
           const { stopEndpointProbeLogCleanup } = await import(
             "@/lib/provider-endpoints/probe-log-cleanup"
           );
@@ -407,6 +418,17 @@ export async function register() {
         });
       }
 
+      try {
+        const { startPublicStatusRebuildScheduler } = await import(
+          "@/lib/public-status/scheduler"
+        );
+        startPublicStatusRebuildScheduler();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start public status rebuild scheduler", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       // 初始化端点熔断器（禁用时清理残留状态）
       try {
         const { initEndpointCircuitBreaker } = await import("@/lib/endpoint-circuit-breaker");
@@ -533,6 +555,17 @@ export async function register() {
           startEndpointProbeScheduler();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to start endpoint probe scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          const { startPublicStatusRebuildScheduler } = await import(
+            "@/lib/public-status/scheduler"
+          );
+          startPublicStatusRebuildScheduler();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to start public status rebuild scheduler", {
             error: error instanceof Error ? error.message : String(error),
           });
         }

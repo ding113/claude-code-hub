@@ -1,12 +1,115 @@
 import { getRedisClient } from "@/lib/redis";
-import { buildPublicStatusRebuildHintKey } from "./redis-contract";
+import {
+  buildPublicStatusPayloadFromRequests,
+  getConfiguredPublicStatusGroups,
+  queryPublicStatusRequests,
+} from "./aggregation";
+import { readCurrentPublicStatusConfigSnapshot } from "./config-snapshot";
+import {
+  alignBucketStartUtc,
+  buildGenerationFingerprint,
+  buildPublicStatusCurrentSnapshotKey,
+  buildPublicStatusManifestKey,
+  buildPublicStatusRebuildHintKey,
+  buildPublicStatusSeriesChunkKey,
+  buildPublicStatusTempKey,
+} from "./redis-contract";
 
 const inFlightRebuilds = new Map<string, Promise<{ sourceGeneration: string }>>();
 const REBUILD_HINT_TTL_SECONDS = 60 * 5;
 
 interface RedisHintWriter {
+  get?(key: string): Promise<string | null> | string | null;
   set(key: string, value: string, mode: "EX", seconds: number): Promise<unknown> | unknown;
+  set(key: string, value: string): Promise<unknown> | unknown;
+  del?(...keys: string[]): Promise<unknown> | unknown;
   status?: string;
+}
+
+function getReadyRedisClient(redis?: RedisHintWriter | null): RedisHintWriter | null {
+  const client = redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (!client || ("status" in client && client.status && client.status !== "ready")) {
+    return null;
+  }
+  return client;
+}
+
+async function publishPublicStatusProjection(input: {
+  redis: RedisHintWriter;
+  configVersion: string;
+  intervalMinutes: number;
+  rangeHours: number;
+  sourceGeneration: string;
+  generatedAt: string;
+  coveredFrom: string;
+  coveredTo: string;
+  groups: unknown;
+}): Promise<void> {
+  const snapshotKey = buildPublicStatusCurrentSnapshotKey({
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+    generation: input.sourceGeneration,
+  });
+  const seriesKey = buildPublicStatusSeriesChunkKey({
+    intervalMinutes: input.intervalMinutes,
+    generation: input.sourceGeneration,
+    bucketStartIso: input.coveredFrom,
+    bucketEndIso: input.coveredTo,
+  });
+  const currentManifestKey = buildPublicStatusManifestKey({
+    configVersion: "current",
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+  });
+  const versionedManifestKey = buildPublicStatusManifestKey({
+    configVersion: input.configVersion,
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+  });
+
+  const nonce = `${input.sourceGeneration}-${Date.now()}`;
+  const snapshotTempKey = buildPublicStatusTempKey(snapshotKey, nonce);
+  const seriesTempKey = buildPublicStatusTempKey(seriesKey, nonce);
+
+  const snapshotRecord = {
+    rebuildState: "fresh" as const,
+    sourceGeneration: input.sourceGeneration,
+    generatedAt: input.generatedAt,
+    freshUntil: new Date(
+      Date.parse(input.generatedAt) + input.intervalMinutes * 60 * 1000
+    ).toISOString(),
+    groups: input.groups,
+  };
+  const seriesRecord = {
+    sourceGeneration: input.sourceGeneration,
+    generatedAt: input.generatedAt,
+    coveredFrom: input.coveredFrom,
+    coveredTo: input.coveredTo,
+    groups: input.groups,
+  };
+  const manifestRecord = {
+    configVersion: input.configVersion,
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+    generation: input.sourceGeneration,
+    sourceGeneration: input.sourceGeneration,
+    coveredFrom: input.coveredFrom,
+    coveredTo: input.coveredTo,
+    generatedAt: input.generatedAt,
+    freshUntil: snapshotRecord.freshUntil,
+    rebuildState: "idle" as const,
+    lastCompleteGeneration: input.sourceGeneration,
+  };
+
+  await input.redis.set(snapshotTempKey, JSON.stringify(snapshotRecord));
+  await input.redis.set(seriesTempKey, JSON.stringify(seriesRecord));
+  await input.redis.set(snapshotKey, JSON.stringify(snapshotRecord));
+  await input.redis.set(seriesKey, JSON.stringify(seriesRecord));
+  await input.redis.set(versionedManifestKey, JSON.stringify(manifestRecord));
+  await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+  if (input.redis.del) {
+    await input.redis.del(snapshotTempKey, seriesTempKey);
+  }
 }
 
 export async function runPublicStatusRebuild(input: {
@@ -28,7 +131,95 @@ export async function runPublicStatusRebuild(input: {
   return promise;
 }
 
-// 调度入口先保持异步语义，后续接入真正的 Redis hint / scheduler 时继续扩展。
+export async function rebuildPublicStatusProjection(input: {
+  intervalMinutes: number;
+  rangeHours: number;
+  redis?: RedisHintWriter | null;
+  now?: Date;
+}): Promise<
+  | { status: "disabled"; reason: "redis-unavailable" | "missing-config" | "no-configured-groups" }
+  | { status: "updated"; sourceGeneration: string }
+> {
+  const redis = getReadyRedisClient(input.redis);
+  if (!redis) {
+    return { status: "disabled", reason: "redis-unavailable" };
+  }
+  if (typeof redis.get !== "function") {
+    return { status: "disabled", reason: "redis-unavailable" };
+  }
+  const redisReader = redis as RedisHintWriter & {
+    get(key: string): Promise<string | null> | string | null;
+  };
+
+  const configSnapshot = await readCurrentPublicStatusConfigSnapshot({
+    redis: redisReader,
+  });
+  if (!configSnapshot) {
+    return { status: "disabled", reason: "missing-config" };
+  }
+
+  const groups = getConfiguredPublicStatusGroups(configSnapshot);
+  if (groups.length === 0) {
+    return { status: "disabled", reason: "no-configured-groups" };
+  }
+
+  const now = input.now ?? new Date();
+  const coveredTo = alignBucketStartUtc(now.toISOString(), input.intervalMinutes);
+  const coveredFrom = new Date(
+    Date.parse(coveredTo) - input.rangeHours * 60 * 60 * 1000
+  ).toISOString();
+  const sourceGeneration = buildGenerationFingerprint({
+    configVersion: configSnapshot.configVersion,
+    intervalMinutes: input.intervalMinutes,
+    coveredFromIso: coveredFrom,
+    coveredToIso: coveredTo,
+  });
+
+  const flightKey = [
+    configSnapshot.configVersion,
+    `${input.intervalMinutes}m`,
+    `${input.rangeHours}h`,
+    sourceGeneration,
+  ].join(":");
+
+  const result = await runPublicStatusRebuild({
+    flightKey,
+    computeGeneration: async () => {
+      const requests = await queryPublicStatusRequests({
+        groups,
+        coveredFrom: new Date(coveredFrom),
+        coveredTo: new Date(coveredTo),
+      });
+      const aggregation = buildPublicStatusPayloadFromRequests({
+        rangeHours: input.rangeHours,
+        intervalMinutes: input.intervalMinutes,
+        now: new Date(coveredTo),
+        groups,
+        requests,
+      });
+
+      await publishPublicStatusProjection({
+        redis,
+        configVersion: configSnapshot.configVersion,
+        intervalMinutes: input.intervalMinutes,
+        rangeHours: input.rangeHours,
+        sourceGeneration,
+        generatedAt: aggregation.generatedAt,
+        coveredFrom: aggregation.coveredFrom,
+        coveredTo: aggregation.coveredTo,
+        groups: aggregation.groups,
+      });
+
+      return { sourceGeneration };
+    },
+  });
+
+  return {
+    status: "updated",
+    sourceGeneration: result.sourceGeneration,
+  };
+}
+
 export async function schedulePublicStatusRebuild(input: {
   intervalMinutes: number;
   rangeHours: number;
@@ -39,8 +230,8 @@ export async function schedulePublicStatusRebuild(input: {
   rebuildState: string;
   key?: string;
 }> {
-  const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
-  if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
+  const redis = getReadyRedisClient(input.redis);
+  if (!redis) {
     return {
       accepted: false,
       rebuildState: "rebuilding",
