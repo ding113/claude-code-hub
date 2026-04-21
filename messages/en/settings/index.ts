@@ -10,6 +10,7 @@ import notifications from "./notifications.json";
 import prices from "./prices.json";
 import requestFilters from "./requestFilters.json";
 import sensitiveWords from "./sensitiveWords.json";
+import statusPage from "./statusPage.json";
 import strings from "./strings.json";
 
 import providersAutoSort from "./providers/autoSort.json";
@@ -102,6 +103,7 @@ export default {
   nav,
   common,
   config,
+  statusPage,
   providers,
   prices,
   sensitiveWords,

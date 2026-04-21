@@ -92,6 +92,10 @@ export interface SystemSettings {
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
 
+  // Public status 聚合配置
+  publicStatusWindowHours: number;
+  publicStatusAggregationIntervalMinutes: number;
+
   // 客户端 IP 提取链（null 走内置默认）
   ipExtractionConfig: IpExtractionConfig | null;
   // 是否启用 IP 归属地查询
@@ -168,6 +172,10 @@ export interface UpdateSystemSettingsInput {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+
+  // Public status 聚合配置（可选）
+  publicStatusWindowHours?: number;
+  publicStatusAggregationIntervalMinutes?: number;
 
   // 客户端 IP 提取链（可选，null = 使用默认）
   ipExtractionConfig?: IpExtractionConfig | null;

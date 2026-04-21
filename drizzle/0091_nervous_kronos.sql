@@ -1,0 +1,2 @@
+ALTER TABLE "system_settings" ADD COLUMN "public_status_window_hours" integer DEFAULT 24 NOT NULL;--> statement-breakpoint
+ALTER TABLE "system_settings" ADD COLUMN "public_status_aggregation_interval_minutes" integer DEFAULT 5 NOT NULL;

@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import {
+  Activity,
   AlertTriangle,
   Bell,
   BookOpen,
@@ -27,6 +28,7 @@ import type { SettingsNavIconName, SettingsNavItem } from "../_lib/nav-items";
 // Map icon names to actual icon components (client-side only)
 const ICON_MAP: Record<SettingsNavIconName, LucideIcon> = {
   settings: Settings,
+  activity: Activity,
   "dollar-sign": DollarSign,
   server: Server,
   "shield-alert": ShieldAlert,

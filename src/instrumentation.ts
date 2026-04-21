@@ -407,6 +407,15 @@ export async function register() {
         });
       }
 
+      try {
+        const { initializePublicStatusScheduler } = await import("@/lib/public-status/scheduler");
+        await initializePublicStatusScheduler();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start public status scheduler", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       // 初始化端点熔断器（禁用时清理残留状态）
       try {
         const { initEndpointCircuitBreaker } = await import("@/lib/endpoint-circuit-breaker");
@@ -533,6 +542,15 @@ export async function register() {
           startEndpointProbeScheduler();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to start endpoint probe scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          const { initializePublicStatusScheduler } = await import("@/lib/public-status/scheduler");
+          await initializePublicStatusScheduler();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to start public status scheduler", {
             error: error instanceof Error ? error.message : String(error),
           });
         }

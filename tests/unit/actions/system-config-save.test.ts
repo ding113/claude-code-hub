@@ -86,6 +86,8 @@ describe("saveSystemSettings", () => {
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -212,6 +214,8 @@ describe("saveSystemSettings", () => {
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -263,6 +267,21 @@ describe("saveSystemSettings", () => {
     expect(updateSystemSettingsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         enableHighConcurrencyMode: true,
+      })
+    );
+  });
+
+  it("should pass public status scheduling fields through validation and save", async () => {
+    const result = await saveSystemSettings({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicStatusWindowHours: 24,
+        publicStatusAggregationIntervalMinutes: 5,
       })
     );
   });

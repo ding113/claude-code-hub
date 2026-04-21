@@ -805,6 +805,12 @@ export const systemSettings = pgTable('system_settings', {
   quotaLeasePercentMonthly: numeric('quota_lease_percent_monthly', { precision: 5, scale: 4 }).default('0.05'),
   quotaLeaseCapUsd: numeric('quota_lease_cap_usd', { precision: 10, scale: 2 }),
 
+  // Public Status 聚合配置
+  publicStatusWindowHours: integer('public_status_window_hours').notNull().default(24),
+  publicStatusAggregationIntervalMinutes: integer('public_status_aggregation_interval_minutes')
+    .notNull()
+    .default(5),
+
   // 客户端 IP 提取配置（null 表示使用内置默认链：cf-connecting-ip → x-real-ip → x-forwarded-for rightmost）
   ipExtractionConfig: jsonb('ip_extraction_config').$type<IpExtractionConfig>(),
   // 是否启用 IP 归属地查询（默认开启）

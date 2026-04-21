@@ -8,7 +8,13 @@ import { logger } from "@/lib/logger";
 
 // Public paths that don't require authentication
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
-const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout"];
+const PUBLIC_PATH_PATTERNS = [
+  "/login",
+  "/status",
+  "/usage-doc",
+  "/api/auth/login",
+  "/api/auth/logout",
+];
 
 const API_PROXY_PATH = "/v1";
 

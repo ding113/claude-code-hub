@@ -46,6 +46,8 @@ const DEFAULT_SETTINGS: Pick<
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
   | "responseFixerConfig"
+  | "publicStatusWindowHours"
+  | "publicStatusAggregationIntervalMinutes"
 > = {
   enableHttp2: false,
   enableHighConcurrencyMode: false,
@@ -58,6 +60,8 @@ const DEFAULT_SETTINGS: Pick<
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
+  publicStatusWindowHours: 24,
+  publicStatusAggregationIntervalMinutes: 5,
   responseFixerConfig: {
     fixTruncatedJson: true,
     fixSseFormat: true,
@@ -141,6 +145,9 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      publicStatusWindowHours: DEFAULT_SETTINGS.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes:
+        DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
       ipExtractionConfig: null,
       ipGeoLookupEnabled: true,
       createdAt: new Date(),
