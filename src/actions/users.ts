@@ -1089,19 +1089,26 @@ export async function batchUpdateUsers(
     });
 
     if (updates.limit5hResetMode !== undefined && updatedIds.length > 0) {
-      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
-      const keysMap = await findKeyListBatch(updatedIds);
-      await Promise.all(
-        updatedIds.map(async (userId) => {
-          const keys = keysMap.get(userId) ?? [];
-          await invalidateCachedUser(userId).catch(() => null);
-          await clearUserCostCache({
-            userId,
-            keyIds: keys.map((item) => item.id),
-            keyHashes: keys.map((item) => item.key),
-          }).catch(() => null);
-        })
-      );
+      try {
+        const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+        const keysMap = await findKeyListBatch(updatedIds);
+        await Promise.all(
+          updatedIds.map(async (userId) => {
+            const keys = keysMap.get(userId) ?? [];
+            await invalidateCachedUser(userId).catch(() => null);
+            await clearUserCostCache({
+              userId,
+              keyIds: keys.map((item) => item.id),
+              keyHashes: keys.map((item) => item.key),
+            }).catch(() => null);
+          })
+        );
+      } catch (error) {
+        logger.warn("[UserAction] Failed to clear user 5h reset-mode cache after batch update", {
+          updatedIds,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     revalidatePath("/dashboard");

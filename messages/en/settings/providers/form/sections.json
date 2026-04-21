@@ -161,7 +161,7 @@
     "limit5hResetMode": {
       "label": "5-Hour Reset Mode",
       "options": {
-        "fixed": "Fixed window",
+        "fixed": "Fixed Window (5h)",
         "rolling": "Rolling Window (5h)"
       },
       "desc": {

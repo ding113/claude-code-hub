@@ -1145,6 +1145,17 @@ export async function batchUpdateKeys(
     }
 
     const updates = params.updates ?? {};
+    if (
+      updates.limit5hResetMode !== undefined &&
+      updates.limit5hResetMode !== "fixed" &&
+      updates.limit5hResetMode !== "rolling"
+    ) {
+      return {
+        ok: false,
+        error: tError("INVALID_FORMAT"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
     const hasAnyUpdate = Object.values(updates).some((v) => v !== undefined);
     if (!hasAnyUpdate) {
       return {
