@@ -5,7 +5,7 @@ const mockUpdateSystemSettings = vi.hoisted(() => vi.fn());
 const mockFindAllProviderGroups = vi.hoisted(() => vi.fn());
 const mockUpdateProviderGroup = vi.hoisted(() => vi.fn());
 const mockFindLatestPricesByModels = vi.hoisted(() => vi.fn());
-const mockPublishPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
+const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
 const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
 const mockInvalidateSystemSettingsCache = vi.hoisted(() => vi.fn());
 const mockRevalidatePath = vi.hoisted(() => vi.fn());
@@ -29,8 +29,7 @@ vi.mock("@/repository/model-price", () => ({
 }));
 
 vi.mock("@/lib/public-status/config-snapshot", () => ({
-  buildPublicStatusConfigSnapshot: vi.fn((input) => input),
-  publishPublicStatusConfigSnapshot: mockPublishPublicStatusConfigSnapshot,
+  publishCurrentPublicStatusConfigProjection: mockPublishCurrentPublicStatusConfigProjection,
 }));
 
 vi.mock("@/lib/public-status/rebuild-worker", () => ({
@@ -89,10 +88,11 @@ describe("public-status config publish integration", () => {
         ],
       ])
     );
-    mockPublishPublicStatusConfigSnapshot.mockResolvedValue({
+    mockPublishCurrentPublicStatusConfigProjection.mockResolvedValue({
       configVersion: "cfg-1",
       key: "public-status:v1:config:cfg-1",
       written: true,
+      groupCount: 1,
     });
     mockSchedulePublicStatusRebuild.mockResolvedValue({
       accepted: true,
@@ -122,7 +122,7 @@ describe("public-status config publish integration", () => {
       publicStatusAggregationIntervalMinutes: 5,
     });
     expect(mockUpdateProviderGroup).toHaveBeenCalledTimes(1);
-    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledTimes(1);
+    expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledTimes(1);
     expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
       intervalMinutes: 5,
       rangeHours: 24,

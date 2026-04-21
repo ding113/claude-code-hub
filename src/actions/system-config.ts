@@ -6,6 +6,8 @@ import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-snapshot";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-worker";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
@@ -132,6 +134,33 @@ export async function saveSystemSettings(formData: {
 
     // Invalidate the system settings cache so proxy requests get fresh settings
     invalidateSystemSettingsCache();
+
+    const shouldRepublishPublicStatusProjection =
+      validated.siteTitle !== undefined ||
+      validated.timezone !== undefined ||
+      validated.publicStatusWindowHours !== undefined ||
+      validated.publicStatusAggregationIntervalMinutes !== undefined;
+
+    if (shouldRepublishPublicStatusProjection) {
+      const publishResult = await publishCurrentPublicStatusConfigProjection({
+        reason: "save-system-settings",
+      });
+
+      if (!publishResult.written) {
+        return {
+          ok: false,
+          error: "系统设置已保存，但 public status Redis 投影发布失败",
+        };
+      }
+
+      await schedulePublicStatusRebuild({
+        intervalMinutes:
+          validated.publicStatusAggregationIntervalMinutes ??
+          updated.publicStatusAggregationIntervalMinutes,
+        rangeHours: validated.publicStatusWindowHours ?? updated.publicStatusWindowHours,
+        reason: "system-settings-updated",
+      });
+    }
 
     // Revalidate paths for all locales to ensure cache invalidation across i18n routes
     for (const locale of locales) {

@@ -1,6 +1,6 @@
-import { and, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { messageRequest, providers } from "@/drizzle/schema";
+import { messageRequest } from "@/drizzle/schema";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import type { PublicStatusPayload, PublicStatusTimelineBucket } from "./payload";
@@ -523,18 +523,12 @@ export async function queryPublicStatusRequests(input: {
       statusCode: messageRequest.statusCode,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
-      providerId: messageRequest.providerId,
-      providerName: providers.name,
-      finalGroupTag: providers.groupTag,
-      finalProviderType: providers.providerType,
     })
     .from(messageRequest)
-    .leftJoin(providers, eq(messageRequest.providerId, providers.id))
     .where(
       and(
         isNull(messageRequest.deletedAt),
         EXCLUDE_WARMUP_CONDITION,
-        sql`${messageRequest.statusCode} IS NOT NULL`,
         gte(messageRequest.createdAt, input.coveredFrom),
         lt(messageRequest.createdAt, input.coveredTo),
         or(
@@ -554,26 +548,6 @@ export async function queryPublicStatusRequests(input: {
         ? (row.providerChain as PublicStatusRequestChainItem[])
         : null;
 
-    const fallbackChain =
-      row.providerId && row.finalGroupTag
-        ? ([
-            {
-              id: row.providerId,
-              name: row.providerName ?? `provider-${row.providerId}`,
-              groupTag: row.finalGroupTag,
-              providerType: row.finalProviderType ?? undefined,
-              reason:
-                typeof row.statusCode === "number" && row.statusCode >= 200 && row.statusCode < 400
-                  ? "request_success"
-                  : row.statusCode === 404
-                    ? "resource_not_found"
-                    : "retry_failed",
-              statusCode: row.statusCode ?? undefined,
-              errorMessage: row.errorMessage ?? undefined,
-            },
-          ] satisfies PublicStatusRequestChainItem[])
-        : null;
-
     return [
       {
         id: row.id,
@@ -583,7 +557,7 @@ export async function queryPublicStatusRequests(input: {
         durationMs: row.durationMs,
         ttfbMs: row.ttfbMs,
         outputTokens: row.outputTokens,
-        providerChain: existingChain ?? fallbackChain,
+        providerChain: existingChain,
       },
     ];
   });

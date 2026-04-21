@@ -13,12 +13,10 @@ import {
   serializePublicStatusDescription,
 } from "@/lib/public-status/config";
 import {
-  buildPublicStatusConfigSnapshot,
-  publishPublicStatusConfigSnapshot,
+  publishCurrentPublicStatusConfigProjection,
 } from "@/lib/public-status/config-snapshot";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-worker";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
-import { findLatestPricesByModels } from "@/repository/model-price";
 import { findAllProviderGroups, updateProviderGroup } from "@/repository/provider-groups";
 import { updateSystemSettings } from "@/repository/system-config";
 import type { ActionResult } from "./types";
@@ -34,20 +32,6 @@ export interface SavePublicStatusSettingsInput {
     sortOrder?: number;
     publicModelKeys: string[];
   }>;
-}
-
-function resolveRequestTypeBadge(modelName: string): string {
-  const normalized = modelName.toLowerCase();
-  if (normalized.includes("codex")) {
-    return "codex";
-  }
-  if (normalized.includes("claude")) {
-    return "anthropic";
-  }
-  if (normalized.includes("gemini")) {
-    return "gemini";
-  }
-  return "openaiCompatible";
 }
 
 function normalizeEnabledGroups(
@@ -132,40 +116,17 @@ export async function savePublicStatusSettings(
       });
     }
 
-    const latestPrices = await findLatestPricesByModels(
-      normalizedEnabledGroups.flatMap((group) => group.publicModelKeys)
-    );
     const configVersion = `cfg-${Date.now()}`;
-
-    const snapshot = buildPublicStatusConfigSnapshot({
-      configVersion,
-      siteTitle: settings.siteTitle,
-      siteDescription: settings.siteTitle,
-      defaultIntervalMinutes: settings.publicStatusAggregationIntervalMinutes,
-      defaultRangeHours: settings.publicStatusWindowHours,
-      groups: normalizedEnabledGroups.map((group) => ({
-        sourceGroupName: group.groupName,
-        slug: group.publicGroupSlug,
-        displayName: group.displayName,
-        sortOrder: group.sortOrder,
-        description: group.explanatoryCopy,
-        models: group.publicModelKeys.map((modelName) => {
-          const price = latestPrices.get(modelName);
-          return {
-            publicModelKey: modelName,
-            label: price?.priceData.display_name?.trim() || modelName,
-            vendorIconKey:
-              price?.priceData.litellm_provider?.trim() || resolveRequestTypeBadge(modelName),
-            requestTypeBadge: resolveRequestTypeBadge(modelName),
-          };
-        }),
-      })),
-    });
-
-    await publishPublicStatusConfigSnapshot({
+    const publishResult = await publishCurrentPublicStatusConfigProjection({
       reason: "save-public-status-settings",
-      snapshot,
+      configVersion,
     });
+    if (!publishResult.written) {
+      return {
+        ok: false,
+        error: "公开状态 Redis 投影发布失败",
+      };
+    }
     await schedulePublicStatusRebuild({
       intervalMinutes: settings.publicStatusAggregationIntervalMinutes,
       rangeHours: settings.publicStatusWindowHours,
@@ -186,7 +147,7 @@ export async function savePublicStatusSettings(
       ok: true,
       data: {
         updatedGroupCount: groupUpdates.length,
-        configVersion,
+        configVersion: publishResult.configVersion,
       },
     };
   } catch (error) {

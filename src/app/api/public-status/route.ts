@@ -3,32 +3,46 @@ import { readCurrentPublicStatusConfigSnapshot } from "@/lib/public-status/confi
 import { readPublicStatusPayload } from "@/lib/public-status/read-store";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-worker";
 
-function parsePositiveIntegerParam(value: string | null, fallback: number): number {
-  if (!value) {
-    return fallback;
-  }
+const PUBLIC_INTERVALS = new Set([5, 15, 30, 60]);
+const MAX_PUBLIC_RANGE_HOURS = 168;
 
-  const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+function clampInterval(value: string | null, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(parsed) && PUBLIC_INTERVALS.has(parsed) ? parsed : fallback;
+}
+
+function clampRange(value: string | null, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_PUBLIC_RANGE_HOURS
+    ? parsed
+    : fallback;
 }
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const configSnapshot = await readCurrentPublicStatusConfigSnapshot();
-  const intervalMinutes = parsePositiveIntegerParam(
+  const defaultInterval = configSnapshot?.defaultIntervalMinutes ?? 5;
+  const defaultRange = configSnapshot?.defaultRangeHours ?? 24;
+  const intervalMinutes = clampInterval(
     url.searchParams.get("interval"),
-    configSnapshot?.defaultIntervalMinutes ?? 5
+    defaultInterval
   );
-  const rangeHours = parsePositiveIntegerParam(
+  const rangeHours = clampRange(
     url.searchParams.get("rangeHours"),
-    configSnapshot?.defaultRangeHours ?? 24
+    defaultRange
   );
+  const canTriggerRebuild =
+    intervalMinutes === defaultInterval && rangeHours === defaultRange;
 
   const payload = await readPublicStatusPayload({
     intervalMinutes,
     rangeHours,
+    configVersion: configSnapshot?.configVersion,
     nowIso: new Date().toISOString(),
     triggerRebuildHint: async (reason) => {
+      if (!canTriggerRebuild) {
+        return;
+      }
       await schedulePublicStatusRebuild({
         intervalMinutes,
         rangeHours,

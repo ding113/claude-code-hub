@@ -41,14 +41,14 @@ function proxyHandler(request: NextRequest) {
   const isLocalePrefixedPublicStatusPath = routing.locales.some(
     (locale) => pathname === `/${locale}/status` || pathname.startsWith(`/${locale}/status/`)
   );
-  if (isDevelopment() && pathname.includes("/status")) {
-    logger.info("Status hard bypass debug", {
-      pathname,
-      isLocalePrefixedPublicStatusPath,
-    });
-  }
   if (isLocalePrefixedPublicStatusPath) {
-    return NextResponse.next();
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-cch-public-status", "1");
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   }
 
   // Skip locale handling for static files and Next.js internals
@@ -82,16 +82,6 @@ function proxyHandler(request: NextRequest) {
   const isPublicPath = PUBLIC_PATH_PATTERNS.some((pattern) =>
     matchesPublicPath(pathWithoutLocale, pattern)
   );
-
-  if (isDevelopment() && pathname.includes("/status")) {
-    logger.info("Public path check", {
-      pathname,
-      pathWithoutLocale,
-      isLocaleInPath,
-      isPublicPath,
-    });
-  }
-
   // Public paths don't require authentication
   if (isPublicPath) {
     return localeResponse;

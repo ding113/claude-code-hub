@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
+  buildPublicStatusRebuildHintKey,
 } from "@/lib/public-status/redis-contract";
 
 const mockRedisSet = vi.hoisted(() => vi.fn());
@@ -109,6 +110,8 @@ describe("public-status rebuild worker", () => {
       coveredTo: "2026-04-21T10:00:00.000Z",
       groups: [],
     });
+    mockRedisSet.mockReset();
+    mockRedisSet.mockResolvedValueOnce("OK");
 
     const result = await mod.rebuildPublicStatusProjection({
       intervalMinutes: 5,
@@ -117,22 +120,19 @@ describe("public-status rebuild worker", () => {
     });
 
     expect(result.status).toBe("updated");
-    const currentManifestKey = buildPublicStatusManifestKey({
-      configVersion: "current",
+    const versionedManifestKey = buildPublicStatusManifestKey({
+      configVersion: "cfg-1",
       intervalMinutes: 5,
       rangeHours: 24,
     });
-    const snapshotSetCall = mockRedisSet.mock.calls.find((call) =>
-      String(call[0]).includes("public-status:v1:snapshot:")
-    );
-    const manifestSetCall = mockRedisSet.mock.calls.find((call) => call[0] === currentManifestKey);
+    const versionedManifestCall = mockRedisSet.mock.calls.find((call) => call[0] === versionedManifestKey);
 
-    expect(snapshotSetCall).toBeTruthy();
-    expect(manifestSetCall).toBeTruthy();
+    expect(versionedManifestCall).toBeTruthy();
 
-    const manifestValue = JSON.parse(String(manifestSetCall?.[1]));
+    const manifestValue = JSON.parse(String(versionedManifestCall?.[1]));
     expect(manifestValue.configVersion).toBe("cfg-1");
     expect(manifestValue.lastCompleteGeneration).toBeTruthy();
+    expect(mockRedisDel).toHaveBeenCalled();
 
     const snapshotKey = buildPublicStatusCurrentSnapshotKey({
       intervalMinutes: 5,
@@ -140,5 +140,26 @@ describe("public-status rebuild worker", () => {
       generation: manifestValue.lastCompleteGeneration,
     });
     expect(mockRedisSet).toHaveBeenCalledWith(snapshotKey, expect.any(String));
+  });
+
+  it("writes rebuild hints with ttl and reason payload", async () => {
+    const mod = await import("@/lib/public-status/rebuild-worker");
+
+    await mod.schedulePublicStatusRebuild({
+      intervalMinutes: 15,
+      rangeHours: 48,
+      reason: "manifest-missing",
+    });
+
+    const hintKey = buildPublicStatusRebuildHintKey({
+      intervalMinutes: 15,
+      rangeHours: 48,
+    });
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      hintKey,
+      expect.stringContaining("manifest-missing"),
+      "EX",
+      300
+    );
   });
 });

@@ -23,7 +23,11 @@ function parseJson<T>(raw: string | null): T | null {
     return null;
   }
 
-  return JSON.parse(raw) as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 function buildRebuildingPayload(): PublicStatusPayload {

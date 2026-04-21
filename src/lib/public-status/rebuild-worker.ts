@@ -11,12 +11,14 @@ import {
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
   buildPublicStatusRebuildHintKey,
+  buildPublicStatusRebuildLockKey,
   buildPublicStatusSeriesChunkKey,
   buildPublicStatusTempKey,
 } from "./redis-contract";
 
 const inFlightRebuilds = new Map<string, Promise<{ sourceGeneration: string }>>();
 const REBUILD_HINT_TTL_SECONDS = 60 * 5;
+const REBUILD_LOCK_TTL_MS = 60_000;
 
 interface RedisHintWriter {
   get?(key: string): Promise<string | null> | string | null;
@@ -112,6 +114,40 @@ async function publishPublicStatusProjection(input: {
   }
 }
 
+async function acquireDistributedRebuildLock(input: {
+  redis: RedisHintWriter & { get(key: string): Promise<string | null> | string | null };
+  flightKey: string;
+}): Promise<{ lockKey: string; lockId: string } | null> {
+  const lockKey = buildPublicStatusRebuildLockKey(input.flightKey);
+  const lockId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const result = await (input.redis as unknown as {
+    set: (
+      key: string,
+      value: string,
+      px: "PX",
+      ttlMs: number,
+      nx: "NX"
+    ) => Promise<unknown> | unknown;
+  }).set(lockKey, lockId, "PX", REBUILD_LOCK_TTL_MS, "NX");
+
+  if (result !== "OK") {
+    return null;
+  }
+
+  return { lockKey, lockId };
+}
+
+async function releaseDistributedRebuildLock(input: {
+  redis: RedisHintWriter & { get(key: string): Promise<string | null> | string | null };
+  lockKey: string;
+  lockId: string;
+}): Promise<void> {
+  const current = await input.redis.get(input.lockKey);
+  if (current === input.lockId && input.redis.del) {
+    await input.redis.del(input.lockKey);
+  }
+}
+
 export async function runPublicStatusRebuild(input: {
   flightKey: string;
   computeGeneration: () => Promise<{ sourceGeneration: string }>;
@@ -185,6 +221,15 @@ export async function rebuildPublicStatusProjection(input: {
   const result = await runPublicStatusRebuild({
     flightKey,
     computeGeneration: async () => {
+      const distributedLock = await acquireDistributedRebuildLock({
+        redis: redisReader,
+        flightKey,
+      });
+      if (!distributedLock) {
+        return { sourceGeneration };
+      }
+
+      try {
       const requests = await queryPublicStatusRequests({
         groups,
         coveredFrom: new Date(coveredFrom),
@@ -211,6 +256,13 @@ export async function rebuildPublicStatusProjection(input: {
       });
 
       return { sourceGeneration };
+      } finally {
+        await releaseDistributedRebuildLock({
+          redis: redisReader,
+          lockKey: distributedLock.lockKey,
+          lockId: distributedLock.lockId,
+        });
+      }
     },
   });
 

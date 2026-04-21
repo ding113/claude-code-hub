@@ -1,4 +1,11 @@
 import { getRedisClient } from "@/lib/redis";
+import { findLatestPricesByModels } from "@/repository/model-price";
+import { findAllProviderGroups } from "@/repository/provider-groups";
+import { getSystemSettings } from "@/repository/system-config";
+import {
+  collectEnabledPublicStatusGroups,
+  parsePublicStatusDescription,
+} from "./config";
 import { buildPublicStatusConfigSnapshotKey } from "./redis-contract";
 
 export interface PublicStatusModelSnapshot {
@@ -22,6 +29,7 @@ export interface PublicStatusConfigSnapshot {
   generatedAt: string;
   siteTitle: string;
   siteDescription: string;
+  timeZone: string | null;
   defaultIntervalMinutes: number;
   defaultRangeHours: number;
   groups: PublicStatusGroupSnapshot[];
@@ -31,6 +39,7 @@ interface BuildPublicStatusConfigSnapshotInput {
   configVersion: string;
   siteTitle: string;
   siteDescription: string;
+  timeZone?: string | null;
   defaultIntervalMinutes: number;
   defaultRangeHours: number;
   groups: Array<{
@@ -59,6 +68,18 @@ interface RedisReader {
   status?: string;
 }
 
+function safeParseJson<T>(raw: string | null): T | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 export function buildPublicStatusConfigSnapshot(
   input: BuildPublicStatusConfigSnapshotInput
 ): PublicStatusConfigSnapshot {
@@ -68,6 +89,7 @@ export function buildPublicStatusConfigSnapshot(
     generatedAt: new Date().toISOString(),
     siteTitle: input.siteTitle.trim(),
     siteDescription: input.siteDescription.trim(),
+    timeZone: input.timeZone ?? null,
     defaultIntervalMinutes: input.defaultIntervalMinutes,
     defaultRangeHours: input.defaultRangeHours,
     groups: [...input.groups]
@@ -103,6 +125,7 @@ export async function publishPublicStatusConfigSnapshot(input: {
       configVersion: `cfg-${Date.now()}`,
       siteTitle: "Claude Code Hub Status",
       siteDescription: "Request-derived public status",
+      timeZone: null,
       defaultIntervalMinutes: 5,
       defaultRangeHours: 24,
       groups: [],
@@ -132,21 +155,13 @@ export async function readCurrentPublicStatusConfigSnapshot(input?: {
   }
 
   const pointerRaw = await redis.get(buildPublicStatusConfigSnapshotKey());
-  if (!pointerRaw) {
-    return null;
-  }
-
-  const pointer = JSON.parse(pointerRaw) as { key?: string };
-  if (!pointer.key) {
+  const pointer = safeParseJson<{ key?: string }>(pointerRaw);
+  if (!pointer?.key) {
     return null;
   }
 
   const snapshotRaw = await redis.get(pointer.key);
-  if (!snapshotRaw) {
-    return null;
-  }
-
-  return JSON.parse(snapshotRaw) as PublicStatusConfigSnapshot;
+  return safeParseJson<PublicStatusConfigSnapshot>(snapshotRaw);
 }
 
 export async function readPublicStatusSiteMetadata(input?: {
@@ -163,5 +178,110 @@ export async function readPublicStatusSiteMetadata(input?: {
   return {
     siteTitle: snapshot.siteTitle,
     siteDescription: snapshot.siteDescription,
+  };
+}
+
+export async function readPublicStatusTimeZone(input?: {
+  redis?: RedisReader | null;
+}): Promise<string | null> {
+  const snapshot = await readCurrentPublicStatusConfigSnapshot(input);
+  return snapshot?.timeZone ?? null;
+}
+
+function resolvePublicVendorIconKey(modelName: string, raw?: string): string {
+  const PUBLIC_VENDOR_ICON_KEYS = new Set([
+    "openai",
+    "anthropic",
+    "gemini",
+    "azure",
+    "bedrock",
+    "generic",
+  ]);
+
+  const normalized = raw?.trim().toLowerCase();
+  if (normalized && PUBLIC_VENDOR_ICON_KEYS.has(normalized)) {
+    return normalized;
+  }
+
+  const lowerModelName = modelName.toLowerCase();
+  if (lowerModelName.includes("codex")) return "openai";
+  if (lowerModelName.includes("claude")) return "anthropic";
+  if (lowerModelName.includes("gemini")) return "gemini";
+  return "generic";
+}
+
+function resolveRequestTypeBadge(modelName: string): string {
+  const normalized = modelName.toLowerCase();
+  if (normalized.includes("codex")) {
+    return "codex";
+  }
+  if (normalized.includes("claude")) {
+    return "anthropic";
+  }
+  if (normalized.includes("gemini")) {
+    return "gemini";
+  }
+  return "openaiCompatible";
+}
+
+export async function publishCurrentPublicStatusConfigProjection(input: {
+  reason: string;
+  configVersion?: string;
+}): Promise<{
+  configVersion: string;
+  key: string;
+  written: boolean;
+  groupCount: number;
+}> {
+  const settings = await getSystemSettings();
+  const providerGroups = await findAllProviderGroups();
+  const enabledGroups = collectEnabledPublicStatusGroups(
+    providerGroups.map((group) => ({
+      groupName: group.name,
+      ...parsePublicStatusDescription(group.description),
+    }))
+  );
+  const latestPrices = await findLatestPricesByModels(
+    enabledGroups.flatMap((group) => group.publicModelKeys)
+  );
+
+  const snapshot = buildPublicStatusConfigSnapshot({
+    configVersion: input.configVersion ?? `cfg-${Date.now()}`,
+    siteTitle: settings.siteTitle,
+    siteDescription: settings.siteTitle,
+    timeZone: settings.timezone,
+    defaultIntervalMinutes: settings.publicStatusAggregationIntervalMinutes,
+    defaultRangeHours: settings.publicStatusWindowHours,
+    groups: enabledGroups.map((group) => ({
+      sourceGroupName: group.groupName,
+      slug: group.publicGroupSlug,
+      displayName: group.displayName,
+      sortOrder: group.sortOrder,
+      description: group.explanatoryCopy,
+      models: group.publicModelKeys.map((modelName) => {
+        const price = latestPrices.get(modelName);
+        return {
+          publicModelKey: modelName,
+          label: price?.priceData.display_name?.trim() || modelName,
+          vendorIconKey: resolvePublicVendorIconKey(
+            modelName,
+            typeof price?.priceData.litellm_provider === "string"
+              ? price.priceData.litellm_provider
+              : undefined
+          ),
+          requestTypeBadge: resolveRequestTypeBadge(modelName),
+        };
+      }),
+    })),
+  });
+
+  const result = await publishPublicStatusConfigSnapshot({
+    reason: input.reason,
+    snapshot,
+  });
+
+  return {
+    ...result,
+    groupCount: enabledGroups.length,
   };
 }

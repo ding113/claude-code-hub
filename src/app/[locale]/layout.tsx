@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import "../globals.css";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { Footer } from "@/components/customs/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { type Locale, locales } from "@/i18n/config";
 import { logger } from "@/lib/logger";
-import { readPublicStatusSiteMetadata } from "@/lib/public-status/config-snapshot";
+import { resolveSiteMetadataSource } from "@/lib/public-status/layout-metadata";
+import {
+  readPublicStatusTimeZone,
+} from "@/lib/public-status/config-snapshot";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { AppProviders } from "../providers";
 
@@ -19,9 +23,11 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
+  const headersStore = await headers();
+  const isPublicStatusRequest = headersStore.get("x-cch-public-status") === "1";
 
   try {
-    const metadata = await readPublicStatusSiteMetadata();
+    const metadata = await resolveSiteMetadataSource({ isPublicStatusRequest });
     const title = metadata?.siteTitle?.trim() || FALLBACK_TITLE;
     const description = metadata?.siteDescription?.trim() || FALLBACK_TITLE;
 
@@ -48,7 +54,7 @@ export async function generateMetadata({
       },
     };
   } catch (error) {
-    logger.error("Failed to load public status metadata projection", { error });
+    logger.error("Failed to load metadata", { error });
     return {
       title: FALLBACK_TITLE,
       description: FALLBACK_TITLE,
@@ -64,6 +70,8 @@ export default async function RootLayout({
   params: Promise<{ locale: string }>;
 }>) {
   const { locale } = await params;
+  const headersStore = await headers();
+  const isPublicStatusRequest = headersStore.get("x-cch-public-status") === "1";
 
   // Validate locale
   if (!locales.includes(locale as Locale)) {
@@ -72,7 +80,9 @@ export default async function RootLayout({
 
   // Load translation messages
   const messages = await getMessages();
-  const timeZone = await resolveSystemTimezone();
+  const timeZone = isPublicStatusRequest
+    ? (await readPublicStatusTimeZone()) || "UTC"
+    : await resolveSystemTimezone();
   // Create a stable `now` timestamp to avoid SSR/CSR hydration mismatch for relative time
   const now = new Date();
 

@@ -9,6 +9,7 @@ const guardedFiles = [
   "src/app/api/public-status/route.ts",
   "src/lib/public-status/read-store.ts",
   "src/app/[locale]/status/page.tsx",
+  "src/app/[locale]/layout.tsx",
 ];
 
 const bannedImports = [

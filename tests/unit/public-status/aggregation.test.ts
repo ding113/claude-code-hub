@@ -68,4 +68,52 @@ describe("public-status aggregation", () => {
     expect(result.groups[0]?.models[0]?.timeline).toHaveLength(4);
     expect(result.groups[0]?.models[0]?.latestState).toBe("failed");
   });
+
+  it("counts failures that have no statusCode but do have failure reason/context", () => {
+    const result = buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: null,
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 3,
+          createdAt: "2026-04-21T10:25:00.000Z",
+          originalModel: "gpt-4.1",
+          durationMs: 1500,
+          ttfbMs: 500,
+          outputTokens: null,
+          providerChain: [
+            {
+              id: 11,
+              name: "provider-1",
+              groupTag: "openai",
+              reason: "system_error",
+              statusCode: undefined,
+              errorMessage: "fetch failed",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.groups[0]?.models[0]?.latestState).toBe("failed");
+    expect(result.groups[0]?.models[0]?.timeline.some((bucket) => bucket.sampleCount > 0)).toBe(true);
+  });
 });

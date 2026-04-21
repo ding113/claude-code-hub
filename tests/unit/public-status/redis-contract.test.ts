@@ -9,6 +9,16 @@ interface RedisContractModule {
     coveredToIso: string;
   }): string;
   alignBucketStartUtc(isoTimestamp: string, intervalMinutes: number): string;
+  resolvePublicStatusManifestState(
+    manifest:
+      | {
+          freshUntil: string;
+          lastCompleteGeneration: string | null;
+          rebuildState: "idle" | "rebuilding";
+        }
+      | null,
+    nowIso: string
+  ): { rebuildState: string; sourceGeneration: string | null };
 }
 
 describe("public-status redis contract", () => {
@@ -46,5 +56,58 @@ describe("public-status redis contract", () => {
     expect(mod.alignBucketStartUtc("2026-04-21T10:07:31.000Z", 15)).toBe(
       "2026-04-21T10:00:00.000Z"
     );
+  });
+
+  it("resolves manifest runtime states honestly", async () => {
+    const mod = await importPublicStatusModule<RedisContractModule>(
+      "@/lib/public-status/redis-contract"
+    );
+
+    expect(mod.resolvePublicStatusManifestState(null, "2026-04-21T10:00:00.000Z")).toMatchObject({
+      rebuildState: "no-data",
+      sourceGeneration: null,
+    });
+
+    expect(
+      mod.resolvePublicStatusManifestState(
+        {
+          freshUntil: "2026-04-21T10:05:00.000Z",
+          lastCompleteGeneration: null,
+          rebuildState: "rebuilding",
+        },
+        "2026-04-21T10:00:00.000Z"
+      )
+    ).toMatchObject({
+      rebuildState: "rebuilding",
+      sourceGeneration: null,
+    });
+
+    expect(
+      mod.resolvePublicStatusManifestState(
+        {
+          freshUntil: "2026-04-21T10:05:00.000Z",
+          lastCompleteGeneration: "gen-1",
+          rebuildState: "idle",
+        },
+        "2026-04-21T10:00:00.000Z"
+      )
+    ).toMatchObject({
+      rebuildState: "fresh",
+      sourceGeneration: "gen-1",
+    });
+
+    expect(
+      mod.resolvePublicStatusManifestState(
+        {
+          freshUntil: "2026-04-21T10:05:00.000Z",
+          lastCompleteGeneration: "gen-1",
+          rebuildState: "idle",
+        },
+        "2026-04-21T10:10:00.000Z"
+      )
+    ).toMatchObject({
+      rebuildState: "stale",
+      sourceGeneration: "gen-1",
+    });
   });
 });

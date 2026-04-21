@@ -37,6 +37,18 @@ interface ConfigSnapshotModule {
       }>;
     }>;
   };
+  readPublicStatusSiteMetadata(input: {
+    redis: {
+      status: string;
+      get: (key: string) => Promise<string | null>;
+    };
+  }): Promise<{ siteTitle: string; siteDescription: string } | null>;
+  readPublicStatusTimeZone(input: {
+    redis: {
+      status: string;
+      get: (key: string) => Promise<string | null>;
+    };
+  }): Promise<string | null>;
 }
 
 describe("public-status config snapshot", () => {
@@ -92,5 +104,43 @@ describe("public-status config snapshot", () => {
     });
     expect(JSON.stringify(snapshot)).not.toContain("internalProviderName");
     expect(JSON.stringify(snapshot)).not.toContain("endpointUrl");
+  });
+
+  it("reads site metadata from the redis config projection", async () => {
+    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
+      "@/lib/public-status/config-snapshot"
+    );
+
+    const redis = {
+      status: "ready",
+      get: vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify({ key: "public-status:v1:config:cfg-2" }))
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            configVersion: "cfg-2",
+            siteTitle: "Claude Code Hub Status",
+            siteDescription: "Request-derived public status",
+          })
+        ),
+    };
+
+    await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toEqual({
+      siteTitle: "Claude Code Hub Status",
+      siteDescription: "Request-derived public status",
+    });
+  });
+
+  it("returns null on malformed pointer records instead of throwing", async () => {
+    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
+      "@/lib/public-status/config-snapshot"
+    );
+
+    const redis = {
+      status: "ready",
+      get: vi.fn().mockResolvedValueOnce("{broken-json"),
+    };
+
+    await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toBeNull();
   });
 });
