@@ -25,13 +25,16 @@ const schedulerState = globalThis as unknown as {
   __CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_STOP_REQUESTED__?: boolean;
 };
 
-function parseRebuildHintKey(key: string): { intervalMinutes: number; rangeHours: number } | null {
+function parseRebuildHintKey(
+  key: string
+): { key: string; intervalMinutes: number; rangeHours: number } | null {
   const match = key.match(/rebuild-hint:(\d+)m:(\d+)h$/);
   if (!match) {
     return null;
   }
 
   return {
+    key,
     intervalMinutes: Number(match[1]),
     rangeHours: Number(match[2]),
   };
@@ -58,7 +61,9 @@ async function ensureLeaderLock(): Promise<boolean> {
   return true;
 }
 
-async function collectTargets(): Promise<Array<{ intervalMinutes: number; rangeHours: number }>> {
+async function collectTargets(): Promise<
+  Array<{ intervalMinutes: number; rangeHours: number; hintKey?: string }>
+> {
   const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
   if (!redis || redis.status !== "ready") {
     return [];
@@ -142,11 +147,14 @@ async function runCycle(): Promise<void> {
 
     const targets = await collectTargets();
     for (const target of targets) {
-      await rebuildPublicStatusProjection({
+      const result = await rebuildPublicStatusProjection({
         intervalMinutes: target.intervalMinutes,
         rangeHours: target.rangeHours,
         redis,
       });
+      if (result.status === "updated" && target.hintKey) {
+        await redis.del(target.hintKey);
+      }
     }
   } catch (error) {
     logger.warn("[PublicStatusScheduler] Cycle failed", {

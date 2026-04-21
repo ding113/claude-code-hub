@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
+import { readCurrentPublicStatusConfigSnapshot } from "@/lib/public-status/config-snapshot";
 import type { PublicStatusTimelineBucket } from "@/lib/public-status/payload";
 import { readPublicStatusPayload } from "@/lib/public-status/read-store";
 import { PublicStatusTimeline } from "./_components/public-status-timeline";
@@ -41,9 +42,10 @@ export default async function PublicStatusPage({
 }) {
   const { locale } = await params;
   const t = await getTranslations("settings");
+  const configSnapshot = await readCurrentPublicStatusConfigSnapshot();
   const payload = await readPublicStatusPayload({
-    intervalMinutes: 5,
-    rangeHours: 24,
+    intervalMinutes: configSnapshot?.defaultIntervalMinutes ?? 5,
+    rangeHours: configSnapshot?.defaultRangeHours ?? 24,
     nowIso: new Date().toISOString(),
     triggerRebuildHint: async () => {},
   });
