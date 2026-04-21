@@ -24,7 +24,7 @@ function isVersionRootPath(basePath: string): boolean {
   }
 
   // 仅接受常见版本 token，避免把 /v1api、/v10models 之类的普通路径误判成版本根。
-  return /^(v\d+(?:(?:alpha|beta|preview|internal)\d*)?)$/.test(tail);
+  return /^(v\d+(?:(?:alpha|beta|preview|internal|rc|ga|stable|dev|canary)\d*)?)$/.test(tail);
 }
 
 type PreviewEndpoint = {
@@ -168,6 +168,7 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
 }
 
 function matchesEndpointRoot(basePath: string, requestPath: string): boolean {
+  // `targetEndpoints` 需要保持前缀互不歧义；否则 preview 过滤会无法判断该保留哪一行。
   for (const { endpoint, regex } of endpointRegexes) {
     const match = requestPath.match(regex);
     if (!match) {

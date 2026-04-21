@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Info, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 interface SectionCardProps {
@@ -153,8 +153,8 @@ export function SmartInputWrapper({
           {required && <span className="text-destructive ml-0.5">*</span>}
         </label>
         {tooltip ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
+          <Popover>
+            <PopoverTrigger asChild>
               <button
                 type="button"
                 aria-label={tooltip}
@@ -167,11 +167,11 @@ export function SmartInputWrapper({
               >
                 <Info className="h-4 w-4" />
               </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
+            </PopoverTrigger>
+            <PopoverContent side="top" className="max-w-xs">
               <p className="text-sm">{tooltip}</p>
-            </TooltipContent>
-          </Tooltip>
+            </PopoverContent>
+          </Popover>
         ) : null}
       </div>
       {children}

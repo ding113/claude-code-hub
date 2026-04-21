@@ -128,6 +128,14 @@ describe("buildProxyUrl", () => {
     );
   });
 
+  test("带 rc 后缀的版本根路径也应被识别", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1rc1",
+      "/v1/chat/completions?x=1",
+      "https://relay.example.com/openai/v1rc1/chat/completions?x=1"
+    );
+  });
+
   test("版本根路径 + Chat 资源后缀：应保留 suffix", () => {
     expectBuiltUrl(
       "https://relay.example.com/openai/v1",

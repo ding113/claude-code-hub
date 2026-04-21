@@ -29,13 +29,15 @@ describe("messages/zh-TW/settings/providers/form/strings.json", () => {
 describe("messages/zh-TW/settings/providers/form/url.json", () => {
   test("does not contain placeholder markers and uses fullwidth parentheses", () => {
     const zhTW = readJson("messages/zh-TW/settings/providers/form/url.json");
+    const en = readJson("messages/en/settings/providers/form/url.json");
 
-    for (const value of Object.values(zhTW)) {
+    for (const [key, value] of Object.entries(zhTW)) {
       expect(value).not.toContain("（繁）");
       expect(value).not.toContain("[JA]");
       expect(value).not.toContain("(TW)");
       expect(value).not.toContain("(繁)");
       expect(value).not.toContain("（TW）");
+      expect(zhTW[key]).not.toBe(en[key]);
 
       expect(value).not.toContain("(");
       expect(value).not.toContain(")");

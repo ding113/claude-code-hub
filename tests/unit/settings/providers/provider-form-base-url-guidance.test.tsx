@@ -36,21 +36,20 @@ vi.mock("framer-motion", () => ({
   },
 }));
 
+vi.mock("@/components/ui/popover", () => ({
+  Popover: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  PopoverTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  PopoverContent: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="popover-content">{children}</div>
+  ),
+}));
+
 vi.mock(
   "@/app/[locale]/settings/providers/_components/forms/provider-form/components/quick-paste-dialog",
   () => ({
     QuickPasteDialog: () => <button type="button">Quick Paste</button>,
   })
 );
-
-vi.mock("@/components/ui/tooltip", () => ({
-  TooltipProvider: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  Tooltip: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children?: ReactNode }) => (
-    <div data-testid="tooltip-content">{children}</div>
-  ),
-}));
 
 vi.mock(
   "@/app/[locale]/settings/providers/_components/forms/provider-form/provider-form-context",
@@ -96,21 +95,19 @@ describe("BasicInfoSection base URL guidance", () => {
   });
 
   test("renders inline guidance text and tooltip help for the API address field", () => {
+    const urlMessages = enMessages.settings.providers.form.url as {
+      description: string;
+      tooltip: string;
+    };
     const { container, unmount } = renderWithIntl(<BasicInfoSection />);
 
     expect(document.getElementById("url")).not.toBeNull();
-    expect(container.textContent).toContain(
-      "Use your provider's base address. For request forwarding, preview, and provider testing, you can also paste a version path or exact endpoint here."
-    );
-    expect(container.textContent).toContain(
-      "Examples: https://relay.example.com/openai, https://relay.example.com/openai/v1, https://relay.example.com/openai/v1/responses. Claude Code Hub reuses the path you provide instead of appending the same endpoint twice."
-    );
+    expect(container.textContent).toContain(urlMessages.description);
+    expect(container.textContent).toContain(urlMessages.tooltip);
 
     const helpTrigger = container.querySelector("button[data-smart-input-tooltip]");
     expect(helpTrigger).not.toBeNull();
-    expect(helpTrigger?.getAttribute("aria-label")).toBe(
-      "Examples: https://relay.example.com/openai, https://relay.example.com/openai/v1, https://relay.example.com/openai/v1/responses. Claude Code Hub reuses the path you provide instead of appending the same endpoint twice."
-    );
+    expect(helpTrigger?.getAttribute("aria-label")).toBe(urlMessages.tooltip);
 
     unmount();
   });

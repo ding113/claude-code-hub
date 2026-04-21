@@ -250,6 +250,33 @@ describe("executeProviderTest", () => {
     expectRequestUrl("https://relay.example.com/openai/v1beta1/chat/completions");
   });
 
+  test("带 rc 后缀的版本根路径在 provider testing 中也应生效", async () => {
+    mockJsonResponse({
+      id: "chatcmpl_test",
+      model: "gpt-4.1-mini",
+      choices: [
+        {
+          index: 0,
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: "pong",
+          },
+        },
+      ],
+    });
+
+    const result = await executeProviderTest({
+      providerUrl: "https://relay.example.com/openai/v1rc1",
+      apiKey: "sk-test-openai-compatible",
+      providerType: "openai-compatible",
+      model: "gpt-4.1-mini",
+    });
+
+    expect(result.success).toBe(true);
+    expectRequestUrl("https://relay.example.com/openai/v1rc1/chat/completions");
+  });
+
   test("带 query 的 preset URL 应保留 preset 自带查询参数", async () => {
     mockJsonResponse({
       id: "msg_123",
