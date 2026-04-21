@@ -299,6 +299,11 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         result.data?.publicStatusProjectionWarningCode === "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED"
       ) {
         toast.warning(tSettings("config.form.publicStatusProjectionWarning"));
+      } else if (
+        result.data?.publicStatusProjectionWarningCode ===
+        "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING"
+      ) {
+        toast.warning(tSettings("config.form.publicStatusBackgroundRefreshPending"));
       }
       router.refresh();
     });

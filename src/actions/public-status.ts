@@ -18,7 +18,11 @@ import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/
 import { PUBLIC_STATUS_INTERVAL_SET } from "@/lib/public-status/constants";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
-import { findAllProviderGroups, updateProviderGroup } from "@/repository/provider-groups";
+import {
+  findAllProviderGroups,
+  findProviderGroupById,
+  updateProviderGroup,
+} from "@/repository/provider-groups";
 import { updateSystemSettings } from "@/repository/system-config";
 import type { ActionResult } from "./types";
 
@@ -84,22 +88,26 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
     const enabledByName = new Map(
       normalizedEnabledGroups.map((group) => [group.groupName, group] as const)
     );
-    const groupUpdates: Array<{ id: number; description: string | null }> = [];
+    const groupUpdates: Array<{
+      id: number;
+      publicStatus: ReturnType<typeof parsePublicStatusDescription>["publicStatus"];
+    }> = [];
 
     for (const group of allGroups) {
       const existing = parsePublicStatusDescription(group.description);
       const configured = enabledByName.get(group.name);
+      const nextPublicStatus = configured
+        ? {
+            displayName: configured.displayName,
+            publicGroupSlug: configured.publicGroupSlug,
+            explanatoryCopy: configured.explanatoryCopy,
+            sortOrder: configured.sortOrder,
+            publicModelKeys: configured.publicModelKeys,
+          }
+        : null;
       const nextDescription = serializePublicStatusDescription({
         note: existing.note,
-        publicStatus: configured
-          ? {
-              displayName: configured.displayName,
-              publicGroupSlug: configured.publicGroupSlug,
-              explanatoryCopy: configured.explanatoryCopy,
-              sortOrder: configured.sortOrder,
-              publicModelKeys: configured.publicModelKeys,
-            }
-          : null,
+        publicStatus: nextPublicStatus,
       });
 
       if (nextDescription && nextDescription.length > 500) {
@@ -112,7 +120,7 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
       if ((group.description ?? null) !== nextDescription) {
         groupUpdates.push({
           id: group.id,
-          description: nextDescription,
+          publicStatus: nextPublicStatus,
         });
       }
     }
@@ -128,10 +136,15 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
       );
 
       for (const groupUpdate of groupUpdates) {
+        const currentGroup = await findProviderGroupById(groupUpdate.id, tx);
+        const currentNote = parsePublicStatusDescription(currentGroup?.description).note;
         await updateProviderGroup(
           groupUpdate.id,
           {
-            description: groupUpdate.description,
+            description: serializePublicStatusDescription({
+              note: currentNote,
+              publicStatus: groupUpdate.publicStatus,
+            }),
           },
           tx
         );
@@ -174,7 +187,7 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
         });
       } catch (error) {
         logger.warn("[PublicStatus] DB truth saved but failed to schedule rebuild hint", error);
-        publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+        publicStatusProjectionWarningCode = "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING";
       }
     }
 

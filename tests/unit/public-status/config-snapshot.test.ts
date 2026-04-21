@@ -139,6 +139,31 @@ describe("public-status config snapshot", () => {
     });
   });
 
+  it("reads site metadata from the shared raw configVersion pointer", async () => {
+    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
+      "@/lib/public-status/config-snapshot"
+    );
+
+    const redis = {
+      status: "ready",
+      get: vi
+        .fn()
+        .mockResolvedValueOnce("cfg-3")
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            configVersion: "cfg-3",
+            siteTitle: "Claude Code Hub Status",
+            siteDescription: "Request-derived public status",
+          })
+        ),
+    };
+
+    await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toEqual({
+      siteTitle: "Claude Code Hub Status",
+      siteDescription: "Request-derived public status",
+    });
+  });
+
   it("returns null on malformed pointer records instead of throwing", async () => {
     const mod = await importPublicStatusModule<ConfigSnapshotModule>(
       "@/lib/public-status/config-snapshot"

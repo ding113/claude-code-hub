@@ -37,6 +37,7 @@
     "cleanupScheduleRequired": "実行時間（Cron）*",
     "configUpdated": "システム設定が更新されました。ページが更新され、通貨表示の変更が適用されます。",
     "publicStatusProjectionWarning": "システム設定は保存されましたが、public status の Redis 投影は更新されませんでした。",
+    "publicStatusBackgroundRefreshPending": "システム設定は保存されましたが、バックグラウンド更新が成功するまで公開ステータスページに古いデータが表示される場合があります。",
     "currencies": {
       "CNY": "¥ 人民元 (CNY)",
       "EUR": "€ ユーロ (EUR)",

@@ -59,6 +59,14 @@ export interface PublicStatusAggregationResult {
   groups: PublicStatusPayload["groups"];
 }
 
+export const MAX_PUBLIC_STATUS_REQUEST_ROWS = 500_000;
+
+export function assertPublicStatusRequestRowCap(rowCount: number): void {
+  if (rowCount > MAX_PUBLIC_STATUS_REQUEST_ROWS) {
+    throw new Error("PUBLIC_STATUS_REQUEST_ROW_CAP_EXCEEDED");
+  }
+}
+
 export function getConfiguredPublicStatusGroups(
   snapshot: InternalPublicStatusConfigSnapshot
 ): PublicStatusConfiguredGroup[] {
@@ -536,7 +544,10 @@ export async function queryPublicStatusRequests(input: {
           inArray(messageRequest.model, targetModelKeys)
         )
       )
-    );
+    )
+    .limit(MAX_PUBLIC_STATUS_REQUEST_ROWS + 1);
+
+  assertPublicStatusRequestRowCap(rows.length);
 
   return rows.flatMap((row) => {
     if (!row.createdAt) {

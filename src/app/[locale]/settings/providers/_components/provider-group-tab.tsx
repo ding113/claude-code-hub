@@ -49,10 +49,7 @@ import {
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
-import {
-  parsePublicStatusDescription,
-  serializePublicStatusDescription,
-} from "@/lib/public-status/config";
+import { parsePublicStatusDescription } from "@/lib/public-status/config";
 import { cn } from "@/lib/utils";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay } from "@/types/provider";
@@ -80,17 +77,6 @@ const INITIAL_FORM: GroupFormState = {
 
 function getProviderGroupDescriptionNote(description: string | null | undefined): string {
   return parsePublicStatusDescription(description).note ?? "";
-}
-
-function mergeProviderGroupDescription(input: {
-  existingDescription: string | null | undefined;
-  nextNote: string | null;
-}): string | null {
-  const parsed = parsePublicStatusDescription(input.existingDescription);
-  return serializePublicStatusDescription({
-    note: input.nextNote,
-    publicStatus: parsed.publicStatus,
-  });
 }
 
 export function ProviderGroupTab({
@@ -180,6 +166,7 @@ export function ProviderGroupTab({
       patch: {
         costMultiplier?: number;
         description?: string | null;
+        descriptionNote?: string | null;
       }
     ): Promise<boolean> => {
       const result = await updateProviderGroup(groupId, patch);
@@ -216,10 +203,7 @@ export function ProviderGroupTab({
       if (editingGroup) {
         const ok = await saveGroupPatch(editingGroup.id, {
           costMultiplier,
-          description: mergeProviderGroupDescription({
-            existingDescription: editingGroup.description,
-            nextNote: trimmedDescription || null,
-          }),
+          descriptionNote: trimmedDescription || null,
         });
         if (ok) {
           closeDialog();
@@ -386,10 +370,7 @@ export function ProviderGroupTab({
                             validator={validateDescription}
                             onSave={(value) =>
                               saveGroupPatch(group.id, {
-                                description: mergeProviderGroupDescription({
-                                  existingDescription: group.description,
-                                  nextNote: value || null,
-                                }),
+                                descriptionNote: value || null,
                               })
                             }
                           />

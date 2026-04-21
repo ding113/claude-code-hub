@@ -37,6 +37,7 @@
     "cleanupScheduleRequired": "Execution Time (Cron) *",
     "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",
     "publicStatusProjectionWarning": "System settings were saved, but the public status Redis projection was not refreshed.",
+    "publicStatusBackgroundRefreshPending": "System settings were saved, but the public status page may stay stale until the background refresh succeeds.",
     "currencies": {
       "CNY": "¥ Chinese Yuan (CNY)",
       "EUR": "€ Euro (EUR)",

@@ -17,6 +17,7 @@ import type {
 
 type ProviderGroupRow = typeof providerGroups.$inferSelect;
 type TransactionExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type ProviderGroupQueryExecutor = Pick<TransactionExecutor, "select">;
 type ProviderGroupMutationExecutor = Pick<TransactionExecutor, "update">;
 
 function toProviderGroup(row: ProviderGroupRow): ProviderGroup {
@@ -86,8 +87,15 @@ export async function findProviderGroupByName(name: string): Promise<ProviderGro
 /**
  * Look up a single provider group by its id.
  */
-export async function findProviderGroupById(id: number): Promise<ProviderGroup | null> {
-  const [row] = await db.select().from(providerGroups).where(eq(providerGroups.id, id)).limit(1);
+export async function findProviderGroupById(
+  id: number,
+  executor: ProviderGroupQueryExecutor = db
+): Promise<ProviderGroup | null> {
+  const [row] = await executor
+    .select()
+    .from(providerGroups)
+    .where(eq(providerGroups.id, id))
+    .limit(1);
 
   return row ? toProviderGroup(row) : null;
 }

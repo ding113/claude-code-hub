@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildPublicStatusPayloadFromRequests } from "@/lib/public-status/aggregation";
+import {
+  assertPublicStatusRequestRowCap,
+  buildPublicStatusPayloadFromRequests,
+  MAX_PUBLIC_STATUS_REQUEST_ROWS,
+} from "@/lib/public-status/aggregation";
 
 describe("public-status aggregation", () => {
   it("aggregates request history into group/model timeline payload", () => {
@@ -116,6 +120,13 @@ describe("public-status aggregation", () => {
     expect(result.groups[0]?.models[0]?.latestState).toBe("failed");
     expect(result.groups[0]?.models[0]?.timeline.some((bucket) => bucket.sampleCount > 0)).toBe(
       true
+    );
+  });
+
+  it("guards rebuilds with an explicit request-row cap", () => {
+    expect(() => assertPublicStatusRequestRowCap(MAX_PUBLIC_STATUS_REQUEST_ROWS)).not.toThrow();
+    expect(() => assertPublicStatusRequestRowCap(MAX_PUBLIC_STATUS_REQUEST_ROWS + 1)).toThrow(
+      "PUBLIC_STATUS_REQUEST_ROW_CAP_EXCEEDED"
     );
   });
 });

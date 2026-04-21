@@ -99,6 +99,10 @@ function extractCurrentConfigVersion(pointerRaw: string | null): string | null {
     return null;
   }
 
+  if (pointerRaw.startsWith("cfg-")) {
+    return pointerRaw;
+  }
+
   const pointer = safeParseJson<{ key?: string; configVersion?: string }>(pointerRaw);
   if (pointer?.configVersion) {
     return pointer.configVersion;

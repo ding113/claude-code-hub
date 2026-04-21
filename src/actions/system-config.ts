@@ -167,7 +167,7 @@ export async function saveSystemSettings(formData: {
               "[SystemSettings] Saved DB truth but failed to schedule public-status rebuild",
               error
             );
-            publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+            publicStatusProjectionWarningCode = "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING";
           }
         }
       } catch (error) {

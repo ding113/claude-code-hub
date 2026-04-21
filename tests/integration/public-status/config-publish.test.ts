@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetSession = vi.hoisted(() => vi.fn());
 const mockUpdateSystemSettings = vi.hoisted(() => vi.fn());
 const mockFindAllProviderGroups = vi.hoisted(() => vi.fn());
+const mockFindProviderGroupById = vi.hoisted(() => vi.fn());
 const mockUpdateProviderGroup = vi.hoisted(() => vi.fn());
 const mockFindLatestPricesByModels = vi.hoisted(() => vi.fn());
 const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
@@ -30,6 +31,7 @@ vi.mock("@/drizzle/db", () => ({
 
 vi.mock("@/repository/provider-groups", () => ({
   findAllProviderGroups: mockFindAllProviderGroups,
+  findProviderGroupById: mockFindProviderGroupById,
   updateProviderGroup: mockUpdateProviderGroup,
 }));
 
@@ -87,6 +89,11 @@ describe("public-status config publish integration", () => {
       },
     ]);
     mockUpdateProviderGroup.mockResolvedValue(undefined);
+    mockFindProviderGroupById.mockResolvedValue({
+      id: 10,
+      name: "openai",
+      description: null,
+    });
     mockFindLatestPricesByModels.mockResolvedValue(
       new Map([
         [
