@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 
 export type SettingsNavIconName =
   | "settings"
+  | "activity"
   | "dollar-sign"
   | "server"
   | "shield-alert"
@@ -31,6 +32,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     labelKey: "nav.config",
     label: "Configuration",
     iconName: "settings",
+  },
+  {
+    href: "/settings/status-page",
+    labelKey: "nav.statusPage",
+    label: "Status Page",
+    iconName: "activity",
   },
   { href: "/settings/prices", labelKey: "nav.prices", label: "Prices", iconName: "dollar-sign" },
   {

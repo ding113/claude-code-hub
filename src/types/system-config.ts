@@ -96,6 +96,9 @@ export interface SystemSettings {
   ipExtractionConfig: IpExtractionConfig | null;
   // 是否启用 IP 归属地查询
   ipGeoLookupEnabled: boolean;
+  // Public Status 全局配置
+  publicStatusWindowHours: number;
+  publicStatusAggregationIntervalMinutes: number;
 
   createdAt: Date;
   updatedAt: Date;
@@ -173,4 +176,7 @@ export interface UpdateSystemSettingsInput {
   ipExtractionConfig?: IpExtractionConfig | null;
   // 是否启用 IP 归属地查询（可选）
   ipGeoLookupEnabled?: boolean;
+  // Public Status 全局配置（可选）
+  publicStatusWindowHours?: number;
+  publicStatusAggregationIntervalMinutes?: number;
 }

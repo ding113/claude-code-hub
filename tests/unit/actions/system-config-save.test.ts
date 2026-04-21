@@ -7,6 +7,8 @@ const revalidatePathMock = vi.fn();
 const invalidateSystemSettingsCacheMock = vi.fn();
 const updateSystemSettingsMock = vi.fn();
 const getSystemSettingsMock = vi.fn();
+const publishCurrentPublicStatusConfigProjectionMock = vi.fn();
+const schedulePublicStatusRebuildMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: () => getSessionMock(),
@@ -38,6 +40,15 @@ vi.mock("@/lib/utils/timezone", () => ({
 vi.mock("@/repository/system-config", () => ({
   getSystemSettings: () => getSystemSettingsMock(),
   updateSystemSettings: (...args: unknown[]) => updateSystemSettingsMock(...args),
+}));
+
+vi.mock("@/lib/public-status/config-publisher", () => ({
+  publishCurrentPublicStatusConfigProjection: (...args: unknown[]) =>
+    publishCurrentPublicStatusConfigProjectionMock(...args),
+}));
+
+vi.mock("@/lib/public-status/rebuild-hints", () => ({
+  schedulePublicStatusRebuild: (...args: unknown[]) => schedulePublicStatusRebuildMock(...args),
 }));
 
 // Import the action after mocks are set up
@@ -86,8 +97,20 @@ describe("saveSystemSettings", () => {
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
       createdAt: new Date(),
       updatedAt: new Date(),
+    });
+    publishCurrentPublicStatusConfigProjectionMock.mockResolvedValue({
+      configVersion: "cfg-1",
+      key: "public-status:v1:config:cfg-1",
+      written: true,
+      groupCount: 0,
+    });
+    schedulePublicStatusRebuildMock.mockResolvedValue({
+      accepted: true,
+      rebuildState: "rebuilding",
     });
   });
 
@@ -212,6 +235,8 @@ describe("saveSystemSettings", () => {
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -229,7 +254,10 @@ describe("saveSystemSettings", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.data).toEqual(mockUpdated);
+    expect(result.data).toEqual({
+      ...mockUpdated,
+      publicStatusProjectionWarningCode: null,
+    });
   });
 
   it("should handle repository errors gracefully", async () => {

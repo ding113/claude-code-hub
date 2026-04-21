@@ -1,0 +1,399 @@
+import { getRedisClient } from "@/lib/redis";
+import {
+  buildPublicStatusPayloadFromRequests,
+  getConfiguredPublicStatusGroups,
+  queryPublicStatusRequests,
+} from "./aggregation";
+import { publishCurrentPublicStatusConfigProjection } from "./config-publisher";
+import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
+import {
+  alignBucketStartUtc,
+  buildGenerationFingerprint,
+  buildPublicStatusCurrentSnapshotKey,
+  buildPublicStatusManifestKey,
+  buildPublicStatusRebuildLockKey,
+  buildPublicStatusSeriesChunkKey,
+  buildPublicStatusTempKey,
+} from "./redis-contract";
+
+interface PublicStatusRebuildResult {
+  sourceGeneration: string;
+  skippedDueToDistributedLock?: boolean;
+}
+
+const inFlightRebuilds = new Map<string, Promise<PublicStatusRebuildResult>>();
+const REBUILD_LOCK_TTL_MS = 60_000;
+const TEMP_PROJECTION_TTL_SECONDS = 300;
+const GENERATION_PROJECTION_TTL_SECONDS = 60 * 60 * 24 * 30;
+
+interface RedisHintWriter {
+  get?(key: string): Promise<string | null> | string | null;
+  set(key: string, value: string, mode: "EX", seconds: number): Promise<unknown> | unknown;
+  set(key: string, value: string): Promise<unknown> | unknown;
+  del?(...keys: string[]): Promise<unknown> | unknown;
+  eval?(script: string, numKeys: number, ...args: string[]): Promise<unknown> | unknown;
+  status?: string;
+}
+
+async function setWithTtl(
+  redis: RedisHintWriter,
+  key: string,
+  value: string,
+  ttlSeconds: number
+): Promise<void> {
+  await redis.set(key, value, "EX", ttlSeconds);
+}
+
+function getReadyRedisClient(redis?: RedisHintWriter | null): RedisHintWriter | null {
+  const client = redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (!client || ("status" in client && client.status && client.status !== "ready")) {
+    return null;
+  }
+  return client;
+}
+
+function parseConfigVersionOrder(configVersion: string): number {
+  const digits = configVersion.replace(/\D+/g, "");
+  return Number.parseInt(digits || "0", 10);
+}
+
+function shouldPromoteCurrentManifest(
+  existing: { configVersion?: string; coveredTo?: string } | null,
+  candidate: { configVersion: string; coveredTo: string }
+): boolean {
+  if (!existing) {
+    return true;
+  }
+
+  const existingVersion = typeof existing.configVersion === "string" ? existing.configVersion : "";
+  const candidateVersionOrder = parseConfigVersionOrder(candidate.configVersion);
+  const existingVersionOrder = parseConfigVersionOrder(existingVersion);
+
+  if (existingVersionOrder > candidateVersionOrder) {
+    return false;
+  }
+
+  if (
+    existingVersionOrder === candidateVersionOrder &&
+    typeof existing.coveredTo === "string" &&
+    Date.parse(existing.coveredTo) > Date.parse(candidate.coveredTo)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+async function publishPublicStatusProjection(input: {
+  redis: RedisHintWriter;
+  configVersion: string;
+  intervalMinutes: number;
+  rangeHours: number;
+  sourceGeneration: string;
+  generatedAt: string;
+  coveredFrom: string;
+  coveredTo: string;
+  groups: unknown;
+}): Promise<void> {
+  const snapshotKey = buildPublicStatusCurrentSnapshotKey({
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+    generation: input.sourceGeneration,
+  });
+  const seriesKey = buildPublicStatusSeriesChunkKey({
+    intervalMinutes: input.intervalMinutes,
+    generation: input.sourceGeneration,
+    bucketStartIso: input.coveredFrom,
+    bucketEndIso: input.coveredTo,
+  });
+  const currentManifestKey = buildPublicStatusManifestKey({
+    configVersion: "current",
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+  });
+  const versionedManifestKey = buildPublicStatusManifestKey({
+    configVersion: input.configVersion,
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+  });
+
+  const nonce = `${input.sourceGeneration}-${Date.now()}`;
+  const snapshotTempKey = buildPublicStatusTempKey(snapshotKey, nonce);
+  const seriesTempKey = buildPublicStatusTempKey(seriesKey, nonce);
+
+  const snapshotRecord = {
+    rebuildState: "fresh" as const,
+    sourceGeneration: input.sourceGeneration,
+    generatedAt: input.generatedAt,
+    freshUntil: new Date(
+      Date.parse(input.generatedAt) + input.intervalMinutes * 60 * 1000
+    ).toISOString(),
+    groups: input.groups,
+  };
+  const seriesRecord = {
+    sourceGeneration: input.sourceGeneration,
+    generatedAt: input.generatedAt,
+    coveredFrom: input.coveredFrom,
+    coveredTo: input.coveredTo,
+    groups: input.groups,
+  };
+  const manifestRecord = {
+    configVersion: input.configVersion,
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+    generation: input.sourceGeneration,
+    sourceGeneration: input.sourceGeneration,
+    coveredFrom: input.coveredFrom,
+    coveredTo: input.coveredTo,
+    generatedAt: input.generatedAt,
+    freshUntil: snapshotRecord.freshUntil,
+    rebuildState: "idle" as const,
+    lastCompleteGeneration: input.sourceGeneration,
+  };
+
+  await setWithTtl(
+    input.redis,
+    snapshotTempKey,
+    JSON.stringify(snapshotRecord),
+    TEMP_PROJECTION_TTL_SECONDS
+  );
+  await setWithTtl(
+    input.redis,
+    seriesTempKey,
+    JSON.stringify(seriesRecord),
+    TEMP_PROJECTION_TTL_SECONDS
+  );
+  await setWithTtl(
+    input.redis,
+    snapshotKey,
+    JSON.stringify(snapshotRecord),
+    GENERATION_PROJECTION_TTL_SECONDS
+  );
+  await setWithTtl(
+    input.redis,
+    seriesKey,
+    JSON.stringify(seriesRecord),
+    GENERATION_PROJECTION_TTL_SECONDS
+  );
+  await setWithTtl(
+    input.redis,
+    versionedManifestKey,
+    JSON.stringify(manifestRecord),
+    GENERATION_PROJECTION_TTL_SECONDS
+  );
+  if (typeof input.redis.get === "function") {
+    let existingCurrentManifest: { configVersion?: string; coveredTo?: string } | null = null;
+    try {
+      const existingCurrentManifestRaw = await input.redis.get(currentManifestKey);
+      existingCurrentManifest = existingCurrentManifestRaw
+        ? (JSON.parse(existingCurrentManifestRaw) as { configVersion?: string; coveredTo?: string })
+        : null;
+    } catch {
+      existingCurrentManifest = null;
+    }
+
+    if (shouldPromoteCurrentManifest(existingCurrentManifest, manifestRecord)) {
+      await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+    }
+  } else {
+    await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+  }
+  if (input.redis.del) {
+    await input.redis.del(snapshotTempKey, seriesTempKey);
+  }
+}
+
+async function acquireDistributedRebuildLock(input: {
+  redis: RedisHintWriter & { get(key: string): Promise<string | null> | string | null };
+  flightKey: string;
+}): Promise<{ lockKey: string; lockId: string } | null> {
+  const lockKey = buildPublicStatusRebuildLockKey(input.flightKey);
+  const lockId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const result = await (
+    input.redis as unknown as {
+      set: (
+        key: string,
+        value: string,
+        px: "PX",
+        ttlMs: number,
+        nx: "NX"
+      ) => Promise<unknown> | unknown;
+    }
+  ).set(lockKey, lockId, "PX", REBUILD_LOCK_TTL_MS, "NX");
+
+  if (result !== "OK") {
+    return null;
+  }
+
+  return { lockKey, lockId };
+}
+
+async function releaseDistributedRebuildLock(input: {
+  redis: RedisHintWriter & { get(key: string): Promise<string | null> | string | null };
+  lockKey: string;
+  lockId: string;
+}): Promise<void> {
+  if (typeof input.redis.eval === "function") {
+    const luaScript = `
+      if redis.call('GET', KEYS[1]) == ARGV[1] then
+        return redis.call('DEL', KEYS[1])
+      else
+        return 0
+      end
+    `;
+    await input.redis.eval(luaScript, 1, input.lockKey, input.lockId);
+    return;
+  }
+
+  const current = await input.redis.get(input.lockKey);
+  if (current === input.lockId && input.redis.del) {
+    await input.redis.del(input.lockKey);
+  }
+}
+
+export async function runPublicStatusRebuild(input: {
+  flightKey: string;
+  computeGeneration: () => Promise<PublicStatusRebuildResult>;
+}): Promise<PublicStatusRebuildResult> {
+  const existing = inFlightRebuilds.get(input.flightKey);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = Promise.resolve()
+    .then(() => input.computeGeneration())
+    .finally(() => {
+      inFlightRebuilds.delete(input.flightKey);
+    });
+
+  inFlightRebuilds.set(input.flightKey, promise);
+  return promise;
+}
+
+export async function rebuildPublicStatusProjection(input: {
+  intervalMinutes: number;
+  rangeHours: number;
+  redis?: RedisHintWriter | null;
+  now?: Date;
+}): Promise<
+  | { status: "disabled"; reason: "redis-unavailable" | "missing-config" | "no-configured-groups" }
+  | { status: "skipped"; reason: "distributed-lock-held"; sourceGeneration: string }
+  | { status: "updated"; sourceGeneration: string }
+> {
+  const redis = getReadyRedisClient(input.redis);
+  if (!redis) {
+    return { status: "disabled", reason: "redis-unavailable" };
+  }
+  if (typeof redis.get !== "function") {
+    return { status: "disabled", reason: "redis-unavailable" };
+  }
+  const redisReader = redis as RedisHintWriter & {
+    get(key: string): Promise<string | null> | string | null;
+  };
+
+  let configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
+    redis: redisReader,
+  });
+  if (!configSnapshot) {
+    try {
+      const publishResult = await publishCurrentPublicStatusConfigProjection({
+        reason: "rebuild-bootstrap",
+      });
+      if (publishResult.written) {
+        configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
+          redis: redisReader,
+        });
+      }
+    } catch {
+      // 忽略自举失败，让调用方继续沿用 missing-config 语义。
+    }
+  }
+  if (!configSnapshot) {
+    return { status: "disabled", reason: "missing-config" };
+  }
+
+  const groups = getConfiguredPublicStatusGroups(configSnapshot);
+  if (groups.length === 0) {
+    return { status: "disabled", reason: "no-configured-groups" };
+  }
+
+  const now = input.now ?? new Date();
+  const coveredTo = alignBucketStartUtc(now.toISOString(), input.intervalMinutes);
+  const coveredFrom = new Date(
+    Date.parse(coveredTo) - input.rangeHours * 60 * 60 * 1000
+  ).toISOString();
+  const sourceGeneration = buildGenerationFingerprint({
+    configVersion: configSnapshot.configVersion,
+    intervalMinutes: input.intervalMinutes,
+    coveredFromIso: coveredFrom,
+    coveredToIso: coveredTo,
+  });
+
+  const flightKey = [
+    configSnapshot.configVersion,
+    `${input.intervalMinutes}m`,
+    `${input.rangeHours}h`,
+    sourceGeneration,
+  ].join(":");
+
+  const result = await runPublicStatusRebuild({
+    flightKey,
+    computeGeneration: async () => {
+      const distributedLock = await acquireDistributedRebuildLock({
+        redis: redisReader,
+        flightKey,
+      });
+      if (!distributedLock) {
+        return { sourceGeneration, skippedDueToDistributedLock: true };
+      }
+
+      try {
+        const requests = await queryPublicStatusRequests({
+          groups,
+          coveredFrom: new Date(coveredFrom),
+          coveredTo: new Date(coveredTo),
+        });
+        const aggregation = buildPublicStatusPayloadFromRequests({
+          rangeHours: input.rangeHours,
+          intervalMinutes: input.intervalMinutes,
+          now: new Date(coveredTo),
+          groups,
+          requests,
+        });
+
+        await publishPublicStatusProjection({
+          redis,
+          configVersion: configSnapshot.configVersion,
+          intervalMinutes: input.intervalMinutes,
+          rangeHours: input.rangeHours,
+          sourceGeneration,
+          generatedAt: aggregation.generatedAt,
+          coveredFrom: aggregation.coveredFrom,
+          coveredTo: aggregation.coveredTo,
+          groups: aggregation.groups,
+        });
+
+        return { sourceGeneration };
+      } finally {
+        await releaseDistributedRebuildLock({
+          redis: redisReader,
+          lockKey: distributedLock.lockKey,
+          lockId: distributedLock.lockId,
+        });
+      }
+    },
+  });
+
+  if (result.skippedDueToDistributedLock) {
+    return {
+      status: "skipped",
+      reason: "distributed-lock-held",
+      sourceGeneration: result.sourceGeneration,
+    };
+  }
+
+  return {
+    status: "updated",
+    sourceGeneration: result.sourceGeneration,
+  };
+}

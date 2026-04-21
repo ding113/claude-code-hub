@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertTriangle,
   Bell,
   Database,
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 // Icon name type for serialization across server/client boundary
 export type PageHeaderIconName =
   | "settings"
+  | "activity"
   | "database"
   | "file-text"
   | "bell"
@@ -27,6 +29,7 @@ export type PageHeaderIconName =
 // Map icon names to components
 const HEADER_ICON_MAP: Record<PageHeaderIconName, LucideIcon> = {
   settings: Settings,
+  activity: Activity,
   database: Database,
   "file-text": FileText,
   bell: Bell,

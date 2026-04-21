@@ -1,0 +1,329 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildPublicStatusCurrentSnapshotKey,
+  buildPublicStatusManifestKey,
+  buildPublicStatusRebuildHintKey,
+} from "@/lib/public-status/redis-contract";
+
+const mockRedisSet = vi.hoisted(() => vi.fn());
+const mockRedisDel = vi.hoisted(() => vi.fn());
+const mockRedisGet = vi.hoisted(() => vi.fn());
+const mockRedisEval = vi.hoisted(() => vi.fn());
+const mockRedisPttl = vi.hoisted(() => vi.fn());
+const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
+const mockQueryPublicStatusRequests = vi.hoisted(() => vi.fn());
+const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
+const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/redis", () => ({
+  getRedisClient: () => ({
+    get: mockRedisGet,
+    pttl: mockRedisPttl,
+    set: mockRedisSet,
+    del: mockRedisDel,
+    eval: mockRedisEval,
+    status: "ready",
+  }),
+}));
+
+vi.mock("@/lib/public-status/config-snapshot", () => ({
+  readCurrentInternalPublicStatusConfigSnapshot: mockReadCurrentInternalPublicStatusConfigSnapshot,
+}));
+
+vi.mock("@/lib/public-status/config-publisher", () => ({
+  publishCurrentPublicStatusConfigProjection: mockPublishCurrentPublicStatusConfigProjection,
+}));
+
+vi.mock("@/lib/public-status/aggregation", () => ({
+  getConfiguredPublicStatusGroups: (snapshot: { groups: unknown[] }) => snapshot.groups,
+  queryPublicStatusRequests: mockQueryPublicStatusRequests,
+  buildPublicStatusPayloadFromRequests: mockBuildPublicStatusPayloadFromRequests,
+}));
+
+describe("public-status rebuild worker", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRedisGet.mockResolvedValue(null);
+    mockRedisEval.mockResolvedValue(1);
+    mockRedisPttl.mockResolvedValue(-1);
+    mockPublishCurrentPublicStatusConfigProjection.mockResolvedValue({
+      configVersion: "cfg-1",
+      key: "public-status:v1:config:cfg-1",
+      written: true,
+      groupCount: 1,
+    });
+  });
+
+  it("collapses concurrent rebuild requests into a single in-flight computation", async () => {
+    const mod = await import("@/lib/public-status/rebuild-worker");
+
+    let releaseCompute: (() => void) | undefined;
+    const computeGate = new Promise<void>((resolve) => {
+      releaseCompute = resolve;
+    });
+    const computeGeneration = vi.fn(async () => {
+      await computeGate;
+      return { sourceGeneration: "generation-1" };
+    });
+
+    const first = mod.runPublicStatusRebuild({
+      flightKey: "cfg-1:5m:24h",
+      computeGeneration,
+    });
+    const second = mod.runPublicStatusRebuild({
+      flightKey: "cfg-1:5m:24h",
+      computeGeneration,
+    });
+    const third = mod.runPublicStatusRebuild({
+      flightKey: "cfg-1:5m:24h",
+      computeGeneration,
+    });
+
+    await Promise.resolve();
+    expect(computeGeneration).toHaveBeenCalledTimes(1);
+
+    releaseCompute?.();
+
+    const results = await Promise.all([first, second, third]);
+
+    expect(computeGeneration).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([
+      { sourceGeneration: "generation-1" },
+      { sourceGeneration: "generation-1" },
+      { sourceGeneration: "generation-1" },
+    ]);
+  });
+
+  it("propagates distributed-lock skip state to piggyback callers", async () => {
+    const mod = await import("@/lib/public-status/rebuild-worker");
+
+    let releaseCompute: (() => void) | undefined;
+    const computeGate = new Promise<void>((resolve) => {
+      releaseCompute = resolve;
+    });
+    const computeGeneration = vi.fn(async () => {
+      await computeGate;
+      return {
+        sourceGeneration: "generation-2",
+        skippedDueToDistributedLock: true,
+      };
+    });
+
+    const first = mod.runPublicStatusRebuild({
+      flightKey: "cfg-2:15m:48h",
+      computeGeneration,
+    });
+    const second = mod.runPublicStatusRebuild({
+      flightKey: "cfg-2:15m:48h",
+      computeGeneration,
+    });
+
+    await Promise.resolve();
+    expect(computeGeneration).toHaveBeenCalledTimes(1);
+
+    releaseCompute?.();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      {
+        sourceGeneration: "generation-2",
+        skippedDueToDistributedLock: true,
+      },
+      {
+        sourceGeneration: "generation-2",
+        skippedDueToDistributedLock: true,
+      },
+    ]);
+  });
+
+  it("publishes snapshot and manifest records for a rebuilt generation", async () => {
+    const mod = await import("@/lib/public-status/rebuild-worker");
+
+    mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      siteTitle: "Claude Code Hub Status",
+      siteDescription: "Request-derived public status",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: "Primary fleet",
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+    });
+    mockQueryPublicStatusRequests.mockResolvedValue([]);
+    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      coveredFrom: "2026-04-20T10:00:00.000Z",
+      coveredTo: "2026-04-21T10:00:00.000Z",
+      groups: [],
+    });
+    mockRedisSet.mockReset();
+    mockRedisSet.mockResolvedValueOnce("OK");
+
+    const result = await mod.rebuildPublicStatusProjection({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      now: new Date("2026-04-21T10:02:00.000Z"),
+    });
+
+    expect(result.status).toBe("updated");
+    const versionedManifestKey = buildPublicStatusManifestKey({
+      configVersion: "cfg-1",
+      intervalMinutes: 5,
+      rangeHours: 24,
+    });
+    const versionedManifestCall = mockRedisSet.mock.calls.find(
+      (call) => call[0] === versionedManifestKey
+    );
+
+    expect(versionedManifestCall).toBeTruthy();
+
+    const manifestValue = JSON.parse(String(versionedManifestCall?.[1]));
+    expect(manifestValue.configVersion).toBe("cfg-1");
+    expect(manifestValue.lastCompleteGeneration).toBeTruthy();
+    expect(mockRedisEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('DEL', KEYS[1])"),
+      1,
+      expect.stringContaining("public-status:v1:rebuild-lock:"),
+      expect.any(String)
+    );
+    expect(mockRedisDel).toHaveBeenCalled();
+
+    const snapshotKey = buildPublicStatusCurrentSnapshotKey({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      generation: manifestValue.lastCompleteGeneration,
+    });
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      snapshotKey,
+      expect.any(String),
+      "EX",
+      60 * 60 * 24 * 30
+    );
+  });
+
+  it("re-publishes config projection before rebuild when redis config keys are missing", async () => {
+    const mod = await import("@/lib/public-status/rebuild-worker");
+
+    mockReadCurrentInternalPublicStatusConfigSnapshot
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        configVersion: "cfg-1",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        siteTitle: "Claude Code Hub Status",
+        siteDescription: "Request-derived public status",
+        defaultIntervalMinutes: 5,
+        defaultRangeHours: 24,
+        groups: [
+          {
+            sourceGroupName: "openai",
+            publicGroupSlug: "openai",
+            displayName: "OpenAI",
+            explanatoryCopy: "Primary fleet",
+            sortOrder: 1,
+            models: [
+              {
+                publicModelKey: "gpt-4.1",
+                label: "GPT-4.1",
+                vendorIconKey: "openai",
+                requestTypeBadge: "openaiCompatible",
+              },
+            ],
+          },
+        ],
+      });
+    mockQueryPublicStatusRequests.mockResolvedValue([]);
+    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      coveredFrom: "2026-04-20T10:00:00.000Z",
+      coveredTo: "2026-04-21T10:00:00.000Z",
+      groups: [],
+    });
+    mockRedisSet.mockReset();
+    mockRedisSet.mockResolvedValueOnce("OK");
+
+    const result = await mod.rebuildPublicStatusProjection({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      now: new Date("2026-04-21T10:02:00.000Z"),
+    });
+
+    expect(result.status).toBe("updated");
+    expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledWith({
+      reason: "rebuild-bootstrap",
+    });
+  });
+
+  it("writes rebuild hints with ttl and reason payload", async () => {
+    const mod = await import("@/lib/public-status/rebuild-hints");
+
+    await mod.schedulePublicStatusRebuild({
+      intervalMinutes: 15,
+      rangeHours: 48,
+      reason: "manifest-missing",
+    });
+
+    const hintKey = buildPublicStatusRebuildHintKey({
+      intervalMinutes: 15,
+      rangeHours: 48,
+    });
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      hintKey,
+      expect.stringContaining("manifest-missing"),
+      "EX",
+      300
+    );
+  });
+
+  it("preserves manifest ttl when marking rebuildState as rebuilding", async () => {
+    const mod = await import("@/lib/public-status/rebuild-hints");
+
+    mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+    });
+    mockRedisGet
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          configVersion: "cfg-1",
+          rebuildState: "idle",
+        })
+      )
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          configVersion: "cfg-1",
+          rebuildState: "idle",
+        })
+      );
+    mockRedisPttl.mockResolvedValueOnce(2_592_000_000).mockResolvedValueOnce(-1);
+
+    await mod.schedulePublicStatusRebuild({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "stale-generation",
+    });
+
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      "public-status:v1:manifest:cfg-1:5m:24h",
+      expect.stringContaining('"rebuildState":"rebuilding"'),
+      "PX",
+      2_592_000_000
+    );
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      "public-status:v1:manifest:current:5m:24h",
+      expect.stringContaining('"rebuildState":"rebuilding"')
+    );
+  });
+});

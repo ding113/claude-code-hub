@@ -8,7 +8,13 @@ import { logger } from "@/lib/logger";
 
 // Public paths that don't require authentication
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
-const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout"];
+const PUBLIC_PATH_PATTERNS = [
+  "/login",
+  "/usage-doc",
+  "/status",
+  "/api/auth/login",
+  "/api/auth/logout",
+];
 
 const API_PROXY_PATH = "/v1";
 
@@ -32,6 +38,19 @@ function proxyHandler(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const isLocalePrefixedPublicStatusPath = routing.locales.some(
+    (locale) => pathname === `/${locale}/status` || pathname.startsWith(`/${locale}/status/`)
+  );
+  if (isLocalePrefixedPublicStatusPath) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-cch-public-status", "1");
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  }
+
   // Skip locale handling for static files and Next.js internals
   if (pathname.startsWith("/_next") || pathname === "/favicon.ico") {
     return NextResponse.next();
@@ -39,6 +58,12 @@ function proxyHandler(request: NextRequest) {
 
   // Apply locale middleware first (handles locale detection and routing)
   const localeResponse = intlMiddleware(request);
+
+  const isExplicitPublicStatusPath = pathname === "/status" || pathname.startsWith("/status/");
+
+  if (isExplicitPublicStatusPath) {
+    return localeResponse;
+  }
 
   // Extract locale from pathname (format: /[locale]/path or just /path)
   const localeMatch = pathname.match(/^\/([^/]+)/);
@@ -55,7 +80,6 @@ function proxyHandler(request: NextRequest) {
   const isPublicPath = PUBLIC_PATH_PATTERNS.some((pattern) =>
     matchesPublicPath(pathWithoutLocale, pattern)
   );
-
   // Public paths don't require authentication
   if (isPublicPath) {
     return localeResponse;

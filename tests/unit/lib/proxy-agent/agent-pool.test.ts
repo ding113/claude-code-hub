@@ -547,7 +547,6 @@ describe("AgentPool", () => {
           releaseCreate = resolve;
         });
 
-        // biome-ignore lint/suspicious/noExplicitAny: private 方法 spy
         const createSpy = vi.spyOn(concurrentPool as any, "createAgent");
         createSpy.mockImplementationOnce(async () => {
           await createBlocker;

@@ -6,6 +6,8 @@ import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
@@ -79,10 +81,12 @@ export async function saveSystemSettings(formData: {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+  publicStatusWindowHours?: number;
+  publicStatusAggregationIntervalMinutes?: number;
   // IP 提取 / 归属地查询
   ipExtractionConfig?: IpExtractionConfig | null;
   ipGeoLookupEnabled?: boolean;
-}): Promise<ActionResult<SystemSettings>> {
+}): Promise<ActionResult<SystemSettings & { publicStatusProjectionWarningCode?: string | null }>> {
   let before: SystemSettings | null = null;
   try {
     const session = await getSession();
@@ -122,12 +126,58 @@ export async function saveSystemSettings(formData: {
       quotaLeasePercentWeekly: validated.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: validated.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: validated.quotaLeaseCapUsd,
+      publicStatusWindowHours: validated.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: validated.publicStatusAggregationIntervalMinutes,
       ipExtractionConfig: validated.ipExtractionConfig,
       ipGeoLookupEnabled: validated.ipGeoLookupEnabled,
     });
 
     // Invalidate the system settings cache so proxy requests get fresh settings
     invalidateSystemSettingsCache();
+
+    const shouldRepublishPublicStatusProjection =
+      validated.siteTitle !== undefined ||
+      validated.timezone !== undefined ||
+      validated.publicStatusWindowHours !== undefined ||
+      validated.publicStatusAggregationIntervalMinutes !== undefined;
+
+    let publicStatusProjectionWarningCode: string | null = null;
+    if (shouldRepublishPublicStatusProjection) {
+      try {
+        const publishResult = await publishCurrentPublicStatusConfigProjection({
+          reason: "save-system-settings",
+        });
+
+        if (!publishResult.written) {
+          logger.warn(
+            "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection"
+          );
+          publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+        } else {
+          try {
+            await schedulePublicStatusRebuild({
+              intervalMinutes:
+                validated.publicStatusAggregationIntervalMinutes ??
+                updated.publicStatusAggregationIntervalMinutes,
+              rangeHours: validated.publicStatusWindowHours ?? updated.publicStatusWindowHours,
+              reason: "system-settings-updated",
+            });
+          } catch (error) {
+            logger.warn(
+              "[SystemSettings] Saved DB truth but failed to schedule public-status rebuild",
+              error
+            );
+            publicStatusProjectionWarningCode = "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING";
+          }
+        }
+      } catch (error) {
+        logger.warn(
+          "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection",
+          error
+        );
+        publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+      }
+    }
 
     // Revalidate paths for all locales to ensure cache invalidation across i18n routes
     for (const locale of locales) {
@@ -147,7 +197,7 @@ export async function saveSystemSettings(formData: {
       success: true,
     });
 
-    return { ok: true, data: updated };
+    return { ok: true, data: { ...updated, publicStatusProjectionWarningCode } };
   } catch (error) {
     logger.error("更新系统设置失败:", error);
     const message = error instanceof Error ? error.message : "更新系统设置失败";

@@ -217,7 +217,7 @@ export function maskProxyUrl(proxyUrl: string): string {
  * @returns 是否合法
  */
 export function isValidProxyUrl(proxyUrl: string): boolean {
-  if (!proxyUrl || !proxyUrl.trim()) {
+  if (!proxyUrl?.trim()) {
     return false;
   }
 

@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import {
+  Activity,
   AlertTriangle,
   Bell,
   Database,
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 // Icon name type for serialization across server/client boundary
 export type SectionIconName =
   | "settings"
+  | "activity"
   | "trash"
   | "database"
   | "hard-drive"
@@ -49,6 +51,7 @@ export type SectionIconName =
 // Map icon names to components (client-side only)
 const SECTION_ICON_MAP: Record<SectionIconName, LucideIcon> = {
   settings: Settings,
+  activity: Activity,
   trash: Trash2,
   database: Database,
   "hard-drive": HardDrive,

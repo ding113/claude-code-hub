@@ -7,6 +7,10 @@ import {
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { PROVIDER_ALLOWED_MODEL_RULES_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_MODEL_REDIRECT_RULES_SCHEMA } from "@/lib/provider-model-redirect-schema";
+import {
+  MAX_PUBLIC_STATUS_RANGE_HOURS,
+  PUBLIC_STATUS_INTERVAL_OPTIONS,
+} from "@/lib/public-status/constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 import { isValidIANATimezone } from "@/lib/utils/timezone";
 
@@ -1011,6 +1015,25 @@ export const UpdateSystemSettingsSchema = z.object({
     .max(1, "Lease percent cannot exceed 1")
     .optional(),
   quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
+  publicStatusWindowHours: z.coerce
+    .number()
+    .int("PUBLIC_STATUS_WINDOW_INVALID_INT")
+    .min(1, "PUBLIC_STATUS_WINDOW_TOO_SMALL")
+    .max(MAX_PUBLIC_STATUS_RANGE_HOURS, "PUBLIC_STATUS_WINDOW_TOO_LARGE")
+    .optional(),
+  publicStatusAggregationIntervalMinutes: z.coerce
+    .number()
+    .int("PUBLIC_STATUS_INTERVAL_INVALID_INT")
+    .refine(
+      (value) =>
+        PUBLIC_STATUS_INTERVAL_OPTIONS.includes(
+          value as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]
+        ),
+      {
+        message: "PUBLIC_STATUS_INTERVAL_INVALID",
+      }
+    )
+    .optional(),
 
   // 客户端 IP 提取链（可选；null 表示使用内置默认）
   ipExtractionConfig: z

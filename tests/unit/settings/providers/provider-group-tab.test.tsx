@@ -210,4 +210,43 @@ describe("ProviderGroupTab", () => {
 
     unmount();
   });
+
+  it("renders provider-group note without exposing embedded public-status JSON", async () => {
+    mockGetProviderGroups.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        {
+          id: 11,
+          name: "premium",
+          costMultiplier: 1.5,
+          description: JSON.stringify({
+            note: "Priority group",
+            publicStatus: {
+              displayName: "Premium",
+              publicGroupSlug: "premium",
+              publicModelKeys: ["gpt-4.1"],
+            },
+          }),
+          providerCount: 1,
+        },
+      ],
+    });
+
+    const { container, unmount } = render(
+      <ProviderGroupTab
+        providers={[makeProvider()]}
+        isAdmin={false}
+        onRequestEditProvider={() => {}}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Priority group");
+    expect(container.textContent).not.toContain("publicStatus");
+
+    unmount();
+  });
 });

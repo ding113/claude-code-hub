@@ -100,6 +100,7 @@ const DEFAULT_IP_EXTRACTION_CONFIG_TEXT = formatIpExtractionConfig(DEFAULT_IP_EX
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
   const router = useRouter();
   const t = useTranslations("settings.config.form");
+  const tSettings = useTranslations("settings");
   const tCommon = useTranslations("settings.common");
   const tIpLogging = useTranslations("settings.config.ipLogging");
   const [siteTitle, setSiteTitle] = useState(initialSettings.siteTitle);
@@ -294,6 +295,16 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       }
 
       toast.success(t("configUpdated"));
+      if (
+        result.data?.publicStatusProjectionWarningCode === "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED"
+      ) {
+        toast.warning(tSettings("config.form.publicStatusProjectionWarning"));
+      } else if (
+        result.data?.publicStatusProjectionWarningCode ===
+        "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING"
+      ) {
+        toast.warning(tSettings("config.form.publicStatusBackgroundRefreshPending"));
+      }
       router.refresh();
     });
   };

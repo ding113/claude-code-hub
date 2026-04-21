@@ -5,6 +5,10 @@ import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import {
+  parsePublicStatusDescription,
+  serializePublicStatusDescription,
+} from "@/lib/public-status/config";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { findAllProvidersFresh } from "@/repository/provider";
@@ -189,7 +193,7 @@ export async function createProviderGroup(input: {
  */
 export async function updateProviderGroup(
   id: number,
-  input: { costMultiplier?: number; description?: string | null }
+  input: { costMultiplier?: number; description?: string | null; descriptionNote?: string | null }
 ): Promise<ActionResult<ProviderGroup>> {
   const t = await getTranslations("settings.providers.providerGroups");
   const tError = await getTranslations("errors");
@@ -211,10 +215,24 @@ export async function updateProviderGroup(
     }
 
     const beforeGroup = await findProviderGroupById(id);
+    const nextDescription =
+      input.descriptionNote !== undefined
+        ? serializePublicStatusDescription({
+            note: input.descriptionNote,
+            publicStatus: parsePublicStatusDescription(beforeGroup?.description).publicStatus,
+          })
+        : input.description;
+    if (nextDescription && nextDescription.length > 500) {
+      return {
+        ok: false,
+        error: t("descriptionTooLong"),
+        errorCode: "DESCRIPTION_TOO_LONG",
+      };
+    }
 
     const updated = await repoUpdateProviderGroup(id, {
       costMultiplier: input.costMultiplier,
-      description: input.description,
+      description: nextDescription,
     });
 
     if (!updated) {

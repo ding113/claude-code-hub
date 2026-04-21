@@ -91,7 +91,7 @@ export async function testWebhookAction(
     return { success: false, error: "无权限执行此操作" };
   }
 
-  if (!webhookUrl || !webhookUrl.trim()) {
+  if (!webhookUrl?.trim()) {
     return { success: false, error: "Webhook URL 不能为空" };
   }
 

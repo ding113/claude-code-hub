@@ -500,7 +500,7 @@ export class ProxyProviderResolver {
 
     // 验证 provider 可用性
     const provider = await findProviderById(providerId);
-    if (!provider || !provider.isEnabled) {
+    if (!provider?.isEnabled) {
       logger.debug("ProviderSelector: Session provider unavailable", {
         sessionId: session.sessionId,
         providerId,
