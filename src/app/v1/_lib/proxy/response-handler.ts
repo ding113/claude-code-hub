@@ -3552,19 +3552,25 @@ async function trackCostToRedis(
       RateLimitService.decrementLeaseBudget(key.id, "key", "5h", costFloat, {
         resetMode: key.limit5hResetMode,
       }),
-      RateLimitService.decrementLeaseBudget(key.id, "key", "daily", costFloat),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "daily", costFloat, {
+        resetMode: key.dailyResetMode,
+      }),
       RateLimitService.decrementLeaseBudget(key.id, "key", "weekly", costFloat),
       RateLimitService.decrementLeaseBudget(key.id, "key", "monthly", costFloat),
       RateLimitService.decrementLeaseBudget(user.id, "user", "5h", costFloat, {
         resetMode: user.limit5hResetMode,
       }),
-      RateLimitService.decrementLeaseBudget(user.id, "user", "daily", costFloat),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "daily", costFloat, {
+        resetMode: user.dailyResetMode,
+      }),
       RateLimitService.decrementLeaseBudget(user.id, "user", "weekly", costFloat),
       RateLimitService.decrementLeaseBudget(user.id, "user", "monthly", costFloat),
       RateLimitService.decrementLeaseBudget(provider.id, "provider", "5h", costFloat, {
         resetMode: provider.limit5hResetMode,
       }),
-      RateLimitService.decrementLeaseBudget(provider.id, "provider", "daily", costFloat),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "daily", costFloat, {
+        resetMode: provider.dailyResetMode,
+      }),
       RateLimitService.decrementLeaseBudget(provider.id, "provider", "weekly", costFloat),
       RateLimitService.decrementLeaseBudget(provider.id, "provider", "monthly", costFloat),
     ]).catch((error) => {

@@ -1036,7 +1036,7 @@
         "rolling": "Rolling Window (5h)"
       },
       "desc": {
-        "fixed": "Use natural 5-hour buckets based on wall-clock time",
+        "fixed": "Start a fixed 5-hour window from the first successful charge",
         "rolling": "Use a rolling 5-hour window from the latest usage"
       }
     }
@@ -2128,7 +2128,7 @@
         "label": "5-Hour Reset Mode",
         "fixed": "Fixed window",
         "rolling": "Rolling window (5h)",
-        "helperFixed": "Use natural 5-hour buckets based on wall-clock time.",
+        "helperFixed": "Start a fixed 5-hour window from the first successful charge.",
         "helperRolling": "Use a rolling 5-hour window from the latest usage."
       }
     },

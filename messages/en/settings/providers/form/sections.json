@@ -165,7 +165,7 @@
         "rolling": "Rolling Window (5h)"
       },
       "desc": {
-        "fixed": "Use natural 5-hour buckets based on wall-clock time",
+        "fixed": "Start a fixed 5-hour window from the first successful charge",
         "rolling": "Use a rolling 5-hour window from the latest usage"
       }
     }

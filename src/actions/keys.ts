@@ -613,6 +613,7 @@ export async function editKey(
       validatedData.limit5hResetMode !== key.limit5hResetMode
     ) {
       const { clearSingleKeyCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await invalidateCachedKey(key.key).catch(() => null);
       await clearSingleKeyCostCache({
         keyId,
         keyHash: key.key,

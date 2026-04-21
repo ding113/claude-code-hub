@@ -57,10 +57,11 @@ export function buildLeaseKey(
   entityType: LeaseEntityTypeType,
   entityId: number,
   window: LeaseWindowType,
-  resetMode: DailyResetMode = "rolling"
+  resetMode?: DailyResetMode
 ): string {
-  if (window === "5h") {
-    return `lease:${entityType}:${entityId}:${window}:${resetMode}`;
+  const effectiveResetMode = resetMode ?? (window === "5h" ? "rolling" : "fixed");
+  if (window === "5h" || window === "daily") {
+    return `lease:${entityType}:${entityId}:${window}:${effectiveResetMode}`;
   }
   return `lease:${entityType}:${entityId}:${window}`;
 }
