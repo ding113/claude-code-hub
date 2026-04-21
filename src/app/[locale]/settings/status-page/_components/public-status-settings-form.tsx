@@ -145,7 +145,7 @@ export function PublicStatusSettingsForm({
               <SelectContent>
                 {PUBLIC_STATUS_INTERVAL_OPTIONS.map((option) => (
                   <SelectItem key={option} value={String(option)}>
-                    {option} min
+                    {t("statusPage.form.intervalOption", { minutes: option })}
                   </SelectItem>
                 ))}
               </SelectContent>

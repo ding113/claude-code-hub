@@ -44,6 +44,10 @@ vi.mock("next/cache", () => ({
   revalidatePath: mockRevalidatePath,
 }));
 
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => (key: string) => key,
+}));
+
 vi.mock("@/lib/logger", () => ({
   logger: {
     error: mockLoggerError,
@@ -130,5 +134,18 @@ describe("public-status config publish integration", () => {
     });
     expect(mockInvalidateSystemSettingsCache).toHaveBeenCalledTimes(1);
     expect(mockRevalidatePath).toHaveBeenCalled();
+  });
+
+  it("rejects aggregation intervals outside the public allowlist", async () => {
+    const { savePublicStatusSettings } = await import("@/actions/public-status");
+
+    const result = await savePublicStatusSettings({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 10,
+      groups: [],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(mockUpdateSystemSettings).not.toHaveBeenCalled();
   });
 });

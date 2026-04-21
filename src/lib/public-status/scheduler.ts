@@ -27,14 +27,14 @@ const schedulerState = globalThis as unknown as {
 
 function parseRebuildHintKey(
   key: string
-): { key: string; intervalMinutes: number; rangeHours: number } | null {
+): { hintKey: string; intervalMinutes: number; rangeHours: number } | null {
   const match = key.match(/rebuild-hint:(\d+)m:(\d+)h$/);
   if (!match) {
     return null;
   }
 
   return {
-    key,
+    hintKey: key,
     intervalMinutes: Number(match[1]),
     rangeHours: Number(match[2]),
   };
@@ -69,7 +69,7 @@ async function collectTargets(): Promise<
     return [];
   }
 
-  const targets = new Map<string, { intervalMinutes: number; rangeHours: number }>();
+  const targets = new Map<string, { intervalMinutes: number; rangeHours: number; hintKey?: string }>();
   const configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({ redis });
   if (configSnapshot && configSnapshot.groups.length > 0) {
     const manifestKey = buildPublicStatusManifestKey({
@@ -85,10 +85,15 @@ async function collectTargets(): Promise<
         rangeHours: configSnapshot.defaultRangeHours,
       });
     } else {
-      const manifest = JSON.parse(manifestRaw) as {
+      let manifest: {
         freshUntil?: string;
         configVersion?: string;
-      };
+      } = {};
+      try {
+        manifest = JSON.parse(manifestRaw) as typeof manifest;
+      } catch {
+        // 视为 manifest 损坏，按缺失/过期处理。
+      }
       if (
         manifest.configVersion !== configSnapshot.configVersion ||
         !manifest.freshUntil ||
@@ -110,7 +115,11 @@ async function collectTargets(): Promise<
       continue;
     }
 
-    targets.set(`${parsed.intervalMinutes}:${parsed.rangeHours}`, parsed);
+    targets.set(`${parsed.intervalMinutes}:${parsed.rangeHours}`, {
+      intervalMinutes: parsed.intervalMinutes,
+      rangeHours: parsed.rangeHours,
+      hintKey: parsed.hintKey,
+    });
   }
 
   return [...targets.values()];

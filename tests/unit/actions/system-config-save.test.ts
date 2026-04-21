@@ -256,7 +256,7 @@ describe("saveSystemSettings", () => {
     expect(result.ok).toBe(true);
     expect(result.data).toEqual({
       ...mockUpdated,
-      publicStatusProjectionWarning: null,
+      publicStatusProjectionWarningCode: null,
     });
   });
 

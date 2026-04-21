@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getTranslations } from "next-intl/server";
 import { locales } from "@/i18n/config";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
@@ -12,6 +13,7 @@ import {
   parsePublicStatusDescription,
   serializePublicStatusDescription,
 } from "@/lib/public-status/config";
+import { PUBLIC_STATUS_INTERVAL_SET } from "@/lib/public-status/constants";
 import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
@@ -54,9 +56,16 @@ export async function savePublicStatusSettings(
   input: SavePublicStatusSettingsInput
 ): Promise<ActionResult<{ updatedGroupCount: number; configVersion: string }>> {
   try {
+    const t = await getTranslations("settings");
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
+    }
+    if (!PUBLIC_STATUS_INTERVAL_SET.has(input.publicStatusAggregationIntervalMinutes)) {
+      return {
+        ok: false,
+        error: t("statusPage.form.aggregationIntervalMinutesInvalid"),
+      };
     }
 
     const validatedSettings = UpdateSystemSettingsSchema.parse({

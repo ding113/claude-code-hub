@@ -86,7 +86,7 @@ export async function saveSystemSettings(formData: {
   // IP 提取 / 归属地查询
   ipExtractionConfig?: IpExtractionConfig | null;
   ipGeoLookupEnabled?: boolean;
-}): Promise<ActionResult<SystemSettings & { publicStatusProjectionWarning?: string | null }>> {
+}): Promise<ActionResult<SystemSettings & { publicStatusProjectionWarningCode?: string | null }>> {
   let before: SystemSettings | null = null;
   try {
     const session = await getSession();
@@ -141,7 +141,7 @@ export async function saveSystemSettings(formData: {
       validated.publicStatusWindowHours !== undefined ||
       validated.publicStatusAggregationIntervalMinutes !== undefined;
 
-    let publicStatusProjectionWarning: string | null = null;
+    let publicStatusProjectionWarningCode: string | null = null;
     if (shouldRepublishPublicStatusProjection) {
       const publishResult = await publishCurrentPublicStatusConfigProjection({
         reason: "save-system-settings",
@@ -151,7 +151,7 @@ export async function saveSystemSettings(formData: {
         logger.warn(
           "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection"
         );
-        publicStatusProjectionWarning = "系统设置已保存，但 public status Redis 投影发布失败";
+        publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
       } else {
         await schedulePublicStatusRebuild({
           intervalMinutes:
@@ -181,7 +181,7 @@ export async function saveSystemSettings(formData: {
       success: true,
     });
 
-    return { ok: true, data: { ...updated, publicStatusProjectionWarning } };
+    return { ok: true, data: { ...updated, publicStatusProjectionWarningCode } };
   } catch (error) {
     logger.error("更新系统设置失败:", error);
     const message = error instanceof Error ? error.message : "更新系统设置失败";

@@ -1017,23 +1017,23 @@ export const UpdateSystemSettingsSchema = z.object({
   quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
   publicStatusWindowHours: z.coerce
     .number()
-    .int("Public status window must be an integer")
-    .min(1, "Public status window cannot be less than 1 hour")
+    .int("PUBLIC_STATUS_WINDOW_INVALID_INT")
+    .min(1, "PUBLIC_STATUS_WINDOW_TOO_SMALL")
     .max(
       MAX_PUBLIC_STATUS_RANGE_HOURS,
-      `Public status window cannot exceed ${MAX_PUBLIC_STATUS_RANGE_HOURS} hours`
+      "PUBLIC_STATUS_WINDOW_TOO_LARGE"
     )
     .optional(),
   publicStatusAggregationIntervalMinutes: z.coerce
     .number()
-    .int("Public status aggregation interval must be an integer")
+    .int("PUBLIC_STATUS_INTERVAL_INVALID_INT")
     .refine(
       (value) =>
         PUBLIC_STATUS_INTERVAL_OPTIONS.includes(
           value as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]
         ),
       {
-        message: `Public status aggregation interval must be one of ${PUBLIC_STATUS_INTERVAL_OPTIONS.join(", ")}`,
+        message: "PUBLIC_STATUS_INTERVAL_INVALID",
       }
     )
     .optional(),
