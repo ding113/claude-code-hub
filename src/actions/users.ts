@@ -236,6 +236,7 @@ export interface BatchUpdateUsersParams {
     rpm?: number | null;
     dailyQuota?: number | null;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
   };
