@@ -92,6 +92,7 @@ import type { LeaseWindowType } from "./lease";
 import { type DecrementLeaseBudgetResult, LeaseService } from "./lease-service";
 import {
   type DailyResetMode,
+  getResetAtFromTtlSeconds,
   getTimeRangeForPeriodWithMode,
   getTTLForPeriod,
   getTTLForPeriodWithMode,
@@ -109,7 +110,7 @@ interface CostLimit {
   period: "5h" | "daily" | "weekly" | "monthly";
   name: string;
   resetTime?: string; // 自定义重置时间（仅 daily + fixed 模式使用，格式 "HH:mm"）
-  resetMode?: DailyResetMode; // 日限额重置模式（仅 daily 使用）
+  resetMode?: DailyResetMode; // 5h/daily 限额重置模式
 }
 
 /**
@@ -119,6 +120,16 @@ interface CostLimit {
  * - Redis 不可用时默认 Fail Open，避免误伤正常请求（仍会在日志中记录）。
  */
 export class RateLimitService {
+  private static readonly TRACK_FIXED_COST_WINDOW_LUA = `
+    local existing = redis.call("GET", KEYS[1])
+    if existing then
+      return redis.call("INCRBYFLOAT", KEYS[1], ARGV[1])
+    end
+
+    redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2])
+    return tonumber(ARGV[1])
+  `;
+
   // 使用 getter 实现懒加载，避免模块加载时立即连接 Redis（构建阶段触发）
   private static get redis() {
     return getRedisClient();
@@ -127,6 +138,68 @@ export class RateLimitService {
   private static resolveDailyReset(resetTime?: string): { normalized: string; suffix: string } {
     const normalized = normalizeResetTime(resetTime);
     return { normalized, suffix: normalized.replace(":", "") };
+  }
+
+  private static get5hCostKey(
+    type: "key" | "provider" | "user",
+    id: number,
+    mode: DailyResetMode = "rolling"
+  ): string {
+    return `${type}:${id}:cost_5h_${mode}`;
+  }
+
+  private static async getFixed5hWindowState(
+    type: "key" | "provider" | "user",
+    id: number
+  ): Promise<{ current: number; resetAt: Date | null; exists: boolean }> {
+    const redis = RateLimitService.redis;
+    if (!redis || redis.status !== "ready") {
+      return { current: 0, resetAt: null, exists: false };
+    }
+
+    const key = RateLimitService.get5hCostKey(type, id, "fixed");
+    const [value, ttlSecondsRaw] = await Promise.all([redis.get(key), redis.ttl(key)]);
+
+    if (value === null) {
+      return { current: 0, resetAt: null, exists: false };
+    }
+
+    const parsed = Number.parseFloat(value || "0");
+    const ttlSeconds = typeof ttlSecondsRaw === "number" ? ttlSecondsRaw : Number(ttlSecondsRaw);
+    return {
+      current: Number.isFinite(parsed) ? parsed : 0,
+      resetAt: getResetAtFromTtlSeconds(ttlSeconds),
+      exists: true,
+    };
+  }
+
+  static async get5hWindowResetAt(
+    id: number,
+    type: "key" | "provider" | "user",
+    resetMode: DailyResetMode = "rolling"
+  ): Promise<Date | null> {
+    if (resetMode === "rolling") {
+      return null;
+    }
+    const state = await RateLimitService.getFixed5hWindowState(type, id);
+    return state.resetAt;
+  }
+
+  private static async trackFixedCostWindow(
+    key: string,
+    cost: number,
+    ttlSeconds: number
+  ): Promise<void> {
+    const redis = RateLimitService.redis;
+    if (!redis || redis.status !== "ready") return;
+
+    await redis.eval(
+      RateLimitService.TRACK_FIXED_COST_WINDOW_LUA,
+      1,
+      key,
+      cost.toString(),
+      ttlSeconds
+    );
   }
 
   private static async warmRollingCostZset(
@@ -160,6 +233,7 @@ export class RateLimitService {
     type: "key" | "provider" | "user",
     limits: {
       limit_5h_usd: number | null;
+      limit_5h_reset_mode?: DailyResetMode;
       limit_daily_usd: number | null;
       daily_reset_time?: string;
       daily_reset_mode?: DailyResetMode;
@@ -169,9 +243,15 @@ export class RateLimitService {
     }
   ): Promise<{ allowed: boolean; reason?: string }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
+    const limit5hResetMode = limits.limit_5h_reset_mode ?? "rolling";
     const dailyResetMode = limits.daily_reset_mode ?? "fixed";
     const costLimits: CostLimit[] = [
-      { amount: limits.limit_5h_usd, period: "5h", name: "5小时" },
+      {
+        amount: limits.limit_5h_usd,
+        period: "5h",
+        name: "5小时",
+        resetMode: limit5hResetMode,
+      },
       {
         amount: limits.limit_daily_usd,
         period: "daily",
@@ -194,10 +274,13 @@ export class RateLimitService {
 
           let current = 0;
 
-          // 5h 使用滚动窗口 Lua 脚本
-          if (limit.period === "5h") {
+          // 5h 根据 fixed/rolling 模式走不同的 Redis 表示
+          if (limit.period === "5h" && limit.resetMode === "fixed") {
+            const fixedWindowState = await RateLimitService.getFixed5hWindowState(type, id);
+            current = fixedWindowState.current;
+          } else if (limit.period === "5h") {
             try {
-              const key = `${type}:${id}:cost_5h_rolling`;
+              const key = RateLimitService.get5hCostKey(type, id, "rolling");
               const result = (await RateLimitService.redis.eval(
                 GET_COST_5H_ROLLING_WINDOW,
                 1, // KEYS count
@@ -453,6 +536,18 @@ export class RateLimitService {
     for (const limit of costLimits) {
       if (!limit.amount || limit.amount <= 0) continue;
 
+      if (limit.period === "5h" && limit.resetMode === "fixed") {
+        const fixedWindowState = await RateLimitService.getFixed5hWindowState(type, id);
+        if (fixedWindowState.current >= limit.amount) {
+          const typeName = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
+          return {
+            allowed: false,
+            reason: `${typeName} ${limit.name}消费上限已达到（${fixedWindowState.current.toFixed(4)}/${limit.amount}）`,
+          };
+        }
+        continue;
+      }
+
       // 计算时间范围（使用支持模式的时间工具函数）
       const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         limit.period,
@@ -513,7 +608,7 @@ export class RateLimitService {
           if (limit.period === "5h") {
             // 5h 滚动窗口：Redis 恢复时必须按原始时间戳重建 ZSET，避免窗口边界偏差/重复累计
             if (costEntries && costEntries.length > 0) {
-              const key = `${type}:${id}:cost_5h_rolling`;
+              const key = RateLimitService.get5hCostKey(type, id, "rolling");
               await RateLimitService.warmRollingCostZset(key, costEntries, 21600);
               logger.info(
                 `[RateLimit] Cache warmed for ${key}, value=${current} (rolling window, rebuilt)`
@@ -756,10 +851,14 @@ export class RateLimitService {
     _sessionId: string,
     cost: number,
     options?: {
+      userId?: number;
+      key5hResetMode?: DailyResetMode;
       keyResetTime?: string;
       keyResetMode?: DailyResetMode;
+      provider5hResetMode?: DailyResetMode;
       providerResetTime?: string;
       providerResetMode?: DailyResetMode;
+      user5hResetMode?: DailyResetMode;
       requestId?: number;
       createdAtMs?: number;
     }
@@ -769,8 +868,11 @@ export class RateLimitService {
     try {
       const keyDailyReset = RateLimitService.resolveDailyReset(options?.keyResetTime);
       const providerDailyReset = RateLimitService.resolveDailyReset(options?.providerResetTime);
+      const key5hMode = options?.key5hResetMode ?? "rolling";
       const keyDailyMode = options?.keyResetMode ?? "fixed";
+      const provider5hMode = options?.provider5hResetMode ?? "rolling";
       const providerDailyMode = options?.providerResetMode ?? "fixed";
+      const user5hMode = options?.user5hResetMode ?? "rolling";
       const now = options?.createdAtMs ?? Date.now();
       const requestId = options?.requestId != null ? String(options.requestId) : "";
       const window5h = 5 * 60 * 60 * 1000; // 5 hours in ms
@@ -794,28 +896,62 @@ export class RateLimitService {
       const ttlWeekly = await getTTLForPeriod("weekly");
       const ttlMonthly = await getTTLForPeriod("monthly");
 
-      // 1. 5h 滚动窗口：使用 Lua 脚本（ZSET）
-      // Key 的 5h 滚动窗口
-      await RateLimitService.redis.eval(
-        TRACK_COST_5H_ROLLING_WINDOW,
-        1, // KEYS count
-        `key:${keyId}:cost_5h_rolling`, // KEYS[1]
-        cost.toString(), // ARGV[1]: cost
-        now.toString(), // ARGV[2]: now
-        window5h.toString(), // ARGV[3]: window
-        requestId // ARGV[4]: request_id (optional)
-      );
+      // 1. 5h 窗口：rolling 使用 ZSET，fixed 仅在首个成功记账时创建 TTL 窗口
+      if (key5hMode === "rolling") {
+        await RateLimitService.redis.eval(
+          TRACK_COST_5H_ROLLING_WINDOW,
+          1, // KEYS count
+          RateLimitService.get5hCostKey("key", keyId, "rolling"), // KEYS[1]
+          cost.toString(), // ARGV[1]: cost
+          now.toString(), // ARGV[2]: now
+          window5h.toString(), // ARGV[3]: window
+          requestId // ARGV[4]: request_id (optional)
+        );
+      } else {
+        await RateLimitService.trackFixedCostWindow(
+          RateLimitService.get5hCostKey("key", keyId, "fixed"),
+          cost,
+          5 * 3600
+        );
+      }
 
-      // Provider 的 5h 滚动窗口
-      await RateLimitService.redis.eval(
-        TRACK_COST_5H_ROLLING_WINDOW,
-        1,
-        `provider:${providerId}:cost_5h_rolling`,
-        cost.toString(),
-        now.toString(),
-        window5h.toString(),
-        requestId
-      );
+      if (provider5hMode === "rolling") {
+        await RateLimitService.redis.eval(
+          TRACK_COST_5H_ROLLING_WINDOW,
+          1,
+          RateLimitService.get5hCostKey("provider", providerId, "rolling"),
+          cost.toString(),
+          now.toString(),
+          window5h.toString(),
+          requestId
+        );
+      } else {
+        await RateLimitService.trackFixedCostWindow(
+          RateLimitService.get5hCostKey("provider", providerId, "fixed"),
+          cost,
+          5 * 3600
+        );
+      }
+
+      if (options?.userId != null) {
+        if (user5hMode === "rolling") {
+          await RateLimitService.redis.eval(
+            TRACK_COST_5H_ROLLING_WINDOW,
+            1,
+            RateLimitService.get5hCostKey("user", options.userId, "rolling"),
+            cost.toString(),
+            now.toString(),
+            window5h.toString(),
+            requestId
+          );
+        } else {
+          await RateLimitService.trackFixedCostWindow(
+            RateLimitService.get5hCostKey("user", options.userId, "fixed"),
+            cost,
+            5 * 3600
+          );
+        }
+      }
 
       // 2. daily 滚动窗口：使用 Lua 脚本（ZSET）
       if (keyDailyMode === "rolling") {
@@ -886,22 +1022,26 @@ export class RateLimitService {
    */
   static async getCurrentCost(
     id: number,
-    type: "key" | "provider",
+    type: "key" | "provider" | "user",
     period: "5h" | "daily" | "weekly" | "monthly",
     resetTime = "00:00",
-    resetMode: DailyResetMode = "fixed"
+    resetMode?: DailyResetMode
   ): Promise<number> {
     try {
+      const effectiveResetMode = resetMode ?? (period === "5h" ? "rolling" : "fixed");
       const dailyResetInfo = RateLimitService.resolveDailyReset(resetTime);
       // Fast Path: Redis 查询
       if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
         let current = 0;
 
-        // 5h 使用滚动窗口 Lua 脚本
-        if (period === "5h") {
+        // 5h 根据模式选择 fixed/rolling
+        if (period === "5h" && effectiveResetMode === "fixed") {
+          const fixedWindowState = await RateLimitService.getFixed5hWindowState(type, id);
+          return fixedWindowState.current;
+        } else if (period === "5h") {
           const now = Date.now();
           const window5h = 5 * 60 * 60 * 1000;
-          const key = `${type}:${id}:cost_5h_rolling`;
+          const key = RateLimitService.get5hCostKey(type, id, "rolling");
 
           const result = (await RateLimitService.redis.eval(
             GET_COST_5H_ROLLING_WINDOW,
@@ -926,7 +1066,7 @@ export class RateLimitService {
             // Key 存在但值为 0，说明真的是 0
             return 0;
           }
-        } else if (period === "daily" && resetMode === "rolling") {
+        } else if (period === "daily" && effectiveResetMode === "rolling") {
           // daily 滚动窗口：使用 ZSET + Lua 脚本
           const now = Date.now();
           const window24h = 24 * 60 * 60 * 1000;
@@ -976,17 +1116,23 @@ export class RateLimitService {
       }
 
       // Slow Path: 数据库查询
+      if (period === "5h" && effectiveResetMode === "fixed") {
+        return 0;
+      }
+
       const {
         findKeyCostEntriesInTimeRange,
         findProviderCostEntriesInTimeRange,
+        findUserCostEntriesInTimeRange,
         sumKeyCostInTimeRange,
         sumProviderCostInTimeRange,
+        sumUserCostInTimeRange,
       } = await import("@/repository/statistics");
 
       const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         period,
         dailyResetInfo.normalized,
-        resetMode
+        effectiveResetMode
       );
 
       let current = 0;
@@ -996,7 +1142,8 @@ export class RateLimitService {
         costUsd: number;
       }> | null = null;
 
-      const isRollingWindow = period === "5h" || (period === "daily" && resetMode === "rolling");
+      const isRollingWindow =
+        period === "5h" || (period === "daily" && effectiveResetMode === "rolling");
 
       if (isRollingWindow) {
         switch (type) {
@@ -1005,6 +1152,9 @@ export class RateLimitService {
             break;
           case "provider":
             costEntries = await findProviderCostEntriesInTimeRange(id, startTime, endTime);
+            break;
+          case "user":
+            costEntries = await findUserCostEntriesInTimeRange(id, startTime, endTime);
             break;
           default:
             costEntries = [];
@@ -1019,6 +1169,9 @@ export class RateLimitService {
           case "provider":
             current = await sumProviderCostInTimeRange(id, startTime, endTime);
             break;
+          case "user":
+            current = await sumUserCostInTimeRange(id, startTime, endTime);
+            break;
           default:
             current = 0;
         }
@@ -1029,13 +1182,13 @@ export class RateLimitService {
         try {
           if (period === "5h") {
             if (costEntries && costEntries.length > 0) {
-              const key = `${type}:${id}:cost_5h_rolling`;
+              const key = RateLimitService.get5hCostKey(type, id, "rolling");
               await RateLimitService.warmRollingCostZset(key, costEntries, 21600);
               logger.info(
                 `[RateLimit] Cache warmed for ${key}, value=${current} (rolling window, rebuilt)`
               );
             }
-          } else if (period === "daily" && resetMode === "rolling") {
+          } else if (period === "daily" && effectiveResetMode === "rolling") {
             // daily 滚动窗口：使用 ZSET + Lua 脚本
             if (costEntries && costEntries.length > 0) {
               const key = `${type}:${id}:cost_daily_rolling`;
@@ -1047,7 +1200,11 @@ export class RateLimitService {
           } else {
             // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
             const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
-            const ttl = await getTTLForPeriodWithMode(period, dailyResetInfo.normalized, resetMode);
+            const ttl = await getTTLForPeriodWithMode(
+              period,
+              dailyResetInfo.normalized,
+              effectiveResetMode
+            );
             await RateLimitService.redis.set(
               `${type}:${id}:cost_${redisKey}`,
               current.toString(),
@@ -1461,6 +1618,7 @@ export class RateLimitService {
     entityType: "key" | "user" | "provider",
     limits: {
       limit_5h_usd: number | null;
+      limit_5h_reset_mode?: DailyResetMode;
       limit_daily_usd: number | null;
       daily_reset_time?: string;
       daily_reset_mode?: DailyResetMode;
@@ -1470,6 +1628,7 @@ export class RateLimitService {
     }
   ): Promise<{ allowed: boolean; reason?: string; failOpen?: boolean }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
+    const limit5hResetMode = limits.limit_5h_reset_mode ?? "rolling";
     const dailyResetMode = limits.daily_reset_mode ?? "fixed";
 
     // Define windows to check with their limits
@@ -1485,7 +1644,7 @@ export class RateLimitService {
         limit: limits.limit_5h_usd,
         name: "5h",
         resetTime: "00:00",
-        resetMode: "rolling" as DailyResetMode,
+        resetMode: limit5hResetMode,
       },
       {
         window: "daily",
@@ -1573,13 +1732,15 @@ export class RateLimitService {
     entityId: number,
     entityType: "key" | "user" | "provider",
     window: LeaseWindowType,
-    cost: number
+    cost: number,
+    options?: { resetMode?: DailyResetMode }
   ): Promise<DecrementLeaseBudgetResult> {
     return LeaseService.decrementLeaseBudget({
       entityType,
       entityId,
       window,
       cost,
+      resetMode: options?.resetMode,
     });
   }
 }

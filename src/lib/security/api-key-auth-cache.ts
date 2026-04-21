@@ -134,6 +134,12 @@ function hydrateKeyFromCache(keyString: string, payload: CachedKeyPayloadV1): Ke
   if (typeof key.canLoginWebUi !== "boolean") return null;
   if (typeof key.dailyResetMode !== "string" || typeof key.dailyResetTime !== "string") return null;
   if (typeof key.limitConcurrentSessions !== "number") return null;
+  if (
+    key.limit5hResetMode != null &&
+    key.limit5hResetMode !== "fixed" &&
+    key.limit5hResetMode !== "rolling"
+  )
+    return null;
 
   const createdAt = parseRequiredDate(key.createdAt);
   const updatedAt = parseRequiredDate(key.updatedAt);
@@ -147,6 +153,7 @@ function hydrateKeyFromCache(keyString: string, payload: CachedKeyPayloadV1): Ke
 
   return {
     ...(payload.key as Omit<Key, "key">),
+    limit5hResetMode: (key.limit5hResetMode as Key["limit5hResetMode"] | undefined) ?? "rolling",
     key: keyString,
     createdAt,
     updatedAt,
@@ -164,6 +171,12 @@ function hydrateUserFromCache(payload: CachedUserPayloadV1): User | null {
   if (typeof user.isEnabled !== "boolean") return null;
   if (typeof user.dailyResetMode !== "string" || typeof user.dailyResetTime !== "string")
     return null;
+  if (
+    user.limit5hResetMode != null &&
+    user.limit5hResetMode !== "fixed" &&
+    user.limit5hResetMode !== "rolling"
+  )
+    return null;
 
   const createdAt = parseRequiredDate(user.createdAt);
   const updatedAt = parseRequiredDate(user.updatedAt);
@@ -178,6 +191,7 @@ function hydrateUserFromCache(payload: CachedUserPayloadV1): User | null {
 
   return {
     ...(payload.user as User),
+    limit5hResetMode: (user.limit5hResetMode as User["limit5hResetMode"] | undefined) ?? "rolling",
     createdAt,
     updatedAt,
     expiresAt: expiresAt === undefined ? undefined : expiresAt,

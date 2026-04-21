@@ -228,8 +228,10 @@ export class ProxyRateLimitGuard {
     // ========== 第三层：短期周期限额（混合检查）==========
 
     // 5. Key 5h 限额（最短周期，最易触发）
+    const normalizedKey5hResetMode = key.limit5hResetMode ?? "rolling";
     const key5hCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: key.limit5hUsd,
+      limit_5h_reset_mode: normalizedKey5hResetMode,
       limit_daily_usd: null, // 仅检查 5h
       limit_weekly_usd: null,
       limit_monthly_usd: null,
@@ -243,13 +245,20 @@ export class ProxyRateLimitGuard {
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
-      // 5h 是滚动窗口，使用专用的滚动窗口错误消息（无固定重置时间）
+      const resetAt = await RateLimitService.get5hWindowResetAt(
+        key.id,
+        "key",
+        normalizedKey5hResetMode
+      );
       const message = await getErrorMessageServer(
         locale,
-        ERROR_CODES.RATE_LIMIT_5H_ROLLING_EXCEEDED,
+        normalizedKey5hResetMode === "fixed"
+          ? ERROR_CODES.RATE_LIMIT_5H_EXCEEDED
+          : ERROR_CODES.RATE_LIMIT_5H_ROLLING_EXCEEDED,
         {
           current: currentUsage.toFixed(4),
           limit: limitValue.toFixed(4),
+          resetTime: resetAt?.toISOString() ?? new Date().toISOString(),
         }
       );
 
@@ -259,14 +268,16 @@ export class ProxyRateLimitGuard {
         "usd_5h",
         currentUsage,
         limitValue,
-        null, // 滚动窗口没有固定重置时间
+        resetAt?.toISOString() ?? null,
         null
       );
     }
 
     // 6. User 5h 限额（防止多 Key 合力在短窗口打爆用户）
+    const normalizedUser5hResetMode = user.limit5hResetMode ?? "rolling";
     const user5hCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: user.limit5hUsd ?? null,
+      limit_5h_reset_mode: normalizedUser5hResetMode,
       limit_daily_usd: null,
       limit_weekly_usd: null,
       limit_monthly_usd: null,
@@ -280,13 +291,20 @@ export class ProxyRateLimitGuard {
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
-      // 5h 是滚动窗口，使用专用的滚动窗口错误消息（无固定重置时间）
+      const resetAt = await RateLimitService.get5hWindowResetAt(
+        user.id,
+        "user",
+        normalizedUser5hResetMode
+      );
       const message = await getErrorMessageServer(
         locale,
-        ERROR_CODES.RATE_LIMIT_5H_ROLLING_EXCEEDED,
+        normalizedUser5hResetMode === "fixed"
+          ? ERROR_CODES.RATE_LIMIT_5H_EXCEEDED
+          : ERROR_CODES.RATE_LIMIT_5H_ROLLING_EXCEEDED,
         {
           current: currentUsage.toFixed(4),
           limit: limitValue.toFixed(4),
+          resetTime: resetAt?.toISOString() ?? new Date().toISOString(),
         }
       );
 
@@ -296,7 +314,7 @@ export class ProxyRateLimitGuard {
         "usd_5h",
         currentUsage,
         limitValue,
-        null, // 滚动窗口没有固定重置时间
+        resetAt?.toISOString() ?? null,
         null
       );
     }

@@ -48,11 +48,11 @@
       "title": "选项",
       "desc": "附加供应商选项和覆写设置"
     },
-  "modelWhitelist": {
-    "title": "模型白名单",
-    "desc": "限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。",
-    "legacyExactOnlyWarning": "这个旧版表单只会显示精确匹配的白名单规则。在这里保存会丢失前缀、后缀、关键词或正则规则，请改用新版供应商表单编辑高级规则。",
-    "label": "允许的模型",
+    "modelWhitelist": {
+      "title": "模型白名单",
+      "desc": "限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。",
+      "legacyExactOnlyWarning": "这个旧版表单只会显示精确匹配的白名单规则。在这里保存会丢失前缀、后缀、关键词或正则规则，请改用新版供应商表单编辑高级规则。",
+      "label": "允许的模型",
       "optional": "(可选)",
       "allowAll": "✓ 允许所有模型（推荐）",
       "selectedOnly": "仅允许命中这 {count} 条规则的模型。其他模型的请求不会调度到此供应商。",
@@ -297,7 +297,8 @@
       }
     },
     "dailyResetTime": {
-      "label": "每日重置时间 (HH:mm)"
+      "label": "每日重置时间 (HH:mm)",
+      "placeholder": "HH:mm"
     },
     "limitWeekly": {
       "label": "周消费上限 (USD)",
@@ -314,12 +315,24 @@
     "limitConcurrent": {
       "label": "并发 Session 上限",
       "placeholder": "0 表示无限制"
+    },
+    "limit5hResetMode": {
+      "label": "5小时重置模式",
+      "options": {
+        "fixed": "固定窗口",
+        "rolling": "滚动窗口（5小时）"
+      },
+      "desc": {
+        "fixed": "从首次成功记账开始锁定 5 小时固定窗口",
+        "rolling": "按最近 5 小时滚动窗口统计额度"
+      }
     }
   },
   "limits": {
     "timeBased": "时间维度限制",
     "dailyReset": "每日重置设置",
-    "otherLimits": "其他限制"
+    "otherLimits": "其他限制",
+    "windowReset": "窗口重置方式"
   },
   "circuitBreaker": {
     "title": "熔断器配置",

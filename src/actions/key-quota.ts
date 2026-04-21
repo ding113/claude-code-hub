@@ -98,6 +98,7 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
     const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
       "@/lib/rate-limit/time-utils"
     );
+    const { RateLimitService } = await import("@/lib/rate-limit");
     const { sumKeyCostInTimeRange, sumKeyTotalCost } = await import("@/repository/statistics");
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
@@ -107,19 +108,23 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       (keyRow.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
     );
 
-    // 5h/weekly/monthly use unified time ranges
     const range5h = await getTimeRangeForPeriod("5h");
+
+    // 5h 使用运行时服务读取，weekly/monthly 继续沿用 DB 时间范围
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     const costResetAt = resolveKeyCostResetAt(keyRow.costResetAt ?? null, result.userCostResetAt);
     const clipStart = (start: Date): Date =>
       costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
+    const limit5hResetMode = (keyRow.limit5hResetMode as DailyResetMode | undefined) ?? "rolling";
 
-    // Use DB direct queries for consistency with my-usage.ts (not Redis-first)
+    // rolling 5h 继续沿用 DB 统计；fixed 5h 只能读取运行时窗口状态
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
-        sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
+        limit5hResetMode === "fixed"
+          ? RateLimitService.getCurrentCost(keyId, "key", "5h", "00:00", limit5hResetMode)
+          : sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
         sumKeyCostInTimeRange(
           keyId,
           clipStart(keyDailyTimeRange.startTime),
@@ -136,6 +141,7 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
         type: "limit5h",
         current: cost5h,
         limit: parseNumericLimit(keyRow.limit5hUsd),
+        mode: limit5hResetMode,
       },
       {
         type: "limitDaily",

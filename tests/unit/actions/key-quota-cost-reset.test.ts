@@ -35,6 +35,13 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
   getTimeRangeForPeriod: getTimeRangeForPeriodMock,
 }));
 
+const getCurrentCostMock = vi.fn();
+vi.mock("@/lib/rate-limit", () => ({
+  RateLimitService: {
+    getCurrentCost: getCurrentCostMock,
+  },
+}));
+
 // Mock SessionTracker
 const getKeySessionCountMock = vi.fn();
 vi.mock("@/lib/session-tracker", () => ({
@@ -81,6 +88,7 @@ const DEFAULT_KEY_ROW = {
   dailyResetTime: "00:00",
   dailyResetMode: "fixed",
   limit5hUsd: "10.00",
+  limit5hResetMode: "rolling",
   limitDailyUsd: "20.00",
   limitWeeklyUsd: "50.00",
   limitMonthlyUsd: "100.00",
@@ -116,6 +124,7 @@ function setupDefaultMocks(costResetAt: Date | null = null) {
     },
   ]);
   setupTimeRangeMocks();
+  getCurrentCostMock.mockResolvedValue(1.5);
   sumKeyCostInTimeRangeMock.mockResolvedValue(1.5);
   sumKeyTotalCostMock.mockResolvedValue(10.0);
   getKeySessionCountMock.mockResolvedValue(2);

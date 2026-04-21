@@ -13,6 +13,7 @@ export const USER_FIELD_PERMISSIONS = {
 
   // Admin-only fields (user-level quota fields)
   limit5hUsd: { requiredRole: "admin" },
+  limit5hResetMode: { requiredRole: "admin" },
   limitWeeklyUsd: { requiredRole: "admin" },
   limitMonthlyUsd: { requiredRole: "admin" },
   limitTotalUsd: { requiredRole: "admin" },

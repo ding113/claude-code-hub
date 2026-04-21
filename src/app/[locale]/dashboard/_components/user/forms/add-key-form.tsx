@@ -61,6 +61,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
       providerGroup: PROVIDER_GROUP.DEFAULT,
       cacheTtlPreference: "inherit",
       limit5hUsd: null,
+      limit5hResetMode: "rolling" as const,
       limitDailyUsd: null,
       dailyResetMode: "fixed" as const,
       dailyResetTime: "00:00",
@@ -82,6 +83,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           expiresAt: data.expiresAt ?? "",
           canLoginWebUi: data.canLoginWebUi,
           limit5hUsd: data.limit5hUsd,
+          limit5hResetMode: data.limit5hResetMode,
           limitDailyUsd: data.limitDailyUsd,
           dailyResetMode: data.dailyResetMode,
           dailyResetTime: data.dailyResetTime,
@@ -268,6 +270,28 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
 
       <FormGrid columns={2}>
         <div className="space-y-2">
+          <Label htmlFor="limit-5h-reset-mode">{t("limit5hResetMode.label")}</Label>
+          <Select
+            value={form.values.limit5hResetMode}
+            onValueChange={(value: "fixed" | "rolling") => form.setValue("limit5hResetMode", value)}
+            disabled={isPending}
+          >
+            <SelectTrigger id="limit-5h-reset-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fixed">{t("limit5hResetMode.options.fixed")}</SelectItem>
+              <SelectItem value="rolling">{t("limit5hResetMode.options.rolling")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {form.values.limit5hResetMode === "fixed"
+              ? t("limit5hResetMode.desc.fixed")
+              : t("limit5hResetMode.desc.rolling")}
+          </p>
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="daily-reset-mode">{t("dailyResetMode.label")}</Label>
           <Select
             value={form.values.dailyResetMode}
@@ -288,18 +312,18 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
               : t("dailyResetMode.desc.rolling")}
           </p>
         </div>
-
-        {form.values.dailyResetMode === "fixed" && (
-          <TextField
-            label={t("dailyResetTime.label")}
-            placeholder={t("dailyResetTime.placeholder")}
-            description={t("dailyResetTime.description")}
-            type="time"
-            step={60}
-            {...form.getFieldProps("dailyResetTime")}
-          />
-        )}
       </FormGrid>
+
+      {form.values.dailyResetMode === "fixed" && (
+        <TextField
+          label={t("dailyResetTime.label")}
+          placeholder={t("dailyResetTime.placeholder")}
+          description={t("dailyResetTime.description")}
+          type="time"
+          step={60}
+          {...form.getFieldProps("dailyResetTime")}
+        />
+      )}
 
       <FormGrid columns={2}>
         <NumberField

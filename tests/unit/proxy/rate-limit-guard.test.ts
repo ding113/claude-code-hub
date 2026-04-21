@@ -8,6 +8,7 @@ const rateLimitServiceMock = {
   checkRpmLimit: vi.fn(),
   checkCostLimitsWithLease: vi.fn(),
   checkUserDailyCost: vi.fn(),
+  get5hWindowResetAt: vi.fn(async () => null),
 };
 
 vi.mock("@/lib/rate-limit", () => ({
@@ -42,6 +43,7 @@ vi.mock("@/lib/utils/error-messages", () => ({
     RATE_LIMIT_RPM_EXCEEDED: "RATE_LIMIT_RPM_EXCEEDED",
     RATE_LIMIT_DAILY_QUOTA_EXCEEDED: "RATE_LIMIT_DAILY_QUOTA_EXCEEDED",
     RATE_LIMIT_5H_EXCEEDED: "RATE_LIMIT_5H_EXCEEDED",
+    RATE_LIMIT_5H_ROLLING_EXCEEDED: "RATE_LIMIT_5H_ROLLING_EXCEEDED",
     RATE_LIMIT_WEEKLY_EXCEEDED: "RATE_LIMIT_WEEKLY_EXCEEDED",
     RATE_LIMIT_MONTHLY_EXCEEDED: "RATE_LIMIT_MONTHLY_EXCEEDED",
   },
@@ -57,6 +59,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       dailyResetMode: "fixed" | "rolling";
       dailyResetTime: string;
       limit5hUsd: number | null;
+      limit5hResetMode: "fixed" | "rolling";
       limitWeeklyUsd: number | null;
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
@@ -66,6 +69,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       id: number;
       key: string;
       limit5hUsd: number | null;
+      limit5hResetMode: "fixed" | "rolling";
       limitDailyUsd: number | null;
       dailyResetMode: "fixed" | "rolling";
       dailyResetTime: string;
@@ -85,6 +89,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
           dailyResetMode: "fixed",
           dailyResetTime: "00:00",
           limit5hUsd: null,
+          limit5hResetMode: "rolling",
           limitWeeklyUsd: null,
           limitMonthlyUsd: null,
           limitTotalUsd: null,
@@ -95,6 +100,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
           id: 2,
           key: "k_test",
           limit5hUsd: null,
+          limit5hResetMode: "rolling",
           limitDailyUsd: null,
           dailyResetMode: "fixed",
           dailyResetTime: "00:00",
@@ -129,6 +135,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     rateLimitServiceMock.checkRpmLimit.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkUserDailyCost.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkCostLimitsWithLease.mockResolvedValue({ allowed: true });
+    rateLimitServiceMock.get5hWindowResetAt.mockResolvedValue(null);
   });
 
   it("当用户未设置每日额度时，Key 每日额度已超限也必须拦截", async () => {
@@ -401,6 +408,39 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       currentUsage: 20,
       limitValue: 10,
     });
+  });
+
+  it("Key 5h fixed 超限应带 resetTime", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    const resetAt = "2026-03-01T12:00:00.000Z";
+    rateLimitServiceMock.checkCostLimitsWithLease.mockResolvedValueOnce({
+      allowed: false,
+      reason: "Key 5h cost limit reached (usage: 20.0000/10.0000)",
+    });
+    rateLimitServiceMock.get5hWindowResetAt.mockResolvedValueOnce(new Date(resetAt));
+
+    const session = createSession({
+      key: { limit5hUsd: 10, limit5hResetMode: "fixed" as const },
+    });
+
+    await expect(ProxyRateLimitGuard.ensure(session)).rejects.toMatchObject({
+      name: "RateLimitError",
+      limitType: "usd_5h",
+      currentUsage: 20,
+      limitValue: 10,
+      resetTime: resetAt,
+    });
+
+    expect(getErrorMessageServerMock).toHaveBeenCalledWith(
+      "zh-CN",
+      "RATE_LIMIT_5H_EXCEEDED",
+      expect.objectContaining({
+        current: "20.0000",
+        limit: "10.0000",
+        resetTime: resetAt,
+      })
+    );
   });
 
   it("Key 周限额超限应拦截（usd_weekly）", async () => {

@@ -122,7 +122,8 @@
       }
     },
     "dailyResetTime": {
-      "label": "日次リセット時刻 (HH:mm)"
+      "label": "日次リセット時刻 (HH:mm)",
+      "placeholder": "HH:mm"
     },
     "limit5h": {
       "label": "5時間の上限 (USD)",
@@ -157,12 +158,23 @@
       "total": "総: ${amount}",
       "weekly": "週: ${amount}"
     },
-    "title": "レート制限"
+    "limit5hResetMode": {
+      "label": "5時間リセットモード",
+      "options": {
+        "fixed": "固定ウィンドウ",
+        "rolling": "ローリングウィンドウ（5時間）"
+      },
+      "desc": {
+        "fixed": "最初の成功課金から 5 時間の固定ウィンドウを開始します",
+        "rolling": "直近5時間のローリングウィンドウで集計します"
+      }
+    }
   },
   "limits": {
     "timeBased": "時間ベースの制限",
     "dailyReset": "日次リセット設定",
-    "otherLimits": "その他の制限"
+    "otherLimits": "その他の制限",
+    "windowReset": "ウィンドウのリセット方式"
   },
   "routing": {
     "cacheTtl": {
@@ -300,11 +312,11 @@
       "label": "モデルリダイレクト設定",
       "optional": "（任意）"
     },
-  "modelWhitelist": {
-    "allowAll": "✓ すべてのモデルを許可（推奨）",
-    "desc": "このプロバイダーが処理できるモデルを制限します。既定では同タイプのすべてのモデルを処理できます。",
-    "legacyExactOnlyWarning": "この旧フォームでは完全一致の allowlist ルールしか表示できません。ここで保存すると prefix / suffix / keyword / regex ルールは失われます。高度なルールは新しいプロバイダーフォームで編集してください。",
-    "label": "許可するモデル",
+    "modelWhitelist": {
+      "allowAll": "✓ すべてのモデルを許可（推奨）",
+      "desc": "このプロバイダーが処理できるモデルを制限します。既定では同タイプのすべてのモデルを処理できます。",
+      "legacyExactOnlyWarning": "この旧フォームでは完全一致の allowlist ルールしか表示できません。ここで保存すると prefix / suffix / keyword / regex ルールは失われます。高度なルールは新しいプロバイダーフォームで編集してください。",
+      "label": "許可するモデル",
       "moreModels": "+{count} 件 さらに表示",
       "optional": "（任意）",
       "selectedOnly": "設定済みの {count} 件のルールに一致したモデルのみ許可します。他のモデルはこのプロバイダーにルーティングされません。",

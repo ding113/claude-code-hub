@@ -175,198 +175,27 @@ vi.mock("@/app/[locale]/dashboard/_components/user/forms/edit-key-form", () => (
   ),
 }));
 
+vi.mock("@/app/[locale]/dashboard/_components/user/hooks/use-model-suggestions", () => ({
+  useModelSuggestions: () => [],
+}));
+
 // Import components after mocks
 import { EditUserDialog } from "@/app/[locale]/dashboard/_components/user/edit-user-dialog";
 import { EditKeyDialog } from "@/app/[locale]/dashboard/_components/user/edit-key-dialog";
 import { AddKeyDialog } from "@/app/[locale]/dashboard/_components/user/add-key-dialog";
 import { CreateUserDialog } from "@/app/[locale]/dashboard/_components/user/create-user-dialog";
 import type { UserDisplay } from "@/types/user";
+import enMessages from "../../messages/en";
 
 // ==================== Test Utilities ====================
 
 const messages = {
-  common: {
-    save: "Save",
-    cancel: "Cancel",
-    close: "Close",
-    copySuccess: "Copied",
-    copyFailed: "Copy failed",
-  },
-  ui: {
-    tagInput: {
-      emptyTag: "Empty tag",
-      duplicateTag: "Duplicate tag",
-      tooLong: "Too long",
-      invalidFormat: "Invalid format",
-      maxTags: "Too many tags",
-    },
-  },
-  dashboard: {
-    userManagement: {
-      editDialog: {
-        title: "Edit User",
-        description: "Edit user information",
-        saving: "Saving...",
-        saveSuccess: "User saved",
-        saveFailed: "Save failed",
-        operationFailed: "Operation failed",
-        userDisabled: "User disabled",
-        userEnabled: "User enabled",
-        deleteFailed: "Delete failed",
-        userDeleted: "User deleted",
-      },
-      createDialog: {
-        title: "Create User",
-        description: "Create a new user with API key",
-        creating: "Creating...",
-        create: "Create",
-        saveFailed: "Create failed",
-        successTitle: "User Created",
-        successDescription: "User created successfully",
-        generatedKey: "Generated Key",
-        keyHint: "Save this key, it cannot be recovered",
-      },
-      userEditSection: {
-        sections: {
-          basicInfo: "Basic Info",
-          expireTime: "Expiration",
-          limitRules: "Limits",
-          accessRestrictions: "Access",
-        },
-        fields: {
-          username: { label: "Username", placeholder: "Enter username" },
-          description: { label: "Note", placeholder: "Enter note" },
-          tags: { label: "Tags", placeholder: "Enter tags" },
-          providerGroup: { label: "Provider Group", placeholder: "Select group" },
-          enableStatus: {
-            label: "Status",
-            enabledDescription: "Enabled",
-            disabledDescription: "Disabled",
-            confirmEnable: "Enable",
-            confirmDisable: "Disable",
-            confirmEnableTitle: "Enable User",
-            confirmDisableTitle: "Disable User",
-            confirmEnableDescription: "Enable this user?",
-            confirmDisableDescription: "Disable this user?",
-            cancel: "Cancel",
-            processing: "Processing...",
-          },
-          allowedClients: {
-            label: "Allowed Clients",
-            description: "Restrict clients",
-            customLabel: "Custom",
-            customPlaceholder: "Custom client",
-            customHelp: "Custom help",
-          },
-          blockedClients: {
-            label: "Blocked Clients",
-            description: "Blocked description",
-            customLabel: "Custom blocked",
-            customPlaceholder: "Blocked client",
-            customHelp: "Blocked help",
-          },
-          allowedModels: {
-            label: "Allowed Models",
-            placeholder: "Select models",
-            description: "Restrict models",
-          },
-        },
-        actions: {
-          allow: "Allow",
-          block: "Block",
-        },
-        presetClients: {
-          "claude-code": "Claude Code",
-          "gemini-cli": "Gemini CLI",
-          "factory-cli": "Factory CLI",
-          "codex-cli": "Codex CLI",
-        },
-      },
-      keyEditSection: {
-        sections: {
-          basicInfo: "Basic Information",
-          expireTime: "Expiration Time",
-          limitRules: "Limit Rules",
-          specialFeatures: "Special Features",
-        },
-        fields: {
-          keyName: { label: "Key Name", placeholder: "Enter key name" },
-          providerGroup: { label: "Provider Group", placeholder: "Default: default" },
-          cacheTtl: {
-            label: "Cache TTL Override",
-            options: { inherit: "No override", "5m": "5m", "1h": "1h" },
-          },
-          balanceQueryPage: {
-            label: "Independent Personal Usage Page",
-            description: "When enabled, this key can access an independent personal usage page",
-            descriptionEnabled: "Enabled description",
-            descriptionDisabled: "Disabled description",
-          },
-          enableStatus: {
-            label: "Enable Status",
-            description: "Disabled keys cannot be used",
-          },
-        },
-      },
-      dangerZone: {
-        title: "Danger Zone",
-        deleteUser: "Delete User",
-        deleteUserDescription: "This action cannot be undone",
-        deleteConfirm: "Type username to confirm",
-        deleteButton: "Delete",
-      },
-      limitRules: {
-        addRule: "Add Rule",
-        ruleTypes: {
-          limitRpm: "RPM",
-          limit5h: "5h Limit",
-          limitDaily: "Daily",
-          limitWeekly: "Weekly",
-          limitMonthly: "Monthly",
-          limitTotal: "Total",
-          limitSessions: "Sessions",
-        },
-        quickValues: {
-          unlimited: "Unlimited",
-          "10": "$10",
-          "50": "$50",
-          "100": "$100",
-          "500": "$500",
-        },
-      },
-      quickExpire: {
-        oneWeek: "1 Week",
-        oneMonth: "1 Month",
-        threeMonths: "3 Months",
-        oneYear: "1 Year",
-      },
-      providerGroupSelect: {
-        providersSuffix: "providers",
-        loadFailed: "Failed to load provider groups",
-      },
-    },
-    addKeyForm: {
-      title: "Add Key",
-      description: "Add a new API key",
-      successTitle: "Key Created",
-      successDescription: "Key created successfully",
-      generatedKey: {
-        label: "Generated Key",
-        hint: "Save this key",
-      },
-      keyName: {
-        label: "Key Name",
-      },
-    },
-  },
-  quota: {
-    keys: {
-      editKeyForm: {
-        title: "Edit Key",
-        description: "Edit key settings",
-      },
-    },
-  },
+  common: enMessages.common,
+  dashboard: enMessages.dashboard,
+  errors: enMessages.errors,
+  forms: enMessages.forms,
+  quota: enMessages.quota,
+  ui: enMessages.ui,
 };
 
 let queryClient: QueryClient;
@@ -433,7 +262,7 @@ describe("EditUserDialog", () => {
 
     expect(container.querySelector('[data-testid="dialog-root"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="dialog-title"]')?.textContent).toContain(
-      "Edit User"
+      messages.dashboard.userManagement.editDialog.title
     );
     expect(container.querySelector('[data-testid="user-edit-section"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="danger-zone"]')).not.toBeNull();
@@ -664,7 +493,7 @@ describe("CreateUserDialog", () => {
 
     expect(container.querySelector('[data-testid="dialog-root"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="dialog-title"]')?.textContent).toContain(
-      "Create User"
+      messages.dashboard.userManagement.createDialog.title
     );
     expect(container.querySelector('[data-testid="user-edit-section"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="key-edit-section"]')).not.toBeNull();

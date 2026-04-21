@@ -39,6 +39,7 @@ export interface BudgetLease {
   remainingBudget: number;
   ttlSeconds: number;
   costResetAtMs?: number | null;
+  windowResetAtMs?: number | null;
 }
 
 /**
@@ -55,8 +56,13 @@ export function createBudgetLease(params: BudgetLease): BudgetLease {
 export function buildLeaseKey(
   entityType: LeaseEntityTypeType,
   entityId: number,
-  window: LeaseWindowType
+  window: LeaseWindowType,
+  resetMode?: DailyResetMode
 ): string {
+  const effectiveResetMode = resetMode ?? (window === "5h" ? "rolling" : "fixed");
+  if (window === "5h" || window === "daily") {
+    return `lease:${entityType}:${entityId}:${window}:${effectiveResetMode}`;
+  }
   return `lease:${entityType}:${entityId}:${window}`;
 }
 

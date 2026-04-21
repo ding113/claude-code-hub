@@ -1019,6 +1019,17 @@
       "userIdMissing": "使用者 ID 不存在",
       "createFailed": "建立失敗，請稍後重試",
       "noKeyReturned": "建立成功但未傳回金鑰"
+    },
+    "limit5hResetMode": {
+      "label": "5 小時重設模式",
+      "options": {
+        "fixed": "固定視窗",
+        "rolling": "滾動視窗（5 小時）"
+      },
+      "desc": {
+        "fixed": "從首次成功記帳開始鎖定 5 小時固定視窗",
+        "rolling": "依最近 5 小時滾動視窗統計額度"
+      }
     }
   },
   "userForm": {
@@ -2032,5 +2043,77 @@
     "autoDetected": "自動識別",
     "selectPlatform": "請選擇平台",
     "successStats": "已建立 {targets} 個目標，{bindings} 個綁定"
+  },
+  "limitRules": {
+    "addRule": "新增限額規則",
+    "title": "新增限額規則",
+    "description": "選擇限額類型並設定數值",
+    "cancel": "取消",
+    "confirm": "儲存",
+    "fields": {
+      "type": {
+        "label": "限額類型",
+        "placeholder": "請選擇"
+      },
+      "value": {
+        "label": "數值",
+        "placeholder": "請輸入"
+      }
+    },
+    "limit5h": {
+      "mode": {
+        "label": "5 小時重設模式",
+        "fixed": "固定視窗",
+        "rolling": "滾動視窗（5 小時）",
+        "helperFixed": "從首次成功記帳開始鎖定 5 小時固定視窗。",
+        "helperRolling": "依最近 5 小時滾動視窗統計額度。"
+      }
+    },
+    "daily": {
+      "mode": {
+        "label": "每日重設模式",
+        "fixed": "固定時間重置",
+        "rolling": "滾動視窗（24 小時）",
+        "helperFixed": "每天在指定時間重置額度。",
+        "helperRolling": "從首次請求開始計算 24 小時滾動視窗"
+      },
+      "time": {
+        "label": "重設時間",
+        "placeholder": "HH:mm"
+      }
+    },
+    "limitTypes": {
+      "limitRpm": "RPM 限額",
+      "limit5h": "5 小時限額",
+      "limitDaily": "每日限額",
+      "limitWeekly": "週限額",
+      "limitMonthly": "月限額",
+      "limitTotal": "總限額",
+      "limitSessions": "並發 Session"
+    },
+    "ruleTypes": {
+      "limitRpm": "RPM 限額",
+      "limit5h": "5 小時限額",
+      "limitDaily": "每日限額",
+      "limitWeekly": "週限額",
+      "limitMonthly": "月限額",
+      "limitTotal": "總限額",
+      "limitSessions": "並發 Session"
+    },
+    "errors": {
+      "missingType": "請選擇限額類型",
+      "invalidValue": "請輸入有效數值",
+      "invalidTime": "請輸入有效時間（HH:mm）"
+    },
+    "overwriteHint": "此類型已存在，儲存後會覆蓋現有設定",
+    "quickValues": {
+      "10": "$10",
+      "50": "$50",
+      "100": "$100",
+      "500": "$500",
+      "unlimited": "無限"
+    },
+    "alreadySet": "已設定",
+    "confirmAdd": "新增"
   }
 }

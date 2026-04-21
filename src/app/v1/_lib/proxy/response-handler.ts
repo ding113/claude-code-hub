@@ -5,7 +5,6 @@ import { logger } from "@/lib/logger";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
-import type { LeaseWindowType } from "@/lib/rate-limit/lease";
 import { deleteLiveChain } from "@/lib/redis/live-chain-store";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -3523,10 +3522,14 @@ async function trackCostToRedis(
       session.sessionId, // 直接使用 session.sessionId
       costFloat,
       {
+        userId: user.id,
+        key5hResetMode: key.limit5hResetMode,
         keyResetTime: key.dailyResetTime,
         keyResetMode: key.dailyResetMode,
+        provider5hResetMode: provider.limit5hResetMode,
         providerResetTime: provider.dailyResetTime,
         providerResetMode: provider.dailyResetMode,
+        user5hResetMode: user.limit5hResetMode,
         requestId: messageContext.id,
         createdAtMs: messageContext.createdAt.getTime(),
       }
@@ -3545,13 +3548,31 @@ async function trackCostToRedis(
     );
 
     // Decrement lease budgets for all windows (fire-and-forget)
-    const windows: LeaseWindowType[] = ["5h", "daily", "weekly", "monthly"];
     void Promise.all([
-      ...windows.map((w) => RateLimitService.decrementLeaseBudget(key.id, "key", w, costFloat)),
-      ...windows.map((w) => RateLimitService.decrementLeaseBudget(user.id, "user", w, costFloat)),
-      ...windows.map((w) =>
-        RateLimitService.decrementLeaseBudget(provider.id, "provider", w, costFloat)
-      ),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "5h", costFloat, {
+        resetMode: key.limit5hResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "daily", costFloat, {
+        resetMode: key.dailyResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "weekly", costFloat),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "monthly", costFloat),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "5h", costFloat, {
+        resetMode: user.limit5hResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "daily", costFloat, {
+        resetMode: user.dailyResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "weekly", costFloat),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "monthly", costFloat),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "5h", costFloat, {
+        resetMode: provider.limit5hResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "daily", costFloat, {
+        resetMode: provider.dailyResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "weekly", costFloat),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "monthly", costFloat),
     ]).catch((error) => {
       logger.warn("[ResponseHandler] Failed to decrement lease budgets:", {
         error: error instanceof Error ? error.message : String(error),

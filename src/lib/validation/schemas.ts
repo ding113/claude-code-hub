@@ -140,6 +140,7 @@ export const CreateUserSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  limit5hResetMode: z.enum(["fixed", "rolling"]).optional().default("rolling"),
   limitWeeklyUsd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -267,6 +268,7 @@ export const UpdateUserSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  limit5hResetMode: z.enum(["fixed", "rolling"]).optional(),
   limitWeeklyUsd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -379,6 +381,7 @@ export const KeyFormSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  limit5hResetMode: z.enum(["fixed", "rolling"]).optional().default("rolling"),
   limitDailyUsd: z.coerce
     .number()
     .min(0, "每日消费上限不能为负数")
@@ -493,6 +496,7 @@ export const CreateProviderSchema = z
       .max(10000, "5小时消费上限不能超过10000美元")
       .nullable()
       .optional(),
+    limit_5h_reset_mode: z.enum(["fixed", "rolling"]).optional().default("rolling"),
     limit_daily_usd: z.coerce
       .number()
       .min(0, "每日消费上限不能为负数")
@@ -730,6 +734,7 @@ export const UpdateProviderSchema = z
       .max(10000, "5小时消费上限不能超过10000美元")
       .nullable()
       .optional(),
+    limit_5h_reset_mode: z.enum(["fixed", "rolling"]).optional(),
     limit_daily_usd: z.coerce
       .number()
       .min(0, "每日消费上限不能为负数")

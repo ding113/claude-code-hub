@@ -630,6 +630,17 @@ describe("provider patch contract", () => {
       expect(result.data.daily_reset_mode).toBe(value);
     });
 
+    it.each(["fixed", "rolling"] as const)("accepts limit_5h_reset_mode value: %s", (value) => {
+      const result = prepareProviderBatchApplyUpdates({
+        limit_5h_reset_mode: { set: value },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.limit_5h_reset_mode).toBe(value);
+    });
+
     it("rejects invalid daily_reset_mode value", () => {
       const result = normalizeProviderBatchPatchDraft({
         daily_reset_mode: { set: "hourly" } as never,
@@ -641,6 +652,17 @@ describe("provider patch contract", () => {
       expect(result.error.field).toBe("daily_reset_mode");
     });
 
+    it("rejects invalid limit_5h_reset_mode value", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        limit_5h_reset_mode: { set: "hourly" } as never,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.field).toBe("limit_5h_reset_mode");
+    });
+
     it("rejects clear on daily_reset_mode", () => {
       const result = normalizeProviderBatchPatchDraft({
         daily_reset_mode: { clear: true } as never,
@@ -650,6 +672,17 @@ describe("provider patch contract", () => {
       if (result.ok) return;
 
       expect(result.error.field).toBe("daily_reset_mode");
+    });
+
+    it("rejects clear on limit_5h_reset_mode", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        limit_5h_reset_mode: { clear: true } as never,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.field).toBe("limit_5h_reset_mode");
     });
 
     it("accepts daily_reset_time as string (non-clearable)", () => {

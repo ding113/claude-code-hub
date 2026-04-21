@@ -982,7 +982,9 @@ export async function clearProviderState(providerId: number): Promise<void> {
 
   // 清除 Redis 状态
   const { deleteCircuitState } = await import("@/lib/redis/circuit-breaker-state");
+  const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
   await deleteCircuitState(providerId);
+  await clearSingleProviderCostCache({ providerId }).catch(() => null);
 
   logger.info(`[CircuitBreaker] Cleared all state for provider ${providerId}`, {
     providerId,

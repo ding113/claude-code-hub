@@ -12,6 +12,7 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
+import { invalidateCachedKey } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
@@ -68,6 +69,7 @@ export interface BatchUpdateKeysParams {
   updates: {
     providerGroup?: string | null;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitDailyUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -95,6 +97,7 @@ export async function addKey(data: {
   isEnabled?: boolean;
   canLoginWebUi?: boolean;
   limit5hUsd?: number | null;
+  limit5hResetMode?: "fixed" | "rolling";
   limitDailyUsd?: number | null;
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
@@ -168,6 +171,7 @@ export async function addKey(data: {
       expiresAt: data.expiresAt,
       canLoginWebUi: data.canLoginWebUi,
       limit5hUsd: data.limit5hUsd,
+      limit5hResetMode: data.limit5hResetMode,
       limitDailyUsd: data.limitDailyUsd,
       dailyResetMode: data.dailyResetMode,
       dailyResetTime: data.dailyResetTime,
@@ -302,6 +306,7 @@ export async function addKey(data: {
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
+      limit_5h_reset_mode: validatedData.limit5hResetMode,
       limit_daily_usd: validatedData.limitDailyUsd,
       daily_reset_mode: validatedData.dailyResetMode,
       daily_reset_time: validatedData.dailyResetTime,
@@ -335,6 +340,7 @@ export async function addKey(data: {
         canLoginWebUi: createdKey.canLoginWebUi,
         providerGroup: createdKey.providerGroup,
         limit5hUsd: createdKey.limit5hUsd,
+        limit5hResetMode: createdKey.limit5hResetMode,
         limitDailyUsd: createdKey.limitDailyUsd,
         limitWeeklyUsd: createdKey.limitWeeklyUsd,
         limitMonthlyUsd: createdKey.limitMonthlyUsd,
@@ -377,6 +383,7 @@ export async function editKey(
     canLoginWebUi?: boolean;
     isEnabled?: boolean;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
@@ -579,6 +586,7 @@ export async function editKey(
       can_login_web_ui: validatedData.canLoginWebUi,
       ...(data.isEnabled !== undefined ? { is_enabled: data.isEnabled } : {}),
       limit_5h_usd: validatedData.limit5hUsd,
+      limit_5h_reset_mode: validatedData.limit5hResetMode,
       limit_daily_usd: validatedData.limitDailyUsd,
       daily_reset_mode: validatedData.dailyResetMode,
       daily_reset_time: validatedData.dailyResetTime,
@@ -600,6 +608,18 @@ export async function editKey(
       await syncUserProviderGroupFromKeys(key.userId);
     }
 
+    if (
+      validatedData.limit5hResetMode !== undefined &&
+      validatedData.limit5hResetMode !== key.limit5hResetMode
+    ) {
+      const { clearSingleKeyCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await invalidateCachedKey(key.key).catch(() => null);
+      await clearSingleKeyCostCache({
+        keyId,
+        keyHash: key.key,
+      }).catch(() => null);
+    }
+
     revalidatePath("/dashboard");
     emitActionAudit({
       category: "key",
@@ -616,6 +636,7 @@ export async function editKey(
         canLoginWebUi: key.canLoginWebUi,
         providerGroup: key.providerGroup,
         limit5hUsd: key.limit5hUsd,
+        limit5hResetMode: key.limit5hResetMode,
         limitDailyUsd: key.limitDailyUsd,
         limitWeeklyUsd: key.limitWeeklyUsd,
         limitMonthlyUsd: key.limitMonthlyUsd,
@@ -632,6 +653,7 @@ export async function editKey(
         canLoginWebUi: validatedData.canLoginWebUi,
         providerGroup: isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : undefined,
         limit5hUsd: validatedData.limit5hUsd,
+        limit5hResetMode: validatedData.limit5hResetMode,
         limitDailyUsd: validatedData.limitDailyUsd,
         limitWeeklyUsd: validatedData.limitWeeklyUsd,
         limitMonthlyUsd: validatedData.limitMonthlyUsd,
@@ -855,6 +877,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       getTimeRangeForPeriod,
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
     const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import("@/repository/statistics");
     const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
       key.limitConcurrentSessions,
@@ -864,6 +887,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     const costResetAt = resolveKeyCostResetAt(key.costResetAt ?? null, result.userCostResetAt);
     const clipStart = (start: Date): Date =>
       costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
+    const limit5hResetMode = key.limit5hResetMode ?? "rolling";
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
@@ -872,15 +896,18 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       key.dailyResetMode ?? "fixed"
     );
 
-    // 5h/weekly/monthly use unified time ranges
     const range5h = await getTimeRangeForPeriod("5h");
+
+    // 5h fixed 走运行时状态，rolling/weekly/monthly 继续沿用 DB 时间范围
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     // 获取金额消费（使用 DB direct，与 my-usage.ts 保持一致）
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
-        sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
+        limit5hResetMode === "fixed"
+          ? RateLimitService.getCurrentCost(keyId, "key", "5h", "00:00", limit5hResetMode)
+          : sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
         sumKeyCostInTimeRange(
           keyId,
           clipStart(keyDailyTimeRange.startTime),
@@ -893,7 +920,10 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       ]);
 
     // 获取重置时间
-    const resetInfo5h = await getResetInfo("5h");
+    const resetAt5h =
+      limit5hResetMode === "fixed"
+        ? await RateLimitService.get5hWindowResetAt(keyId, "key", limit5hResetMode)
+        : null;
     const resetInfoDaily = await getResetInfoWithMode(
       "daily",
       key.dailyResetTime,
@@ -908,7 +938,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
         cost5h: {
           current: cost5h,
           limit: key.limit5hUsd,
-          resetAt: resetInfo5h.resetAt, // 滚动窗口无 resetAt
+          resetAt: resetAt5h ?? undefined,
         },
         costDaily: {
           current: costDaily,
@@ -1115,6 +1145,17 @@ export async function batchUpdateKeys(
     }
 
     const updates = params.updates ?? {};
+    if (
+      updates.limit5hResetMode !== undefined &&
+      updates.limit5hResetMode !== "fixed" &&
+      updates.limit5hResetMode !== "rolling"
+    ) {
+      return {
+        ok: false,
+        error: tError("INVALID_FORMAT"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
     const hasAnyUpdate = Object.values(updates).some((v) => v !== undefined);
     if (!hasAnyUpdate) {
       return {
@@ -1131,10 +1172,11 @@ export async function batchUpdateKeys(
 
     let updatedIds: number[] = [];
     let affectedUserIds: number[] = [];
+    let affectedKeys: Array<{ id: number; userId: number; key: string }> = [];
 
     await db.transaction(async (tx) => {
       const existingRows = await tx
-        .select({ id: keysTable.id, userId: keysTable.userId })
+        .select({ id: keysTable.id, userId: keysTable.userId, key: keysTable.key })
         .from(keysTable)
         .where(and(inArray(keysTable.id, requestedIds), isNull(keysTable.deletedAt)));
 
@@ -1204,6 +1246,7 @@ export async function batchUpdateKeys(
       }
 
       affectedUserIds = Array.from(new Set(existingRows.map((r) => r.userId)));
+      affectedKeys = existingRows;
 
       const dbUpdates: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -1212,6 +1255,8 @@ export async function batchUpdateKeys(
       if (normalizedProviderGroup !== undefined) dbUpdates.providerGroup = normalizedProviderGroup;
       if (updates.limit5hUsd !== undefined)
         dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
+      if (updates.limit5hResetMode !== undefined)
+        dbUpdates.limit5hResetMode = updates.limit5hResetMode;
       if (updates.limitDailyUsd !== undefined)
         dbUpdates.limitDailyUsd =
           updates.limitDailyUsd === null ? null : updates.limitDailyUsd.toString();
@@ -1263,6 +1308,19 @@ export async function batchUpdateKeys(
     // 同步用户分组（用户分组 = Key 分组并集）
     if (normalizedProviderGroup !== undefined && affectedUserIds.length > 0) {
       await Promise.all(affectedUserIds.map((userId) => syncUserProviderGroupFromKeys(userId)));
+    }
+
+    if (updates.limit5hResetMode !== undefined && affectedKeys.length > 0) {
+      const { clearSingleKeyCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await Promise.all(
+        affectedKeys.map(async (keyRow) => {
+          await invalidateCachedKey(keyRow.key).catch(() => null);
+          await clearSingleKeyCostCache({
+            keyId: keyRow.id,
+            keyHash: keyRow.key,
+          }).catch(() => null);
+        })
+      );
     }
 
     revalidatePath("/dashboard");

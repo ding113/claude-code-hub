@@ -645,6 +645,13 @@
       "when": 1776767493777,
       "tag": "0091_daily_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1776800253243,
+      "tag": "0092_smart_stone_men",
+      "breakpoints": true
     }
   ]
 }

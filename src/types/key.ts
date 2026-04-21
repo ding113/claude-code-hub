@@ -16,6 +16,7 @@ export interface Key {
 
   // 金额限流配置
   limit5hUsd: number | null;
+  limit5hResetMode: "fixed" | "rolling";
   limitDailyUsd: number | null;
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string; // HH:mm 格式
@@ -49,6 +50,7 @@ export interface CreateKeyData {
   can_login_web_ui?: boolean;
   // 金额限流配置
   limit_5h_usd?: number | null;
+  limit_5h_reset_mode?: "fixed" | "rolling";
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
@@ -75,6 +77,7 @@ export interface UpdateKeyData {
   can_login_web_ui?: boolean;
   // 金额限流配置
   limit_5h_usd?: number | null;
+  limit_5h_reset_mode?: "fixed" | "rolling";
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;

@@ -1029,6 +1029,17 @@
       "userIdMissing": "用户ID不存在",
       "createFailed": "创建失败，请稍后重试",
       "noKeyReturned": "创建成功但未返回密钥"
+    },
+    "limit5hResetMode": {
+      "label": "5小时重置模式",
+      "options": {
+        "fixed": "固定窗口",
+        "rolling": "滚动窗口（5小时）"
+      },
+      "desc": {
+        "fixed": "从首次成功记账开始锁定 5 小时固定窗口",
+        "rolling": "按最近 5 小时滚动窗口统计额度"
+      }
     }
   },
   "userForm": {
@@ -2047,5 +2058,77 @@
     "autoDetected": "自动识别",
     "selectPlatform": "请选择平台",
     "successStats": "已创建 {targets} 个目标，{bindings} 个绑定"
+  },
+  "limitRules": {
+    "addRule": "添加限额规则",
+    "title": "添加限额规则",
+    "description": "选择限额类型并设置数值",
+    "cancel": "取消",
+    "confirm": "保存",
+    "fields": {
+      "type": {
+        "label": "限额类型",
+        "placeholder": "请选择"
+      },
+      "value": {
+        "label": "数值",
+        "placeholder": "请输入"
+      }
+    },
+    "limit5h": {
+      "mode": {
+        "label": "5小时重置模式",
+        "fixed": "固定窗口",
+        "rolling": "滚动窗口（5小时）",
+        "helperFixed": "从首次成功记账开始锁定 5 小时固定窗口。",
+        "helperRolling": "按最近 5 小时滚动窗口统计额度。"
+      }
+    },
+    "daily": {
+      "mode": {
+        "label": "每日重置模式",
+        "fixed": "固定时间重置",
+        "rolling": "滚动窗口（24小时）",
+        "helperFixed": "每天在指定时间重置额度。",
+        "helperRolling": "从首次请求开始计算24小时滚动窗口"
+      },
+      "time": {
+        "label": "重置时间",
+        "placeholder": "HH:mm"
+      }
+    },
+    "limitTypes": {
+      "limitRpm": "RPM 限额",
+      "limit5h": "5小时限额",
+      "limitDaily": "每日限额",
+      "limitWeekly": "周限额",
+      "limitMonthly": "月限额",
+      "limitTotal": "总限额",
+      "limitSessions": "并发 Session"
+    },
+    "ruleTypes": {
+      "limitRpm": "RPM 限额",
+      "limit5h": "5小时限额",
+      "limitDaily": "每日限额",
+      "limitWeekly": "周限额",
+      "limitMonthly": "月限额",
+      "limitTotal": "总限额",
+      "limitSessions": "并发 Session"
+    },
+    "errors": {
+      "missingType": "请选择限额类型",
+      "invalidValue": "请输入有效数值",
+      "invalidTime": "请输入有效时间（HH:mm）"
+    },
+    "overwriteHint": "该类型已存在，保存后会覆盖现有配置",
+    "quickValues": {
+      "10": "$10",
+      "50": "$50",
+      "100": "$100",
+      "500": "$500",
+      "unlimited": "无限"
+    },
+    "alreadySet": "已配置",
+    "confirmAdd": "添加"
   }
 }

@@ -14,6 +14,9 @@ export function buildPatchDraftFromFormState(
   dirtyFields: Set<string>
 ): ProviderBatchPatchDraft {
   const draft: ProviderBatchPatchDraft = {};
+  const rateLimit = state.rateLimit as ProviderFormState["rateLimit"] & {
+    limit5hResetMode?: "fixed" | "rolling";
+  };
 
   // Batch-specific: isEnabled
   if (dirtyFields.has("batch.isEnabled")) {
@@ -190,6 +193,9 @@ export function buildPatchDraftFromFormState(
     } else {
       draft.limit_5h_usd = { set: state.rateLimit.limit5hUsd };
     }
+  }
+  if (dirtyFields.has("rateLimit.limit5hResetMode")) {
+    draft.limit_5h_reset_mode = { set: rateLimit.limit5hResetMode ?? "rolling" };
   }
   if (dirtyFields.has("rateLimit.limitDailyUsd")) {
     if (state.rateLimit.limitDailyUsd === null) {

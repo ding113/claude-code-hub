@@ -101,6 +101,8 @@ describe("RateLimitService - other quota paths", () => {
       eval: vi.fn(async () => "0"),
       exists: vi.fn(async () => 1),
       get: vi.fn(async () => null),
+      ttl: vi.fn(async () => 0),
+      incrbyfloat: vi.fn(async () => 0),
       set: vi.fn(async () => "OK"),
       setex: vi.fn(async () => "OK"),
       pipeline: vi.fn(() => makePipeline()),
@@ -458,6 +460,75 @@ describe("RateLimitService - other quota paths", () => {
     );
     expect(current).toBeCloseTo(5, 10);
     expect(pipelineCalls.some((c) => c[0] === "zadd")).toBe(true);
+  });
+
+  it("checkCostLimits：5h fixed 在没有活动窗口时应视为 0 且不回退 DB", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.get.mockResolvedValueOnce(null);
+    redisClientRef.ttl.mockResolvedValueOnce(-2);
+
+    const result = await RateLimitService.checkCostLimits(9, "provider", {
+      limit_5h_usd: 10,
+      limit_5h_reset_mode: "fixed",
+      limit_daily_usd: null,
+      limit_weekly_usd: null,
+      limit_monthly_usd: null,
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(statisticsMock.findProviderCostEntriesInTimeRange).not.toHaveBeenCalled();
+  });
+
+  it("getCurrentCost：5h fixed cache hit 时应返回当前值", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === "provider:9:cost_5h_fixed") return "7.5";
+      return null;
+    });
+    redisClientRef.ttl.mockResolvedValueOnce(3600);
+
+    const current = await RateLimitService.getCurrentCost(9, "provider", "5h", "00:00", "fixed");
+    expect(current).toBeCloseTo(7.5, 10);
+  });
+
+  it("trackCost：5h fixed 模式应使用固定窗口 key 而不是 rolling Lua", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    await RateLimitService.trackCost(1, 9, "sess", 1.25, {
+      userId: 7,
+      key5hResetMode: "fixed",
+      provider5hResetMode: "fixed",
+      user5hResetMode: "fixed",
+      keyResetMode: "fixed",
+      providerResetMode: "fixed",
+      keyResetTime: "00:00",
+      providerResetTime: "00:00",
+      requestId: 123,
+      createdAtMs: nowMs,
+    });
+
+    expect(
+      redisClientRef.eval.mock.calls.some(
+        (call: unknown[]) => String(call[2]) === "key:1:cost_5h_fixed"
+      )
+    ).toBe(true);
+    expect(
+      redisClientRef.eval.mock.calls.some(
+        (call: unknown[]) => String(call[2]) === "provider:9:cost_5h_fixed"
+      )
+    ).toBe(true);
+    expect(
+      redisClientRef.eval.mock.calls.some(
+        (call: unknown[]) => String(call[2]) === "user:7:cost_5h_fixed"
+      )
+    ).toBe(true);
+    expect(
+      redisClientRef.eval.mock.calls.some((call: unknown[]) =>
+        String(call[2]).includes("cost_5h_rolling")
+      )
+    ).toBe(false);
   });
 
   it("trackCost：fixed 模式应写入 key/provider 的 daily+weekly+monthly（STRING）", async () => {

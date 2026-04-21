@@ -21,6 +21,10 @@ export interface ClearSingleKeyCostCacheOptions {
   keyHash: string;
 }
 
+export interface ClearSingleProviderCostCacheOptions {
+  providerId: number;
+}
+
 /**
  * Scan and delete all Redis cost-cache keys for a user and their API keys.
  *
@@ -238,6 +242,91 @@ export async function clearSingleKeyCostCache(
     logger.warn("Some Redis deletes failed during single key cost cache cleanup", {
       errorCount: errors.length,
       keyId,
+    });
+  }
+
+  return {
+    costKeysDeleted: allCostKeys.length,
+    activeSessionsDeleted: 0,
+    durationMs: Date.now() - startTime,
+  };
+}
+
+export async function clearSingleProviderCostCache(
+  options: ClearSingleProviderCostCacheOptions
+): Promise<ClearUserCostCacheResult | null> {
+  const { providerId } = options;
+
+  const redis = getRedisClient();
+  if (!redis || redis.status !== "ready") {
+    return null;
+  }
+
+  const startTime = Date.now();
+  const scanResults = await Promise.all([
+    scanPattern(redis, `provider:${providerId}:cost_*`).catch((err) => {
+      logger.warn("Failed to scan provider cost pattern", { providerId, error: err });
+      return [];
+    }),
+    scanPattern(redis, `total_cost:provider:${providerId}`).catch((err) => {
+      logger.warn("Failed to scan total cost provider pattern", {
+        providerId,
+        pattern: `total_cost:provider:${providerId}`,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
+    scanPattern(redis, `total_cost:provider:${providerId}:*`).catch((err) => {
+      logger.warn("Failed to scan total cost provider pattern", {
+        providerId,
+        pattern: `total_cost:provider:${providerId}:*`,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
+    scanPattern(redis, `lease:provider:${providerId}:*`).catch((err) => {
+      logger.warn("Failed to scan provider lease pattern", {
+        providerId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
+  ]);
+
+  const allCostKeys = scanResults.flat();
+  if (allCostKeys.length === 0) {
+    return {
+      costKeysDeleted: 0,
+      activeSessionsDeleted: 0,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  const pipeline = redis.pipeline();
+  for (const key of allCostKeys) {
+    pipeline.del(key);
+  }
+
+  let results: Array<[Error | null, unknown]> | null = null;
+  try {
+    results = await pipeline.exec();
+  } catch (error) {
+    logger.warn("Redis pipeline.exec() failed during provider cost cache cleanup", {
+      providerId,
+      error,
+    });
+    return {
+      costKeysDeleted: 0,
+      activeSessionsDeleted: 0,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  const errors = results?.filter(([err]) => err);
+  if (errors && errors.length > 0) {
+    logger.warn("Some Redis deletes failed during provider cost cache cleanup", {
+      errorCount: errors.length,
+      providerId,
     });
   }
 

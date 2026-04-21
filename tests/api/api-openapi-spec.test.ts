@@ -253,4 +253,29 @@ describe("OpenAPI 规范验证", () => {
       expect(limitSchema?.maximum).toBeUndefined();
     }
   });
+
+  test("issue-947: addKey/editKey 请求 schema 应暴露 limit5hResetMode", () => {
+    for (const path of ["/api/actions/keys/addKey", "/api/actions/keys/editKey"]) {
+      const schema = getJsonRequestSchema(openApiDoc, path);
+      expect(schema?.properties?.limit5hResetMode).toBeDefined();
+    }
+  });
+
+  test("issue-947: addUser 响应 schema 应暴露 user.limit5hResetMode", () => {
+    const responseSchema = (
+      openApiDoc.paths["/api/actions/users/addUser"]?.post?.responses?.["200"] as
+        | {
+            content?: {
+              "application/json"?: {
+                schema?: JsonSchemaProperty;
+              };
+            };
+          }
+        | undefined
+    )?.content?.["application/json"]?.schema;
+
+    expect(
+      responseSchema?.properties?.data?.properties?.user?.properties?.limit5hResetMode
+    ).toBeDefined();
+  });
 });
