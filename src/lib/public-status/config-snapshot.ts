@@ -52,6 +52,11 @@ interface RedisWriter {
   set(key: string, value: string): Promise<unknown> | unknown;
 }
 
+interface RedisReader {
+  get(key: string): Promise<string | null> | string | null;
+  status?: string;
+}
+
 export function buildPublicStatusConfigSnapshot(
   input: BuildPublicStatusConfigSnapshotInput
 ): PublicStatusConfigSnapshot {
@@ -112,5 +117,42 @@ export async function publishPublicStatusConfigSnapshot(input: {
     configVersion: snapshot.configVersion,
     key,
     written: Boolean(redis),
+  };
+}
+
+export async function readPublicStatusSiteMetadata(input?: {
+  redis?: RedisReader | null;
+}): Promise<{
+  siteTitle: string;
+  siteDescription: string;
+} | null> {
+  const redis = input?.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
+    return null;
+  }
+
+  const pointerRaw = await redis.get(buildPublicStatusConfigSnapshotKey());
+  if (!pointerRaw) {
+    return null;
+  }
+
+  const pointer = JSON.parse(pointerRaw) as { key?: string };
+  if (!pointer.key) {
+    return null;
+  }
+
+  const snapshotRaw = await redis.get(pointer.key);
+  if (!snapshotRaw) {
+    return null;
+  }
+
+  const snapshot = JSON.parse(snapshotRaw) as Partial<PublicStatusConfigSnapshot>;
+  if (!snapshot.siteTitle || !snapshot.siteDescription) {
+    return null;
+  }
+
+  return {
+    siteTitle: snapshot.siteTitle,
+    siteDescription: snapshot.siteDescription,
   };
 }

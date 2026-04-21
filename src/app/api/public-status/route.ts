@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { readPublicStatusPayload } from "@/lib/public-status/read-store";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-worker";
 
 function parsePositiveIntegerParam(value: string | null, fallback: number): number {
   if (!value) {
@@ -19,7 +20,13 @@ export async function GET(request: Request): Promise<Response> {
     intervalMinutes,
     rangeHours,
     nowIso: new Date().toISOString(),
-    triggerRebuildHint: async () => {},
+    triggerRebuildHint: async (reason) => {
+      await schedulePublicStatusRebuild({
+        intervalMinutes,
+        rangeHours,
+        reason,
+      });
+    },
   });
 
   const status = payload.rebuildState === "rebuilding" && !payload.generatedAt ? 503 : 200;

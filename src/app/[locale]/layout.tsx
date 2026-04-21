@@ -7,8 +7,8 @@ import { Footer } from "@/components/customs/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { type Locale, locales } from "@/i18n/config";
 import { logger } from "@/lib/logger";
+import { readPublicStatusSiteMetadata } from "@/lib/public-status/config-snapshot";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import { getSystemSettings } from "@/repository/system-config";
 import { AppProviders } from "../providers";
 
 const FALLBACK_TITLE = "Claude Code Hub";
@@ -21,8 +21,9 @@ export async function generateMetadata({
   const { locale } = await params;
 
   try {
-    const settings = await getSystemSettings();
-    const title = settings.siteTitle?.trim() || FALLBACK_TITLE;
+    const metadata = await readPublicStatusSiteMetadata();
+    const title = metadata?.siteTitle?.trim() || FALLBACK_TITLE;
+    const description = metadata?.siteDescription?.trim() || FALLBACK_TITLE;
 
     // Generate alternates for all locales
     const alternates: Record<string, string> = {};
@@ -34,20 +35,20 @@ export async function generateMetadata({
 
     return {
       title,
-      description: title,
+      description,
       alternates: {
         canonical: `${baseUrl}/${locale}`,
         languages: alternates,
       },
       openGraph: {
         title,
-        description: title,
+        description,
         locale,
         alternateLocale: locales.filter((l) => l !== locale),
       },
     };
   } catch (error) {
-    logger.error("Failed to load system settings for metadata", { error });
+    logger.error("Failed to load public status metadata projection", { error });
     return {
       title: FALLBACK_TITLE,
       description: FALLBACK_TITLE,

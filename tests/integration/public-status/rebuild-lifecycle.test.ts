@@ -1,22 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { importPublicStatusModule } from "../../helpers/public-status-test-helpers";
+import { describe, expect, it, vi } from "vitest";
 
-interface RebuildLifecycleModule {
-  schedulePublicStatusRebuild(input: {
-    intervalMinutes: number;
-    rangeHours: number;
-    reason: string;
-  }): Promise<{
-    accepted: boolean;
-    rebuildState: string;
-  }>;
-}
+const mockRedisSet = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/redis", () => ({
+  getRedisClient: () => ({
+    set: mockRedisSet,
+    status: "ready",
+  }),
+}));
 
 describe("public-status rebuild lifecycle", () => {
-  it("reserves an async rebuild lifecycle for widened ranges and cold starts", async () => {
-    const mod = await importPublicStatusModule<RebuildLifecycleModule>(
-      "@/lib/public-status/rebuild-worker"
-    );
+  it("persists a rebuild hint for widened ranges and cold starts", async () => {
+    const mod = await import("@/lib/public-status/rebuild-worker");
 
     const result = await mod.schedulePublicStatusRebuild({
       intervalMinutes: 5,
@@ -25,6 +20,7 @@ describe("public-status rebuild lifecycle", () => {
     });
 
     expect(result.accepted).toBe(true);
-    expect(result.rebuildState).toBeTruthy();
+    expect(result.rebuildState).toBe("rebuilding");
+    expect(mockRedisSet).toHaveBeenCalledTimes(1);
   });
 });

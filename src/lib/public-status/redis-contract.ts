@@ -122,6 +122,15 @@ export function buildPublicStatusRebuildLockKey(flightKey: string): string {
   return `${PUBLIC_STATUS_REDIS_PREFIX}:rebuild-lock:${encodeKeyPart(flightKey)}`;
 }
 
+export function buildPublicStatusRebuildHintKey(input: {
+  intervalMinutes: number;
+  rangeHours: number;
+}): string {
+  assertPositiveInteger(input.intervalMinutes, "intervalMinutes");
+  assertPositiveInteger(input.rangeHours, "rangeHours");
+  return `${PUBLIC_STATUS_REDIS_PREFIX}:rebuild-hint:${input.intervalMinutes}m:${input.rangeHours}h`;
+}
+
 export function buildPublicStatusTempKey(baseKey: string, nonce: string): string {
   return `${baseKey}:tmp:${encodeKeyPart(nonce)}`;
 }
