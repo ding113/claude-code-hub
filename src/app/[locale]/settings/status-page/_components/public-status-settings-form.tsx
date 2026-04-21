@@ -200,7 +200,7 @@ export function PublicStatusSettingsForm({
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Slug</Label>
+                  <Label>{t("statusPage.form.slug")}</Label>
                   <Input
                     value={group.publicGroupSlug}
                     onChange={(event) =>
@@ -212,7 +212,7 @@ export function PublicStatusSettingsForm({
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Copy</Label>
+                  <Label>{t("statusPage.form.copy")}</Label>
                   <Textarea
                     value={group.explanatoryCopy}
                     onChange={(event) =>
@@ -224,7 +224,7 @@ export function PublicStatusSettingsForm({
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Sort Order</Label>
+                  <Label>{t("statusPage.form.sortOrder")}</Label>
                   <Input
                     type="number"
                     value={String(group.sortOrder)}

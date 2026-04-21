@@ -25,6 +25,7 @@ interface PublicStatusViewProps {
     rebuilding: string;
     noData: string;
     emptyDescription: string;
+    requestTypes: Record<string, string>;
   };
 }
 
@@ -227,7 +228,7 @@ export function PublicStatusView({
                         </p>
                       </div>
                       <div className="rounded-full border border-white/10 bg-muted/50 px-3 py-1 text-xs uppercase tracking-wide text-muted-foreground">
-                        {model.requestTypeBadge}
+                        {labels.requestTypes[model.requestTypeBadge] ?? model.requestTypeBadge}
                       </div>
                     </div>
 

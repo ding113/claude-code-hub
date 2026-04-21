@@ -42,6 +42,12 @@ export default async function PublicStatusPage({
         rebuilding: t("statusPage.public.rebuilding"),
         noData: t("statusPage.public.noData"),
         emptyDescription: t("statusPage.public.emptyDescription"),
+        requestTypes: {
+          openaiCompatible: t("statusPage.public.requestTypes.openaiCompatible"),
+          codex: t("statusPage.public.requestTypes.codex"),
+          anthropic: t("statusPage.public.requestTypes.anthropic"),
+          gemini: t("statusPage.public.requestTypes.gemini"),
+        },
       }}
     />
   );

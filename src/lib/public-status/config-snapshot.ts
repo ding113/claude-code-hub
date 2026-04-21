@@ -83,6 +83,14 @@ function safeParseJson<T>(raw: string | null): T | null {
   }
 }
 
+async function safeGet(redis: RedisReader, key: string): Promise<string | null> {
+  try {
+    return await redis.get(key);
+  } catch {
+    return null;
+  }
+}
+
 export function buildPublicStatusConfigSnapshot(
   input: BuildPublicStatusConfigSnapshotInput
 ): PublicStatusConfigSnapshot {
@@ -195,13 +203,13 @@ export async function readCurrentPublicStatusConfigSnapshot(input?: {
     return null;
   }
 
-  const pointerRaw = await redis.get(buildPublicStatusConfigSnapshotKey());
+  const pointerRaw = await safeGet(redis, buildPublicStatusConfigSnapshotKey());
   const pointer = safeParseJson<{ key?: string }>(pointerRaw);
   if (!pointer?.key) {
     return null;
   }
 
-  const snapshotRaw = await redis.get(pointer.key);
+  const snapshotRaw = await safeGet(redis, pointer.key);
   return safeParseJson<PublicStatusConfigSnapshot>(snapshotRaw);
 }
 
@@ -213,13 +221,13 @@ export async function readCurrentInternalPublicStatusConfigSnapshot(input?: {
     return null;
   }
 
-  const pointerRaw = await redis.get(buildPublicStatusInternalConfigSnapshotKey());
+  const pointerRaw = await safeGet(redis, buildPublicStatusInternalConfigSnapshotKey());
   const pointer = safeParseJson<{ key?: string }>(pointerRaw);
   if (!pointer?.key) {
     return null;
   }
 
-  const snapshotRaw = await redis.get(pointer.key);
+  const snapshotRaw = await safeGet(redis, pointer.key);
   return safeParseJson<InternalPublicStatusConfigSnapshot>(snapshotRaw);
 }
 

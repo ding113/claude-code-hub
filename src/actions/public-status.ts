@@ -57,9 +57,10 @@ export async function savePublicStatusSettings(
 ): Promise<ActionResult<{ updatedGroupCount: number; configVersion: string }>> {
   try {
     const t = await getTranslations("settings");
+    const tError = await getTranslations("errors");
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "无权限执行此操作" };
+      return { ok: false, error: tError("UNAUTHORIZED") };
     }
     if (!PUBLIC_STATUS_INTERVAL_SET.has(input.publicStatusAggregationIntervalMinutes)) {
       return {
@@ -99,7 +100,7 @@ export async function savePublicStatusSettings(
       if (nextDescription && nextDescription.length > 500) {
         return {
           ok: false,
-          error: "公开状态配置超过 provider_groups.description 的 500 字符限制",
+          error: t("statusPage.form.descriptionTooLong"),
         };
       }
 
@@ -131,7 +132,7 @@ export async function savePublicStatusSettings(
     if (!publishResult.written) {
       return {
         ok: false,
-        error: "公开状态 Redis 投影发布失败",
+        error: t("statusPage.form.projectionPublishFailed"),
       };
     }
     await schedulePublicStatusRebuild({

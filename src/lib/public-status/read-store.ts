@@ -18,6 +18,17 @@ interface PublicStatusSnapshotRecord extends PublicStatusPayload {
   freshUntil: string;
 }
 
+async function safeGet(
+  redis: RedisReader,
+  key: string
+): Promise<string | null> {
+  try {
+    return await redis.get(key);
+  } catch {
+    return null;
+  }
+}
+
 function parseJson<T>(raw: string | null): T | null {
   if (!raw) {
     return null;
@@ -59,13 +70,13 @@ export async function readPublicStatusPayload(input: {
     intervalMinutes: input.intervalMinutes,
     rangeHours: input.rangeHours,
   });
-  const manifest = parseJson<PublicStatusManifest>(await redis.get(manifestKey));
+  const manifest = parseJson<PublicStatusManifest>(await safeGet(redis, manifestKey));
   const currentManifestKey = buildPublicStatusManifestKey({
     configVersion: "current",
     intervalMinutes: input.intervalMinutes,
     rangeHours: input.rangeHours,
   });
-  const currentManifest = parseJson<PublicStatusManifest>(await redis.get(currentManifestKey));
+  const currentManifest = parseJson<PublicStatusManifest>(await safeGet(redis, currentManifestKey));
 
   let selectedManifest = manifest;
   let resolution = resolvePublicStatusManifestState(selectedManifest, input.nowIso);
@@ -87,7 +98,7 @@ export async function readPublicStatusPayload(input: {
     rangeHours: input.rangeHours,
     generation: resolution.sourceGeneration,
   });
-  const snapshot = parseJson<PublicStatusSnapshotRecord>(await redis.get(snapshotKey));
+  const snapshot = parseJson<PublicStatusSnapshotRecord>(await safeGet(redis, snapshotKey));
   if (!snapshot) {
     await input.triggerRebuildHint("snapshot-missing");
     return buildRebuildingPayload();

@@ -56,6 +56,27 @@ describe("public-status read store", () => {
     expect(triggerRebuildHint).toHaveBeenCalledWith("manifest-missing");
   });
 
+  it("degrades to rebuilding when redis.get rejects", async () => {
+    const triggerRebuildHint = vi.fn();
+    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
+
+    const redis = createRedisClientSpy({
+      status: "ready",
+      get: vi.fn().mockRejectedValueOnce(new Error("redis down")),
+    });
+
+    const result = await mod.readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      nowIso: "2026-04-21T10:05:00.000Z",
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(result.rebuildState).toBe("rebuilding");
+    expect(triggerRebuildHint).toHaveBeenCalledWith("manifest-missing");
+  });
+
   it("returns rebuilding when snapshot is missing", async () => {
     const triggerRebuildHint = vi.fn();
     const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
