@@ -193,7 +193,13 @@ export class RateLimitService {
     const redis = RateLimitService.redis;
     if (!redis || redis.status !== "ready") return;
 
-    await redis.eval(RateLimitService.TRACK_FIXED_COST_WINDOW_LUA, 1, key, cost.toString(), ttlSeconds);
+    await redis.eval(
+      RateLimitService.TRACK_FIXED_COST_WINDOW_LUA,
+      1,
+      key,
+      cost.toString(),
+      ttlSeconds
+    );
   }
 
   private static async warmRollingCostZset(

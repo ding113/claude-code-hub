@@ -196,8 +196,9 @@ describe("OpenAPI 端点完整性检查", () => {
       openApiDoc.paths["/api/actions/keys/addKey"]?.post?.requestBody?.content?.["application/json"]
         ?.schema;
     const editKeyRequest =
-      openApiDoc.paths["/api/actions/keys/editKey"]?.post?.requestBody?.content?.["application/json"]
-        ?.schema;
+      openApiDoc.paths["/api/actions/keys/editKey"]?.post?.requestBody?.content?.[
+        "application/json"
+      ]?.schema;
     const addUserResponse =
       openApiDoc.paths["/api/actions/users/addUser"]?.post?.responses?.["200"]?.content?.[
         "application/json"
@@ -205,7 +206,9 @@ describe("OpenAPI 端点完整性检查", () => {
 
     expect(addKeyRequest?.properties?.limit5hResetMode).toBeDefined();
     expect(editKeyRequest?.properties?.limit5hResetMode).toBeDefined();
-    expect(addUserResponse?.properties?.data?.properties?.user?.properties?.limit5hResetMode).toBeDefined();
+    expect(
+      addUserResponse?.properties?.data?.properties?.user?.properties?.limit5hResetMode
+    ).toBeDefined();
   });
 
   test("敏感词管理模块的所有端点应该被注册", () => {

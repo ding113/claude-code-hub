@@ -274,6 +274,8 @@ describe("OpenAPI 规范验证", () => {
         | undefined
     )?.content?.["application/json"]?.schema;
 
-    expect(responseSchema?.properties?.data?.properties?.user?.properties?.limit5hResetMode).toBeDefined();
+    expect(
+      responseSchema?.properties?.data?.properties?.user?.properties?.limit5hResetMode
+    ).toBeDefined();
   });
 });
