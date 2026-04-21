@@ -96,7 +96,9 @@ export function buildPublicStatusConfigSnapshot(
     defaultIntervalMinutes: input.defaultIntervalMinutes,
     defaultRangeHours: input.defaultRangeHours,
     groups: [...input.groups]
-      .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug))
+      .sort(
+        (left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug)
+      )
       .map((group) => ({
         slug: group.slug,
         displayName: group.displayName,
@@ -138,7 +140,10 @@ export async function publishPublicStatusConfigSnapshot(input: {
 
   if (redis) {
     await redis.set(key, JSON.stringify(snapshot));
-    await redis.set(buildPublicStatusConfigSnapshotKey(), JSON.stringify({ key, configVersion: snapshot.configVersion }));
+    await redis.set(
+      buildPublicStatusConfigSnapshotKey(),
+      JSON.stringify({ key, configVersion: snapshot.configVersion })
+    );
   }
 
   return {
@@ -148,10 +153,9 @@ export async function publishPublicStatusConfigSnapshot(input: {
   };
 }
 
-export function buildInternalPublicStatusConfigSnapshot(input: Omit<
-  InternalPublicStatusConfigSnapshot,
-  "generatedAt"
->): InternalPublicStatusConfigSnapshot {
+export function buildInternalPublicStatusConfigSnapshot(
+  input: Omit<InternalPublicStatusConfigSnapshot, "generatedAt">
+): InternalPublicStatusConfigSnapshot {
   return {
     ...input,
     generatedAt: new Date().toISOString(),

@@ -1,8 +1,8 @@
 "use client";
 
 import { startTransition, useEffect, useState } from "react";
-import type { PublicStatusPayload, PublicStatusTimelineBucket } from "@/lib/public-status/payload";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
+import type { PublicStatusPayload, PublicStatusTimelineBucket } from "@/lib/public-status/payload";
 import { PublicStatusTimeline } from "./public-status-timeline";
 
 interface PublicStatusViewProps {
@@ -191,9 +191,7 @@ export function PublicStatusView({
                   }).format(new Date(payload.generatedAt))
                 : labels.rebuilding}
             </span>
-            <span>
-              {labels.history}: 60
-            </span>
+            <span>{labels.history}: 60</span>
             {countdown ? (
               <span>
                 {labels.freshnessWindow}: {countdown}
