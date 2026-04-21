@@ -1028,7 +1028,10 @@ export const UpdateSystemSettingsSchema = z.object({
     .number()
     .int("Public status aggregation interval must be an integer")
     .refine(
-      (value) => PUBLIC_STATUS_INTERVAL_OPTIONS.includes(value as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]),
+      (value) =>
+        PUBLIC_STATUS_INTERVAL_OPTIONS.includes(
+          value as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]
+        ),
       {
         message: `Public status aggregation interval must be one of ${PUBLIC_STATUS_INTERVAL_OPTIONS.join(", ")}`,
       }

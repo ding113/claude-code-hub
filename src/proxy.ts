@@ -59,9 +59,7 @@ function proxyHandler(request: NextRequest) {
   // Apply locale middleware first (handles locale detection and routing)
   const localeResponse = intlMiddleware(request);
 
-  const isExplicitPublicStatusPath =
-    pathname === "/status" ||
-    pathname.startsWith("/status/");
+  const isExplicitPublicStatusPath = pathname === "/status" || pathname.startsWith("/status/");
 
   if (isExplicitPublicStatusPath) {
     return localeResponse;

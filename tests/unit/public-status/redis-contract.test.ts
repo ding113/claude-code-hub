@@ -10,13 +10,11 @@ interface RedisContractModule {
   }): string;
   alignBucketStartUtc(isoTimestamp: string, intervalMinutes: number): string;
   resolvePublicStatusManifestState(
-    manifest:
-      | {
-          freshUntil: string;
-          lastCompleteGeneration: string | null;
-          rebuildState: "idle" | "rebuilding";
-        }
-      | null,
+    manifest: {
+      freshUntil: string;
+      lastCompleteGeneration: string | null;
+      rebuildState: "idle" | "rebuilding";
+    } | null,
     nowIso: string
   ): { rebuildState: string; sourceGeneration: string | null };
 }
@@ -50,9 +48,7 @@ describe("public-status redis contract", () => {
       "@/lib/public-status/redis-contract"
     );
 
-    expect(mod.alignBucketStartUtc("2026-04-21T10:07:31.000Z", 5)).toBe(
-      "2026-04-21T10:05:00.000Z"
-    );
+    expect(mod.alignBucketStartUtc("2026-04-21T10:07:31.000Z", 5)).toBe("2026-04-21T10:05:00.000Z");
     expect(mod.alignBucketStartUtc("2026-04-21T10:07:31.000Z", 15)).toBe(
       "2026-04-21T10:00:00.000Z"
     );

@@ -72,16 +72,18 @@ describe("GET /api/public-status", () => {
       defaultIntervalMinutes: 5,
       defaultRangeHours: 24,
     });
-    mockReadPublicStatusPayload.mockImplementation(async ({ triggerRebuildHint }: { triggerRebuildHint: (reason: string) => Promise<void> }) => {
-      await triggerRebuildHint("manifest-missing");
-      return {
-        rebuildState: "rebuilding",
-        sourceGeneration: "",
-        generatedAt: null,
-        freshUntil: null,
-        groups: [],
-      };
-    });
+    mockReadPublicStatusPayload.mockImplementation(
+      async ({ triggerRebuildHint }: { triggerRebuildHint: (reason: string) => Promise<void> }) => {
+        await triggerRebuildHint("manifest-missing");
+        return {
+          rebuildState: "rebuilding",
+          sourceGeneration: "",
+          generatedAt: null,
+          freshUntil: null,
+          groups: [],
+        };
+      }
+    );
 
     const { GET } = await import("@/app/api/public-status/route");
     const response = await GET(

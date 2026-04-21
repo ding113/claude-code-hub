@@ -114,6 +114,8 @@ describe("public-status aggregation", () => {
     });
 
     expect(result.groups[0]?.models[0]?.latestState).toBe("failed");
-    expect(result.groups[0]?.models[0]?.timeline.some((bucket) => bucket.sampleCount > 0)).toBe(true);
+    expect(result.groups[0]?.models[0]?.timeline.some((bucket) => bucket.sampleCount > 0)).toBe(
+      true
+    );
   });
 });

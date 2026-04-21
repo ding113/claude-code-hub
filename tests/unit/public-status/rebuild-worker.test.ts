@@ -125,7 +125,9 @@ describe("public-status rebuild worker", () => {
       intervalMinutes: 5,
       rangeHours: 24,
     });
-    const versionedManifestCall = mockRedisSet.mock.calls.find((call) => call[0] === versionedManifestKey);
+    const versionedManifestCall = mockRedisSet.mock.calls.find(
+      (call) => call[0] === versionedManifestKey
+    );
 
     expect(versionedManifestCall).toBeTruthy();
 
