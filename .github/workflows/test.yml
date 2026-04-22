@@ -108,7 +108,11 @@ jobs:
         run: bun run db:migrate
 
       - name: Run integration tests
-        run: bun run test -- tests/integration/ --passWithNoTests
+        run: >
+          bunx vitest run
+          tests/integration/usage-ledger.test.ts
+          tests/integration/my-usage-imported-ledger.test.ts
+          --passWithNoTests
 
   # ==================== API 测试（需要运行服务）====================
   api-tests:

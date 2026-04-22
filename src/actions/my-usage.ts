@@ -7,7 +7,6 @@ import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { lookupIp } from "@/lib/ip-geo/client";
-import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import {
@@ -24,12 +23,11 @@ import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
-  findUsageLogsBatch,
+  findReadonlyUsageLogsBatchForKey,
   findUsageLogsForKeyBatch,
   findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
-  type UsageLogBatchFilters,
   type UsageLogSlimBatchResult,
   type UsageLogSummary,
   type UsageLogsBatchResult,
@@ -67,13 +65,17 @@ function scrubUsageLogsBatchForReadonly(result: UsageLogsBatchResult): UsageLogs
     ...result,
     logs: result.logs.map((log) => ({
       ...log,
+      userName: "",
+      keyName: "",
+      providerName: null,
+      errorMessage: null,
+      blockedReason: null,
+      userAgent: null,
+      messagesCount: null,
+      _liveChain: null,
       providerChain: scrubProviderChainRequestForReadonly(log.providerChain),
-      _liveChain: log._liveChain
-        ? {
-            ...log._liveChain,
-            chain: scrubProviderChainRequestForReadonly(log._liveChain.chain) ?? [],
-          }
-        : log._liveChain,
+      costMultiplier: null,
+      groupCostMultiplier: null,
     })),
   };
 }
@@ -299,7 +301,6 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
       "@/lib/rate-limit/time-utils"
     );
-    const { RateLimitService } = await import("@/lib/rate-limit");
     const { sumKeyQuotaCostsById, sumUserQuotaCosts } = await import("@/repository/statistics");
 
     // 计算各周期的时间范围
@@ -372,14 +373,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       user.limitConcurrentSessions ?? null
     );
 
-    const [
-      keyCosts,
-      keyCurrent5hUsd,
-      keyConcurrent,
-      userCosts,
-      userCurrent5hUsd,
-      userKeyConcurrent,
-    ] = await Promise.all([
+    const [keyCosts, keyConcurrent, userCosts, userKeyConcurrent] = await Promise.all([
       // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
       sumKeyQuotaCostsById(
         key.id,
@@ -391,13 +385,6 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
         },
         ALL_TIME_MAX_AGE_DAYS,
         keyCostResetAtResolved
-      ),
-      RateLimitService.getCurrentCost(
-        key.id,
-        "key",
-        "5h",
-        "00:00",
-        key.limit5hResetMode ?? "rolling"
       ),
       SessionTracker.getKeySessionCount(key.id),
       // User 配额：直接查 DB
@@ -412,27 +399,18 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
         ALL_TIME_MAX_AGE_DAYS,
         userCostResetAt
       ),
-      RateLimitService.getCurrentCost(
-        user.id,
-        "user",
-        "5h",
-        "00:00",
-        user.limit5hResetMode ?? "rolling",
-        {
-          costResetAt: user.costResetAt ?? null,
-          limit5hCostResetAt: user.limit5hCostResetAt ?? null,
-        }
-      ),
       getUserConcurrentSessions(user.id),
     ]);
 
     const {
+      cost5h: keyCurrent5hUsd,
       costDaily: keyCostDaily,
       costWeekly: keyCostWeekly,
       costMonthly: keyCostMonthly,
       costTotal: keyTotalCost,
     } = keyCosts;
     const {
+      cost5h: userCurrent5hUsd,
       costDaily: userCostDaily,
       costWeekly: userCostWeekly,
       costMonthly: userCostMonthly,
@@ -722,7 +700,7 @@ export async function getMyUsageLogsBatch(
  * Returns UsageLogsBatchResult (same shape as admin getUsageLogsBatch).
  */
 export async function getMyUsageLogsBatchFull(
-  params: Omit<UsageLogBatchFilters, "userId" | "keyId" | "providerId">
+  params: MyUsageLogsBatchFilters = {}
 ): Promise<ActionResult<UsageLogsBatchResult>> {
   const tError = await getErrorTranslator();
   try {
@@ -731,10 +709,25 @@ export async function getMyUsageLogsBatchFull(
       return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
-    const { userId: _u, keyId: _k, providerId: _p, ...safeParams } = params as UsageLogBatchFilters;
-    const result = await findUsageLogsBatch({
-      ...safeParams,
-      keyId: session.key.id,
+    const timezone = await resolveSystemTimezone();
+    const { startTime, endTime } = parseDateRangeInServerTimezone(
+      params.startDate,
+      params.endDate,
+      timezone
+    );
+    const limit = params.limit && params.limit > 0 ? Math.min(params.limit, 100) : 20;
+    const result = await findReadonlyUsageLogsBatchForKey({
+      sessionId: params.sessionId,
+      model: params.model,
+      statusCode: params.statusCode,
+      excludeStatusCode200: params.excludeStatusCode200,
+      endpoint: params.endpoint,
+      minRetryCount: params.minRetryCount,
+      cursor: params.cursor,
+      startTime,
+      endTime,
+      limit,
+      keyString: session.key.key,
     });
 
     return { ok: true, data: scrubUsageLogsBatchForReadonly(result) };
@@ -832,7 +825,7 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
 
     let visibleLogId = messageRequestMatch?.id ?? null;
 
-    if (!visibleLogId && (await isLedgerOnlyMode())) {
+    if (!visibleLogId) {
       const [ledgerMatch] = await db
         .select({ id: usageLedger.requestId })
         .from(usageLedger)
@@ -840,7 +833,14 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
           and(
             LEDGER_BILLING_CONDITION,
             eq(usageLedger.key, session.key.key),
-            eq(usageLedger.clientIp, ip)
+            eq(usageLedger.clientIp, ip),
+            sql`not exists (
+              select 1
+              from "message_request" as mr_active
+              where mr_active.id = ${usageLedger.requestId}
+                and mr_active.deleted_at is null
+                and mr_active.key = ${usageLedger.key}
+            )`
           )
         )
         .limit(1);
@@ -937,38 +937,37 @@ export async function getMyStatsSummary(
     // Key 维度是 User 维度的子集：用一条聚合 SQL 扫描 userId 范围即可同时算出两套 breakdown。
     const modelBreakdown = await db
       .select({
-        model: messageRequest.model,
+        model: usageLedger.model,
         // User breakdown（跨所有 Key）
         userRequests: sql<number>`count(*)::int`,
-        userCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        userInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        userOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        userCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-        userCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
-        userCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}), 0)::double precision`,
-        userCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}), 0)::double precision`,
+        userCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
+        userInputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}), 0)::double precision`,
+        userOutputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}), 0)::double precision`,
+        userCacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}), 0)::double precision`,
+        userCacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}), 0)::double precision`,
+        userCacheCreation5mTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation5mInputTokens}), 0)::double precision`,
+        userCacheCreation1hTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation1hInputTokens}), 0)::double precision`,
         // Key breakdown（FILTER 聚合）
-        keyRequests: sql<number>`count(*) FILTER (WHERE ${messageRequest.key} = ${keyString})::int`,
-        keyCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)`,
-        keyInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
+        keyRequests: sql<number>`count(*) FILTER (WHERE ${usageLedger.key} = ${keyString})::int`,
+        keyCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)`,
+        keyInputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyOutputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyCacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreation5mTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation5mInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreation1hTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation1hInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
       })
-      .from(messageRequest)
+      .from(usageLedger)
       .where(
         and(
-          eq(messageRequest.userId, userId),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          startDate ? gte(messageRequest.createdAt, startDate) : undefined,
-          endDate ? lt(messageRequest.createdAt, endDate) : undefined
+          eq(usageLedger.userId, userId),
+          LEDGER_BILLING_CONDITION,
+          startDate ? gte(usageLedger.createdAt, startDate) : undefined,
+          endDate ? lt(usageLedger.createdAt, endDate) : undefined
         )
       )
-      .groupBy(messageRequest.model)
-      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+      .groupBy(usageLedger.model)
+      .orderBy(sql`sum(${usageLedger.costUsd}) DESC`);
 
     const keyOnlyBreakdown = modelBreakdown.filter((row) => (row.keyRequests ?? 0) > 0);
 

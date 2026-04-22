@@ -27,7 +27,7 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
 }));
 
 const sumUserQuotaCostsMock = vi.fn(async () => ({
-  cost5h: 0,
+  cost5h: 2,
   costDaily: 9,
   costWeekly: 9,
   costMonthly: 9,
@@ -45,13 +45,6 @@ vi.mock("@/repository/statistics", () => ({
   sumKeyQuotaCostsById: (...args: unknown[]) => sumKeyQuotaCostsByIdMock(...args),
   sumUserCostInTimeRange: vi.fn(async () => 0),
   sumUserTotalCost: vi.fn(async () => 0),
-}));
-
-const getCurrentCostMock = vi.fn(async () => 2);
-vi.mock("@/lib/rate-limit/service", () => ({
-  RateLimitService: {
-    getCurrentCost: (...args: unknown[]) => getCurrentCostMock(...args),
-  },
 }));
 
 vi.mock("@/lib/session-tracker", () => ({
@@ -130,17 +123,7 @@ describe("getMyQuota - user 5h reset boundary", () => {
     const result = await getMyQuota();
 
     expect(result.ok).toBe(true);
-    expect(getCurrentCostMock).toHaveBeenCalledWith(
-      22,
-      "user",
-      "5h",
-      "00:00",
-      "rolling",
-      expect.objectContaining({
-        costResetAt: new Date("2026-04-21T21:00:00.000Z"),
-        limit5hCostResetAt: new Date("2026-04-21T23:00:00.000Z"),
-      })
-    );
+    expect(result.ok && result.data.userCurrent5hUsd).toBe(2);
     expect(sumUserQuotaCostsMock).toHaveBeenCalledWith(
       22,
       expect.objectContaining({

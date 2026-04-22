@@ -35,10 +35,15 @@ describe("findUsageLogsForKeySlim", () => {
       },
     ];
     const logsQuery = createThenableQuery(rows);
+    const ledgerLogsQuery = createThenableQuery([]);
+    const messageCountQuery = createThenableQuery([{ totalRows: 1 }]);
+    const ledgerCountQuery = createThenableQuery([{ totalRows: 0 }]);
     const selectMock = vi
       .fn()
       .mockImplementationOnce(() => logsQuery)
-      .mockImplementationOnce(() => Promise.resolve([{ totalRows: 321 }]));
+      .mockImplementationOnce(() => ledgerLogsQuery)
+      .mockImplementationOnce(() => messageCountQuery)
+      .mockImplementationOnce(() => ledgerCountQuery);
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -99,11 +104,15 @@ describe("findUsageLogsForKeySlim", () => {
         specialSettings: null,
       },
     ]);
-    const countQuery = createThenableQuery([{ totalRows: 321 }]);
+    const ledgerLogsQuery = createThenableQuery([]);
+    const messageCountQuery = createThenableQuery([{ totalRows: 321 }]);
+    const ledgerCountQuery = createThenableQuery([{ totalRows: 0 }]);
     const selectMock = vi
       .fn()
       .mockImplementationOnce(() => logsQuery)
-      .mockImplementationOnce(() => countQuery);
+      .mockImplementationOnce(() => ledgerLogsQuery)
+      .mockImplementationOnce(() => messageCountQuery)
+      .mockImplementationOnce(() => ledgerCountQuery);
 
     vi.doMock("@/drizzle/db", () => ({
       db: {

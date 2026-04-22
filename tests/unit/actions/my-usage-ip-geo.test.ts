@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => ({
   lookupIp: vi.fn(),
   loggerWarn: vi.fn(),
   loggerError: vi.fn(),
+  loggerInfo: vi.fn(),
   dbSelect: vi.fn(),
   dbFrom: vi.fn(),
   dbWhere: vi.fn(),
@@ -75,6 +76,7 @@ vi.mock("@/lib/logger", () => ({
   logger: {
     warn: mocks.loggerWarn,
     error: mocks.loggerError,
+    info: mocks.loggerInfo,
   },
 }));
 
@@ -147,7 +149,7 @@ describe("getMyIpGeoDetails", () => {
       user: { id: 1 },
       key: { id: 10, key: "sk-test" },
     });
-    mocks.dbLimit.mockResolvedValueOnce([]);
+    mocks.dbLimit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     const { getMyIpGeoDetails } = await import("@/actions/my-usage");
     const result = await getMyIpGeoDetails({ ip: "198.51.100.88", lang: "en" });
