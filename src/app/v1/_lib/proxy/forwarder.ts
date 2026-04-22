@@ -46,7 +46,7 @@ import type {
 
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
-import { HeaderProcessor } from "../headers";
+import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
@@ -2266,24 +2266,6 @@ export class ProxyForwarder {
         }
       } // end bypassForwarderPreprocessing gate
 
-      processedHeaders = ProxyForwarder.buildHeaders(session, provider);
-
-      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
-        void SessionManager.storeSessionRequestHeaders(
-          session.sessionId,
-          processedHeaders,
-          session.requestSequence
-        ).catch((err) => logger.error("Failed to store request headers:", err));
-      }
-
-      if (process.env.NODE_ENV === "development") {
-        logger.trace("ProxyForwarder: Final request headers", {
-          provider: provider.name,
-          providerType: provider.providerType,
-          headers: Object.fromEntries(processedHeaders.entries()),
-        });
-      }
-
       // ⭐ MCP 透传处理：检测是否为 MCP 请求，并使用相应的 URL
       let effectiveBaseUrl = baseUrl || provider.url;
 
@@ -2343,6 +2325,8 @@ export class ProxyForwarder {
         );
       }
 
+      processedHeaders = ProxyForwarder.buildHeaders(session, provider, effectiveBaseUrl);
+
       // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
       // 移除了强制 /v1/responses 路径重写，解决 Issue #139
       // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
@@ -2352,6 +2336,22 @@ export class ProxyForwarder {
       // When provider has multiple endpoints, provider.url and proxyUrl hosts may differ
       const actualHost = HeaderProcessor.extractHost(proxyUrl);
       processedHeaders.set("host", actualHost);
+
+      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+        void SessionManager.storeSessionRequestHeaders(
+          session.sessionId,
+          new Headers(processedHeaders),
+          session.requestSequence
+        ).catch((err) => logger.error("Failed to store request headers:", err));
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        logger.trace("ProxyForwarder: Final request headers", {
+          provider: provider.name,
+          providerType: provider.providerType,
+          headers: Object.fromEntries(processedHeaders.entries()),
+        });
+      }
 
       logger.debug("ProxyForwarder: Final proxy URL", {
         url: proxyUrl,
@@ -4164,7 +4164,8 @@ export class ProxyForwarder {
 
   private static buildHeaders(
     session: ProxySession,
-    provider: NonNullable<typeof session.provider>
+    provider: NonNullable<typeof session.provider>,
+    upstreamBaseUrl: string
   ): Headers {
     const outboundKey = provider.key;
     const preserveClientIp = provider.preserveClientIp ?? false;
@@ -4172,16 +4173,22 @@ export class ProxyForwarder {
 
     // 构建请求头覆盖规则
     const overrides: Record<string, string> = {
-      host: HeaderProcessor.extractHost(provider.url),
-      authorization: `Bearer ${outboundKey}`,
-      "x-api-key": outboundKey,
+      host: HeaderProcessor.extractHost(upstreamBaseUrl),
       "content-type": "application/json", // 确保 Content-Type
       "accept-encoding": "identity", // 禁用压缩：避免 undici ZlibError（代理应透传原始数据）
     };
 
-    // claude-auth: 移除 x-api-key（避免中转服务冲突）
-    if (provider.providerType === "claude-auth") {
-      delete overrides["x-api-key"];
+    if (provider.providerType === "claude-auth" || provider.providerType === "claude") {
+      Object.assign(
+        overrides,
+        resolveAnthropicAuthHeaders(outboundKey, upstreamBaseUrl, {
+          forceBearerOnly: provider.providerType === "claude-auth",
+        })
+      );
+    }
+
+    if (provider.providerType === "codex" || provider.providerType === "openai-compatible") {
+      overrides.authorization = `Bearer ${outboundKey}`;
     }
 
     // Codex 特殊处理：优先使用过滤器修改的 User-Agent
@@ -4238,14 +4245,13 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
+      blacklist: [...OUTBOUND_TRANSPORT_HEADER_BLACKLIST, "x-api-key"],
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
 
     return headerProcessor.process(session.headers);
   }
-
   private static buildGeminiHeaders(
     session: ProxySession,
     provider: NonNullable<typeof session.provider>,

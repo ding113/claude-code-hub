@@ -121,7 +121,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
     const res = await handleProxyRequest({} as any);
 
     expect(res.status).toBe(503);
-    expect(res.headers.get("x-cch-session-id")).toBe("s_hedge");
+    expect(res.headers.get("x-cch-session-id")).toBeNull();
 
     const body = await res.json();
     expect(body.error.message).toBe("所有供应商暂时不可用，请稍后重试 (cch_session_id: s_hedge)");
@@ -129,7 +129,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
     expect(body.error.details).toBeUndefined();
   });
 
-  test("命中 error override 时，应返回 override body/status，且保留 session id header", async () => {
+  test("命中 error override 时，应返回 override body/status，并仅保留消息后缀", async () => {
     h.verboseProviderError = true;
     h.override = {
       statusCode: 451,
@@ -145,7 +145,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
     const res = await handleProxyRequest({} as any);
 
     expect(res.status).toBe(451);
-    expect(res.headers.get("x-cch-session-id")).toBe("s_hedge");
+    expect(res.headers.get("x-cch-session-id")).toBeNull();
 
     const body = await res.json();
     expect(body).toEqual({

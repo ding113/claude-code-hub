@@ -42,6 +42,7 @@ function cleanResponseHeaders(headers: Headers): Headers {
   const cleaned = new Headers(headers);
   cleaned.delete("transfer-encoding");
   cleaned.delete("content-length");
+  cleaned.delete("x-cch-response-fixer");
   return cleaned;
 }
 
@@ -285,7 +286,6 @@ export class ResponseFixer {
     }
 
     const headers = cleanResponseHeaders(response.headers);
-    headers.set("x-cch-response-fixer", audit.hit ? "applied" : "not-applied");
 
     return new Response(toArrayBufferUint8Array(data), {
       status: response.status,
@@ -326,9 +326,6 @@ export class ResponseFixer {
     const maxBufferBytes = config.maxFixSize;
 
     const headers = cleanResponseHeaders(response.headers);
-    // 流式响应无法在返回 Response 时准确判断是否发生了“实际修复”（需要读完整流）。
-    // 这里使用“processed”表示已启用并参与处理；真实命中情况以 specialSettings 审计为准。
-    headers.set("x-cch-response-fixer", "processed");
 
     const transform = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {

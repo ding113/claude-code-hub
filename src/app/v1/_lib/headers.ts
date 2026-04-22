@@ -14,6 +14,48 @@ export interface HeaderProcessorConfig {
   preserveClientIpHeaders?: boolean;
 }
 
+export function looksLikeAnthropicProxyUrl(providerUrl?: string | null): boolean {
+  if (!providerUrl) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(providerUrl).hostname.toLowerCase();
+    if (
+      hostname === "anthropic.com" ||
+      hostname.endsWith(".anthropic.com") ||
+      hostname === "claude.ai" ||
+      hostname.endsWith(".claude.ai")
+    ) {
+      return false;
+    }
+
+    // 只匹配常见 relay/proxy 标识，避免把普通业务域名误识别成代理层。
+    return /(?:^|[.-])(proxy|relay|gateway|router|worker|openrouter|api2d|oaipro)(?:[.-]|$)/i.test(
+      hostname
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function resolveAnthropicAuthHeaders(
+  apiKey: string,
+  providerUrl?: string | null,
+  options?: { forceBearerOnly?: boolean }
+): Record<string, string> {
+  if (options?.forceBearerOnly || looksLikeAnthropicProxyUrl(providerUrl)) {
+    return {
+      Authorization: `Bearer ${apiKey}`,
+    };
+  }
+
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "x-api-key": apiKey,
+  };
+}
+
 /**
  * 代理请求 Header 处理器
  */

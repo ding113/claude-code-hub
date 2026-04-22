@@ -129,8 +129,8 @@ describe("ProxyWarmupGuard.ensure", () => {
     expect(result).not.toBeNull();
     expect(result?.status).toBe(200);
     expect(result?.headers.get("content-type")).toContain("application/json");
-    expect(result?.headers.get("x-cch-intercepted")).toBe("warmup");
-    expect(result?.headers.get("x-cch-intercepted-by")).toBe("claude-code-hub");
+    expect(result?.headers.get("x-cch-intercepted")).toBeNull();
+    expect(result?.headers.get("x-cch-intercepted-by")).toBeNull();
 
     const body = await result!.json();
     expect(body).toEqual(

@@ -321,7 +321,7 @@ export class ProxyErrorHandler {
    * - error.limit: 限制值
    * - error.reset_time: 重置时间（ISO-8601格式，滚动窗口为 null）
    *
-   * 响应头（3个标准 rate limit 头）：
+   * 响应头（标准 rate limit 头）：
    * - X-RateLimit-Limit: 限制值
    * - X-RateLimit-Remaining: 剩余配额（max(0, limit - current)）
    * - X-RateLimit-Reset: Unix 时间戳（秒），滚动窗口不设置此头
@@ -338,8 +338,6 @@ export class ProxyErrorHandler {
       // 标准 rate limit 响应头
       "X-RateLimit-Limit": error.limitValue.toString(),
       "X-RateLimit-Remaining": remaining.toString(),
-      // 额外的自定义头（便于客户端快速识别限流类型）
-      "X-RateLimit-Type": error.limitType,
     });
 
     // 只有固定窗口才设置重置时间相关头（滚动窗口 resetTime 为 null）

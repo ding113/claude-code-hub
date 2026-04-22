@@ -10,7 +10,6 @@ function createSession({
   userAgent: string | null;
   headers: Headers;
 }): ProxySession {
-  // 使用 ProxySession 的内部构造方法创建测试实例
   const session = Object.create(ProxySession.prototype);
 
   Object.assign(session, {
@@ -18,7 +17,7 @@ function createSession({
     method: "POST",
     requestUrl: new URL("https://example.com/v1/messages"),
     headers,
-    originalHeaders: new Headers(headers), // 同步更新 originalHeaders
+    originalHeaders: new Headers(headers),
     headerLog: JSON.stringify(Object.fromEntries(headers.entries())),
     request: { message: {}, log: "" },
     userAgent,
@@ -40,7 +39,6 @@ function createSession({
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
     isHeaderModified: (key: string) => {
-      // 简化的 isHeaderModified 实现
       const original = session.originalHeaders?.get(key);
       const current = session.headers.get(key);
       return original !== current;
@@ -59,6 +57,33 @@ function createCodexProvider(): Provider {
   } as unknown as Provider;
 }
 
+function createOpenAIProvider(): Provider {
+  return {
+    providerType: "openai-compatible",
+    url: "https://openai.example.com/v1/chat/completions",
+    key: "test-outbound-key",
+    preserveClientIp: false,
+  } as unknown as Provider;
+}
+
+function createClaudeProvider(url = "https://api.anthropic.com/v1/messages"): Provider {
+  return {
+    providerType: "claude",
+    url,
+    key: "test-outbound-key",
+    preserveClientIp: false,
+  } as unknown as Provider;
+}
+
+function createClaudeAuthProvider(): Provider {
+  return {
+    providerType: "claude-auth",
+    url: "https://relay.example.com/v1/messages",
+    key: "test-outbound-key",
+    preserveClientIp: false,
+  } as unknown as Provider;
+}
+
 function createGeminiProvider(providerType: "gemini" | "gemini-cli"): Provider {
   return {
     providerType,
@@ -66,6 +91,27 @@ function createGeminiProvider(providerType: "gemini" | "gemini-cli"): Provider {
     key: "test-outbound-key",
     preserveClientIp: false,
   } as unknown as Provider;
+}
+
+function buildHeaders(session: ProxySession, provider: Provider): Headers {
+  const forwarder = ProxyForwarder as unknown as {
+    buildHeaders: (session: ProxySession, provider: Provider, upstreamBaseUrl: string) => Headers;
+  };
+  return forwarder.buildHeaders(
+    session,
+    provider,
+    ((provider as { url?: string }).url ?? "https://example.com").toString()
+  );
+}
+
+function createAuthLeakSession(): ProxySession {
+  return createSession({
+    userAgent: "Original-UA/1.0",
+    headers: new Headers([
+      ["authorization", "Bearer proxy-user-bearer-should-not-leak"],
+      ["x-api-key", "proxy-user-key-should-not-leak"],
+    ]),
+  });
 }
 
 describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
@@ -78,9 +124,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers([["user-agent", "Original-UA/1.0"]]);
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Filtered-UA/2.0");
@@ -95,9 +138,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers([["user-agent", "Original-UA/1.0"]]);
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Original-UA/1.0");
@@ -112,9 +152,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers([["user-agent", "Original-UA/1.0"]]);
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Original-UA/1.0");
@@ -128,9 +165,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers();
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe(DEFAULT_CODEX_USER_AGENT);
@@ -145,9 +179,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers([["user-agent", "Original-UA/1.0"]]);
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     // 空字符串应该被保留（使用 ?? 而非 ||）
@@ -166,14 +197,71 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     });
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("connection")).toBeNull();
     expect(resultHeaders.get("transfer-encoding")).toBeNull();
     expect(resultHeaders.get("content-length")).toBeNull();
+  });
+});
+
+describe("ProxyForwarder - buildHeaders auth minimization", () => {
+  it("codex 应只发送 Authorization，不再默认双发 x-api-key", () => {
+    const resultHeaders = buildHeaders(createAuthLeakSession(), createCodexProvider());
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBeNull();
+  });
+
+  it("openai-compatible 应只发送 Authorization，不再默认双发 x-api-key", () => {
+    const resultHeaders = buildHeaders(createAuthLeakSession(), createOpenAIProvider());
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBeNull();
+  });
+
+  it("claude-auth 应只发送 Authorization", () => {
+    const resultHeaders = buildHeaders(createAuthLeakSession(), createClaudeAuthProvider());
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBeNull();
+  });
+
+  it("claude proxy host 应只发送 Authorization", () => {
+    const resultHeaders = buildHeaders(
+      createAuthLeakSession(),
+      createClaudeProvider("https://proxy.openrouter.example.com/v1/messages")
+    );
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBeNull();
+  });
+
+  it("openrouter 风格 host 应被识别为 proxy 并只发送 Authorization", () => {
+    const resultHeaders = buildHeaders(
+      createAuthLeakSession(),
+      createClaudeProvider("https://openrouter.example.com/v1/messages")
+    );
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBeNull();
+  });
+
+  it("非代理 claude 直连仍保留双头兼容性", () => {
+    const resultHeaders = buildHeaders(createAuthLeakSession(), createClaudeProvider());
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBe("test-outbound-key");
+  });
+
+  it("普通自定义域名的 claude endpoint 仍保留双头兼容性", () => {
+    const resultHeaders = buildHeaders(
+      createAuthLeakSession(),
+      createClaudeProvider("https://models.partner.example.com/v1/messages")
+    );
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBe("test-outbound-key");
   });
 });
 

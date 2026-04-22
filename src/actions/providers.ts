@@ -3,6 +3,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
+import { resolveAnthropicAuthHeaders as resolveAnthropicAuthHeaderSet } from "@/app/v1/_lib/headers";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { buildProxyUrl } from "@/app/v1/_lib/url";
 import { db } from "@/drizzle/db";
@@ -4181,44 +4182,16 @@ async function executeProviderApiTest(
   }
 }
 
-/**
- * 测试 Anthropic Messages API 连通性
- */
-function getHostnameFromUrl(url: string): string | null {
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-function resolveAnthropicAuthHeaders(apiKey: string, providerUrl: string): Record<string, string> {
-  const headers: Record<string, string> = {
+function resolveAnthropicAuthHeaders(
+  apiKey: string,
+  providerUrl: string,
+  options?: { forceBearerOnly?: boolean }
+): Record<string, string> {
+  return {
     "Content-Type": "application/json",
     "anthropic-version": "2023-06-01",
+    ...resolveAnthropicAuthHeaderSet(apiKey, providerUrl, options),
   };
-
-  const hostname = getHostnameFromUrl(providerUrl);
-  const isOfficialAnthropic = hostname
-    ? hostname.endsWith("anthropic.com") || hostname.endsWith("claude.ai")
-    : false;
-  const looksLikeProxy = hostname
-    ? /proxy|relay|gateway|router|openai|api2d|openrouter|worker|gpt/i.test(hostname)
-    : false;
-
-  if (isOfficialAnthropic) {
-    headers["x-api-key"] = apiKey;
-    return headers;
-  }
-
-  if (looksLikeProxy) {
-    headers.Authorization = `Bearer ${apiKey}`;
-    return headers;
-  }
-
-  headers["x-api-key"] = apiKey;
-  headers.Authorization = `Bearer ${apiKey}`;
-  return headers;
 }
 
 export async function testProviderAnthropicMessages(
@@ -5038,7 +5011,9 @@ async function fetchAnthropicModels(
   const url = `${normalizedUrl}/v1/models`;
 
   // 复用认证逻辑：官方 API 用 x-api-key，代理用 Bearer token
-  const authHeaders = resolveAnthropicAuthHeaders(data.apiKey, normalizedUrl);
+  const authHeaders = resolveAnthropicAuthHeaders(data.apiKey, normalizedUrl, {
+    forceBearerOnly: data.providerType === "claude-auth",
+  });
 
   try {
     const response = await executeProxiedFetch(
