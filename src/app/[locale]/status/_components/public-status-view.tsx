@@ -23,6 +23,7 @@ import { getPublicStatusVendorIconComponent } from "@/lib/public-status/vendor-i
 import { cn } from "@/lib/utils";
 import { type DisplayState, deriveLatestModelState } from "../_lib/derive-display-state";
 import { fillDisplayTimeline } from "../_lib/fill-display-timeline";
+import { formatTtfb } from "../_lib/format-ttfb";
 import {
   clearGroupOrder,
   loadCollapsedSet,
@@ -48,6 +49,7 @@ interface PublicStatusViewProps {
   intervalMinutes: number;
   rangeHours: number;
   followServerDefaults?: boolean;
+  filterSlug?: string;
   locale: string;
   siteTitle: string;
   timeZone: string;
@@ -87,6 +89,7 @@ interface PublicStatusViewProps {
     issuesLabel: string;
     clearSearch: string;
     dragHandle: string;
+    toggleGroup: string;
     openGroupPage: string;
   };
 }
@@ -119,7 +122,7 @@ function badgeVariant(state: DisplayState): {
   }
 }
 
-function aggregateGroupState(states: DisplayState[]): DisplayState {
+function aggregateByFailed(states: DisplayState[]): DisplayState {
   const effective = states.filter((s) => s !== "no_data");
   if (effective.length === 0) return "no_data";
   const failedCount = effective.filter((s) => s === "failed").length;
@@ -128,28 +131,12 @@ function aggregateGroupState(states: DisplayState[]): DisplayState {
   return "operational";
 }
 
-function aggregateOverallFromGroups(groupStates: DisplayState[]): DisplayState {
-  const effective = groupStates.filter((s) => s !== "no_data");
-  if (effective.length === 0) return "no_data";
-  const failedCount = effective.filter((s) => s === "failed").length;
-  if (failedCount === effective.length) return "failed";
-  if (failedCount >= 1) return "degraded";
-  return "operational";
-}
-
-function formatTtfb(ms: number | null): string {
-  if (ms === null) return "—";
-  if (ms >= 10000) {
-    return `${(ms / 1000).toFixed(2)} s`;
-  }
-  return `${ms} ms`;
-}
-
 export function PublicStatusView({
   initialPayload,
   intervalMinutes,
   rangeHours,
   followServerDefaults = false,
+  filterSlug,
   locale,
   siteTitle,
   timeZone,
@@ -173,7 +160,11 @@ export function PublicStatusView({
         );
         if (!response.ok) return;
         const next = (await response.json()) as PublicStatusPayload;
-        startTransition(() => setPayload(next));
+        // 单分组页面(/status/[slug]):每次轮询后仍只保留目标分组,避免刷新后展开成全站视图
+        const scoped = filterSlug
+          ? { ...next, groups: next.groups.filter((g) => g.publicGroupSlug === filterSlug) }
+          : next;
+        startTransition(() => setPayload(scoped));
       } catch {
         // keep last payload until next tick
       }
@@ -183,7 +174,7 @@ export function PublicStatusView({
     }
     const pollId = window.setInterval(() => void refresh(), 30_000);
     return () => window.clearInterval(pollId);
-  }, [followServerDefaults, initialPayload.rebuildState, intervalMinutes, rangeHours]);
+  }, [followServerDefaults, initialPayload.rebuildState, intervalMinutes, rangeHours, filterSlug]);
 
   useEffect(() => {
     setGroupOrder(loadGroupOrder());
@@ -191,20 +182,7 @@ export function PublicStatusView({
     setOrderHydrated(true);
   }, []);
 
-  const baseGroups = useMemo(
-    () =>
-      payload.groups.length > 0
-        ? payload.groups
-        : [
-            {
-              publicGroupSlug: "bootstrap",
-              displayName: labels.systemStatus,
-              explanatoryCopy: labels.emptyDescription,
-              models: [],
-            },
-          ],
-    [payload.groups, labels.systemStatus, labels.emptyDescription]
-  );
+  const baseGroups = useMemo(() => payload.groups, [payload.groups]);
 
   const derivedGroups = useMemo(() => {
     return baseGroups.map((group) => {
@@ -217,7 +195,7 @@ export function PublicStatusView({
         return { model, chartCells, uptime24h, ttfb24h, latest };
       });
       const issueCount = derivedModels.filter((d) => d.latest === "failed").length;
-      const groupState = aggregateGroupState(derivedModels.map((d) => d.latest));
+      const groupState = aggregateByFailed(derivedModels.map((d) => d.latest));
       return { group, derivedModels, issueCount, groupState };
     });
   }, [baseGroups]);
@@ -253,7 +231,7 @@ export function PublicStatusView({
   }, [orderedGroups, searchQuery, isFiltering]);
 
   const overallState: DisplayState = useMemo(() => {
-    return aggregateOverallFromGroups(derivedGroups.map((g) => g.groupState));
+    return aggregateByFailed(derivedGroups.map((g) => g.groupState));
   }, [derivedGroups]);
 
   const overallLabel = badgeVariant(overallState).label(labels);
@@ -374,7 +352,8 @@ export function PublicStatusView({
                       modelBadgeLabel={labels.modelsLabel}
                       issueBadgeLabel={labels.issuesLabel}
                       dragHandleLabel={labels.dragHandle}
-                      groupHref={`/status/${group.publicGroupSlug}`}
+                      toggleLabel={labels.toggleGroup}
+                      groupHref={filterSlug ? undefined : `/status/${group.publicGroupSlug}`}
                       groupLinkLabel={labels.openGroupPage}
                     >
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

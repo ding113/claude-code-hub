@@ -87,6 +87,7 @@ export default async function PublicStatusPage({
         issuesLabel: t("statusPage.public.issuesLabel"),
         clearSearch: t("statusPage.public.clearSearch"),
         dragHandle: t("statusPage.public.dragHandle"),
+        toggleGroup: t("statusPage.public.toggleGroup"),
         openGroupPage: t("statusPage.public.openGroupPage"),
       }}
     />

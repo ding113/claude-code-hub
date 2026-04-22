@@ -3,6 +3,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { FilledTimelineCell } from "../_lib/fill-display-timeline";
+import { formatTtfb } from "../_lib/format-ttfb";
 
 export interface PublicStatusTimelineLabels {
   availability: string;
@@ -113,13 +114,7 @@ export function PublicStatusTimeline({
                       : `${bucket.availabilityPct.toFixed(2)}%`}
                   </span>
                   <span className="text-muted-foreground">{labels.ttfb}</span>
-                  <span className="text-right">
-                    {bucket.ttfbMs === null
-                      ? "—"
-                      : bucket.ttfbMs >= 10000
-                        ? `${(bucket.ttfbMs / 1000).toFixed(2)} s`
-                        : `${bucket.ttfbMs} ms`}
-                  </span>
+                  <span className="text-right">{formatTtfb(bucket.ttfbMs)}</span>
                   <span className="text-muted-foreground">{labels.tps}</span>
                   <span className="text-right">
                     {bucket.tps === null ? "—" : bucket.tps.toFixed(1)}

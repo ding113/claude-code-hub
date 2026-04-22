@@ -1,6 +1,6 @@
 {
   "title": "Public Status Page",
-  "description": "Configure the public status window, aggregation interval, and which groups/models should be exposed.",
+  "description": "Configure the public status page's stats window, chart bucket size, and which groups/models should be exposed.",
   "form": {
     "windowHours": "Stats Window (hours)",
     "windowHoursDesc": "Window length used to compute TTFB and availability, and the total span the chart covers. Default: 24 hours.",
@@ -88,6 +88,7 @@
     "issuesLabel": "issues",
     "clearSearch": "Clear search",
     "dragHandle": "Drag to reorder",
+    "toggleGroup": "Toggle group",
     "openGroupPage": "Open group status page"
   }
 }

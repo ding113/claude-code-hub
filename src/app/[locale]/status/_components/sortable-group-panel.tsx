@@ -21,6 +21,7 @@ interface SortableGroupPanelProps {
   issueBadgeLabel?: string;
   modelBadgeLabel?: string;
   dragHandleLabel?: string;
+  toggleLabel?: string;
   groupHref?: string;
   groupLinkLabel?: string;
 }
@@ -38,6 +39,7 @@ export function SortableGroupPanel({
   issueBadgeLabel,
   modelBadgeLabel,
   dragHandleLabel,
+  toggleLabel,
   groupHref,
   groupLinkLabel,
 }: SortableGroupPanelProps) {
@@ -77,7 +79,8 @@ export function SortableGroupPanel({
           <button
             type="button"
             onClick={() => onOpenChange(!open)}
-            aria-label={displayName}
+            aria-label={toggleLabel ?? displayName}
+            aria-expanded={open}
             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
           >
             <ChevronDown

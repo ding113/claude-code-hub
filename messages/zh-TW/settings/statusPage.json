@@ -1,6 +1,6 @@
 {
   "title": "公開狀態頁面",
-  "description": "設定公開狀態頁面的聚合視窗、聚合間隔，以及需要對外展示的分組和模型。",
+  "description": "設定公開狀態頁面的統計視窗、圖表分桶，以及需要對外展示的分組和模型。",
   "form": {
     "windowHours": "統計視窗（小時）",
     "windowHoursDesc": "用於計算 TTFB 與在線率的統計視窗長度，也是圖表覆蓋的總時間跨度。預設 24 小時。",
@@ -88,6 +88,7 @@
     "issuesLabel": "異常",
     "clearSearch": "清除搜尋",
     "dragHandle": "拖曳重排",
+    "toggleGroup": "展開或收合分組",
     "openGroupPage": "開啟分組獨立狀態頁"
   }
 }

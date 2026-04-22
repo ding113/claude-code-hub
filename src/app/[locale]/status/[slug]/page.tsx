@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { readPublicSiteMeta } from "@/lib/public-site-meta";
@@ -9,13 +10,7 @@ import { PublicStatusView } from "../_components/public-status-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function PublicStatusGroupPage({
-  params,
-}: {
-  params: Promise<{ locale: string; slug: string }>;
-}) {
-  const { locale, slug } = await params;
-  const t = await getTranslations("settings");
+async function loadGroupContext(slug: string) {
   const configSnapshot = await readCurrentPublicStatusConfigSnapshot();
   const siteMeta = await readPublicSiteMeta();
   const intervalMinutes = configSnapshot?.defaultIntervalMinutes ?? 5;
@@ -37,12 +32,41 @@ export default async function PublicStatusGroupPage({
       }
     },
   });
-
   const targetGroup = payload.groups.find((group) => group.publicGroupSlug === slug);
+  return { configSnapshot, siteMeta, intervalMinutes, rangeHours, payload, targetGroup };
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const { configSnapshot, siteMeta, targetGroup } = await loadGroupContext(slug);
+  const siteTitle = resolveSiteTitle(configSnapshot?.siteTitle, siteMeta.siteTitle);
+  if (!targetGroup) {
+    return { title: siteTitle };
+  }
+  return {
+    title: `${targetGroup.displayName} · ${siteTitle}`,
+    description: targetGroup.explanatoryCopy ?? undefined,
+  };
+}
+
+export default async function PublicStatusGroupPage({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string }>;
+}) {
+  const { locale, slug } = await params;
+  const t = await getTranslations("settings");
+  const { configSnapshot, siteMeta, intervalMinutes, rangeHours, payload, targetGroup } =
+    await loadGroupContext(slug);
   if (!targetGroup) {
     notFound();
   }
 
+  const followServerDefaults = !configSnapshot;
   const filteredPayload = { ...payload, groups: [targetGroup] };
 
   return (
@@ -51,6 +75,7 @@ export default async function PublicStatusGroupPage({
       intervalMinutes={intervalMinutes}
       rangeHours={rangeHours}
       followServerDefaults={followServerDefaults}
+      filterSlug={slug}
       locale={locale}
       siteTitle={resolveSiteTitle(configSnapshot?.siteTitle, siteMeta.siteTitle)}
       timeZone={configSnapshot?.timeZone ?? "UTC"}
@@ -95,6 +120,7 @@ export default async function PublicStatusGroupPage({
         issuesLabel: t("statusPage.public.issuesLabel"),
         clearSearch: t("statusPage.public.clearSearch"),
         dragHandle: t("statusPage.public.dragHandle"),
+        toggleGroup: t("statusPage.public.toggleGroup"),
         openGroupPage: t("statusPage.public.openGroupPage"),
       }}
     />

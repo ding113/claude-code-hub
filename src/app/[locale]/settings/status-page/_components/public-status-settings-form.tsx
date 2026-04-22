@@ -63,7 +63,7 @@ function slugifyGroupName(input: string): string {
   const trimmed = (input || "").trim().toLowerCase();
   if (!trimmed) return "";
   return trimmed
-    .replace(/[^a-z0-9\u4e00-\u9fa5\s-]+/g, "")
+    .replace(/[^a-z0-9\s-]+/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
@@ -103,14 +103,10 @@ export function PublicStatusSettingsForm({
     String(initialAggregationIntervalMinutes)
   );
   const [groups, setGroups] = useState(() =>
-    initialGroups.map((group) => {
-      const defaultSlug = slugifyGroupName(group.displayName || group.groupName);
-      return {
-        ...group,
-        publicGroupSlug: group.publicGroupSlug?.trim() || defaultSlug,
-        publicModels: normalizePublicStatusModels(group.publicModels),
-      };
-    })
+    initialGroups.map((group) => ({
+      ...group,
+      publicModels: normalizePublicStatusModels(group.publicModels),
+    }))
   );
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(initialGroups.map((group) => [group.groupName, !group.enabled]))
@@ -197,7 +193,6 @@ export function PublicStatusSettingsForm({
               onChange={(event) => setWindowHours(event.target.value)}
               disabled={isPending}
             />
-            <p className="text-sm text-muted-foreground">{t("statusPage.form.windowHoursDesc")}</p>
           </div>
 
           <div className="space-y-2">
@@ -223,9 +218,6 @@ export function PublicStatusSettingsForm({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-sm text-muted-foreground">
-              {t("statusPage.form.aggregationIntervalMinutesDesc")}
-            </p>
           </div>
         </div>
 

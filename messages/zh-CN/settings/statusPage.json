@@ -1,6 +1,6 @@
 {
   "title": "公开状态页面",
-  "description": "配置公开状态页面的聚合窗口、聚合间隔，以及需要对外展示的分组和模型。",
+  "description": "配置公开状态页面的统计窗口、图表分桶,以及需要对外展示的分组和模型。",
   "form": {
     "windowHours": "统计窗口（小时）",
     "windowHoursDesc": "用于计算 TTFB 与在线率的统计窗口长度，也是图表覆盖的总时间跨度。默认 24 小时。",
@@ -88,6 +88,7 @@
     "issuesLabel": "异常",
     "clearSearch": "清除搜索",
     "dragHandle": "拖动重排",
+    "toggleGroup": "展开或折叠分组",
     "openGroupPage": "打开分组独立状态页"
   }
 }
