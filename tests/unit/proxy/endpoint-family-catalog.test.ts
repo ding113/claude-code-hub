@@ -106,6 +106,20 @@ const FAMILY_SAMPLES = [
     modelRequired: false,
   },
   {
+    id: "openai-images",
+    path: "/v1/images/edits",
+    format: "openai",
+    accountingTier: "none",
+    modelRequired: false,
+  },
+  {
+    id: "openai-images",
+    path: "/v1/images/variations",
+    format: "openai",
+    accountingTier: "none",
+    modelRequired: false,
+  },
+  {
     id: "openai-files",
     path: "/v1/files/file_123/content",
     format: "openai",

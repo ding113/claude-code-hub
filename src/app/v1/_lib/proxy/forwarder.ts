@@ -65,6 +65,13 @@ import {
   sanitizeUrl,
 } from "./errors";
 import { ModelRedirector } from "./model-redirector";
+import {
+  cloneOpenAIImageRequestMetadata,
+  sanitizeGenerationsRequestForProvider,
+  serializeOpenAIImageMultipartRequest,
+  syncOpenAIImageMultipartFromLogicalBody,
+  validateOpenAIImageRequest,
+} from "./openai-image-compat";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
@@ -2308,6 +2315,55 @@ export class ProxyForwarder {
           } catch {
             isStreaming = false;
           }
+        } else if (session.isOpenAIImageMultipartRequest()) {
+          const imageRequestMetadata = session.getOpenAIImageRequestMetadata();
+          if (!imageRequestMetadata) {
+            throw new ProxyError("Invalid request: image multipart metadata is missing.", 400);
+          }
+
+          const logicalBody = filterPrivateParameters(
+            structuredClone(session.request.message)
+          ) as Record<string, unknown>;
+
+          if (!session.getEndpointPolicy().bypassRequestFilters) {
+            const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+            await requestFilterEngine.applyFinal(session, logicalBody, processedHeaders);
+          }
+
+          syncOpenAIImageMultipartFromLogicalBody(imageRequestMetadata, logicalBody);
+
+          const validation = await validateOpenAIImageRequest({
+            pathname: requestPath,
+            body: logicalBody,
+            imageRequestMetadata,
+          });
+          if (!validation.ok) {
+            throw new ProxyError(validation.message ?? "Invalid request.", 400);
+          }
+
+          const serializedMultipart =
+            await serializeOpenAIImageMultipartRequest(imageRequestMetadata);
+          requestBody = serializedMultipart.body;
+          session.forwardedRequestBody = serializedMultipart.summary;
+          isStreaming = serializedMultipart.isStreaming;
+
+          if (serializedMultipart.contentType) {
+            processedHeaders.set("content-type", serializedMultipart.contentType);
+          } else {
+            processedHeaders.delete("content-type");
+          }
+
+          if (process.env.NODE_ENV === "development") {
+            logger.trace("ProxyForwarder: Forwarding multipart image request", {
+              provider: provider.name,
+              providerId: provider.id,
+              proxyUrl: proxyUrl,
+              format: session.originalFormat,
+              method: session.method,
+              bodyLength: serializedMultipart.body.byteLength,
+              isStreaming,
+            });
+          }
         } else {
           const filteredMessage = filterPrivateParameters(session.request.message) as Record<
             string,
@@ -2336,6 +2392,19 @@ export class ProxyForwarder {
           if (!session.getEndpointPolicy().bypassRequestFilters) {
             const { requestFilterEngine } = await import("@/lib/request-filter-engine");
             await requestFilterEngine.applyFinal(session, messageToSend, processedHeaders);
+          }
+
+          if (requestPath === "/v1/images/generations") {
+            sanitizeGenerationsRequestForProvider(messageToSend, provider);
+          }
+
+          const validation = await validateOpenAIImageRequest({
+            pathname: requestPath,
+            body: messageToSend,
+            imageRequestMetadata: session.getOpenAIImageRequestMetadata(),
+          });
+          if (!validation.ok) {
+            throw new ProxyError(validation.message ?? "Invalid request.", 400);
           }
 
           const bodyString = JSON.stringify(messageToSend);
@@ -3847,6 +3916,7 @@ export class ProxyForwarder {
       ...session.request,
       message: structuredClone(session.request.message),
       buffer: session.request.buffer ? session.request.buffer.slice(0) : undefined,
+      imageRequestMetadata: cloneOpenAIImageRequestMetadata(session.request.imageRequestMetadata),
     };
     shadow.requestUrl = new URL(session.requestUrl.toString());
     shadowState.headers = new Headers(session.headers);
@@ -3878,6 +3948,9 @@ export class ProxyForwarder {
     target.request.log = source.request.log;
     target.request.note = source.request.note;
     target.request.model = source.request.model;
+    target.request.imageRequestMetadata = cloneOpenAIImageRequestMetadata(
+      source.request.imageRequestMetadata
+    );
     target.requestUrl = new URL(source.requestUrl.toString());
     target.forwardedRequestBody = source.forwardedRequestBody;
     target.setCacheTtlResolved(source.getCacheTtlResolved());
