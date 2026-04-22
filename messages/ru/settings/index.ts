@@ -104,6 +104,7 @@ export default {
   common,
   config,
   providers,
+  providerTypes: providersFormProviderTypes,
   prices,
   sensitiveWords,
   requestFilters,

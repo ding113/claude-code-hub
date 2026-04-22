@@ -2,15 +2,17 @@
   "title": "公开状态页面",
   "description": "配置公开状态页面的聚合窗口、聚合间隔，以及需要对外展示的分组和模型。",
   "form": {
-    "windowHours": "展示时间长度（小时）",
-    "windowHoursDesc": "控制公开页面聚合覆盖的时间窗口。默认 24 小时。",
-    "aggregationIntervalMinutes": "聚合间隔（分钟）",
-    "aggregationIntervalMinutesDesc": "定时聚合写快照的周期。只有配置了公开分组和模型后才会生效。",
+    "windowHours": "统计窗口（小时）",
+    "windowHoursDesc": "用于计算 TTFB 与在线率的统计窗口长度，也是图表覆盖的总时间跨度。默认 24 小时。",
+    "aggregationIntervalMinutes": "图表分桶（分钟）",
+    "aggregationIntervalMinutesDesc": "图表时间线每个分桶的时长，决定图表粒度。可选 5 / 15 / 30 / 60 分钟。",
     "aggregationIntervalMinutesInvalid": "公开状态聚合间隔只能是 5、15、30、60 分钟之一。",
     "intervalOption": "{minutes} 分钟",
     "slug": "Slug",
+    "slugTooltip": "用于分组独立状态页的 URL 标识。留空将基于对外显示名自动生成。只能包含小写字母、数字和连字符。",
     "copy": "说明文案",
     "sortOrder": "排序",
+    "sortOrderTooltip": "控制公开状态页中分组的显示顺序。数值越小越靠前（与供应商优先级一致）。相同数值按分组名排序。",
     "descriptionTooLong": "公开状态配置超过 provider_groups.description 的 16 KB UTF-8 限制。",
     "projectionPublishFailed": "公开状态 Redis 投影发布失败。",
     "groupsTitle": "公开分组与模型",
@@ -41,7 +43,7 @@
   "public": {
     "systemStatus": "系统状态",
     "heroPrimary": "AI 服务",
-    "heroSecondary": "智能状态面板",
+    "heroSecondary": "服务状态面板",
     "generatedAt": "更新于",
     "ttfb": "TTFB",
     "tps": "TPS",
@@ -85,6 +87,7 @@
     "modelsLabel": "模型",
     "issuesLabel": "异常",
     "clearSearch": "清除搜索",
-    "dragHandle": "拖动重排"
+    "dragHandle": "拖动重排",
+    "openGroupPage": "打开分组独立状态页"
   }
 }

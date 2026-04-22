@@ -19,13 +19,10 @@ export function deriveDisplayState(bucket: PublicStatusTimelineBucket): DisplayS
   if (pct === null) {
     return bucket.state === "degraded" ? "degraded" : "operational";
   }
-  if (pct >= 100) {
-    return "operational";
-  }
   if (pct < DEGRADED_THRESHOLD) {
-    return "failed";
+    return "degraded";
   }
-  return "degraded";
+  return "operational";
 }
 
 export function deriveLatestModelState(

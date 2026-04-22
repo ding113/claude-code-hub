@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, ExternalLink, Save } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Info, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
 import {
   getProviderTypeTranslationKey,
@@ -58,6 +59,37 @@ function getPublishableGroupCount(groups: PublicStatusSettingsFormGroup[]): numb
   return groups.filter((group) => group.enabled && group.publicModels.length > 0).length;
 }
 
+function slugifyGroupName(input: string): string {
+  const trimmed = (input || "").trim().toLowerCase();
+  if (!trimmed) return "";
+  return trimmed
+    .replace(/[^a-z0-9\u4e00-\u9fa5\s-]+/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground hover:text-foreground"
+            aria-label={text}
+          >
+            <Info className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
+          {text}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function PublicStatusSettingsForm({
   initialWindowHours,
   initialAggregationIntervalMinutes,
@@ -71,10 +103,14 @@ export function PublicStatusSettingsForm({
     String(initialAggregationIntervalMinutes)
   );
   const [groups, setGroups] = useState(() =>
-    initialGroups.map((group) => ({
-      ...group,
-      publicModels: normalizePublicStatusModels(group.publicModels),
-    }))
+    initialGroups.map((group) => {
+      const defaultSlug = slugifyGroupName(group.displayName || group.groupName);
+      return {
+        ...group,
+        publicGroupSlug: group.publicGroupSlug?.trim() || defaultSlug,
+        publicModels: normalizePublicStatusModels(group.publicModels),
+      };
+    })
   );
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(initialGroups.map((group) => [group.groupName, !group.enabled]))
@@ -148,7 +184,10 @@ export function PublicStatusSettingsForm({
       >
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="public-status-window-hours">{t("statusPage.form.windowHours")}</Label>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="public-status-window-hours">{t("statusPage.form.windowHours")}</Label>
+              <InfoTip text={t("statusPage.form.windowHoursDesc")} />
+            </div>
             <Input
               id="public-status-window-hours"
               type="number"
@@ -162,9 +201,12 @@ export function PublicStatusSettingsForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="public-status-aggregation-interval">
-              {t("statusPage.form.aggregationIntervalMinutes")}
-            </Label>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="public-status-aggregation-interval">
+                {t("statusPage.form.aggregationIntervalMinutes")}
+              </Label>
+              <InfoTip text={t("statusPage.form.aggregationIntervalMinutesDesc")} />
+            </div>
             <Select
               value={aggregationIntervalMinutes}
               onValueChange={setAggregationIntervalMinutes}
@@ -279,7 +321,10 @@ export function PublicStatusSettingsForm({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>{t("statusPage.form.slug")}</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>{t("statusPage.form.slug")}</Label>
+                        <InfoTip text={t("statusPage.form.slugTooltip")} />
+                      </div>
                       <Input
                         value={group.publicGroupSlug}
                         onChange={(event) =>
@@ -287,7 +332,7 @@ export function PublicStatusSettingsForm({
                             publicGroupSlug: event.target.value,
                           })
                         }
-                        placeholder={group.groupName.toLowerCase()}
+                        placeholder={slugifyGroupName(group.displayName || group.groupName)}
                         disabled={isPending}
                       />
                     </div>
@@ -307,7 +352,10 @@ export function PublicStatusSettingsForm({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>{t("statusPage.form.sortOrder")}</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>{t("statusPage.form.sortOrder")}</Label>
+                        <InfoTip text={t("statusPage.form.sortOrderTooltip")} />
+                      </div>
                       <Input
                         type="number"
                         value={String(group.sortOrder)}

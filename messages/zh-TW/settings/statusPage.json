@@ -2,15 +2,17 @@
   "title": "公開狀態頁面",
   "description": "設定公開狀態頁面的聚合視窗、聚合間隔，以及需要對外展示的分組和模型。",
   "form": {
-    "windowHours": "展示時間長度（小時）",
-    "windowHoursDesc": "控制公開頁面聚合覆蓋的時間視窗。預設 24 小時。",
-    "aggregationIntervalMinutes": "聚合間隔（分鐘）",
-    "aggregationIntervalMinutesDesc": "定時聚合寫入快照的週期。只有在設定了公開分組和模型後才會生效。",
+    "windowHours": "統計視窗（小時）",
+    "windowHoursDesc": "用於計算 TTFB 與在線率的統計視窗長度，也是圖表覆蓋的總時間跨度。預設 24 小時。",
+    "aggregationIntervalMinutes": "圖表分桶（分鐘）",
+    "aggregationIntervalMinutesDesc": "圖表時間軸每個分桶的時長，決定圖表粒度。可選 5 / 15 / 30 / 60 分鐘。",
     "aggregationIntervalMinutesInvalid": "公開狀態聚合間隔只能是 5、15、30、60 分鐘之一。",
     "intervalOption": "{minutes} 分鐘",
     "slug": "Slug",
+    "slugTooltip": "用於分組獨立狀態頁的 URL 識別碼。留空將根據對外顯示名自動產生。只能包含小寫字母、數字與連字號。",
     "copy": "說明文案",
     "sortOrder": "排序",
+    "sortOrderTooltip": "控制公開狀態頁中分組的顯示順序。數值越小越靠前（與供應商優先級一致）。相同數值按分組名排序。",
     "descriptionTooLong": "公開狀態設定超過 provider_groups.description 的 16 KB UTF-8 限制。",
     "projectionPublishFailed": "公開狀態 Redis 投影發布失敗。",
     "groupsTitle": "公開分組與模型",
@@ -41,7 +43,7 @@
   "public": {
     "systemStatus": "系統狀態",
     "heroPrimary": "AI 服務",
-    "heroSecondary": "智慧狀態面板",
+    "heroSecondary": "服務狀態面板",
     "generatedAt": "更新於",
     "ttfb": "TTFB",
     "tps": "TPS",
@@ -85,6 +87,7 @@
     "modelsLabel": "模型",
     "issuesLabel": "異常",
     "clearSearch": "清除搜尋",
-    "dragHandle": "拖曳重排"
+    "dragHandle": "拖曳重排",
+    "openGroupPage": "開啟分組獨立狀態頁"
   }
 }

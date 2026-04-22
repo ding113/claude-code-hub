@@ -15,6 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { Activity } from "lucide-react";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
@@ -76,8 +77,6 @@ interface PublicStatusViewProps {
       availability: string;
       ttfb: string;
       tps: string;
-      samples: string;
-      inferredFromNeighbors: string;
       historyAriaLabel: string;
     };
     searchPlaceholder: string;
@@ -88,6 +87,7 @@ interface PublicStatusViewProps {
     issuesLabel: string;
     clearSearch: string;
     dragHandle: string;
+    openGroupPage: string;
   };
 }
 
@@ -119,11 +119,30 @@ function badgeVariant(state: DisplayState): {
   }
 }
 
-function aggregateOverallState(states: DisplayState[]): DisplayState {
-  if (states.some((s) => s === "failed")) return "failed";
-  if (states.some((s) => s === "degraded")) return "degraded";
-  if (states.some((s) => s === "operational")) return "operational";
-  return "no_data";
+function aggregateGroupState(states: DisplayState[]): DisplayState {
+  const effective = states.filter((s) => s !== "no_data");
+  if (effective.length === 0) return "no_data";
+  const failedCount = effective.filter((s) => s === "failed").length;
+  if (failedCount === effective.length) return "failed";
+  if (failedCount >= 1) return "degraded";
+  return "operational";
+}
+
+function aggregateOverallFromGroups(groupStates: DisplayState[]): DisplayState {
+  const effective = groupStates.filter((s) => s !== "no_data");
+  if (effective.length === 0) return "no_data";
+  const failedCount = effective.filter((s) => s === "failed").length;
+  if (failedCount === effective.length) return "failed";
+  if (failedCount >= 1) return "degraded";
+  return "operational";
+}
+
+function formatTtfb(ms: number | null): string {
+  if (ms === null) return "—";
+  if (ms >= 10000) {
+    return `${(ms / 1000).toFixed(2)} s`;
+  }
+  return `${ms} ms`;
 }
 
 export function PublicStatusView({
@@ -197,10 +216,9 @@ export function PublicStatusView({
         const latest = deriveLatestModelState(model);
         return { model, chartCells, uptime24h, ttfb24h, latest };
       });
-      const issueCount = derivedModels.filter(
-        (d) => d.latest === "failed" || d.latest === "degraded"
-      ).length;
-      return { group, derivedModels, issueCount };
+      const issueCount = derivedModels.filter((d) => d.latest === "failed").length;
+      const groupState = aggregateGroupState(derivedModels.map((d) => d.latest));
+      return { group, derivedModels, issueCount, groupState };
     });
   }, [baseGroups]);
 
@@ -235,8 +253,7 @@ export function PublicStatusView({
   }, [orderedGroups, searchQuery, isFiltering]);
 
   const overallState: DisplayState = useMemo(() => {
-    const states = derivedGroups.flatMap((g) => g.derivedModels.map((d) => d.latest));
-    return aggregateOverallState(states);
+    return aggregateOverallFromGroups(derivedGroups.map((g) => g.groupState));
   }, [derivedGroups]);
 
   const overallLabel = badgeVariant(overallState).label(labels);
@@ -287,11 +304,17 @@ export function PublicStatusView({
     availability: labels.tooltip.availability,
     ttfb: labels.tooltip.ttfb,
     tps: labels.tooltip.tps,
-    samples: labels.tooltip.samples,
-    inferredFromNeighbors: labels.tooltip.inferredFromNeighbors,
     noData: labels.noData,
     historyAriaLabel: labels.tooltip.historyAriaLabel,
   };
+
+  if (payload.groups.length === 0) {
+    return (
+      <div className="cch-status-bg relative flex min-h-screen items-center justify-center text-foreground">
+        <Activity className="size-16 text-muted-foreground/50" aria-hidden="true" />
+      </div>
+    );
+  }
 
   return (
     <div className="cch-status-bg relative min-h-screen text-foreground">
@@ -342,6 +365,7 @@ export function PublicStatusView({
                       key={group.publicGroupSlug}
                       slug={group.publicGroupSlug}
                       displayName={group.displayName}
+                      explanatoryCopy={group.explanatoryCopy}
                       modelCount={entry.derivedModels.length}
                       issueCount={entry.issueCount}
                       open={open}
@@ -350,6 +374,8 @@ export function PublicStatusView({
                       modelBadgeLabel={labels.modelsLabel}
                       issueBadgeLabel={labels.issuesLabel}
                       dragHandleLabel={labels.dragHandle}
+                      groupHref={`/status/${group.publicGroupSlug}`}
+                      groupLinkLabel={labels.openGroupPage}
                     >
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {entry.derivedModels.map(
@@ -394,7 +420,10 @@ export function PublicStatusView({
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                   <div className="rounded-md border border-border/40 bg-muted/20 p-2">
                                     <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      {labels.availability}
+                                      {labels.availability}{" "}
+                                      <span className="normal-case opacity-70">
+                                        ({rangeHours}H)
+                                      </span>
                                     </div>
                                     <div className="mt-1 font-mono text-base">
                                       {uptime24h === null ? "—" : `${uptime24h.toFixed(2)}%`}
@@ -402,10 +431,13 @@ export function PublicStatusView({
                                   </div>
                                   <div className="rounded-md border border-border/40 bg-muted/20 p-2">
                                     <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      {labels.ttfb}
+                                      {labels.ttfb}{" "}
+                                      <span className="normal-case opacity-70">
+                                        ({rangeHours}H)
+                                      </span>
                                     </div>
                                     <div className="mt-1 font-mono text-base">
-                                      {ttfb24h === null ? "—" : `${ttfb24h} ms`}
+                                      {formatTtfb(ttfb24h)}
                                     </div>
                                   </div>
                                 </div>

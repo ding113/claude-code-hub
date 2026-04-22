@@ -99,11 +99,11 @@ describe("fillDisplayTimeline", () => {
     expect(JSON.stringify(original)).toBe(snapshot);
   });
 
-  it("derives degraded for partial availability when filling", () => {
+  it("derives degraded for partial availability below threshold when filling", () => {
     const result = fillDisplayTimeline([
-      bucket("operational", 80, 0),
+      bucket("operational", 30, 0),
       bucket("no_data", null, 1),
-      bucket("operational", 80, 2),
+      bucket("operational", 30, 2),
     ]);
     expect(result.map((c) => c.displayState)).toEqual(["degraded", "degraded", "degraded"]);
   });

@@ -40,16 +40,20 @@ describe("deriveDisplayState", () => {
     expect(deriveDisplayState(makeBucket({ availabilityPct: 100 }))).toBe("operational");
   });
 
-  it("returns degraded when availabilityPct between threshold and 100", () => {
-    expect(deriveDisplayState(makeBucket({ availabilityPct: 80 }))).toBe("degraded");
+  it("returns degraded when availabilityPct below threshold", () => {
+    expect(deriveDisplayState(makeBucket({ availabilityPct: 30 }))).toBe("degraded");
+    expect(deriveDisplayState(makeBucket({ availabilityPct: 0 }))).toBe("degraded");
+  });
+
+  it("returns operational when availabilityPct between threshold and 100", () => {
+    expect(deriveDisplayState(makeBucket({ availabilityPct: 80 }))).toBe("operational");
     expect(deriveDisplayState(makeBucket({ availabilityPct: DEGRADED_THRESHOLD }))).toBe(
-      "degraded"
+      "operational"
     );
   });
 
-  it("collapses to failed when availabilityPct below threshold", () => {
-    expect(deriveDisplayState(makeBucket({ availabilityPct: 30 }))).toBe("failed");
-    expect(deriveDisplayState(makeBucket({ availabilityPct: 0 }))).toBe("failed");
+  it("returns operational when availabilityPct is below 100 but not below threshold", () => {
+    expect(deriveDisplayState(makeBucket({ availabilityPct: 99 }))).toBe("operational");
   });
 });
 
@@ -97,11 +101,11 @@ describe("deriveLatestModelState", () => {
     expect(result).toBe("degraded");
   });
 
-  it("returns degraded when last known availability is partial", () => {
+  it("returns operational when last known availability is partial but >= threshold", () => {
     const result = deriveLatestModelState({
       latestState: "operational",
       timeline: [makeBucket({ state: "operational", availabilityPct: 75 })],
     });
-    expect(result).toBe("degraded");
+    expect(result).toBe("operational");
   });
 });
