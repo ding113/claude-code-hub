@@ -1,16 +1,18 @@
 {
   "title": "公開ステータスページ",
-  "description": "公開ステータスページの集計期間、集計間隔、および公開するグループ/モデルを設定します。",
+  "description": "公開ステータスページの統計ウィンドウ、チャートのバケットサイズ、および公開するグループ/モデルを設定します。",
   "form": {
-    "windowHours": "表示期間（時間）",
-    "windowHoursDesc": "公開ページが集計する履歴期間を指定します。既定値は 24 時間です。",
-    "aggregationIntervalMinutes": "集計間隔（分）",
-    "aggregationIntervalMinutesDesc": "バックグラウンド集計がスナップショットを更新する周期です。公開グループとモデルが設定された場合のみ有効になります。",
+    "windowHours": "統計ウィンドウ（時間）",
+    "windowHoursDesc": "TTFB と可用率の算出に使う統計期間であり、チャートがカバーする総期間でもあります。既定値は 24 時間です。",
+    "aggregationIntervalMinutes": "チャートのバケット（分）",
+    "aggregationIntervalMinutesDesc": "チャート時間軸の各バケットの長さで、チャートの粒度を決定します。5 / 15 / 30 / 60 分から選択できます。",
     "aggregationIntervalMinutesInvalid": "公開ステータスの集計間隔は 5、15、30、60 分のいずれかである必要があります。",
     "intervalOption": "{minutes} 分",
     "slug": "Slug",
+    "slugTooltip": "グループ専用ステータスページの URL 識別子。空欄の場合は公開表示名から自動生成されます。小文字、数字、ハイフンのみ使用可能です。",
     "copy": "説明文",
     "sortOrder": "並び順",
+    "sortOrderTooltip": "公開ステータスページでの表示順。値が小さいほど先頭に表示されます（プロバイダー優先度と同じ規則）。同値の場合はグループ名順となります。",
     "descriptionTooLong": "公開ステータス設定が provider_groups.description の 16 KB UTF-8 制限を超えています。",
     "projectionPublishFailed": "公開ステータスの Redis 投影の公開に失敗しました。",
     "groupsTitle": "公開グループとモデル",
@@ -41,7 +43,7 @@
   "public": {
     "systemStatus": "システム状態",
     "heroPrimary": "AI SERVICES",
-    "heroSecondary": "INTELLIGENCE MONITOR",
+    "heroSecondary": "SERVICE STATUS DASHBOARD",
     "generatedAt": "更新",
     "ttfb": "TTFB",
     "tps": "TPS",
@@ -85,6 +87,8 @@
     "modelsLabel": "モデル",
     "issuesLabel": "異常",
     "clearSearch": "検索をクリア",
-    "dragHandle": "ドラッグして並べ替え"
+    "dragHandle": "ドラッグして並べ替え",
+    "toggleGroup": "グループを展開または折りたたむ",
+    "openGroupPage": "グループ専用ステータスページを開く"
   }
 }

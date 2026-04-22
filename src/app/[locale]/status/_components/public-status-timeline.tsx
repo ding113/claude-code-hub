@@ -3,13 +3,12 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { FilledTimelineCell } from "../_lib/fill-display-timeline";
+import { formatTtfb } from "../_lib/format-ttfb";
 
 export interface PublicStatusTimelineLabels {
   availability: string;
   ttfb: string;
   tps: string;
-  samples: string;
-  inferredFromNeighbors: string;
   noData: string;
   historyAriaLabel: string;
 }
@@ -21,17 +20,28 @@ interface PublicStatusTimelineProps {
   labels: PublicStatusTimelineLabels;
 }
 
-function cellColor(state: FilledTimelineCell["displayState"], inferred: boolean): string {
-  switch (state) {
-    case "operational":
-      return inferred ? "bg-emerald-500/60" : "bg-emerald-500";
-    case "degraded":
-      return inferred ? "bg-amber-500/60" : "bg-amber-500";
-    case "failed":
-      return inferred ? "bg-rose-500/60" : "bg-rose-500";
-    default:
-      return "bg-muted/40";
+function cellColor(cell: FilledTimelineCell): string {
+  const { displayState, inferred, bucket } = cell;
+  if (displayState === "no_data") {
+    return "bg-muted/40";
   }
+  if (displayState === "failed" || bucket.state === "failed") {
+    return inferred ? "bg-rose-500/60" : "bg-rose-500";
+  }
+  const pct = bucket.availabilityPct;
+  if (pct === null) {
+    return displayState === "degraded"
+      ? inferred
+        ? "bg-amber-500/60"
+        : "bg-amber-500"
+      : inferred
+        ? "bg-emerald-500/60"
+        : "bg-emerald-500";
+  }
+  if (pct >= 90) return inferred ? "bg-emerald-500/60" : "bg-emerald-500";
+  if (pct >= 80) return inferred ? "bg-amber-400/60" : "bg-amber-400";
+  if (pct >= 60) return inferred ? "bg-orange-500/60" : "bg-orange-500";
+  return inferred ? "bg-rose-500/60" : "bg-rose-500";
 }
 
 function formatRange(start: string, end: string, locale: string, timeZone: string): string {
@@ -72,7 +82,7 @@ export function PublicStatusTimeline({
         aria-label={labels.historyAriaLabel}
       >
         {cells.map((cell, index) => {
-          const { bucket, displayState, inferred } = cell;
+          const { bucket } = cell;
           const isPlaceholder = bucket.bucketStart.startsWith("empty-");
           return (
             <Tooltip key={`${bucket.bucketStart}-${index}`}>
@@ -83,7 +93,7 @@ export function PublicStatusTimeline({
                   aria-label={`${labels.availability}: ${bucket.availabilityPct ?? "—"}`}
                   className={cn(
                     "h-6 flex-1 rounded-[2px] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring",
-                    cellColor(displayState, inferred)
+                    cellColor(cell)
                   )}
                 />
               </TooltipTrigger>
@@ -104,21 +114,12 @@ export function PublicStatusTimeline({
                       : `${bucket.availabilityPct.toFixed(2)}%`}
                   </span>
                   <span className="text-muted-foreground">{labels.ttfb}</span>
-                  <span className="text-right">
-                    {bucket.ttfbMs === null ? "—" : `${bucket.ttfbMs} ms`}
-                  </span>
+                  <span className="text-right">{formatTtfb(bucket.ttfbMs)}</span>
                   <span className="text-muted-foreground">{labels.tps}</span>
                   <span className="text-right">
                     {bucket.tps === null ? "—" : bucket.tps.toFixed(1)}
                   </span>
-                  <span className="text-muted-foreground">{labels.samples}</span>
-                  <span className="text-right">{bucket.sampleCount}</span>
                 </div>
-                {inferred && !isPlaceholder ? (
-                  <p className="text-[10px] text-muted-foreground">
-                    {labels.inferredFromNeighbors}
-                  </p>
-                ) : null}
               </TooltipContent>
             </Tooltip>
           );
