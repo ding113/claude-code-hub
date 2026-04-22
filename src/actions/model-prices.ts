@@ -316,21 +316,26 @@ export interface AvailableModelCatalogItem {
   updatedAt: string;
 }
 
+export type AvailableModelCatalogScope = "chat" | "all";
+
 /**
- * 获取本地价格表中的聊天模型目录。
- * 供供应商白名单模型选择器回退使用，按更新时间倒序返回。
+ * 获取本地价格表中的模型目录。
+ * 默认只返回聊天模型；调用方可显式放宽到任意类型。
  */
-export async function getAvailableModelCatalog(): Promise<AvailableModelCatalogItem[]> {
+export async function getAvailableModelCatalog(options?: {
+  scope?: AvailableModelCatalogScope;
+}): Promise<AvailableModelCatalogItem[]> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return [];
     }
 
+    const scope = options?.scope ?? "chat";
     const allPrices = await findAllLatestPrices();
 
     return allPrices
-      .filter((price) => price.priceData.mode === "chat")
+      .filter((price) => scope === "all" || price.priceData.mode === "chat")
       .sort((left, right) => {
         const timeDelta = right.updatedAt.getTime() - left.updatedAt.getTime();
         if (timeDelta !== 0) {
@@ -407,7 +412,7 @@ export async function hasPriceTable(): Promise<boolean> {
  */
 export async function getAvailableModelsByProviderType(): Promise<string[]> {
   try {
-    const catalog = await getAvailableModelCatalog();
+    const catalog = await getAvailableModelCatalog({ scope: "chat" });
     return catalog.map((item) => item.modelName);
   } catch (error) {
     logger.error("获取可用模型列表失败:", error);

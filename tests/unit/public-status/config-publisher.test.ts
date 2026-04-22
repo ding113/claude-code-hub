@@ -116,5 +116,50 @@ describe("public-status config publisher", () => {
         }),
       })
     );
+  }, 20_000);
+
+  it("uses shared model-prefix matching for vendor icons without changing request type badges", async () => {
+    mockFindAllProviderGroups.mockResolvedValue([
+      {
+        id: 1,
+        name: "mixed",
+        description: JSON.stringify({
+          version: 2,
+          publicStatus: {
+            displayName: "Mixed",
+            publicModels: [{ modelKey: "qwen-max" }, { modelKey: "deepseek-chat" }],
+          },
+        }),
+      },
+    ]);
+
+    const mod = await import("@/lib/public-status/config-publisher");
+    await mod.publishCurrentPublicStatusConfigProjection({
+      reason: "test",
+      configVersion: "cfg-test",
+    });
+
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          groups: [
+            expect.objectContaining({
+              models: [
+                expect.objectContaining({
+                  publicModelKey: "qwen-max",
+                  vendorIconKey: "qwen",
+                  requestTypeBadge: "openaiCompatible",
+                }),
+                expect.objectContaining({
+                  publicModelKey: "deepseek-chat",
+                  vendorIconKey: "deepseek",
+                  requestTypeBadge: "openaiCompatible",
+                }),
+              ],
+            }),
+          ],
+        }),
+      })
+    );
   });
 });

@@ -1,10 +1,9 @@
 "use client";
 
-import { Azure, Bedrock, Claude, Gemini, OpenAI } from "@lobehub/icons";
-import { Bot } from "lucide-react";
 import { startTransition, useEffect, useState } from "react";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import type { PublicStatusPayload, PublicStatusTimelineBucket } from "@/lib/public-status/payload";
+import { getPublicStatusVendorIconComponent } from "@/lib/public-status/vendor-icon";
 import { PublicStatusTimeline } from "./public-status-timeline";
 
 interface PublicStatusViewProps {
@@ -57,23 +56,6 @@ function resolveStateLabel(
     return labels.noData;
   }
   return labels.fresh;
-}
-
-function resolveVendorIcon(vendorIconKey: string) {
-  switch (vendorIconKey) {
-    case "openai":
-      return OpenAI;
-    case "anthropic":
-      return Claude.Color;
-    case "gemini":
-      return Gemini.Color;
-    case "azure":
-      return Azure;
-    case "bedrock":
-      return Bedrock;
-    default:
-      return Bot;
-  }
 }
 
 export function PublicStatusView({
@@ -213,7 +195,10 @@ export function PublicStatusView({
 
               <div className="grid gap-4 xl:grid-cols-2">
                 {group.models.map((model) => {
-                  const VendorIcon = resolveVendorIcon(model.vendorIconKey);
+                  const { iconKey, Icon: VendorIcon } = getPublicStatusVendorIconComponent({
+                    modelName: model.publicModelKey,
+                    vendorIconKey: model.vendorIconKey,
+                  });
 
                   return (
                     <article
@@ -223,7 +208,10 @@ export function PublicStatusView({
                       <div className="mb-4 flex items-start justify-between gap-4">
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-muted/40">
+                            <span
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-muted/40"
+                              data-vendor-icon-key={iconKey}
+                            >
                               <VendorIcon className="h-4 w-4" />
                             </span>
                             <h3 className="text-lg font-semibold">{model.label}</h3>

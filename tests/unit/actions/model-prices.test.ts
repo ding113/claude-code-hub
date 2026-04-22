@@ -92,6 +92,48 @@ describe("Model Price Actions", () => {
     findAllLatestPricesMock.mockResolvedValue([]);
   });
 
+  describe("getAvailableModelCatalog", () => {
+    it("returns chat models only by default", async () => {
+      findAllLatestPricesMock.mockResolvedValue([
+        makeMockPrice("gpt-4.1", { mode: "chat" }),
+        makeMockPrice("gpt-image-2", { mode: "image_generation" }),
+      ]);
+
+      const { getAvailableModelCatalog } = await import("@/actions/model-prices");
+      const result = await getAvailableModelCatalog();
+
+      expect(result.map((item) => item.modelName)).toEqual(["gpt-4.1"]);
+    });
+
+    it("returns all model types when scope is all", async () => {
+      findAllLatestPricesMock.mockResolvedValue([
+        makeMockPrice("gpt-image-2", { mode: "image_generation" }),
+        makeMockPrice("gpt-4.1", { mode: "chat" }),
+      ]);
+
+      const { getAvailableModelCatalog } = await import("@/actions/model-prices");
+      const result = await getAvailableModelCatalog({ scope: "all" });
+
+      expect(result.map((item) => item.modelName)).toEqual(
+        expect.arrayContaining(["gpt-image-2", "gpt-4.1"])
+      );
+    });
+  });
+
+  describe("getAvailableModelsByProviderType", () => {
+    it("keeps using the chat-only catalog", async () => {
+      findAllLatestPricesMock.mockResolvedValue([
+        makeMockPrice("gpt-4.1", { mode: "chat" }),
+        makeMockPrice("gpt-image-2", { mode: "image_generation" }),
+      ]);
+
+      const { getAvailableModelsByProviderType } = await import("@/actions/model-prices");
+      const result = await getAvailableModelsByProviderType();
+
+      expect(result).toEqual(["gpt-4.1"]);
+    });
+  });
+
   describe("upsertSingleModelPrice", () => {
     it("should create a new model price for admin", async () => {
       const mockResult = makeMockPrice("gpt-5.2-codex", {

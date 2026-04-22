@@ -234,4 +234,124 @@ describe("public-status view", () => {
     vi.useRealTimers();
     unmount();
   });
+
+  it("falls back to shared model-prefix vendor icons when payload vendorIconKey is generic", () => {
+    const { container, unmount } = render(
+      <PublicStatusView
+        initialPayload={buildPayload({
+          groups: [
+            {
+              publicGroupSlug: "mixed",
+              displayName: "Mixed",
+              explanatoryCopy: "Prefix-matched icons",
+              models: [
+                {
+                  publicModelKey: "qwen-max",
+                  label: "Qwen Max",
+                  vendorIconKey: "generic",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "operational",
+                  availabilityPct: 99.9,
+                  latestTtfbMs: 420,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+          ],
+        })}
+        intervalMinutes={5}
+        rangeHours={24}
+        locale="en"
+        timeZone="UTC"
+        labels={{
+          systemStatus: "System Status",
+          heroPrimary: "AI SERVICES",
+          heroSecondary: "INTELLIGENCE MONITOR",
+          generatedAt: "Updated",
+          history: "History",
+          availability: "Availability",
+          ttfb: "TTFB",
+          freshnessWindow: "Snapshot freshness",
+          fresh: "Fresh",
+          stale: "Stale",
+          staleDetail: "Refresh delayed",
+          rebuilding: "Rebuilding",
+          noData: "No data",
+          emptyDescription: "Preparing first snapshot",
+          requestTypes: {
+            openaiCompatible: "OpenAI Compatible",
+            codex: "Codex",
+            anthropic: "Anthropic",
+            gemini: "Gemini",
+          },
+        }}
+        siteTitle="Acme AI Hub"
+      />
+    );
+
+    expect(container.querySelector('[data-vendor-icon-key="qwen"]')).not.toBeNull();
+
+    unmount();
+  });
+
+  it("keeps explicit vendorIconKey when the model prefix itself is ambiguous", () => {
+    const { container, unmount } = render(
+      <PublicStatusView
+        initialPayload={buildPayload({
+          groups: [
+            {
+              publicGroupSlug: "mixed",
+              displayName: "Mixed",
+              explanatoryCopy: "Override icon",
+              models: [
+                {
+                  publicModelKey: "reasoner-pro",
+                  label: "Reasoner Pro",
+                  vendorIconKey: "gemini",
+                  requestTypeBadge: "gemini",
+                  latestState: "operational",
+                  availabilityPct: 99.9,
+                  latestTtfbMs: 420,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+          ],
+        })}
+        intervalMinutes={5}
+        rangeHours={24}
+        locale="en"
+        timeZone="UTC"
+        labels={{
+          systemStatus: "System Status",
+          heroPrimary: "AI SERVICES",
+          heroSecondary: "INTELLIGENCE MONITOR",
+          generatedAt: "Updated",
+          history: "History",
+          availability: "Availability",
+          ttfb: "TTFB",
+          freshnessWindow: "Snapshot freshness",
+          fresh: "Fresh",
+          stale: "Stale",
+          staleDetail: "Refresh delayed",
+          rebuilding: "Rebuilding",
+          noData: "No data",
+          emptyDescription: "Preparing first snapshot",
+          requestTypes: {
+            openaiCompatible: "OpenAI Compatible",
+            codex: "Codex",
+            anthropic: "Anthropic",
+            gemini: "Gemini",
+          },
+        }}
+        siteTitle="Acme AI Hub"
+      />
+    );
+
+    expect(container.querySelector('[data-vendor-icon-key="gemini"]')).not.toBeNull();
+
+    unmount();
+  });
 });

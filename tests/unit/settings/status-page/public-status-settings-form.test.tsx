@@ -10,6 +10,7 @@ import { PublicStatusSettingsForm } from "@/app/[locale]/settings/status-page/_c
 
 const mockRefresh = vi.hoisted(() => vi.fn());
 const mockSavePublicStatusSettings = vi.hoisted(() => vi.fn());
+const modelMultiSelectPropsSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -31,20 +32,28 @@ vi.mock("@/i18n/routing", () => ({
 
 vi.mock("@/app/[locale]/settings/providers/_components/model-multi-select", () => ({
   ModelMultiSelect: ({
+    catalogScope,
+    providerType,
     selectedModels,
     onChange,
   }: {
+    catalogScope?: string;
+    providerType?: string;
     selectedModels: string[];
     onChange: (models: string[]) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="public-status-model-picker"
-      onClick={() => onChange([...selectedModels, "gpt-4.1"])}
-    >
-      picker
-    </button>
-  ),
+  }) => {
+    modelMultiSelectPropsSpy({ catalogScope, providerType, selectedModels });
+
+    return (
+      <button
+        type="button"
+        data-testid="public-status-model-picker"
+        onClick={() => onChange([...selectedModels, "gpt-4.1"])}
+      >
+        picker
+      </button>
+    );
+  },
 }));
 
 vi.mock("@/components/section", () => ({
@@ -194,6 +203,12 @@ describe("public-status settings form", () => {
 
     expect(container.querySelector('[data-testid="public-status-model-picker"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="public-status-preview-link"]')).not.toBeNull();
+    expect(modelMultiSelectPropsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogScope: "all",
+        providerType: "openai-compatible",
+      })
+    );
 
     unmount();
   });

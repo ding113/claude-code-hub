@@ -324,6 +324,7 @@ export function PublicStatusSettingsForm({
                       <Label>{t("statusPage.form.models")}</Label>
                       <ModelMultiSelect
                         providerType="openai-compatible"
+                        catalogScope="all"
                         selectedModels={selectedModelKeys}
                         emptyLabel={t("statusPage.form.modelsEmpty")}
                         onChange={(nextModelKeys) =>
