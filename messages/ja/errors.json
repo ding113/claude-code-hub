@@ -36,6 +36,7 @@
   "NOT_FOUND": "リソースが見つかりません",
   "OPERATION_FAILED": "操作に失敗しました",
   "USER_5H_FIXED_RESET_REQUIRES_REDIS": "固定 5H 制限のリセットには Redis が必要です",
+  "USER_5H_RESET_COMPENSATION_REQUIRED": "Redis クリーンアップ失敗後に 5H リセットを完全にロールバックできませんでした。状態を確認してください",
   "USER_5H_RESET_REQUIRES_REDIS": "5H 制限のリセットには Redis が必要です",
   "USER_5H_LIMIT_NOT_CONFIGURED": "このユーザーにはユーザーレベルの 5H 制限が設定されていません",
   "CREATE_FAILED": "作成に失敗しました。後でもう一度お試しください",

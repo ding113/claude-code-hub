@@ -223,6 +223,30 @@ describe("resetUser5hLimitOnly", () => {
     });
     expect(emitActionAuditMock).not.toHaveBeenCalled();
   });
+
+  test("rolling mode surfaces a compensation-required error when rollback also fails", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    findUserByIdMock.mockResolvedValue({
+      id: 123,
+      name: "Test User",
+      limit5hUsd: 5,
+      limit5hResetMode: "rolling",
+      limit5hCostResetAt: new Date("2026-04-21T00:00:00.000Z"),
+    });
+    clearUser5hCostCacheMock.mockResolvedValue(null);
+    updateUserCostResetMarkersMock
+      .mockResolvedValueOnce(true)
+      .mockRejectedValueOnce(new Error("rollback failed"));
+
+    const { resetUser5hLimitOnly } = await import(
+      "@/app/[locale]/dashboard/_components/user/actions/reset-user-5h-limit"
+    );
+    const result = await resetUser5hLimitOnly(123);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("USER_5H_RESET_COMPENSATION_REQUIRED");
+    expect(emitActionAuditMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("full reset compatibility with user 5h marker", () => {

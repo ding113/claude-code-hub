@@ -69,7 +69,7 @@ export async function resetUser5hLimitOnly(
     const cleanupResult = await clearUser5hCostCache({ userId, resetMode });
     if (!cleanupResult) {
       if (resetMode === "rolling") {
-        await updateUserCostResetMarkers(userId, {
+        const rolledBack = await updateUserCostResetMarkers(userId, {
           limit5hCostResetAt: previousLimit5hCostResetAt,
         }).catch((rollbackError) => {
           logger.error("Failed to roll back user 5h reset marker after Redis cleanup failure", {
@@ -77,7 +77,15 @@ export async function resetUser5hLimitOnly(
             rollbackError:
               rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
           });
+          return false;
         });
+        if (!rolledBack) {
+          return {
+            ok: false,
+            error: tError("USER_5H_RESET_COMPENSATION_REQUIRED"),
+            errorCode: ERROR_CODES.OPERATION_FAILED,
+          };
+        }
       }
       return {
         ok: false,
