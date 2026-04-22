@@ -10,7 +10,11 @@ import { lookupIp } from "@/lib/ip-geo/client";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
-import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
+import {
+  clipStartByResetAt,
+  resolveKeyCostResetAt,
+  resolveUser5hCostResetAt,
+} from "@/lib/rate-limit/cost-reset-utils";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
@@ -318,16 +322,16 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
-    // Clip time range starts by costResetAt (for limits-only reset)
-    // Key uses MAX(key.costResetAt, user.costResetAt); User uses only user.costResetAt
+    // full reset 继续影响所有窗口；5H-only reset 只额外推进用户聚合 5H 的起点。
     const userCostResetAt = user.costResetAt ?? null;
+    const user5hCostResetAt = resolveUser5hCostResetAt(
+      user.costResetAt ?? null,
+      user.limit5hCostResetAt ?? null
+    );
     const keyCostResetAtResolved = resolveKeyCostResetAt(key.costResetAt ?? null, userCostResetAt);
-    const keyClipStart = (start: Date): Date =>
-      keyCostResetAtResolved instanceof Date && keyCostResetAtResolved > start
-        ? keyCostResetAtResolved
-        : start;
-    const userClipStart = (start: Date): Date =>
-      userCostResetAt instanceof Date && userCostResetAt > start ? userCostResetAt : start;
+    const keyClipStart = (start: Date): Date => clipStartByResetAt(start, keyCostResetAtResolved);
+    const userClipStart = (start: Date): Date => clipStartByResetAt(start, userCostResetAt);
+    const user5hClipStart = (start: Date): Date => clipStartByResetAt(start, user5hCostResetAt);
 
     const keyClippedRange5h = {
       startTime: keyClipStart(range5h.startTime),
@@ -347,7 +351,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     };
 
     const userClippedRange5h = {
-      startTime: userClipStart(range5h.startTime),
+      startTime: user5hClipStart(range5h.startTime),
       endTime: range5h.endTime,
     };
     const userClippedRangeWeekly = {
@@ -413,7 +417,11 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
         "user",
         "5h",
         "00:00",
-        user.limit5hResetMode ?? "rolling"
+        user.limit5hResetMode ?? "rolling",
+        {
+          costResetAt: user.costResetAt ?? null,
+          limit5hCostResetAt: user.limit5hCostResetAt ?? null,
+        }
       ),
       getUserConcurrentSessions(user.id),
     ]);

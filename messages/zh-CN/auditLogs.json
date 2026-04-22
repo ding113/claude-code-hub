@@ -38,7 +38,8 @@
     "user": {
       "create": "创建用户",
       "update": "更新用户",
-      "delete": "删除用户"
+      "delete": "删除用户",
+      "reset_5h_limit": "重置用户 5H 限额"
     },
     "provider": {
       "create": "创建供应商",

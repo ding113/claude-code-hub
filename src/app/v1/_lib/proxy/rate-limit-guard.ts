@@ -1,7 +1,7 @@
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
-import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
+import { resolveKeyCostResetAt, resolveUser5hCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { getResetInfo, getResetInfoWithMode } from "@/lib/rate-limit/time-utils";
 import { SessionManager } from "@/lib/session-manager";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
@@ -59,6 +59,10 @@ export class ProxyRateLimitGuard {
     if (!user || !key) return;
 
     const keyCostResetAt = resolveKeyCostResetAt(key.costResetAt ?? null, user.costResetAt ?? null);
+    const user5hCostResetAt = resolveUser5hCostResetAt(
+      user.costResetAt ?? null,
+      user.limit5hCostResetAt ?? null
+    );
 
     // ========== 第一层：永久硬限制 ==========
 
@@ -282,6 +286,7 @@ export class ProxyRateLimitGuard {
       limit_weekly_usd: null,
       limit_monthly_usd: null,
       cost_reset_at: user.costResetAt ?? null,
+      limit_5h_cost_reset_at: user5hCostResetAt,
     });
 
     if (!user5hCheck.allowed) {

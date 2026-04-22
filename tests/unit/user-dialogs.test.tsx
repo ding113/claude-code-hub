@@ -42,6 +42,9 @@ vi.mock("@/i18n/routing", () => ({
 const mockEditUser = vi.fn().mockResolvedValue({ ok: true });
 const mockRemoveUser = vi.fn().mockResolvedValue({ ok: true });
 const mockToggleUserEnabled = vi.fn().mockResolvedValue({ ok: true });
+const mockResetUser5hLimitOnly = vi.fn().mockResolvedValue({ ok: true });
+const mockResetUserLimitsOnly = vi.fn().mockResolvedValue({ ok: true });
+const mockResetUserAllStatistics = vi.fn().mockResolvedValue({ ok: true });
 const mockAddKey = vi.fn().mockResolvedValue({ ok: true, data: { key: "sk-test-key" } });
 const mockEditKey = vi.fn().mockResolvedValue({ ok: true });
 const mockCreateUserOnly = vi.fn().mockResolvedValue({ ok: true, data: { user: { id: 1 } } });
@@ -50,7 +53,13 @@ vi.mock("@/actions/users", () => ({
   editUser: (...args: unknown[]) => mockEditUser(...args),
   removeUser: (...args: unknown[]) => mockRemoveUser(...args),
   toggleUserEnabled: (...args: unknown[]) => mockToggleUserEnabled(...args),
+  resetUserLimitsOnly: (...args: unknown[]) => mockResetUserLimitsOnly(...args),
+  resetUserAllStatistics: (...args: unknown[]) => mockResetUserAllStatistics(...args),
   createUserOnly: (...args: unknown[]) => mockCreateUserOnly(...args),
+}));
+
+vi.mock("@/app/[locale]/dashboard/_components/user/actions/reset-user-5h-limit", () => ({
+  resetUser5hLimitOnly: (...args: unknown[]) => mockResetUser5hLimitOnly(...args),
 }));
 
 vi.mock("@/actions/keys", () => ({
@@ -235,6 +244,8 @@ const mockUser: UserDisplay = {
   providerGroup: "default",
   tags: ["test"],
   keys: [],
+  limit5hUsd: 5,
+  limit5hResetMode: "rolling",
   isEnabled: true,
   expiresAt: null,
 };
@@ -321,6 +332,52 @@ describe("EditUserDialog", () => {
 
     expect(buttonTexts).toContain("Save");
     expect(buttonTexts).toContain("Cancel");
+
+    unmount();
+  });
+
+  test("EditUserDialog renders reset 5h button beside reset all limits button", () => {
+    const onOpenChange = vi.fn();
+
+    const { container, unmount } = renderWithProviders(
+      <EditUserDialog open={true} onOpenChange={onOpenChange} user={mockUser} />
+    );
+
+    const buttonTexts = Array.from(container.querySelectorAll("button")).map((button) =>
+      button.textContent?.trim()
+    );
+
+    expect(buttonTexts).toContain(messages.dashboard.userManagement.editDialog.reset5h.button);
+    expect(buttonTexts).toContain(messages.dashboard.userManagement.editDialog.resetLimits.button);
+
+    unmount();
+  });
+
+  test("EditUserDialog disables reset 5h button when no 5h limit is configured", () => {
+    const onOpenChange = vi.fn();
+    const userWithout5hLimit: UserDisplay = {
+      ...mockUser,
+      limit5hUsd: null,
+    };
+
+    const { container, unmount } = renderWithProviders(
+      <EditUserDialog open={true} onOpenChange={onOpenChange} user={userWithout5hLimit} />
+    );
+
+    const reset5hButton = Array.from(container.querySelectorAll("button")).find(
+      (button) =>
+        button.textContent?.trim() === messages.dashboard.userManagement.editDialog.reset5h.button
+    );
+
+    expect(reset5hButton).toBeDefined();
+    expect(reset5hButton?.hasAttribute("disabled")).toBe(true);
+    expect(
+      Array.from(container.querySelectorAll("button")).some(
+        (button) =>
+          button.textContent?.trim() ===
+          messages.dashboard.userManagement.editDialog.resetLimits.button
+      )
+    ).toBe(true);
 
     unmount();
   });

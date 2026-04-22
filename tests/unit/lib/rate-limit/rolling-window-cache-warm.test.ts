@@ -89,6 +89,26 @@ describe("RateLimitService rolling window cache warm", () => {
     expect(first[3]).toBe(`${nowMs - 4 * 60 * 60 * 1000}:101:1.5`);
   });
 
+  it("getCurrentCost(5h) clips user cache-miss rebuild by the later 5h reset marker", async () => {
+    const limit5hCostResetAt = new Date(nowMs - 2 * 60 * 60 * 1000);
+    statisticsMock.findUserCostEntriesInTimeRange.mockResolvedValueOnce([
+      { id: 201, createdAt: new Date(nowMs - 60 * 60 * 1000), costUsd: 2.5 },
+    ]);
+
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    const current = await RateLimitService.getCurrentCost(7, "user", "5h", "00:00", "rolling", {
+      costResetAt: new Date(nowMs - 3 * 60 * 60 * 1000),
+      limit5hCostResetAt,
+    });
+
+    expect(current).toBeCloseTo(2.5, 10);
+    expect(statisticsMock.findUserCostEntriesInTimeRange).toHaveBeenCalledWith(
+      7,
+      limit5hCostResetAt,
+      new Date(nowMs)
+    );
+  });
+
   it("trackCost passes requestId and uses createdAtMs for rolling windows", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 

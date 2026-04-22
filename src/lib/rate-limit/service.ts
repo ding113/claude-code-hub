@@ -88,6 +88,7 @@ import {
   sumUserCostInTimeRange,
   sumUserTotalCost,
 } from "@/repository/statistics";
+import { clipStartByResetAt, resolveUser5hCostResetAt } from "./cost-reset-utils";
 import type { LeaseWindowType } from "./lease";
 import { type DecrementLeaseBudgetResult, LeaseService } from "./lease-service";
 import {
@@ -240,6 +241,7 @@ export class RateLimitService {
       limit_weekly_usd: number | null;
       limit_monthly_usd: number | null;
       cost_reset_at?: Date | null;
+      limit_5h_cost_reset_at?: Date | null;
     }
   ): Promise<{ allowed: boolean; reason?: string }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
@@ -302,7 +304,8 @@ export class RateLimitService {
                     id,
                     type,
                     costLimits,
-                    limits.cost_reset_at
+                    limits.cost_reset_at,
+                    limits.limit_5h_cost_reset_at
                   );
                 }
               }
@@ -315,7 +318,8 @@ export class RateLimitService {
                 id,
                 type,
                 costLimits,
-                limits.cost_reset_at
+                limits.cost_reset_at,
+                limits.limit_5h_cost_reset_at
               );
             }
           } else if (limit.period === "daily" && limit.resetMode === "rolling") {
@@ -344,7 +348,8 @@ export class RateLimitService {
                     id,
                     type,
                     costLimits,
-                    limits.cost_reset_at
+                    limits.cost_reset_at,
+                    limits.limit_5h_cost_reset_at
                   );
                 }
               }
@@ -357,7 +362,8 @@ export class RateLimitService {
                 id,
                 type,
                 costLimits,
-                limits.cost_reset_at
+                limits.cost_reset_at,
+                limits.limit_5h_cost_reset_at
               );
             }
           } else {
@@ -375,7 +381,8 @@ export class RateLimitService {
                 id,
                 type,
                 costLimits,
-                limits.cost_reset_at
+                limits.cost_reset_at,
+                limits.limit_5h_cost_reset_at
               );
             }
 
@@ -400,7 +407,8 @@ export class RateLimitService {
         id,
         type,
         costLimits,
-        limits.cost_reset_at
+        limits.cost_reset_at,
+        limits.limit_5h_cost_reset_at
       );
     } catch (error) {
       logger.error("[RateLimit] Check failed, fallback to database:", error);
@@ -408,7 +416,8 @@ export class RateLimitService {
         id,
         type,
         costLimits,
-        limits.cost_reset_at
+        limits.cost_reset_at,
+        limits.limit_5h_cost_reset_at
       );
     }
   }
@@ -522,7 +531,8 @@ export class RateLimitService {
     id: number,
     type: "key" | "provider" | "user",
     costLimits: CostLimit[],
-    costResetAt?: Date | null
+    costResetAt?: Date | null,
+    limit5hCostResetAt?: Date | null
   ): Promise<{ allowed: boolean; reason?: string }> {
     const {
       findKeyCostEntriesInTimeRange,
@@ -556,8 +566,13 @@ export class RateLimitService {
       );
 
       // Clip startTime forward if costResetAt is more recent
-      const effectiveStartTime =
-        costResetAt instanceof Date && costResetAt > startTime ? costResetAt : startTime;
+      // 仅 rolling 5h 需要使用 later-of(costResetAt, limit5hCostResetAt)；
+      // 其它窗口继续沿用 full reset 边界，避免 5h-only reset 污染更长窗口。
+      const effectiveResetAt =
+        type === "user" && limit.period === "5h" && limit.resetMode !== "fixed"
+          ? resolveUser5hCostResetAt(costResetAt, limit5hCostResetAt)
+          : costResetAt;
+      const effectiveStartTime = clipStartByResetAt(startTime, effectiveResetAt);
 
       // 查询数据库
       let current = 0;
@@ -1025,7 +1040,11 @@ export class RateLimitService {
     type: "key" | "provider" | "user",
     period: "5h" | "daily" | "weekly" | "monthly",
     resetTime = "00:00",
-    resetMode?: DailyResetMode
+    resetMode?: DailyResetMode,
+    options?: {
+      costResetAt?: Date | null;
+      limit5hCostResetAt?: Date | null;
+    }
   ): Promise<number> {
     try {
       const effectiveResetMode = resetMode ?? (period === "5h" ? "rolling" : "fixed");
@@ -1134,6 +1153,11 @@ export class RateLimitService {
         dailyResetInfo.normalized,
         effectiveResetMode
       );
+      const effectiveResetAt =
+        type === "user" && period === "5h" && effectiveResetMode === "rolling"
+          ? resolveUser5hCostResetAt(options?.costResetAt, options?.limit5hCostResetAt)
+          : options?.costResetAt;
+      const effectiveStartTime = clipStartByResetAt(startTime, effectiveResetAt);
 
       let current = 0;
       let costEntries: Array<{
@@ -1148,13 +1172,13 @@ export class RateLimitService {
       if (isRollingWindow) {
         switch (type) {
           case "key":
-            costEntries = await findKeyCostEntriesInTimeRange(id, startTime, endTime);
+            costEntries = await findKeyCostEntriesInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "provider":
-            costEntries = await findProviderCostEntriesInTimeRange(id, startTime, endTime);
+            costEntries = await findProviderCostEntriesInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "user":
-            costEntries = await findUserCostEntriesInTimeRange(id, startTime, endTime);
+            costEntries = await findUserCostEntriesInTimeRange(id, effectiveStartTime, endTime);
             break;
           default:
             costEntries = [];
@@ -1164,13 +1188,13 @@ export class RateLimitService {
       } else {
         switch (type) {
           case "key":
-            current = await sumKeyCostInTimeRange(id, startTime, endTime);
+            current = await sumKeyCostInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "provider":
-            current = await sumProviderCostInTimeRange(id, startTime, endTime);
+            current = await sumProviderCostInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "user":
-            current = await sumUserCostInTimeRange(id, startTime, endTime);
+            current = await sumUserCostInTimeRange(id, effectiveStartTime, endTime);
             break;
           default:
             current = 0;
@@ -1625,10 +1649,15 @@ export class RateLimitService {
       limit_weekly_usd: number | null;
       limit_monthly_usd: number | null;
       cost_reset_at?: Date | null;
+      limit_5h_cost_reset_at?: Date | null;
     }
   ): Promise<{ allowed: boolean; reason?: string; failOpen?: boolean }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
     const limit5hResetMode = limits.limit_5h_reset_mode ?? "rolling";
+    const effective5hResetAt =
+      limit5hResetMode === "rolling"
+        ? resolveUser5hCostResetAt(limits.cost_reset_at, limits.limit_5h_cost_reset_at)
+        : (limits.cost_reset_at ?? null);
     const dailyResetMode = limits.daily_reset_mode ?? "fixed";
 
     // Define windows to check with their limits
@@ -1681,7 +1710,10 @@ export class RateLimitService {
           limitAmount: check.limit,
           resetTime: check.resetTime,
           resetMode: check.resetMode,
-          costResetAt: limits.cost_reset_at,
+          costResetAt:
+            entityType === "user" && check.window === "5h" && check.resetMode === "rolling"
+              ? effective5hResetAt
+              : limits.cost_reset_at,
         });
 
         // Fail-open if lease retrieval failed

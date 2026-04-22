@@ -1624,16 +1624,28 @@
         "title": "重置选项"
       },
       "resetLimits": {
-        "title": "重置限额",
-        "description": "重置所有限额的累计消费计数器。请求日志和统计数据将被保留。",
-        "button": "重置限额",
-        "confirmTitle": "仅重置限额？",
+        "title": "重置全部限额",
+        "description": "重置全部限额（5小时、每日、每周、每月、总计）的累计消费计数器。请求日志和统计数据将被保留。",
+        "button": "重置全部限额",
+        "confirmTitle": "确认重置全部限额？",
         "confirmDescription": "这将把所有累计消费计数器（5小时、每日、每周、每月、总计）归零。请求日志和使用统计将被保留。",
-        "confirm": "是的，重置限额",
+        "confirm": "是的，重置全部限额",
         "loading": "正在重置...",
-        "error": "重置限额失败",
+        "error": "重置全部限额失败",
         "success": "所有限额已重置",
-        "lastResetAt": "上次重置: {date}"
+        "lastResetAt": "上次全部重置: {date}"
+      },
+      "reset5h": {
+        "button": "重置 5H 限额",
+        "confirm": "是的，重置 5H 限额",
+        "confirmDescriptionFixed": "这只会清空当前用户聚合层的固定 5 小时窗口，不影响每日、每周、每月、总计，也不会影响该用户下的子 Key。",
+        "confirmDescriptionRolling": "这只会把当前用户聚合层的滚动 5 小时用量从现在开始重新计算，不影响每日、每周、每月、总计，也不会影响该用户下的子 Key。",
+        "confirmTitle": "确认重置 5H 限额？",
+        "error": "重置 5H 限额失败",
+        "loading": "正在重置...",
+        "successFixed": "该用户当前固定 5H 窗口已重置",
+        "successRolling": "该用户滚动 5H 限额已重置",
+        "unavailableReason": "仅当该用户配置了用户级 5H 限额时才可用。"
       },
       "resetData": {
         "title": "重置统计",
