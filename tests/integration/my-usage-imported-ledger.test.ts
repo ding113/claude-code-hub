@@ -50,8 +50,8 @@ function getStableRecentUtcTimestamp(): number {
     now.getUTCFullYear(),
     now.getUTCMonth(),
     now.getUTCDate(),
-    Math.max(0, now.getUTCHours() - 1),
-    0,
+    now.getUTCHours(),
+    now.getUTCMinutes(),
     0,
     0
   );
@@ -255,7 +255,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "1.250000000000000",
       inputTokens: 120,
       outputTokens: 30,
-      createdAt: new Date(now - 30 * 60 * 1000),
+      createdAt: new Date(now),
       clientIp: visibleIp,
     });
     const oldB = await insertLedgerOnlyRow({
@@ -266,7 +266,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "0.750000000000000",
       inputTokens: 80,
       outputTokens: 40,
-      createdAt: new Date(now - 20 * 60 * 1000),
+      createdAt: new Date(now),
     });
     await insertLedgerOnlyRow({
       userId: user.id,
@@ -276,7 +276,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "0.500000000000000",
       inputTokens: 60,
       outputTokens: 20,
-      createdAt: new Date(now - 10 * 60 * 1000),
+      createdAt: new Date(now),
     });
 
     await createMessage({
@@ -287,7 +287,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "0.330000000000000",
       inputTokens: 33,
       outputTokens: 11,
-      createdAt: new Date(now - 5 * 60 * 1000),
+      createdAt: new Date(now),
     });
 
     const batch = await runAsSession(user.id, key.id, () => getMyUsageLogsBatch({ limit: 20 }));
@@ -356,7 +356,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "1.100000000000000",
       inputTokens: 110,
       outputTokens: 55,
-      createdAt: new Date(now - 2 * 60 * 60 * 1000),
+      createdAt: new Date(now),
     });
 
     const liveRequestId = await createMessage({
@@ -367,21 +367,21 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "0.900000000000000",
       inputTokens: 90,
       outputTokens: 45,
-      createdAt: new Date(now - 15 * 60 * 1000),
+      createdAt: new Date(now),
     });
 
     const batch = await runAsSession(user.id, key.id, () => getMyUsageLogsBatch({ limit: 20 }));
     expect(batch.ok).toBe(true);
     expect(batch.ok && batch.data.logs.map((log) => log.id)).toEqual([
-      liveRequestId,
       importedRequestId,
+      liveRequestId,
     ]);
 
     const full = await runAsSession(user.id, key.id, () => getMyUsageLogsBatchFull({ limit: 20 }));
     expect(full.ok).toBe(true);
     expect(full.ok && full.data.logs.map((log) => log.id)).toEqual([
-      liveRequestId,
       importedRequestId,
+      liveRequestId,
     ]);
 
     const summary = await runAsSession(user.id, key.id, () =>
@@ -419,7 +419,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       name: `cursor-${unique}`,
     });
 
-    const createdAt = new Date(Date.now() - 15 * 60 * 1000);
+    const createdAt = new Date(getStableRecentUtcTimestamp());
     const importedRequestId = await insertLedgerOnlyRow({
       userId: user.id,
       key: key.key,

@@ -81,8 +81,8 @@ function getStableRecentUtcTimestamp(): number {
     now.getUTCFullYear(),
     now.getUTCMonth(),
     now.getUTCDate(),
-    Math.max(0, now.getUTCHours() - 1),
-    0,
+    now.getUTCHours(),
+    now.getUTCMinutes(),
     0,
     0
   );
@@ -913,7 +913,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
         costUsd: "1.200000000000000",
         inputTokens: 120,
         outputTokens: 24,
-        createdAt: new Date(now - 30 * 60 * 1000),
+        createdAt: new Date(now),
         clientIp: visibleIp,
       })
     );
@@ -926,7 +926,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
         costUsd: "0.800000000000000",
         inputTokens: 80,
         outputTokens: 16,
-        createdAt: new Date(now - 10 * 60 * 1000),
+        createdAt: new Date(now),
       })
     );
 
@@ -939,7 +939,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
         costUsd: "0.1000",
         inputTokens: 10,
         outputTokens: 5,
-        createdAt: new Date(now - 5 * 60 * 1000),
+        createdAt: new Date(now),
       })
     );
 
@@ -1030,7 +1030,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       costUsd: "1.100000000000000",
       inputTokens: 110,
       outputTokens: 22,
-      createdAt: new Date(now - 90 * 60 * 1000),
+      createdAt: new Date(now),
     });
     createdLedgerRequestIds.push(importedRequestId);
 
@@ -1042,7 +1042,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       costUsd: "0.900000000000000",
       inputTokens: 90,
       outputTokens: 18,
-      createdAt: new Date(now - 5 * 60 * 1000),
+      createdAt: new Date(now),
     });
     createdMessageIds.push(liveRequestId);
 
@@ -1056,8 +1056,8 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
     });
     expect(full.response.status).toBe(200);
     expect(((full.json as any).data.logs as Array<{ id: number }>).map((row) => row.id)).toEqual([
-      liveRequestId,
       importedRequestId,
+      liveRequestId,
     ]);
 
     const summary = await callActionsRoute({

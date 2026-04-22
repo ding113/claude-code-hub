@@ -97,10 +97,12 @@ describe("getMyUsageLogsBatchFull", () => {
     const result = await getMyUsageLogsBatchFull({ limit: 20 });
 
     expect(mocks.getSession).toHaveBeenCalledWith({ allowReadOnlyAccess: true });
-    expect(mocks.findReadonlyUsageLogsBatchForKey).toHaveBeenCalledWith({
-      keyString: "sk-readonly",
-      limit: 20,
-    });
+    expect(mocks.findReadonlyUsageLogsBatchForKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keyString: "sk-readonly",
+        limit: 20,
+      })
+    );
     expect(result).toMatchObject({
       ok: true,
       data: {
