@@ -209,7 +209,6 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
 
   // Initialize the map
-  // biome-ignore lint/correctness/useExhaustiveDependencies: map lifecycle is intentionally one-shot
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -392,7 +391,6 @@ function MapMarker({
     onDragEnd,
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: marker instance is intentionally stable
   const marker = useMemo(() => {
     const markerInstance = new MapLibreGL.Marker({
       ...markerOptions,

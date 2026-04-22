@@ -910,7 +910,7 @@ export function syncOpenAIImageMultipartFromLogicalBody(
     if (part.kind !== "file") return false;
     if (part.name.startsWith("_")) return false;
     if (PRIMARY_IMAGE_FILE_FIELDS.has(part.name)) return true;
-    return Object.prototype.hasOwnProperty.call(logicalBody, part.name);
+    return Object.hasOwn(logicalBody, part.name);
   });
   const nextTextParts: MultipartTextPart[] = [];
 

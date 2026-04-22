@@ -1,4 +1,3 @@
-import type { ComponentType } from "react";
 import {
   Azure,
   Baichuan,
@@ -34,6 +33,7 @@ import {
   Zhipu,
 } from "@lobehub/icons";
 import { Bot } from "lucide-react";
+import type { ComponentType } from "react";
 import {
   type PublicStatusVendorIconKey,
   resolvePublicStatusVendorIconKey,
