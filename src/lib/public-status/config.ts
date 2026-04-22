@@ -97,10 +97,9 @@ function sanitizePublicModels(publicModels: unknown): PublicStatusModelConfig[] 
     }
 
     seen.add(modelKey);
-    const providerTypeOverride =
-      isObjectEntry
-        ? sanitizeProviderType((entry as { providerTypeOverride?: unknown }).providerTypeOverride)
-        : undefined;
+    const providerTypeOverride = isObjectEntry
+      ? sanitizeProviderType((entry as { providerTypeOverride?: unknown }).providerTypeOverride)
+      : undefined;
 
     normalized.push({
       modelKey,

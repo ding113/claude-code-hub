@@ -49,8 +49,8 @@ import {
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
-import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
 import { parsePublicStatusDescription } from "@/lib/public-status/config";
+import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
 import { cn } from "@/lib/utils";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay } from "@/types/provider";
