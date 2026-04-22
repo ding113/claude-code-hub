@@ -524,6 +524,28 @@ describe("SessionMessagesClient (request export actions)", () => {
     unmount();
   });
 
+  test("renders the global empty state when both before and after snapshots are absent", async () => {
+    const snapshots = createSnapshots();
+    snapshots.request.before = null;
+    snapshots.request.after = null;
+    snapshots.response.before = null;
+    snapshots.response.after = null;
+
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: buildDetailsData({
+        snapshots,
+      }),
+    });
+
+    const { container, unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    expect(container.textContent).toContain("details.noDetailedData");
+
+    unmount();
+  });
+
   test("renders session stats view and supports terminate flow", async () => {
     getSessionDetailsMock.mockResolvedValue({
       ok: true,

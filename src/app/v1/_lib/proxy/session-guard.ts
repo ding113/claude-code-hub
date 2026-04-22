@@ -76,9 +76,16 @@ export class ProxySessionGuard {
     try {
       const systemSettings = await getCachedSystemSettings();
       session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
-      const requestMessageBeforeProxyMutations = structuredClone(
-        session.request.message as Record<string, unknown>
-      );
+      let requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
+      if (session.request.message && typeof session.request.message === "object") {
+        try {
+          requestMessageBeforeProxyMutations = structuredClone(
+            session.request.message as Record<string, unknown>
+          );
+        } catch {
+          requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
+        }
+      }
       const originalMessages = session.getMessages();
 
       // Codex Session ID 补全：在提取 clientSessionId 之前触发，避免落入不稳定的降级方案

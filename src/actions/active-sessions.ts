@@ -797,22 +797,26 @@ export async function getSessionDetails(
         after: normalizeResponseSnapshot(responseSnapshotAfter ?? null),
       },
     };
-    const hasAnySnapshot =
-      snapshots.request.before !== null ||
-      snapshots.request.after !== null ||
-      snapshots.response.before !== null ||
-      snapshots.response.after !== null;
-    const effectiveSnapshots = hasAnySnapshot
-      ? snapshots
-      : buildLegacyCompatibilitySnapshots({
-          requestBody: normalizedRequestBody,
-          messages: normalizedMessages,
-          response,
-          requestHeaders,
-          responseHeaders,
-          requestMeta,
-          responseMeta,
-        });
+    const legacyCompatibilitySnapshots = buildLegacyCompatibilitySnapshots({
+      requestBody: normalizedRequestBody,
+      messages: normalizedMessages,
+      response,
+      requestHeaders,
+      responseHeaders,
+      requestMeta,
+      responseMeta,
+    });
+    const effectiveSnapshots: SessionDetailSnapshots = {
+      defaultView: snapshots.defaultView,
+      request: {
+        before: snapshots.request.before,
+        after: snapshots.request.after ?? legacyCompatibilitySnapshots.request.after,
+      },
+      response: {
+        before: snapshots.response.before,
+        after: snapshots.response.after ?? legacyCompatibilitySnapshots.response.after,
+      },
+    };
 
     const mergedSpecialSettings: SpecialSetting[] = [
       ...(Array.isArray(redisSpecialSettings) ? (redisSpecialSettings as SpecialSetting[]) : []),

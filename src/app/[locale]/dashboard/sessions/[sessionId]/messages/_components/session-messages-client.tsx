@@ -181,6 +181,7 @@ export function SessionMessagesClient() {
   const canExportRequest =
     !isLoading &&
     error === null &&
+    currentRequestSnapshot !== null &&
     currentRequestSnapshot?.headers !== null &&
     currentRequestSnapshot?.body !== null;
   const exportSequence = selectedSeq ?? currentSequence;
