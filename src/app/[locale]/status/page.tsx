@@ -3,6 +3,7 @@ import { readPublicSiteMeta } from "@/lib/public-site-meta";
 import { readCurrentPublicStatusConfigSnapshot } from "@/lib/public-status/config-snapshot";
 import { readPublicStatusPayload } from "@/lib/public-status/read-store";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
+import { resolveSiteTitle } from "@/lib/site-title";
 import { PublicStatusView } from "./_components/public-status-view";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export default async function PublicStatusPage({
       rangeHours={rangeHours}
       followServerDefaults={followServerDefaults}
       locale={locale}
-      siteTitle={configSnapshot?.siteTitle ?? siteMeta.siteTitle}
+      siteTitle={resolveSiteTitle(configSnapshot?.siteTitle, siteMeta.siteTitle)}
       timeZone={configSnapshot?.timeZone ?? "UTC"}
       labels={{
         systemStatus: t("statusPage.public.systemStatus"),
