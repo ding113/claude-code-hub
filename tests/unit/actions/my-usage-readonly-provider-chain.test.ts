@@ -52,6 +52,20 @@ describe("getMyUsageLogsBatchFull", () => {
       logs: [
         {
           id: 101,
+          costBreakdown: {
+            input: { usd: "0.1" },
+          },
+          specialSettings: [
+            {
+              type: "guard_intercept",
+              scope: "guard",
+              hit: true,
+              guard: "sensitive_word",
+              action: "block_request",
+              statusCode: 403,
+              reason: '{"matched":"secret"}',
+            },
+          ],
           providerChain: [
             {
               id: 1,
@@ -121,5 +135,12 @@ describe("getMyUsageLogsBatchFull", () => {
       errorDetails: null,
     });
     expect(result.ok && result.data.logs[0]?._liveChain).toBeNull();
+    expect(result.ok && result.data.logs[0]?.costBreakdown).toBeNull();
+    expect(result.ok && result.data.logs[0]?.specialSettings).toEqual([
+      expect.objectContaining({
+        type: "guard_intercept",
+        reason: null,
+      }),
+    ]);
   });
 });

@@ -15,6 +15,8 @@ export interface ClearUserCostCacheResult {
   costKeysDeleted: number;
   activeSessionsDeleted: number;
   durationMs: number;
+  cleanupFailed?: boolean;
+  errorCount?: number;
 }
 
 export interface ClearSingleKeyCostCacheOptions {
@@ -35,6 +37,8 @@ export interface ClearUser5hCostCacheResult {
   costKeysDeleted: number;
   leaseKeysDeleted: number;
   durationMs: number;
+  cleanupFailed?: boolean;
+  errorCount?: number;
 }
 
 /**
@@ -160,6 +164,7 @@ export async function clearUserCostCache(
       costKeysDeleted: allCostKeys.length,
       activeSessionsDeleted,
       durationMs: Date.now() - startTime,
+      cleanupFailed: true,
     };
   }
 
@@ -176,6 +181,8 @@ export async function clearUserCostCache(
     costKeysDeleted: allCostKeys.length,
     activeSessionsDeleted,
     durationMs: Date.now() - startTime,
+    cleanupFailed: !!errors && errors.length > 0,
+    errorCount: errors?.length || 0,
   };
 }
 
@@ -206,7 +213,13 @@ export async function clearUser5hCostCache(
         resetMode,
         errorCount: errors.length,
       });
-      return null;
+      return {
+        costKeysDeleted: 1,
+        leaseKeysDeleted: 1,
+        durationMs: Date.now() - startTime,
+        cleanupFailed: true,
+        errorCount: errors.length,
+      };
     }
   } catch (error) {
     logger.warn("Redis pipeline.exec() failed during user 5h cache cleanup", {
@@ -214,7 +227,13 @@ export async function clearUser5hCostCache(
       resetMode,
       error,
     });
-    return null;
+    return {
+      costKeysDeleted: 1,
+      leaseKeysDeleted: 1,
+      durationMs: Date.now() - startTime,
+      cleanupFailed: true,
+      errorCount: 1,
+    };
   }
 
   return {

@@ -77,6 +77,8 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionResponse: vi.fn(),
     updateSessionUsage: vi.fn(),
     clearSessionProvider: vi.fn(),
+    storeSessionRequestPhaseSnapshot: vi.fn(async () => undefined),
+    storeSessionResponsePhaseSnapshot: vi.fn(async () => undefined),
     storeSessionUpstreamRequestMeta: vi.fn(async () => undefined),
     storeSessionSpecialSettings: vi.fn(async () => undefined),
     storeSessionRequestHeaders: vi.fn(async () => undefined),
@@ -266,6 +268,132 @@ async function readWithTimeout(
 }
 
 describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
+  test("非流式早退时应丢弃未消费的 before-snapshot 响应分支", async () => {
+    const cancel = vi.fn(async () => undefined);
+    const session = createSession({
+      clientAbortSignal: new AbortController().signal,
+      messageId: 11,
+      userId: 22,
+    });
+    (
+      session as ProxySession & {
+        detailSnapshotResponseBeforeSource?: { body?: { cancel: typeof cancel } | null } | null;
+      }
+    ).detailSnapshotResponseBeforeSource = {
+      body: { cancel },
+    };
+
+    const response = new Response('{"ok":true}', {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+    const returned = await (
+      ProxyResponseHandler as unknown as {
+        handleNonStream: (session: ProxySession, response: Response) => Promise<Response>;
+      }
+    ).handleNonStream(session, response);
+
+    expect(returned).toBe(response);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(
+      (session as ProxySession & { detailSnapshotResponseBeforeSource?: unknown })
+        .detailSnapshotResponseBeforeSource
+    ).toBeNull();
+  });
+
+  test("流式早退时应丢弃未消费的 before-snapshot 响应分支", async () => {
+    const cancel = vi.fn(async () => undefined);
+    const session = createSession({
+      clientAbortSignal: new AbortController().signal,
+      messageId: 33,
+      userId: 44,
+    });
+    session.setProvider(createProvider());
+    session.messageContext = null;
+    (
+      session as ProxySession & {
+        detailSnapshotResponseBeforeSource?: { body?: { cancel: typeof cancel } | null } | null;
+      }
+    ).detailSnapshotResponseBeforeSource = {
+      body: { cancel },
+    };
+
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"x":1}\n\n'));
+          controller.close();
+        },
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      }
+    );
+
+    const returned = await (
+      ProxyResponseHandler as unknown as {
+        handleStream: (session: ProxySession, response: Response) => Promise<Response>;
+      }
+    ).handleStream(session, response);
+
+    expect(returned).toBe(response);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(
+      (session as ProxySession & { detailSnapshotResponseBeforeSource?: unknown })
+        .detailSnapshotResponseBeforeSource
+    ).toBeNull();
+  });
+
+  test("Gemini 流式透传返回原始响应前应丢弃未消费的 before-snapshot 响应分支", async () => {
+    asyncTasks.length = 0;
+    const cancel = vi.fn(async () => undefined);
+    const session = createSession({
+      clientAbortSignal: new AbortController().signal,
+      messageId: 55,
+      userId: 66,
+    });
+    const provider = createProvider();
+    session.setProvider(provider);
+    session.sessionId = null;
+    (
+      session as ProxySession & {
+        detailSnapshotResponseBeforeSource?: { body?: { cancel: typeof cancel } | null } | null;
+      }
+    ).detailSnapshotResponseBeforeSource = {
+      body: { cancel },
+    };
+
+    const upstreamResponse = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"provider":"gemini"}\n\n'));
+          controller.close();
+        },
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      }
+    );
+
+    const returned = await (
+      ProxyResponseHandler as unknown as {
+        handleStream: (session: ProxySession, response: Response) => Promise<Response>;
+      }
+    ).handleStream(session, upstreamResponse);
+
+    expect(returned).toBe(upstreamResponse);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(
+      (session as ProxySession & { detailSnapshotResponseBeforeSource?: unknown })
+        .detailSnapshotResponseBeforeSource
+    ).toBeNull();
+
+    await Promise.allSettled(asyncTasks);
+  });
+
   test("不应在仅收到 headers 时清除首字节超时：无首块数据时应在窗口内中断避免悬挂", async () => {
     asyncTasks.length = 0;
     const { baseUrl, close } = await startSseServer((_req, res) => {

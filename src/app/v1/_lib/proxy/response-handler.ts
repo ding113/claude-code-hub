@@ -58,12 +58,17 @@ function releaseSessionAgent(session: ProxySession): void {
   }
 }
 
-async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise<string | null> {
+function takeBeforeResponseBodySnapshotSource(session: ProxySession): Response | null {
   const snapshotSession = session as ProxySession & {
     detailSnapshotResponseBeforeSource?: Response | null;
   };
   const source = snapshotSession.detailSnapshotResponseBeforeSource;
   snapshotSession.detailSnapshotResponseBeforeSource = null;
+  return source ?? null;
+}
+
+async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise<string | null> {
+  const source = takeBeforeResponseBodySnapshotSource(session);
   if (!source) return null;
 
   try {
@@ -76,6 +81,19 @@ async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise
     });
     return null;
   }
+}
+
+function discardBeforeResponseBodySnapshot(session: ProxySession): void {
+  const source = takeBeforeResponseBodySnapshotSource(session);
+  if (!source?.body) return;
+
+  void source.body.cancel().catch((error) => {
+    logger.warn("[ResponseHandler] Failed to discard before-response snapshot body", {
+      sessionId: session.sessionId ?? null,
+      requestSequence: session.requestSequence ?? null,
+      error,
+    });
+  });
 }
 
 export type UsageMetrics = {
@@ -816,6 +834,7 @@ export class ProxyResponseHandler {
     const messageContext = session.messageContext;
     const provider = session.provider;
     if (!provider) {
+      discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
       return response;
     }
@@ -1491,6 +1510,7 @@ export class ProxyResponseHandler {
     const provider = session.provider;
 
     if (!messageContext || !provider || !response.body) {
+      discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
       return response;
     }
@@ -1992,6 +2012,7 @@ export class ProxyResponseHandler {
           });
         }
 
+        discardBeforeResponseBodySnapshot(session);
         return response;
       } else {
         // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）

@@ -166,7 +166,7 @@ describe("resetUserAllStatistics", () => {
     expect(loggerMock.info).toHaveBeenCalled();
   });
 
-  test("should succeed even when Redis is not ready", async () => {
+  test("should return partial failure when Redis is not ready after DB reset", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findUserByIdMock.mockResolvedValue({ id: 123, name: "Test User" });
     findKeyListMock.mockResolvedValue([{ id: 1 }]);
@@ -175,14 +175,13 @@ describe("resetUserAllStatistics", () => {
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
-    expect(result.ok).toBe(true);
-    // DB transaction still called
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe(ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE);
     expect(dbTransactionMock).toHaveBeenCalled();
-    // Redis pipeline NOT called (status not ready)
     expect(redisMock.pipeline).not.toHaveBeenCalled();
   });
 
-  test("should succeed with warning when Redis has partial failures", async () => {
+  test("should return partial failure when Redis has partial failures", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findUserByIdMock.mockResolvedValue({ id: 123, name: "Test User" });
     findKeyListMock.mockResolvedValue([{ id: 1 }]);
@@ -196,8 +195,8 @@ describe("resetUserAllStatistics", () => {
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
-    expect(result.ok).toBe(true);
-    // Pipeline partial failures logged as warn inside clearUserCostCache
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe(ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE);
     expect(loggerMock.warn).toHaveBeenCalledWith(
       "Some Redis deletes failed during cost cache cleanup",
       expect.objectContaining({ errorCount: 1, userId: 123 })
@@ -220,7 +219,7 @@ describe("resetUserAllStatistics", () => {
     expect(loggerMock.warn).toHaveBeenCalled();
   });
 
-  test("should succeed when pipeline.exec throws (caught inside clearUserCostCache)", async () => {
+  test("should return partial failure when pipeline.exec throws", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findUserByIdMock.mockResolvedValue({ id: 123, name: "Test User" });
     findKeyListMock.mockResolvedValue([{ id: 1 }]);
@@ -231,8 +230,8 @@ describe("resetUserAllStatistics", () => {
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
-    // clearUserCostCache catches pipeline.exec throw internally, logs warn
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe(ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE);
     expect(loggerMock.warn).toHaveBeenCalledWith(
       "Redis pipeline.exec() failed during cost cache cleanup",
       expect.objectContaining({ userId: 123 })

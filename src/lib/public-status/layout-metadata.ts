@@ -11,7 +11,7 @@ export async function resolveSiteMetadataSource(input: {
     const metadata = await readPublicSiteMeta();
     return {
       siteTitle: metadata.siteTitle,
-      siteDescription: metadata.siteTitle,
+      siteDescription: metadata.siteDescription,
     };
   }
 

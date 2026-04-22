@@ -96,6 +96,7 @@ describe("public-status config publisher", () => {
     expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         snapshot: expect.objectContaining({
+          siteDescription: "Claude Code Hub public status",
           groups: [
             expect.objectContaining({
               models: [
