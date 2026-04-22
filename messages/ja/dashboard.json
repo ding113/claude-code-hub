@@ -450,6 +450,11 @@
       "providerRanking": "プロバイダーランキング",
       "providerCacheHitRateRanking": "プロバイダーキャッシュ命中率",
       "modelRanking": "モデルランキング",
+      "primaryUser": "ユーザー",
+      "primaryProvider": "プロバイダー",
+      "primaryModel": "モデル",
+      "secondaryCost": "コスト",
+      "secondaryCacheHit": "キャッシュ命中率",
       "dailyRanking": "本日",
       "weeklyRanking": "今週",
       "monthlyRanking": "今月",
@@ -1596,16 +1601,28 @@
         "title": "リセットオプション"
       },
       "resetLimits": {
-        "title": "制限のリセット",
-        "description": "全ての制限の累積コストカウンターをリセットします。リクエストログと統計データは保持されます。",
-        "button": "制限をリセット",
-        "confirmTitle": "制限のみリセットしますか？",
+        "title": "すべての制限をリセット",
+        "description": "全ての制限 (5時間、日次、週次、月次、合計) の累積コストカウンターをリセットします。リクエストログと統計データは保持されます。",
+        "button": "すべての制限をリセット",
+        "confirmTitle": "すべての制限をリセットしますか？",
         "confirmDescription": "全ての累積コストカウンター(5時間、日次、週次、月次、合計)がゼロにリセットされます。リクエストログと利用統計は保持されます。",
-        "confirm": "はい、リセットする",
+        "confirm": "はい、すべての制限をリセット",
         "loading": "リセット中...",
-        "error": "制限のリセットに失敗しました",
+        "error": "すべての制限のリセットに失敗しました",
         "success": "全ての制限がリセットされました",
-        "lastResetAt": "前回のリセット: {date}"
+        "lastResetAt": "前回の全体リセット: {date}"
+      },
+      "reset5h": {
+        "button": "5H 制限をリセット",
+        "confirm": "はい、5H 制限をリセット",
+        "confirmDescriptionFixed": "現在のユーザー集約 5 時間固定ウィンドウだけをクリアします。日次、週次、月次、合計、および子 Key には影響しません。",
+        "confirmDescriptionRolling": "現在のユーザー集約 5 時間ローリング使用量だけを今から再計算します。日次、週次、月次、合計、および子 Key には影響しません。",
+        "confirmTitle": "5H 制限をリセットしますか？",
+        "error": "5H 制限のリセットに失敗しました",
+        "loading": "リセット中...",
+        "successFixed": "ユーザーの固定 5H ウィンドウをリセットしました",
+        "successRolling": "ユーザーのローリング 5H 制限をリセットしました",
+        "unavailableReason": "ユーザーレベルの 5H 制限が設定されている場合のみ利用できます。"
       },
       "resetData": {
         "title": "統計リセット",

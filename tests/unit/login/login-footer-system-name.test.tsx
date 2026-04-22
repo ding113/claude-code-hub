@@ -1,7 +1,8 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import LoginPage from "../../../src/app/[locale]/login/page";
+import LoginPage from "@/app/[locale]/login/page";
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 
 const mockPush = vi.hoisted(() => vi.fn());
 const mockRefresh = vi.hoisted(() => vi.fn());
@@ -33,7 +34,6 @@ vi.mock("next-themes", () => ({
 }));
 
 const globalFetch = global.fetch;
-const DEFAULT_SITE_TITLE = "Claude Code Hub";
 
 function getRequestPath(input: string | URL | Request): string {
   if (typeof input === "string") {
@@ -95,7 +95,7 @@ describe("LoginPage footer system name", () => {
       (input: string | URL | Request) => {
         const path = getRequestPath(input);
 
-        if (path === "/api/system-settings") {
+        if (path === "/api/public-site-meta") {
           return Promise.resolve(mockJsonResponse({ siteTitle: "My Custom Hub" }));
         }
 
@@ -115,7 +115,7 @@ describe("LoginPage footer system name", () => {
       (input: string | URL | Request) => {
         const path = getRequestPath(input);
 
-        if (path === "/api/system-settings") {
+        if (path === "/api/public-site-meta") {
           return Promise.resolve(mockJsonResponse({ error: "Unauthorized" }, false));
         }
 
@@ -135,7 +135,7 @@ describe("LoginPage footer system name", () => {
       (input: string | URL | Request) => {
         const path = getRequestPath(input);
 
-        if (path === "/api/system-settings") {
+        if (path === "/api/public-site-meta") {
           return new Promise(() => {});
         }
 
@@ -144,6 +144,26 @@ describe("LoginPage footer system name", () => {
     );
 
     await render();
+
+    expect(getSiteTitleFooter()).not.toBeNull();
+    expect(getSiteTitleFooter()?.textContent).toBe(DEFAULT_SITE_TITLE);
+  });
+
+  it("falls back to default title when public metadata returns blank title", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+      (input: string | URL | Request) => {
+        const path = getRequestPath(input);
+
+        if (path === "/api/public-site-meta") {
+          return Promise.resolve(mockJsonResponse({ siteTitle: "   " }));
+        }
+
+        return Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }));
+      }
+    );
+
+    await render();
+    await flushMicrotasks();
 
     expect(getSiteTitleFooter()).not.toBeNull();
     expect(getSiteTitleFooter()?.textContent).toBe(DEFAULT_SITE_TITLE);

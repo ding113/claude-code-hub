@@ -123,6 +123,14 @@ describe("LeaderboardView user cache hit rate scope", () => {
         (url) => url.includes("scope=userCacheHitRate") && url.includes("includeUserModelStats=1")
       )
     ).toBe(true);
+    expect(
+      container!.querySelector("[data-testid='leaderboard-primary-tab-user'][data-state='active']")
+    ).not.toBeNull();
+    expect(
+      container!.querySelector(
+        "[data-testid='leaderboard-secondary-tab-cache-hit'][data-state='active']"
+      )
+    ).not.toBeNull();
     expect(container!.textContent).toContain("cache-user");
     expect(container!.textContent).toContain("50.0%");
   });

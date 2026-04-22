@@ -450,6 +450,11 @@
       "providerRanking": "Provider Rankings",
       "providerCacheHitRateRanking": "Provider Cache Hit Rate",
       "modelRanking": "Model Rankings",
+      "primaryUser": "Users",
+      "primaryProvider": "Providers",
+      "primaryModel": "Models",
+      "secondaryCost": "Cost",
+      "secondaryCacheHit": "Cache Hit Rate",
       "dailyRanking": "Today",
       "weeklyRanking": "This Week",
       "monthlyRanking": "This Month",
@@ -1618,16 +1623,28 @@
         "title": "Reset Options"
       },
       "resetLimits": {
-        "title": "Reset Limits",
-        "description": "Reset accumulated cost counters for all limits. Request logs and statistics are preserved.",
-        "button": "Reset Limits",
-        "confirmTitle": "Reset Limits Only?",
+        "title": "Reset All Limits",
+        "description": "Reset accumulated cost counters for all limits (5h, daily, weekly, monthly, total). Request logs and statistics are preserved.",
+        "button": "Reset All Limits",
+        "confirmTitle": "Reset All Limits?",
         "confirmDescription": "This will reset all accumulated cost counters (5h, daily, weekly, monthly, total) to zero. Request logs and usage statistics will be preserved.",
-        "confirm": "Yes, Reset Limits",
+        "confirm": "Yes, Reset All Limits",
         "loading": "Resetting...",
-        "error": "Failed to reset limits",
+        "error": "Failed to reset all limits",
         "success": "All limits have been reset",
-        "lastResetAt": "Last reset: {date}"
+        "lastResetAt": "Last full reset: {date}"
+      },
+      "reset5h": {
+        "button": "Reset 5H Limit",
+        "confirm": "Yes, Reset 5H Limit",
+        "confirmDescriptionFixed": "This will clear only this user's current fixed 5-hour window. Daily, weekly, monthly, total, and child key usage are not affected.",
+        "confirmDescriptionRolling": "This will reset only this user's aggregated rolling 5-hour usage from now on. Daily, weekly, monthly, total, and child key usage are not affected.",
+        "confirmTitle": "Reset 5H Limit?",
+        "error": "Failed to reset 5H limit",
+        "loading": "Resetting...",
+        "successFixed": "The user's fixed 5H limit window has been reset",
+        "successRolling": "The user's rolling 5H limit has been reset",
+        "unavailableReason": "Available only when a user-level 5H limit is configured."
       },
       "resetData": {
         "title": "Reset Statistics",

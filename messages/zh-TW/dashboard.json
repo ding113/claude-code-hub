@@ -450,6 +450,11 @@
       "providerRanking": "供應商排名",
       "providerCacheHitRateRanking": "供應商快取命中率排行",
       "modelRanking": "模型排名",
+      "primaryUser": "使用者",
+      "primaryProvider": "供應商",
+      "primaryModel": "模型榜",
+      "secondaryCost": "成本排名",
+      "secondaryCacheHit": "快取命中榜",
       "dailyRanking": "今天",
       "weeklyRanking": "本週",
       "monthlyRanking": "當月",
@@ -1604,16 +1609,28 @@
         "title": "重置選項"
       },
       "resetLimits": {
-        "title": "重設限額",
-        "description": "重設所有限額的累計消費計數器。請求日誌和統計資料將被保留。",
-        "button": "重設限額",
-        "confirmTitle": "僅重設限額？",
+        "title": "重設全部限額",
+        "description": "重設全部限額（5小時、每日、每週、每月、總計）的累計消費計數器。請求日誌和統計資料將被保留。",
+        "button": "重設全部限額",
+        "confirmTitle": "確認重設全部限額？",
         "confirmDescription": "這將把所有累計消費計數器（5小時、每日、每週、每月、總計）歸零。請求日誌和使用統計將被保留。",
-        "confirm": "是的，重設限額",
+        "confirm": "是的，重設全部限額",
         "loading": "正在重設...",
-        "error": "重設限額失敗",
+        "error": "重設全部限額失敗",
         "success": "所有限額已重設",
-        "lastResetAt": "上次重設: {date}"
+        "lastResetAt": "上次全部重設: {date}"
+      },
+      "reset5h": {
+        "button": "重設 5H 限額",
+        "confirm": "是的，重設 5H 限額",
+        "confirmDescriptionFixed": "這只會清空目前使用者聚合層的固定 5 小時視窗，不影響每日、每週、每月、總計，也不會影響該使用者底下的子 Key。",
+        "confirmDescriptionRolling": "這只會讓目前使用者聚合層的滾動 5 小時用量從現在起重新累計，不影響每日、每週、每月、總計，也不會影響該使用者底下的子 Key。",
+        "confirmTitle": "確認重設 5H 限額？",
+        "error": "重設 5H 限額失敗",
+        "loading": "正在重設...",
+        "successFixed": "該使用者目前固定 5H 視窗已重設",
+        "successRolling": "該使用者滾動 5H 限額已重設",
+        "unavailableReason": "僅在該使用者已設定使用者層級 5H 限額時可用。"
       },
       "resetData": {
         "title": "重置統計",

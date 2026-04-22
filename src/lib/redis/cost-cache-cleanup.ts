@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import { buildLeaseKey } from "@/lib/rate-limit/lease";
 import { getRedisClient } from "@/lib/redis";
 import { getKeyActiveSessionsKey, getUserActiveSessionsKey } from "@/lib/redis/active-session-keys";
 import { scanPattern } from "@/lib/redis/scan-helper";
@@ -23,6 +24,17 @@ export interface ClearSingleKeyCostCacheOptions {
 
 export interface ClearSingleProviderCostCacheOptions {
   providerId: number;
+}
+
+export interface ClearUser5hCostCacheOptions {
+  userId: number;
+  resetMode: "fixed" | "rolling";
+}
+
+export interface ClearUser5hCostCacheResult {
+  costKeysDeleted: number;
+  leaseKeysDeleted: number;
+  durationMs: number;
 }
 
 /**
@@ -163,6 +175,51 @@ export async function clearUserCostCache(
   return {
     costKeysDeleted: allCostKeys.length,
     activeSessionsDeleted,
+    durationMs: Date.now() - startTime,
+  };
+}
+
+export async function clearUser5hCostCache(
+  options: ClearUser5hCostCacheOptions
+): Promise<ClearUser5hCostCacheResult | null> {
+  const { userId, resetMode } = options;
+
+  const redis = getRedisClient();
+  if (!redis || redis.status !== "ready") {
+    return null;
+  }
+
+  const startTime = Date.now();
+  const costKey = `user:${userId}:cost_5h_${resetMode}`;
+  const leaseKey = buildLeaseKey("user", userId, "5h", resetMode);
+  const pipeline = redis.pipeline();
+
+  pipeline.del(costKey);
+  pipeline.del(leaseKey);
+
+  try {
+    const results = await pipeline.exec();
+    const errors = results?.filter(([error]) => error);
+    if (errors && errors.length > 0) {
+      logger.warn("Some Redis deletes failed during user 5h cache cleanup", {
+        userId,
+        resetMode,
+        errorCount: errors.length,
+      });
+      return null;
+    }
+  } catch (error) {
+    logger.warn("Redis pipeline.exec() failed during user 5h cache cleanup", {
+      userId,
+      resetMode,
+      error,
+    });
+    return null;
+  }
+
+  return {
+    costKeysDeleted: 1,
+    leaseKeysDeleted: 1,
     durationMs: Date.now() - startTime,
   };
 }

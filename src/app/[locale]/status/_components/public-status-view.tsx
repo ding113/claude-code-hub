@@ -1,5 +1,7 @@
 "use client";
 
+import { Azure, Bedrock, Claude, Gemini, OpenAI } from "@lobehub/icons";
+import { Bot } from "lucide-react";
 import { startTransition, useEffect, useState } from "react";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import type { PublicStatusPayload, PublicStatusTimelineBucket } from "@/lib/public-status/payload";
@@ -11,6 +13,7 @@ interface PublicStatusViewProps {
   rangeHours: number;
   followServerDefaults?: boolean;
   locale: string;
+  siteTitle: string;
   timeZone: string;
   labels: {
     systemStatus: string;
@@ -23,6 +26,7 @@ interface PublicStatusViewProps {
     freshnessWindow: string;
     fresh: string;
     stale: string;
+    staleDetail: string;
     rebuilding: string;
     noData: string;
     emptyDescription: string;
@@ -46,34 +50,30 @@ function resolveStateLabel(
   rebuildState: PublicStatusPayload["rebuildState"],
   labels: PublicStatusViewProps["labels"]
 ): string {
-  if (rebuildState === "fresh") {
-    return labels.fresh;
-  }
-  if (rebuildState === "stale") {
-    return labels.stale;
-  }
   if (rebuildState === "rebuilding") {
     return labels.rebuilding;
   }
-  return labels.noData;
+  if (rebuildState === "no-data") {
+    return labels.noData;
+  }
+  return labels.fresh;
 }
 
-function formatCountdown(freshUntil: string | null): string | null {
-  if (!freshUntil) {
-    return null;
+function resolveVendorIcon(vendorIconKey: string) {
+  switch (vendorIconKey) {
+    case "openai":
+      return OpenAI;
+    case "anthropic":
+      return Claude.Color;
+    case "gemini":
+      return Gemini.Color;
+    case "azure":
+      return Azure;
+    case "bedrock":
+      return Bedrock;
+    default:
+      return Bot;
   }
-
-  const remainingMs = Date.parse(freshUntil) - Date.now();
-  if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
-    return "00:00";
-  }
-
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
-  return `${minutes}:${seconds}`;
 }
 
 export function PublicStatusView({
@@ -82,11 +82,11 @@ export function PublicStatusView({
   rangeHours,
   followServerDefaults = false,
   locale,
+  siteTitle,
   timeZone,
   labels,
 }: PublicStatusViewProps) {
   const [payload, setPayload] = useState(initialPayload);
-  const [countdown, setCountdown] = useState(() => formatCountdown(initialPayload.freshUntil));
 
   useEffect(() => {
     const refresh = async () => {
@@ -102,7 +102,6 @@ export function PublicStatusView({
         const nextPayload = (await response.json()) as PublicStatusPayload;
         startTransition(() => {
           setPayload(nextPayload);
-          setCountdown(formatCountdown(nextPayload.freshUntil));
         });
       } catch {
         // 保持最后一版 payload，等待下一个轮询周期。
@@ -117,23 +116,10 @@ export function PublicStatusView({
       void refresh();
     }, 30_000);
 
-    const countdownId = window.setInterval(() => {
-      startTransition(() => {
-        setCountdown(formatCountdown(payload.freshUntil));
-      });
-    }, 1000);
-
     return () => {
       window.clearInterval(pollId);
-      window.clearInterval(countdownId);
     };
-  }, [
-    followServerDefaults,
-    initialPayload.rebuildState,
-    intervalMinutes,
-    payload.freshUntil,
-    rangeHours,
-  ]);
+  }, [followServerDefaults, initialPayload.rebuildState, intervalMinutes, rangeHours]);
 
   const groups =
     payload.groups.length > 0
@@ -160,7 +146,7 @@ export function PublicStatusView({
         ];
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-background text-foreground">
+    <div className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.15),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.08))] text-foreground">
       <div
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
@@ -171,16 +157,14 @@ export function PublicStatusView({
       />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="rounded-[28px] border border-white/10 bg-card/70 p-6 shadow-2xl backdrop-blur-xl">
+        <header className="rounded-[32px] border border-white/10 bg-card/72 p-6 shadow-2xl backdrop-blur-xl">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-4">
               <p className="text-xs font-semibold uppercase tracking-[0.32em] text-muted-foreground">
                 {labels.heroPrimary}
               </p>
-              <div className="space-y-2">
-                <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-                  {labels.systemStatus}
-                </h1>
+              <div className="space-y-3">
+                <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">{siteTitle}</h1>
                 <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
                   {labels.heroSecondary}
                 </p>
@@ -188,14 +172,16 @@ export function PublicStatusView({
             </div>
 
             <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-              <div className="rounded-full border border-white/10 bg-background/70 px-4 py-2 text-sm">
-                {resolveStateLabel(payload.rebuildState, labels)}
-              </div>
+              {payload.rebuildState !== "stale" ? (
+                <div className="rounded-full border border-white/10 bg-background/70 px-4 py-2 text-sm">
+                  {resolveStateLabel(payload.rebuildState, labels)}
+                </div>
+              ) : null}
               <ThemeSwitcher />
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-6 text-sm text-muted-foreground">
+          <div className="mt-6 space-y-2 text-sm text-muted-foreground">
             <span>
               {labels.generatedAt}:{" "}
               {payload.generatedAt
@@ -206,11 +192,8 @@ export function PublicStatusView({
                   }).format(new Date(payload.generatedAt))
                 : labels.rebuilding}
             </span>
-            <span>{labels.history}: 60</span>
-            {countdown ? (
-              <span>
-                {labels.freshnessWindow}: {countdown}
-              </span>
+            {payload.rebuildState === "stale" ? (
+              <p className="text-xs">{labels.staleDetail}</p>
             ) : null}
           </div>
         </header>
@@ -223,53 +206,62 @@ export function PublicStatusView({
             >
               <div className="mb-4 space-y-2">
                 <h2 className="text-2xl font-semibold tracking-tight">{group.displayName}</h2>
-                {group.explanatoryCopy && (
+                {group.explanatoryCopy ? (
                   <p className="text-sm text-muted-foreground">{group.explanatoryCopy}</p>
-                )}
+                ) : null}
               </div>
 
               <div className="grid gap-4 xl:grid-cols-2">
-                {group.models.map((model) => (
-                  <article
-                    key={model.publicModelKey}
-                    className="rounded-[24px] border border-white/10 bg-background/60 p-5"
-                  >
-                    <div className="mb-4 flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <h3 className="text-lg font-semibold">{model.label}</h3>
-                        <p className="font-mono text-xs text-muted-foreground">
-                          {model.publicModelKey}
-                        </p>
-                      </div>
-                      <div className="rounded-full border border-white/10 bg-muted/50 px-3 py-1 text-xs uppercase tracking-wide text-muted-foreground">
-                        {labels.requestTypes[model.requestTypeBadge] ?? model.requestTypeBadge}
-                      </div>
-                    </div>
+                {group.models.map((model) => {
+                  const VendorIcon = resolveVendorIcon(model.vendorIconKey);
 
-                    <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-white/10 bg-muted/30 p-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                          {labels.ttfb}
+                  return (
+                    <article
+                      key={model.publicModelKey}
+                      className="rounded-[24px] border border-white/10 bg-background/60 p-5"
+                    >
+                      <div className="mb-4 flex items-start justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-muted/40">
+                              <VendorIcon className="h-4 w-4" />
+                            </span>
+                            <h3 className="text-lg font-semibold">{model.label}</h3>
+                          </div>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {model.publicModelKey}
+                          </p>
                         </div>
-                        <div className="mt-2 font-mono text-xl">
-                          {model.latestTtfbMs === null ? "—" : `${model.latestTtfbMs} ms`}
+                        <div className="rounded-full border border-white/10 bg-muted/50 px-3 py-1 text-xs uppercase tracking-wide text-muted-foreground">
+                          {labels.requestTypes[model.requestTypeBadge] ?? model.requestTypeBadge}
                         </div>
                       </div>
-                      <div className="rounded-2xl border border-white/10 bg-muted/30 p-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                          {labels.availability}
-                        </div>
-                        <div className="mt-2 font-mono text-xl">
-                          {model.availabilityPct === null
-                            ? "—"
-                            : `${model.availabilityPct.toFixed(2)}%`}
-                        </div>
-                      </div>
-                    </div>
 
-                    <PublicStatusTimeline items={model.timeline} />
-                  </article>
-                ))}
+                      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-muted/30 p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                            {labels.ttfb}
+                          </div>
+                          <div className="mt-2 font-mono text-xl">
+                            {model.latestTtfbMs === null ? "—" : `${model.latestTtfbMs} ms`}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-muted/30 p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                            {labels.availability}
+                          </div>
+                          <div className="mt-2 font-mono text-xl">
+                            {model.availabilityPct === null
+                              ? "—"
+                              : `${model.availabilityPct.toFixed(2)}%`}
+                          </div>
+                        </div>
+                      </div>
+
+                      <PublicStatusTimeline items={model.timeline} />
+                    </article>
+                  );
+                })}
               </div>
             </section>
           ))}

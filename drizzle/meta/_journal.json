@@ -652,6 +652,20 @@
       "when": 1776800253243,
       "tag": "0092_smart_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1776823153912,
+      "tag": "0093_tricky_shockwave",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1776831143074,
+      "tag": "0094_third_spacker_dave",
+      "breakpoints": true
     }
   ]
 }

@@ -59,6 +59,7 @@ export const users = pgTable('users', {
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   costResetAt: timestamp('cost_reset_at', { withTimezone: true }),
+  limit5hCostResetAt: timestamp('limit_5h_cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
 
   // Daily quota reset mode (fixed: reset at specific time, rolling: 24h window)
@@ -172,7 +173,7 @@ export const providerGroups = pgTable('provider_groups', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 200 }).notNull().unique(),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).notNull().default('1.0'),
-  description: varchar('description', { length: 500 }),
+  description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

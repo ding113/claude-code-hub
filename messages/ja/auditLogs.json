@@ -38,7 +38,8 @@
     "user": {
       "create": "ユーザー作成",
       "update": "ユーザー更新",
-      "delete": "ユーザー削除"
+      "delete": "ユーザー削除",
+      "reset_5h_limit": "ユーザー 5H 制限のリセット"
     },
     "provider": {
       "create": "プロバイダー作成",
