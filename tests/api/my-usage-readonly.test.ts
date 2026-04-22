@@ -4,6 +4,7 @@ import { db } from "@/drizzle/db";
 import { keys, messageRequest, usageLedger, users } from "@/drizzle/schema";
 
 let callActionsRouteImpl: typeof import("../test-utils")["callActionsRoute"] | undefined;
+const originalSessionTokenMode = process.env.SESSION_TOKEN_MODE;
 
 async function ensureLegacyApiRuntime() {
   if (!callActionsRouteImpl) {
@@ -72,6 +73,19 @@ function nextLedgerRequestId() {
 function nextLedgerProviderId() {
   ledgerProviderCursor += 1;
   return ledgerProviderCursor;
+}
+
+function getStableRecentUtcTimestamp(): number {
+  const now = new Date();
+  return Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    Math.max(0, now.getUTCHours() - 1),
+    0,
+    0,
+    0
+  );
 }
 
 async function createTestUser(name: string): Promise<TestUser> {
@@ -199,6 +213,12 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
   const createdLedgerRequestIds: number[] = [];
 
   afterAll(async () => {
+    if (originalSessionTokenMode === undefined) {
+      delete process.env.SESSION_TOKEN_MODE;
+    } else {
+      process.env.SESSION_TOKEN_MODE = originalSessionTokenMode;
+    }
+
     // 软删除更安全：避免潜在外键约束或其他测试依赖
     const now = new Date();
     if (createdMessageIds.length + createdLedgerRequestIds.length > 0) {
@@ -880,7 +900,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
     });
     createdKeyIds.push(otherKey.id);
 
-    const now = Date.now();
+    const now = getStableRecentUtcTimestamp();
     const today = new Date(now).toISOString().slice(0, 10);
     const visibleIp = "203.0.113.29";
 
@@ -999,7 +1019,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
     });
     createdKeyIds.push(key.id);
 
-    const now = Date.now();
+    const now = getStableRecentUtcTimestamp();
     const today = new Date(now).toISOString().slice(0, 10);
 
     const importedRequestId = await insertLedgerOnlyRow({

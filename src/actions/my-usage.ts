@@ -836,7 +836,6 @@ export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): 
               where mr_active.id = ${usageLedger.requestId}
                 and mr_active.deleted_at is null
                 and mr_active.key = ${usageLedger.key}
-                and mr_active.created_at = ${usageLedger.createdAt}
             )`
           )
         )

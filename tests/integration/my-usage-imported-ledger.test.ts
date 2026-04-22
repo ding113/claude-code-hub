@@ -44,6 +44,19 @@ function nextProviderId() {
   return providerCursor;
 }
 
+function getStableRecentUtcTimestamp(): number {
+  const now = new Date();
+  return Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    Math.max(0, now.getUTCHours() - 1),
+    0,
+    0,
+    0
+  );
+}
+
 async function createTestUser(name: string): Promise<TestUser> {
   const [row] = await db
     .insert(users)
@@ -230,7 +243,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       name: `other-${unique}`,
     });
 
-    const now = Date.now();
+    const now = getStableRecentUtcTimestamp();
     const today = new Date(now).toISOString().slice(0, 10);
     const visibleIp = "203.0.113.19";
 
@@ -332,7 +345,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       name: `mixed-${unique}`,
     });
 
-    const now = Date.now();
+    const now = getStableRecentUtcTimestamp();
     const today = new Date(now).toISOString().slice(0, 10);
 
     const importedRequestId = await insertLedgerOnlyRow({

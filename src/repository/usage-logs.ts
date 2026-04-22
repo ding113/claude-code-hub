@@ -619,7 +619,6 @@ function buildKeyLedgerConditions(
       where mr_active.id = ${usageLedger.requestId}
         and mr_active.deleted_at is null
         and mr_active.key = ${usageLedger.key}
-        and mr_active.created_at = ${usageLedger.createdAt}
     )`,
   ];
 
@@ -1116,7 +1115,7 @@ export async function getDistinctModelsForKey(keyString: string): Promise<string
     ),
     ledgerConditions
       ? db
-          .select({ model: usageLedger.model })
+          .selectDistinct({ model: usageLedger.model })
           .from(usageLedger)
           .where(and(...ledgerConditions, sql`${usageLedger.model} is not null`))
       : Promise.resolve([]),
@@ -1151,7 +1150,7 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
     ),
     ledgerConditions
       ? db
-          .select({ endpoint: usageLedger.endpoint })
+          .selectDistinct({ endpoint: usageLedger.endpoint })
           .from(usageLedger)
           .where(and(...ledgerConditions, sql`${usageLedger.endpoint} is not null`))
       : Promise.resolve([]),
