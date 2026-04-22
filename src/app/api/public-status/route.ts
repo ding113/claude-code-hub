@@ -26,6 +26,7 @@ export async function GET(request: Request): Promise<Response> {
   const defaultRange = configSnapshot?.defaultRangeHours ?? 24;
   const intervalMinutes = clampInterval(url.searchParams.get("interval"), defaultInterval);
   const rangeHours = clampRange(url.searchParams.get("rangeHours"), defaultRange);
+
   const payload = await readPublicStatusPayload({
     intervalMinutes,
     rangeHours,
@@ -42,6 +43,5 @@ export async function GET(request: Request): Promise<Response> {
   });
 
   const status = payload.rebuildState === "rebuilding" && !payload.generatedAt ? 503 : 200;
-
   return NextResponse.json(payload, { status });
 }

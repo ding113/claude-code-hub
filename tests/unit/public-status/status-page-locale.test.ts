@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetTranslations = vi.hoisted(() => vi.fn());
 const mockReadCurrentPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockReadPublicStatusSiteMetadata = vi.hoisted(() => vi.fn());
+const mockResolvePublicStatusSiteDescription = vi.hoisted(() => vi.fn());
 const mockReadPublicStatusPayload = vi.hoisted(() => vi.fn());
 const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
 const mockPublicStatusView = vi.hoisted(() => vi.fn(() => null));
@@ -14,6 +15,7 @@ vi.mock("next-intl/server", () => ({
 vi.mock("@/lib/public-status/config-snapshot", () => ({
   readCurrentPublicStatusConfigSnapshot: mockReadCurrentPublicStatusConfigSnapshot,
   readPublicStatusSiteMetadata: mockReadPublicStatusSiteMetadata,
+  resolvePublicStatusSiteDescription: mockResolvePublicStatusSiteDescription,
 }));
 
 vi.mock("@/lib/public-status/read-store", () => ({
@@ -77,6 +79,10 @@ describe("PublicStatusPage locale handling", () => {
     });
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue(null);
     mockReadPublicStatusSiteMetadata.mockResolvedValue(null);
+    mockResolvePublicStatusSiteDescription.mockImplementation(
+      ({ siteTitle, siteDescription }: { siteTitle?: string; siteDescription?: string }) =>
+        siteDescription ?? `${siteTitle ?? "Claude Code Hub"} public status`
+    );
     mockReadPublicStatusPayload.mockResolvedValue({
       rebuildState: "fresh",
       sourceGeneration: "gen-1",

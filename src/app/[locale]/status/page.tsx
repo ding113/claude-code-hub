@@ -1,12 +1,15 @@
 import { getTranslations } from "next-intl/server";
-import { readPublicSiteMeta } from "@/lib/public-site-meta";
-import { readCurrentPublicStatusConfigSnapshot } from "@/lib/public-status/config-snapshot";
+import {
+  readCurrentPublicStatusConfigSnapshot,
+  readPublicStatusSiteMetadata,
+} from "@/lib/public-status/config-snapshot";
 import { readPublicStatusPayload } from "@/lib/public-status/read-store";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
-import { resolveSiteTitle } from "@/lib/site-title";
 import { PublicStatusView } from "./_components/public-status-view";
 
 export const dynamic = "force-dynamic";
+
+const FALLBACK_SITE_TITLE = "Claude Code Hub";
 
 export default async function PublicStatusPage({
   params,
@@ -14,9 +17,9 @@ export default async function PublicStatusPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const t = await getTranslations("settings");
+  const t = await getTranslations({ locale, namespace: "settings.statusPage.public" });
   const configSnapshot = await readCurrentPublicStatusConfigSnapshot();
-  const siteMeta = await readPublicSiteMeta();
+  const siteMetadata = await readPublicStatusSiteMetadata();
   const intervalMinutes = configSnapshot?.defaultIntervalMinutes ?? 5;
   const rangeHours = configSnapshot?.defaultRangeHours ?? 24;
   const followServerDefaults = !configSnapshot;
@@ -27,13 +30,11 @@ export default async function PublicStatusPage({
     hasConfiguredGroups: configSnapshot ? configSnapshot.groups.length > 0 : undefined,
     nowIso: new Date().toISOString(),
     triggerRebuildHint: async (reason) => {
-      if (followServerDefaults) {
-        await schedulePublicStatusRebuild({
-          intervalMinutes,
-          rangeHours,
-          reason,
-        });
-      }
+      await schedulePublicStatusRebuild({
+        intervalMinutes,
+        rangeHours,
+        reason,
+      });
     },
   });
 
@@ -44,51 +45,55 @@ export default async function PublicStatusPage({
       rangeHours={rangeHours}
       followServerDefaults={followServerDefaults}
       locale={locale}
-      siteTitle={resolveSiteTitle(configSnapshot?.siteTitle, siteMeta.siteTitle)}
+      siteTitle={
+        siteMetadata?.siteTitle?.trim() ||
+        configSnapshot?.siteTitle?.trim() ||
+        FALLBACK_SITE_TITLE
+      }
       timeZone={configSnapshot?.timeZone ?? "UTC"}
       labels={{
-        systemStatus: t("statusPage.public.systemStatus"),
-        heroPrimary: t("statusPage.public.heroPrimary"),
-        heroSecondary: t("statusPage.public.heroSecondary"),
-        generatedAt: t("statusPage.public.generatedAt"),
-        history: t("statusPage.public.history"),
-        availability: t("statusPage.public.availability"),
-        ttfb: t("statusPage.public.ttfb"),
-        freshnessWindow: t("statusPage.public.freshnessWindow"),
-        fresh: t("statusPage.public.fresh"),
-        stale: t("statusPage.public.stale"),
-        staleDetail: t("statusPage.public.staleDetail"),
-        rebuilding: t("statusPage.public.rebuilding"),
-        noData: t("statusPage.public.noData"),
-        emptyDescription: t("statusPage.public.emptyDescription"),
+        systemStatus: t("systemStatus"),
+        heroPrimary: t("heroPrimary"),
+        heroSecondary: t("heroSecondary"),
+        generatedAt: t("generatedAt"),
+        history: t("history"),
+        availability: t("availability"),
+        ttfb: t("ttfb"),
+        freshnessWindow: t("freshnessWindow"),
+        fresh: t("fresh"),
+        stale: t("stale"),
+        staleDetail: t("staleDetail"),
+        rebuilding: t("rebuilding"),
+        noData: t("noData"),
+        emptyDescription: t("emptyDescription"),
         requestTypes: {
-          openaiCompatible: t("statusPage.public.requestTypes.openaiCompatible"),
-          codex: t("statusPage.public.requestTypes.codex"),
-          anthropic: t("statusPage.public.requestTypes.anthropic"),
-          gemini: t("statusPage.public.requestTypes.gemini"),
+          openaiCompatible: t("requestTypes.openaiCompatible"),
+          codex: t("requestTypes.codex"),
+          anthropic: t("requestTypes.anthropic"),
+          gemini: t("requestTypes.gemini"),
         },
         statusBadge: {
-          operational: t("statusPage.public.statusBadge.operational"),
-          degraded: t("statusPage.public.statusBadge.degraded"),
-          failed: t("statusPage.public.statusBadge.failed"),
-          noData: t("statusPage.public.statusBadge.noData"),
+          operational: t("statusBadge.operational"),
+          degraded: t("statusBadge.degraded"),
+          failed: t("statusBadge.failed"),
+          noData: t("statusBadge.noData"),
         },
         tooltip: {
-          availability: t("statusPage.public.tooltip.availability"),
-          ttfb: t("statusPage.public.tooltip.ttfb"),
-          tps: t("statusPage.public.tooltip.tps"),
-          historyAriaLabel: t("statusPage.public.tooltip.historyAriaLabel"),
+          availability: t("tooltip.availability"),
+          ttfb: t("tooltip.ttfb"),
+          tps: t("tooltip.tps"),
+          historyAriaLabel: t("tooltip.historyAriaLabel"),
         },
-        searchPlaceholder: t("statusPage.public.searchPlaceholder"),
-        customSort: t("statusPage.public.customSort"),
-        resetSort: t("statusPage.public.resetSort"),
-        emptyByFilter: t("statusPage.public.emptyByFilter"),
-        modelsLabel: t("statusPage.public.modelsLabel"),
-        issuesLabel: t("statusPage.public.issuesLabel"),
-        clearSearch: t("statusPage.public.clearSearch"),
-        dragHandle: t("statusPage.public.dragHandle"),
-        toggleGroup: t("statusPage.public.toggleGroup"),
-        openGroupPage: t("statusPage.public.openGroupPage"),
+        searchPlaceholder: t("searchPlaceholder"),
+        customSort: t("customSort"),
+        resetSort: t("resetSort"),
+        emptyByFilter: t("emptyByFilter"),
+        modelsLabel: t("modelsLabel"),
+        issuesLabel: t("issuesLabel"),
+        clearSearch: t("clearSearch"),
+        dragHandle: t("dragHandle"),
+        toggleGroup: t("toggleGroup"),
+        openGroupPage: t("openGroupPage"),
       }}
     />
   );

@@ -206,6 +206,7 @@ export async function readPublicStatusPayload(input: {
 
   let selectedManifest = manifest;
   let resolution = resolvePublicStatusManifestState(selectedManifest, input.nowIso);
+
   if (!resolution.sourceGeneration && currentManifest) {
     selectedManifest = currentManifest;
     resolution = {
@@ -225,6 +226,7 @@ export async function readPublicStatusPayload(input: {
     generation: resolution.sourceGeneration,
   });
   const snapshot = parseJson<PublicStatusSnapshotRecord>(await safeGet(redis, snapshotKey));
+
   if (!snapshot) {
     await input.triggerRebuildHint("snapshot-missing");
     return buildRebuildingPayload();
@@ -233,6 +235,7 @@ export async function readPublicStatusPayload(input: {
   if (resolution.rebuildState !== "fresh") {
     await input.triggerRebuildHint("stale-generation");
   }
+
   if (input.configVersion && selectedManifest?.configVersion !== input.configVersion) {
     await input.triggerRebuildHint("config-version-mismatch");
     resolution = {

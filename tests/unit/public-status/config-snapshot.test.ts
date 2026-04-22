@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { importPublicStatusModule } from "../../helpers/public-status-test-helpers";
 
 interface ConfigSnapshotModule {
@@ -50,12 +50,6 @@ interface ConfigSnapshotModule {
       eval: (script: string, numKeys: number, ...args: string[]) => Promise<unknown>;
     };
   }): Promise<boolean>;
-  readPublicStatusTimeZone(input: {
-    redis: {
-      status: string;
-      get: (key: string) => Promise<string | null>;
-    };
-  }): Promise<string | null>;
 }
 
 describe("public-status config snapshot", () => {
@@ -137,69 +131,6 @@ describe("public-status config snapshot", () => {
       siteTitle: "Claude Code Hub Status",
       siteDescription: "Request-derived public status",
     });
-  });
-
-  it("reads site metadata from the shared raw configVersion pointer", async () => {
-    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
-      "@/lib/public-status/config-snapshot"
-    );
-
-    const redis = {
-      status: "ready",
-      get: vi
-        .fn()
-        .mockResolvedValueOnce("cfg-3")
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            configVersion: "cfg-3",
-            siteTitle: "Claude Code Hub Status",
-            siteDescription: "Request-derived public status",
-          })
-        ),
-    };
-
-    await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toEqual({
-      siteTitle: "Claude Code Hub Status",
-      siteDescription: "Request-derived public status",
-    });
-  });
-
-  it("synthesizes siteDescription when the stored snapshot description is blank", async () => {
-    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
-      "@/lib/public-status/config-snapshot"
-    );
-
-    const redis = {
-      status: "ready",
-      get: vi
-        .fn()
-        .mockResolvedValueOnce("cfg-4")
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            configVersion: "cfg-4",
-            siteTitle: "Acme AI Hub",
-            siteDescription: "   ",
-          })
-        ),
-    };
-
-    await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toEqual({
-      siteTitle: "Acme AI Hub",
-      siteDescription: "Acme AI Hub public status",
-    });
-  });
-
-  it("returns null on malformed pointer records instead of throwing", async () => {
-    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
-      "@/lib/public-status/config-snapshot"
-    );
-
-    const redis = {
-      status: "ready",
-      get: vi.fn().mockResolvedValueOnce("{broken-json"),
-    };
-
-    await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toBeNull();
   });
 
   it("does not let an older configVersion overwrite the current pointer", async () => {

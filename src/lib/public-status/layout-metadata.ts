@@ -1,4 +1,4 @@
-import { DEFAULT_SITE_TITLE, resolveSiteTitle } from "@/lib/site-title";
+const FALLBACK_SITE_TITLE = "Claude Code Hub";
 
 export async function resolveSiteMetadataSource(input: {
   isPublicStatusRequest: boolean;
@@ -7,19 +7,17 @@ export async function resolveSiteMetadataSource(input: {
   siteDescription: string;
 } | null> {
   if (input.isPublicStatusRequest) {
-    const { readPublicSiteMeta } = await import("@/lib/public-site-meta");
-    const metadata = await readPublicSiteMeta();
-    return {
-      siteTitle: metadata.siteTitle,
-      siteDescription: metadata.siteDescription,
-    };
+    const { readPublicStatusSiteMetadata } = await import("./config-snapshot");
+    return await readPublicStatusSiteMetadata();
   }
 
   const { getSystemSettings } = await import("@/repository/system-config");
   const settings = await getSystemSettings();
+  const title = settings.siteTitle?.trim() || FALLBACK_SITE_TITLE;
+
   return {
-    siteTitle: resolveSiteTitle(settings.siteTitle, DEFAULT_SITE_TITLE),
-    siteDescription: resolveSiteTitle(settings.siteTitle, DEFAULT_SITE_TITLE),
+    siteTitle: title,
+    siteDescription: title,
   };
 }
 

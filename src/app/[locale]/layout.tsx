@@ -27,7 +27,7 @@ export async function generateMetadata({
   try {
     const metadata = await resolveSiteMetadataSource({ isPublicStatusRequest });
     const title = metadata?.siteTitle?.trim() || DEFAULT_SITE_TITLE;
-    const description = metadata?.siteDescription?.trim() || DEFAULT_SITE_TITLE;
+    const description = metadata?.siteDescription?.trim() || title;
 
     // Generate alternates for all locales
     const alternates: Record<string, string> = {};
