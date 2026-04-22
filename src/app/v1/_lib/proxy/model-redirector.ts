@@ -5,6 +5,7 @@ import {
   hasProviderModelRedirectRules,
 } from "@/lib/provider-model-redirects";
 import type { Provider } from "@/types/provider";
+import { isOpenAIImageMultipartRequest, setOpenAIImageMultipartModel } from "./openai-image-compat";
 import type { ProxySession } from "./session";
 
 /**
@@ -109,16 +110,24 @@ export class ModelRedirector {
       }
     }
 
-    // 修改 message 对象中的模型（对 Claude/OpenAI 有效，对 Gemini 无效但不影响）
-    session.request.message.model = redirectedModel;
+    // multipart 图片请求不能伪装成 JSON；模型改写写回 sidecar metadata。
+    const imageRequestMetadata = session.getOpenAIImageRequestMetadata();
+    if (isOpenAIImageMultipartRequest(imageRequestMetadata) && imageRequestMetadata) {
+      setOpenAIImageMultipartModel(imageRequestMetadata, redirectedModel);
+      session.request.message.model = redirectedModel;
+      session.request.model = redirectedModel;
+    } else {
+      // 修改 message 对象中的模型（对 Claude/OpenAI 有效，对 Gemini 无效但不影响）
+      session.request.message.model = redirectedModel;
 
-    // 更新缓存的 model 字段
-    session.request.model = redirectedModel;
+      // 更新缓存的 model 字段
+      session.request.model = redirectedModel;
 
-    // 重新生成请求 buffer（使用 TextEncoder）
-    const updatedBody = JSON.stringify(session.request.message);
-    const encoder = new TextEncoder();
-    session.request.buffer = encoder.encode(updatedBody).buffer;
+      // 重新生成请求 buffer（使用 TextEncoder）
+      const updatedBody = JSON.stringify(session.request.message);
+      const encoder = new TextEncoder();
+      session.request.buffer = encoder.encode(updatedBody).buffer;
+    }
 
     // 更新日志（记录重定向）
     session.request.note = `[Model Redirected: ${originalModel} → ${redirectedModel}] ${session.request.note || ""}`;
@@ -186,9 +195,15 @@ export class ModelRedirector {
     originalModel: string,
     provider: Provider
   ): void {
-    // 重置 request.model 和 request.message.model
+    // 重置 request.model 和 request.message.model / multipart sidecar
     session.request.model = originalModel;
-    session.request.message.model = originalModel;
+    const imageRequestMetadata = session.getOpenAIImageRequestMetadata();
+    if (isOpenAIImageMultipartRequest(imageRequestMetadata) && imageRequestMetadata) {
+      setOpenAIImageMultipartModel(imageRequestMetadata, originalModel);
+      session.request.message.model = originalModel;
+    } else {
+      session.request.message.model = originalModel;
+    }
 
     // 重置 Gemini URL 路径（如果适用）
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
@@ -207,8 +222,10 @@ export class ModelRedirector {
     }
 
     // 重新生成请求 buffer
-    const updatedBody = JSON.stringify(session.request.message);
-    session.request.buffer = new TextEncoder().encode(updatedBody).buffer;
+    if (!isOpenAIImageMultipartRequest(imageRequestMetadata)) {
+      const updatedBody = JSON.stringify(session.request.message);
+      session.request.buffer = new TextEncoder().encode(updatedBody).buffer;
+    }
 
     logger.info("[ModelRedirector] Reset model to original (provider switch)", {
       originalModel,

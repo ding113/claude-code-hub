@@ -96,6 +96,18 @@ const ENDPOINT_PROVIDER_CASES = [
     expectedProviderType: "openai-compatible",
   },
   {
+    id: "openai-images",
+    path: "/v1/images/edits",
+    requestedModel: "",
+    expectedProviderType: "openai-compatible",
+  },
+  {
+    id: "openai-images",
+    path: "/v1/images/variations",
+    requestedModel: "",
+    expectedProviderType: "openai-compatible",
+  },
+  {
     id: "openai-files",
     path: "/v1/files/file_123/content",
     requestedModel: "",

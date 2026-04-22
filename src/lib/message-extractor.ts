@@ -149,6 +149,17 @@ function extractInputText(input: unknown): string[] {
 export function extractTextFromMessages(message: Record<string, unknown>): string[] {
   const texts: string[] = [];
 
+  // 0. 提取图片接口等顶层 prompt 文本
+  if (typeof message.prompt === "string") {
+    texts.push(message.prompt);
+  } else if (Array.isArray(message.prompt)) {
+    for (const item of message.prompt) {
+      if (typeof item === "string") {
+        texts.push(item);
+      }
+    }
+  }
+
   // 1. 提取 system
   if ("system" in message) {
     const systemTexts = extractSystemText(message.system);

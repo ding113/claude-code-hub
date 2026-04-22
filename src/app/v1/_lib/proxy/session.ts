@@ -20,6 +20,15 @@ import { isCountTokensEndpointPath } from "./endpoint-paths";
 import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
+import {
+  buildOpenAIImageLogicalBody,
+  getOpenAIImageEndpoint,
+  getOpenAIImageMultipartSummary,
+  isOpenAIImageMultipartContentType,
+  isOpenAIImageMultipartRequest,
+  type OpenAIImageRequestMetadata,
+  parseOpenAIImageMultipartMetadata,
+} from "./openai-image-compat";
 
 export interface AuthState {
   user: User | null;
@@ -43,6 +52,7 @@ export interface ProxyRequestPayload {
   log: string;
   note?: string;
   model: string | null;
+  imageRequestMetadata?: OpenAIImageRequestMetadata | null;
 }
 
 interface RequestBodyResult {
@@ -52,6 +62,7 @@ interface RequestBodyResult {
   requestBodyBuffer?: ArrayBuffer;
   contentLength?: number | null;
   actualBodyBytes?: number;
+  imageRequestMetadata?: OpenAIImageRequestMetadata | null;
 }
 
 export class ProxySession {
@@ -207,6 +218,7 @@ export class ProxySession {
 
     const modelFromBody =
       typeof bodyResult.requestMessage.model === "string" ? bodyResult.requestMessage.model : null;
+    const modelFromImageRequest = bodyResult.imageRequestMetadata?.model ?? null;
 
     // 针对官方 Gemini 路径（/v1beta/models/{model}:generateContent）
     // 请求体中通常没有 model 字段，需从 URL 路径提取用于调度器匹配
@@ -219,7 +231,10 @@ export class ProxySession {
       modelFromPath !== null;
 
     const resolvedModel =
-      modelFromBody ?? modelFromPath ?? (isLikelyGeminiRequest ? "gemini-2.5-flash" : null);
+      modelFromBody ??
+      modelFromImageRequest ??
+      modelFromPath ??
+      (isLikelyGeminiRequest ? "gemini-2.5-flash" : null);
 
     const isLargeRequestBody =
       (bodyResult.contentLength !== null &&
@@ -247,6 +262,7 @@ export class ProxySession {
       log: bodyResult.requestBodyLog,
       note: bodyResult.requestBodyLogNote,
       model: resolvedModel,
+      imageRequestMetadata: bodyResult.imageRequestMetadata,
     };
 
     return new ProxySession({
@@ -645,6 +661,14 @@ export class ProxySession {
    */
   getCurrentModel(): string | null {
     return this.request.model;
+  }
+
+  getOpenAIImageRequestMetadata(): OpenAIImageRequestMetadata | null {
+    return this.request.imageRequestMetadata ?? null;
+  }
+
+  isOpenAIImageMultipartRequest(): boolean {
+    return isOpenAIImageMultipartRequest(this.getOpenAIImageRequestMetadata());
   }
 
   getEndpointPolicy(): EndpointPolicy {
@@ -1064,6 +1088,8 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
   }
 
   const contentLength = parseContentLengthHeader(c.req.header("content-length"));
+  const contentType = c.req.header("content-type") ?? null;
+  const pathname = new URL(c.req.url).pathname;
   const requestBodyBuffer = await c.req.raw.clone().arrayBuffer();
   const actualBodyBytes = requestBodyBuffer.byteLength;
   const requestBodyText = new TextDecoder().decode(requestBodyBuffer);
@@ -1090,6 +1116,31 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
   let requestMessage: Record<string, unknown> = {};
   let requestBodyLog: string;
   let requestBodyLogNote: string | undefined;
+  let imageRequestMetadata: OpenAIImageRequestMetadata | null = null;
+
+  if (getOpenAIImageEndpoint(pathname) && isOpenAIImageMultipartContentType(contentType)) {
+    // 图片 multipart 请求保留 sidecar metadata，并为过滤/敏感词提供文本字段视图。
+    imageRequestMetadata = await parseOpenAIImageMultipartMetadata(
+      c.req.raw,
+      pathname,
+      contentType
+    );
+    requestMessage = buildOpenAIImageLogicalBody(imageRequestMetadata);
+    requestBodyLog = imageRequestMetadata
+      ? getOpenAIImageMultipartSummary(imageRequestMetadata)
+      : "(multipart image request)";
+    requestBodyLogNote = "图片 multipart 请求已记录结构化摘要。";
+
+    return {
+      requestMessage,
+      requestBodyLog,
+      requestBodyLogNote,
+      requestBodyBuffer,
+      contentLength,
+      actualBodyBytes,
+      imageRequestMetadata,
+    };
+  }
 
   try {
     const parsedMessage = JSON.parse(requestBodyText) as Record<string, unknown>;
@@ -1108,5 +1159,6 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
     requestBodyBuffer,
     contentLength,
     actualBodyBytes,
+    imageRequestMetadata,
   };
 }

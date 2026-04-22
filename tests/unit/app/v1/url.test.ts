@@ -160,6 +160,30 @@ describe("buildProxyUrl", () => {
     );
   });
 
+  test("版本根路径 + Images 端点：不应重复追加 /v1", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1",
+      "/v1/images/generations?x=1",
+      "https://relay.example.com/openai/v1/images/generations?x=1"
+    );
+  });
+
+  test("完整 Images path：baseUrl 已包含 /openai/v1/images 时保持原路径", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1/images",
+      "/v1/images/edits?x=1",
+      "https://relay.example.com/openai/v1/images/edits?x=1"
+    );
+  });
+
+  test("版本根路径 + Audio 端点：不应重复追加 /v1", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1",
+      "/v1/audio/transcriptions?x=1",
+      "https://relay.example.com/openai/v1/audio/transcriptions?x=1"
+    );
+  });
+
   test("完整子端点：baseUrl 已包含 /v1/messages/count_tokens 时不应重复拼接", () => {
     expectBuiltUrl(
       "https://proxy.example.com/anthropic/v1/messages/count_tokens",
