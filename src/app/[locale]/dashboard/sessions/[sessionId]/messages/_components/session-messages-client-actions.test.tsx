@@ -107,7 +107,7 @@ vi.mock("./session-details-tabs", () => {
           >
             after
           </button>
-          {responseBody && props.onCopyResponse ? (
+          {responseBody !== null && props.onCopyResponse ? (
             <button type="button" onClick={props.onCopyResponse}>
               {props.isResponseCopied ? "actions.copied" : "actions.copyResponse"}
             </button>
@@ -486,6 +486,38 @@ describe("SessionMessagesClient (request export actions)", () => {
     });
     vi.useRealTimers();
     expect(clipboardWriteText).toHaveBeenLastCalledWith('{"before":true}');
+
+    unmount();
+  });
+
+  test("copies empty-string response bodies instead of treating them as absent", async () => {
+    const snapshots = createSnapshots();
+    if (!snapshots.response.after) {
+      throw new Error("after response snapshot missing");
+    }
+    snapshots.response.after.body = "";
+
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: buildDetailsData({ snapshots }),
+    });
+
+    const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: clipboardWriteText },
+      configurable: true,
+    });
+
+    const { container, unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    const copyRespBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("actions.copyResponse")
+    );
+    expect(copyRespBtn).not.toBeUndefined();
+    await clickAsync(copyRespBtn as HTMLButtonElement);
+
+    expect(clipboardWriteText).toHaveBeenLastCalledWith("");
 
     unmount();
   });

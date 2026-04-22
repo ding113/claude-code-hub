@@ -214,7 +214,7 @@ export function SessionMessagesClient() {
   };
 
   const handleCopyResponse = async () => {
-    if (!currentResponseSnapshot?.body) return;
+    if (currentResponseSnapshot?.body == null) return;
     try {
       await navigator.clipboard.writeText(currentResponseSnapshot.body);
       setCopiedResponse(true);

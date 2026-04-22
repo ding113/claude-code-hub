@@ -104,6 +104,48 @@ function buildLegacyCompatibilitySnapshots(params: {
   };
 }
 
+function mergeLegacyRequestAfterSnapshot(
+  snapshot: SessionDetailSnapshots["request"]["after"],
+  legacySnapshot: SessionDetailSnapshots["request"]["after"]
+): SessionDetailSnapshots["request"]["after"] {
+  if (!snapshot) return legacySnapshot;
+  if (
+    snapshot.body === null &&
+    snapshot.messages === null &&
+    snapshot.headers === null &&
+    legacySnapshot
+  ) {
+    return {
+      ...legacySnapshot,
+      meta: {
+        clientUrl: snapshot.meta.clientUrl,
+        upstreamUrl: snapshot.meta.upstreamUrl ?? legacySnapshot.meta.upstreamUrl,
+        method: snapshot.meta.method ?? legacySnapshot.meta.method,
+      },
+    };
+  }
+
+  return snapshot;
+}
+
+function mergeLegacyResponseAfterSnapshot(
+  snapshot: SessionDetailSnapshots["response"]["after"],
+  legacySnapshot: SessionDetailSnapshots["response"]["after"]
+): SessionDetailSnapshots["response"]["after"] {
+  if (!snapshot) return legacySnapshot;
+  if (snapshot.body === null && snapshot.headers === null && legacySnapshot) {
+    return {
+      ...legacySnapshot,
+      meta: {
+        upstreamUrl: snapshot.meta.upstreamUrl ?? legacySnapshot.meta.upstreamUrl,
+        statusCode: snapshot.meta.statusCode ?? legacySnapshot.meta.statusCode,
+      },
+    };
+  }
+
+  return snapshot;
+}
+
 /**
  * 获取所有活跃 session 的详细信息（使用聚合数据 + 批量查询 + 缓存）
  * 用于实时监控页面
@@ -810,11 +852,17 @@ export async function getSessionDetails(
       defaultView: snapshots.defaultView,
       request: {
         before: snapshots.request.before,
-        after: snapshots.request.after ?? legacyCompatibilitySnapshots.request.after,
+        after: mergeLegacyRequestAfterSnapshot(
+          snapshots.request.after,
+          legacyCompatibilitySnapshots.request.after
+        ),
       },
       response: {
         before: snapshots.response.before,
-        after: snapshots.response.after ?? legacyCompatibilitySnapshots.response.after,
+        after: mergeLegacyResponseAfterSnapshot(
+          snapshots.response.after,
+          legacyCompatibilitySnapshots.response.after
+        ),
       },
     };
 
