@@ -132,7 +132,7 @@ describe("public-status config publish integration", () => {
           groupName: "openai",
           displayName: "OpenAI",
           publicGroupSlug: "openai",
-          publicModelKeys: ["gpt-4.1"],
+          publicModels: [{ modelKey: "gpt-4.1" }],
         },
       ],
     });
@@ -175,7 +175,7 @@ describe("public-status config publish integration", () => {
           groupName: "openai",
           displayName: "OpenAI",
           publicGroupSlug: "openai",
-          publicModelKeys: ["gpt-4.1"],
+          publicModels: [{ modelKey: "gpt-4.1" }],
         },
       ],
     });

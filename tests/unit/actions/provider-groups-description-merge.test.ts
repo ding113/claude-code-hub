@@ -47,11 +47,12 @@ describe("provider-groups action description merge", () => {
       name: "premium",
       costMultiplier: 1.5,
       description: JSON.stringify({
+        version: 2,
         note: "Old note",
         publicStatus: {
           displayName: "Premium",
           publicGroupSlug: "premium",
-          publicModelKeys: ["gpt-4.1"],
+          publicModels: [{ modelKey: "gpt-4.1" }],
         },
       }),
     });
@@ -60,11 +61,12 @@ describe("provider-groups action description merge", () => {
       name: "premium",
       costMultiplier: 1.5,
       description: JSON.stringify({
+        version: 2,
         note: "New note",
         publicStatus: {
           displayName: "Premium",
           publicGroupSlug: "premium",
-          publicModelKeys: ["gpt-4.1"],
+          publicModels: [{ modelKey: "gpt-4.1" }],
         },
       }),
     });
@@ -81,21 +83,22 @@ describe("provider-groups action description merge", () => {
     expect(mockRepoUpdateProviderGroup).toHaveBeenCalledWith(11, {
       costMultiplier: undefined,
       description: JSON.stringify({
+        version: 2,
         note: "New note",
         publicStatus: {
           displayName: "Premium",
           publicGroupSlug: "premium",
-          publicModelKeys: ["gpt-4.1"],
+          publicModels: [{ modelKey: "gpt-4.1" }],
         },
       }),
     });
   });
 
-  it("rejects descriptionNote when merged payload would exceed the column limit", async () => {
+  it("rejects descriptionNote when merged payload would exceed the UTF-8 byte limit", async () => {
     const { updateProviderGroup } = await import("@/actions/provider-groups");
 
     const result = await updateProviderGroup(11, {
-      descriptionNote: "x".repeat(430),
+      descriptionNote: "中".repeat(6_000),
     });
 
     expect(result).toMatchObject({

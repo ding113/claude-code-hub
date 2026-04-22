@@ -2,7 +2,12 @@ import { getRedisClient } from "@/lib/redis";
 import { findLatestPricesByModels } from "@/repository/model-price";
 import { findAllProviderGroups } from "@/repository/provider-groups";
 import { getSystemSettings } from "@/repository/system-config";
-import { collectEnabledPublicStatusGroups, parsePublicStatusDescription } from "./config";
+import type { ProviderType } from "@/types/provider";
+import {
+  collectEnabledPublicStatusGroups,
+  getPublicStatusModelKeys,
+  parsePublicStatusDescription,
+} from "./config";
 import {
   buildInternalPublicStatusConfigSnapshot,
   buildPublicStatusConfigSnapshot,
@@ -12,7 +17,21 @@ import {
 } from "./config-snapshot";
 import { MAX_PUBLIC_STATUS_RANGE_HOURS, PUBLIC_STATUS_INTERVAL_SET } from "./constants";
 
-function resolvePublicVendorIconKey(modelName: string, raw?: string): string {
+function resolvePublicVendorIconKey(
+  modelName: string,
+  raw?: string,
+  providerTypeOverride?: ProviderType
+): string {
+  if (providerTypeOverride === "claude" || providerTypeOverride === "claude-auth") {
+    return "anthropic";
+  }
+  if (providerTypeOverride === "codex" || providerTypeOverride === "openai-compatible") {
+    return "openai";
+  }
+  if (providerTypeOverride === "gemini" || providerTypeOverride === "gemini-cli") {
+    return "gemini";
+  }
+
   const PUBLIC_VENDOR_ICON_KEYS = new Set([
     "openai",
     "anthropic",
@@ -34,7 +53,20 @@ function resolvePublicVendorIconKey(modelName: string, raw?: string): string {
   return "generic";
 }
 
-function resolveRequestTypeBadge(modelName: string): string {
+function resolveRequestTypeBadge(modelName: string, providerTypeOverride?: ProviderType): string {
+  if (providerTypeOverride === "claude" || providerTypeOverride === "claude-auth") {
+    return "anthropic";
+  }
+  if (providerTypeOverride === "codex") {
+    return "codex";
+  }
+  if (providerTypeOverride === "gemini" || providerTypeOverride === "gemini-cli") {
+    return "gemini";
+  }
+  if (providerTypeOverride === "openai-compatible") {
+    return "openaiCompatible";
+  }
+
   const normalized = modelName.toLowerCase();
   if (normalized.includes("codex")) {
     return "codex";
@@ -74,7 +106,7 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
     }))
   );
   const latestPrices = await findLatestPricesByModels(
-    enabledGroups.flatMap((group) => group.publicModelKeys)
+    enabledGroups.flatMap((group) => getPublicStatusModelKeys(group.publicModels))
   );
   const defaultIntervalMinutes = normalizePublicInterval(
     settings.publicStatusAggregationIntervalMinutes
@@ -93,7 +125,8 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
       displayName: group.displayName,
       sortOrder: group.sortOrder,
       description: group.explanatoryCopy,
-      models: group.publicModelKeys.map((modelName) => {
+      models: group.publicModels.map((model) => {
+        const modelName = model.modelKey;
         const price = latestPrices.get(modelName);
         return {
           publicModelKey: modelName,
@@ -102,9 +135,10 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
             modelName,
             typeof price?.priceData.litellm_provider === "string"
               ? price.priceData.litellm_provider
-              : undefined
+              : undefined,
+            model.providerTypeOverride
           ),
-          requestTypeBadge: resolveRequestTypeBadge(modelName),
+          requestTypeBadge: resolveRequestTypeBadge(modelName, model.providerTypeOverride),
         };
       }),
     })),
@@ -122,7 +156,8 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
       displayName: group.displayName,
       sortOrder: group.sortOrder,
       description: group.explanatoryCopy,
-      models: group.publicModelKeys.map((modelName) => {
+      models: group.publicModels.map((model) => {
+        const modelName = model.modelKey;
         const price = latestPrices.get(modelName);
         return {
           publicModelKey: modelName,
@@ -131,9 +166,10 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
             modelName,
             typeof price?.priceData.litellm_provider === "string"
               ? price.priceData.litellm_provider
-              : undefined
+              : undefined,
+            model.providerTypeOverride
           ),
-          requestTypeBadge: resolveRequestTypeBadge(modelName),
+          requestTypeBadge: resolveRequestTypeBadge(modelName, model.providerTypeOverride),
         };
       }),
     })),

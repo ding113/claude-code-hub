@@ -1,3 +1,7 @@
+/**
+ * @vitest-environment happy-dom
+ */
+
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,7 +48,7 @@ function getRequestPath(input: string | URL | Request): string {
     return input.pathname;
   }
 
-  return input.url;
+  return new URL(input.url).pathname;
 }
 
 function mockJsonResponse(payload: unknown, ok = true): Response {
@@ -54,7 +58,7 @@ function mockJsonResponse(payload: unknown, ok = true): Response {
   } as Response;
 }
 
-describe("LoginPage footer system name", () => {
+describe("login page site title", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
 
@@ -87,16 +91,16 @@ describe("LoginPage footer system name", () => {
     });
   };
 
-  const getSiteTitleFooter = () =>
-    container.querySelector<HTMLElement>('[data-testid="login-site-title-footer"]');
+  it("reads branding from the public-safe metadata endpoint instead of the admin settings API", async () => {
+    const requestedPaths: string[] = [];
 
-  it("renders configured site title when API returns it", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
       (input: string | URL | Request) => {
         const path = getRequestPath(input);
+        requestedPaths.push(path);
 
         if (path === "/api/public-site-meta") {
-          return Promise.resolve(mockJsonResponse({ siteTitle: "My Custom Hub" }));
+          return Promise.resolve(mockJsonResponse({ siteTitle: "Acme AI Hub" }));
         }
 
         return Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }));
@@ -106,50 +110,19 @@ describe("LoginPage footer system name", () => {
     await render();
     await flushMicrotasks();
 
-    expect(getSiteTitleFooter()).not.toBeNull();
-    expect(getSiteTitleFooter()?.textContent).toBe("My Custom Hub");
-  });
-
-  it("falls back to default title when API fails", async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
-      (input: string | URL | Request) => {
-        const path = getRequestPath(input);
-
-        if (path === "/api/public-site-meta") {
-          return Promise.resolve(mockJsonResponse({ error: "Unauthorized" }, false));
-        }
-
-        return Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }));
-      }
+    const headings = Array.from(container.querySelectorAll("h1")).map(
+      (heading) => heading.textContent?.trim() || ""
     );
 
-    await render();
-    await flushMicrotasks();
-
-    expect(getSiteTitleFooter()).not.toBeNull();
-    expect(getSiteTitleFooter()?.textContent).toBe(DEFAULT_SITE_TITLE);
+    expect(requestedPaths).toContain("/api/public-site-meta");
+    expect(requestedPaths).not.toContain("/api/system-settings");
+    expect(headings).toContain("Acme AI Hub");
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="login-site-title-footer"]')?.textContent
+    ).toBe("Acme AI Hub");
   });
 
-  it("shows default title while loading", async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
-      (input: string | URL | Request) => {
-        const path = getRequestPath(input);
-
-        if (path === "/api/public-site-meta") {
-          return new Promise(() => {});
-        }
-
-        return Promise.resolve(mockJsonResponse({ current: "1.0.0", hasUpdate: false }));
-      }
-    );
-
-    await render();
-
-    expect(getSiteTitleFooter()).not.toBeNull();
-    expect(getSiteTitleFooter()?.textContent).toBe(DEFAULT_SITE_TITLE);
-  });
-
-  it("falls back to default title when public metadata returns blank title", async () => {
+  it("falls back to the default title when the public branding payload is blank", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
       (input: string | URL | Request) => {
         const path = getRequestPath(input);
@@ -165,7 +138,8 @@ describe("LoginPage footer system name", () => {
     await render();
     await flushMicrotasks();
 
-    expect(getSiteTitleFooter()).not.toBeNull();
-    expect(getSiteTitleFooter()?.textContent).toBe(DEFAULT_SITE_TITLE);
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="login-site-title-footer"]')?.textContent
+    ).toBe(DEFAULT_SITE_TITLE);
   });
 });

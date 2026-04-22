@@ -1,0 +1,1 @@
+ALTER TABLE "provider_groups" ALTER COLUMN "description" SET DATA TYPE text;

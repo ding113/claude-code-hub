@@ -5,17 +5,15 @@ import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { bootstrapProviderGroupsFromProviders } from "@/lib/provider-groups/bootstrap";
 import {
   parsePublicStatusDescription,
   serializePublicStatusDescription,
 } from "@/lib/public-status/config";
+import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
-import { findAllProvidersFresh } from "@/repository/provider";
 import {
   countProvidersUsingGroup,
-  ensureProviderGroupsExist,
-  findAllProviderGroups,
   findProviderGroupById,
   findProviderGroupByName,
   createProviderGroup as repoCreateProviderGroup,
@@ -49,49 +47,14 @@ export async function getProviderGroups(): Promise<ActionResult<ProviderGroupWit
       return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
-    const [initialGroups, providers] = await Promise.all([
-      findAllProviderGroups(),
-      findAllProvidersFresh(),
-    ]);
-
-    // 单次遍历 providers：同时聚合引用集合与按组计数（未打 tag 的 provider 归入 default）
-    const referenced = new Set<string>();
-    const groupCounts = new Map<string, number>();
-    for (const provider of providers) {
-      const parsed = parseProviderGroups(provider.groupTag);
-      if (parsed.length === 0) {
-        referenced.add(PROVIDER_GROUP.DEFAULT);
-        groupCounts.set(PROVIDER_GROUP.DEFAULT, (groupCounts.get(PROVIDER_GROUP.DEFAULT) || 0) + 1);
-        continue;
-      }
-      for (const name of parsed) {
-        referenced.add(name);
-        groupCounts.set(name, (groupCounts.get(name) || 0) + 1);
-      }
-    }
-
-    // 读时自愈：把被引用但表里缺失的分组名批量补齐。
-    // 必须吞错——若 ensureProviderGroupsExist 因任何原因失败（如历史 tag 超过 provider_groups.name 长度上限），
-    // Tab 依然应能展示既有分组，不能因自愈失败整页不可用。
-    const existingNames = new Set(initialGroups.map((g) => g.name));
-    const PROVIDER_GROUP_NAME_MAX = 200; // 与 schema 保持一致
-    const missing = [...referenced].filter(
-      (n) => !existingNames.has(n) && n.length <= PROVIDER_GROUP_NAME_MAX
-    );
-    let groups = initialGroups;
-    if (missing.length > 0) {
-      try {
-        await ensureProviderGroupsExist(missing);
-        // 重新拉取一次，拿到新插入行的完整字段（id/timestamps/默认倍率）
-        groups = await findAllProviderGroups();
-      } catch (syncError) {
+    const { groups, groupCounts } = await bootstrapProviderGroupsFromProviders({
+      logSelfHealFailure: (error, missing) => {
         logger.warn("getProviderGroups:self_heal_failed", {
-          error: syncError instanceof Error ? syncError.message : String(syncError),
+          error: error instanceof Error ? error.message : String(error),
           missingCount: missing.length,
         });
-        // 继续用 initialGroups 返回，不阻塞 Tab 加载
-      }
-    }
+      },
+    });
 
     const data: ProviderGroupWithCount[] = groups.map((group) => ({
       ...group,
@@ -222,7 +185,7 @@ export async function updateProviderGroup(
             publicStatus: parsePublicStatusDescription(beforeGroup?.description).publicStatus,
           })
         : input.description;
-    if (nextDescription && nextDescription.length > 500) {
+    if (exceedsProviderGroupDescriptionLimit(nextDescription)) {
       return {
         ok: false,
         error: t("descriptionTooLong"),

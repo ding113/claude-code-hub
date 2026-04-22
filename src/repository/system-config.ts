@@ -4,10 +4,10 @@ import { eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { systemSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import type { SystemSettings, UpdateSystemSettingsInput } from "@/types/system-config";
 import { toSystemSettings } from "./_shared/transformers";
 
-const DEFAULT_SITE_TITLE = "Claude Code Hub";
 type TransactionExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type SystemSettingsMutationExecutor = Pick<TransactionExecutor, "update">;
 

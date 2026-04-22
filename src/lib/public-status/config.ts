@@ -1,9 +1,27 @@
+import type { ProviderType } from "@/types/provider";
+
+export const PUBLIC_STATUS_DESCRIPTION_VERSION = 2;
+
+const VALID_PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
+  "claude",
+  "claude-auth",
+  "codex",
+  "gemini",
+  "gemini-cli",
+  "openai-compatible",
+]);
+
+export interface PublicStatusModelConfig {
+  modelKey: string;
+  providerTypeOverride?: ProviderType;
+}
+
 export interface PublicStatusGroupConfig {
   displayName?: string;
   publicGroupSlug?: string;
   explanatoryCopy?: string | null;
   sortOrder?: number;
-  publicModelKeys: string[];
+  publicModels: PublicStatusModelConfig[];
 }
 
 export interface ParsedPublicStatusDescription {
@@ -21,7 +39,17 @@ export interface EnabledPublicStatusGroup {
   publicGroupSlug: string;
   explanatoryCopy: string | null;
   sortOrder: number;
-  publicModelKeys: string[];
+  publicModels: PublicStatusModelConfig[];
+}
+
+interface LegacyPublicStatusGroupConfigInput {
+  displayName?: unknown;
+  publicGroupSlug?: unknown;
+  explanatoryCopy?: unknown;
+  sortOrder?: unknown;
+  publicModels?: unknown;
+  publicModelKeys?: unknown;
+  modelIds?: unknown;
 }
 
 const CONFIG_CACHE_TTL_MS = 60 * 1000;
@@ -38,19 +66,63 @@ function sanitizeString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function sanitizePublicModelKeys(modelKeys: unknown): string[] {
-  if (!Array.isArray(modelKeys)) {
+function sanitizeProviderType(value: unknown): ProviderType | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim() as ProviderType;
+  return VALID_PROVIDER_TYPES.has(normalized) ? normalized : undefined;
+}
+
+function sanitizePublicModels(publicModels: unknown): PublicStatusModelConfig[] {
+  if (!Array.isArray(publicModels)) {
     return [];
   }
 
-  return Array.from(
-    new Set(
-      modelKeys
-        .filter((value): value is string => typeof value === "string")
-        .map((value) => value.trim())
-        .filter(Boolean)
-    )
-  );
+  const seen = new Set<string>();
+  const normalized: PublicStatusModelConfig[] = [];
+
+  for (const entry of publicModels) {
+    const modelKey =
+      typeof entry === "string"
+        ? sanitizeString(entry)
+        : sanitizeString((entry as { modelKey?: unknown }).modelKey);
+
+    if (!modelKey || seen.has(modelKey)) {
+      continue;
+    }
+
+    seen.add(modelKey);
+    const providerTypeOverride =
+      typeof entry === "string"
+        ? undefined
+        : sanitizeProviderType((entry as { providerTypeOverride?: unknown }).providerTypeOverride);
+
+    normalized.push({
+      modelKey,
+      ...(providerTypeOverride ? { providerTypeOverride } : {}),
+    });
+  }
+
+  return normalized;
+}
+
+function sanitizeLegacyPublicModels(
+  publicModels: unknown,
+  publicModelKeys: unknown,
+  modelIds: unknown
+): PublicStatusModelConfig[] {
+  const normalizedPublicModels = sanitizePublicModels(publicModels);
+  if (normalizedPublicModels.length > 0) {
+    return normalizedPublicModels;
+  }
+
+  return sanitizePublicModels(publicModelKeys ?? modelIds);
+}
+
+export function getPublicStatusModelKeys(publicModels: PublicStatusModelConfig[]): string[] {
+  return publicModels.map((model) => model.modelKey);
 }
 
 export function slugifyPublicGroup(input: string): string {
@@ -71,15 +143,9 @@ export function parsePublicStatusDescription(
 
   try {
     const parsed = JSON.parse(description) as {
+      version?: unknown;
       note?: unknown;
-      publicStatus?: {
-        displayName?: unknown;
-        publicGroupSlug?: unknown;
-        explanatoryCopy?: unknown;
-        sortOrder?: unknown;
-        publicModelKeys?: unknown;
-        modelIds?: unknown;
-      } | null;
+      publicStatus?: LegacyPublicStatusGroupConfigInput | null;
     };
 
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -87,19 +153,21 @@ export function parsePublicStatusDescription(
     }
 
     const note = sanitizeString(parsed.note) ?? null;
+    const publicStatus = parsed.publicStatus;
     const groupConfig =
-      parsed.publicStatus && typeof parsed.publicStatus === "object"
+      publicStatus && typeof publicStatus === "object"
         ? {
-            displayName: sanitizeString(parsed.publicStatus.displayName),
-            publicGroupSlug: sanitizeString(parsed.publicStatus.publicGroupSlug),
-            explanatoryCopy: sanitizeString(parsed.publicStatus.explanatoryCopy) ?? null,
+            displayName: sanitizeString(publicStatus.displayName),
+            publicGroupSlug: sanitizeString(publicStatus.publicGroupSlug),
+            explanatoryCopy: sanitizeString(publicStatus.explanatoryCopy) ?? null,
             sortOrder:
-              typeof parsed.publicStatus.sortOrder === "number" &&
-              Number.isFinite(parsed.publicStatus.sortOrder)
-                ? parsed.publicStatus.sortOrder
+              typeof publicStatus.sortOrder === "number" && Number.isFinite(publicStatus.sortOrder)
+                ? publicStatus.sortOrder
                 : undefined,
-            publicModelKeys: sanitizePublicModelKeys(
-              parsed.publicStatus.publicModelKeys ?? parsed.publicStatus.modelIds
+            publicModels: sanitizeLegacyPublicModels(
+              publicStatus.publicModels,
+              publicStatus.publicModelKeys,
+              publicStatus.modelIds
             ),
           }
         : null;
@@ -112,7 +180,7 @@ export function parsePublicStatusDescription(
           groupConfig.publicGroupSlug ||
           groupConfig.explanatoryCopy ||
           groupConfig.sortOrder !== undefined ||
-          groupConfig.publicModelKeys.length > 0)
+          groupConfig.publicModels.length > 0)
           ? groupConfig
           : null,
     };
@@ -122,7 +190,11 @@ export function parsePublicStatusDescription(
 }
 
 export function serializePublicStatusDescription(
-  input: ParsedPublicStatusDescription
+  input: ParsedPublicStatusDescription & {
+    publicStatus?:
+      | (ParsedPublicStatusDescription["publicStatus"] & { publicModelKeys?: unknown })
+      | null;
+  }
 ): string | null {
   const note = sanitizeString(input.note) ?? null;
   const displayName = sanitizeString(input.publicStatus?.displayName);
@@ -133,7 +205,11 @@ export function serializePublicStatusDescription(
     Number.isFinite(input.publicStatus.sortOrder)
       ? input.publicStatus.sortOrder
       : undefined;
-  const publicModelKeys = sanitizePublicModelKeys(input.publicStatus?.publicModelKeys);
+  const publicModels = sanitizeLegacyPublicModels(
+    input.publicStatus?.publicModels,
+    input.publicStatus?.publicModelKeys,
+    undefined
+  );
 
   if (
     !note &&
@@ -141,25 +217,26 @@ export function serializePublicStatusDescription(
     !publicGroupSlug &&
     !explanatoryCopy &&
     sortOrder === undefined &&
-    publicModelKeys.length === 0
+    publicModels.length === 0
   ) {
     return null;
   }
 
   return JSON.stringify({
+    version: PUBLIC_STATUS_DESCRIPTION_VERSION,
     ...(note ? { note } : {}),
     ...(displayName ||
     publicGroupSlug ||
     explanatoryCopy ||
     sortOrder !== undefined ||
-    publicModelKeys.length > 0
+    publicModels.length > 0
       ? {
           publicStatus: {
             ...(displayName ? { displayName } : {}),
             ...(publicGroupSlug ? { publicGroupSlug } : {}),
             ...(explanatoryCopy ? { explanatoryCopy } : {}),
             ...(sortOrder !== undefined ? { sortOrder } : {}),
-            publicModelKeys,
+            publicModels,
           },
         }
       : {}),
@@ -170,16 +247,20 @@ export function collectEnabledPublicStatusGroups(
   groups: PublicStatusConfiguredGroupInput[]
 ): EnabledPublicStatusGroup[] {
   return groups
-    .filter((group) => group.publicStatus && group.publicStatus.publicModelKeys.length > 0)
-    .map((group) => ({
-      groupName: group.groupName,
-      displayName: group.publicStatus?.displayName?.trim() || group.groupName,
-      publicGroupSlug:
-        group.publicStatus?.publicGroupSlug?.trim() || slugifyPublicGroup(group.groupName),
-      explanatoryCopy: group.publicStatus?.explanatoryCopy?.trim() || null,
-      sortOrder: group.publicStatus?.sortOrder ?? 0,
-      publicModelKeys: sanitizePublicModelKeys(group.publicStatus?.publicModelKeys),
-    }))
+    .map((group) => {
+      const publicModels = sanitizePublicModels(group.publicStatus?.publicModels);
+
+      return {
+        groupName: group.groupName,
+        displayName: group.publicStatus?.displayName?.trim() || group.groupName,
+        publicGroupSlug:
+          group.publicStatus?.publicGroupSlug?.trim() || slugifyPublicGroup(group.groupName),
+        explanatoryCopy: group.publicStatus?.explanatoryCopy?.trim() || null,
+        sortOrder: group.publicStatus?.sortOrder ?? 0,
+        publicModels,
+      };
+    })
+    .filter((group) => group.publicModels.length > 0)
     .sort(
       (left, right) =>
         left.sortOrder - right.sortOrder || left.displayName.localeCompare(right.displayName)
