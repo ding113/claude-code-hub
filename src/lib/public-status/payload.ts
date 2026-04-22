@@ -1,6 +1,6 @@
 import type { PublicStatusServeState } from "./redis-contract";
 
-export type PublicStatusTimelineState = "operational" | "failed" | "no_data";
+export type PublicStatusTimelineState = "operational" | "degraded" | "failed" | "no_data";
 
 export interface PublicStatusTimelineBucket {
   bucketStart: string;

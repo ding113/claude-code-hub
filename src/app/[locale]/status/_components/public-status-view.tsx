@@ -1,10 +1,46 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
-import { ThemeSwitcher } from "@/components/ui/theme-switcher";
-import type { PublicStatusPayload, PublicStatusTimelineBucket } from "@/lib/public-status/payload";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { startTransition, useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import type { PublicStatusPayload } from "@/lib/public-status/payload";
 import { getPublicStatusVendorIconComponent } from "@/lib/public-status/vendor-icon";
-import { PublicStatusTimeline } from "./public-status-timeline";
+import { cn } from "@/lib/utils";
+import { type DisplayState, deriveLatestModelState } from "../_lib/derive-display-state";
+import { fillDisplayTimeline } from "../_lib/fill-display-timeline";
+import {
+  clearGroupOrder,
+  loadCollapsedSet,
+  loadGroupOrder,
+  reconcileOrder,
+  saveCollapsedSet,
+  saveGroupOrder,
+} from "../_lib/group-order-store";
+import {
+  CHART_BUCKETS,
+  computeAvgTtfb,
+  computeUptimePct,
+  sliceTimelineForChart,
+} from "../_lib/timeline-windows";
+import "../status-page.css";
+import { PublicStatusTimeline, type PublicStatusTimelineLabels } from "./public-status-timeline";
+import { SortableGroupPanel } from "./sortable-group-panel";
+import { StatusHero } from "./status-hero";
+import { StatusToolbar } from "./status-toolbar";
 
 interface PublicStatusViewProps {
   initialPayload: PublicStatusPayload;
@@ -30,32 +66,62 @@ interface PublicStatusViewProps {
     noData: string;
     emptyDescription: string;
     requestTypes: Record<string, string>;
+    statusBadge: {
+      operational: string;
+      degraded: string;
+      failed: string;
+      noData: string;
+    };
+    tooltip: {
+      timeRange: string;
+      availability: string;
+      ttfb: string;
+      tps: string;
+      samples: string;
+      inferredFromNeighbors: string;
+    };
+    searchPlaceholder: string;
+    customSort: string;
+    resetSort: string;
+    emptyByFilter: string;
+    modelsLabel: string;
+    issuesLabel: string;
   };
 }
 
-function buildEmptyTimeline(): PublicStatusTimelineBucket[] {
-  return Array.from({ length: 60 }, (_, index) => ({
-    bucketStart: `empty-${index}`,
-    bucketEnd: `empty-${index}`,
-    state: "no_data",
-    availabilityPct: null,
-    ttfbMs: null,
-    tps: null,
-    sampleCount: 0,
-  }));
+function badgeVariant(state: DisplayState): {
+  className: string;
+  label: (labels: PublicStatusViewProps["labels"]) => string;
+} {
+  switch (state) {
+    case "operational":
+      return {
+        className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        label: (l) => l.statusBadge.operational,
+      };
+    case "degraded":
+      return {
+        className: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+        label: (l) => l.statusBadge.degraded,
+      };
+    case "failed":
+      return {
+        className: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+        label: (l) => l.statusBadge.failed,
+      };
+    default:
+      return {
+        className: "border-border/60 bg-muted/40 text-muted-foreground",
+        label: (l) => l.statusBadge.noData,
+      };
+  }
 }
 
-function resolveStateLabel(
-  rebuildState: PublicStatusPayload["rebuildState"],
-  labels: PublicStatusViewProps["labels"]
-): string {
-  if (rebuildState === "rebuilding") {
-    return labels.rebuilding;
-  }
-  if (rebuildState === "no-data") {
-    return labels.noData;
-  }
-  return labels.fresh;
+function aggregateOverallState(states: DisplayState[]): DisplayState {
+  if (states.some((s) => s === "failed")) return "failed";
+  if (states.some((s) => s === "degraded")) return "degraded";
+  if (states.some((s) => s === "operational")) return "operational";
+  return "no_data";
 }
 
 export function PublicStatusView({
@@ -69,6 +135,11 @@ export function PublicStatusView({
   labels,
 }: PublicStatusViewProps) {
   const [payload, setPayload] = useState(initialPayload);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [customSort, setCustomSort] = useState(false);
+  const [orderHydrated, setOrderHydrated] = useState(false);
+  const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const refresh = async () => {
@@ -77,183 +148,264 @@ export function PublicStatusView({
           followServerDefaults
             ? "/api/public-status"
             : `/api/public-status?interval=${intervalMinutes}&rangeHours=${rangeHours}`,
-          {
-            cache: "no-store",
-          }
+          { cache: "no-store" }
         );
-        const nextPayload = (await response.json()) as PublicStatusPayload;
-        startTransition(() => {
-          setPayload(nextPayload);
-        });
+        const next = (await response.json()) as PublicStatusPayload;
+        startTransition(() => setPayload(next));
       } catch {
-        // 保持最后一版 payload，等待下一个轮询周期。
+        // keep last payload until next tick
       }
     };
-
     if (followServerDefaults || initialPayload.rebuildState === "rebuilding") {
       void refresh();
     }
-
-    const pollId = window.setInterval(() => {
-      void refresh();
-    }, 30_000);
-
-    return () => {
-      window.clearInterval(pollId);
-    };
+    const pollId = window.setInterval(() => void refresh(), 30_000);
+    return () => window.clearInterval(pollId);
   }, [followServerDefaults, initialPayload.rebuildState, intervalMinutes, rangeHours]);
 
-  const groups =
-    payload.groups.length > 0
-      ? payload.groups
-      : [
-          {
-            publicGroupSlug: "bootstrap",
-            displayName: labels.systemStatus,
-            explanatoryCopy: labels.emptyDescription,
-            models: [
-              {
-                publicModelKey: "bootstrap",
-                label: labels.systemStatus,
-                vendorIconKey: "generic",
-                requestTypeBadge: "openaiCompatible",
-                latestState: "no_data" as const,
-                availabilityPct: null,
-                latestTtfbMs: null,
-                latestTps: null,
-                timeline: buildEmptyTimeline(),
-              },
-            ],
-          },
-        ];
+  useEffect(() => {
+    setGroupOrder(loadGroupOrder());
+    setCollapsedGroups(loadCollapsedSet());
+    setOrderHydrated(true);
+  }, []);
+
+  const baseGroups = useMemo(
+    () =>
+      payload.groups.length > 0
+        ? payload.groups
+        : [
+            {
+              publicGroupSlug: "bootstrap",
+              displayName: labels.systemStatus,
+              explanatoryCopy: labels.emptyDescription,
+              models: [],
+            },
+          ],
+    [payload.groups, labels.systemStatus, labels.emptyDescription]
+  );
+
+  const orderedGroups = useMemo(() => {
+    const slugs = baseGroups.map((g) => g.publicGroupSlug);
+    if (!orderHydrated || groupOrder.length === 0) {
+      return baseGroups;
+    }
+    const ordered = reconcileOrder(groupOrder, slugs);
+    const map = new Map(baseGroups.map((g) => [g.publicGroupSlug, g]));
+    return ordered.map((slug) => map.get(slug)).filter((g) => g !== undefined);
+  }, [baseGroups, groupOrder, orderHydrated]);
+
+  const filteredGroups = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return orderedGroups;
+    return orderedGroups
+      .map((group) => {
+        const groupMatches = group.displayName.toLowerCase().includes(q);
+        const matchedModels = group.models.filter((m) => m.label.toLowerCase().includes(q));
+        if (groupMatches) return group;
+        if (matchedModels.length === 0) return null;
+        return { ...group, models: matchedModels };
+      })
+      .filter((g): g is (typeof orderedGroups)[number] => g !== null);
+  }, [orderedGroups, searchQuery]);
+
+  const overallState: DisplayState = useMemo(() => {
+    const states = baseGroups.flatMap((g) => g.models.map((m) => deriveLatestModelState(m)));
+    return aggregateOverallState(states);
+  }, [baseGroups]);
+
+  const overallLabel = badgeVariant(overallState).label(labels);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const slugs = filteredGroups.map((g) => g.publicGroupSlug);
+    const oldIndex = slugs.indexOf(String(active.id));
+    const newIndex = slugs.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(slugs, oldIndex, newIndex);
+    const baseSlugs = baseGroups.map((g) => g.publicGroupSlug);
+    const reconciled = reconcileOrder(next, baseSlugs);
+    setGroupOrder(reconciled);
+    saveGroupOrder(reconciled);
+  };
+
+  const handleToggleCustomSort = () => {
+    if (customSort) {
+      setCustomSort(false);
+      setGroupOrder([]);
+      clearGroupOrder();
+    } else {
+      setCustomSort(true);
+    }
+  };
+
+  const handleGroupOpenChange = (slug: string, open: boolean) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (open) {
+        next.delete(slug);
+      } else {
+        next.add(slug);
+      }
+      saveCollapsedSet(next);
+      return next;
+    });
+  };
+
+  const timelineLabels: PublicStatusTimelineLabels = {
+    availability: labels.tooltip.availability,
+    ttfb: labels.tooltip.ttfb,
+    tps: labels.tooltip.tps,
+    samples: labels.tooltip.samples,
+    inferredFromNeighbors: labels.tooltip.inferredFromNeighbors,
+    noData: labels.noData,
+  };
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.15),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.08))] text-foreground">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgba(148,163,184,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.08) 1px, transparent 1px)",
-          backgroundSize: "32px 32px",
-        }}
-      />
+    <div className="cch-status-bg relative min-h-screen text-foreground">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
+        <StatusHero
+          siteTitle={siteTitle}
+          heroPrimary={labels.heroPrimary}
+          heroSecondary={labels.heroSecondary}
+          generatedAtLabel={labels.generatedAt}
+          generatedAt={payload.generatedAt}
+          locale={locale}
+          timeZone={timeZone}
+          overallState={overallState}
+          statusLabel={overallLabel}
+        />
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="rounded-[32px] border border-white/10 bg-card/72 p-6 shadow-2xl backdrop-blur-xl">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-muted-foreground">
-                {labels.heroPrimary}
-              </p>
-              <div className="space-y-3">
-                <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">{siteTitle}</h1>
-                <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-                  {labels.heroSecondary}
-                </p>
-              </div>
-            </div>
+        <StatusToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          customSort={customSort}
+          onToggleCustomSort={handleToggleCustomSort}
+          searchPlaceholder={labels.searchPlaceholder}
+          customSortLabel={labels.customSort}
+          resetSortLabel={labels.resetSort}
+        />
 
-            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-              {payload.rebuildState !== "stale" ? (
-                <div className="rounded-full border border-white/10 bg-background/70 px-4 py-2 text-sm">
-                  {resolveStateLabel(payload.rebuildState, labels)}
-                </div>
-              ) : null}
-              <ThemeSwitcher />
-            </div>
+        {filteredGroups.length === 0 ? (
+          <div className="rounded-2xl border border-border/60 bg-card/40 p-8 text-center text-sm text-muted-foreground backdrop-blur-sm">
+            {labels.emptyByFilter}
           </div>
-
-          <div className="mt-6 space-y-2 text-sm text-muted-foreground">
-            <span>
-              {labels.generatedAt}:{" "}
-              {payload.generatedAt
-                ? new Intl.DateTimeFormat(locale, {
-                    dateStyle: "medium",
-                    timeStyle: "medium",
-                    timeZone,
-                  }).format(new Date(payload.generatedAt))
-                : labels.rebuilding}
-            </span>
-            {payload.rebuildState === "stale" ? (
-              <p className="text-xs">{labels.staleDetail}</p>
-            ) : null}
-          </div>
-        </header>
-
-        <div className="grid gap-6">
-          {groups.map((group) => (
-            <section
-              key={group.publicGroupSlug}
-              className="rounded-[28px] border border-white/10 bg-card/60 p-6 shadow-xl backdrop-blur-xl"
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={filteredGroups.map((g) => g.publicGroupSlug)}
+              strategy={verticalListSortingStrategy}
             >
-              <div className="mb-4 space-y-2">
-                <h2 className="text-2xl font-semibold tracking-tight">{group.displayName}</h2>
-                {group.explanatoryCopy ? (
-                  <p className="text-sm text-muted-foreground">{group.explanatoryCopy}</p>
-                ) : null}
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                {group.models.map((model) => {
-                  const { iconKey, Icon: VendorIcon } = getPublicStatusVendorIconComponent({
-                    modelName: model.publicModelKey,
-                    vendorIconKey: model.vendorIconKey,
-                  });
+              <div className="space-y-4">
+                {filteredGroups.map((group) => {
+                  const open = !collapsedGroups.has(group.publicGroupSlug);
+                  const issueCount = group.models.filter((m) => {
+                    const s = deriveLatestModelState(m);
+                    return s === "failed" || s === "degraded";
+                  }).length;
 
                   return (
-                    <article
-                      key={model.publicModelKey}
-                      className="rounded-[24px] border border-white/10 bg-background/60 p-5"
+                    <SortableGroupPanel
+                      key={group.publicGroupSlug}
+                      slug={group.publicGroupSlug}
+                      displayName={group.displayName}
+                      modelCount={group.models.length}
+                      issueCount={issueCount}
+                      open={open}
+                      onOpenChange={(next) => handleGroupOpenChange(group.publicGroupSlug, next)}
+                      draggable={customSort}
+                      modelBadgeLabel={labels.modelsLabel}
+                      issueBadgeLabel={labels.issuesLabel}
                     >
-                      <div className="mb-4 flex items-start justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-muted/40"
-                              data-vendor-icon-key={iconKey}
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {group.models.map((model) => {
+                          const filled = fillDisplayTimeline(model.timeline);
+                          const chartCells = sliceTimelineForChart(filled, CHART_BUCKETS);
+                          const uptime24h = computeUptimePct(model.timeline);
+                          const ttfb24h = computeAvgTtfb(model.timeline);
+                          const latest = deriveLatestModelState(model);
+                          const variant = badgeVariant(latest);
+                          const { Icon } = getPublicStatusVendorIconComponent({
+                            modelName: model.publicModelKey,
+                            vendorIconKey: model.vendorIconKey,
+                          });
+
+                          return (
+                            <article
+                              key={model.publicModelKey}
+                              className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/50 p-4 backdrop-blur-sm"
                             >
-                              <VendorIcon className="h-4 w-4" />
-                            </span>
-                            <h3 className="text-lg font-semibold">{model.label}</h3>
-                          </div>
-                          <p className="font-mono text-xs text-muted-foreground">
-                            {model.publicModelKey}
-                          </p>
-                        </div>
-                        <div className="rounded-full border border-white/10 bg-muted/50 px-3 py-1 text-xs uppercase tracking-wide text-muted-foreground">
-                          {labels.requestTypes[model.requestTypeBadge] ?? model.requestTypeBadge}
-                        </div>
-                      </div>
+                              <header className="flex items-start justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className="inline-flex size-8 items-center justify-center rounded-lg border border-border/60 bg-muted/30">
+                                    <Icon className="size-4" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <h3 className="truncate text-sm font-semibold">
+                                      {model.label}
+                                    </h3>
+                                    <p className="truncate font-mono text-[10px] text-muted-foreground">
+                                      {labels.requestTypes[model.requestTypeBadge] ??
+                                        model.requestTypeBadge}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Badge
+                                  className={cn(
+                                    "border bg-transparent px-2 py-0.5 text-[10px] uppercase tracking-wide",
+                                    variant.className
+                                  )}
+                                  variant="outline"
+                                >
+                                  {variant.label(labels)}
+                                </Badge>
+                              </header>
 
-                      <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-white/10 bg-muted/30 p-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                            {labels.ttfb}
-                          </div>
-                          <div className="mt-2 font-mono text-xl">
-                            {model.latestTtfbMs === null ? "—" : `${model.latestTtfbMs} ms`}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-muted/30 p-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                            {labels.availability}
-                          </div>
-                          <div className="mt-2 font-mono text-xl">
-                            {model.availabilityPct === null
-                              ? "—"
-                              : `${model.availabilityPct.toFixed(2)}%`}
-                          </div>
-                        </div>
-                      </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="rounded-md border border-border/40 bg-muted/20 p-2">
+                                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    {labels.availability}
+                                  </div>
+                                  <div className="mt-1 font-mono text-base">
+                                    {uptime24h === null ? "—" : `${uptime24h.toFixed(2)}%`}
+                                  </div>
+                                </div>
+                                <div className="rounded-md border border-border/40 bg-muted/20 p-2">
+                                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    {labels.ttfb}
+                                  </div>
+                                  <div className="mt-1 font-mono text-base">
+                                    {ttfb24h === null ? "—" : `${ttfb24h} ms`}
+                                  </div>
+                                </div>
+                              </div>
 
-                      <PublicStatusTimeline items={model.timeline} />
-                    </article>
+                              <PublicStatusTimeline
+                                cells={chartCells}
+                                timeZone={timeZone}
+                                locale={locale}
+                                labels={timelineLabels}
+                              />
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </SortableGroupPanel>
                   );
                 })}
               </div>
-            </section>
-          ))}
-        </div>
+            </SortableContext>
+          </DndContext>
+        )}
       </div>
     </div>
   );
