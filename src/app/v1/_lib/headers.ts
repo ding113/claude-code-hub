@@ -21,7 +21,12 @@ export function looksLikeAnthropicProxyUrl(providerUrl?: string | null): boolean
 
   try {
     const hostname = new URL(providerUrl).hostname.toLowerCase();
-    if (hostname.endsWith("anthropic.com") || hostname.endsWith("claude.ai")) {
+    if (
+      hostname === "anthropic.com" ||
+      hostname.endsWith(".anthropic.com") ||
+      hostname === "claude.ai" ||
+      hostname.endsWith(".claude.ai")
+    ) {
       return false;
     }
 

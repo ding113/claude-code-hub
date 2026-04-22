@@ -42,6 +42,7 @@ function cleanResponseHeaders(headers: Headers): Headers {
   const cleaned = new Headers(headers);
   cleaned.delete("transfer-encoding");
   cleaned.delete("content-length");
+  cleaned.delete("x-cch-response-fixer");
   return cleaned;
 }
 

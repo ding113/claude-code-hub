@@ -92,7 +92,10 @@ describe("ResponseFixer", () => {
     const session = createSession();
     const bomJson = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"a":1}')]);
     const response = new Response(bomJson, {
-      headers: { "content-type": "application/json; charset=utf-8" },
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "x-cch-response-fixer": "applied",
+      },
     });
 
     const fixed = await ResponseFixer.process(session, response);
@@ -122,7 +125,10 @@ describe("ResponseFixer", () => {
     session.shouldPersistSessionDebugArtifacts = () => false;
     const bomJson = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"a":1}')]);
     const response = new Response(bomJson, {
-      headers: { "content-type": "application/json; charset=utf-8" },
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "x-cch-response-fixer": "applied",
+      },
     });
 
     const fixed = await ResponseFixer.process(session, response);
@@ -148,7 +154,10 @@ describe("ResponseFixer", () => {
     });
 
     const response = new Response(stream, {
-      headers: { "content-type": "text/event-stream" },
+      headers: {
+        "content-type": "text/event-stream",
+        "x-cch-response-fixer": "processed",
+      },
     });
 
     const fixed = await ResponseFixer.process(session, response);

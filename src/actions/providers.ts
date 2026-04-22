@@ -4182,11 +4182,15 @@ async function executeProviderApiTest(
   }
 }
 
-function resolveAnthropicAuthHeaders(apiKey: string, providerUrl: string): Record<string, string> {
+function resolveAnthropicAuthHeaders(
+  apiKey: string,
+  providerUrl: string,
+  options?: { forceBearerOnly?: boolean }
+): Record<string, string> {
   return {
     "Content-Type": "application/json",
     "anthropic-version": "2023-06-01",
-    ...resolveAnthropicAuthHeaderSet(apiKey, providerUrl),
+    ...resolveAnthropicAuthHeaderSet(apiKey, providerUrl, options),
   };
 }
 
@@ -5007,7 +5011,9 @@ async function fetchAnthropicModels(
   const url = `${normalizedUrl}/v1/models`;
 
   // 复用认证逻辑：官方 API 用 x-api-key，代理用 Bearer token
-  const authHeaders = resolveAnthropicAuthHeaders(data.apiKey, normalizedUrl);
+  const authHeaders = resolveAnthropicAuthHeaders(data.apiKey, normalizedUrl, {
+    forceBearerOnly: data.providerType === "claude-auth",
+  });
 
   try {
     const response = await executeProxiedFetch(

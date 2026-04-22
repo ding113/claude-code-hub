@@ -2266,24 +2266,6 @@ export class ProxyForwarder {
         }
       } // end bypassForwarderPreprocessing gate
 
-      processedHeaders = ProxyForwarder.buildHeaders(session, provider);
-
-      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
-        void SessionManager.storeSessionRequestHeaders(
-          session.sessionId,
-          processedHeaders,
-          session.requestSequence
-        ).catch((err) => logger.error("Failed to store request headers:", err));
-      }
-
-      if (process.env.NODE_ENV === "development") {
-        logger.trace("ProxyForwarder: Final request headers", {
-          provider: provider.name,
-          providerType: provider.providerType,
-          headers: Object.fromEntries(processedHeaders.entries()),
-        });
-      }
-
       // ⭐ MCP 透传处理：检测是否为 MCP 请求，并使用相应的 URL
       let effectiveBaseUrl = baseUrl || provider.url;
 
@@ -2341,6 +2323,24 @@ export class ProxyForwarder {
             requestPath,
           }
         );
+      }
+
+      processedHeaders = ProxyForwarder.buildHeaders(session, provider, effectiveBaseUrl);
+
+      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+        void SessionManager.storeSessionRequestHeaders(
+          session.sessionId,
+          processedHeaders,
+          session.requestSequence
+        ).catch((err) => logger.error("Failed to store request headers:", err));
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        logger.trace("ProxyForwarder: Final request headers", {
+          provider: provider.name,
+          providerType: provider.providerType,
+          headers: Object.fromEntries(processedHeaders.entries()),
+        });
       }
 
       // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
@@ -4164,7 +4164,8 @@ export class ProxyForwarder {
 
   private static buildHeaders(
     session: ProxySession,
-    provider: NonNullable<typeof session.provider>
+    provider: NonNullable<typeof session.provider>,
+    upstreamBaseUrl: string = provider.url
   ): Headers {
     const outboundKey = provider.key;
     const preserveClientIp = provider.preserveClientIp ?? false;
@@ -4180,7 +4181,7 @@ export class ProxyForwarder {
     if (provider.providerType === "claude-auth" || provider.providerType === "claude") {
       Object.assign(
         overrides,
-        resolveAnthropicAuthHeaders(outboundKey, provider.url, {
+        resolveAnthropicAuthHeaders(outboundKey, upstreamBaseUrl, {
           forceBearerOnly: provider.providerType === "claude-auth",
         })
       );

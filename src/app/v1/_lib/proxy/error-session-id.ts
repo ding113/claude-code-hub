@@ -14,7 +14,7 @@ export async function attachSessionIdToErrorResponse(
   if (!sessionId) return response;
   if (response.status < 400) return response;
 
-  const contentType = response.headers.get("content-type") || "";
+  const contentType = response.headers.get("content-type")?.toLowerCase() || "";
   if (!contentType.includes("application/json")) {
     return response;
   }
@@ -39,10 +39,18 @@ export async function attachSessionIdToErrorResponse(
     ) {
       const p = parsed as { error: { message: string } } & Record<string, unknown>;
       p.error.message = attachSessionIdToErrorMessage(sessionId, p.error.message);
+      const headers = new Headers(response.headers);
+      headers.delete("content-length");
+      headers.delete("transfer-encoding");
+      headers.delete("content-encoding");
+      headers.delete("content-range");
+      headers.delete("content-md5");
+      headers.delete("digest");
+      headers.delete("content-digest");
       return new Response(JSON.stringify(p), {
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers,
+        headers,
       });
     }
   } catch {
