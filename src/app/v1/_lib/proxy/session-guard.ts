@@ -2,10 +2,34 @@ import { injectClaudeMetadataUserIdWithContext } from "@/lib/claude-code/metadat
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
-import { SessionManager } from "@/lib/session-manager";
+import { headersToSanitizedObject, SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { completeCodexSessionIdentifiers } from "../codex/session-completer";
 import type { ProxySession } from "./session";
+
+const CLIENT_HEADER_SNAPSHOT_BLOCKLIST = [
+  /^cf-/i,
+  /^x-forwarded-/i,
+  /^x-real-ip$/i,
+  /^true-client-ip$/i,
+  /^forwarded$/i,
+  /^traceparent$/i,
+  /^tracestate$/i,
+  /^baggage$/i,
+  /^x-b3-/i,
+  /^x-amzn-trace-id$/i,
+];
+
+function filterClientRequestSnapshotHeaders(headers: Headers): Record<string, string> | null {
+  const sanitized = headersToSanitizedObject(headers);
+  const filtered = Object.fromEntries(
+    Object.entries(sanitized).filter(
+      ([name]) => !CLIENT_HEADER_SNAPSHOT_BLOCKLIST.some((pattern) => pattern.test(name))
+    )
+  );
+
+  return Object.keys(filtered).length > 0 ? filtered : null;
+}
 
 /**
  * 带重试的异步操作执行器
@@ -52,6 +76,10 @@ export class ProxySessionGuard {
     try {
       const systemSettings = await getCachedSystemSettings();
       session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
+      const requestMessageBeforeProxyMutations = structuredClone(
+        session.request.message as Record<string, unknown>
+      );
+      const originalMessages = session.getMessages();
 
       // Codex Session ID 补全：在提取 clientSessionId 之前触发，避免落入不稳定的降级方案
       const codexCompletionEnabled = systemSettings.enableCodexSessionIdCompletion ?? true;
@@ -131,6 +159,17 @@ export class ProxySessionGuard {
       // 4.2 存储完整请求体与客户端端点（用于 Session 详情调试）
       // 注意：必须在后续任何格式转换/过滤前触发存储，避免记录被“后处理”污染
       if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+        const requestBeforeSnapshot = {
+          body: requestMessageBeforeProxyMutations,
+          headers: filterClientRequestSnapshotHeaders(session.headers),
+          meta: {
+            clientUrl: session.requestUrl.toString(),
+            upstreamUrl: null,
+            method: session.method,
+          },
+          ...(originalMessages !== undefined ? { messages: originalMessages } : {}),
+        };
+
         void SessionManager.storeSessionRequestBody(
           session.sessionId,
           session.request.message,
@@ -145,6 +184,17 @@ export class ProxySessionGuard {
           requestSequence
         ).catch((err) => {
           logger.error("[ProxySessionGuard] Failed to store client request meta:", err);
+        });
+
+        // 新增 before-phase 快照，明确记录客户端原始输入，后续 UI 不再依赖混合时机字段猜语义。
+        const requestBeforeSnapshotTask = SessionManager.storeSessionRequestPhaseSnapshot?.(
+          session.sessionId,
+          "before",
+          requestBeforeSnapshot,
+          requestSequence
+        );
+        requestBeforeSnapshotTask?.catch((err) => {
+          logger.error("[ProxySessionGuard] Failed to store request before snapshot:", err);
         });
 
         // 可选：存储 messages（受环境变量控制，按请求序号独立存储）

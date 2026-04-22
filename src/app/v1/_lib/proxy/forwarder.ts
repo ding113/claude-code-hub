@@ -2375,6 +2375,27 @@ export class ProxyForwarder {
       }
     }
 
+    if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+      // 这里是 request.after 唯一稳定时机：最终 headers、proxyUrl、body 都已确定，但尚未真正发往上游。
+      const requestAfterSnapshotTask = SessionManager.storeSessionRequestPhaseSnapshot?.(
+        session.sessionId,
+        "after",
+        {
+          body: session.forwardedRequestBody,
+          headers: processedHeaders,
+          meta: {
+            clientUrl: null,
+            upstreamUrl: proxyUrl,
+            method: session.method,
+          },
+        },
+        session.requestSequence
+      );
+      requestAfterSnapshotTask?.catch((err) =>
+        logger.error("Failed to store request after snapshot:", err)
+      );
+    }
+
     // ⭐ 扩展 RequestInit 类型以支持 undici dispatcher
     interface UndiciFetchOptions extends RequestInit {
       dispatcher?: Dispatcher;
@@ -4251,6 +4272,22 @@ export class ProxyForwarder {
         { url, statusCode: undiciRes.statusCode },
         session.requestSequence
       ).catch((err) => logger.error("Failed to store upstream response meta:", err));
+
+      const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+        session.sessionId,
+        "before",
+        {
+          headers: responseHeaders,
+          meta: {
+            upstreamUrl: url,
+            statusCode: undiciRes.statusCode,
+          },
+        },
+        session.requestSequence
+      );
+      responseBeforeSnapshotTask?.catch((err) =>
+        logger.error("Failed to store response before snapshot meta:", err)
+      );
     }
 
     // 检测响应是否为 gzip 压缩

@@ -6,6 +6,11 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import {
+  DEFAULT_SESSION_DETAIL_VIEW_MODE,
+  type SessionDetailSnapshots,
+  type SessionDetailViewMode,
+} from "@/types/session";
 import { SessionMessagesClient } from "./session-messages-client";
 
 vi.mock("@tanstack/react-query", () => {
@@ -77,13 +82,32 @@ vi.mock("./request-list-sidebar", () => {
 vi.mock("./session-details-tabs", () => {
   return {
     SessionMessagesDetailsTabs: (props: {
-      response: string | null;
+      snapshots: SessionDetailSnapshots | null;
+      viewMode: SessionDetailViewMode;
+      onViewModeChange: (mode: SessionDetailViewMode) => void;
       onCopyResponse?: () => void;
       isResponseCopied?: boolean;
     }) => {
+      const responseBody = props.snapshots?.response[props.viewMode]?.body ?? null;
+
       return (
         <div data-testid="mock-session-details-tabs">
-          {props.response && props.onCopyResponse ? (
+          <div data-testid="mock-view-mode">{props.viewMode}</div>
+          <button
+            type="button"
+            data-testid="mock-view-before"
+            onClick={() => props.onViewModeChange("before")}
+          >
+            before
+          </button>
+          <button
+            type="button"
+            data-testid="mock-view-after"
+            onClick={() => props.onViewModeChange("after")}
+          >
+            after
+          </button>
+          {responseBody && props.onCopyResponse ? (
             <button type="button" onClick={props.onCopyResponse}>
               {props.isResponseCopied ? "actions.copied" : "actions.copyResponse"}
             </button>
@@ -93,6 +117,83 @@ vi.mock("./session-details-tabs", () => {
     },
   };
 });
+
+function createSnapshots(): SessionDetailSnapshots {
+  return {
+    defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
+    request: {
+      before: {
+        body: { model: "gpt-5.2", input: "before" },
+        messages: { role: "user", content: "before" },
+        headers: { "x-before": "1" },
+        meta: {
+          clientUrl: "https://client.example/v1/responses",
+          upstreamUrl: null,
+          method: "POST",
+        },
+      },
+      after: {
+        body: { model: "gpt-5.2", input: "after" },
+        messages: { role: "user", content: "after" },
+        headers: { "x-after": "1" },
+        meta: {
+          clientUrl: null,
+          upstreamUrl: "https://upstream.example/v1/responses",
+          method: "POST",
+        },
+      },
+    },
+    response: {
+      before: {
+        body: '{"before":true}',
+        headers: { "x-before-res": "1" },
+        meta: {
+          upstreamUrl: "https://upstream.example/v1/responses",
+          statusCode: 200,
+        },
+      },
+      after: {
+        body: '{"after":true}',
+        headers: { "x-after-res": "1" },
+        meta: {
+          upstreamUrl: null,
+          statusCode: 200,
+        },
+      },
+    },
+  };
+}
+
+function buildDetailsData(
+  overrides: Partial<{
+    snapshots: SessionDetailSnapshots | null;
+    sessionStats: unknown | null;
+    currentSequence: number | null;
+    prevSequence: number | null;
+    nextSequence: number | null;
+  }> = {}
+) {
+  return {
+    requestBody: { model: "gpt-5.2", input: "legacy" },
+    messages: { role: "user", content: "legacy" },
+    response: '{"legacy":true}',
+    requestHeaders: { "x-legacy": "1" },
+    responseHeaders: { "x-legacy-response": "1" },
+    requestMeta: {
+      clientUrl: "https://client.example/v1/responses",
+      upstreamUrl: "https://upstream.example/v1/responses",
+      method: "POST",
+    },
+    responseMeta: { upstreamUrl: "https://upstream.example/v1/responses", statusCode: 200 },
+    snapshots: createSnapshots(),
+    specialSettings: null,
+    sessionStats: null,
+    currentSequence: 7,
+    prevSequence: null,
+    nextSequence: null,
+    ...overrides,
+  };
+}
 
 function renderClient(node: ReactNode) {
   const container = document.createElement("div");
@@ -125,14 +226,11 @@ async function clickAsync(el: Element) {
     el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    // 让事件处理器内的 await 续体在 act 作用域内完成
     await Promise.resolve();
   });
 }
 
 async function flushEffects() {
-  // SessionMessagesClient 内部有异步 useEffect（await getSessionDetails + 多次 setState）。
-  // 这里用两轮 tick 来确保状态更新都在 act 范围内落地，避免 act 警告。
   await act(async () => {
     await new Promise((r) => setTimeout(r, 0));
   });
@@ -156,23 +254,7 @@ describe("SessionMessagesClient (request export actions)", () => {
     seqParamValue = "3";
     getSessionDetailsMock.mockResolvedValue({
       ok: true,
-      data: {
-        requestBody: { model: "gpt-5.2", input: "hi" },
-        messages: { role: "user", content: "hi" },
-        response: '{"ok":true}',
-        requestHeaders: { "content-type": "application/json", "x-test": "1" },
-        responseHeaders: { "x-res": "1" },
-        requestMeta: {
-          clientUrl: "https://client.example/v1/responses",
-          upstreamUrl: "https://upstream.example/v1/responses",
-          method: "POST",
-        },
-        responseMeta: { upstreamUrl: "https://upstream.example/v1/responses", statusCode: 200 },
-        sessionStats: null,
-        currentSequence: 7,
-        prevSequence: null,
-        nextSequence: null,
-      },
+      data: buildDetailsData(),
     });
 
     const createObjectURLSpy = vi
@@ -205,6 +287,20 @@ describe("SessionMessagesClient (request export actions)", () => {
     expect(anchor.download).toBe("session-01234567-seq-3-request.json");
     expect(anchor.href).toBe("blob:mock");
 
+    const blob = createObjectURLSpy.mock.calls[0]?.[0] as Blob;
+    expect(await blob.text()).toBe(
+      JSON.stringify(
+        {
+          sessionId: "0123456789abcdef",
+          sequence: 3,
+          view: "after",
+          request: createSnapshots().request.after,
+          specialSettings: null,
+        },
+        null,
+        2
+      )
+    );
     expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:mock");
     expect(clickSpy).toHaveBeenCalledTimes(1);
 
@@ -215,26 +311,61 @@ describe("SessionMessagesClient (request export actions)", () => {
     createElementSpy.mockRestore();
   });
 
-  test("copy/download exports include request headers and body", async () => {
+  test("defaults to after and preserves view mode across seq navigation", async () => {
     getSessionDetailsMock.mockResolvedValue({
       ok: true,
-      data: {
-        requestBody: { model: "gpt-5.2", input: "hi" },
-        messages: { role: "user", content: "hi" },
-        response: '{"ok":true}',
-        requestHeaders: { "content-type": "application/json", "x-test": "1" },
-        responseHeaders: { "x-res": "1" },
-        requestMeta: {
-          clientUrl: "https://client.example/v1/responses",
-          upstreamUrl: "https://upstream.example/v1/responses",
-          method: "POST",
+      data: buildDetailsData({
+        sessionStats: {
+          userAgent: "UA",
+          requestCount: 3,
+          firstRequestAt: "2026-01-01T00:00:00.000Z",
+          lastRequestAt: "2026-01-01T00:01:00.000Z",
+          totalDurationMs: 1500,
+          providers: [{ id: 1, name: "p1" }],
+          models: ["gpt-5.2"],
+          totalInputTokens: 10,
+          totalOutputTokens: 20,
+          totalCacheCreationTokens: 30,
+          totalCacheReadTokens: 40,
+          cacheTtlApplied: "mixed",
+          totalCostUsd: "0.123456",
         },
-        responseMeta: { upstreamUrl: "https://upstream.example/v1/responses", statusCode: 200 },
-        sessionStats: null,
-        currentSequence: 7,
-        prevSequence: null,
-        nextSequence: null,
-      },
+        prevSequence: 6,
+        nextSequence: 8,
+      }),
+    });
+
+    const { container, unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    expect(container.querySelector("[data-testid='mock-view-mode']")?.textContent).toBe("after");
+    click(container.querySelector("[data-testid='mock-view-before']") as HTMLButtonElement);
+    expect(container.querySelector("[data-testid='mock-view-mode']")?.textContent).toBe("before");
+
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const prevBtn = buttons.find((b) => b.textContent?.includes("details.prevRequest"));
+    const nextBtn = buttons.find((b) => b.textContent?.includes("details.nextRequest"));
+    expect(prevBtn).not.toBeUndefined();
+    expect(nextBtn).not.toBeUndefined();
+    click(prevBtn as HTMLButtonElement);
+    click(nextBtn as HTMLButtonElement);
+
+    expect(routerReplaceMock).toHaveBeenCalledWith(
+      "/dashboard/sessions/0123456789abcdef/messages?seq=6"
+    );
+    expect(routerReplaceMock).toHaveBeenCalledWith(
+      "/dashboard/sessions/0123456789abcdef/messages?seq=8"
+    );
+    expect(container.querySelector("[data-testid='mock-view-mode']")?.textContent).toBe("before");
+
+    unmount();
+  });
+
+  test("copy and download request payloads from the active view", async () => {
+    const snapshots = createSnapshots();
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: buildDetailsData({ snapshots }),
     });
 
     const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
@@ -263,33 +394,30 @@ describe("SessionMessagesClient (request export actions)", () => {
     const { container, unmount } = renderClient(<SessionMessagesClient />);
     await flushEffects();
 
-    // 复制按钮内部会设置 2s 的回滚定时器；用 fake timers 避免 act 警告
+    click(container.querySelector("[data-testid='mock-view-before']") as HTMLButtonElement);
+
     vi.useFakeTimers();
-
-    const expectedJson = JSON.stringify(
-      {
-        sessionId: "0123456789abcdef",
-        sequence: 7,
-        meta: {
-          clientUrl: "https://client.example/v1/responses",
-          upstreamUrl: "https://upstream.example/v1/responses",
-          method: "POST",
-        },
-        headers: { "content-type": "application/json", "x-test": "1" },
-        body: { model: "gpt-5.2", input: "hi" },
-      },
-      null,
-      2
-    );
-
     const copyBtn = container.querySelector('button[aria-label="actions.copyMessages"]');
     expect(copyBtn).not.toBeNull();
     await clickAsync(copyBtn as HTMLButtonElement);
-    expect(clipboardWriteText).toHaveBeenCalledWith(expectedJson);
     act(() => {
       vi.runOnlyPendingTimers();
     });
     vi.useRealTimers();
+
+    expect(clipboardWriteText).toHaveBeenCalledWith(
+      JSON.stringify(
+        {
+          sessionId: "0123456789abcdef",
+          sequence: 7,
+          view: "before",
+          request: snapshots.request.before,
+          specialSettings: null,
+        },
+        null,
+        2
+      )
+    );
 
     const downloadBtn = container.querySelector('button[aria-label="actions.downloadMessages"]');
     expect(downloadBtn).not.toBeNull();
@@ -299,10 +427,20 @@ describe("SessionMessagesClient (request export actions)", () => {
     const anchor = lastAnchor as HTMLAnchorElement | null;
     if (!anchor) throw new Error("anchor not created");
     expect(anchor.download).toBe("session-01234567-seq-7-request.json");
-    expect(anchor.href).toBe("blob:mock");
-
     const blob = createObjectURLSpy.mock.calls[0]?.[0] as Blob;
-    expect(await blob.text()).toBe(expectedJson);
+    expect(await blob.text()).toBe(
+      JSON.stringify(
+        {
+          sessionId: "0123456789abcdef",
+          sequence: 7,
+          view: "before",
+          request: snapshots.request.before,
+          specialSettings: null,
+        },
+        null,
+        2
+      )
+    );
     expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:mock");
     expect(clickSpy).toHaveBeenCalledTimes(1);
 
@@ -313,60 +451,41 @@ describe("SessionMessagesClient (request export actions)", () => {
     createElementSpy.mockRestore();
   });
 
-  test("does not render export buttons when request headers/body are missing", async () => {
+  test("copies response body from the active view", async () => {
     getSessionDetailsMock.mockResolvedValue({
       ok: true,
-      data: {
-        requestBody: null,
-        messages: { role: "user", content: "hi" },
-        response: null,
-        requestHeaders: null,
-        responseHeaders: null,
-        requestMeta: { clientUrl: null, upstreamUrl: null, method: null },
-        responseMeta: { upstreamUrl: null, statusCode: null },
-        sessionStats: null,
-        currentSequence: 1,
-        prevSequence: null,
-        nextSequence: null,
-      },
+      data: buildDetailsData(),
+    });
+
+    const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: clipboardWriteText },
+      configurable: true,
     });
 
     const { container, unmount } = renderClient(<SessionMessagesClient />);
     await flushEffects();
 
-    expect(container.querySelector('button[aria-label="actions.copyMessages"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="actions.downloadMessages"]')).toBeNull();
-
-    unmount();
-  });
-
-  test("does not render export buttons when request body is missing but headers exist", async () => {
-    getSessionDetailsMock.mockResolvedValue({
-      ok: true,
-      data: {
-        requestBody: null,
-        messages: { role: "user", content: "hi" },
-        response: null,
-        requestHeaders: { "content-type": "application/json" },
-        responseHeaders: null,
-        requestMeta: {
-          clientUrl: "https://client.example/v1/responses",
-          upstreamUrl: "https://upstream.example/v1/responses",
-          method: "POST",
-        },
-        responseMeta: { upstreamUrl: null, statusCode: null },
-        sessionStats: null,
-        currentSequence: 1,
-        prevSequence: null,
-        nextSequence: null,
-      },
+    vi.useFakeTimers();
+    const copyRespBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("actions.copyResponse")
+    );
+    expect(copyRespBtn).not.toBeUndefined();
+    await clickAsync(copyRespBtn as HTMLButtonElement);
+    act(() => {
+      vi.runOnlyPendingTimers();
     });
+    vi.useRealTimers();
+    expect(clipboardWriteText).toHaveBeenLastCalledWith('{"after":true}');
 
-    const { container, unmount } = renderClient(<SessionMessagesClient />);
-    await flushEffects();
-
-    expect(container.querySelector('button[aria-label="actions.copyMessages"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="actions.downloadMessages"]')).toBeNull();
+    click(container.querySelector("[data-testid='mock-view-before']") as HTMLButtonElement);
+    vi.useFakeTimers();
+    await clickAsync(copyRespBtn as HTMLButtonElement);
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    vi.useRealTimers();
+    expect(clipboardWriteText).toHaveBeenLastCalledWith('{"before":true}');
 
     unmount();
   });
@@ -385,17 +504,30 @@ describe("SessionMessagesClient (request export actions)", () => {
     unmount();
   });
 
-  test("renders session stats view and supports nav/copy/terminate flows", async () => {
+  test("does not render the global empty state when another view still has snapshot data", async () => {
+    const snapshots = createSnapshots();
+    snapshots.request.after = null;
+    snapshots.response.after = null;
+
     getSessionDetailsMock.mockResolvedValue({
       ok: true,
-      data: {
-        requestBody: { model: "gpt-5.2", input: "hi" },
-        messages: { role: "user", content: "hi" },
-        response: '{"ok":true}',
-        requestHeaders: { "content-type": "application/json" },
-        responseHeaders: { "x-res": "1" },
-        requestMeta: { clientUrl: null, upstreamUrl: null, method: "POST" },
-        responseMeta: { upstreamUrl: null, statusCode: 200 },
+      data: buildDetailsData({
+        snapshots,
+      }),
+    });
+
+    const { container, unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    expect(container.textContent).not.toContain("details.noDetailedData");
+
+    unmount();
+  });
+
+  test("renders session stats view and supports terminate flow", async () => {
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: buildDetailsData({
         sessionStats: {
           userAgent: "UA",
           requestCount: 3,
@@ -411,49 +543,15 @@ describe("SessionMessagesClient (request export actions)", () => {
           cacheTtlApplied: "mixed",
           totalCostUsd: "0.123456",
         },
-        currentSequence: 7,
-        prevSequence: 6,
-        nextSequence: 8,
-      },
-    });
-
-    const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: clipboardWriteText },
-      configurable: true,
+      }),
     });
 
     const { container, unmount } = renderClient(<SessionMessagesClient />);
     await flushEffects();
 
-    // 上/下一个请求按钮应触发 router.replace
-    const buttons = Array.from(container.querySelectorAll("button"));
-    const prevBtn = buttons.find((b) => b.textContent?.includes("details.prevRequest"));
-    const nextBtn = buttons.find((b) => b.textContent?.includes("details.nextRequest"));
-    expect(prevBtn).not.toBeUndefined();
-    expect(nextBtn).not.toBeUndefined();
-    click(prevBtn as HTMLButtonElement);
-    click(nextBtn as HTMLButtonElement);
-    expect(routerReplaceMock).toHaveBeenCalledWith(
-      "/dashboard/sessions/0123456789abcdef/messages?seq=6"
+    const terminateBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("actions.terminate")
     );
-    expect(routerReplaceMock).toHaveBeenCalledWith(
-      "/dashboard/sessions/0123456789abcdef/messages?seq=8"
-    );
-
-    // 复制响应体
-    const copyRespBtn = buttons.find((b) => b.textContent?.includes("actions.copyResponse"));
-    expect(copyRespBtn).not.toBeUndefined();
-    vi.useFakeTimers();
-    await clickAsync(copyRespBtn as HTMLButtonElement);
-    act(() => {
-      vi.runOnlyPendingTimers();
-    });
-    vi.useRealTimers();
-    expect(clipboardWriteText).toHaveBeenCalledWith('{"ok":true}');
-
-    // 终止会话：打开弹窗并确认
-    const terminateBtn = buttons.find((b) => b.textContent?.includes("actions.terminate"));
     expect(terminateBtn).not.toBeUndefined();
     click(terminateBtn as HTMLButtonElement);
     await act(async () => {
