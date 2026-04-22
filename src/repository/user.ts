@@ -580,12 +580,12 @@ export async function updateUserCostResetMarkers(
     updatedAt: new Date(),
   };
 
-  if ("costResetAt" in updates) {
-    setClauses.costResetAt = updates.costResetAt ?? null;
+  if (updates.costResetAt !== undefined) {
+    setClauses.costResetAt = updates.costResetAt;
   }
 
-  if ("limit5hCostResetAt" in updates) {
-    setClauses.limit5hCostResetAt = updates.limit5hCostResetAt ?? null;
+  if (updates.limit5hCostResetAt !== undefined) {
+    setClauses.limit5hCostResetAt = updates.limit5hCostResetAt;
   }
 
   const result = await db
