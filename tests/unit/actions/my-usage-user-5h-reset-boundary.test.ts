@@ -47,6 +47,13 @@ vi.mock("@/repository/statistics", () => ({
   sumUserTotalCost: vi.fn(async () => 0),
 }));
 
+const getCurrentCostMock = vi.fn(async () => 0);
+vi.mock("@/lib/rate-limit/service", () => ({
+  RateLimitService: {
+    getCurrentCost: (...args: unknown[]) => getCurrentCostMock(...args),
+  },
+}));
+
 vi.mock("@/lib/session-tracker", () => ({
   SessionTracker: {
     getKeySessionCount: vi.fn(async () => 0),
@@ -74,6 +81,7 @@ vi.mock("@/lib/logger", () => ({
 describe("getMyQuota - user 5h reset boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getCurrentCostMock.mockResolvedValue(0);
     getSessionMock.mockResolvedValue({
       key: {
         id: 11,
@@ -143,5 +151,65 @@ describe("getMyQuota - user 5h reset boundary", () => {
       Infinity,
       new Date("2026-04-21T21:00:00.000Z")
     );
+  });
+
+  it("passes reset markers into fixed 5h runtime reads for both key and user", async () => {
+    getCurrentCostMock.mockResolvedValueOnce(7).mockResolvedValueOnce(8);
+    getSessionMock.mockResolvedValue({
+      key: {
+        id: 11,
+        key: "sk-test",
+        name: "key",
+        dailyResetTime: "07:30",
+        dailyResetMode: "fixed",
+        limit5hUsd: 5,
+        limit5hResetMode: "fixed",
+        limitDailyUsd: null,
+        limitWeeklyUsd: null,
+        limitMonthlyUsd: null,
+        limitTotalUsd: null,
+        limitConcurrentSessions: 0,
+        providerGroup: null,
+        isEnabled: true,
+        expiresAt: null,
+        costResetAt: new Date("2026-04-21T22:00:00.000Z"),
+      },
+      user: {
+        id: 22,
+        name: "user",
+        dailyResetTime: "06:00",
+        dailyResetMode: "fixed",
+        limit5hUsd: 10,
+        limit5hResetMode: "fixed",
+        dailyQuota: 50,
+        limitWeeklyUsd: 100,
+        limitMonthlyUsd: 200,
+        limitTotalUsd: 300,
+        limitConcurrentSessions: 0,
+        rpm: null,
+        providerGroup: null,
+        isEnabled: true,
+        expiresAt: null,
+        allowedModels: [],
+        allowedClients: [],
+        blockedClients: [],
+        costResetAt: new Date("2026-04-21T21:00:00.000Z"),
+        limit5hCostResetAt: new Date("2026-04-21T23:00:00.000Z"),
+      },
+    });
+
+    const { getMyQuota } = await import("@/actions/my-usage");
+    const result = await getMyQuota();
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.data.keyCurrent5hUsd).toBe(7);
+    expect(result.ok && result.data.userCurrent5hUsd).toBe(8);
+    expect(getCurrentCostMock).toHaveBeenNthCalledWith(1, 11, "key", "5h", "07:30", "fixed", {
+      costResetAt: new Date("2026-04-21T22:00:00.000Z"),
+    });
+    expect(getCurrentCostMock).toHaveBeenNthCalledWith(2, 22, "user", "5h", "06:00", "fixed", {
+      costResetAt: new Date("2026-04-21T21:00:00.000Z"),
+      limit5hCostResetAt: new Date("2026-04-21T23:00:00.000Z"),
+    });
   });
 });

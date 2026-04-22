@@ -34,6 +34,7 @@ import {
 } from "@/repository/usage-logs";
 import type { IpGeoLookupResult, IpGeoPrivateMarker } from "@/types/ip-geo";
 import type { ProviderChainItem } from "@/types/message";
+import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
@@ -60,6 +61,16 @@ function scrubProviderChainRequestForReadonly(
   );
 }
 
+function scrubSpecialSettingsForReadonly(
+  specialSettings: SpecialSetting[] | null | undefined
+): SpecialSetting[] | null {
+  return (
+    specialSettings?.map((setting) =>
+      setting.type === "guard_intercept" ? { ...setting, reason: null } : setting
+    ) ?? null
+  );
+}
+
 function scrubUsageLogsBatchForReadonly(result: UsageLogsBatchResult): UsageLogsBatchResult {
   return {
     ...result,
@@ -76,6 +87,8 @@ function scrubUsageLogsBatchForReadonly(result: UsageLogsBatchResult): UsageLogs
       providerChain: scrubProviderChainRequestForReadonly(log.providerChain),
       costMultiplier: null,
       groupCostMultiplier: null,
+      costBreakdown: null,
+      specialSettings: scrubSpecialSettingsForReadonly(log.specialSettings),
     })),
   };
 }
@@ -236,6 +249,8 @@ export interface MyUsageLogsBatchResult {
 export interface MyUsageLogsFilters {
   startDate?: string;
   endDate?: string;
+  startTime?: number;
+  endTime?: number;
   sessionId?: string;
   model?: string;
   statusCode?: number;
@@ -302,6 +317,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       "@/lib/rate-limit/time-utils"
     );
     const { sumKeyQuotaCostsById, sumUserQuotaCosts } = await import("@/repository/statistics");
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
 
     // 计算各周期的时间范围
     // Key 使用 Key 的 dailyResetTime/dailyResetMode 配置
@@ -373,34 +389,60 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       user.limitConcurrentSessions ?? null
     );
 
-    const [keyCosts, keyConcurrent, userCosts, userKeyConcurrent] = await Promise.all([
-      // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
-      sumKeyQuotaCostsById(
-        key.id,
-        {
-          range5h: keyClippedRange5h,
-          rangeDaily: clippedKeyDaily,
-          rangeWeekly: keyClippedRangeWeekly,
-          rangeMonthly: keyClippedRangeMonthly,
-        },
-        ALL_TIME_MAX_AGE_DAYS,
-        keyCostResetAtResolved
-      ),
-      SessionTracker.getKeySessionCount(key.id),
-      // User 配额：直接查 DB
-      sumUserQuotaCosts(
-        user.id,
-        {
-          range5h: userClippedRange5h,
-          rangeDaily: clippedUserDaily,
-          rangeWeekly: userClippedRangeWeekly,
-          rangeMonthly: userClippedRangeMonthly,
-        },
-        ALL_TIME_MAX_AGE_DAYS,
-        userCostResetAt
-      ),
-      getUserConcurrentSessions(user.id),
-    ]);
+    const [keyCosts, keyFixed5hUsd, keyConcurrent, userCosts, userFixed5hUsd, userKeyConcurrent] =
+      await Promise.all([
+        // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
+        sumKeyQuotaCostsById(
+          key.id,
+          {
+            range5h: keyClippedRange5h,
+            rangeDaily: clippedKeyDaily,
+            rangeWeekly: keyClippedRangeWeekly,
+            rangeMonthly: keyClippedRangeMonthly,
+          },
+          ALL_TIME_MAX_AGE_DAYS,
+          keyCostResetAtResolved
+        ),
+        (key.limit5hResetMode ?? "rolling") === "fixed"
+          ? RateLimitService.getCurrentCost(
+              key.id,
+              "key",
+              "5h",
+              key.dailyResetTime ?? "00:00",
+              "fixed",
+              {
+                costResetAt: keyCostResetAtResolved,
+              }
+            )
+          : Promise.resolve(null),
+        SessionTracker.getKeySessionCount(key.id),
+        // User 配额：直接查 DB
+        sumUserQuotaCosts(
+          user.id,
+          {
+            range5h: userClippedRange5h,
+            rangeDaily: clippedUserDaily,
+            rangeWeekly: userClippedRangeWeekly,
+            rangeMonthly: userClippedRangeMonthly,
+          },
+          ALL_TIME_MAX_AGE_DAYS,
+          userCostResetAt
+        ),
+        (user.limit5hResetMode ?? "rolling") === "fixed"
+          ? RateLimitService.getCurrentCost(
+              user.id,
+              "user",
+              "5h",
+              user.dailyResetTime ?? "00:00",
+              "fixed",
+              {
+                costResetAt: userCostResetAt,
+                limit5hCostResetAt: user.limit5hCostResetAt ?? null,
+              }
+            )
+          : Promise.resolve(null),
+        getUserConcurrentSessions(user.id),
+      ]);
 
     const {
       cost5h: keyCurrent5hUsd,
@@ -416,6 +458,8 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       costMonthly: userCostMonthly,
       costTotal: userTotalCost,
     } = userCosts;
+    const resolvedKeyCurrent5hUsd = keyFixed5hUsd ?? keyCurrent5hUsd;
+    const resolvedUserCurrent5hUsd = userFixed5hUsd ?? userCurrent5hUsd;
 
     const quota: MyUsageQuota = {
       keyLimit5hUsd: key.limit5hUsd ?? null,
@@ -424,7 +468,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyLimitMonthlyUsd: key.limitMonthlyUsd ?? null,
       keyLimitTotalUsd: key.limitTotalUsd ?? null,
       keyLimitConcurrentSessions: effectiveKeyConcurrentLimit,
-      keyCurrent5hUsd,
+      keyCurrent5hUsd: resolvedKeyCurrent5hUsd,
       keyCurrentDailyUsd: keyCostDaily,
       keyCurrentWeeklyUsd: keyCostWeekly,
       keyCurrentMonthlyUsd: keyCostMonthly,
@@ -437,7 +481,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userLimitTotalUsd: user.limitTotalUsd ?? null,
       userLimitConcurrentSessions: user.limitConcurrentSessions ?? null,
       userRpmLimit: user.rpm ?? null,
-      userCurrent5hUsd,
+      userCurrent5hUsd: resolvedUserCurrent5hUsd,
       userCurrentDailyUsd: userCostDaily,
       userCurrentWeeklyUsd: userCostWeekly,
       userCurrentMonthlyUsd: userCostMonthly,
@@ -551,6 +595,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
 export interface MyUsageLogsBatchFilters {
   startDate?: string;
   endDate?: string;
+  startTime?: number;
+  endTime?: number;
   /** Session ID（精确匹配；空字符串/空白视为不筛选） */
   sessionId?: string;
   model?: string;
@@ -606,11 +652,10 @@ export async function getMyUsageLogs(
 
     const settings = await getSystemSettings();
     const timezone = await resolveSystemTimezone();
-    const { startTime, endTime } = parseDateRangeInServerTimezone(
-      filters.startDate,
-      filters.endDate,
-      timezone
-    );
+    const dateRange =
+      filters.startTime !== undefined || filters.endTime !== undefined
+        ? { startTime: filters.startTime, endTime: filters.endTime }
+        : parseDateRangeInServerTimezone(filters.startDate, filters.endDate, timezone);
     const parsedPageSize = Number(filters.pageSize);
     const pageSize =
       Number.isFinite(parsedPageSize) && parsedPageSize > 0
@@ -621,8 +666,8 @@ export async function getMyUsageLogs(
     const result = await findUsageLogsForKeySlim({
       keyString: session.key.key,
       sessionId: filters.sessionId,
-      startTime,
-      endTime,
+      startTime: dateRange.startTime,
+      endTime: dateRange.endTime,
       model: filters.model,
       statusCode: filters.statusCode,
       excludeStatusCode200: filters.excludeStatusCode200,
@@ -658,17 +703,16 @@ export async function getMyUsageLogsBatch(
 
     const settings = await getSystemSettings();
     const timezone = await resolveSystemTimezone();
-    const { startTime, endTime } = parseDateRangeInServerTimezone(
-      filters.startDate,
-      filters.endDate,
-      timezone
-    );
+    const dateRange =
+      filters.startTime !== undefined || filters.endTime !== undefined
+        ? { startTime: filters.startTime, endTime: filters.endTime }
+        : parseDateRangeInServerTimezone(filters.startDate, filters.endDate, timezone);
     const limit = filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 20;
     const result = await findUsageLogsForKeyBatch({
       keyString: session.key.key,
       sessionId: filters.sessionId,
-      startTime,
-      endTime,
+      startTime: dateRange.startTime,
+      endTime: dateRange.endTime,
       model: filters.model,
       statusCode: filters.statusCode,
       excludeStatusCode200: filters.excludeStatusCode200,
@@ -710,11 +754,10 @@ export async function getMyUsageLogsBatchFull(
     }
 
     const timezone = await resolveSystemTimezone();
-    const { startTime, endTime } = parseDateRangeInServerTimezone(
-      params.startDate,
-      params.endDate,
-      timezone
-    );
+    const dateRange =
+      params.startTime !== undefined || params.endTime !== undefined
+        ? { startTime: params.startTime, endTime: params.endTime }
+        : parseDateRangeInServerTimezone(params.startDate, params.endDate, timezone);
     const limit = params.limit && params.limit > 0 ? Math.min(params.limit, 100) : 20;
     const result = await findReadonlyUsageLogsBatchForKey({
       sessionId: params.sessionId,
@@ -724,8 +767,8 @@ export async function getMyUsageLogsBatchFull(
       endpoint: params.endpoint,
       minRetryCount: params.minRetryCount,
       cursor: params.cursor,
-      startTime,
-      endTime,
+      startTime: dateRange.startTime,
+      endTime: dateRange.endTime,
       limit,
       keyString: session.key.key,
     });

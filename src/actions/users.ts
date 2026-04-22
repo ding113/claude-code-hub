@@ -2169,19 +2169,44 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
     try {
       const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
       const cacheResult = await clearUserCostCache({ userId, keyIds, keyHashes });
-      if (cacheResult) {
+      if (!cacheResult) {
+        logger.warn("Reset user limits only completed without Redis cleanup", {
+          userId,
+          requiresRedisForFixed5h,
+        });
+        if (requiresRedisForFixed5h) {
+          return {
+            ok: false,
+            error: tError("USER_LIMITS_RESET_PARTIAL_FAILURE"),
+            errorCode: ERROR_CODES.USER_LIMITS_RESET_PARTIAL_FAILURE,
+          };
+        }
+      } else {
         logger.info("Reset user limits only - Redis cost cache cleared", {
           userId,
           keyCount: keyIds.length,
           ...cacheResult,
         });
+        if (cacheResult.cleanupFailed && requiresRedisForFixed5h) {
+          return {
+            ok: false,
+            error: tError("USER_LIMITS_RESET_PARTIAL_FAILURE"),
+            errorCode: ERROR_CODES.USER_LIMITS_RESET_PARTIAL_FAILURE,
+          };
+        }
       }
     } catch (error) {
       logger.error("Failed to clear Redis cache during user limits reset", {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Continue execution - costResetAt already set in DB
+      if (requiresRedisForFixed5h) {
+        return {
+          ok: false,
+          error: tError("USER_LIMITS_RESET_PARTIAL_FAILURE"),
+          errorCode: ERROR_CODES.USER_LIMITS_RESET_PARTIAL_FAILURE,
+        };
+      }
     }
 
     logger.info("Reset user limits only (costResetAt set)", { userId, keyCount: keyIds.length });
@@ -2266,19 +2291,40 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
         keyHashes,
         includeActiveSessions: true,
       });
-      if (cacheResult) {
-        logger.info("Reset user statistics - Redis cache cleared", {
+      if (!cacheResult) {
+        logger.error("Reset user statistics committed DB changes without Redis cleanup", {
           userId,
-          keyCount: keyIds.length,
-          ...cacheResult,
+          requiresRedisForFixed5h,
         });
+        return {
+          ok: false,
+          error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
+          errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
+        };
+      }
+
+      logger.info("Reset user statistics - Redis cache cleared", {
+        userId,
+        keyCount: keyIds.length,
+        ...cacheResult,
+      });
+      if (cacheResult.cleanupFailed) {
+        return {
+          ok: false,
+          error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
+          errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
+        };
       }
     } catch (error) {
       logger.error("Failed to clear Redis cache during user statistics reset", {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Continue execution - DB logs already deleted
+      return {
+        ok: false,
+        error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
+        errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
+      };
     }
 
     logger.info("Reset all user statistics", { userId, keyCount: keyIds.length });

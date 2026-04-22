@@ -58,12 +58,17 @@ function releaseSessionAgent(session: ProxySession): void {
   }
 }
 
-async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise<string | null> {
+function takeBeforeResponseBodySnapshotSource(session: ProxySession): Response | null {
   const snapshotSession = session as ProxySession & {
     detailSnapshotResponseBeforeSource?: Response | null;
   };
   const source = snapshotSession.detailSnapshotResponseBeforeSource;
   snapshotSession.detailSnapshotResponseBeforeSource = null;
+  return source ?? null;
+}
+
+async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise<string | null> {
+  const source = takeBeforeResponseBodySnapshotSource(session);
   if (!source) return null;
 
   try {
@@ -76,6 +81,19 @@ async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise
     });
     return null;
   }
+}
+
+function discardBeforeResponseBodySnapshot(session: ProxySession): void {
+  const source = takeBeforeResponseBodySnapshotSource(session);
+  if (!source?.body) return;
+
+  void source.body.cancel().catch((error) => {
+    logger.warn("[ResponseHandler] Failed to discard before-response snapshot body", {
+      sessionId: session.sessionId ?? null,
+      requestSequence: session.requestSequence ?? null,
+      error,
+    });
+  });
 }
 
 export type UsageMetrics = {
@@ -816,6 +834,7 @@ export class ProxyResponseHandler {
     const messageContext = session.messageContext;
     const provider = session.provider;
     if (!provider) {
+      discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
       return response;
     }
@@ -966,6 +985,9 @@ export class ProxyResponseHandler {
               errorMessage: errorMessageForFinalize,
             });
           } catch (error) {
+            if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+              await discardBeforeResponseBodySnapshot(session);
+            }
             if (!isClientAbortError(error as Error)) {
               logger.error(
                 "[ResponseHandler] Gemini non-stream passthrough stats task failed:",
@@ -980,6 +1002,9 @@ export class ProxyResponseHandler {
 
         AsyncTaskManager.register(taskId, statsPromise, "non-stream-passthrough-stats");
         statsPromise.catch((error) => {
+          if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+            void discardBeforeResponseBodySnapshot(session);
+          }
           logger.error(
             "[ResponseHandler] Gemini non-stream passthrough stats task uncaught error:",
             error
@@ -1351,6 +1376,9 @@ export class ProxyResponseHandler {
           isStreaming: false,
         });
       } catch (error) {
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          await discardBeforeResponseBodySnapshot(session);
+        }
         // 检测 AbortError 的来源：响应超时 vs 客户端中断
         const err = error as Error;
         if (isClientAbortError(err)) {
@@ -1491,6 +1519,7 @@ export class ProxyResponseHandler {
     const provider = session.provider;
 
     if (!messageContext || !provider || !response.body) {
+      discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
       return response;
     }
@@ -1971,6 +2000,9 @@ export class ProxyResponseHandler {
 
         AsyncTaskManager.register(taskId, statsPromise, "stream-passthrough-stats");
         statsPromise.catch((error) => {
+          if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+            void discardBeforeResponseBodySnapshot(session);
+          }
           logger.error("[ResponseHandler] Gemini passthrough stats task uncaught error:", error);
         });
 
@@ -1992,6 +2024,7 @@ export class ProxyResponseHandler {
           });
         }
 
+        discardBeforeResponseBodySnapshot(session);
         return response;
       } else {
         // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）

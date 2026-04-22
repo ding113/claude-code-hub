@@ -1,9 +1,12 @@
 import { getRedisClient } from "@/lib/redis";
+import { normalizeSiteTitle } from "@/lib/site-title";
 import {
   buildPublicStatusConfigSnapshotKey,
   buildPublicStatusConfigVersionPointerKey,
   buildPublicStatusInternalConfigSnapshotKey,
 } from "./redis-contract";
+
+export const DEFAULT_PUBLIC_STATUS_SITE_DESCRIPTION = "Request-derived public status";
 
 export interface PublicStatusModelSnapshot {
   publicModelKey: string;
@@ -74,6 +77,32 @@ interface RedisReader {
   status?: string;
 }
 
+function normalizePublicSiteDescription(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function resolvePublicStatusSiteDescription(input: {
+  siteTitle?: unknown;
+  siteDescription?: unknown;
+}): string {
+  const description = normalizePublicSiteDescription(input.siteDescription);
+  if (description) {
+    return description;
+  }
+
+  const siteTitle = normalizeSiteTitle(input.siteTitle);
+  if (siteTitle) {
+    return `${siteTitle} public status`;
+  }
+
+  return DEFAULT_PUBLIC_STATUS_SITE_DESCRIPTION;
+}
+
 function safeParseJson<T>(raw: string | null): T | null {
   if (!raw) {
     return null;
@@ -124,7 +153,10 @@ export function buildPublicStatusConfigSnapshot(
     configVersion: input.configVersion,
     generatedAt: new Date().toISOString(),
     siteTitle: input.siteTitle.trim(),
-    siteDescription: input.siteDescription.trim(),
+    siteDescription: resolvePublicStatusSiteDescription({
+      siteTitle: input.siteTitle,
+      siteDescription: input.siteDescription,
+    }),
     timeZone: input.timeZone ?? null,
     defaultIntervalMinutes: input.defaultIntervalMinutes,
     defaultRangeHours: input.defaultRangeHours,
@@ -162,7 +194,7 @@ export async function publishPublicStatusConfigSnapshot(input: {
     buildPublicStatusConfigSnapshot({
       configVersion: `cfg-${Date.now()}`,
       siteTitle: "Claude Code Hub Status",
-      siteDescription: "Request-derived public status",
+      siteDescription: DEFAULT_PUBLIC_STATUS_SITE_DESCRIPTION,
       timeZone: null,
       defaultIntervalMinutes: 5,
       defaultRangeHours: 24,
@@ -321,13 +353,17 @@ export async function readPublicStatusSiteMetadata(input?: {
   siteDescription: string;
 } | null> {
   const snapshot = await readCurrentPublicStatusConfigSnapshot(input);
-  if (!snapshot?.siteTitle || !snapshot.siteDescription) {
+  const siteTitle = normalizeSiteTitle(snapshot?.siteTitle);
+  if (!siteTitle) {
     return null;
   }
 
   return {
-    siteTitle: snapshot.siteTitle,
-    siteDescription: snapshot.siteDescription,
+    siteTitle,
+    siteDescription: resolvePublicStatusSiteDescription({
+      siteTitle,
+      siteDescription: snapshot?.siteDescription,
+    }),
   };
 }
 

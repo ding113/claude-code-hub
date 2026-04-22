@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { readPublicSiteMeta } from "@/lib/public-site-meta";
+import { resolvePublicStatusSiteDescription } from "@/lib/public-status/config-snapshot";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 
 export const runtime = "nodejs";
@@ -14,9 +16,13 @@ export async function GET() {
         "Cache-Control": PUBLIC_SITE_META_CACHE_CONTROL,
       },
     });
-  } catch {
+  } catch (error) {
+    logger.error("GET /api/public-site-meta failed", { error });
     return NextResponse.json(
-      { siteTitle: DEFAULT_SITE_TITLE },
+      {
+        siteTitle: DEFAULT_SITE_TITLE,
+        siteDescription: resolvePublicStatusSiteDescription({ siteTitle: DEFAULT_SITE_TITLE }),
+      },
       {
         headers: {
           "Cache-Control": PUBLIC_SITE_META_CACHE_CONTROL,

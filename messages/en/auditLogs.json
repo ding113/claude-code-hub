@@ -39,7 +39,8 @@
       "create": "Create user",
       "update": "Update user",
       "delete": "Delete user",
-      "reset_5h_limit": "Reset user 5H limit"
+      "reset_5h_limit": "Reset user 5H limit",
+      "reset_5h_limit_only": "Reset user-only 5H limit"
     },
     "provider": {
       "create": "Create provider",

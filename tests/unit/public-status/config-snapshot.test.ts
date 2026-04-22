@@ -164,6 +164,31 @@ describe("public-status config snapshot", () => {
     });
   });
 
+  it("synthesizes siteDescription when the stored snapshot description is blank", async () => {
+    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
+      "@/lib/public-status/config-snapshot"
+    );
+
+    const redis = {
+      status: "ready",
+      get: vi
+        .fn()
+        .mockResolvedValueOnce("cfg-4")
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            configVersion: "cfg-4",
+            siteTitle: "Acme AI Hub",
+            siteDescription: "   ",
+          })
+        ),
+    };
+
+    await expect(mod.readPublicStatusSiteMetadata({ redis })).resolves.toEqual({
+      siteTitle: "Acme AI Hub",
+      siteDescription: "Acme AI Hub public status",
+    });
+  });
+
   it("returns null on malformed pointer records instead of throwing", async () => {
     const mod = await importPublicStatusModule<ConfigSnapshotModule>(
       "@/lib/public-status/config-snapshot"

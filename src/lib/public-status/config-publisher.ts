@@ -14,6 +14,7 @@ import {
   publishCurrentPublicStatusConfigPointers,
   publishInternalPublicStatusConfigSnapshot,
   publishPublicStatusConfigSnapshot,
+  resolvePublicStatusSiteDescription,
 } from "./config-snapshot";
 import { MAX_PUBLIC_STATUS_RANGE_HOURS, PUBLIC_STATUS_INTERVAL_SET } from "./constants";
 
@@ -116,7 +117,7 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
   const snapshot = buildPublicStatusConfigSnapshot({
     configVersion: input.configVersion ?? `cfg-${Date.now()}`,
     siteTitle: settings.siteTitle,
-    siteDescription: settings.siteTitle,
+    siteDescription: resolvePublicStatusSiteDescription({ siteTitle: settings.siteTitle }),
     timeZone: settings.timezone,
     defaultIntervalMinutes,
     defaultRangeHours,

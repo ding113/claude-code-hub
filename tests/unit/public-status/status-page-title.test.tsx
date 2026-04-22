@@ -41,6 +41,7 @@ describe("public status page title", () => {
     });
     mockReadPublicSiteMeta.mockResolvedValue({
       siteTitle: "Claude Code Hub",
+      siteDescription: "Claude Code Hub public status",
     });
     mockReadPublicStatusPayload.mockResolvedValue({
       rebuildState: "fresh",
@@ -75,6 +76,7 @@ describe("public status page title", () => {
     });
     mockReadPublicSiteMeta.mockResolvedValue({
       siteTitle: "Claude Code Hub",
+      siteDescription: "Claude Code Hub public status",
     });
     mockReadPublicStatusPayload.mockResolvedValue({
       rebuildState: "fresh",

@@ -115,6 +115,14 @@ export async function createProviderGroup(input: {
       };
     }
 
+    if (exceedsProviderGroupDescriptionLimit(input.description)) {
+      return {
+        ok: false,
+        error: t("descriptionTooLong"),
+        errorCode: "DESCRIPTION_TOO_LONG",
+      };
+    }
+
     const group = await repoCreateProviderGroup({
       name,
       costMultiplier: input.costMultiplier,

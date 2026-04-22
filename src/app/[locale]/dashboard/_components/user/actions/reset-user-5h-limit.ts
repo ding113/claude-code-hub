@@ -13,7 +13,7 @@ import { findUserById, updateUserCostResetMarkers } from "@/repository/user";
 
 export async function resetUser5hLimitOnly(
   userId: number
-): Promise<ActionResult<{ resetMode: "fixed" | "rolling" }>> {
+): Promise<ActionResult<{ resetMode: "fixed" | "rolling"; cleanupRequired?: boolean }>> {
   try {
     const tError = await getTranslations("errors");
 
@@ -41,60 +41,69 @@ export async function resetUser5hLimitOnly(
 
     const resetMode = user.limit5hResetMode ?? "rolling";
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    const redisReady = !!redis && redis.status === "ready";
+    if (resetMode === "fixed" && !redisReady) {
       return {
         ok: false,
-        error: tError(
-          resetMode === "fixed"
-            ? "USER_5H_FIXED_RESET_REQUIRES_REDIS"
-            : "USER_5H_RESET_REQUIRES_REDIS"
-        ),
+        error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),
         errorCode: ERROR_CODES.OPERATION_FAILED,
       };
     }
 
     const { clearUser5hCostCache } = await import("@/lib/redis/cost-cache-cleanup");
-    const previousLimit5hCostResetAt = user.limit5hCostResetAt ?? null;
 
     if (resetMode === "rolling") {
       const resetAt = new Date();
       const updated = await updateUserCostResetMarkers(userId, {
         limit5hCostResetAt: resetAt,
+        enforceLimit5hMonotonic: true,
       });
       if (!updated) {
         return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
       }
     }
 
-    const cleanupResult = await clearUser5hCostCache({ userId, resetMode });
-    if (!cleanupResult) {
+    const cleanupResult = redisReady ? await clearUser5hCostCache({ userId, resetMode }) : null;
+    if (!cleanupResult || cleanupResult.cleanupFailed) {
       if (resetMode === "rolling") {
-        const rolledBack = await updateUserCostResetMarkers(userId, {
-          limit5hCostResetAt: previousLimit5hCostResetAt,
-        }).catch((rollbackError) => {
-          logger.error("Failed to roll back user 5h reset marker after Redis cleanup failure", {
-            userId,
-            rollbackError:
-              rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
-          });
-          return false;
+        logger.warn("Rolling user 5h reset requires Redis cleanup follow-up", {
+          userId,
+          cleanupFailed: cleanupResult?.cleanupFailed ?? true,
+          errorCount: cleanupResult?.errorCount,
         });
-        if (!rolledBack) {
-          return {
-            ok: false,
-            error: tError("USER_5H_RESET_COMPENSATION_REQUIRED"),
-            errorCode: ERROR_CODES.OPERATION_FAILED,
-          };
-        }
+        await invalidateCachedUser(userId).catch(() => {});
+        emitActionAudit({
+          category: "user",
+          action: "user.reset_5h_limit_only",
+          targetType: "user",
+          targetId: String(userId),
+          targetName: user.name,
+          before: user,
+          after: {
+            resetMode,
+            cleanupRequired: true,
+          },
+          success: true,
+        });
+        revalidatePath("/dashboard/users");
+        return {
+          ok: true,
+          data: {
+            resetMode,
+            cleanupRequired: true,
+          },
+        };
       }
+
+      logger.error("Fixed user 5h reset could not clear Redis enforcement state", {
+        userId,
+        cleanupFailed: cleanupResult?.cleanupFailed ?? true,
+        errorCount: cleanupResult?.errorCount,
+      });
       return {
         ok: false,
-        error: tError(
-          resetMode === "fixed"
-            ? "USER_5H_FIXED_RESET_REQUIRES_REDIS"
-            : "USER_5H_RESET_REQUIRES_REDIS"
-        ),
-        errorCode: ERROR_CODES.OPERATION_FAILED,
+        error: tError("USER_5H_FIXED_RESET_CLEANUP_FAILED"),
+        errorCode: ERROR_CODES.USER_5H_FIXED_RESET_CLEANUP_FAILED,
       };
     }
 

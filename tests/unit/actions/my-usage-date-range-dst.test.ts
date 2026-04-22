@@ -4,8 +4,10 @@ import { fromZonedTime } from "date-fns-tz";
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getSystemSettings: vi.fn(),
+  findReadonlyUsageLogsBatchForKey: vi.fn(),
   findUsageLogsForKeySlim: vi.fn(),
   findUsageLogsForKeyBatch: vi.fn(),
+  getTranslations: vi.fn(async () => (key: string) => key),
   resolveSystemTimezone: vi.fn(),
 }));
 
@@ -17,10 +19,15 @@ vi.mock("@/repository/system-config", () => ({
   getSystemSettings: mocks.getSystemSettings,
 }));
 
+vi.mock("next-intl/server", () => ({
+  getTranslations: mocks.getTranslations,
+}));
+
 vi.mock("@/repository/usage-logs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/repository/usage-logs")>();
   return {
     ...actual,
+    findReadonlyUsageLogsBatchForKey: mocks.findReadonlyUsageLogsBatchForKey,
     findUsageLogsForKeySlim: mocks.findUsageLogsForKeySlim,
     findUsageLogsForKeyBatch: mocks.findUsageLogsForKeyBatch,
   };
@@ -46,6 +53,11 @@ describe("my-usage date range parsing", () => {
     });
 
     mocks.findUsageLogsForKeyBatch.mockResolvedValue({
+      logs: [],
+      nextCursor: null,
+      hasMore: false,
+    });
+    mocks.findReadonlyUsageLogsBatchForKey.mockResolvedValue({
       logs: [],
       nextCursor: null,
       hasMore: false,
@@ -129,5 +141,39 @@ describe("my-usage date range parsing", () => {
     expect(args.endTime).toBe(fromZonedTime("2024-03-11T00:00:00", tz).getTime());
     expect(args.page).toBe(1);
     expect(args.pageSize).toBe(20);
+  });
+
+  it("passes explicit startTime/endTime through to full batch readonly API without reparsing dates", async () => {
+    const tz = "America/Los_Angeles";
+    mocks.resolveSystemTimezone.mockResolvedValue(tz);
+
+    mocks.getSession.mockResolvedValue({
+      key: { id: 1, key: "k" },
+      user: { id: 1 },
+    });
+
+    mocks.findReadonlyUsageLogsBatchForKey.mockResolvedValue({
+      logs: [],
+      nextCursor: null,
+      hasMore: false,
+    });
+
+    const explicitStart = 1_700_000_000_000;
+    const explicitEnd = 1_700_003_600_000;
+    const { getMyUsageLogsBatchFull } = await import("@/actions/my-usage");
+    const res = await getMyUsageLogsBatchFull({
+      startDate: "2024-03-10",
+      endDate: "2024-03-10",
+      startTime: explicitStart,
+      endTime: explicitEnd,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(mocks.findReadonlyUsageLogsBatchForKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startTime: explicitStart,
+        endTime: explicitEnd,
+      })
+    );
   });
 });

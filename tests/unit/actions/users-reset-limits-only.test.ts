@@ -163,6 +163,32 @@ describe("resetUserLimitsOnly", () => {
     expect(dbDeleteMock).not.toHaveBeenCalled();
   });
 
+  test("should return partial failure when fixed 5h cleanup fails after DB markers advance", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    findUserByIdMock.mockResolvedValue({
+      id: 123,
+      name: "Test User",
+      limit5hUsd: 5,
+      limit5hResetMode: "fixed",
+    });
+    findKeyListMock.mockResolvedValue([]);
+    scanPatternMock.mockResolvedValue(["user:123:cost_5h_fixed"]);
+    redisPipelineMock.exec.mockResolvedValue([[new Error("fixed cleanup failed"), null]]);
+
+    const { resetUserLimitsOnly } = await import("@/actions/users");
+    const result = await resetUserLimitsOnly(123);
+
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe(ERROR_CODES.USER_LIMITS_RESET_PARTIAL_FAILURE);
+    expect(updateUserCostResetMarkersMock).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        costResetAt: expect.any(Date),
+        limit5hCostResetAt: expect.any(Date),
+      })
+    );
+  });
+
   test("should NOT delete messageRequest or usageLedger rows", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findUserByIdMock.mockResolvedValue({ id: 123, name: "Test User" });

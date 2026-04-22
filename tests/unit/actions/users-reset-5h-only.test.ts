@@ -188,20 +188,22 @@ describe("resetUser5hLimitOnly", () => {
     );
     const result = await resetUser5hLimitOnly(123);
 
-    expect(result.ok).toBe(false);
-    expect(result.errorCode).toBe(ERROR_CODES.OPERATION_FAILED);
-    expect(updateUserCostResetMarkersMock).not.toHaveBeenCalled();
-    expect(revalidatePathMock).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      resetMode: "rolling",
+      cleanupRequired: true,
+    });
+    expect(updateUserCostResetMarkersMock).toHaveBeenCalledTimes(1);
+    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/users");
   });
 
-  test("rolling mode rolls back the marker when Redis cleanup fails after the DB write", async () => {
+  test("rolling mode keeps the marker and surfaces cleanupRequired when Redis cleanup fails", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findUserByIdMock.mockResolvedValue({
       id: 123,
       name: "Test User",
       limit5hUsd: 5,
       limit5hResetMode: "rolling",
-      limit5hCostResetAt: new Date("2026-04-21T00:00:00.000Z"),
     });
     clearUser5hCostCacheMock.mockResolvedValue(null);
 
@@ -210,33 +212,39 @@ describe("resetUser5hLimitOnly", () => {
     );
     const result = await resetUser5hLimitOnly(123);
 
-    expect(result.ok).toBe(false);
-    expect(updateUserCostResetMarkersMock).toHaveBeenNthCalledWith(
-      1,
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      resetMode: "rolling",
+      cleanupRequired: true,
+    });
+    expect(updateUserCostResetMarkersMock).toHaveBeenCalledTimes(1);
+    expect(updateUserCostResetMarkersMock).toHaveBeenCalledWith(
       123,
       expect.objectContaining({
         limit5hCostResetAt: expect.any(Date),
+        enforceLimit5hMonotonic: true,
       })
     );
-    expect(updateUserCostResetMarkersMock).toHaveBeenNthCalledWith(2, 123, {
-      limit5hCostResetAt: new Date("2026-04-21T00:00:00.000Z"),
-    });
-    expect(emitActionAuditMock).not.toHaveBeenCalled();
+    expect(emitActionAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        after: expect.objectContaining({
+          cleanupRequired: true,
+          resetMode: "rolling",
+        }),
+      })
+    );
   });
 
-  test("rolling mode surfaces a compensation-required error when rollback also fails", async () => {
+  test("fixed mode returns a dedicated cleanup failure error when Redis cleanup fails", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findUserByIdMock.mockResolvedValue({
       id: 123,
       name: "Test User",
       limit5hUsd: 5,
-      limit5hResetMode: "rolling",
-      limit5hCostResetAt: new Date("2026-04-21T00:00:00.000Z"),
+      limit5hResetMode: "fixed",
     });
     clearUser5hCostCacheMock.mockResolvedValue(null);
-    updateUserCostResetMarkersMock
-      .mockResolvedValueOnce(true)
-      .mockRejectedValueOnce(new Error("rollback failed"));
 
     const { resetUser5hLimitOnly } = await import(
       "@/app/[locale]/dashboard/_components/user/actions/reset-user-5h-limit"
@@ -244,7 +252,9 @@ describe("resetUser5hLimitOnly", () => {
     const result = await resetUser5hLimitOnly(123);
 
     expect(result.ok).toBe(false);
-    expect(result.error).toBe("USER_5H_RESET_COMPENSATION_REQUIRED");
+    expect(result.errorCode).toBe(ERROR_CODES.USER_5H_FIXED_RESET_CLEANUP_FAILED);
+    expect(result.error).toBe("USER_5H_FIXED_RESET_CLEANUP_FAILED");
+    expect(updateUserCostResetMarkersMock).not.toHaveBeenCalled();
     expect(emitActionAuditMock).not.toHaveBeenCalled();
   });
 });

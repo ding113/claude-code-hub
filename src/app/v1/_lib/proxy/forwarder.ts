@@ -141,6 +141,29 @@ type ReactiveRectifierResult =
       requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>;
     };
 
+type DetailRequestAfterSnapshot = {
+  body: string | null;
+  headers: Headers;
+  meta: {
+    clientUrl: null;
+    upstreamUrl: string;
+    method: string;
+  };
+};
+
+type DetailResponseBeforeSnapshot = {
+  headers: Headers;
+  meta: {
+    upstreamUrl: string;
+    statusCode: number;
+  };
+};
+
+type ProxySessionWithDetailSnapshotRuntime = ProxySession & {
+  detailSnapshotRequestAfter?: DetailRequestAfterSnapshot | null;
+  detailSnapshotResponseBefore?: DetailResponseBeforeSnapshot | null;
+};
+
 // 非流式响应体检查的上限（字节）：避免上游在 2xx 场景返回超大内容导致内存占用失控。
 // 说明：
 // - 该检查仅用于“空响应/假 200”启发式判定，不用于业务逻辑解析；
@@ -396,6 +419,49 @@ function addSpecialSettingForPersistence(
   if (persistSession !== ownerSession) {
     persistSession.addSpecialSetting(setting);
   }
+}
+
+async function persistRequestAfterSnapshot(
+  session: ProxySession,
+  snapshot: DetailRequestAfterSnapshot | null | undefined
+): Promise<void> {
+  if (!snapshot || !session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
+    return;
+  }
+
+  await SessionManager.storeSessionRequestPhaseSnapshot(
+    session.sessionId,
+    "after",
+    {
+      body: snapshot.body,
+      headers: snapshot.headers,
+      meta: snapshot.meta,
+    },
+    session.requestSequence
+  ).catch((err) => {
+    logger.error("Failed to store request after snapshot:", err);
+  });
+}
+
+async function persistResponseBeforeSnapshot(
+  session: ProxySession,
+  snapshot: DetailResponseBeforeSnapshot | null | undefined
+): Promise<void> {
+  if (!snapshot || !session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
+    return;
+  }
+
+  await SessionManager.storeSessionResponsePhaseSnapshot(
+    session.sessionId,
+    "before",
+    {
+      headers: snapshot.headers,
+      meta: snapshot.meta,
+    },
+    session.requestSequence
+  ).catch((err) => {
+    logger.error("Failed to store response before snapshot meta:", err);
+  });
 }
 
 type MatchedRuleDetails = NonNullable<
@@ -1888,7 +1954,8 @@ export class ProxyForwarder {
     provider: typeof session.provider,
     baseUrl: string,
     endpointAudit?: { endpointId: number | null; endpointUrl: string },
-    attemptNumber?: number
+    attemptNumber?: number,
+    deferDetailSnapshotPersistence: boolean = false
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -2444,25 +2511,21 @@ export class ProxyForwarder {
       }
     }
 
-    if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
-      // 这里是 request.after 唯一稳定时机：最终 headers、proxyUrl、body 都已确定，但尚未真正发往上游。
-      const requestAfterSnapshotTask = SessionManager.storeSessionRequestPhaseSnapshot?.(
-        session.sessionId,
-        "after",
-        {
-          body: session.forwardedRequestBody,
-          headers: processedHeaders,
-          meta: {
-            clientUrl: null,
-            upstreamUrl: proxyUrl,
-            method: session.method,
-          },
+    if (session.shouldPersistSessionDebugArtifacts()) {
+      const detailSnapshotSession = session as ProxySessionWithDetailSnapshotRuntime;
+      detailSnapshotSession.detailSnapshotRequestAfter = {
+        body: session.forwardedRequestBody ?? null,
+        headers: new Headers(processedHeaders),
+        meta: {
+          clientUrl: null,
+          upstreamUrl: proxyUrl,
+          method: session.method,
         },
-        session.requestSequence
-      );
-      requestAfterSnapshotTask?.catch((err) =>
-        logger.error("Failed to store request after snapshot:", err)
-      );
+      };
+      // 这里是 request.after 唯一稳定时机：最终 headers、proxyUrl、body 都已确定，但尚未真正发往上游。
+      if (!deferDetailSnapshotPersistence) {
+        void persistRequestAfterSnapshot(session, detailSnapshotSession.detailSnapshotRequestAfter);
+      }
     }
 
     // ⭐ 扩展 RequestInit 类型以支持 undici dispatcher
@@ -2633,7 +2696,8 @@ export class ProxyForwarder {
             init,
             provider.id,
             provider.name,
-            session
+            session,
+            deferDetailSnapshotPersistence
           )
         : await fetch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
@@ -2858,7 +2922,8 @@ export class ProxyForwarder {
                 http1FallbackInit,
                 provider.id,
                 provider.name,
-                session
+                session,
+                deferDetailSnapshotPersistence
               )
             : await fetch(proxyUrl, http1FallbackInit);
 
@@ -2940,7 +3005,8 @@ export class ProxyForwarder {
                     fallbackInit,
                     provider.id,
                     provider.name,
-                    session
+                    session,
+                    deferDetailSnapshotPersistence
                   )
                 : await fetch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
@@ -3343,7 +3409,8 @@ export class ProxyForwarder {
         providerForRequest,
         attempt.baseUrl,
         attempt.endpointAudit,
-        attempt.requestAttemptCount
+        attempt.requestAttemptCount,
+        true
       )
         .then(async (response) => {
           if (settled || winnerCommitted || attempt.settled) {
@@ -3612,6 +3679,12 @@ export class ProxyForwarder {
       if (attempt.session !== session) {
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
       }
+      const detailSnapshotSession = attempt.session as ProxySessionWithDetailSnapshotRuntime;
+      void persistRequestAfterSnapshot(session, detailSnapshotSession.detailSnapshotRequestAfter);
+      void persistResponseBeforeSnapshot(
+        session,
+        detailSnapshotSession.detailSnapshotResponseBefore
+      );
       session.setProvider(attempt.provider);
 
       // Determine if this is truly a hedge winner or just a regular success
@@ -4262,7 +4335,8 @@ export class ProxyForwarder {
     init: RequestInit & { dispatcher?: Dispatcher },
     providerId: number,
     providerName: string,
-    session?: ProxySession
+    session?: ProxySession,
+    deferDetailSnapshotPersistence: boolean = false
   ): Promise<Response> {
     const { FETCH_HEADERS_TIMEOUT: headersTimeout, FETCH_BODY_TIMEOUT: bodyTimeout } =
       getEnvConfig();
@@ -4333,6 +4407,17 @@ export class ProxyForwarder {
       }
     }
 
+    if (session?.shouldPersistSessionDebugArtifacts()) {
+      const detailSnapshotSession = session as ProxySessionWithDetailSnapshotRuntime;
+      detailSnapshotSession.detailSnapshotResponseBefore = {
+        headers: new Headers(responseHeaders),
+        meta: {
+          upstreamUrl: url,
+          statusCode: undiciRes.statusCode,
+        },
+      };
+    }
+
     if (session?.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       void SessionManager.storeSessionResponseHeaders(
         session.sessionId,
@@ -4346,21 +4431,12 @@ export class ProxyForwarder {
         session.requestSequence
       ).catch((err) => logger.error("Failed to store upstream response meta:", err));
 
-      const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
-        session.sessionId,
-        "before",
-        {
-          headers: responseHeaders,
-          meta: {
-            upstreamUrl: url,
-            statusCode: undiciRes.statusCode,
-          },
-        },
-        session.requestSequence
-      );
-      responseBeforeSnapshotTask?.catch((err) =>
-        logger.error("Failed to store response before snapshot meta:", err)
-      );
+      if (!deferDetailSnapshotPersistence) {
+        void persistResponseBeforeSnapshot(
+          session,
+          (session as ProxySessionWithDetailSnapshotRuntime).detailSnapshotResponseBefore
+        );
+      }
     }
 
     // 检测响应是否为 gzip 压缩

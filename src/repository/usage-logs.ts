@@ -467,6 +467,7 @@ export interface UsageLogSlimBatchResult {
 }
 
 const usageLogSlimTotalCache = new TTLMap<string, number>({ ttlMs: 10_000, maxSize: 1000 });
+const MAX_LEGACY_USAGE_LOG_PAGES = 10;
 
 export async function findUsageLogsForKeySlim(
   filters: UsageLogSlimFilters & { page?: number; pageSize?: number }
@@ -485,23 +486,73 @@ export async function findUsageLogsForKeySlim(
     filters.endpoint ?? "",
     filters.minRetryCount ?? "",
   ].join("\u0001");
+  const cachedTotal = usageLogSlimTotalCache.get(totalCacheKey);
 
-  const offset = (safePage - 1) * safePageSize;
-  const fetchLimit = offset + safePageSize + 1;
+  const resolveTotal = async (): Promise<number> => {
+    if (cachedTotal !== undefined) {
+      return cachedTotal;
+    }
 
-  const [messageRows, ledgerRows, messageTotal, ledgerTotal] = await Promise.all([
-    selectKeyScopedMessageSlimRows(keyString, filters, fetchLimit),
-    selectKeyScopedLedgerSlimRows(keyString, filters, fetchLimit),
-    countKeyScopedMessageRows(keyString, filters),
-    countKeyScopedLedgerRows(keyString, filters),
-  ]);
+    const [messageTotal, ledgerTotal] = await Promise.all([
+      countKeyScopedMessageRows(keyString, filters),
+      countKeyScopedLedgerRows(keyString, filters),
+    ]);
+    const total = messageTotal + ledgerTotal;
+    usageLogSlimTotalCache.set(totalCacheKey, total);
+    return total;
+  };
 
-  const mergedRows = mergeOrderedUsageLogs<KeyScopedSlimSourceRow>([...messageRows, ...ledgerRows]);
-  const logs = mergedRows.slice(offset, offset + safePageSize);
-  const total = messageTotal + ledgerTotal;
+  if (safePage === 1) {
+    const fetchLimit = safePageSize + 1;
+    const [messageRows, ledgerRows, total] = await Promise.all([
+      selectKeyScopedMessageSlimRows(keyString, filters, fetchLimit),
+      selectKeyScopedLedgerSlimRows(keyString, filters, fetchLimit),
+      resolveTotal(),
+    ]);
 
-  usageLogSlimTotalCache.set(totalCacheKey, total);
-  return { logs, total };
+    const mergedRows = mergeOrderedUsageLogs<KeyScopedSlimSourceRow>([
+      ...messageRows,
+      ...ledgerRows,
+    ]);
+    return {
+      logs: mergedRows.slice(0, safePageSize),
+      total,
+    };
+  }
+
+  if (safePage > MAX_LEGACY_USAGE_LOG_PAGES) {
+    return {
+      logs: [],
+      total: await resolveTotal(),
+    };
+  }
+
+  let cursor: KeyScopedCursor | undefined;
+  let currentPage = 1;
+  let pageResult: UsageLogSlimBatchResult = {
+    logs: [],
+    nextCursor: null,
+    hasMore: false,
+  };
+
+  while (currentPage <= safePage) {
+    pageResult = await findUsageLogsForKeyBatch({
+      ...filters,
+      cursor,
+      limit: safePageSize,
+      keyString,
+    });
+    if (currentPage === safePage || !pageResult.hasMore) {
+      break;
+    }
+    cursor = pageResult.nextCursor ?? undefined;
+    currentPage += 1;
+  }
+
+  return {
+    logs: currentPage === safePage ? pageResult.logs : [],
+    total: await resolveTotal(),
+  };
 }
 
 function buildNextCursorOrThrow(
@@ -564,20 +615,24 @@ type KeyScopedSlimSourceRow = UsageLogSlimRow & {
 };
 
 function compareUsageLogOrder(
-  a: { createdAt: Date | null; id: number },
-  b: { createdAt: Date | null; id: number }
+  a: { createdAt: Date | null; id: number; createdAtRaw?: string | null },
+  b: { createdAt: Date | null; id: number; createdAtRaw?: string | null }
 ): number {
-  const aTime = a.createdAt?.getTime() ?? Number.NEGATIVE_INFINITY;
-  const bTime = b.createdAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const aRaw = a.createdAtRaw ?? (a.createdAt ? a.createdAt.toISOString() : null);
+  const bRaw = b.createdAtRaw ?? (b.createdAt ? b.createdAt.toISOString() : null);
 
-  if (aTime !== bTime) {
-    return bTime - aTime;
+  if (aRaw !== bRaw) {
+    if (aRaw === null) return 1;
+    if (bRaw === null) return -1;
+    return bRaw.localeCompare(aRaw);
   }
 
   return b.id - a.id;
 }
 
-function mergeOrderedUsageLogs<T extends { createdAt: Date | null; id: number }>(rows: T[]): T[] {
+function mergeOrderedUsageLogs<
+  T extends { createdAt: Date | null; id: number; createdAtRaw?: string | null },
+>(rows: T[]): T[] {
   return rows.sort(compareUsageLogOrder);
 }
 

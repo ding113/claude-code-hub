@@ -471,4 +471,36 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
     expect(secondFull.ok).toBe(true);
     expect(secondFull.ok && secondFull.data.logs.map((log) => log.id)).toEqual([liveRequestId]);
   });
+
+  test("ledger rows that reference an active live message_request are deduped from my-usage batch and full views", async () => {
+    const { getMyUsageLogsBatch, getMyUsageLogsBatchFull } = await import("@/actions/my-usage");
+
+    const unique = `${KEY_PREFIX}-dedupe-${Math.random().toString(16).slice(2)}`;
+    const user = await createTestUser(`Dedupe ${unique}`);
+    const key = await createTestKey({
+      userId: user.id,
+      key: `${KEY_PREFIX}-dedupe-key-${unique}`,
+      name: `dedupe-${unique}`,
+    });
+
+    const createdAt = new Date(getStableRecentUtcTimestamp());
+    const liveRequestId = await createMessage({
+      userId: user.id,
+      key: key.key,
+      model: "dedupe-live-model",
+      endpoint: "/v1/responses",
+      costUsd: "0.800000000000000",
+      inputTokens: 80,
+      outputTokens: 16,
+      createdAt,
+    });
+
+    const batch = await runAsSession(user.id, key.id, () => getMyUsageLogsBatch({ limit: 20 }));
+    expect(batch.ok).toBe(true);
+    expect(batch.ok && batch.data.logs.map((log) => log.id)).toEqual([liveRequestId]);
+
+    const full = await runAsSession(user.id, key.id, () => getMyUsageLogsBatchFull({ limit: 20 }));
+    expect(full.ok).toBe(true);
+    expect(full.ok && full.data.logs.map((log) => log.id)).toEqual([liveRequestId]);
+  });
 });

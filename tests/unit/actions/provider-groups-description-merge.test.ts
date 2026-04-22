@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetSession = vi.hoisted(() => vi.fn());
 const mockFindProviderGroupById = vi.hoisted(() => vi.fn());
+const mockFindProviderGroupByName = vi.hoisted(() => vi.fn());
+const mockRepoCreateProviderGroup = vi.hoisted(() => vi.fn());
 const mockRepoUpdateProviderGroup = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth", () => ({
@@ -19,6 +21,8 @@ vi.mock("@/repository/provider-groups", async () => {
   return {
     ...actual,
     findProviderGroupById: mockFindProviderGroupById,
+    findProviderGroupByName: mockFindProviderGroupByName,
+    createProviderGroup: mockRepoCreateProviderGroup,
     updateProviderGroup: mockRepoUpdateProviderGroup,
   };
 });
@@ -55,6 +59,13 @@ describe("provider-groups action description merge", () => {
           publicModels: [{ modelKey: "gpt-4.1" }],
         },
       }),
+    });
+    mockFindProviderGroupByName.mockResolvedValue(null);
+    mockRepoCreateProviderGroup.mockResolvedValue({
+      id: 12,
+      name: "new-group",
+      costMultiplier: "1.0",
+      description: null,
     });
     mockRepoUpdateProviderGroup.mockResolvedValue({
       id: 11,
@@ -106,5 +117,21 @@ describe("provider-groups action description merge", () => {
       errorCode: "DESCRIPTION_TOO_LONG",
     });
     expect(mockRepoUpdateProviderGroup).not.toHaveBeenCalled();
+  });
+
+  it("rejects createProviderGroup when description exceeds the UTF-8 byte limit", async () => {
+    const { createProviderGroup } = await import("@/actions/provider-groups");
+
+    const result = await createProviderGroup({
+      name: "new-group",
+      costMultiplier: 1,
+      description: "中".repeat(6_000),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      errorCode: "DESCRIPTION_TOO_LONG",
+    });
+    expect(mockRepoCreateProviderGroup).not.toHaveBeenCalled();
   });
 });

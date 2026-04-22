@@ -2247,7 +2247,7 @@
         },
         "description": {
           "name": "description",
-          "type": "varchar(500)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -4089,12 +4089,6 @@
         },
         "cost_reset_at": {
           "name": "cost_reset_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "limit_5h_cost_reset_at": {
-          "name": "limit_5h_cost_reset_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

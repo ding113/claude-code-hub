@@ -39,7 +39,8 @@
       "create": "建立使用者",
       "update": "更新使用者",
       "delete": "刪除使用者",
-      "reset_5h_limit": "重設使用者 5H 限額"
+      "reset_5h_limit": "重設使用者 5H 限額",
+      "reset_5h_limit_only": "重設使用者專屬 5H 限額"
     },
     "provider": {
       "create": "建立供應商",
