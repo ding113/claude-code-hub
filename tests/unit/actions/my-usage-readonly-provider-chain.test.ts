@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
-  findUsageLogsBatch: vi.fn(),
+  findReadonlyUsageLogsBatchForKey: vi.fn(),
   getTranslations: vi.fn(async () => (key: string) => key),
   loggerError: vi.fn(),
+  loggerInfo: vi.fn(),
+  resolveSystemTimezone: vi.fn(async () => "UTC"),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -12,7 +14,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/repository/usage-logs", () => ({
-  findUsageLogsBatch: mocks.findUsageLogsBatch,
+  findReadonlyUsageLogsBatchForKey: mocks.findReadonlyUsageLogsBatchForKey,
   findUsageLogsForKeyBatch: vi.fn(),
   findUsageLogsForKeySlim: vi.fn(),
   getDistinctEndpointsForKey: vi.fn(),
@@ -23,9 +25,14 @@ vi.mock("next-intl/server", () => ({
   getTranslations: mocks.getTranslations,
 }));
 
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: mocks.resolveSystemTimezone,
+}));
+
 vi.mock("@/lib/logger", () => ({
   logger: {
     error: mocks.loggerError,
+    info: mocks.loggerInfo,
   },
 }));
 
@@ -35,12 +42,13 @@ describe("getMyUsageLogsBatchFull", () => {
   });
 
   it("scrubs request details from providerChain for readonly my-usage responses", async () => {
+    vi.resetModules();
     mocks.getSession.mockResolvedValueOnce({
       user: { id: 1 },
       key: { id: 7, key: "sk-readonly" },
     });
 
-    mocks.findUsageLogsBatch.mockResolvedValueOnce({
+    mocks.findReadonlyUsageLogsBatchForKey.mockResolvedValueOnce({
       logs: [
         {
           id: 101,
@@ -89,7 +97,10 @@ describe("getMyUsageLogsBatchFull", () => {
     const result = await getMyUsageLogsBatchFull({ limit: 20 });
 
     expect(mocks.getSession).toHaveBeenCalledWith({ allowReadOnlyAccess: true });
-    expect(mocks.findUsageLogsBatch).toHaveBeenCalledWith({ keyId: 7, limit: 20 });
+    expect(mocks.findReadonlyUsageLogsBatchForKey).toHaveBeenCalledWith({
+      keyString: "sk-readonly",
+      limit: 20,
+    });
     expect(result).toMatchObject({
       ok: true,
       data: {
@@ -107,8 +118,6 @@ describe("getMyUsageLogsBatchFull", () => {
       name: "provider-b",
       errorDetails: null,
     });
-    const scrubbedLiveChainErrorDetails =
-      result.ok && result.data.logs[0]?._liveChain?.chain[0]?.errorDetails;
-    expect(scrubbedLiveChainErrorDetails && "request" in scrubbedLiveChainErrorDetails).toBe(false);
+    expect(result.ok && result.data.logs[0]?._liveChain).toBeNull();
   });
 });

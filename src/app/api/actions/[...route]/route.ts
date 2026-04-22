@@ -1297,6 +1297,42 @@ const { route: getMyUsageLogsBatchRoute, handler: getMyUsageLogsBatchHandler } =
 );
 app.openapi(getMyUsageLogsBatchRoute, getMyUsageLogsBatchHandler);
 
+const { route: getMyUsageLogsBatchFullRoute, handler: getMyUsageLogsBatchFullHandler } =
+  createActionRoute("my-usage", "getMyUsageLogsBatchFull", myUsageActions.getMyUsageLogsBatchFull, {
+    requestSchema: z.object({
+      startDate: z.string().optional().describe("开始日期（YYYY-MM-DD，可为空）"),
+      endDate: z.string().optional().describe("结束日期（YYYY-MM-DD，可为空）"),
+      sessionId: z.string().optional(),
+      model: z.string().optional(),
+      endpoint: z.string().optional(),
+      statusCode: z.number().optional(),
+      excludeStatusCode200: z.boolean().optional(),
+      minRetryCount: z.number().int().nonnegative().optional(),
+      cursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number().int(),
+        })
+        .optional(),
+      limit: z.number().int().positive().max(100).default(20).optional(),
+    }),
+    responseSchema: z.object({
+      logs: z.array(z.object({}).passthrough()),
+      nextCursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number().int(),
+        })
+        .nullable(),
+      hasMore: z.boolean(),
+    }),
+    description: "获取当前 key 的完整使用日志批量数据（只读页面详情弹窗使用）",
+    summary: "批量获取我的完整使用日志",
+    tags: ["使用日志"],
+    allowReadOnlyAccess: true,
+  });
+app.openapi(getMyUsageLogsBatchFullRoute, getMyUsageLogsBatchFullHandler);
+
 const { route: getMyAvailableModelsRoute, handler: getMyAvailableModelsHandler } =
   createActionRoute("my-usage", "getMyAvailableModels", myUsageActions.getMyAvailableModels, {
     requestSchema: z.object({}).describe("无需请求参数"),

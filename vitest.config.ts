@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 import { sharedResolve } from "./tests/vitest.base";
 
 const isIntegrationFileFilterRequested = process.argv.some((arg) =>
-  /tests[\\/]+integration[\\/].+\.(test|spec)\.[cm]?[jt]sx?$/.test(arg)
+  /tests[\\/]+integration(?:[\\/].+\.(test|spec)\.[cm]?[jt]sx?|[\\/]?$)/.test(arg)
 );
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -121,7 +121,6 @@ export default defineConfig({
       "tests/api/users-actions.test.ts",
       "tests/api/providers-actions.test.ts",
       "tests/api/keys-actions.test.ts",
-      "tests/api/my-usage-readonly.test.ts",
     ],
 
     // ==================== 监听模式配置 ====================
