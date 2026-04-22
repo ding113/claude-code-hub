@@ -49,6 +49,17 @@ function createSession({
   return session as any;
 }
 
+function buildHeaders(session: ProxySession, provider: Provider): Headers {
+  const forwarder = ProxyForwarder as unknown as {
+    buildHeaders: (session: ProxySession, provider: Provider, upstreamBaseUrl: string) => Headers;
+  };
+  return forwarder.buildHeaders(
+    session,
+    provider,
+    ((provider as { url?: string }).url ?? "https://example.com").toString()
+  );
+}
+
 describe("ProxyForwarder - Host header correction for multi-endpoint providers", () => {
   it("buildHeaders sets Host from provider.url, which may differ from actual target", () => {
     const session = createSession({
@@ -63,9 +74,6 @@ describe("ProxyForwarder - Host header correction for multi-endpoint providers",
       preserveClientIp: false,
     } as unknown as Provider;
 
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     // buildHeaders uses provider.url for Host
@@ -85,9 +93,6 @@ describe("ProxyForwarder - Host header correction for multi-endpoint providers",
       preserveClientIp: false,
     } as unknown as Provider;
 
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const processedHeaders = buildHeaders(session, provider);
 
     // Initial Host from provider.url
@@ -115,9 +120,6 @@ describe("ProxyForwarder - Host header correction for multi-endpoint providers",
       preserveClientIp: false,
     } as unknown as Provider;
 
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const processedHeaders = buildHeaders(session, provider);
 
     // Initial Host from provider.url (includes /anthropic path)
@@ -145,9 +147,6 @@ describe("ProxyForwarder - Host header correction for multi-endpoint providers",
       preserveClientIp: false,
     } as unknown as Provider;
 
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const processedHeaders = buildHeaders(session, provider);
 
     // Same host, correction is a no-op
