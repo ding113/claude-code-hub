@@ -11,11 +11,13 @@ import {
   collectEnabledPublicStatusGroups,
   type EnabledPublicStatusGroup,
   invalidateConfiguredPublicStatusGroupsCache,
+  type PublicStatusModelConfig,
   parsePublicStatusDescription,
   serializePublicStatusDescription,
 } from "@/lib/public-status/config";
 import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
 import { PUBLIC_STATUS_INTERVAL_SET } from "@/lib/public-status/constants";
+import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
 import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import {
@@ -35,7 +37,7 @@ export interface SavePublicStatusSettingsInput {
     publicGroupSlug?: string;
     explanatoryCopy?: string | null;
     sortOrder?: number;
-    publicModelKeys: string[];
+    publicModels: PublicStatusModelConfig[];
   }>;
 }
 
@@ -51,7 +53,7 @@ function normalizeEnabledGroups(
         publicGroupSlug: group.publicGroupSlug,
         explanatoryCopy: group.explanatoryCopy,
         sortOrder: group.sortOrder,
-        publicModelKeys: group.publicModelKeys,
+        publicModels: group.publicModels,
       },
     }))
   );
@@ -102,7 +104,7 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
             publicGroupSlug: configured.publicGroupSlug,
             explanatoryCopy: configured.explanatoryCopy,
             sortOrder: configured.sortOrder,
-            publicModelKeys: configured.publicModelKeys,
+            publicModels: configured.publicModels,
           }
         : null;
       const nextDescription = serializePublicStatusDescription({
@@ -110,7 +112,7 @@ export async function savePublicStatusSettings(input: SavePublicStatusSettingsIn
         publicStatus: nextPublicStatus,
       });
 
-      if (nextDescription && nextDescription.length > 500) {
+      if (exceedsProviderGroupDescriptionLimit(nextDescription)) {
         return {
           ok: false,
           error: t("statusPage.form.descriptionTooLong"),

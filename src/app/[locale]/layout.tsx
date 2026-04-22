@@ -12,9 +12,8 @@ import {
   resolveLayoutTimeZone,
   resolveSiteMetadataSource,
 } from "@/lib/public-status/layout-metadata";
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { AppProviders } from "../providers";
-
-const FALLBACK_TITLE = "Claude Code Hub";
 
 export async function generateMetadata({
   params,
@@ -27,8 +26,8 @@ export async function generateMetadata({
 
   try {
     const metadata = await resolveSiteMetadataSource({ isPublicStatusRequest });
-    const title = metadata?.siteTitle?.trim() || FALLBACK_TITLE;
-    const description = metadata?.siteDescription?.trim() || FALLBACK_TITLE;
+    const title = metadata?.siteTitle?.trim() || DEFAULT_SITE_TITLE;
+    const description = metadata?.siteDescription?.trim() || DEFAULT_SITE_TITLE;
 
     // Generate alternates for all locales
     const alternates: Record<string, string> = {};
@@ -55,8 +54,8 @@ export async function generateMetadata({
   } catch (error) {
     logger.error("Failed to load metadata", { error });
     return {
-      title: FALLBACK_TITLE,
-      description: FALLBACK_TITLE,
+      title: DEFAULT_SITE_TITLE,
+      description: DEFAULT_SITE_TITLE,
     };
   }
 }

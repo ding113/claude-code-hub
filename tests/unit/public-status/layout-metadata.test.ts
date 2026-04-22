@@ -24,6 +24,9 @@ describe("layout metadata", () => {
   });
 
   it("uses public-status redis metadata only for public status requests", async () => {
+    mockGetSystemSettings.mockResolvedValue({
+      siteTitle: "   ",
+    });
     mockReadPublicStatusSiteMetadata.mockResolvedValue({
       siteTitle: "Status Title",
       siteDescription: "Status Description",
@@ -35,7 +38,7 @@ describe("layout metadata", () => {
     });
 
     expect(metadata?.siteTitle).toBe("Status Title");
-    expect(mockGetSystemSettings).not.toHaveBeenCalled();
+    expect(mockGetSystemSettings).toHaveBeenCalledTimes(1);
   });
 
   it("keeps non-status pages on system settings metadata", async () => {

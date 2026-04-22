@@ -1,33 +1,13 @@
 import { getTranslations } from "next-intl/server";
-import { parsePublicStatusDescription } from "@/lib/public-status/config";
-import { findAllProviderGroups } from "@/repository/provider-groups";
-import { getSystemSettings } from "@/repository/system-config";
 import { SettingsPageHeader } from "../_components/settings-page-header";
-import {
-  PublicStatusSettingsForm,
-  type PublicStatusSettingsFormGroup,
-} from "./_components/public-status-settings-form";
+import { PublicStatusSettingsForm } from "./_components/public-status-settings-form";
+import { loadStatusPageSettings } from "./loader";
 
 export const dynamic = "force-dynamic";
 
 export default async function StatusPageSettingsPage() {
   const t = await getTranslations("settings");
-  const settings = await getSystemSettings();
-  const groups = await findAllProviderGroups();
-
-  const initialGroups: PublicStatusSettingsFormGroup[] = groups.map((group) => {
-    const parsed = parsePublicStatusDescription(group.description);
-
-    return {
-      groupName: group.name,
-      enabled: !!parsed.publicStatus && parsed.publicStatus.publicModelKeys.length > 0,
-      displayName: parsed.publicStatus?.displayName ?? "",
-      publicGroupSlug: parsed.publicStatus?.publicGroupSlug ?? "",
-      explanatoryCopy: parsed.publicStatus?.explanatoryCopy ?? "",
-      sortOrder: parsed.publicStatus?.sortOrder ?? 0,
-      modelIdsText: parsed.publicStatus?.publicModelKeys.join("\n") ?? "",
-    };
-  });
+  const settings = await loadStatusPageSettings();
 
   return (
     <div className="space-y-6">
@@ -37,9 +17,9 @@ export default async function StatusPageSettingsPage() {
         icon="activity"
       />
       <PublicStatusSettingsForm
-        initialWindowHours={settings.publicStatusWindowHours}
-        initialAggregationIntervalMinutes={settings.publicStatusAggregationIntervalMinutes}
-        initialGroups={initialGroups}
+        initialWindowHours={settings.initialWindowHours}
+        initialAggregationIntervalMinutes={settings.initialAggregationIntervalMinutes}
+        initialGroups={settings.initialGroups}
       />
     </div>
   );

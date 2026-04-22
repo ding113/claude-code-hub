@@ -49,6 +49,7 @@ interface ModelMultiSelectProps {
   selectedModels: string[];
   onChange: (models: string[]) => void;
   disabled?: boolean;
+  emptyLabel?: string;
   providerUrl?: string;
   apiKey?: string;
   proxyUrl?: string | null;
@@ -98,6 +99,7 @@ export function ModelMultiSelect({
   selectedModels,
   onChange,
   disabled = false,
+  emptyLabel,
   providerUrl,
   apiKey,
   proxyUrl,
@@ -341,7 +343,7 @@ export function ModelMultiSelect({
           >
             <span className="truncate text-left">
               {selectedModels.length === 0
-                ? t("emptyLabel", { type: getProviderTypeLabel(providerType, t) })
+                ? (emptyLabel ?? t("emptyLabel", { type: getProviderTypeLabel(providerType, t) }))
                 : t("selectedCount", { count: selectedModels.length })}
             </span>
             <div className="ml-3 flex items-center gap-2">
