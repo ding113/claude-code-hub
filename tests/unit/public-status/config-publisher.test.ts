@@ -127,7 +127,11 @@ describe("public-status config publisher", () => {
           version: 2,
           publicStatus: {
             displayName: "Mixed",
-            publicModels: [{ modelKey: "qwen-max" }, { modelKey: "deepseek-chat" }],
+            publicModels: [
+              { modelKey: "qwen-max" },
+              { modelKey: "deepseek-chat" },
+              { modelKey: "qwen-plus", providerTypeOverride: "openai-compatible" },
+            ],
           },
         }),
       },
@@ -153,6 +157,11 @@ describe("public-status config publisher", () => {
                 expect.objectContaining({
                   publicModelKey: "deepseek-chat",
                   vendorIconKey: "deepseek",
+                  requestTypeBadge: "openaiCompatible",
+                }),
+                expect.objectContaining({
+                  publicModelKey: "qwen-plus",
+                  vendorIconKey: "qwen",
                   requestTypeBadge: "openaiCompatible",
                 }),
               ],

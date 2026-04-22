@@ -17,7 +17,7 @@ import {
   resolvePublicStatusSiteDescription,
 } from "./config-snapshot";
 import { MAX_PUBLIC_STATUS_RANGE_HOURS, PUBLIC_STATUS_INTERVAL_SET } from "./constants";
-import { resolvePublicStatusVendorIconKey } from "./vendor-icon";
+import { resolvePublicStatusVendorIconKey } from "./vendor-icon-key";
 
 function resolveRequestTypeBadge(modelName: string, providerTypeOverride?: ProviderType): string {
   if (providerTypeOverride === "claude" || providerTypeOverride === "claude-auth") {
