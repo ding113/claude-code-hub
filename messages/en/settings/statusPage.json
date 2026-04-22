@@ -63,6 +63,28 @@
       "codex": "Codex",
       "anthropic": "Anthropic",
       "gemini": "Gemini"
-    }
+    },
+    "statusBadge": {
+      "operational": "Operational",
+      "degraded": "Degraded",
+      "failed": "Failed",
+      "noData": "No data"
+    },
+    "tooltip": {
+      "availability": "Availability",
+      "ttfb": "TTFB",
+      "tps": "TPS",
+      "samples": "Samples",
+      "inferredFromNeighbors": "No requests in this window — inferred from neighbors",
+      "historyAriaLabel": "Status history timeline"
+    },
+    "searchPlaceholder": "Search groups or models",
+    "customSort": "Custom sort",
+    "resetSort": "Reset order",
+    "emptyByFilter": "No groups or models match your filter",
+    "modelsLabel": "models",
+    "issuesLabel": "issues",
+    "clearSearch": "Clear search",
+    "dragHandle": "Drag to reorder"
   }
 }

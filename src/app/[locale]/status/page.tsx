@@ -67,6 +67,28 @@ export default async function PublicStatusPage({
           anthropic: t("statusPage.public.requestTypes.anthropic"),
           gemini: t("statusPage.public.requestTypes.gemini"),
         },
+        statusBadge: {
+          operational: t("statusPage.public.statusBadge.operational"),
+          degraded: t("statusPage.public.statusBadge.degraded"),
+          failed: t("statusPage.public.statusBadge.failed"),
+          noData: t("statusPage.public.statusBadge.noData"),
+        },
+        tooltip: {
+          availability: t("statusPage.public.tooltip.availability"),
+          ttfb: t("statusPage.public.tooltip.ttfb"),
+          tps: t("statusPage.public.tooltip.tps"),
+          samples: t("statusPage.public.tooltip.samples"),
+          inferredFromNeighbors: t("statusPage.public.tooltip.inferredFromNeighbors"),
+          historyAriaLabel: t("statusPage.public.tooltip.historyAriaLabel"),
+        },
+        searchPlaceholder: t("statusPage.public.searchPlaceholder"),
+        customSort: t("statusPage.public.customSort"),
+        resetSort: t("statusPage.public.resetSort"),
+        emptyByFilter: t("statusPage.public.emptyByFilter"),
+        modelsLabel: t("statusPage.public.modelsLabel"),
+        issuesLabel: t("statusPage.public.issuesLabel"),
+        clearSearch: t("statusPage.public.clearSearch"),
+        dragHandle: t("statusPage.public.dragHandle"),
       }}
     />
   );

@@ -63,6 +63,28 @@
       "codex": "Codex",
       "anthropic": "Anthropic",
       "gemini": "Gemini"
-    }
+    },
+    "statusBadge": {
+      "operational": "可用",
+      "degraded": "降級",
+      "failed": "錯誤",
+      "noData": "無資料"
+    },
+    "tooltip": {
+      "availability": "可用率",
+      "ttfb": "TTFB",
+      "tps": "TPS",
+      "samples": "樣本數",
+      "inferredFromNeighbors": "該時段無請求，依相鄰時段狀態推斷",
+      "historyAriaLabel": "狀態歷史時間軸"
+    },
+    "searchPlaceholder": "搜尋分組或模型",
+    "customSort": "自訂排序",
+    "resetSort": "恢復預設順序",
+    "emptyByFilter": "未匹配到任何分組或模型",
+    "modelsLabel": "模型",
+    "issuesLabel": "異常",
+    "clearSearch": "清除搜尋",
+    "dragHandle": "拖曳重排"
   }
 }

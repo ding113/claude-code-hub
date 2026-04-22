@@ -63,6 +63,28 @@
       "codex": "Codex",
       "anthropic": "Anthropic",
       "gemini": "Gemini"
-    }
+    },
+    "statusBadge": {
+      "operational": "正常",
+      "degraded": "低下",
+      "failed": "障害",
+      "noData": "データなし"
+    },
+    "tooltip": {
+      "availability": "可用率",
+      "ttfb": "TTFB",
+      "tps": "TPS",
+      "samples": "サンプル数",
+      "inferredFromNeighbors": "この期間はリクエストがないため、隣接データから推定",
+      "historyAriaLabel": "状態履歴タイムライン"
+    },
+    "searchPlaceholder": "グループまたはモデルを検索",
+    "customSort": "カスタム並び順",
+    "resetSort": "既定の順序に戻す",
+    "emptyByFilter": "条件に一致するグループまたはモデルがありません",
+    "modelsLabel": "モデル",
+    "issuesLabel": "異常",
+    "clearSearch": "検索をクリア",
+    "dragHandle": "ドラッグして並べ替え"
   }
 }
