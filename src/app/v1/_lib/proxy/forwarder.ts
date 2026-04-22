@@ -2327,10 +2327,20 @@ export class ProxyForwarder {
 
       processedHeaders = ProxyForwarder.buildHeaders(session, provider, effectiveBaseUrl);
 
+      // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
+      // 移除了强制 /v1/responses 路径重写，解决 Issue #139
+      // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
+      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
+
+      // Host header must match actual request target for undici TLS cert validation
+      // When provider has multiple endpoints, provider.url and proxyUrl hosts may differ
+      const actualHost = HeaderProcessor.extractHost(proxyUrl);
+      processedHeaders.set("host", actualHost);
+
       if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
         void SessionManager.storeSessionRequestHeaders(
           session.sessionId,
-          processedHeaders,
+          new Headers(processedHeaders),
           session.requestSequence
         ).catch((err) => logger.error("Failed to store request headers:", err));
       }
@@ -2342,16 +2352,6 @@ export class ProxyForwarder {
           headers: Object.fromEntries(processedHeaders.entries()),
         });
       }
-
-      // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
-      // 移除了强制 /v1/responses 路径重写，解决 Issue #139
-      // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
-      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
-
-      // Host header must match actual request target for undici TLS cert validation
-      // When provider has multiple endpoints, provider.url and proxyUrl hosts may differ
-      const actualHost = HeaderProcessor.extractHost(proxyUrl);
-      processedHeaders.set("host", actualHost);
 
       logger.debug("ProxyForwarder: Final proxy URL", {
         url: proxyUrl,
@@ -4165,7 +4165,7 @@ export class ProxyForwarder {
   private static buildHeaders(
     session: ProxySession,
     provider: NonNullable<typeof session.provider>,
-    upstreamBaseUrl: string = provider.url
+    upstreamBaseUrl: string
   ): Headers {
     const outboundKey = provider.key;
     const preserveClientIp = provider.preserveClientIp ?? false;
@@ -4173,7 +4173,7 @@ export class ProxyForwarder {
 
     // 构建请求头覆盖规则
     const overrides: Record<string, string> = {
-      host: HeaderProcessor.extractHost(provider.url),
+      host: HeaderProcessor.extractHost(upstreamBaseUrl),
       "content-type": "application/json", // 确保 Content-Type
       "accept-encoding": "identity", // 禁用压缩：避免 undici ZlibError（代理应透传原始数据）
     };

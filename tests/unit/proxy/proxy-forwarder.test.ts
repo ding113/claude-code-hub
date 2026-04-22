@@ -95,9 +95,13 @@ function createGeminiProvider(providerType: "gemini" | "gemini-cli"): Provider {
 
 function buildHeaders(session: ProxySession, provider: Provider): Headers {
   const forwarder = ProxyForwarder as unknown as {
-    buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+    buildHeaders: (session: ProxySession, provider: Provider, upstreamBaseUrl: string) => Headers;
   };
-  return forwarder.buildHeaders(session, provider);
+  return forwarder.buildHeaders(
+    session,
+    provider,
+    ((provider as { url?: string }).url ?? "https://example.com").toString()
+  );
 }
 
 function createAuthLeakSession(): ProxySession {
@@ -120,9 +124,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers([["user-agent", "Original-UA/1.0"]]);
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Filtered-UA/2.0");
@@ -137,9 +138,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers([["user-agent", "Original-UA/1.0"]]);
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Original-UA/1.0");
@@ -154,9 +152,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers([["user-agent", "Original-UA/1.0"]]);
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Original-UA/1.0");
@@ -170,9 +165,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers();
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe(DEFAULT_CODEX_USER_AGENT);
@@ -187,9 +179,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     (session as any).originalHeaders = new Headers([["user-agent", "Original-UA/1.0"]]);
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     // 空字符串应该被保留（使用 ?? 而非 ||）
@@ -208,9 +197,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     });
 
     const provider = createCodexProvider();
-    const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
-    };
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("connection")).toBeNull();

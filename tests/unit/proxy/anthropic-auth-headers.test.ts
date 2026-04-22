@@ -7,7 +7,7 @@ describe("Anthropic auth header helpers", () => {
     expect(looksLikeAnthropicProxyUrl("https://console.claude.ai/v1/messages")).toBe(false);
   });
 
-  it("does not misclassify lookalike domains as official Anthropic", () => {
+  it("treats non-proxy lookalike domains as direct-compatible endpoints", () => {
     expect(looksLikeAnthropicProxyUrl("https://proxyanthropic.com/v1/messages")).toBe(false);
     expect(
       resolveAnthropicAuthHeaders("sk-test", "https://proxyanthropic.com/v1/messages")
