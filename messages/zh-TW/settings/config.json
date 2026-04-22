@@ -87,6 +87,8 @@
     "saveFailed": "儲存失敗",
     "saveSettings": "儲存設定",
     "saveSuccess": "儲存成功",
+    "publicStatusProjectionWarning": "系統設定已儲存，但 public status Redis 投影尚未刷新。",
+    "publicStatusBackgroundRefreshPending": "系統設定已儲存，但公開狀態頁可能會在背景刷新成功前暫時維持舊資料。",
     "siteTitle": "站台標題",
     "siteTitleDesc": "用於設定瀏覽器分頁標題以及系統預設顯示名稱。",
     "siteTitlePlaceholder": "例：Claude Code Hub",

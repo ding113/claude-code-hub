@@ -77,7 +77,7 @@ export default async function RootLayout({
   }
 
   // Load translation messages
-  const messages = await getMessages();
+  const messages = await getMessages({ locale });
   const timeZone = await resolveLayoutTimeZone({ isPublicStatusRequest });
   // Create a stable `now` timestamp to avoid SSR/CSR hydration mismatch for relative time
   const now = new Date();

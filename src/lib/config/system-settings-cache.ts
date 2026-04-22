@@ -46,6 +46,8 @@ const DEFAULT_SETTINGS: Pick<
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
   | "responseFixerConfig"
+  | "publicStatusWindowHours"
+  | "publicStatusAggregationIntervalMinutes"
 > = {
   enableHttp2: false,
   enableHighConcurrencyMode: false,
@@ -65,6 +67,8 @@ const DEFAULT_SETTINGS: Pick<
     maxJsonDepth: 200,
     maxFixSize: 1024 * 1024,
   },
+  publicStatusWindowHours: 24,
+  publicStatusAggregationIntervalMinutes: 5,
 };
 
 /**
@@ -135,6 +139,9 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableClaudeMetadataUserIdInjection: DEFAULT_SETTINGS.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
       responseFixerConfig: DEFAULT_SETTINGS.responseFixerConfig,
+      publicStatusWindowHours: DEFAULT_SETTINGS.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes:
+        DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
       quotaDbRefreshIntervalSeconds: 10,
       quotaLeasePercent5h: 0.05,
       quotaLeasePercentDaily: 0.05,
