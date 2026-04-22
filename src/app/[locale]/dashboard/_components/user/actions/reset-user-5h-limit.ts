@@ -71,12 +71,14 @@ export async function resetUser5hLimitOnly(
           cleanupFailed: cleanupResult?.cleanupFailed ?? true,
           errorCount: cleanupResult?.errorCount,
         });
+        await invalidateCachedUser(userId).catch(() => {});
         emitActionAudit({
           category: "user",
           action: "user.reset_5h_limit_only",
           targetType: "user",
           targetId: String(userId),
           targetName: user.name,
+          before: user,
           after: {
             resetMode,
             cleanupRequired: true,

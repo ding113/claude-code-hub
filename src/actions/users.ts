@@ -2166,8 +2166,8 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
     }
 
     // Clear Redis cost cache (but NOT active sessions, NOT DB logs)
-    const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
     try {
+      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
       const cacheResult = await clearUserCostCache({ userId, keyIds, keyHashes });
       if (!cacheResult) {
         logger.warn("Reset user limits only completed without Redis cleanup", {
@@ -2283,8 +2283,8 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     await invalidateCachedUser(userId).catch(() => {});
 
     // 2. Clear Redis cache (cost keys + active sessions)
-    const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
     try {
+      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
       const cacheResult = await clearUserCostCache({
         userId,
         keyIds,

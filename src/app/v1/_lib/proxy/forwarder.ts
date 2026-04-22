@@ -1947,7 +1947,8 @@ export class ProxyForwarder {
     provider: typeof session.provider,
     baseUrl: string,
     endpointAudit?: { endpointId: number | null; endpointUrl: string },
-    attemptNumber?: number
+    attemptNumber?: number,
+    deferDetailSnapshotPersistence: boolean = false
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -2453,7 +2454,9 @@ export class ProxyForwarder {
         },
       };
       // 这里是 request.after 唯一稳定时机：最终 headers、proxyUrl、body 都已确定，但尚未真正发往上游。
-      await persistRequestAfterSnapshot(session, detailSnapshotSession.detailSnapshotRequestAfter);
+      if (!deferDetailSnapshotPersistence) {
+        void persistRequestAfterSnapshot(session, detailSnapshotSession.detailSnapshotRequestAfter);
+      }
     }
 
     // ⭐ 扩展 RequestInit 类型以支持 undici dispatcher
@@ -2624,7 +2627,8 @@ export class ProxyForwarder {
             init,
             provider.id,
             provider.name,
-            session
+            session,
+            deferDetailSnapshotPersistence
           )
         : await fetch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
@@ -2849,7 +2853,8 @@ export class ProxyForwarder {
                 http1FallbackInit,
                 provider.id,
                 provider.name,
-                session
+                session,
+                deferDetailSnapshotPersistence
               )
             : await fetch(proxyUrl, http1FallbackInit);
 
@@ -2931,7 +2936,8 @@ export class ProxyForwarder {
                     fallbackInit,
                     provider.id,
                     provider.name,
-                    session
+                    session,
+                    deferDetailSnapshotPersistence
                   )
                 : await fetch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
@@ -3334,7 +3340,8 @@ export class ProxyForwarder {
         providerForRequest,
         attempt.baseUrl,
         attempt.endpointAudit,
-        attempt.requestAttemptCount
+        attempt.requestAttemptCount,
+        true
       )
         .then(async (response) => {
           if (settled || winnerCommitted || attempt.settled) {
@@ -3602,16 +3609,13 @@ export class ProxyForwarder {
 
       if (attempt.session !== session) {
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
-        const detailSnapshotSession = attempt.session as ProxySessionWithDetailSnapshotRuntime;
-        await persistRequestAfterSnapshot(
-          session,
-          detailSnapshotSession.detailSnapshotRequestAfter
-        );
-        await persistResponseBeforeSnapshot(
-          session,
-          detailSnapshotSession.detailSnapshotResponseBefore
-        );
       }
+      const detailSnapshotSession = attempt.session as ProxySessionWithDetailSnapshotRuntime;
+      void persistRequestAfterSnapshot(session, detailSnapshotSession.detailSnapshotRequestAfter);
+      void persistResponseBeforeSnapshot(
+        session,
+        detailSnapshotSession.detailSnapshotResponseBefore
+      );
       session.setProvider(attempt.provider);
 
       // Determine if this is truly a hedge winner or just a regular success
@@ -4258,7 +4262,8 @@ export class ProxyForwarder {
     init: RequestInit & { dispatcher?: Dispatcher },
     providerId: number,
     providerName: string,
-    session?: ProxySession
+    session?: ProxySession,
+    deferDetailSnapshotPersistence: boolean = false
   ): Promise<Response> {
     const { FETCH_HEADERS_TIMEOUT: headersTimeout, FETCH_BODY_TIMEOUT: bodyTimeout } =
       getEnvConfig();
@@ -4353,10 +4358,12 @@ export class ProxyForwarder {
         session.requestSequence
       ).catch((err) => logger.error("Failed to store upstream response meta:", err));
 
-      await persistResponseBeforeSnapshot(
-        session,
-        (session as ProxySessionWithDetailSnapshotRuntime).detailSnapshotResponseBefore
-      );
+      if (!deferDetailSnapshotPersistence) {
+        void persistResponseBeforeSnapshot(
+          session,
+          (session as ProxySessionWithDetailSnapshotRuntime).detailSnapshotResponseBefore
+        );
+      }
     }
 
     // 检测响应是否为 gzip 压缩

@@ -985,6 +985,9 @@ export class ProxyResponseHandler {
               errorMessage: errorMessageForFinalize,
             });
           } catch (error) {
+            if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+              await discardBeforeResponseBodySnapshot(session);
+            }
             if (!isClientAbortError(error as Error)) {
               logger.error(
                 "[ResponseHandler] Gemini non-stream passthrough stats task failed:",
@@ -999,6 +1002,9 @@ export class ProxyResponseHandler {
 
         AsyncTaskManager.register(taskId, statsPromise, "non-stream-passthrough-stats");
         statsPromise.catch((error) => {
+          if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+            void discardBeforeResponseBodySnapshot(session);
+          }
           logger.error(
             "[ResponseHandler] Gemini non-stream passthrough stats task uncaught error:",
             error
@@ -1370,6 +1376,9 @@ export class ProxyResponseHandler {
           isStreaming: false,
         });
       } catch (error) {
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          await discardBeforeResponseBodySnapshot(session);
+        }
         // 检测 AbortError 的来源：响应超时 vs 客户端中断
         const err = error as Error;
         if (isClientAbortError(err)) {
@@ -1991,6 +2000,9 @@ export class ProxyResponseHandler {
 
         AsyncTaskManager.register(taskId, statsPromise, "stream-passthrough-stats");
         statsPromise.catch((error) => {
+          if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+            void discardBeforeResponseBodySnapshot(session);
+          }
           logger.error("[ResponseHandler] Gemini passthrough stats task uncaught error:", error);
         });
 

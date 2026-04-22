@@ -467,6 +467,7 @@ export interface UsageLogSlimBatchResult {
 }
 
 const usageLogSlimTotalCache = new TTLMap<string, number>({ ttlMs: 10_000, maxSize: 1000 });
+const MAX_LEGACY_USAGE_LOG_PAGES = 10;
 
 export async function findUsageLogsForKeySlim(
   filters: UsageLogSlimFilters & { page?: number; pageSize?: number }
@@ -516,6 +517,13 @@ export async function findUsageLogsForKeySlim(
     return {
       logs: mergedRows.slice(0, safePageSize),
       total,
+    };
+  }
+
+  if (safePage > MAX_LEGACY_USAGE_LOG_PAGES) {
+    return {
+      logs: [],
+      total: await resolveTotal(),
     };
   }
 

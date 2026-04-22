@@ -404,7 +404,16 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
           keyCostResetAtResolved
         ),
         (key.limit5hResetMode ?? "rolling") === "fixed"
-          ? RateLimitService.getCurrentCost(key.id, "key", "5h", "00:00", "fixed")
+          ? RateLimitService.getCurrentCost(
+              key.id,
+              "key",
+              "5h",
+              key.dailyResetTime ?? "00:00",
+              "fixed",
+              {
+                costResetAt: keyCostResetAtResolved,
+              }
+            )
           : Promise.resolve(null),
         SessionTracker.getKeySessionCount(key.id),
         // User 配额：直接查 DB
@@ -420,7 +429,17 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
           userCostResetAt
         ),
         (user.limit5hResetMode ?? "rolling") === "fixed"
-          ? RateLimitService.getCurrentCost(user.id, "user", "5h", "00:00", "fixed")
+          ? RateLimitService.getCurrentCost(
+              user.id,
+              "user",
+              "5h",
+              user.dailyResetTime ?? "00:00",
+              "fixed",
+              {
+                costResetAt: userCostResetAt,
+                limit5hCostResetAt: user.limit5hCostResetAt ?? null,
+              }
+            )
           : Promise.resolve(null),
         getUserConcurrentSessions(user.id),
       ]);

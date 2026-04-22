@@ -586,10 +586,16 @@ export async function updateUserCostResetMarkers(
   }
 
   if (updates.limit5hCostResetAt !== undefined) {
-    setClauses.limit5hCostResetAt =
-      updates.enforceLimit5hMonotonic && updates.limit5hCostResetAt
-        ? sql`greatest(coalesce(${users.limit5hCostResetAt}, ${updates.limit5hCostResetAt}), ${updates.limit5hCostResetAt})`
-        : updates.limit5hCostResetAt;
+    if (updates.enforceLimit5hMonotonic && updates.limit5hCostResetAt) {
+      const resetAtIso = updates.limit5hCostResetAt.toISOString();
+      const resetAtSql = sql`${resetAtIso}::timestamptz`;
+      setClauses.limit5hCostResetAt = sql`greatest(
+        coalesce(${users.limit5hCostResetAt}, ${resetAtSql}),
+        ${resetAtSql}
+      )`;
+    } else {
+      setClauses.limit5hCostResetAt = updates.limit5hCostResetAt;
+    }
   }
 
   const result = await db

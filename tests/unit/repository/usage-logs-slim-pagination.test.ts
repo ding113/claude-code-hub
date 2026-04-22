@@ -188,4 +188,33 @@ describe("findUsageLogsForKeySlim", () => {
     expect(second.total).toBe(1);
     expect(selectMock).toHaveBeenCalledTimes(6);
   });
+
+  test("returns an empty page when legacy page number exceeds the hard cap", async () => {
+    vi.resetModules();
+
+    const messageCountQuery = createThenableQuery([{ totalRows: 1 }]);
+    const ledgerCountQuery = createThenableQuery([{ totalRows: 0 }]);
+    const selectMock = vi
+      .fn()
+      .mockImplementationOnce(() => messageCountQuery)
+      .mockImplementationOnce(() => ledgerCountQuery);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+      },
+    }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => false),
+    }));
+
+    const { findUsageLogsForKeySlim } = await import("@/repository/usage-logs");
+    const result = await findUsageLogsForKeySlim({ keyString: "k", page: 999, pageSize: 1 });
+
+    expect(result).toEqual({
+      logs: [],
+      total: 1,
+    });
+    expect(selectMock).toHaveBeenCalledTimes(2);
+  });
 });
