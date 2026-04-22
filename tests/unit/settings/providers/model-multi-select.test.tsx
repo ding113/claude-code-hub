@@ -204,9 +204,9 @@ describe("ModelMultiSelect", () => {
     expect(initialItems.some((text) => text.includes("openai-new"))).toBe(true);
     expect(initialItems.some((text) => text.includes("anthropic-mid"))).toBe(true);
     expect(initialItems.some((text) => text.includes("openai-old"))).toBe(true);
-    expect(
-      initialItems.findIndex((text) => text.includes("openai-new"))
-    ).toBeLessThan(initialItems.findIndex((text) => text.includes("openai-old")));
+    expect(initialItems.findIndex((text) => text.includes("openai-new"))).toBeLessThan(
+      initialItems.findIndex((text) => text.includes("openai-old"))
+    );
 
     const providerFilter = document.querySelector(
       '[data-testid="provider-filter-select"]'
