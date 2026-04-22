@@ -58,6 +58,26 @@ function releaseSessionAgent(session: ProxySession): void {
   }
 }
 
+async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise<string | null> {
+  const snapshotSession = session as ProxySession & {
+    detailSnapshotResponseBeforeSource?: Response | null;
+  };
+  const source = snapshotSession.detailSnapshotResponseBeforeSource;
+  snapshotSession.detailSnapshotResponseBeforeSource = null;
+  if (!source) return null;
+
+  try {
+    return await source.text();
+  } catch (error) {
+    logger.warn("[ResponseHandler] Failed to read before-response snapshot body", {
+      sessionId: session.sessionId ?? null,
+      requestSequence: session.requestSequence ?? null,
+      error,
+    });
+    return null;
+  }
+}
+
 export type UsageMetrics = {
   input_tokens?: number;
   output_tokens?: number;
@@ -754,6 +774,13 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
 export class ProxyResponseHandler {
   static async dispatch(session: ProxySession, response: Response): Promise<Response> {
+    const snapshotSession = session as ProxySession & {
+      detailSnapshotResponseBeforeSource?: Response | null;
+    };
+    if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+      snapshotSession.detailSnapshotResponseBeforeSource = response.clone();
+    }
+
     let fixedResponse = response;
     if (!session.getEndpointPolicy().bypassResponseRectifier) {
       try {
@@ -797,6 +824,29 @@ export class ProxyResponseHandler {
     const statusCode = response.status;
 
     let finalResponse = response;
+    const persistNonStreamAfterSnapshot = async (targetResponse: Response) => {
+      if (!session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
+        return;
+      }
+
+      const finalBody = await targetResponse.clone().text();
+      const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+        session.sessionId,
+        "after",
+        {
+          body: finalBody,
+          headers: targetResponse.headers,
+          meta: {
+            upstreamUrl: null,
+            statusCode: targetResponse.status,
+          },
+        },
+        session.requestSequence
+      );
+      responseAfterSnapshotTask?.catch((err) => {
+        logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+      });
+    };
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
@@ -834,12 +884,33 @@ export class ProxyResponseHandler {
 
             // 存储响应体到 Redis（5分钟过期）
             if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+              const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? responseText;
               void SessionManager.storeSessionResponse(
                 session.sessionId,
                 responseText,
                 session.requestSequence
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to store response:", err);
+              });
+
+              const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+                session.sessionId,
+                "before",
+                { body: beforeBody },
+                session.requestSequence
+              );
+              responseBeforeSnapshotTask?.catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+              });
+
+              const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+                session.sessionId,
+                "after",
+                { body: responseText },
+                session.requestSequence
+              );
+              responseAfterSnapshotTask?.catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
               });
             }
 
@@ -914,6 +985,24 @@ export class ProxyResponseHandler {
             error
           );
         });
+
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          const responseAfterMetaTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "after",
+            {
+              headers: response.headers,
+              meta: {
+                upstreamUrl: null,
+                statusCode: response.status,
+              },
+            },
+            session.requestSequence
+          );
+          responseAfterMetaTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store non-stream response after meta:", err);
+          });
+        }
 
         return response;
       } else {
@@ -1062,12 +1151,23 @@ export class ProxyResponseHandler {
 
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? responseText;
           void SessionManager.storeSessionResponse(
             session.sessionId,
             responseText,
             session.requestSequence
           ).catch((err) => {
             logger.error("[ResponseHandler] Failed to store response:", err);
+          });
+
+          const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "before",
+            { body: beforeBody },
+            session.requestSequence
+          );
+          responseBeforeSnapshotTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
           });
         }
 
@@ -1380,6 +1480,9 @@ export class ProxyResponseHandler {
       });
     }
 
+    void persistNonStreamAfterSnapshot(finalResponse).catch((error) => {
+      logger.error("[ResponseHandler] Failed to persist non-stream after snapshot", { error });
+    });
     return finalResponse;
   }
 
@@ -1678,6 +1781,26 @@ export class ProxyResponseHandler {
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to store stream passthrough response:", err);
               });
+
+              const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+                session.sessionId,
+                "before",
+                { body: allContent },
+                session.requestSequence
+              );
+              responseBeforeSnapshotTask?.catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+              });
+
+              const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+                session.sessionId,
+                "after",
+                { body: allContent },
+                session.requestSequence
+              );
+              responseAfterSnapshotTask?.catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+              });
             } else if (session.sessionId && wasTruncated) {
               logger.warn("[ResponseHandler] Skip storing passthrough response: body too large", {
                 taskId,
@@ -1850,6 +1973,24 @@ export class ProxyResponseHandler {
         statsPromise.catch((error) => {
           logger.error("[ResponseHandler] Gemini passthrough stats task uncaught error:", error);
         });
+
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          const responseAfterMetaTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "after",
+            {
+              headers: response.headers,
+              meta: {
+                upstreamUrl: null,
+                statusCode: response.status,
+              },
+            },
+            session.requestSequence
+          );
+          responseAfterMetaTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store stream response after meta:", err);
+          });
+        }
 
         return response;
       } else {
@@ -2030,12 +2171,33 @@ export class ProxyResponseHandler {
 
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? allContent;
           void SessionManager.storeSessionResponse(
             session.sessionId,
             allContent,
             session.requestSequence
           ).catch((err) => {
             logger.error("[ResponseHandler] Failed to store response:", err);
+          });
+
+          const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "after",
+            { body: allContent },
+            session.requestSequence
+          );
+          responseAfterSnapshotTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+          });
+
+          const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "before",
+            { body: beforeBody },
+            session.requestSequence
+          );
+          responseBeforeSnapshotTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
           });
         }
 
@@ -2586,10 +2748,29 @@ export class ProxyResponseHandler {
 
     // ⭐ 修复 Bun 运行时的 Transfer-Encoding 重复问题
     // 清理上游的传输 headers，让 Response API 自动管理
+    const finalStreamHeaders = cleanResponseHeaders(response.headers);
+    if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+      const responseAfterMetaTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+        session.sessionId,
+        "after",
+        {
+          headers: finalStreamHeaders,
+          meta: {
+            upstreamUrl: null,
+            statusCode: response.status,
+          },
+        },
+        session.requestSequence
+      );
+      responseAfterMetaTask?.catch((err) => {
+        logger.error("[ResponseHandler] Failed to store stream response after meta:", err);
+      });
+    }
+
     return new Response(clientStream, {
       status: response.status,
       statusText: response.statusText,
-      headers: cleanResponseHeaders(response.headers),
+      headers: finalStreamHeaders,
     });
   }
 }

@@ -39,9 +39,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePathname, useRouter } from "@/i18n/routing";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import {
+  DEFAULT_SESSION_DETAIL_VIEW_MODE,
+  type SessionDetailSnapshots,
+  type SessionDetailViewMode,
+} from "@/types/session";
 import { RequestListSidebar } from "./request-list-sidebar";
-import { type SessionMessages, SessionMessagesDetailsTabs } from "./session-details-tabs";
-import { isSessionMessages } from "./session-messages-guards";
+import { SessionMessagesDetailsTabs } from "./session-details-tabs";
+import { hasSnapshotData } from "./session-messages-guards";
 import { SessionStats } from "./session-stats";
 
 async function fetchSystemSettings(): Promise<{
@@ -73,11 +78,7 @@ export function SessionMessagesClient() {
   })();
 
   // Data State
-  const [messages, setMessages] = useState<SessionMessages | null>(null);
-  const [requestBody, setRequestBody] = useState<unknown | null>(null);
-  const [response, setResponse] = useState<string | null>(null);
-  const [requestHeaders, setRequestHeaders] = useState<Record<string, string> | null>(null);
-  const [responseHeaders, setResponseHeaders] = useState<Record<string, string> | null>(null);
+  const [snapshots, setSnapshots] = useState<SessionDetailSnapshots | null>(null);
   const [specialSettings, setSpecialSettings] =
     useState<
       Extract<
@@ -85,15 +86,6 @@ export function SessionMessagesClient() {
         { ok: true }
       >["data"]["specialSettings"]
     >(null);
-  const [requestMeta, setRequestMeta] = useState<{
-    clientUrl: string | null;
-    upstreamUrl: string | null;
-    method: string | null;
-  }>({ clientUrl: null, upstreamUrl: null, method: null });
-  const [responseMeta, setResponseMeta] = useState<{
-    upstreamUrl: string | null;
-    statusCode: number | null;
-  }>({ upstreamUrl: null, statusCode: null });
   const [sessionStats, setSessionStats] =
     useState<
       Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
@@ -107,6 +99,7 @@ export function SessionMessagesClient() {
   const [error, setError] = useState<string | null>(null);
   const [copiedRequest, setCopiedRequest] = useState(false);
   const [copiedResponse, setCopiedResponse] = useState(false);
+  const [viewMode, setViewMode] = useState<SessionDetailViewMode>(DEFAULT_SESSION_DETAIL_VIEW_MODE);
   const [showTerminateDialog, setShowTerminateDialog] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -114,14 +107,8 @@ export function SessionMessagesClient() {
   const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false);
 
   const resetDetailsState = useCallback(() => {
-    setMessages(null);
-    setRequestBody(null);
-    setResponse(null);
-    setRequestHeaders(null);
-    setResponseHeaders(null);
+    setSnapshots(null);
     setSpecialSettings(null);
-    setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
-    setResponseMeta({ upstreamUrl: null, statusCode: null });
     setSessionStats(null);
     setCurrentSequence(null);
     setPrevSequence(null);
@@ -157,15 +144,8 @@ export function SessionMessagesClient() {
         if (cancelled) return;
 
         if (result.ok) {
-          setRequestBody(result.data.requestBody);
-          const maybeMessages = result.data.messages;
-          setMessages(isSessionMessages(maybeMessages) ? maybeMessages : null);
-          setResponse(result.data.response);
-          setRequestHeaders(result.data.requestHeaders);
-          setResponseHeaders(result.data.responseHeaders);
+          setSnapshots(result.data.snapshots);
           setSpecialSettings(result.data.specialSettings);
-          setRequestMeta(result.data.requestMeta);
-          setResponseMeta(result.data.responseMeta);
           setSessionStats(result.data.sessionStats);
           setCurrentSequence(result.data.currentSequence);
           setPrevSequence(result.data.prevSequence);
@@ -192,8 +172,18 @@ export function SessionMessagesClient() {
     };
   }, [resetDetailsState, sessionId, selectedSeq, t]);
 
+  const currentRequestSnapshot = snapshots?.request[viewMode] ?? null;
+  const currentResponseSnapshot = snapshots?.response[viewMode] ?? null;
+  const hasAnyRequestSnapshotData =
+    hasSnapshotData(snapshots?.request.before) || hasSnapshotData(snapshots?.request.after);
+  const hasAnyResponseSnapshotData =
+    hasSnapshotData(snapshots?.response.before) || hasSnapshotData(snapshots?.response.after);
   const canExportRequest =
-    !isLoading && error === null && requestHeaders !== null && requestBody !== null;
+    !isLoading &&
+    error === null &&
+    currentRequestSnapshot !== null &&
+    currentRequestSnapshot?.headers !== null &&
+    currentRequestSnapshot?.body !== null;
   const exportSequence = selectedSeq ?? currentSequence;
 
   const getRequestExportJson = () => {
@@ -201,9 +191,8 @@ export function SessionMessagesClient() {
       {
         sessionId,
         sequence: exportSequence,
-        meta: requestMeta,
-        headers: requestHeaders,
-        body: requestBody,
+        view: viewMode,
+        request: currentRequestSnapshot,
         specialSettings,
       },
       null,
@@ -225,9 +214,9 @@ export function SessionMessagesClient() {
   };
 
   const handleCopyResponse = async () => {
-    if (!response) return;
+    if (currentResponseSnapshot?.body == null) return;
     try {
-      await navigator.clipboard.writeText(response);
+      await navigator.clipboard.writeText(currentResponseSnapshot.body);
       setCopiedResponse(true);
       setTimeout(() => setCopiedResponse(false), 2000);
       toast.success(t("actions.copied"));
@@ -515,24 +504,19 @@ export function SessionMessagesClient() {
 
                   {/* Main Content - No more extra Card wrapper */}
                   <SessionMessagesDetailsTabs
-                    messages={messages}
-                    requestBody={requestBody}
+                    snapshots={snapshots}
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
                     specialSettings={specialSettings}
-                    response={response}
-                    requestHeaders={requestHeaders}
-                    responseHeaders={responseHeaders}
-                    requestMeta={requestMeta}
-                    responseMeta={responseMeta}
                     onCopyResponse={handleCopyResponse}
                     isResponseCopied={copiedResponse}
                   />
 
                   {/* Empty State */}
                   {!sessionStats?.userAgent &&
-                    !messages &&
-                    !requestBody &&
-                    !response &&
-                    !requestHeaders && (
+                    specialSettings === null &&
+                    !hasAnyRequestSnapshotData &&
+                    !hasAnyResponseSnapshotData && (
                       <div className="text-center py-20 border-2 border-dashed rounded-xl bg-muted/10">
                         <div className="text-muted-foreground text-lg mb-2 font-medium">
                           {t("details.noDetailedData")}

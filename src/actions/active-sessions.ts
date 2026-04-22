@@ -8,12 +8,143 @@ import {
   setSessionDetailsCache,
 } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
+import { extractAfterRequestMessages, isSessionMessages } from "@/lib/session-detail-snapshots";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
-import type { ActiveSessionInfo } from "@/types/session";
+import {
+  type ActiveSessionInfo,
+  DEFAULT_SESSION_DETAIL_VIEW_MODE,
+  type SessionDetailRequestMeta,
+  type SessionDetailResponseMeta,
+  type SessionDetailSnapshots,
+} from "@/types/session";
 import type { SpecialSetting } from "@/types/special-settings";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
+
+function normalizeRequestSnapshot(
+  snapshot: Awaited<
+    ReturnType<typeof import("@/lib/session-manager").SessionManager.getSessionRequestPhaseSnapshot>
+  >,
+  phase: "before" | "after",
+  parseJsonStringOrKeepRaw: (value: unknown) => unknown
+) {
+  if (!snapshot) return null;
+
+  const normalizedBody = parseJsonStringOrKeepRaw(snapshot.body);
+  const normalizedMessages =
+    phase === "before"
+      ? parseJsonStringOrKeepRaw(snapshot.messages)
+      : extractAfterRequestMessages(normalizedBody);
+
+  return {
+    body: normalizedBody,
+    messages: isSessionMessages(normalizedMessages) ? normalizedMessages : null,
+    headers: snapshot.headers,
+    meta: snapshot.meta,
+  };
+}
+
+function normalizeResponseSnapshot(
+  snapshot: Awaited<
+    ReturnType<
+      typeof import("@/lib/session-manager").SessionManager.getSessionResponsePhaseSnapshot
+    >
+  >
+) {
+  if (!snapshot) return null;
+
+  return {
+    body: snapshot.body,
+    headers: snapshot.headers,
+    meta: snapshot.meta,
+  };
+}
+
+function buildLegacyCompatibilitySnapshots(params: {
+  requestBody: unknown | null;
+  messages: unknown | null;
+  response: string | null;
+  requestHeaders: Record<string, string> | null;
+  responseHeaders: Record<string, string> | null;
+  requestMeta: SessionDetailRequestMeta;
+  responseMeta: SessionDetailResponseMeta;
+}): SessionDetailSnapshots {
+  const hasLegacyRequestData =
+    params.requestBody !== null ||
+    (params.requestHeaders !== null && Object.keys(params.requestHeaders).length > 0) ||
+    params.messages !== null;
+  const hasLegacyResponseData =
+    params.response !== null ||
+    (params.responseHeaders !== null && Object.keys(params.responseHeaders).length > 0);
+
+  return {
+    defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
+    request: {
+      before: null,
+      after: hasLegacyRequestData
+        ? {
+            body: params.requestBody,
+            messages: isSessionMessages(params.messages) ? params.messages : null,
+            headers: params.requestHeaders,
+            meta: params.requestMeta,
+          }
+        : null,
+    },
+    response: {
+      before: null,
+      after: hasLegacyResponseData
+        ? {
+            body: params.response,
+            headers: params.responseHeaders,
+            meta: params.responseMeta,
+          }
+        : null,
+    },
+  };
+}
+
+function mergeLegacyRequestAfterSnapshot(
+  snapshot: SessionDetailSnapshots["request"]["after"],
+  legacySnapshot: SessionDetailSnapshots["request"]["after"]
+): SessionDetailSnapshots["request"]["after"] {
+  if (!snapshot) return legacySnapshot;
+  if (
+    snapshot.body === null &&
+    snapshot.messages === null &&
+    snapshot.headers === null &&
+    legacySnapshot
+  ) {
+    return {
+      ...legacySnapshot,
+      meta: {
+        clientUrl: snapshot.meta.clientUrl,
+        upstreamUrl: snapshot.meta.upstreamUrl ?? legacySnapshot.meta.upstreamUrl,
+        method: snapshot.meta.method ?? legacySnapshot.meta.method,
+      },
+    };
+  }
+
+  return snapshot;
+}
+
+function mergeLegacyResponseAfterSnapshot(
+  snapshot: SessionDetailSnapshots["response"]["after"],
+  legacySnapshot: SessionDetailSnapshots["response"]["after"]
+): SessionDetailSnapshots["response"]["after"] {
+  if (!snapshot) return legacySnapshot;
+  if (snapshot.body === null && snapshot.headers === null && legacySnapshot) {
+    return {
+      ...legacySnapshot,
+      meta: {
+        upstreamUrl: snapshot.meta.upstreamUrl ?? legacySnapshot.meta.upstreamUrl,
+        statusCode: snapshot.meta.statusCode ?? legacySnapshot.meta.statusCode,
+      },
+    };
+  }
+
+  return snapshot;
+}
 
 /**
  * 获取所有活跃 session 的详细信息（使用聚合数据 + 批量查询 + 缓存）
@@ -538,8 +669,9 @@ export async function getSessionDetails(
     response: string | null;
     requestHeaders: Record<string, string> | null;
     responseHeaders: Record<string, string> | null;
-    requestMeta: { clientUrl: string | null; upstreamUrl: string | null; method: string | null };
-    responseMeta: { upstreamUrl: string | null; statusCode: number | null };
+    requestMeta: SessionDetailRequestMeta;
+    responseMeta: SessionDetailResponseMeta;
+    snapshots: SessionDetailSnapshots;
     specialSettings: SpecialSetting[] | null;
     sessionStats: Awaited<
       ReturnType<typeof import("@/repository/message").aggregateSessionStats>
@@ -629,6 +761,14 @@ export async function getSessionDetails(
         return null;
       }
     };
+    const parseJsonStringOrKeepRaw = (value: unknown): unknown => {
+      if (typeof value !== "string") return value;
+      try {
+        return JSON.parse(value) as unknown;
+      } catch {
+        return value;
+      }
+    };
 
     // 6. 并行获取 messages、requestBody 和 response（不缓存，因为这些数据较大）
     const [
@@ -642,6 +782,10 @@ export async function getSessionDetails(
       upstreamResMeta,
       redisSpecialSettings,
       requestAudit,
+      requestSnapshotBefore,
+      requestSnapshotAfter,
+      responseSnapshotBefore,
+      responseSnapshotAfter,
     ] = await Promise.all([
       SessionManager.getSessionRequestBody(sessionId, effectiveSequence),
       SessionManager.getSessionMessages(sessionId, effectiveSequence),
@@ -655,6 +799,10 @@ export async function getSessionDetails(
       effectiveSequence
         ? findMessageRequestAuditBySessionIdAndSequence(sessionId, effectiveSequence)
         : Promise.resolve(null),
+      SessionManager.getSessionRequestPhaseSnapshot(sessionId, "before", effectiveSequence),
+      SessionManager.getSessionRequestPhaseSnapshot(sessionId, "after", effectiveSequence),
+      SessionManager.getSessionResponsePhaseSnapshot(sessionId, "before", effectiveSequence),
+      SessionManager.getSessionResponsePhaseSnapshot(sessionId, "after", effectiveSequence),
     ]);
 
     // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
@@ -670,6 +818,52 @@ export async function getSessionDetails(
     const responseMeta = {
       upstreamUrl: upstreamResMeta?.url ?? upstreamReqMeta?.url ?? null,
       statusCode: upstreamResMeta?.statusCode ?? null,
+    };
+
+    const snapshots: SessionDetailSnapshots = {
+      defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
+      request: {
+        before: normalizeRequestSnapshot(
+          requestSnapshotBefore ?? null,
+          "before",
+          parseJsonStringOrKeepRaw
+        ),
+        after: normalizeRequestSnapshot(
+          requestSnapshotAfter ?? null,
+          "after",
+          parseJsonStringOrKeepRaw
+        ),
+      },
+      response: {
+        before: normalizeResponseSnapshot(responseSnapshotBefore ?? null),
+        after: normalizeResponseSnapshot(responseSnapshotAfter ?? null),
+      },
+    };
+    const legacyCompatibilitySnapshots = buildLegacyCompatibilitySnapshots({
+      requestBody: normalizedRequestBody,
+      messages: normalizedMessages,
+      response,
+      requestHeaders,
+      responseHeaders,
+      requestMeta,
+      responseMeta,
+    });
+    const effectiveSnapshots: SessionDetailSnapshots = {
+      defaultView: snapshots.defaultView,
+      request: {
+        before: snapshots.request.before,
+        after: mergeLegacyRequestAfterSnapshot(
+          snapshots.request.after,
+          legacyCompatibilitySnapshots.request.after
+        ),
+      },
+      response: {
+        before: snapshots.response.before,
+        after: mergeLegacyResponseAfterSnapshot(
+          snapshots.response.after,
+          legacyCompatibilitySnapshots.response.after
+        ),
+      },
     };
 
     const mergedSpecialSettings: SpecialSetting[] = [
@@ -699,6 +893,7 @@ export async function getSessionDetails(
         responseHeaders,
         requestMeta,
         responseMeta,
+        snapshots: effectiveSnapshots,
         specialSettings: unifiedSpecialSettings,
         sessionStats,
         currentSequence: effectiveSequence ?? null,

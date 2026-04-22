@@ -3,14 +3,19 @@
  */
 
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
 import dashboardMessages from "@messages/en/dashboard.json";
+import {
+  DEFAULT_SESSION_DETAIL_VIEW_MODE,
+  type SessionDetailSnapshots,
+  type SessionDetailViewMode,
+} from "@/types/session";
 import { SessionMessagesDetailsTabs } from "./session-details-tabs";
 
-// Use real locale messages to ensure test stays in sync with actual translations
 const messages = {
   dashboard: dashboardMessages,
 } as const;
@@ -45,55 +50,86 @@ function click(el: Element) {
   });
 }
 
-describe("SessionMessagesDetailsTabs", () => {
-  test("uses CodeDisplay for request/response/headers and detects SSE response", () => {
-    const sse = ["event: foo", 'data: {"x":1}', "", "data: [DONE]"].join("\n");
-
-    const { container, unmount } = renderWithIntl(
-      <SessionMessagesDetailsTabs
-        requestBody={{ model: "gpt-5.2", instructions: "test" }}
-        messages={{ role: "user", content: "hi" }}
-        specialSettings={null}
-        response={sse}
-        requestHeaders={{ a: "1" }}
-        responseHeaders={{ b: "2" }}
-        requestMeta={{
-          clientUrl: "https://example.com/v1/responses",
+function createSnapshots(): SessionDetailSnapshots {
+  return {
+    defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
+    request: {
+      before: {
+        body: { model: "gpt-5.2", instructions: "before body" },
+        messages: { role: "user", content: "before hi" },
+        headers: { "x-before-request": "1" },
+        meta: {
+          clientUrl: "https://client.example/v1/responses",
           upstreamUrl: null,
           method: "POST",
-        }}
-        responseMeta={{ upstreamUrl: "https://api.example.com/v1/responses", statusCode: 200 }}
-      />
+        },
+      },
+      after: {
+        body: { model: "gpt-5.2", instructions: "after body" },
+        messages: { role: "user", content: "after hi" },
+        headers: { "x-after-request": "1" },
+        meta: {
+          clientUrl: null,
+          upstreamUrl: "https://upstream.example/v1/responses",
+          method: "POST",
+        },
+      },
+    },
+    response: {
+      before: {
+        body: ["event: foo", 'data: {"x":1}', "", "data: [DONE]"].join("\n"),
+        headers: { "x-before-response": "1" },
+        meta: {
+          upstreamUrl: "https://upstream.example/v1/responses",
+          statusCode: 200,
+        },
+      },
+      after: {
+        body: '{"after":true}',
+        headers: { "x-after-response": "1" },
+        meta: {
+          upstreamUrl: null,
+          statusCode: 200,
+        },
+      },
+    },
+  };
+}
+
+function StatefulTabsHarness({
+  snapshots,
+  specialSettings,
+}: {
+  snapshots: SessionDetailSnapshots | null;
+  specialSettings: unknown | null;
+}) {
+  const [viewMode, setViewMode] = useState<SessionDetailViewMode>(DEFAULT_SESSION_DETAIL_VIEW_MODE);
+
+  return (
+    <SessionMessagesDetailsTabs
+      snapshots={snapshots}
+      specialSettings={specialSettings}
+      viewMode={viewMode}
+      onViewModeChange={setViewMode}
+    />
+  );
+}
+
+describe("SessionMessagesDetailsTabs", () => {
+  test("switches request and response tabs between before and after snapshots", () => {
+    const { container, unmount } = renderWithIntl(
+      <StatefulTabsHarness snapshots={createSnapshots()} specialSettings={null} />
     );
 
-    expect(container.querySelector("[data-testid='session-details-tabs']")).not.toBeNull();
-    expect(
-      container.querySelector("[data-testid='session-tab-trigger-request-messages']")
-    ).not.toBeNull();
-
-    // Check request body tab content within its scope
-    const requestBodyTab = container.querySelector(
-      "[data-testid='session-tab-request-body']"
-    ) as HTMLElement;
-    const requestBodyCodeDisplay = requestBodyTab.querySelector(
-      "[data-testid='code-display']"
-    ) as HTMLElement;
-    expect(requestBodyCodeDisplay.getAttribute("data-language")).toBe("json");
-    expect(requestBodyTab.textContent).toContain('"model": "gpt-5.2"');
-
-    // Switch to request headers tab and check within its scope
-    const requestHeadersTrigger = container.querySelector(
-      "[data-testid='session-tab-trigger-request-headers']"
-    ) as HTMLElement;
-    click(requestHeadersTrigger);
+    click(requestHeadersTrigger(container));
     const requestHeadersTab = container.querySelector(
       "[data-testid='session-tab-request-headers']"
     ) as HTMLElement;
     expect(requestHeadersTab.textContent).toContain(
-      "CLIENT: POST https://example.com/v1/responses"
+      "Upstream: POST https://upstream.example/v1/responses"
     );
+    expect(requestHeadersTab.textContent).toContain("x-after-request: 1");
 
-    // Switch to request messages tab and check within its scope
     const requestMessagesTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-request-messages']"
     ) as HTMLElement;
@@ -101,23 +137,21 @@ describe("SessionMessagesDetailsTabs", () => {
     const requestMessagesTab = container.querySelector(
       "[data-testid='session-tab-request-messages']"
     ) as HTMLElement;
-    expect(requestMessagesTab.textContent).toContain('"content": "hi"');
+    expect(requestMessagesTab.textContent).toContain('"content": "after hi"');
 
-    // Switch to response body tab and check SSE detection
     const responseBodyTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-response-body']"
     ) as HTMLElement;
     click(responseBodyTrigger);
-
     const responseBodyTab = container.querySelector(
       "[data-testid='session-tab-response-body']"
     ) as HTMLElement;
     const responseBodyCodeDisplay = responseBodyTab.querySelector(
       "[data-testid='code-display']"
     ) as HTMLElement;
-    expect(responseBodyCodeDisplay.getAttribute("data-language")).toBe("sse");
+    expect(responseBodyCodeDisplay.getAttribute("data-language")).toBe("json");
+    expect(responseBodyTab.textContent).toContain('"after": true');
 
-    // Switch to response headers tab and check within its scope
     const responseHeadersTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-response-headers']"
     ) as HTMLElement;
@@ -125,25 +159,76 @@ describe("SessionMessagesDetailsTabs", () => {
     const responseHeadersTab = container.querySelector(
       "[data-testid='session-tab-response-headers']"
     ) as HTMLElement;
+    expect(responseHeadersTab.textContent).toContain("Client: HTTP 200");
+    expect(responseHeadersTab.textContent).toContain("x-after-response: 1");
+
+    const beforeToggle = container.querySelector(
+      "[data-testid='session-view-mode-before']"
+    ) as HTMLElement;
+    click(beforeToggle);
+
+    click(requestHeadersTrigger(container));
+    expect(requestHeadersTab.textContent).toContain(
+      "Client: POST https://client.example/v1/responses"
+    );
+    expect(requestHeadersTab.textContent).toContain("x-before-request: 1");
+
+    click(requestMessagesTrigger);
+    expect(requestMessagesTab.textContent).toContain('"content": "before hi"');
+
+    click(responseBodyTrigger);
+    const beforeResponseBodyCodeDisplay = responseBodyTab.querySelector(
+      "[data-testid='code-display']"
+    ) as HTMLElement;
+    expect(beforeResponseBodyCodeDisplay.getAttribute("data-language")).toBe("sse");
+
+    click(responseHeadersTrigger);
     expect(responseHeadersTab.textContent).toContain(
-      "UPSTREAM: HTTP 200 https://api.example.com/v1/responses"
+      "Upstream: HTTP 200 https://upstream.example/v1/responses"
+    );
+    expect(responseHeadersTab.textContent).toContain("x-before-response: 1");
+
+    unmount();
+  });
+
+  test("shows after-request-messages empty state when processed request has no messages field", () => {
+    const snapshots = createSnapshots();
+    if (!snapshots.request.after) {
+      throw new Error("after snapshot missing");
+    }
+    snapshots.request.after.body = { model: "gpt-5.2", input: [{ role: "user", content: "hi" }] };
+    snapshots.request.after.messages = null;
+
+    const { container, unmount } = renderWithIntl(
+      <StatefulTabsHarness snapshots={snapshots} specialSettings={null} />
+    );
+
+    const requestMessagesTrigger = container.querySelector(
+      "[data-testid='session-tab-trigger-request-messages']"
+    ) as HTMLElement;
+    click(requestMessagesTrigger);
+    const requestMessagesTab = container.querySelector(
+      "[data-testid='session-tab-request-messages']"
+    ) as HTMLElement;
+    expect(requestMessagesTab.textContent).toContain(
+      dashboardMessages.sessions.details.afterRequestMessagesEmpty.replace(
+        "{requestBodyLabel}",
+        dashboardMessages.sessions.details.requestBody
+      )
     );
 
     unmount();
   });
 
   test("detects JSON response when response is not SSE", () => {
+    const snapshots = createSnapshots();
+    if (!snapshots.response.after) {
+      throw new Error("after response snapshot missing");
+    }
+    snapshots.response.after.body = '{"ok":true}';
+
     const { container, unmount } = renderWithIntl(
-      <SessionMessagesDetailsTabs
-        requestBody={{ model: "gpt-5.2", instructions: "test" }}
-        messages={{ role: "user", content: "hi" }}
-        specialSettings={null}
-        response='{"ok":true}'
-        requestHeaders={{}}
-        responseHeaders={{}}
-        requestMeta={{ clientUrl: null, upstreamUrl: null, method: null }}
-        responseMeta={{ upstreamUrl: null, statusCode: null }}
-      />
+      <StatefulTabsHarness snapshots={snapshots} specialSettings={null} />
     );
 
     const responseBodyTrigger = container.querySelector(
@@ -164,35 +249,21 @@ describe("SessionMessagesDetailsTabs", () => {
 
   test("renders empty states for missing data", () => {
     const { container, unmount } = renderWithIntl(
-      <SessionMessagesDetailsTabs
-        requestBody={null}
-        messages={null}
+      <StatefulTabsHarness
+        snapshots={{
+          defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
+          request: { before: null, after: null },
+          response: { before: null, after: null },
+        }}
         specialSettings={null}
-        response={null}
-        requestHeaders={null}
-        responseHeaders={null}
-        requestMeta={{ clientUrl: null, upstreamUrl: null, method: null }}
-        responseMeta={{ upstreamUrl: null, statusCode: null }}
       />
     );
 
-    // Check default tab (request body) shows storageTip when null - scoped to tab
     const requestBodyTab = container.querySelector(
       "[data-testid='session-tab-request-body']"
     ) as HTMLElement;
     expect(requestBodyTab.textContent).toContain(dashboardMessages.sessions.details.storageTip);
 
-    // Switch to request headers tab and check storageTip - scoped to tab
-    const requestHeadersTrigger = container.querySelector(
-      "[data-testid='session-tab-trigger-request-headers']"
-    ) as HTMLElement;
-    click(requestHeadersTrigger);
-    const requestHeadersTab = container.querySelector(
-      "[data-testid='session-tab-request-headers']"
-    ) as HTMLElement;
-    expect(requestHeadersTab.textContent).toContain(dashboardMessages.sessions.details.storageTip);
-
-    // Switch to special settings tab and check noData - scoped to tab
     const specialSettingsTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-special-settings']"
     ) as HTMLElement;
@@ -200,34 +271,30 @@ describe("SessionMessagesDetailsTabs", () => {
     const specialSettingsTab = container.querySelector(
       "[data-testid='session-tab-special-settings']"
     ) as HTMLElement;
-    expect(specialSettingsTab.textContent).toContain(dashboardMessages.sessions.details.noData);
+    expect(specialSettingsTab.textContent).toContain(
+      dashboardMessages.sessions.details.specialSettingsStaticNote
+    );
+    expect(specialSettingsTab.textContent).toContain(
+      dashboardMessages.sessions.details.specialSettingsEmpty
+    );
 
     unmount();
   });
 
   test("uses larger hard-limit threshold (<= 30,000 lines) for request headers", () => {
-    const requestHeaders = Object.fromEntries(
+    const snapshots = createSnapshots();
+    if (!snapshots.request.after) {
+      throw new Error("after snapshot missing");
+    }
+    snapshots.request.after.headers = Object.fromEntries(
       Array.from({ length: 10_100 }, (_, i) => [`x-h-${i}`, `v-${i}`])
     );
 
     const { container, unmount } = renderWithIntl(
-      <SessionMessagesDetailsTabs
-        requestBody={null}
-        messages={{ role: "user", content: "hi" }}
-        specialSettings={null}
-        response='{"ok":true}'
-        requestHeaders={requestHeaders}
-        responseHeaders={{ b: "2" }}
-        requestMeta={{ clientUrl: null, upstreamUrl: null, method: null }}
-        responseMeta={{ upstreamUrl: null, statusCode: null }}
-      />
+      <StatefulTabsHarness snapshots={snapshots} specialSettings={null} />
     );
 
-    const requestHeadersTrigger = container.querySelector(
-      "[data-testid='session-tab-trigger-request-headers']"
-    ) as HTMLElement;
-    click(requestHeadersTrigger);
-
+    click(requestHeadersTrigger(container));
     const requestHeadersTab = container.querySelector(
       "[data-testid='session-tab-request-headers']"
     ) as HTMLElement;
@@ -246,6 +313,11 @@ describe("SessionMessagesDetailsTabs", () => {
   test("hard-limited request body provides in-panel download for request.json", async () => {
     const requestBody = Array.from({ length: 30_001 }, (_, i) => i);
     const expectedJson = JSON.stringify(requestBody, null, 2);
+    const snapshots = createSnapshots();
+    if (!snapshots.request.after) {
+      throw new Error("after snapshot missing");
+    }
+    snapshots.request.after.body = requestBody;
 
     const createObjectURLSpy = vi
       .spyOn(URL, "createObjectURL")
@@ -265,16 +337,7 @@ describe("SessionMessagesDetailsTabs", () => {
     }) as unknown as typeof document.createElement);
 
     const { container, unmount } = renderWithIntl(
-      <SessionMessagesDetailsTabs
-        requestBody={requestBody}
-        messages={{ role: "user", content: "hi" }}
-        specialSettings={null}
-        response='{"ok":true}'
-        requestHeaders={{ a: "1" }}
-        responseHeaders={{ b: "2" }}
-        requestMeta={{ clientUrl: null, upstreamUrl: null, method: null }}
-        responseMeta={{ upstreamUrl: null, statusCode: null }}
-      />
+      <StatefulTabsHarness snapshots={snapshots} specialSettings={null} />
     );
 
     const requestBodyTab = container.querySelector(
@@ -308,3 +371,9 @@ describe("SessionMessagesDetailsTabs", () => {
     createElementSpy.mockRestore();
   });
 });
+
+function requestHeadersTrigger(container: HTMLElement) {
+  return container.querySelector(
+    "[data-testid='session-tab-trigger-request-headers']"
+  ) as HTMLElement;
+}

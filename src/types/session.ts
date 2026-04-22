@@ -73,3 +73,37 @@ export interface SessionProviderInfo {
   providerId: number;
   providerName: string;
 }
+
+export type SessionDetailViewMode = "before" | "after";
+
+export const DEFAULT_SESSION_DETAIL_VIEW_MODE: SessionDetailViewMode = "after";
+
+export interface SessionDetailRequestMeta {
+  clientUrl: string | null;
+  upstreamUrl: string | null;
+  method: string | null;
+}
+
+export interface SessionDetailResponseMeta {
+  upstreamUrl: string | null;
+  statusCode: number | null;
+}
+
+export interface SessionDetailRequestSnapshot {
+  body: unknown | null;
+  messages: unknown | null;
+  headers: Record<string, string> | null;
+  meta: SessionDetailRequestMeta;
+}
+
+export interface SessionDetailResponseSnapshot {
+  body: string | null;
+  headers: Record<string, string> | null;
+  meta: SessionDetailResponseMeta;
+}
+
+export interface SessionDetailSnapshots {
+  defaultView: SessionDetailViewMode;
+  request: Record<SessionDetailViewMode, SessionDetailRequestSnapshot | null>;
+  response: Record<SessionDetailViewMode, SessionDetailResponseSnapshot | null>;
+}
