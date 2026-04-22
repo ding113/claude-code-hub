@@ -120,4 +120,26 @@ describe("public-status config", () => {
       ])
     ).toEqual([]);
   });
+
+  it("ignores null and primitive entries in publicModels arrays", async () => {
+    const mod = await importPublicStatusModule<PublicStatusConfigModule>(
+      "@/lib/public-status/config"
+    );
+
+    expect(
+      mod.parsePublicStatusDescription(
+        JSON.stringify({
+          version: 2,
+          publicStatus: {
+            publicModels: [null, 42, { modelKey: "gpt-4.1", providerTypeOverride: "codex" }],
+          },
+        })
+      )
+    ).toMatchObject({
+      note: null,
+      publicStatus: {
+        publicModels: [{ modelKey: "gpt-4.1", providerTypeOverride: "codex" }],
+      },
+    });
+  });
 });

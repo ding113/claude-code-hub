@@ -49,6 +49,7 @@ import {
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
 import { parsePublicStatusDescription } from "@/lib/public-status/config";
 import { cn } from "@/lib/utils";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
@@ -196,7 +197,7 @@ export function ProviderGroupTab({
       toast.error(t("nameRequired"));
       return;
     }
-    if (trimmedDescription.length > 500) {
+    if (exceedsProviderGroupDescriptionLimit(trimmedDescription)) {
       toast.error(t("descriptionTooLong"));
       return;
     }
@@ -267,7 +268,7 @@ export function ProviderGroupTab({
 
   const validateDescription = useCallback(
     (raw: string) => {
-      if (raw.length > 500) return t("descriptionTooLong");
+      if (exceedsProviderGroupDescriptionLimit(raw)) return t("descriptionTooLong");
       return null;
     },
     [t]

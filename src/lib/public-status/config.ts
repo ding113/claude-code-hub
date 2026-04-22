@@ -84,10 +84,13 @@ function sanitizePublicModels(publicModels: unknown): PublicStatusModelConfig[] 
   const normalized: PublicStatusModelConfig[] = [];
 
   for (const entry of publicModels) {
+    const isObjectEntry = typeof entry === "object" && entry !== null;
     const modelKey =
       typeof entry === "string"
         ? sanitizeString(entry)
-        : sanitizeString((entry as { modelKey?: unknown }).modelKey);
+        : isObjectEntry
+          ? sanitizeString((entry as { modelKey?: unknown }).modelKey)
+          : undefined;
 
     if (!modelKey || seen.has(modelKey)) {
       continue;
@@ -95,9 +98,9 @@ function sanitizePublicModels(publicModels: unknown): PublicStatusModelConfig[] 
 
     seen.add(modelKey);
     const providerTypeOverride =
-      typeof entry === "string"
-        ? undefined
-        : sanitizeProviderType((entry as { providerTypeOverride?: unknown }).providerTypeOverride);
+      isObjectEntry
+        ? sanitizeProviderType((entry as { providerTypeOverride?: unknown }).providerTypeOverride)
+        : undefined;
 
     normalized.push({
       modelKey,
