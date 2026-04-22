@@ -110,9 +110,7 @@ describe("public-status view", () => {
             gemini: "Gemini",
           },
         }}
-        {...({
-          siteTitle: "Acme AI Hub",
-        } as never)}
+        siteTitle="Acme AI Hub"
       />
     );
 
@@ -158,9 +156,7 @@ describe("public-status view", () => {
             gemini: "Gemini",
           },
         }}
-        {...({
-          siteTitle: "Acme AI Hub",
-        } as never)}
+        siteTitle="Acme AI Hub"
       />
     );
 
@@ -215,9 +211,7 @@ describe("public-status view", () => {
             gemini: "Gemini",
           },
         }}
-        {...({
-          siteTitle: "Acme AI Hub",
-        } as never)}
+        siteTitle="Acme AI Hub"
       />
     );
 

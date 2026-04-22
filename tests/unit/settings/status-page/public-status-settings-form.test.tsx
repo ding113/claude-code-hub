@@ -279,14 +279,6 @@ describe("public-status settings form", () => {
     const providerOverrideSelect = selects[1];
     expect(providerOverrideSelect).toBeTruthy();
 
-    await act(async () => {
-      providerOverrideSelect?.dispatchEvent(
-        new Event("change", {
-          bubbles: true,
-        })
-      );
-    });
-
     if (providerOverrideSelect instanceof HTMLSelectElement) {
       providerOverrideSelect.value = "codex";
       await act(async () => {

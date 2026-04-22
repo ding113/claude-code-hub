@@ -152,6 +152,10 @@ export function parsePublicStatusDescription(
       return { note: description, publicStatus: null };
     }
 
+    if (typeof parsed.version === "number" && parsed.version > PUBLIC_STATUS_DESCRIPTION_VERSION) {
+      return { note: description, publicStatus: null };
+    }
+
     const note = sanitizeString(parsed.note) ?? null;
     const publicStatus = parsed.publicStatus;
     const groupConfig =

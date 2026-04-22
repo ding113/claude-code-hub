@@ -63,4 +63,38 @@ describe("public status page title", () => {
       undefined
     );
   });
+
+  it("prefers a non-blank snapshot siteTitle over public site meta", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+      siteTitle: "Snapshot Title",
+      timeZone: "UTC",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [],
+    });
+    mockReadPublicSiteMeta.mockResolvedValue({
+      siteTitle: "Claude Code Hub",
+    });
+    mockReadPublicStatusPayload.mockResolvedValue({
+      rebuildState: "fresh",
+      sourceGeneration: "gen-1",
+      generatedAt: "2026-04-22T00:00:00.000Z",
+      freshUntil: null,
+      groups: [],
+    });
+
+    const mod = await import("@/app/[locale]/status/page");
+    const pageElement = await mod.default({
+      params: Promise.resolve({ locale: "en" }),
+    });
+    renderToStaticMarkup(pageElement);
+
+    expect(mockPublicStatusView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        siteTitle: "Snapshot Title",
+      }),
+      undefined
+    );
+  });
 });

@@ -19,7 +19,13 @@ export async function readPublicSiteMeta(): Promise<PublicSiteMeta> {
     // fall through to public snapshot
   }
 
-  const publicSnapshot = await readPublicStatusSiteMetadata();
+  let publicSnapshot: Awaited<ReturnType<typeof readPublicStatusSiteMetadata>> = null;
+  try {
+    publicSnapshot = await readPublicStatusSiteMetadata();
+  } catch {
+    publicSnapshot = null;
+  }
+
   return {
     siteTitle: resolveSiteTitle(publicSnapshot?.siteTitle, DEFAULT_SITE_TITLE),
   };

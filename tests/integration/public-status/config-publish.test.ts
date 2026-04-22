@@ -132,7 +132,7 @@ describe("public-status config publish integration", () => {
           groupName: "openai",
           displayName: "OpenAI",
           publicGroupSlug: "openai",
-          publicModels: [{ modelKey: "gpt-4.1" }],
+          publicModels: [{ modelKey: "gpt-4.1", providerTypeOverride: "codex" }],
         },
       ],
     });
@@ -147,6 +147,13 @@ describe("public-status config publish integration", () => {
       {}
     );
     expect(mockUpdateProviderGroup).toHaveBeenCalledTimes(1);
+    expect(mockUpdateProviderGroup).toHaveBeenCalledWith(
+      10,
+      expect.objectContaining({
+        description: expect.stringContaining('"providerTypeOverride":"codex"'),
+      }),
+      {}
+    );
     expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledTimes(1);
     expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
       intervalMinutes: 5,

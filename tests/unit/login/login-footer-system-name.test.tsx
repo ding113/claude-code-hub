@@ -1,7 +1,8 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import LoginPage from "../../../src/app/[locale]/login/page";
+import LoginPage from "@/app/[locale]/login/page";
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 
 const mockPush = vi.hoisted(() => vi.fn());
 const mockRefresh = vi.hoisted(() => vi.fn());
@@ -33,7 +34,6 @@ vi.mock("next-themes", () => ({
 }));
 
 const globalFetch = global.fetch;
-const DEFAULT_SITE_TITLE = "Claude Code Hub";
 
 function getRequestPath(input: string | URL | Request): string {
   if (typeof input === "string") {

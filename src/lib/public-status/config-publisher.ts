@@ -17,6 +17,15 @@ import {
 } from "./config-snapshot";
 import { MAX_PUBLIC_STATUS_RANGE_HOURS, PUBLIC_STATUS_INTERVAL_SET } from "./constants";
 
+const PUBLIC_VENDOR_ICON_KEYS = new Set([
+  "openai",
+  "anthropic",
+  "gemini",
+  "azure",
+  "bedrock",
+  "generic",
+]);
+
 function resolvePublicVendorIconKey(
   modelName: string,
   raw?: string,
@@ -31,15 +40,6 @@ function resolvePublicVendorIconKey(
   if (providerTypeOverride === "gemini" || providerTypeOverride === "gemini-cli") {
     return "gemini";
   }
-
-  const PUBLIC_VENDOR_ICON_KEYS = new Set([
-    "openai",
-    "anthropic",
-    "gemini",
-    "azure",
-    "bedrock",
-    "generic",
-  ]);
 
   const normalized = raw?.trim().toLowerCase();
   if (normalized && PUBLIC_VENDOR_ICON_KEYS.has(normalized)) {
