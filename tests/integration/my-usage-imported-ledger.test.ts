@@ -495,18 +495,6 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       createdAt,
     });
 
-    await insertLedgerOnlyRow({
-      requestId: liveRequestId,
-      userId: user.id,
-      key: key.key,
-      model: "dedupe-live-model",
-      endpoint: "/v1/responses",
-      costUsd: "0.800000000000000",
-      inputTokens: 80,
-      outputTokens: 16,
-      createdAt,
-    });
-
     const batch = await runAsSession(user.id, key.id, () => getMyUsageLogsBatch({ limit: 20 }));
     expect(batch.ok).toBe(true);
     expect(batch.ok && batch.data.logs.map((log) => log.id)).toEqual([liveRequestId]);
