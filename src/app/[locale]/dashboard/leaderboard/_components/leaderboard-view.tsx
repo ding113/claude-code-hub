@@ -7,7 +7,6 @@ import { getAllUserKeyGroups, getAllUserTags } from "@/actions/users";
 import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_components/provider-type-filter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagInput } from "@/components/ui/tag-input";
 import { Link } from "@/i18n/routing";
 import { formatTokenAmount } from "@/lib/utils";
@@ -26,13 +25,25 @@ import type {
 } from "@/repository/leaderboard";
 import type { ProviderType } from "@/types/provider";
 import { DateRangePicker } from "./date-range-picker";
+import { LeaderboardPrimaryTabs } from "./leaderboard-primary-tabs";
+import { LeaderboardSecondaryTabs } from "./leaderboard-secondary-tabs";
+import {
+  getPrimaryTabFromScope,
+  getScopeForPrimaryTab,
+  getScopeForSecondaryTab,
+  getSecondaryTabFromScope,
+  isProviderFamilyScope,
+  isUserFamilyScope,
+  type LeaderboardPrimaryTab,
+  type LeaderboardLeafScope as LeaderboardScope,
+  type LeaderboardSecondaryTab,
+  normalizeScopeFromUrl,
+} from "./leaderboard-tab-groups";
 import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
 
 interface LeaderboardViewProps {
   isAdmin: boolean;
 }
-
-type LeaderboardScope = "user" | "userCacheHitRate" | "provider" | "providerCacheHitRate" | "model";
 type TotalCostFormattedFields = { totalCostFormatted?: string };
 type ProviderCostFormattedFields = {
   // API 额外返回的展示用字段（格式化后的字符串）
@@ -74,15 +85,8 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
   const searchParams = useSearchParams();
 
-  const urlScope = searchParams.get("scope") as LeaderboardScope | null;
-  const initialScope: LeaderboardScope =
-    (urlScope === "provider" ||
-      urlScope === "providerCacheHitRate" ||
-      urlScope === "userCacheHitRate" ||
-      urlScope === "model") &&
-    isAdmin
-      ? urlScope
-      : "user";
+  const urlScope = searchParams.get("scope");
+  const initialScope = normalizeScopeFromUrl(urlScope, isAdmin);
   const urlPeriod = searchParams.get("period") as LeaderboardPeriod | null;
   const initialPeriod: LeaderboardPeriod =
     urlPeriod && VALID_PERIODS.includes(urlPeriod) ? urlPeriod : "daily";
@@ -117,15 +121,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   // 与 URL 查询参数保持同步，支持外部携带 scope/period 直达特定榜单
   // biome-ignore lint/correctness/useExhaustiveDependencies: period 和 scope 仅用于比较，不应触发 effect 重新执行
   useEffect(() => {
-    const urlScopeParam = searchParams.get("scope") as LeaderboardScope | null;
-    const normalizedScope: LeaderboardScope =
-      (urlScopeParam === "provider" ||
-        urlScopeParam === "userCacheHitRate" ||
-        urlScopeParam === "providerCacheHitRate" ||
-        urlScopeParam === "model") &&
-      isAdmin
-        ? urlScopeParam
-        : "user";
+    const normalizedScope = normalizeScopeFromUrl(searchParams.get("scope"), isAdmin);
 
     if (normalizedScope !== scope) {
       setScope(normalizedScope);
@@ -150,19 +146,16 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         if (period === "custom" && dateRange) {
           url += `&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
         }
-        if (
-          (scope === "providerCacheHitRate" || scope === "provider") &&
-          providerTypeFilter !== "all"
-        ) {
+        if (isProviderFamilyScope(scope) && providerTypeFilter !== "all") {
           url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
         }
         if (scope === "provider") {
           url += "&includeModelStats=1";
         }
-        if ((scope === "user" || scope === "userCacheHitRate") && isAdmin) {
+        if (isUserFamilyScope(scope) && isAdmin) {
           url += "&includeUserModelStats=1";
         }
-        if (scope === "user" || scope === "userCacheHitRate") {
+        if (isUserFamilyScope(scope)) {
           if (userTagFilters.length > 0) {
             url += `&userTags=${encodeURIComponent(userTagFilters.join(","))}`;
           }
@@ -203,6 +196,26 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
     []
   );
+
+  // 一级/二级 tab 只是叶子 scope 的 UI 投影，状态真源始终只有 scope。
+  const activePrimaryTab = getPrimaryTabFromScope(scope);
+  const activeSecondaryTab = getSecondaryTabFromScope(scope);
+  const showSecondaryTabs = isAdmin && activePrimaryTab !== "model";
+  const isProviderFamily = isProviderFamilyScope(scope);
+  const isUserFamily = isUserFamilyScope(scope);
+
+  const handlePrimaryTabChange = (tab: LeaderboardPrimaryTab) => {
+    setScope(getScopeForPrimaryTab(tab));
+  };
+
+  const handleSecondaryTabChange = (tab: LeaderboardSecondaryTab) => {
+    const primaryTab = getPrimaryTabFromScope(scope);
+    if (primaryTab === "model") {
+      return;
+    }
+
+    setScope(getScopeForSecondaryTab(primaryTab, tab));
+  };
 
   const skeletonColumns =
     scope === "user"
@@ -585,26 +598,32 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   return (
     <div className="w-full">
       {/* Scope toggle */}
-      <div className="flex flex-wrap gap-4 items-center mb-4">
-        <Tabs value={scope} onValueChange={(v) => setScope(v as LeaderboardScope)}>
-          <TabsList className={isAdmin ? "grid grid-cols-5" : ""}>
-            <TabsTrigger value="user">{t("tabs.userRanking")}</TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="userCacheHitRate">
-                {t("tabs.userCacheHitRateRanking")}
-              </TabsTrigger>
-            )}
-            {isAdmin && <TabsTrigger value="provider">{t("tabs.providerRanking")}</TabsTrigger>}
-            {isAdmin && (
-              <TabsTrigger value="providerCacheHitRate">
-                {t("tabs.providerCacheHitRateRanking")}
-              </TabsTrigger>
-            )}
-            {isAdmin && <TabsTrigger value="model">{t("tabs.modelRanking")}</TabsTrigger>}
-          </TabsList>
-        </Tabs>
+      <div className="mb-4 flex flex-wrap items-start gap-4">
+        <div className="flex min-w-[220px] flex-1 flex-col gap-2">
+          <LeaderboardPrimaryTabs
+            isAdmin={isAdmin}
+            activePrimaryTab={activePrimaryTab}
+            onPrimaryChange={handlePrimaryTabChange}
+            labels={{
+              user: t("tabs.primaryUser"),
+              provider: t("tabs.primaryProvider"),
+              model: t("tabs.primaryModel"),
+            }}
+          />
+          {showSecondaryTabs ? (
+            <LeaderboardSecondaryTabs
+              activePrimaryTab={activePrimaryTab}
+              activeSecondaryTab={activeSecondaryTab}
+              onSecondaryChange={handleSecondaryTabChange}
+              labels={{
+                cost: t("tabs.secondaryCost"),
+                cacheHit: t("tabs.secondaryCacheHit"),
+              }}
+            />
+          ) : null}
+        </div>
 
-        {scope === "provider" || scope === "providerCacheHitRate" ? (
+        {isProviderFamily ? (
           <ProviderTypeFilter
             value={providerTypeFilter}
             onChange={setProviderTypeFilter}
@@ -613,10 +632,11 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         ) : null}
       </div>
 
-      {(scope === "user" || scope === "userCacheHitRate") && isAdmin && (
+      {isUserFamily && isAdmin && (
         <div className="flex flex-wrap gap-4 mb-4">
           <div className="flex-1 min-w-[200px] max-w-[300px]">
             <TagInput
+              data-testid="leaderboard-user-tag-filter"
               value={userTagFilters}
               onChange={setUserTagFilters}
               placeholder={t("filters.userTagsPlaceholder")}
@@ -630,6 +650,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           </div>
           <div className="flex-1 min-w-[200px] max-w-[300px]">
             <TagInput
+              data-testid="leaderboard-user-group-filter"
               value={userGroupFilters}
               onChange={setUserGroupFilters}
               placeholder={t("filters.userGroupsPlaceholder")}
