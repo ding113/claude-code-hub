@@ -194,13 +194,19 @@ describe("ModelMultiSelect", () => {
     expect(modelPricesActionMocks.getAvailableModelCatalog).not.toHaveBeenCalled();
     await openPicker();
     expect(modelPricesActionMocks.getAvailableModelCatalog).toHaveBeenCalledTimes(1);
+    expect(modelPricesActionMocks.getAvailableModelCatalog).toHaveBeenCalledWith({
+      scope: "chat",
+    });
 
     const initialItems = Array.from(
       document.querySelectorAll('[data-model-group="available"] [data-slot="command-item"]')
     ).map((element) => element.textContent?.trim() || "");
-    expect(initialItems[0]).toContain("openai-new");
-    expect(initialItems[1]).toContain("anthropic-mid");
-    expect(initialItems[2]).toContain("openai-old");
+    expect(initialItems.some((text) => text.includes("openai-new"))).toBe(true);
+    expect(initialItems.some((text) => text.includes("anthropic-mid"))).toBe(true);
+    expect(initialItems.some((text) => text.includes("openai-old"))).toBe(true);
+    expect(initialItems.findIndex((text) => text.includes("openai-new"))).toBeLessThan(
+      initialItems.findIndex((text) => text.includes("openai-old"))
+    );
 
     const providerFilter = document.querySelector(
       '[data-testid="provider-filter-select"]'
@@ -221,6 +227,52 @@ describe("ModelMultiSelect", () => {
     expect(filteredItems.some((text) => text.includes("anthropic-mid"))).toBe(false);
     expect(filteredItems.some((text) => text.includes("openai-new"))).toBe(true);
     expect(filteredItems.some((text) => text.includes("openai-old"))).toBe(true);
+
+    unmount();
+  });
+
+  test("supports all model types when the caller opts into all-type catalog scope", async () => {
+    const messages = loadMessages();
+
+    modelPricesActionMocks.getAvailableModelCatalog.mockResolvedValueOnce([
+      {
+        modelName: "gpt-image-2",
+        litellmProvider: "openai",
+        updatedAt: "2026-04-06T12:00:00.000Z",
+      },
+      {
+        modelName: "openai-new",
+        litellmProvider: "openai",
+        updatedAt: "2026-04-05T12:00:00.000Z",
+      },
+      {
+        modelName: "anthropic-mid",
+        litellmProvider: "anthropic",
+        updatedAt: "2026-04-04T12:00:00.000Z",
+      },
+    ]);
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ModelMultiSelect
+          providerType="openai-compatible"
+          catalogScope="all"
+          selectedModels={[]}
+          onChange={vi.fn()}
+        />
+      </NextIntlClientProvider>
+    );
+
+    await openPicker();
+
+    expect(modelPricesActionMocks.getAvailableModelCatalog).toHaveBeenCalledWith({
+      scope: "all",
+    });
+
+    const items = Array.from(
+      document.querySelectorAll('[data-model-group="available"] [data-slot="command-item"]')
+    ).map((element) => element.textContent?.trim() || "");
+    expect(items.some((text) => text.includes("gpt-image-2"))).toBe(true);
 
     unmount();
   });

@@ -17,42 +17,7 @@ import {
   resolvePublicStatusSiteDescription,
 } from "./config-snapshot";
 import { MAX_PUBLIC_STATUS_RANGE_HOURS, PUBLIC_STATUS_INTERVAL_SET } from "./constants";
-
-const PUBLIC_VENDOR_ICON_KEYS = new Set([
-  "openai",
-  "anthropic",
-  "gemini",
-  "azure",
-  "bedrock",
-  "generic",
-]);
-
-function resolvePublicVendorIconKey(
-  modelName: string,
-  raw?: string,
-  providerTypeOverride?: ProviderType
-): string {
-  if (providerTypeOverride === "claude" || providerTypeOverride === "claude-auth") {
-    return "anthropic";
-  }
-  if (providerTypeOverride === "codex" || providerTypeOverride === "openai-compatible") {
-    return "openai";
-  }
-  if (providerTypeOverride === "gemini" || providerTypeOverride === "gemini-cli") {
-    return "gemini";
-  }
-
-  const normalized = raw?.trim().toLowerCase();
-  if (normalized && PUBLIC_VENDOR_ICON_KEYS.has(normalized)) {
-    return normalized;
-  }
-
-  const lowerModelName = modelName.toLowerCase();
-  if (lowerModelName.includes("codex")) return "openai";
-  if (lowerModelName.includes("claude")) return "anthropic";
-  if (lowerModelName.includes("gemini")) return "gemini";
-  return "generic";
-}
+import { resolvePublicStatusVendorIconKey } from "./vendor-icon-key";
 
 function resolveRequestTypeBadge(modelName: string, providerTypeOverride?: ProviderType): string {
   if (providerTypeOverride === "claude" || providerTypeOverride === "claude-auth") {
@@ -132,13 +97,14 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
         return {
           publicModelKey: modelName,
           label: price?.priceData.display_name?.trim() || modelName,
-          vendorIconKey: resolvePublicVendorIconKey(
+          vendorIconKey: resolvePublicStatusVendorIconKey({
             modelName,
-            typeof price?.priceData.litellm_provider === "string"
-              ? price.priceData.litellm_provider
-              : undefined,
-            model.providerTypeOverride
-          ),
+            vendorIconKey:
+              typeof price?.priceData.litellm_provider === "string"
+                ? price.priceData.litellm_provider
+                : undefined,
+            providerTypeOverride: model.providerTypeOverride,
+          }),
           requestTypeBadge: resolveRequestTypeBadge(modelName, model.providerTypeOverride),
         };
       }),
@@ -163,13 +129,14 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
         return {
           publicModelKey: modelName,
           label: price?.priceData.display_name?.trim() || modelName,
-          vendorIconKey: resolvePublicVendorIconKey(
+          vendorIconKey: resolvePublicStatusVendorIconKey({
             modelName,
-            typeof price?.priceData.litellm_provider === "string"
-              ? price.priceData.litellm_provider
-              : undefined,
-            model.providerTypeOverride
-          ),
+            vendorIconKey:
+              typeof price?.priceData.litellm_provider === "string"
+                ? price.priceData.litellm_provider
+                : undefined,
+            providerTypeOverride: model.providerTypeOverride,
+          }),
           requestTypeBadge: resolveRequestTypeBadge(modelName, model.providerTypeOverride),
         };
       }),
