@@ -2083,13 +2083,15 @@ export class SessionManager {
             bodyToStore = JSON.stringify(bodyToStore);
           }
 
-          writes.push(
-            redis.setex(
-              buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "body"),
-              SessionManager.SESSION_TTL,
-              bodyToStore ?? "null"
-            )
-          );
+          if (bodyToStore !== null) {
+            writes.push(
+              redis.setex(
+                buildSessionDetailSnapshotKey(sessionId, sequence, "response", phase, "body"),
+                SessionManager.SESSION_TTL,
+                bodyToStore
+              )
+            );
+          }
         }
       }
 

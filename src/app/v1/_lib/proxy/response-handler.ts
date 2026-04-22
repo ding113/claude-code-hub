@@ -1480,7 +1480,9 @@ export class ProxyResponseHandler {
       });
     }
 
-    await persistNonStreamAfterSnapshot(finalResponse);
+    void persistNonStreamAfterSnapshot(finalResponse).catch((error) => {
+      logger.error("[ResponseHandler] Failed to persist non-stream after snapshot", { error });
+    });
     return finalResponse;
   }
 
