@@ -38,6 +38,7 @@ import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { cn } from "@/lib/utils";
 import { UpdateUserSchema } from "@/lib/validation/schemas";
 import type { UserDisplay } from "@/types/user";
+import { resetUser5hLimitOnly } from "./actions/reset-user-5h-limit";
 import { DangerZone } from "./forms/danger-zone";
 import { UserEditSection } from "./forms/user-edit-section";
 import { useModelSuggestions } from "./hooks/use-model-suggestions";
@@ -95,6 +96,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const [isPending, startTransition] = useTransition();
   const [isResettingAll, setIsResettingAll] = useState(false);
   const [resetAllDialogOpen, setResetAllDialogOpen] = useState(false);
+  const [isResetting5h, setIsResetting5h] = useState(false);
+  const [reset5hDialogOpen, setReset5hDialogOpen] = useState(false);
   const [isResettingLimits, setIsResettingLimits] = useState(false);
   const [resetLimitsDialogOpen, setResetLimitsDialogOpen] = useState(false);
 
@@ -273,6 +276,33 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     }
   };
 
+  const handleReset5hLimitOnly = async () => {
+    setIsResetting5h(true);
+    try {
+      const res = await resetUser5hLimitOnly(user.id);
+      if (!res.ok) {
+        toast.error(res.error || t("editDialog.reset5h.error"));
+        return;
+      }
+
+      toast.success(
+        res.data?.resetMode === "fixed"
+          ? t("editDialog.reset5h.successFixed")
+          : t("editDialog.reset5h.successRolling")
+      );
+      setReset5hDialogOpen(false);
+      window.location.reload();
+    } catch (error) {
+      console.error("[EditUserDialog] reset 5h limit failed", error);
+      toast.error(t("editDialog.reset5h.error"));
+    } finally {
+      setIsResetting5h(false);
+    }
+  };
+
+  const canReset5h = (user.limit5hUsd ?? null) !== null && (user.limit5hUsd ?? 0) > 0;
+  const reset5hMode = user.limit5hResetMode ?? "rolling";
+
   return (
     <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-3xl max-h-[var(--cch-viewport-height-90,90vh)] p-0 flex flex-col overflow-hidden">
       <form onSubmit={form.handleSubmit} className="flex flex-1 min-h-0 flex-col">
@@ -327,7 +357,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
 
             {/* Reset Limits Only - Less destructive (amber) */}
             <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
                   <h4 className="text-sm font-medium text-amber-700 dark:text-amber-400">
                     {t("editDialog.resetLimits.title")}
@@ -335,6 +365,11 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                   <p className="text-xs text-muted-foreground">
                     {t("editDialog.resetLimits.description")}
                   </p>
+                  {!canReset5h && (
+                    <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
+                      {t("editDialog.reset5h.unavailableReason")}
+                    </p>
+                  )}
                   {user.costResetAt && (
                     <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
                       {t("editDialog.resetLimits.lastResetAt", {
@@ -347,50 +382,100 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                   )}
                 </div>
 
-                <AlertDialog open={resetLimitsDialogOpen} onOpenChange={setResetLimitsDialogOpen}>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/10"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      {t("editDialog.resetLimits.button")}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        {t("editDialog.resetLimits.confirmTitle")}
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t("editDialog.resetLimits.confirmDescription")}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel disabled={isResettingLimits}>
-                        {tCommon("cancel")}
-                      </AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleResetLimitsOnly();
-                        }}
-                        disabled={isResettingLimits}
-                        className="bg-amber-600 text-white hover:bg-amber-700"
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <AlertDialog open={reset5hDialogOpen} onOpenChange={setReset5hDialogOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!canReset5h}
+                        className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/10"
                       >
-                        {isResettingLimits ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            {t("editDialog.resetLimits.loading")}
-                          </>
-                        ) : (
-                          t("editDialog.resetLimits.confirm")
-                        )}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                        <RotateCcw className="h-4 w-4" />
+                        {t("editDialog.reset5h.button")}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{t("editDialog.reset5h.confirmTitle")}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t(
+                            reset5hMode === "fixed"
+                              ? "editDialog.reset5h.confirmDescriptionFixed"
+                              : "editDialog.reset5h.confirmDescriptionRolling"
+                          )}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isResetting5h}>
+                          {tCommon("cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleReset5hLimitOnly();
+                          }}
+                          disabled={isResetting5h}
+                          className="bg-amber-600 text-white hover:bg-amber-700"
+                        >
+                          {isResetting5h ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              {t("editDialog.reset5h.loading")}
+                            </>
+                          ) : (
+                            t("editDialog.reset5h.confirm")
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+
+                  <AlertDialog open={resetLimitsDialogOpen} onOpenChange={setResetLimitsDialogOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        {t("editDialog.resetLimits.button")}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {t("editDialog.resetLimits.confirmTitle")}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t("editDialog.resetLimits.confirmDescription")}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isResettingLimits}>
+                          {tCommon("cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleResetLimitsOnly();
+                          }}
+                          disabled={isResettingLimits}
+                          className="bg-amber-600 text-white hover:bg-amber-700"
+                        >
+                          {isResettingLimits ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              {t("editDialog.resetLimits.loading")}
+                            </>
+                          ) : (
+                            t("editDialog.resetLimits.confirm")
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
             </div>
 

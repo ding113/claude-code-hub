@@ -1,5 +1,5 @@
 {
-  "id": "1b93472d-5235-4096-89c7-931e9882a74c",
+  "id": "d3837826-d76b-474b-a0c2-0310369214bb",
   "prevId": "23c081ca-fa24-4130-92a3-49bdec22203e",
   "version": "7",
   "dialect": "postgresql",
@@ -2247,7 +2247,7 @@
         },
         "description": {
           "name": "description",
-          "type": "text",
+          "type": "varchar(500)",
           "primaryKey": false,
           "notNull": false
         },
@@ -4089,6 +4089,12 @@
         },
         "cost_reset_at": {
           "name": "cost_reset_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "limit_5h_cost_reset_at": {
+          "name": "limit_5h_cost_reset_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

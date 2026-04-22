@@ -83,6 +83,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitMonthlyUsd: users.limitMonthlyUsd,
     limitTotalUsd: users.limitTotalUsd,
     costResetAt: users.costResetAt,
+    limit5hCostResetAt: users.limit5hCostResetAt,
     limitConcurrentSessions: users.limitConcurrentSessions,
     dailyResetMode: users.dailyResetMode,
     dailyResetTime: users.dailyResetTime,
@@ -118,6 +119,7 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       costResetAt: users.costResetAt,
+      limit5hCostResetAt: users.limit5hCostResetAt,
       limitConcurrentSessions: users.limitConcurrentSessions,
       dailyResetMode: users.dailyResetMode,
       dailyResetTime: users.dailyResetTime,
@@ -367,6 +369,7 @@ export async function findUserListBatch(
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       costResetAt: users.costResetAt,
+      limit5hCostResetAt: users.limit5hCostResetAt,
       limitConcurrentSessions: users.limitConcurrentSessions,
       dailyResetMode: users.dailyResetMode,
       dailyResetTime: users.dailyResetTime,
@@ -427,6 +430,7 @@ export async function findUserById(id: number): Promise<User | null> {
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       costResetAt: users.costResetAt,
+      limit5hCostResetAt: users.limit5hCostResetAt,
       limitConcurrentSessions: users.limitConcurrentSessions,
       dailyResetMode: users.dailyResetMode,
       dailyResetTime: users.dailyResetTime,
@@ -526,6 +530,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       costResetAt: users.costResetAt,
+      limit5hCostResetAt: users.limit5hCostResetAt,
       limitConcurrentSessions: users.limitConcurrentSessions,
       dailyResetMode: users.dailyResetMode,
       dailyResetTime: users.dailyResetTime,
@@ -557,9 +562,35 @@ export async function deleteUser(id: number): Promise<boolean> {
 }
 
 export async function resetUserCostResetAt(userId: number, resetAt: Date | null): Promise<boolean> {
+  return updateUserCostResetMarkers(userId, { costResetAt: resetAt });
+}
+
+export async function updateUserCostResetMarkers(
+  userId: number,
+  updates: {
+    costResetAt?: Date | null;
+    limit5hCostResetAt?: Date | null;
+  }
+): Promise<boolean> {
+  const setClauses: {
+    updatedAt: Date;
+    costResetAt?: Date | null;
+    limit5hCostResetAt?: Date | null;
+  } = {
+    updatedAt: new Date(),
+  };
+
+  if ("costResetAt" in updates) {
+    setClauses.costResetAt = updates.costResetAt ?? null;
+  }
+
+  if ("limit5hCostResetAt" in updates) {
+    setClauses.limit5hCostResetAt = updates.limit5hCostResetAt ?? null;
+  }
+
   const result = await db
     .update(users)
-    .set({ costResetAt: resetAt, updatedAt: new Date() })
+    .set(setClauses)
     .where(and(eq(users.id, userId), isNull(users.deletedAt)))
     .returning({ id: users.id });
 

@@ -11,6 +11,8 @@ import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
+import { clipStartByResetAt, resolveUser5hCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
+import { getRedisClient } from "@/lib/redis";
 import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
@@ -33,9 +35,9 @@ import {
   findUserListBatch,
   getAllUserProviderGroups as getAllUserProviderGroupsRepository,
   getAllUserTags as getAllUserTagsRepository,
-  resetUserCostResetAt,
   searchUsersForFilter as searchUsersForFilterRepository,
   updateUser,
+  updateUserCostResetMarkers,
 } from "@/repository/user";
 import type { User, UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
@@ -2058,6 +2060,10 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const { RateLimitService } = await import("@/lib/rate-limit/service");
     const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
     const limit5hResetMode = user.limit5hResetMode ?? "rolling";
+    const user5hCostResetAt = resolveUser5hCostResetAt(
+      user.costResetAt ?? null,
+      user.limit5hCostResetAt ?? null
+    );
 
     // 获取各时间范围
     const range5h = await getTimeRangeForPeriod("5h");
@@ -2070,15 +2076,15 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     // Clip time range start by costResetAt (for limits-only reset)
-    const clipStart = (start: Date): Date =>
-      user.costResetAt instanceof Date && user.costResetAt > start ? user.costResetAt : start;
+    const clipStart = (start: Date): Date => clipStartByResetAt(start, user.costResetAt ?? null);
+    const clip5hStart = (start: Date): Date => clipStartByResetAt(start, user5hCostResetAt);
 
     // 并行查询各时间范围的消费
     // Note: sumUserTotalCost uses ALL_TIME_MAX_AGE_DAYS for all-time semantics
     const [usage5h, usageDaily, usageWeekly, usageMonthly, usageTotal] = await Promise.all([
       limit5hResetMode === "fixed"
         ? RateLimitService.getCurrentCost(userId, "user", "5h", "00:00", limit5hResetMode)
-        : sumUserCostInTimeRange(userId, clipStart(range5h.startTime), range5h.endTime),
+        : sumUserCostInTimeRange(userId, clip5hStart(range5h.startTime), range5h.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeDaily.startTime), rangeDaily.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
@@ -2132,10 +2138,29 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
     const keys = await findKeyList(userId);
     const keyIds = keys.map((k) => k.id);
     const keyHashes = keys.map((k) => k.key);
+    const requiresRedisForFixed5h =
+      ((user.limit5hUsd ?? 0) > 0 && (user.limit5hResetMode ?? "rolling") === "fixed") ||
+      keys.some(
+        (key) => (key.limit5hUsd ?? 0) > 0 && (key.limit5hResetMode ?? "rolling") === "fixed"
+      );
 
-    // Set costResetAt on user so all cost calculations start fresh
-    // Uses repo function which also sets updatedAt and invalidates auth cache
-    const updated = await resetUserCostResetAt(userId, new Date());
+    if (requiresRedisForFixed5h) {
+      const redis = getRedisClient();
+      if (!redis || redis.status !== "ready") {
+        return {
+          ok: false,
+          error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),
+          errorCode: ERROR_CODES.OPERATION_FAILED,
+        };
+      }
+    }
+
+    // 同时推进 full reset marker 和 5H-only marker，避免 later-of 仍读到旧边界。
+    const resetAt = new Date();
+    const updated = await updateUserCostResetMarkers(userId, {
+      costResetAt: resetAt,
+      limit5hCostResetAt: resetAt,
+    });
     if (!updated) {
       return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
@@ -2202,6 +2227,22 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     const keys = await findKeyList(userId);
     const keyIds = keys.map((k) => k.id);
     const keyHashes = keys.map((k) => k.key);
+    const requiresRedisForFixed5h =
+      ((user.limit5hUsd ?? 0) > 0 && (user.limit5hResetMode ?? "rolling") === "fixed") ||
+      keys.some(
+        (key) => (key.limit5hUsd ?? 0) > 0 && (key.limit5hResetMode ?? "rolling") === "fixed"
+      );
+
+    if (requiresRedisForFixed5h) {
+      const redis = getRedisClient();
+      if (!redis || redis.status !== "ready") {
+        return {
+          ok: false,
+          error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),
+          errorCode: ERROR_CODES.OPERATION_FAILED,
+        };
+      }
+    }
 
     // 1. Delete all messageRequest logs for this user
     // Atomic: delete logs + ledger + clear costResetAt in a single transaction
@@ -2210,7 +2251,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
       await tx.delete(usageLedger).where(eq(usageLedger.userId, userId));
       await tx
         .update(usersTable)
-        .set({ costResetAt: null, updatedAt: new Date() })
+        .set({ costResetAt: null, limit5hCostResetAt: null, updatedAt: new Date() })
         .where(and(eq(usersTable.id, userId), isNull(usersTable.deletedAt)));
     });
     // Invalidate auth cache outside transaction (Redis, not DB)

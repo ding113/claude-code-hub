@@ -20,6 +20,7 @@ export interface User {
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
   costResetAt?: Date | null; // Cost reset timestamp for limits-only reset
+  limit5hCostResetAt?: Date | null; // Rolling 5h reset boundary timestamp
   limitConcurrentSessions?: number; // 并发 Session 上限
   // Daily quota reset mode
   dailyResetMode: "fixed" | "rolling"; // 每日限额重置模式
