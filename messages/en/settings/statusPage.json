@@ -71,12 +71,12 @@
       "noData": "No data"
     },
     "tooltip": {
-      "timeRange": "Time",
       "availability": "Availability",
       "ttfb": "TTFB",
       "tps": "TPS",
       "samples": "Samples",
-      "inferredFromNeighbors": "No requests in this window — inferred from neighbors"
+      "inferredFromNeighbors": "No requests in this window — inferred from neighbors",
+      "historyAriaLabel": "Status history timeline"
     },
     "searchPlaceholder": "Search groups or models",
     "customSort": "Custom sort",
@@ -84,6 +84,7 @@
     "emptyByFilter": "No groups or models match your filter",
     "modelsLabel": "models",
     "issuesLabel": "issues",
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "dragHandle": "Drag to reorder"
   }
 }

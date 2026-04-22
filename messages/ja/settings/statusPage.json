@@ -71,12 +71,12 @@
       "noData": "データなし"
     },
     "tooltip": {
-      "timeRange": "期間",
       "availability": "可用率",
       "ttfb": "TTFB",
       "tps": "TPS",
       "samples": "サンプル数",
-      "inferredFromNeighbors": "この期間はリクエストがないため、隣接データから推定"
+      "inferredFromNeighbors": "この期間はリクエストがないため、隣接データから推定",
+      "historyAriaLabel": "状態履歴タイムライン"
     },
     "searchPlaceholder": "グループまたはモデルを検索",
     "customSort": "カスタム並び順",
@@ -84,6 +84,7 @@
     "emptyByFilter": "条件に一致するグループまたはモデルがありません",
     "modelsLabel": "モデル",
     "issuesLabel": "異常",
-    "clearSearch": "検索をクリア"
+    "clearSearch": "検索をクリア",
+    "dragHandle": "ドラッグして並べ替え"
   }
 }

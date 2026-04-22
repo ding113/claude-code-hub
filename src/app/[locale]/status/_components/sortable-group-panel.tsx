@@ -18,6 +18,7 @@ interface SortableGroupPanelProps {
   children: ReactNode;
   issueBadgeLabel?: string;
   modelBadgeLabel?: string;
+  dragHandleLabel?: string;
 }
 
 export function SortableGroupPanel({
@@ -31,6 +32,7 @@ export function SortableGroupPanel({
   children,
   issueBadgeLabel,
   modelBadgeLabel,
+  dragHandleLabel,
 }: SortableGroupPanelProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: slug,
@@ -58,7 +60,7 @@ export function SortableGroupPanel({
             <button
               type="button"
               className="cursor-grab rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
-              aria-label="drag"
+              aria-label={dragHandleLabel ?? displayName}
               {...attributes}
               {...listeners}
             >

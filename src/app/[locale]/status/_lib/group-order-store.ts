@@ -2,7 +2,12 @@ const ORDER_KEY = "cch-status-group-order";
 const COLLAPSED_KEY = "cch-status-collapsed-groups";
 
 function isBrowser(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  if (typeof window === "undefined") return false;
+  try {
+    return typeof window.localStorage !== "undefined";
+  } catch {
+    return false;
+  }
 }
 
 export function loadGroupOrder(): string[] {
@@ -37,9 +42,14 @@ export function clearGroupOrder(): void {
 
 export function reconcileOrder(stored: string[], current: string[]): string[] {
   const currentSet = new Set(current);
-  const kept = stored.filter((slug) => currentSet.has(slug));
-  const keptSet = new Set(kept);
-  const appended = current.filter((slug) => !keptSet.has(slug));
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const slug of stored) {
+    if (!currentSet.has(slug) || seen.has(slug)) continue;
+    seen.add(slug);
+    kept.push(slug);
+  }
+  const appended = current.filter((slug) => !seen.has(slug));
   return [...kept, ...appended];
 }
 

@@ -89,6 +89,14 @@ describe("deriveLatestModelState", () => {
     expect(result).toBe("no_data");
   });
 
+  it("returns degraded when last known bucket is degraded with null pct", () => {
+    const result = deriveLatestModelState({
+      latestState: "degraded",
+      timeline: [makeBucket({ state: "degraded", availabilityPct: null })],
+    });
+    expect(result).toBe("degraded");
+  });
+
   it("returns degraded when last known availability is partial", () => {
     const result = deriveLatestModelState({
       latestState: "operational",

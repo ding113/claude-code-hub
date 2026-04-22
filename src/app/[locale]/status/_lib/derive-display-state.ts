@@ -16,7 +16,10 @@ export function deriveDisplayState(bucket: PublicStatusTimelineBucket): DisplayS
     return "no_data";
   }
   const pct = bucket.availabilityPct;
-  if (pct === null || pct >= 100) {
+  if (pct === null) {
+    return bucket.state === "degraded" ? "degraded" : "operational";
+  }
+  if (pct >= 100) {
     return "operational";
   }
   if (pct < DEGRADED_THRESHOLD) {

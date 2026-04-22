@@ -1,5 +1,6 @@
 .cch-status-bg {
   position: relative;
+  isolation: isolate;
 }
 
 .cch-status-bg::before {

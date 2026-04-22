@@ -71,12 +71,12 @@
       "noData": "Нет данных"
     },
     "tooltip": {
-      "timeRange": "Период",
       "availability": "Доступность",
       "ttfb": "TTFB",
       "tps": "TPS",
       "samples": "Выборки",
-      "inferredFromNeighbors": "Запросов нет — состояние выведено из соседних интервалов"
+      "inferredFromNeighbors": "Запросов нет — состояние выведено из соседних интервалов",
+      "historyAriaLabel": "История статуса"
     },
     "searchPlaceholder": "Поиск групп или моделей",
     "customSort": "Произвольный порядок",
@@ -84,6 +84,7 @@
     "emptyByFilter": "Нет групп или моделей, соответствующих фильтру",
     "modelsLabel": "моделей",
     "issuesLabel": "проблем",
-    "clearSearch": "Очистить поиск"
+    "clearSearch": "Очистить поиск",
+    "dragHandle": "Перетащить"
   }
 }

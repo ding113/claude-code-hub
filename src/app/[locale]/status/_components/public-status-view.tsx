@@ -73,12 +73,12 @@ interface PublicStatusViewProps {
       noData: string;
     };
     tooltip: {
-      timeRange: string;
       availability: string;
       ttfb: string;
       tps: string;
       samples: string;
       inferredFromNeighbors: string;
+      historyAriaLabel: string;
     };
     searchPlaceholder: string;
     customSort: string;
@@ -87,6 +87,7 @@ interface PublicStatusViewProps {
     modelsLabel: string;
     issuesLabel: string;
     clearSearch: string;
+    dragHandle: string;
   };
 }
 
@@ -151,6 +152,7 @@ export function PublicStatusView({
             : `/api/public-status?interval=${intervalMinutes}&rangeHours=${rangeHours}`,
           { cache: "no-store" }
         );
+        if (!response.ok) return;
         const next = (await response.json()) as PublicStatusPayload;
         startTransition(() => setPayload(next));
       } catch {
@@ -209,7 +211,9 @@ export function PublicStatusView({
     }
     const ordered = reconcileOrder(groupOrder, slugs);
     const map = new Map(derivedGroups.map((g) => [g.group.publicGroupSlug, g]));
-    return ordered.map((slug) => map.get(slug)).filter((g) => g !== undefined);
+    return ordered
+      .map((slug) => map.get(slug))
+      .filter((g): g is (typeof derivedGroups)[number] => g !== undefined);
   }, [derivedGroups, groupOrder, orderHydrated]);
 
   const isFiltering = searchQuery.trim().length > 0;
@@ -286,6 +290,7 @@ export function PublicStatusView({
     samples: labels.tooltip.samples,
     inferredFromNeighbors: labels.tooltip.inferredFromNeighbors,
     noData: labels.noData,
+    historyAriaLabel: labels.tooltip.historyAriaLabel,
   };
 
   return (
@@ -344,6 +349,7 @@ export function PublicStatusView({
                       draggable={customSort && !isFiltering}
                       modelBadgeLabel={labels.modelsLabel}
                       issueBadgeLabel={labels.issuesLabel}
+                      dragHandleLabel={labels.dragHandle}
                     >
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {entry.derivedModels.map(

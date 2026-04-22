@@ -11,6 +11,7 @@ export interface PublicStatusTimelineLabels {
   samples: string;
   inferredFromNeighbors: string;
   noData: string;
+  historyAriaLabel: string;
 }
 
 interface PublicStatusTimelineProps {
@@ -35,6 +36,11 @@ function cellColor(state: FilledTimelineCell["displayState"], inferred: boolean)
 
 function formatRange(start: string, end: string, locale: string, timeZone: string): string {
   try {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return `${start} – ${end}`;
+    }
     const fmt = new Intl.DateTimeFormat(locale, {
       hour: "2-digit",
       minute: "2-digit",
@@ -46,9 +52,6 @@ function formatRange(start: string, end: string, locale: string, timeZone: strin
       day: "2-digit",
       timeZone,
     });
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    if (Number.isNaN(startDate.getTime())) return start;
     return `${dateFmt.format(startDate)} ${fmt.format(startDate)} – ${fmt.format(endDate)}`;
   } catch {
     return `${start} – ${end}`;
@@ -63,7 +66,11 @@ export function PublicStatusTimeline({
 }: PublicStatusTimelineProps) {
   return (
     <TooltipProvider delayDuration={80}>
-      <div className="flex w-full items-center gap-[2px]" role="list" aria-label="status history">
+      <div
+        className="flex w-full items-center gap-[2px]"
+        role="list"
+        aria-label={labels.historyAriaLabel}
+      >
         {cells.map((cell, index) => {
           const { bucket, displayState, inferred } = cell;
           const isPlaceholder = bucket.bucketStart.startsWith("empty-");

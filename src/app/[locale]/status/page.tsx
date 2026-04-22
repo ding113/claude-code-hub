@@ -74,12 +74,12 @@ export default async function PublicStatusPage({
           noData: t("statusPage.public.statusBadge.noData"),
         },
         tooltip: {
-          timeRange: t("statusPage.public.tooltip.timeRange"),
           availability: t("statusPage.public.tooltip.availability"),
           ttfb: t("statusPage.public.tooltip.ttfb"),
           tps: t("statusPage.public.tooltip.tps"),
           samples: t("statusPage.public.tooltip.samples"),
           inferredFromNeighbors: t("statusPage.public.tooltip.inferredFromNeighbors"),
+          historyAriaLabel: t("statusPage.public.tooltip.historyAriaLabel"),
         },
         searchPlaceholder: t("statusPage.public.searchPlaceholder"),
         customSort: t("statusPage.public.customSort"),
@@ -88,6 +88,7 @@ export default async function PublicStatusPage({
         modelsLabel: t("statusPage.public.modelsLabel"),
         issuesLabel: t("statusPage.public.issuesLabel"),
         clearSearch: t("statusPage.public.clearSearch"),
+        dragHandle: t("statusPage.public.dragHandle"),
       }}
     />
   );
