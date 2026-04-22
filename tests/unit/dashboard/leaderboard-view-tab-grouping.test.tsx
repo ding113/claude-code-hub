@@ -81,6 +81,13 @@ async function flushUi() {
   });
 }
 
+function getRequestedScopes() {
+  return fetchMock.mock.calls.map((call) => {
+    const url = new URL(String(call[0]), "http://localhost");
+    return url.searchParams.get("scope");
+  });
+}
+
 describe("LeaderboardView grouped tabs", () => {
   let container: HTMLDivElement | null = null;
   let root: ReturnType<typeof createRoot> | null = null;
@@ -133,7 +140,7 @@ describe("LeaderboardView grouped tabs", () => {
         "[data-testid='leaderboard-secondary-tab-cost'][data-state='active']"
       )
     ).not.toBeNull();
-    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("scope=user"))).toBe(true);
+    expect(getRequestedScopes()).toContain("user");
   });
 
   it("deep-links admin users to the cache-hit secondary tab", async () => {
@@ -202,7 +209,7 @@ describe("LeaderboardView grouped tabs", () => {
       container!.querySelector("[data-testid='leaderboard-primary-tab-model'][data-state='active']")
     ).not.toBeNull();
     expect(container!.querySelector("[data-testid='leaderboard-secondary-tabs']")).toBeNull();
-    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("scope=model"))).toBe(true);
+    expect(getRequestedScopes()).toContain("model");
   });
 
   it("falls back non-admin users to the user cost leaderboard", async () => {
@@ -220,9 +227,9 @@ describe("LeaderboardView grouped tabs", () => {
     expect(container!.querySelector("[data-testid='leaderboard-primary-tab-provider']")).toBeNull();
     expect(container!.querySelector("[data-testid='leaderboard-primary-tab-model']")).toBeNull();
     expect(container!.querySelector("[data-testid='leaderboard-secondary-tabs']")).toBeNull();
-    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("scope=user"))).toBe(true);
-    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("scope=provider"))).toBe(
-      false
-    );
+    expect(getRequestedScopes()).toContain("user");
+    expect(getRequestedScopes()).not.toContain("userCacheHitRate");
+    expect(getRequestedScopes()).not.toContain("provider");
+    expect(getRequestedScopes()).not.toContain("providerCacheHitRate");
   });
 });

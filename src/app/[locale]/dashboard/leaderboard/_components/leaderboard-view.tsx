@@ -4,6 +4,20 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { getAllUserKeyGroups, getAllUserTags } from "@/actions/users";
+import { LeaderboardPrimaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-primary-tabs";
+import { LeaderboardSecondaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-secondary-tabs";
+import {
+  getPrimaryTabFromScope,
+  getScopeForPrimaryTab,
+  getScopeForSecondaryTab,
+  getSecondaryTabFromScope,
+  isProviderFamilyScope,
+  isUserFamilyScope,
+  type LeaderboardPrimaryTab,
+  type LeaderboardLeafScope as LeaderboardScope,
+  type LeaderboardSecondaryTab,
+  normalizeScopeFromUrl,
+} from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-tab-groups";
 import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_components/provider-type-filter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,20 +39,6 @@ import type {
 } from "@/repository/leaderboard";
 import type { ProviderType } from "@/types/provider";
 import { DateRangePicker } from "./date-range-picker";
-import { LeaderboardPrimaryTabs } from "./leaderboard-primary-tabs";
-import { LeaderboardSecondaryTabs } from "./leaderboard-secondary-tabs";
-import {
-  getPrimaryTabFromScope,
-  getScopeForPrimaryTab,
-  getScopeForSecondaryTab,
-  getSecondaryTabFromScope,
-  isProviderFamilyScope,
-  isUserFamilyScope,
-  type LeaderboardPrimaryTab,
-  type LeaderboardLeafScope as LeaderboardScope,
-  type LeaderboardSecondaryTab,
-  normalizeScopeFromUrl,
-} from "./leaderboard-tab-groups";
 import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
 
 interface LeaderboardViewProps {

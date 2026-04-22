@@ -1,7 +1,10 @@
 "use client";
 
+import type {
+  LeaderboardPrimaryTab,
+  LeaderboardSecondaryTab,
+} from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-tab-groups";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { LeaderboardPrimaryTab, LeaderboardSecondaryTab } from "./leaderboard-tab-groups";
 
 interface LeaderboardSecondaryTabLabels {
   cost: string;
