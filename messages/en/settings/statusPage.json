@@ -83,6 +83,7 @@
     "resetSort": "Reset order",
     "emptyByFilter": "No groups or models match your filter",
     "modelsLabel": "models",
-    "issuesLabel": "issues"
+    "issuesLabel": "issues",
+    "clearSearch": "Clear search"
   }
 }

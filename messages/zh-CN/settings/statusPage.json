@@ -83,6 +83,7 @@
     "resetSort": "恢复默认顺序",
     "emptyByFilter": "未匹配到任何分组或模型",
     "modelsLabel": "模型",
-    "issuesLabel": "异常"
+    "issuesLabel": "异常",
+    "clearSearch": "清除搜索"
   }
 }

@@ -76,13 +76,14 @@
       "ttfb": "TTFB",
       "tps": "TPS",
       "samples": "樣本數",
-      "inferredFromNeighbors": "該時段無請求，依相鄰時��狀態推斷"
+      "inferredFromNeighbors": "該時段無請求，依相鄰時段狀態推斷"
     },
     "searchPlaceholder": "搜尋分組或模型",
     "customSort": "自訂排序",
     "resetSort": "恢復預設順序",
     "emptyByFilter": "未匹配到任何分組或模型",
     "modelsLabel": "模型",
-    "issuesLabel": "異常"
+    "issuesLabel": "異常",
+    "clearSearch": "清除搜尋"
   }
 }

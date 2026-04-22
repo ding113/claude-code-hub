@@ -83,6 +83,7 @@
     "resetSort": "Сбросить порядок",
     "emptyByFilter": "Нет групп или моделей, соответствующих фильтру",
     "modelsLabel": "моделей",
-    "issuesLabel": "проблем"
+    "issuesLabel": "проблем",
+    "clearSearch": "Очистить поиск"
   }
 }

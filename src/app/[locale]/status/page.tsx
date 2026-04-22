@@ -87,6 +87,7 @@ export default async function PublicStatusPage({
         emptyByFilter: t("statusPage.public.emptyByFilter"),
         modelsLabel: t("statusPage.public.modelsLabel"),
         issuesLabel: t("statusPage.public.issuesLabel"),
+        clearSearch: t("statusPage.public.clearSearch"),
       }}
     />
   );

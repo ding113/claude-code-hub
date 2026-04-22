@@ -83,6 +83,7 @@
     "resetSort": "既定の順序に戻す",
     "emptyByFilter": "条件に一致するグループまたはモデルがありません",
     "modelsLabel": "モデル",
-    "issuesLabel": "異常"
+    "issuesLabel": "異常",
+    "clearSearch": "検索をクリア"
   }
 }

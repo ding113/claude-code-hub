@@ -13,6 +13,7 @@ interface StatusToolbarProps {
   searchPlaceholder: string;
   customSortLabel: string;
   resetSortLabel: string;
+  clearSearchLabel: string;
 }
 
 export function StatusToolbar({
@@ -23,6 +24,7 @@ export function StatusToolbar({
   searchPlaceholder,
   customSortLabel,
   resetSortLabel,
+  clearSearchLabel,
 }: StatusToolbarProps) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -41,7 +43,7 @@ export function StatusToolbar({
             type="button"
             onClick={() => onSearchChange("")}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="clear"
+            aria-label={clearSearchLabel}
           >
             <X className="size-3.5" />
           </button>

@@ -107,7 +107,7 @@ export function PublicStatusTimeline({
                   <span className="text-muted-foreground">{labels.samples}</span>
                   <span className="text-right">{bucket.sampleCount}</span>
                 </div>
-                {bucket.sampleCount === 0 && !isPlaceholder ? (
+                {inferred && !isPlaceholder ? (
                   <p className="text-[10px] text-muted-foreground">
                     {labels.inferredFromNeighbors}
                   </p>
