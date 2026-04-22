@@ -97,7 +97,7 @@ describe("ResponseFixer", () => {
 
     const fixed = await ResponseFixer.process(session, response);
     expect(await fixed.text()).toBe('{"a":1}');
-    expect(fixed.headers.get("x-cch-response-fixer")).toBe("applied");
+    expect(fixed.headers.get("x-cch-response-fixer")).toBeNull();
     expect(session.getSpecialSettings()).not.toBeNull();
     expect(mocks.storeSessionSpecialSettings).toHaveBeenCalledTimes(1);
     expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
@@ -127,7 +127,7 @@ describe("ResponseFixer", () => {
 
     const fixed = await ResponseFixer.process(session, response);
     expect(await fixed.text()).toBe('{"a":1}');
-    expect(fixed.headers.get("x-cch-response-fixer")).toBe("applied");
+    expect(fixed.headers.get("x-cch-response-fixer")).toBeNull();
     expect(session.getSpecialSettings()).not.toBeNull();
     expect(mocks.storeSessionSpecialSettings).not.toHaveBeenCalled();
     expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
@@ -154,7 +154,7 @@ describe("ResponseFixer", () => {
     const fixed = await ResponseFixer.process(session, response);
     const text = await fixed.text();
 
-    expect(fixed.headers.get("x-cch-response-fixer")).toBe("processed");
+    expect(fixed.headers.get("x-cch-response-fixer")).toBeNull();
     expect(text).toBe('data: {"key":null}\n\n');
     expect(session.getSpecialSettings()).not.toBeNull();
   });

@@ -14,23 +14,16 @@ export async function attachSessionIdToErrorResponse(
   if (!sessionId) return response;
   if (response.status < 400) return response;
 
-  const headers = new Headers(response.headers);
-  headers.set("x-cch-session-id", sessionId);
-
-  const contentType = headers.get("content-type") || "";
-  if (contentType.includes("text/event-stream")) {
-    return new Response(response.body, { status: response.status, headers });
-  }
-
+  const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
-    return new Response(response.body, { status: response.status, headers });
+    return response;
   }
 
   let text: string;
   try {
     text = await response.clone().text();
   } catch {
-    return new Response(response.body, { status: response.status, headers });
+    return response;
   }
 
   try {
@@ -46,11 +39,15 @@ export async function attachSessionIdToErrorResponse(
     ) {
       const p = parsed as { error: { message: string } } & Record<string, unknown>;
       p.error.message = attachSessionIdToErrorMessage(sessionId, p.error.message);
-      return new Response(JSON.stringify(p), { status: response.status, headers });
+      return new Response(JSON.stringify(p), {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
     }
   } catch {
     // best-effort: keep original response body
   }
 
-  return new Response(text, { status: response.status, headers });
+  return response;
 }

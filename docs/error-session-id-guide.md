@@ -4,10 +4,11 @@ When reporting an API error, include the CCH session id so maintainers can locat
 
 ## Where to find it
 
-1. **Preferred**: response header `x-cch-session-id`
-2. **Fallback**: `error.message` suffix `cch_session_id: <id>`
+1. **Primary**: JSON `error.message` suffix `cch_session_id: <id>`
+2. **Note**: proxy 不再返回 `x-cch-session-id` response header
 
-If the response does not include a session id, the server could not determine it for that request.
+If the response does not include a session id suffix, the server either could not determine it for that
+request, or the error response did not normalize into a JSON `error.message` envelope.
 
 ## Example (curl)
 
@@ -21,6 +22,5 @@ curl -i -sS \\
 
 In the response:
 
-- Check header: `x-cch-session-id: ...`
-- If missing, check JSON: `{"error":{"message":"... (cch_session_id: ...)"} }`
-
+- Check JSON: `{"error":{"message":"... (cch_session_id: ...)"} }`
+- Do not expect `x-cch-session-id` header from the proxy anymore

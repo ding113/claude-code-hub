@@ -46,7 +46,7 @@ import type {
 
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
-import { HeaderProcessor } from "../headers";
+import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
@@ -4173,15 +4173,21 @@ export class ProxyForwarder {
     // 构建请求头覆盖规则
     const overrides: Record<string, string> = {
       host: HeaderProcessor.extractHost(provider.url),
-      authorization: `Bearer ${outboundKey}`,
-      "x-api-key": outboundKey,
       "content-type": "application/json", // 确保 Content-Type
       "accept-encoding": "identity", // 禁用压缩：避免 undici ZlibError（代理应透传原始数据）
     };
 
-    // claude-auth: 移除 x-api-key（避免中转服务冲突）
-    if (provider.providerType === "claude-auth") {
-      delete overrides["x-api-key"];
+    if (provider.providerType === "claude-auth" || provider.providerType === "claude") {
+      Object.assign(
+        overrides,
+        resolveAnthropicAuthHeaders(outboundKey, provider.url, {
+          forceBearerOnly: provider.providerType === "claude-auth",
+        })
+      );
+    }
+
+    if (provider.providerType === "codex" || provider.providerType === "openai-compatible") {
+      overrides.authorization = `Bearer ${outboundKey}`;
     }
 
     // Codex 特殊处理：优先使用过滤器修改的 User-Agent
@@ -4238,14 +4244,13 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
+      blacklist: [...OUTBOUND_TRANSPORT_HEADER_BLACKLIST, "x-api-key"],
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
 
     return headerProcessor.process(session.headers);
   }
-
   private static buildGeminiHeaders(
     session: ProxySession,
     provider: NonNullable<typeof session.provider>,
