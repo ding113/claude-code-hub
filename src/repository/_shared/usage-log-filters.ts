@@ -153,10 +153,16 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
     conditions.push(hiddenEndpointCondition);
   }
 
-  if (filters.endpoint) {
-    conditions.push(
-      buildUsageLogEndpointMatchCondition(messageRequest.endpoint, filters.endpoint)!
+  if (filters.endpoint?.trim()) {
+    // 与 buildUsageLogEndpointMatchCondition 的 trim 语义保持一致，
+    // 避免纯空白输入把 null 推入 conditions，污染 and(...) 生成的 SQL。
+    const matchCondition = buildUsageLogEndpointMatchCondition(
+      messageRequest.endpoint,
+      filters.endpoint
     );
+    if (matchCondition) {
+      conditions.push(matchCondition);
+    }
   }
 
   const minRetryCount = filters.minRetryCount ?? 0;

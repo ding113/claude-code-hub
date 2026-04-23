@@ -645,11 +645,13 @@ export class SessionManager {
     try {
       if (keyId != null) {
         const boundKeyId = await redis.get(`session:${sessionId}:key`);
-        if (boundKeyId && boundKeyId !== keyId.toString()) {
+        // Fail-closed：boundKeyId 缺失（TTL 漂移、旧绑定或写入路径未原子写 key）也视为校验失败，
+        // 避免无法证明归属当前 key 的旧 provider binding 继续被复用。
+        if (boundKeyId !== keyId.toString()) {
           logger.warn("SessionManager: Session provider binding key mismatch", {
             sessionId,
             expectedKeyId: keyId,
-            boundKeyId,
+            boundKeyId: boundKeyId ?? null,
           });
           return null;
         }

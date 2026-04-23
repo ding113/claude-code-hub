@@ -1154,8 +1154,6 @@ export class ProxyResponseHandler {
           ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
         }
         const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
-        const billableUsageMetrics =
-          usageMetrics && !isNonBillingUsageEndpoint(session) ? usageMetrics : null;
 
         if (usageMetrics) {
           usageMetrics = normalizeUsageWithSwap(
@@ -1165,7 +1163,15 @@ export class ProxyResponseHandler {
           );
         }
 
-        maybeSetCodexContext1m(session, provider, usageMetrics?.input_tokens);
+        // 关键：必须在 normalizeUsageWithSwap 之后再快照 billable 视图，
+        // 否则 updateRequestCostFromUsage / trackCostToRedis 会用未归一化的旧值，
+        // 导致缓存 TTL swap、bucket 归一化等场景下的账单与限流统计错位。
+        const billableUsageMetrics =
+          usageMetrics && !isNonBillingUsageEndpoint(session) ? usageMetrics : null;
+
+        if (billableUsageMetrics) {
+          maybeSetCodexContext1m(session, provider, billableUsageMetrics.input_tokens);
+        }
 
         // Codex: Extract prompt_cache_key and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
@@ -3631,7 +3637,11 @@ export async function finalizeRequestStats(
   );
   const billableNormalizedUsage = !isNonBillingUsageEndpoint(session) ? normalizedUsage : null;
 
-  maybeSetCodexContext1m(session, provider, normalizedUsage.input_tokens);
+  // 非计费端点（count_tokens / compact）不得触发 Codex 1M 上下文开关，
+  // 否则会影响同 session 后续真实请求的账单口径。
+  if (billableNormalizedUsage) {
+    maybeSetCodexContext1m(session, provider, billableNormalizedUsage.input_tokens);
+  }
 
   const costUpdateResult = await updateRequestCostFromUsage(
     messageContext.id,

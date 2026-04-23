@@ -41,7 +41,7 @@ describe("getMyUsageLogsBatchFull", () => {
     vi.clearAllMocks();
   });
 
-  it("scrubs request details from providerChain for readonly my-usage responses", async () => {
+  it("readonly my-usage 仅对 raw fallback 链路做强脱敏，其它链路保留原有 clientError 可见性", async () => {
     vi.resetModules();
     mocks.getSession.mockResolvedValueOnce({
       user: { id: 1 },
@@ -78,11 +78,40 @@ describe("getMyUsageLogsBatchFull", () => {
                 response: {
                   statusCode: 500,
                 },
+                clientError: "401 Unauthorized",
+                provider: {
+                  id: 1,
+                  name: "provider-a",
+                  statusCode: 401,
+                  statusText: "Unauthorized",
+                  upstreamBody: "{\"error\":\"unauthorized\"}",
+                  upstreamParsed: { error: "unauthorized" },
+                },
               },
             },
             {
               id: 2,
               name: "provider-b",
+              rawCrossProviderFallbackEnabled: true,
+              errorDetails: {
+                request: {
+                  headers: "authorization: Bearer raw-secret-token",
+                  body: "{\"model\":\"gpt-4.1\"}",
+                },
+                clientError: "raw fallback leaked error",
+                provider: {
+                  id: 2,
+                  name: "provider-b",
+                  statusCode: 404,
+                  statusText: "Not Found",
+                  upstreamBody: "{\"error\":\"missing\"}",
+                  upstreamParsed: { error: "missing" },
+                },
+              },
+            },
+            {
+              id: 3,
+              name: "provider-c",
               errorDetails: null,
             },
           ],
@@ -129,9 +158,21 @@ describe("getMyUsageLogsBatchFull", () => {
     expect(result.ok && result.data.logs[0]?.providerChain?.[0]?.errorDetails?.response).toEqual({
       statusCode: 500,
     });
-    expect(result.ok && result.data.logs[0]?.providerChain?.[1]).toEqual({
-      id: 2,
-      name: "provider-b",
+    expect(result.ok && result.data.logs[0]?.providerChain?.[0]?.errorDetails?.clientError).toBe(
+      "401 Unauthorized"
+    );
+    expect(
+      result.ok && result.data.logs[0]?.providerChain?.[0]?.errorDetails?.provider?.upstreamBody
+    ).toBe("{\"error\":\"unauthorized\"}");
+    expect(
+      result.ok && result.data.logs[0]?.providerChain?.[1]?.errorDetails?.clientError
+    ).toBeUndefined();
+    expect(
+      result.ok && result.data.logs[0]?.providerChain?.[1]?.errorDetails?.provider?.upstreamBody
+    ).toBeUndefined();
+    expect(result.ok && result.data.logs[0]?.providerChain?.[2]).toEqual({
+      id: 3,
+      name: "provider-c",
       errorDetails: null,
     });
     expect(result.ok && result.data.logs[0]?._liveChain).toBeNull();

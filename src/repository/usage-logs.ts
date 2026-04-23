@@ -1595,13 +1595,14 @@ export async function findUsageLogsStats(
 
     const totalRequests = summaryResult?.totalRequests ?? 0;
     const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
+    // totalCacheCreation5m/1hTokens 是 totalCacheCreationTokens 的细分项，
+    // 不得重复累加，否则 count_tokens / compact 端点的 totalTokens
+    // 会比其他端点多出一份缓存创建 token，造成前端口径错位。
     const totalTokens =
       (summaryResult?.totalInputTokens ?? 0) +
       (summaryResult?.totalOutputTokens ?? 0) +
       (summaryResult?.totalCacheCreationTokens ?? 0) +
-      (summaryResult?.totalCacheReadTokens ?? 0) +
-      (summaryResult?.totalCacheCreation5mTokens ?? 0) +
-      (summaryResult?.totalCacheCreation1hTokens ?? 0);
+      (summaryResult?.totalCacheReadTokens ?? 0);
 
     return {
       totalRequests,

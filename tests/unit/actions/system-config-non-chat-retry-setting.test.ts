@@ -131,7 +131,7 @@ describe("non-chat fallback system setting", () => {
     vi.useRealTimers();
   });
 
-  test("defaults to enabled across transformer, repository fallback, and cache fallback layers", async () => {
+  test("transformer/repository 保持启用默认值，但缓存层异常回退必须 fail-closed", async () => {
     const { toSystemSettings } = await import("@/repository/_shared/transformers");
     expect(toSystemSettings(undefined).allowNonConversationEndpointProviderFallback).toBe(true);
     expect(
@@ -169,7 +169,7 @@ describe("non-chat fallback system setting", () => {
     getSystemSettingsMock.mockRejectedValueOnce(new Error("db down"));
     const { getCachedSystemSettings } = await loadCacheModule();
     const cachedFallback = await getCachedSystemSettings();
-    expect(cachedFallback.allowNonConversationEndpointProviderFallback).toBe(true);
+    expect(cachedFallback.allowNonConversationEndpointProviderFallback).toBe(false);
   });
 
   test("persists update and invalidates cache", async () => {

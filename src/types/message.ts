@@ -11,6 +11,9 @@ export interface ProviderChainItem {
   id: number;
   name: string;
 
+  // 仅用于只读日志脱敏：标记该链路是否走了 raw 跨供应商 fallback。
+  rawCrossProviderFallbackEnabled?: boolean;
+
   // 供应商维度（便于日志审计，无需额外 join）
   vendorId?: number;
   providerType?: ProviderType;

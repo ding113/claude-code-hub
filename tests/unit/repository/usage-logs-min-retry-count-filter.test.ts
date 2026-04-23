@@ -46,6 +46,7 @@ describe("Usage logs minRetryCount filter", () => {
       sqlToString(item).toLowerCase().includes("jsonb_array_elements")
     );
     expect(condition).toBeDefined();
+    if (!condition) throw new Error("Expected minRetryCount SQL condition to be present");
     const whereSql = sqlToString(condition).toLowerCase();
     expect(whereSql).toContain("jsonb_array_elements");
     expect(whereSql).toContain("bool_or");

@@ -78,19 +78,8 @@ export class ProxySessionGuard {
       const rawFallbackEnabled =
         (systemSettings.allowNonConversationEndpointProviderFallback ?? true) &&
         session.getEndpointPolicy().allowRawCrossProviderFallback;
-      (
-        session as ProxySession & {
-          setRawCrossProviderFallbackEnabled?: ((enabled: boolean) => void) | undefined;
-        }
-      ).setRawCrossProviderFallbackEnabled?.(rawFallbackEnabled);
-      const allowRawSessionContext =
-        typeof (
-          session as ProxySession & {
-            isRawCrossProviderFallbackEnabled?: (() => boolean) | undefined;
-          }
-        ).isRawCrossProviderFallbackEnabled === "function"
-          ? session.isRawCrossProviderFallbackEnabled()
-          : rawFallbackEnabled;
+      session.setRawCrossProviderFallbackEnabled(rawFallbackEnabled);
+      const allowRawSessionContext = session.isRawCrossProviderFallbackEnabled();
       session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
       let requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
       if (session.request.message && typeof session.request.message === "object") {

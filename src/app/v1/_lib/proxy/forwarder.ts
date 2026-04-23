@@ -470,27 +470,6 @@ type MatchedRuleDetails = NonNullable<
   NonNullable<ProviderChainItem["errorDetails"]>["matchedRule"]
 >;
 
-function isSessionRawCrossProviderFallbackEnabled(session: ProxySession): boolean {
-  const rawSession = session as unknown as {
-    requestUrl?: URL;
-    isRawCrossProviderFallbackEnabled?: (() => boolean) | undefined;
-    getEndpointPolicy?: (() => ReturnType<typeof resolveEndpointPolicy>) | undefined;
-    endpointPolicy?: ReturnType<typeof resolveEndpointPolicy>;
-  };
-
-  if (typeof rawSession.isRawCrossProviderFallbackEnabled === "function") {
-    return rawSession.isRawCrossProviderFallbackEnabled();
-  }
-
-  const endpointPolicy =
-    typeof rawSession.getEndpointPolicy === "function"
-      ? rawSession.getEndpointPolicy()
-      : rawSession.endpointPolicy;
-
-  return (endpointPolicy ?? resolveEndpointPolicy(rawSession.requestUrl?.pathname ?? "/"))
-    .allowRawCrossProviderFallback;
-}
-
 function buildMatchedRuleDetails(
   detectionResult: Awaited<ReturnType<typeof getErrorDetectionResultAsync>>
 ): MatchedRuleDetails | undefined {
@@ -534,17 +513,17 @@ function buildMatchedRuleLogContext(
 }
 
 function buildClientErrorChainEntry(
-  session: ProxySession,
   provider: Provider,
   endpointAudit: { endpointId: number | null; endpointUrl: string },
   attemptNumber: number,
   error: Error,
   errorMessage: string,
   requestDetails: ReturnType<typeof buildRequestDetails>,
-  matchedRule: MatchedRuleDetails | undefined
+  matchedRule: MatchedRuleDetails | undefined,
+  rawCrossProviderFallbackEnabled: boolean
 ): NonNullable<Parameters<ProxySession["addProviderToChain"]>[1]> {
   if (error instanceof ProxyError) {
-    const providerDetails = isSessionRawCrossProviderFallbackEnabled(session)
+    const providerDetails = rawCrossProviderFallbackEnabled
       ? {
           id: provider.id,
           name: provider.name,
@@ -565,6 +544,7 @@ function buildClientErrorChainEntry(
       reason: "client_error_non_retryable",
       circuitState: getCircuitState(provider.id),
       attemptNumber,
+      rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
       errorMessage,
       statusCode: error.statusCode,
       statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
@@ -592,16 +572,16 @@ function buildClientErrorChainEntry(
 }
 
 function buildRetryFailedChainEntry(
-  session: ProxySession,
   provider: Provider,
   endpointAudit: { endpointId: number | null; endpointUrl: string },
   attemptNumber: number,
   error: Error,
   errorMessage: string,
-  requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>
+  requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>,
+  rawCrossProviderFallbackEnabled: boolean
 ): NonNullable<Parameters<ProxySession["addProviderToChain"]>[1]> {
   if (error instanceof ProxyError) {
-    const providerDetails = isSessionRawCrossProviderFallbackEnabled(session)
+    const providerDetails = rawCrossProviderFallbackEnabled
       ? {
           id: provider.id,
           name: provider.name,
@@ -622,6 +602,7 @@ function buildRetryFailedChainEntry(
       reason: "retry_failed",
       circuitState: getCircuitState(provider.id),
       attemptNumber,
+      rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
       errorMessage,
       statusCode: error.statusCode,
       statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
@@ -957,8 +938,7 @@ export class ProxyForwarder {
 
     const env = getEnvConfig();
     const envDefaultMaxAttempts = clampRetryAttempts(env.MAX_RETRY_ATTEMPTS_DEFAULT);
-    const rawCrossProviderFallbackEnabled =
-      await ProxyForwarder.isRawCrossProviderFallbackEnabled(session);
+    const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
     const shouldSkipRawRetryAndProviderSwitch =
       !endpointPolicy.allowRetry && !rawCrossProviderFallbackEnabled;
@@ -1558,13 +1538,13 @@ export class ProxyForwarder {
               session.addProviderToChain(
                 currentProvider,
                 buildRetryFailedChainEntry(
-                  session,
                   currentProvider,
                   endpointAudit,
                   attemptCount,
                   lastError,
                   errorMessage,
-                  reactiveRectifierResult.requestDetailsBeforeRectify
+                  reactiveRectifierResult.requestDetailsBeforeRectify,
+                  rawCrossProviderFallbackEnabled
                 )
               );
 
@@ -1580,14 +1560,14 @@ export class ProxyForwarder {
             const matchedRule = buildMatchedRuleDetails(detectionResult);
             const matchedRuleLogContext = buildMatchedRuleLogContext(matchedRule);
             const clientErrorChainEntry = buildClientErrorChainEntry(
-              session,
               currentProvider,
               endpointAudit,
               attemptCount,
               lastError,
               errorMessage,
               buildRequestDetails(session),
-              matchedRule
+              matchedRule,
+              rawCrossProviderFallbackEnabled
             );
 
             if (lastError instanceof ProxyError) {
@@ -1759,11 +1739,12 @@ export class ProxyForwarder {
               reason: "resource_not_found",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
+              rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
               errorMessage: errorMessage,
               statusCode: 404,
               statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
-                provider: isSessionRawCrossProviderFallbackEnabled(session)
+                provider: rawCrossProviderFallbackEnabled
                   ? {
                       id: currentProvider.id,
                       name: currentProvider.name,
@@ -1834,6 +1815,7 @@ export class ProxyForwarder {
                 reason: "retry_failed",
                 circuitState: getCircuitState(currentProvider.id),
                 attemptNumber: attemptCount,
+                rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
                 errorMessage: emptyError.message,
                 circuitFailureCount: health.failureCount + 1,
                 circuitFailureThreshold: config.failureThreshold,
@@ -1897,10 +1879,11 @@ export class ProxyForwarder {
                 ...endpointAudit,
                 reason: "vendor_type_all_timeout",
                 attemptNumber: attemptCount,
+                rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
                 statusCode: 524,
                 errorMessage: errorMessage,
                 errorDetails: {
-                  provider: isSessionRawCrossProviderFallbackEnabled(session)
+                  provider: rawCrossProviderFallbackEnabled
                     ? {
                         id: currentProvider.id,
                         name: currentProvider.name,
@@ -1963,13 +1946,14 @@ export class ProxyForwarder {
               reason: "retry_failed",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
+              rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
               errorMessage: errorMessage,
               circuitFailureCount: health.failureCount + 1, // 包含本次失败
               circuitFailureThreshold: config.failureThreshold,
               statusCode: statusCode,
               statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
-                provider: isSessionRawCrossProviderFallbackEnabled(session)
+                provider: rawCrossProviderFallbackEnabled
                   ? {
                       id: currentProvider.id,
                       name: currentProvider.name,
@@ -3376,20 +3360,13 @@ export class ProxyForwarder {
     return resolveEndpointPolicy(policySession.requestUrl?.pathname ?? "/");
   }
 
-  private static async isRawCrossProviderFallbackEnabled(session: ProxySession): Promise<boolean> {
-    if (!isSessionRawCrossProviderFallbackEnabled(session)) {
-      return false;
-    }
-
-    return true;
-  }
-
   private static async sendStreamingWithHedge(session: ProxySession): Promise<Response> {
     const initialProvider = session.provider;
     if (!initialProvider) {
       throw new Error("代理上下文缺少供应商");
     }
 
+    const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     const launchedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
     let settled = false;
@@ -3726,13 +3703,13 @@ export class ProxyForwarder {
 
           session.addProviderToChain(attempt.provider, {
             ...buildRetryFailedChainEntry(
-              session,
               attempt.provider,
               attempt.endpointAudit,
               attempt.requestAttemptCount,
               error,
               errorMessage,
-              reactiveRectifierResult.requestDetailsBeforeRectify
+              reactiveRectifierResult.requestDetailsBeforeRectify,
+              rawCrossProviderFallbackEnabled
             ),
             modelRedirect: getAttemptModelRedirect(attempt),
           });
@@ -3779,14 +3756,14 @@ export class ProxyForwarder {
         errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
           ? {
               ...buildClientErrorChainEntry(
-                session,
                 attempt.provider,
                 attempt.endpointAudit,
                 attempt.sequence,
                 error,
                 errorMessage,
                 buildRequestDetails(session),
-                matchedRule
+                matchedRule,
+                rawCrossProviderFallbackEnabled
               ),
               modelRedirect: getAttemptModelRedirect(attempt),
             }

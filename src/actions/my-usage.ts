@@ -52,17 +52,24 @@ function scrubProviderChainRequestForReadonly(
       }
 
       const { request: _request, provider, ...restErrorDetails } = item.errorDetails;
+      const shouldStronglyScrubProviderError = item.rawCrossProviderFallbackEnabled === true;
 
       return {
         ...item,
         errorDetails: {
           ...restErrorDetails,
-          clientError: undefined,
+          clientError: shouldStronglyScrubProviderError
+            ? undefined
+            : restErrorDetails.clientError,
           provider: provider
-            ? {
+            ? shouldStronglyScrubProviderError
+              ? {
+                  ...provider,
+                  upstreamBody: undefined,
+                  upstreamParsed: undefined,
+                }
+              : {
                 ...provider,
-                upstreamBody: undefined,
-                upstreamParsed: undefined,
               }
             : undefined,
         },

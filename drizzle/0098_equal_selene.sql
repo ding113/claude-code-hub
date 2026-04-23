@@ -44,7 +44,8 @@ BEGIN
     v_final_provider_id := NEW.provider_id;
   END IF;
 
-  v_is_success := (NEW.error_message IS NULL OR NEW.error_message = '');
+  v_is_success := (NEW.error_message IS NULL OR NEW.error_message = '')
+                  AND (NEW.status_code IS NULL OR NEW.status_code < 400);
 
   INSERT INTO usage_ledger (
     request_id, user_id, key, provider_id, final_provider_id,
