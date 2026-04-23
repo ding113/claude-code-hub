@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const mockReadCurrentPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
@@ -11,6 +11,7 @@ vi.mock("next-intl/server", () => ({
 
 vi.mock("@/lib/public-status/config-snapshot", () => ({
   readCurrentPublicStatusConfigSnapshot: mockReadCurrentPublicStatusConfigSnapshot,
+  readPublicStatusSiteMetadata: mockReadPublicSiteMeta,
 }));
 
 vi.mock("@/lib/public-status/read-store", () => ({
@@ -21,15 +22,16 @@ vi.mock("@/lib/public-status/rebuild-hints", () => ({
   schedulePublicStatusRebuild: vi.fn(),
 }));
 
-vi.mock("@/lib/public-site-meta", () => ({
-  readPublicSiteMeta: mockReadPublicSiteMeta,
-}));
-
 vi.mock("@/app/[locale]/status/_components/public-status-view", () => ({
   PublicStatusView: mockPublicStatusView,
 }));
 
 describe("public status page title", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
   it("falls back to public site meta when the snapshot siteTitle is blank", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-1",
@@ -65,7 +67,7 @@ describe("public status page title", () => {
     );
   });
 
-  it("prefers a non-blank snapshot siteTitle over public site meta", async () => {
+  it("falls back to a non-blank snapshot siteTitle when public site meta is blank", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-1",
       siteTitle: "Snapshot Title",
@@ -75,7 +77,7 @@ describe("public status page title", () => {
       groups: [],
     });
     mockReadPublicSiteMeta.mockResolvedValue({
-      siteTitle: "Claude Code Hub",
+      siteTitle: "   ",
       siteDescription: "Claude Code Hub public status",
     });
     mockReadPublicStatusPayload.mockResolvedValue({
