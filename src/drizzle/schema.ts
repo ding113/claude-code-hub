@@ -955,6 +955,7 @@ export const usageLedger = pgTable('usage_ledger', {
   sessionId: varchar('session_id', { length: 64 }),
   statusCode: integer('status_code'),
   isSuccess: boolean('is_success').notNull().default(false),
+  successRateOutcome: varchar('success_rate_outcome', { length: 16 }),
   blockedBy: varchar('blocked_by', { length: 50 }),
   costUsd: numeric('cost_usd', { precision: 21, scale: 15 }).default('0'),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }),

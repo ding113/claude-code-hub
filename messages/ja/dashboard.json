@@ -492,7 +492,9 @@
       "avgTokensPerSecond": "平均トークン/秒",
       "avgCostPerRequest": "平均リクエスト単価",
       "avgCostPerMillionTokens": "100万トークンあたりコスト",
-      "unknownModel": "不明"
+      "unknownModel": "不明",
+      "successRateUnavailable": "利用不可",
+      "successRateBasisDisclosure": "redirected 課金モデルでは 1 行に複数の元モデルが混在しうるため、誤解を避けるためここでは成功率を表示しません。"
     },
     "expandModelStats": "モデル詳細を展開",
     "collapseModelStats": "モデル詳細を折りたたむ",

@@ -309,10 +309,12 @@ describe("availability-service", () => {
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
-    expect(finalizedRequestsSql).toMatch(/where .*status_?code.*is not null/);
+    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
     expect(queryText).toContain("group by");
     expect(queryText).toContain("percentile_cont(0.95)");
     expect(queryText).toContain("row_number() over");
+    expect(queryText).toContain(`"successrateoutcome" in ('success', 'failure')`);
+    expect(queryText).toContain('avg("durationms") filter');
   });
 
   it("queryProviderAvailability 计算 currentStatus 时会按最近 buckets 的请求量加权", async () => {
@@ -480,7 +482,7 @@ describe("availability-service", () => {
     const finalizedRequestsSql = extractFinalizedRequestsSql(
       normalizeSql(executeMock.mock.calls[0]?.[0])
     );
-    expect(finalizedRequestsSql).toMatch(/where .*status_?code.*is not null/);
+    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
   });
 
   it("queryProviderAvailability 会保留 Gemini passthrough 终态(statusCode!=null 且 durationMs=null)", async () => {
@@ -546,10 +548,9 @@ describe("availability-service", () => {
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
 
-    expect(finalizedRequestsSql).toMatch(/where .*status_?code.*is not null/);
-    expect(queryText).toMatch(
-      /count\(\*\) filter \(where .*status_?code.*< 200 .*or .*status_?code.*>= 400\)/
-    );
+    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
+    expect(queryText).toContain(`"successrateoutcome" = 'failure'`);
   });
 
   it("queryProviderAvailability 在 maxBuckets 为 Infinity 时仍使用默认桶上限", async () => {
@@ -716,7 +717,7 @@ describe("availability-service", () => {
     ]);
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
-    expect(queryText).toMatch(/where .*status_?code.*is not null/);
+    expect(queryText).toContain("fn_is_message_request_finalized");
     expect(queryText).toContain(">= now() - (15 * interval '1 minute')");
     expect(queryText).toContain("<= now()");
     expect(queryText).toContain("count(*) filter");

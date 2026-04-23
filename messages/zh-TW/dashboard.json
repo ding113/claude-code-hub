@@ -492,7 +492,9 @@
       "avgTokensPerSecond": "平均輸出速率",
       "avgCostPerRequest": "平均每次請求成本",
       "avgCostPerMillionTokens": "平均每百萬 Token 成本",
-      "unknownModel": "未知"
+      "unknownModel": "未知",
+      "successRateUnavailable": "不適用",
+      "successRateBasisDisclosure": "在 redirected 計費模型模式下，一列可能合併多個原始模型，因此這裡不顯示成功率以避免口徑誤導。"
     },
     "expandModelStats": "展開模型詳情",
     "collapseModelStats": "收起模型詳情",

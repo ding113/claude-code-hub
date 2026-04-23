@@ -106,6 +106,7 @@ async function selectLedgerRowByRequestId(requestId: number) {
       apiType: usageLedger.apiType,
       statusCode: usageLedger.statusCode,
       isSuccess: usageLedger.isSuccess,
+      successRateOutcome: usageLedger.successRateOutcome,
       blockedBy: usageLedger.blockedBy,
       costUsd: usageLedger.costUsd,
       costMultiplier: usageLedger.costMultiplier,
@@ -171,6 +172,7 @@ run("usage ledger integration", () => {
       expect(ledgerRow?.apiType).toBe("response");
       expect(ledgerRow?.statusCode).toBe(200);
       expect(ledgerRow?.isSuccess).toBe(true);
+      expect(ledgerRow?.successRateOutcome).toBe("success");
       expect(toNumber(ledgerRow?.costUsd)).toBeCloseTo(1.25, 10);
       expect(ledgerRow?.inputTokens).toBe(12);
       expect(ledgerRow?.outputTokens).toBe(34);
@@ -262,6 +264,7 @@ run("usage ledger integration", () => {
 
       const ledgerRow = await selectLedgerRowByRequestId(requestId);
       expect(ledgerRow?.isSuccess).toBe(false);
+      expect(ledgerRow?.successRateOutcome).toBe("failure");
     });
 
     test("sets is_success=true when error_message is absent", async () => {
@@ -274,6 +277,20 @@ run("usage ledger integration", () => {
 
       const ledgerRow = await selectLedgerRowByRequestId(requestId);
       expect(ledgerRow?.isSuccess).toBe(true);
+      expect(ledgerRow?.successRateOutcome).toBe("success");
+    });
+
+    test("marks non-upstream failures as excluded for success-rate outcome", async () => {
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("trigger-excluded"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        statusCode: 499,
+        errorMessage: "request aborted by client",
+      });
+
+      const ledgerRow = await selectLedgerRowByRequestId(requestId);
+      expect(ledgerRow?.successRateOutcome).toBe("excluded");
     });
   });
 
@@ -342,6 +359,29 @@ run("usage ledger integration", () => {
 
       expect(countAfterFirst[0]?.count ?? 0).toBe(1);
       expect(countAfterSecond[0]?.count ?? 0).toBe(1);
+    });
+
+    test("backfill repairs existing ledger rows whose success_rate_outcome is null", {
+      timeout: 60_000,
+    }, async () => {
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("backfill-null-outcome"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        statusCode: 499,
+        errorMessage: "request aborted by client",
+      });
+
+      await db
+        .update(usageLedger)
+        .set({ successRateOutcome: null })
+        .where(eq(usageLedger.requestId, requestId));
+
+      const summary = await backfillUsageLedger();
+      expect(summary.alreadyExisted).toBeGreaterThanOrEqual(1);
+
+      const ledgerRow = await selectLedgerRowByRequestId(requestId);
+      expect(ledgerRow?.successRateOutcome).toBe("excluded");
     });
   });
 

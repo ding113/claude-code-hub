@@ -492,7 +492,9 @@
       "avgTokensPerSecond": "Средн. ток/с",
       "avgCostPerRequest": "Ср. стоимость/запрос",
       "avgCostPerMillionTokens": "Ср. стоимость/1М токенов",
-      "unknownModel": "Неизвестно"
+      "unknownModel": "Неизвестно",
+      "successRateUnavailable": "Н/Д",
+      "successRateBasisDisclosure": "В режиме redirected billing одна строка может объединять несколько исходных моделей, поэтому здесь успешность скрыта, чтобы не вводить в заблуждение."
     },
     "expandModelStats": "Развернуть модели",
     "collapseModelStats": "Свернуть модели",

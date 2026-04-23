@@ -91,6 +91,7 @@ vi.mock("@/drizzle/schema", () => ({
     durationMs: "durationMs",
     statusCode: "statusCode",
     isSuccess: "isSuccess",
+    successRateOutcome: "successRateOutcome",
     model: "model",
     originalModel: "originalModel",
   },

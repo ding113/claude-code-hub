@@ -80,6 +80,7 @@ vi.mock("@/drizzle/schema", () => ({
     cacheCreationInputTokens: "cacheCreationInputTokens",
     cacheReadInputTokens: "cacheReadInputTokens",
     isSuccess: "isSuccess",
+    successRateOutcome: "successRateOutcome",
     blockedBy: "blockedBy",
     createdAt: "createdAt",
     ttfbMs: "ttfbMs",

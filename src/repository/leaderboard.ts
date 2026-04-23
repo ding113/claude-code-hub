@@ -5,10 +5,25 @@ import { db } from "@/drizzle/db";
 import { providers, usageLedger, users } from "@/drizzle/schema";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { ProviderType } from "@/types/provider";
-import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
+import type { BillingModelSource } from "@/types/system-config";
+import {
+  LEDGER_BILLING_CONDITION,
+  LEDGER_SUCCESS_RATE_COUNTABLE_CONDITION,
+  LEDGER_SUCCESS_RATE_SUCCESS_CONDITION,
+} from "./_shared/ledger-conditions";
 import { getSystemSettings } from "./system-config";
 
 const clampRatio01 = (value: number | null | undefined) => Math.min(Math.max(value ?? 0, 0), 1);
+const clampRatio01Nullable = (value: number | null | undefined) =>
+  value == null ? null : clampRatio01(value);
+
+const LEDGER_SUCCESS_RATE_EXPR = sql<number | null>`
+  count(CASE WHEN ${LEDGER_SUCCESS_RATE_SUCCESS_CONDITION} THEN 1 END)::double precision
+  / NULLIF(
+      count(CASE WHEN ${LEDGER_SUCCESS_RATE_COUNTABLE_CONDITION} THEN 1 END)::double precision,
+      0
+    )
+`;
 
 /**
  * 排行榜条目类型
@@ -48,7 +63,7 @@ export interface ProviderLeaderboardEntry {
   totalRequests: number;
   totalCost: number;
   totalTokens: number;
-  successRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
+  successRate: number | null; // 0-1 之间的小数，UI 层负责格式化为百分比
   avgTtfbMs: number; // 毫秒
   avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
   avgCostPerRequest: number | null; // totalCost / totalRequests, null when totalRequests === 0
@@ -69,11 +84,16 @@ export interface ModelProviderStat {
   totalRequests: number;
   totalCost: number;
   totalTokens: number;
-  successRate: number; // 0-1
+  successRate: number | null; // 0-1
   avgTtfbMs: number; // 毫秒
   avgTokensPerSecond: number; // tok/s
   avgCostPerRequest: number | null;
   avgCostPerMillionTokens: number | null;
+  rowIdentityBasis?: BillingModelSource;
+  successRateBasis?: "original" | "unavailable";
+  costTokensBasis?: BillingModelSource;
+  basisDisclosureRequired?: boolean;
+  successRateUnavailableReason?: "redirected_billing_model";
 }
 
 /**
@@ -140,7 +160,12 @@ export interface ModelLeaderboardEntry {
   totalRequests: number;
   totalCost: number;
   totalTokens: number;
-  successRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
+  successRate: number | null; // 0-1 之间的小数，UI 层负责格式化为百分比
+  rowIdentityBasis?: BillingModelSource;
+  successRateBasis?: "original" | "unavailable";
+  costTokensBasis?: BillingModelSource;
+  basisDisclosureRequired?: boolean;
+  successRateUnavailableReason?: "redirected_billing_model";
 }
 
 /**
@@ -629,11 +654,7 @@ async function findProviderLeaderboardWithTimezone(
     )::double precision,
     0::double precision
   )`;
-  const successRateExpr = sql<number>`COALESCE(
-    count(CASE WHEN ${usageLedger.isSuccess} THEN 1 END)::double precision
-    / NULLIF(count(*)::double precision, 0),
-    0::double precision
-  )`;
+  const successRateExpr = LEDGER_SUCCESS_RATE_EXPR;
   const avgTtfbMsExpr = sql<number>`COALESCE(avg(${usageLedger.ttfbMs})::double precision, 0::double precision)`;
   const avgTokensPerSecondExpr = sql<number>`COALESCE(
     avg(
@@ -688,7 +709,7 @@ async function findProviderLeaderboardWithTimezone(
       totalRequests,
       totalCost,
       totalTokens,
-      successRate: clampRatio01(entry.successRate),
+      successRate: clampRatio01Nullable(entry.successRate),
       avgTtfbMs: entry.avgTtfbMs ?? 0,
       avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
       ...avgCosts,
@@ -736,14 +757,22 @@ async function findProviderLeaderboardWithTimezone(
     const totalTokens = row.totalTokens;
     const avgCosts = computeAvgCosts(totalCost, totalRequests, totalTokens);
     const stats = modelStatsByProvider.get(row.providerId) ?? [];
+    const basisDisclosureRequired = billingModelSource !== "original";
     stats.push({
       model: row.model,
       totalRequests,
       totalCost,
       totalTokens,
-      successRate: clampRatio01(row.successRate),
+      successRate: basisDisclosureRequired ? null : clampRatio01Nullable(row.successRate),
       avgTtfbMs: row.avgTtfbMs ?? 0,
       avgTokensPerSecond: row.avgTokensPerSecond ?? 0,
+      rowIdentityBasis: billingModelSource,
+      successRateBasis: basisDisclosureRequired ? "unavailable" : "original",
+      costTokensBasis: billingModelSource,
+      basisDisclosureRequired,
+      successRateUnavailableReason: basisDisclosureRequired
+        ? "redirected_billing_model"
+        : undefined,
       ...avgCosts,
     });
     modelStatsByProvider.set(row.providerId, stats);
@@ -1119,11 +1148,7 @@ async function findModelLeaderboardWithTimezone(
         )::double precision,
         0::double precision
       )`,
-      successRate: sql<number>`COALESCE(
-        count(CASE WHEN ${usageLedger.isSuccess} THEN 1 END)::double precision
-        / NULLIF(count(*)::double precision, 0),
-        0::double precision
-      )`,
+      successRate: LEDGER_SUCCESS_RATE_EXPR,
     })
     .from(usageLedger)
     .where(and(LEDGER_BILLING_CONDITION, buildDateCondition(period, timezone, dateRange)))
@@ -1137,7 +1162,14 @@ async function findModelLeaderboardWithTimezone(
       totalRequests: entry.totalRequests,
       totalCost: parseFloat(entry.totalCost),
       totalTokens: entry.totalTokens,
-      successRate: clampRatio01(entry.successRate),
+      successRate:
+        billingModelSource === "original" ? clampRatio01Nullable(entry.successRate) : null,
+      rowIdentityBasis: billingModelSource,
+      successRateBasis: billingModelSource === "original" ? "original" : "unavailable",
+      costTokensBasis: billingModelSource,
+      basisDisclosureRequired: billingModelSource !== "original",
+      successRateUnavailableReason:
+        billingModelSource !== "original" ? "redirected_billing_model" : undefined,
     }));
 }
 
