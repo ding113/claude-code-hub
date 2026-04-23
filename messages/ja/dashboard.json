@@ -247,6 +247,14 @@
         "billingOriginal": "課金: 元",
         "billingRedirected": "課金: 実際"
       },
+      "modelAudit": {
+        "unifiedLabel": "モデル",
+        "requestModelLabel": "リクエストモデル",
+        "responseModelLabel": "実際の応答モデル",
+        "mismatchTooltip": "上流プロバイダが返したモデルがリクエストされたモデルと異なります。課金は引き続きリクエストモデルを基準とします。",
+        "secondaryLineAriaLabel": "実際の応答モデル: {model}",
+        "arrowPrefix": "\u21b3"
+      },
       "errorMessage": "エラーメッセージ",
       "fake200ForwardedNotice": "注意：ストリーミング要求では、失敗判定がストリーム終了後になる場合があります。応答内容は既にクライアントへ転送されている可能性があります。",
       "fake200DetectedReason": "検出理由：{reason}",

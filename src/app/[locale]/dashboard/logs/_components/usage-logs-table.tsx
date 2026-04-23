@@ -282,6 +282,7 @@ export function UsageLogsTable({
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
+                                actualResponseModel={log.actualResponseModel}
                                 billingModelSource={billingModelSource}
                                 onRedirectClick={() =>
                                   setDialogState({ logId: log.id, scrollToRedirect: true })
@@ -547,6 +548,7 @@ export function UsageLogsTable({
                         blockedReason={log.blockedReason}
                         originalModel={log.originalModel}
                         currentModel={log.model}
+                        actualResponseModel={log.actualResponseModel}
                         userAgent={log.userAgent}
                         clientIp={log.clientIp}
                         messagesCount={log.messagesCount}

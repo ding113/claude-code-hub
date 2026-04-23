@@ -25,6 +25,8 @@ export type MessageRequestUpdatePatch = {
   errorStack?: string;
   errorCause?: string;
   model?: string;
+  /** 上游响应中实际返回的模型名(audit);null 显式清空,undefined 不动 */
+  actualResponseModel?: string | null;
   providerId?: number;
   context1mApplied?: boolean;
   swapCacheTtlApplied?: boolean;
@@ -64,6 +66,7 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   errorStack: "error_stack",
   errorCause: "error_cause",
   model: "model",
+  actualResponseModel: "actual_response_model",
   providerId: "provider_id",
   context1mApplied: "context_1m_applied",
   swapCacheTtlApplied: "swap_cache_ttl_applied",

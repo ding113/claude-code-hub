@@ -901,6 +901,7 @@ export function VirtualizedLogsTable({
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
+                                actualResponseModel={log.actualResponseModel}
                                 billingModelSource={billingModelSource}
                                 onRedirectClick={
                                   disableDetailDialog
@@ -1128,6 +1129,7 @@ export function VirtualizedLogsTable({
                           blockedReason={log.blockedReason}
                           originalModel={log.originalModel}
                           currentModel={log.model}
+                          actualResponseModel={log.actualResponseModel}
                           userAgent={log.userAgent}
                           clientIp={log.clientIp}
                           messagesCount={log.messagesCount}

@@ -25,6 +25,8 @@ export interface TabSharedProps {
   originalModel?: string | null;
   /** Current model after redirect */
   currentModel?: string | null;
+  /** Upstream response's actually returned model name (audit; not billing) */
+  actualResponseModel?: string | null;
   /** User-Agent header */
   userAgent?: string | null;
   /** Client IP (IPv4/IPv6) */

@@ -38,6 +38,7 @@ import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
+import { extractActualResponseModelForProvider } from "./actual-response-model";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
@@ -1347,6 +1348,11 @@ export class ProxyResponseHandler {
             cacheTtlApplied: usageMetrics?.cache_ttl ?? null,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+            actualResponseModel: extractActualResponseModelForProvider(
+              provider.providerType,
+              false,
+              responseText
+            ),
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
             swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
@@ -2416,6 +2422,11 @@ export class ProxyResponseHandler {
           providerChain: session.getProviderChain(),
           ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
           model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+          actualResponseModel: extractActualResponseModelForProvider(
+            provider.providerType,
+            true,
+            allContent
+          ),
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
           swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
@@ -3558,6 +3569,11 @@ export async function finalizeRequestStats(
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
+      actualResponseModel: extractActualResponseModelForProvider(
+        provider.providerType,
+        isSSEText(responseText),
+        responseText
+      ),
       providerId: providerIdForPersistence,
       context1mApplied: session.getContext1mApplied(),
       swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
@@ -3662,6 +3678,11 @@ export async function finalizeRequestStats(
     providerChain: session.getProviderChain(),
     ...(errorMessage ? { errorMessage } : {}),
     model: session.getCurrentModel() ?? undefined,
+    actualResponseModel: extractActualResponseModelForProvider(
+      provider.providerType,
+      isSSEText(responseText),
+      responseText
+    ),
     providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
     swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,

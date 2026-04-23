@@ -247,6 +247,14 @@
         "billingOriginal": "计费: 原始",
         "billingRedirected": "计费: 实际"
       },
+      "modelAudit": {
+        "unifiedLabel": "模型",
+        "requestModelLabel": "请求模型",
+        "responseModelLabel": "实际响应模型",
+        "mismatchTooltip": "上游供应商实际返回的模型与请求的模型不一致。计费仍然基于请求模型。",
+        "secondaryLineAriaLabel": "实际响应模型：{model}",
+        "arrowPrefix": "\u21b3"
+      },
       "errorMessage": "错误信息",
       "fake200ForwardedNotice": "提示：对于流式请求，该失败可能在流结束后才被识别；响应内容可能已原样透传给客户端。",
       "fake200DetectedReason": "检测原因：{reason}",

@@ -247,6 +247,14 @@
         "billingOriginal": "計費: 原始",
         "billingRedirected": "計費: 實際"
       },
+      "modelAudit": {
+        "unifiedLabel": "模型",
+        "requestModelLabel": "請求模型",
+        "responseModelLabel": "實際回應模型",
+        "mismatchTooltip": "上游供應商實際回傳的模型與請求的模型不一致。計費仍然依據請求模型。",
+        "secondaryLineAriaLabel": "實際回應模型：{model}",
+        "arrowPrefix": "\u21b3"
+      },
       "errorMessage": "錯誤訊息",
       "fake200ForwardedNotice": "提示：對於串流請求，此失敗可能在串流結束後才被識別；回應內容可能已原樣透傳給用戶端。",
       "fake200DetectedReason": "檢測原因：{reason}",
