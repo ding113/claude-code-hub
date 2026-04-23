@@ -1,10 +1,14 @@
 "use client";
 
 import { Settings } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
+import { type PatchKeyLimitField, patchKeyLimit } from "@/actions/keys";
 import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { QuotaProgress } from "@/components/quota/quota-progress";
+import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { QuotaWindowType } from "@/components/quota/quota-window-type";
 import { UserQuotaHeader } from "@/components/quota/user-quota-header";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +27,8 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { getUsageRate, hasKeyQuotaSet, isUserExceeded } from "@/lib/utils/quota-helpers";
 import { EditKeyQuotaDialog } from "./edit-key-quota-dialog";
+
+type KeyLimitField = PatchKeyLimitField;
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null; resetAt?: Date };
@@ -63,6 +69,8 @@ interface KeysQuotaClientProps {
 
 export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClientProps) {
   const t = useTranslations("quota.keys");
+  const tEdit = useTranslations("quota.quickEdit");
+  const router = useRouter();
   // 默认展开所有用户组
   const [openUsers, setOpenUsers] = useState<Set<number>>(new Set(users.map((user) => user.id)));
 
@@ -77,6 +85,37 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
       return newSet;
     });
   };
+
+  const handleSaveLimit = useCallback(
+    async (
+      keyId: number,
+      _keyName: string,
+      field: KeyLimitField,
+      newLimit: number | null
+    ): Promise<boolean> => {
+      try {
+        const value =
+          field === "limitConcurrentSessions"
+            ? newLimit == null
+              ? 0
+              : Math.round(newLimit)
+            : newLimit;
+        const res = await patchKeyLimit(keyId, field, value);
+        if (!res.ok) {
+          toast.error(res.error || tEdit("saveFailed"));
+          return false;
+        }
+        toast.success(tEdit("saveSuccess"));
+        router.refresh();
+        return true;
+      } catch (err) {
+        console.error("[KeysQuotaClient] save failed", err);
+        toast.error(tEdit("saveFailed"));
+        return false;
+      }
+    },
+    [router, tEdit]
+  );
 
   if (users.length === 0) {
     return (
@@ -162,7 +201,22 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-mono">
                                     {formatCurrency(key.quota.cost5h.current, currencyCode)}/
-                                    {formatCurrency(key.quota.cost5h.limit, currencyCode)}
+                                    <QuotaQuickEditPopover
+                                      currentLimit={key.quota.cost5h.limit}
+                                      label={t("table.cost5h")}
+                                      unit="currency"
+                                      currencyCode={currencyCode}
+                                      onSave={(v) =>
+                                        handleSaveLimit(key.id, key.name, "limit5hUsd", v)
+                                      }
+                                    >
+                                      <button
+                                        type="button"
+                                        className="underline-offset-4 hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      >
+                                        {formatCurrency(key.quota.cost5h.limit, currencyCode)}
+                                      </button>
+                                    </QuotaQuickEditPopover>
                                   </span>
                                 </div>
                                 <QuotaProgress
@@ -196,7 +250,22 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-mono">
                                     {formatCurrency(key.quota.costDaily.current, currencyCode)}/
-                                    {formatCurrency(key.quota.costDaily.limit, currencyCode)}
+                                    <QuotaQuickEditPopover
+                                      currentLimit={key.quota.costDaily.limit}
+                                      label={t("table.costDaily")}
+                                      unit="currency"
+                                      currencyCode={currencyCode}
+                                      onSave={(v) =>
+                                        handleSaveLimit(key.id, key.name, "limitDailyUsd", v)
+                                      }
+                                    >
+                                      <button
+                                        type="button"
+                                        className="underline-offset-4 hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      >
+                                        {formatCurrency(key.quota.costDaily.limit, currencyCode)}
+                                      </button>
+                                    </QuotaQuickEditPopover>
                                   </span>
                                 </div>
                                 <QuotaProgress
@@ -231,7 +300,22 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-mono">
                                     {formatCurrency(key.quota.costWeekly.current, currencyCode)}/
-                                    {formatCurrency(key.quota.costWeekly.limit, currencyCode)}
+                                    <QuotaQuickEditPopover
+                                      currentLimit={key.quota.costWeekly.limit}
+                                      label={t("table.costWeekly")}
+                                      unit="currency"
+                                      currencyCode={currencyCode}
+                                      onSave={(v) =>
+                                        handleSaveLimit(key.id, key.name, "limitWeeklyUsd", v)
+                                      }
+                                    >
+                                      <button
+                                        type="button"
+                                        className="underline-offset-4 hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      >
+                                        {formatCurrency(key.quota.costWeekly.limit, currencyCode)}
+                                      </button>
+                                    </QuotaQuickEditPopover>
                                   </span>
                                 </div>
                                 <QuotaProgress
@@ -268,7 +352,22 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-mono">
                                     {formatCurrency(key.quota.costMonthly.current, currencyCode)}/
-                                    {formatCurrency(key.quota.costMonthly.limit, currencyCode)}
+                                    <QuotaQuickEditPopover
+                                      currentLimit={key.quota.costMonthly.limit}
+                                      label={t("table.costMonthly")}
+                                      unit="currency"
+                                      currencyCode={currencyCode}
+                                      onSave={(v) =>
+                                        handleSaveLimit(key.id, key.name, "limitMonthlyUsd", v)
+                                      }
+                                    >
+                                      <button
+                                        type="button"
+                                        className="underline-offset-4 hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      >
+                                        {formatCurrency(key.quota.costMonthly.limit, currencyCode)}
+                                      </button>
+                                    </QuotaQuickEditPopover>
                                   </span>
                                 </div>
                                 <QuotaProgress
@@ -296,7 +395,27 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-mono">
                                     {key.quota.concurrentSessions.current}/
-                                    {key.quota.concurrentSessions.limit}
+                                    <QuotaQuickEditPopover
+                                      currentLimit={key.quota.concurrentSessions.limit}
+                                      label={t("table.concurrentSessions")}
+                                      unit="integer"
+                                      onSave={(v) =>
+                                        handleSaveLimit(
+                                          key.id,
+                                          key.name,
+                                          "limitConcurrentSessions",
+                                          v
+                                        )
+                                      }
+                                      allowClear={false}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="underline-offset-4 hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      >
+                                        {key.quota.concurrentSessions.limit}
+                                      </button>
+                                    </QuotaQuickEditPopover>
                                   </span>
                                 </div>
                                 <QuotaProgress

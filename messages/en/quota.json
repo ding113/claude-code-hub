@@ -384,5 +384,24 @@
         }
       }
     }
+  },
+  "quickEdit": {
+    "title": "Adjust Limit",
+    "currentLabel": "Current",
+    "noLimit": "Unlimited",
+    "tabs": {
+      "set": "Set value",
+      "add": "Add value"
+    },
+    "setPlaceholder": "Enter new limit (empty = unlimited)",
+    "addPlaceholder": "Enter increment",
+    "preview": "New limit: {value}",
+    "previewNoLimit": "Will clear limit (unlimited)",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saveSuccess": "Limit updated",
+    "saveFailed": "Update failed",
+    "invalidNumber": "Please enter a valid number",
+    "negativeNotAllowed": "Cannot be negative"
   }
 }

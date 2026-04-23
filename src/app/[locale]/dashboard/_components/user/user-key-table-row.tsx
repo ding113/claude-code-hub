@@ -15,15 +15,18 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { removeKey } from "@/actions/keys";
-import { toggleUserEnabled } from "@/actions/users";
+import { editUser, toggleUserEnabled } from "@/actions/users";
+import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRouter } from "@/i18n/routing";
+import { clearUsageCache } from "@/lib/dashboard/user-limit-usage-cache";
 import { cn } from "@/lib/utils";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
+import type { CurrencyCode } from "@/lib/utils/currency";
 import { getCurrencySymbol } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
@@ -204,6 +207,44 @@ export function UserKeyTableRow({
 
   // Convert currencyCode to symbol for display
   const currencySymbol = getCurrencySymbol(currencyCode);
+  const tQuickEdit = useTranslations("quota.quickEdit");
+
+  type UserLimitField =
+    | "rpm"
+    | "dailyQuota"
+    | "limit5hUsd"
+    | "limitWeeklyUsd"
+    | "limitMonthlyUsd"
+    | "limitTotalUsd"
+    | "limitConcurrentSessions";
+
+  const handleSaveUserLimit = async (
+    field: UserLimitField,
+    newLimit: number | null
+  ): Promise<boolean> => {
+    if (!isAdmin) return false;
+    try {
+      // 整数字段：rpm / sessions
+      const isInt = field === "rpm" || field === "limitConcurrentSessions";
+      const value = isInt ? (newLimit == null ? 0 : Math.round(newLimit)) : newLimit;
+      const res = await editUser(user.id, { [field]: value } as Parameters<typeof editUser>[1]);
+      if (!res.ok) {
+        toast.error(res.error || tQuickEdit("saveFailed"));
+        return false;
+      }
+      toast.success(tQuickEdit("saveSuccess"));
+      clearUsageCache(user.id);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      router.refresh();
+      return true;
+    } catch (err) {
+      console.error("[UserKeyTableRow] save user limit failed", err);
+      toast.error(tQuickEdit("saveFailed"));
+      return false;
+    }
+  };
+
+  const editableCurrencyCode = (currencyCode || "USD") as CurrencyCode;
 
   const handleDeleteKey = (keyId: number) => {
     startTransition(async () => {
@@ -389,14 +430,33 @@ export function UserKeyTableRow({
 
         {/* RPM 限额 */}
         <div className="px-2 flex items-center justify-center">
-          <Badge
-            variant={rpm ? "secondary" : "outline"}
-            className="px-2 py-0.5 tabular-nums text-xs"
-            title={`${translations.columns.limitRpm}: ${rpm ?? "-"}`}
-            aria-label={`${translations.columns.limitRpm}: ${rpm ?? "-"}`}
-          >
-            {rpm ?? "-"}
-          </Badge>
+          {isAdmin ? (
+            <QuotaQuickEditPopover
+              currentLimit={rpm}
+              label={translations.columns.limitRpm}
+              unit="integer"
+              onSave={(v) => handleSaveUserLimit("rpm", v)}
+              allowClear={false}
+            >
+              <Badge
+                variant={rpm ? "secondary" : "outline"}
+                className="px-2 py-0.5 tabular-nums text-xs cursor-pointer hover:ring-1 hover:ring-ring"
+                title={`${translations.columns.limitRpm}: ${rpm ?? "-"}`}
+                aria-label={`${translations.columns.limitRpm}: ${rpm ?? "-"}`}
+              >
+                {rpm ?? "-"}
+              </Badge>
+            </QuotaQuickEditPopover>
+          ) : (
+            <Badge
+              variant={rpm ? "secondary" : "outline"}
+              className="px-2 py-0.5 tabular-nums text-xs"
+              title={`${translations.columns.limitRpm}: ${rpm ?? "-"}`}
+              aria-label={`${translations.columns.limitRpm}: ${rpm ?? "-"}`}
+            >
+              {rpm ?? "-"}
+            </Badge>
+          )}
         </div>
 
         {/* 5h 限额 */}
@@ -407,6 +467,10 @@ export function UserKeyTableRow({
             limit={limit5h}
             label={translations.columns.limit5h}
             unit={currencySymbol}
+            editable={isAdmin}
+            onSave={(v) => handleSaveUserLimit("limit5hUsd", v)}
+            currencyCode={editableCurrencyCode}
+            editUnit="currency"
           />
         </div>
 
@@ -418,6 +482,10 @@ export function UserKeyTableRow({
             limit={limitDaily}
             label={translations.columns.limitDaily}
             unit={currencySymbol}
+            editable={isAdmin}
+            onSave={(v) => handleSaveUserLimit("dailyQuota", v)}
+            currencyCode={editableCurrencyCode}
+            editUnit="currency"
           />
         </div>
 
@@ -429,6 +497,10 @@ export function UserKeyTableRow({
             limit={limitWeekly}
             label={translations.columns.limitWeekly}
             unit={currencySymbol}
+            editable={isAdmin}
+            onSave={(v) => handleSaveUserLimit("limitWeeklyUsd", v)}
+            currencyCode={editableCurrencyCode}
+            editUnit="currency"
           />
         </div>
 
@@ -440,6 +512,10 @@ export function UserKeyTableRow({
             limit={limitMonthly}
             label={translations.columns.limitMonthly}
             unit={currencySymbol}
+            editable={isAdmin}
+            onSave={(v) => handleSaveUserLimit("limitMonthlyUsd", v)}
+            currencyCode={editableCurrencyCode}
+            editUnit="currency"
           />
         </div>
 
@@ -451,19 +527,42 @@ export function UserKeyTableRow({
             limit={limitTotal}
             label={translations.columns.limitTotal}
             unit={currencySymbol}
+            editable={isAdmin}
+            onSave={(v) => handleSaveUserLimit("limitTotalUsd", v)}
+            currencyCode={editableCurrencyCode}
+            editUnit="currency"
           />
         </div>
 
         {/* 并发限额 */}
         <div className="px-2 flex items-center justify-center">
-          <Badge
-            variant={limitSessions ? "secondary" : "outline"}
-            className="px-2 py-0.5 tabular-nums text-xs"
-            title={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
-            aria-label={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
-          >
-            {limitSessions ?? "-"}
-          </Badge>
+          {isAdmin ? (
+            <QuotaQuickEditPopover
+              currentLimit={limitSessions}
+              label={translations.columns.limitSessions}
+              unit="integer"
+              onSave={(v) => handleSaveUserLimit("limitConcurrentSessions", v)}
+              allowClear={false}
+            >
+              <Badge
+                variant={limitSessions ? "secondary" : "outline"}
+                className="px-2 py-0.5 tabular-nums text-xs cursor-pointer hover:ring-1 hover:ring-ring"
+                title={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
+                aria-label={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
+              >
+                {limitSessions ?? "-"}
+              </Badge>
+            </QuotaQuickEditPopover>
+          ) : (
+            <Badge
+              variant={limitSessions ? "secondary" : "outline"}
+              className="px-2 py-0.5 tabular-nums text-xs"
+              title={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
+              aria-label={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
+            >
+              {limitSessions ?? "-"}
+            </Badge>
+          )}
         </div>
 
         {/* 操作 */}

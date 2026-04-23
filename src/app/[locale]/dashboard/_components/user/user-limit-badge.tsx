@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  clearUsageCache,
   getSharedUserLimitUsage,
   type LimitUsageData,
   peekCachedUserLimitUsage,
 } from "@/lib/dashboard/user-limit-usage-cache";
 import { cn } from "@/lib/utils";
+import type { CurrencyCode } from "@/lib/utils/currency";
 
 export type LimitType = "5h" | "daily" | "weekly" | "monthly" | "total";
 
@@ -18,6 +21,12 @@ export interface UserLimitBadgeProps {
   limit: number | null;
   label: string;
   unit?: string;
+  /** 可选：允许点击编辑。传入 onSave 后，Badge 成为可点击触发器 */
+  editable?: boolean;
+  onSave?: (newLimit: number | null) => Promise<boolean>;
+  currencyCode?: CurrencyCode;
+  /** 编辑器的数值类型（默认 currency） */
+  editUnit?: "currency" | "integer";
 }
 
 function formatPercentage(usage: number, limit: number): string {
@@ -55,6 +64,10 @@ export function UserLimitBadge({
   limit,
   label,
   unit = "",
+  editable = false,
+  onSave,
+  currencyCode = "USD",
+  editUnit = "currency",
 }: UserLimitBadgeProps) {
   const [usageData, setUsageData] = useState<LimitUsageData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -111,16 +124,37 @@ export function UserLimitBadge({
 
   // No limit set - show "-"
   if (limit === null || limit === undefined) {
-    return (
+    const noLimitBadge = (
       <Badge
         variant="outline"
-        className="px-2 py-0.5 tabular-nums text-xs"
+        className={cn(
+          "px-2 py-0.5 tabular-nums text-xs",
+          editable && onSave && "cursor-pointer hover:ring-1 hover:ring-ring"
+        )}
         title={`${label}: -`}
         aria-label={`${label}: -`}
       >
         -
       </Badge>
     );
+    if (editable && onSave) {
+      return (
+        <QuotaQuickEditPopover
+          currentLimit={null}
+          label={label}
+          unit={editUnit}
+          currencyCode={currencyCode}
+          onSave={async (v) => {
+            const ok = await onSave(v);
+            if (ok) clearUsageCache(userId);
+            return ok;
+          }}
+        >
+          {noLimitBadge}
+        </QuotaQuickEditPopover>
+      );
+    }
+    return noLimitBadge;
   }
 
   // Loading state
@@ -130,16 +164,37 @@ export function UserLimitBadge({
 
   // Error state - show just the limit value
   if (error || !usageData) {
-    return (
+    const errorBadge = (
       <Badge
         variant="secondary"
-        className="px-2 py-0.5 tabular-nums text-xs"
+        className={cn(
+          "px-2 py-0.5 tabular-nums text-xs",
+          editable && onSave && "cursor-pointer hover:ring-1 hover:ring-ring"
+        )}
         title={`${label}: ${formatValue(limit, unit)}`}
         aria-label={`${label}: ${formatValue(limit, unit)}`}
       >
         {formatValue(limit, unit)}
       </Badge>
     );
+    if (editable && onSave) {
+      return (
+        <QuotaQuickEditPopover
+          currentLimit={limit}
+          label={label}
+          unit={editUnit}
+          currencyCode={currencyCode}
+          onSave={async (v) => {
+            const ok = await onSave(v);
+            if (ok) clearUsageCache(userId);
+            return ok;
+          }}
+        >
+          {errorBadge}
+        </QuotaQuickEditPopover>
+      );
+    }
+    return errorBadge;
   }
 
   // Get usage for this limit type
@@ -152,14 +207,36 @@ export function UserLimitBadge({
   const colorClass = getPercentageColor(usage, limit);
   const statusText = `${formatValue(usage, unit)} / ${formatValue(limit, unit)}`;
 
-  return (
+  const percentBadge = (
     <Badge
       variant="secondary"
-      className={cn("px-2 py-0.5 tabular-nums text-xs", colorClass)}
+      className={cn(
+        "px-2 py-0.5 tabular-nums text-xs",
+        colorClass,
+        editable && onSave && "cursor-pointer hover:ring-1 hover:ring-ring"
+      )}
       title={`${label}: ${statusText}`}
       aria-label={`${label}: ${statusText}`}
     >
       {percentage}
     </Badge>
   );
+  if (editable && onSave) {
+    return (
+      <QuotaQuickEditPopover
+        currentLimit={limit}
+        label={label}
+        unit={editUnit}
+        currencyCode={currencyCode}
+        onSave={async (v) => {
+          const ok = await onSave(v);
+          if (ok) clearUsageCache(userId);
+          return ok;
+        }}
+      >
+        {percentBadge}
+      </QuotaQuickEditPopover>
+    );
+  }
+  return percentBadge;
 }

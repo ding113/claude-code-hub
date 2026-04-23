@@ -384,5 +384,24 @@
         }
       }
     }
+  },
+  "quickEdit": {
+    "title": "调整限额",
+    "currentLabel": "当前",
+    "noLimit": "无限额",
+    "tabs": {
+      "set": "设置值",
+      "add": "增加值"
+    },
+    "setPlaceholder": "输入新限额（留空=无限额）",
+    "addPlaceholder": "输入要增加的值",
+    "preview": "新限额：{value}",
+    "previewNoLimit": "将清除限额（无限额）",
+    "save": "保存",
+    "cancel": "取消",
+    "saveSuccess": "限额已更新",
+    "saveFailed": "更新失败",
+    "invalidNumber": "请输入有效数字",
+    "negativeNotAllowed": "不能为负数"
   }
 }
