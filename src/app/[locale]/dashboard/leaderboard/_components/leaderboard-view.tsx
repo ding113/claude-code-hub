@@ -337,7 +337,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       className: "text-right",
       cell: (row) => renderSuccessRateCell(row, t),
       sortKey: "successRate",
-      getValue: (row) => row.successRate ?? -1,
+      getValue: (row) => row.successRate,
     },
     {
       header: t("columns.avgTtfbMs"),
@@ -538,7 +538,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       className: "text-right",
       cell: (row) => renderSuccessRateCell(row, t),
       sortKey: "successRate",
-      getValue: (row) => row.successRate ?? -1,
+      getValue: (row) => row.successRate,
     },
   ];
 

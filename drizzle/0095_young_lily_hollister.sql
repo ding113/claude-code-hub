@@ -59,7 +59,6 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION fn_compute_message_request_success_rate_outcome(
   blocked_by varchar,
-  blocked_reason text,
   status_code integer,
   error_message text,
   provider_chain jsonb
@@ -158,7 +157,6 @@ DECLARE
 BEGIN
   v_success_rate_outcome := fn_compute_message_request_success_rate_outcome(
     NEW.blocked_by,
-    NEW.blocked_reason,
     NEW.status_code,
     NEW.error_message,
     NEW.provider_chain
@@ -167,7 +165,7 @@ BEGIN
   IF NEW.blocked_by = 'warmup' THEN
     UPDATE usage_ledger
     SET blocked_by = 'warmup',
-        success_rate_outcome = 'excluded'
+        success_rate_outcome = v_success_rate_outcome
     WHERE request_id = NEW.id;
     RETURN NEW;
   END IF;

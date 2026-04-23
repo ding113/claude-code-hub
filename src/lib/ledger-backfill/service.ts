@@ -66,7 +66,6 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
             mr.status_code,
             fn_compute_message_request_success_rate_outcome(
               mr.blocked_by,
-              mr.blocked_reason,
               mr.status_code,
               mr.error_message,
               mr.provider_chain

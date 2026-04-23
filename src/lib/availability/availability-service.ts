@@ -163,14 +163,12 @@ function isAvailabilitySuccessStatusCode(statusCode: number): boolean {
 
 function buildRequestOutcomeSql(
   blockedByExpression: SQLWrapper,
-  blockedReasonExpression: SQLWrapper,
   statusCodeExpression: SQLWrapper,
   errorMessageExpression: SQLWrapper,
   providerChainExpression: SQLWrapper
 ) {
   return sql`fn_compute_message_request_success_rate_outcome(
     ${blockedByExpression},
-    ${blockedReasonExpression},
     ${statusCodeExpression},
     ${errorMessageExpression},
     ${providerChainExpression}
@@ -374,7 +372,6 @@ export async function queryProviderAvailability(
         ${messageRequest.createdAt} AS "createdAt",
         ${buildRequestOutcomeSql(
           messageRequest.blockedBy,
-          messageRequest.blockedReason,
           messageRequest.statusCode,
           messageRequest.errorMessage,
           messageRequest.providerChain
@@ -601,7 +598,6 @@ export async function getCurrentProviderStatus(): Promise<
       COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessOutcomeCondition(
         buildRequestOutcomeSql(
           messageRequest.blockedBy,
-          messageRequest.blockedReason,
           messageRequest.statusCode,
           messageRequest.errorMessage,
           messageRequest.providerChain
@@ -610,7 +606,6 @@ export async function getCurrentProviderStatus(): Promise<
       COUNT(*) FILTER (WHERE ${buildAvailabilityFailureOutcomeCondition(
         buildRequestOutcomeSql(
           messageRequest.blockedBy,
-          messageRequest.blockedReason,
           messageRequest.statusCode,
           messageRequest.errorMessage,
           messageRequest.providerChain
