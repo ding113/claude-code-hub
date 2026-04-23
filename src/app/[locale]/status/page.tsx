@@ -46,9 +46,7 @@ export default async function PublicStatusPage({
       followServerDefaults={followServerDefaults}
       locale={locale}
       siteTitle={
-        siteMetadata?.siteTitle?.trim() ||
-        configSnapshot?.siteTitle?.trim() ||
-        FALLBACK_SITE_TITLE
+        siteMetadata?.siteTitle?.trim() || configSnapshot?.siteTitle?.trim() || FALLBACK_SITE_TITLE
       }
       timeZone={configSnapshot?.timeZone ?? "UTC"}
       labels={{
