@@ -406,6 +406,30 @@ describe("non-chat endpoint fallback", () => {
     expect(selectAlternative).not.toHaveBeenCalled();
   });
 
+  test("disabled setting preserves immediate throw behavior for raw endpoint strict pool exhaustion", async () => {
+    const session = createRawSession(V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS);
+    const providerA = createProvider(1);
+    session.setRawCrossProviderFallbackEnabled(false);
+    session.setProvider(providerA);
+
+    mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(
+      new Error("endpoint selector temporarily unavailable")
+    );
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    const selectAlternative = vi.spyOn(
+      ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+      "selectAlternative"
+    );
+
+    await expect(ProxyForwarder.send(session)).rejects.toBeInstanceOf(ProxyError);
+    expect(doForward).not.toHaveBeenCalled();
+    expect(selectAlternative).not.toHaveBeenCalled();
+  });
+
   test("enabled raw fallback does not hedge or mutate circuit breaker accounting", async () => {
     const session = createRawSession(V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS);
     session.setProvider(createProvider(1));

@@ -1059,6 +1059,24 @@ export class ProxyForwarder {
             errorMessage: endpointSelectionError?.message,
           });
 
+          if (shouldSkipRawRetryAndProviderSwitch) {
+            logger.debug(
+              "ProxyForwarder: raw passthrough endpoint pool exhaustion, skipping provider switch",
+              {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                strictBlockCause,
+                selectorError: endpointSelectionError?.message,
+                policyKind: endpointPolicy.kind,
+              }
+            );
+            throw new ProxyError("No available provider endpoints", 503, {
+              body: "",
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+            });
+          }
+
           failedProviderIds.push(currentProvider.id);
           attemptCount = maxAttemptsPerProvider;
         } else {
