@@ -104,7 +104,7 @@ describe("providers api test actions", () => {
     global.fetch = fetchMock as typeof fetch;
   });
 
-  test("testProviderUnified 应该把 executeProviderTest 返回的完整 rawResponse 透传给前端", async () => {
+  test("testProviderUnified should forward request url and rawResponse", async () => {
     executeProviderTestMock.mockResolvedValue({
       success: true,
       status: "green",
@@ -116,6 +116,7 @@ describe("providers api test actions", () => {
       httpStatusText: "OK",
       model: "gpt-4.1-mini",
       content: "pong",
+      requestUrl: "https://api.gptclubapi.xyz/openai/responses",
       rawResponse: '{"message":"pong"}',
       usage: undefined,
       streamInfo: undefined,
@@ -139,9 +140,9 @@ describe("providers api test actions", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data?.success).toBe(true);
-    expect((result.data as { rawResponse?: string } | undefined)?.rawResponse).toBe(
-      '{"message":"pong"}'
-    );
+    const forwarded = result.data as { requestUrl?: string; rawResponse?: string } | undefined;
+    expect(forwarded?.requestUrl).toBe("https://api.gptclubapi.xyz/openai/responses");
+    expect(forwarded?.rawResponse).toBe('{"message":"pong"}');
   });
 
   test("testProviderGemini 成功时也应该返回完整响应体，保证前端能展示原始 body", async () => {
