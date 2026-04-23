@@ -108,5 +108,8 @@ describe("usage logs hidden non-chat endpoints", () => {
     expect(usageLogsSource).toContain("hiddenLedgerEndpointCondition");
     expect(usageLogsSource).toContain("hiddenKeyLedgerEndpointCondition");
     expect(usageLogsSource).toContain("hiddenStatsLedgerEndpointCondition");
+    expect(usageLogsSource).toContain(
+      "buildUsageLogEndpointMatchCondition(\n      usageLedger.endpoint,\n      filters.endpoint"
+    );
   });
 });

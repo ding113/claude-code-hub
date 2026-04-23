@@ -575,20 +575,15 @@ export class SessionManager {
   /**
    * 刷新 session TTL（滑动窗口）
    */
-  private static async refreshSessionTTL(sessionId: string, keyId?: number | null): Promise<void> {
+  private static async refreshSessionTTL(sessionId: string, _keyId?: number | null): Promise<void> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
     try {
       const pipeline = redis.pipeline();
 
-      // 刷新所有 session 相关 key 的 TTL。
-      // 当 key 绑定缺失但当前请求已知 keyId 时，顺手补齐，避免后续 fail-closed 校验误伤。
-      if (keyId != null) {
-        pipeline.setex(`session:${sessionId}:key`, SessionManager.SESSION_TTL, keyId.toString());
-      } else {
-        pipeline.expire(`session:${sessionId}:key`, SessionManager.SESSION_TTL);
-      }
+      // TTL 刷新不能改写 session 归属；这里只延长已有 key/provider 绑定的存活时间。
+      pipeline.expire(`session:${sessionId}:key`, SessionManager.SESSION_TTL);
       pipeline.expire(`session:${sessionId}:provider`, SessionManager.SESSION_TTL);
       pipeline.setex(
         `session:${sessionId}:last_seen`,

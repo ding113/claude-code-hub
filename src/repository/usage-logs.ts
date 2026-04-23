@@ -328,8 +328,14 @@ export async function findUsageLogsBatch(
     ledgerConditions.push(hiddenLedgerEndpointCondition);
   }
 
-  if (filters.endpoint) {
-    ledgerConditions.push(eq(usageLedger.endpoint, filters.endpoint));
+  if (filters.endpoint?.trim()) {
+    const endpointMatchCondition = buildUsageLogEndpointMatchCondition(
+      usageLedger.endpoint,
+      filters.endpoint
+    );
+    if (endpointMatchCondition) {
+      ledgerConditions.push(endpointMatchCondition);
+    }
   }
 
   if (cursor) {
@@ -728,8 +734,14 @@ function buildKeyLedgerConditions(
     conditions.push(hiddenKeyLedgerEndpointCondition);
   }
 
-  if (filters.endpoint) {
-    conditions.push(eq(usageLedger.endpoint, filters.endpoint));
+  if (filters.endpoint?.trim()) {
+    const endpointMatchCondition = buildUsageLogEndpointMatchCondition(
+      usageLedger.endpoint,
+      filters.endpoint
+    );
+    if (endpointMatchCondition) {
+      conditions.push(endpointMatchCondition);
+    }
   }
 
   if (filters.cursor) {
