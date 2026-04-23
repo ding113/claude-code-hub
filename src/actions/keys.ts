@@ -1402,3 +1402,137 @@ export async function renewKeyExpiresAt(
     return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }
+
+/**
+ * 仅更新密钥的某个限额字段，避免触发完整 KeyFormSchema 默认值覆盖（保护 providerGroup
+ * / canLoginWebUi / dailyResetMode 等未传字段）。
+ *
+ * 用于 Key 限额使用情况弹窗 / 限额管理页的快捷编辑。
+ */
+export type PatchKeyLimitField =
+  | "limit5hUsd"
+  | "limitDailyUsd"
+  | "limitWeeklyUsd"
+  | "limitMonthlyUsd"
+  | "limitTotalUsd"
+  | "limitConcurrentSessions";
+
+export async function patchKeyLimit(
+  keyId: number,
+  field: PatchKeyLimitField,
+  value: number | null
+): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    if (session.user.role !== "admin" && session.user.id !== key.userId) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // 校验：负数与整数列
+    if (field === "limitConcurrentSessions") {
+      if (value == null || !Number.isInteger(value) || value < 0 || value > 1000) {
+        return {
+          ok: false,
+          error: tError("INVALID_FORMAT"),
+          errorCode: ERROR_CODES.INVALID_FORMAT,
+        };
+      }
+    } else if (value != null && (!Number.isFinite(value) || value < 0)) {
+      return { ok: false, error: tError("INVALID_FORMAT"), errorCode: ERROR_CODES.INVALID_FORMAT };
+    }
+
+    // 服务端校验：Key 限额不能超过用户限额
+    const { findUserById } = await import("@/repository/user");
+    const user = await findUserById(key.userId);
+    if (!user) {
+      return { ok: false, error: "用户不存在" };
+    }
+
+    const checkExceed = (
+      keyVal: number | null,
+      userVal: number | null | undefined,
+      errKey: string
+    ): ActionResult | null => {
+      if (keyVal != null && keyVal > 0 && userVal != null && userVal > 0 && keyVal > userVal) {
+        return {
+          ok: false,
+          error: tError(errKey, { keyLimit: String(keyVal), userLimit: String(userVal) }),
+        };
+      }
+      return null;
+    };
+
+    const exceed =
+      field === "limit5hUsd"
+        ? checkExceed(value, user.limit5hUsd, "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT")
+        : field === "limitDailyUsd"
+          ? checkExceed(value, user.dailyQuota, "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT")
+          : field === "limitWeeklyUsd"
+            ? checkExceed(value, user.limitWeeklyUsd, "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT")
+            : field === "limitMonthlyUsd"
+              ? checkExceed(value, user.limitMonthlyUsd, "KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT")
+              : field === "limitTotalUsd"
+                ? checkExceed(value, user.limitTotalUsd, "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT")
+                : field === "limitConcurrentSessions"
+                  ? checkExceed(
+                      value,
+                      user.limitConcurrentSessions,
+                      "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT"
+                    )
+                  : null;
+    if (exceed) return exceed;
+
+    // 字段映射：camelCase → snake_case（updateKey 仓库层只写 defined 字段）
+    const dbFieldMap: Record<PatchKeyLimitField, string> = {
+      limit5hUsd: "limit_5h_usd",
+      limitDailyUsd: "limit_daily_usd",
+      limitWeeklyUsd: "limit_weekly_usd",
+      limitMonthlyUsd: "limit_monthly_usd",
+      limitTotalUsd: "limit_total_usd",
+      limitConcurrentSessions: "limit_concurrent_sessions",
+    };
+
+    await updateKey(keyId, {
+      [dbFieldMap[field]]: value,
+    } as Parameters<typeof updateKey>[1]);
+
+    await invalidateCachedKey(key.key).catch(() => null);
+    revalidatePath("/dashboard");
+
+    emitActionAudit({
+      category: "key",
+      action: "key.update",
+      targetType: "key",
+      targetId: String(keyId),
+      targetName: key.name,
+      after: { [field]: value },
+      success: true,
+    });
+
+    return { ok: true };
+  } catch (error) {
+    logger.error("快捷更新密钥限额失败:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
+  }
+}

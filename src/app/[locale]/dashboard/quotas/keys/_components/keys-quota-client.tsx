@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { editKey } from "@/actions/keys";
+import { type PatchKeyLimitField, patchKeyLimit } from "@/actions/keys";
 import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { QuotaProgress } from "@/components/quota/quota-progress";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
@@ -28,12 +28,7 @@ import { formatCurrency } from "@/lib/utils/currency";
 import { getUsageRate, hasKeyQuotaSet, isUserExceeded } from "@/lib/utils/quota-helpers";
 import { EditKeyQuotaDialog } from "./edit-key-quota-dialog";
 
-type KeyLimitField =
-  | "limit5hUsd"
-  | "limitDailyUsd"
-  | "limitWeeklyUsd"
-  | "limitMonthlyUsd"
-  | "limitConcurrentSessions";
+type KeyLimitField = PatchKeyLimitField;
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null; resetAt?: Date };
@@ -94,7 +89,7 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
   const handleSaveLimit = useCallback(
     async (
       keyId: number,
-      keyName: string,
+      _keyName: string,
       field: KeyLimitField,
       newLimit: number | null
     ): Promise<boolean> => {
@@ -105,10 +100,7 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
               ? 0
               : Math.round(newLimit)
             : newLimit;
-        const res = await editKey(keyId, {
-          name: keyName,
-          [field]: value,
-        } as Parameters<typeof editKey>[1]);
+        const res = await patchKeyLimit(keyId, field, value);
         if (!res.ok) {
           toast.error(res.error || tEdit("saveFailed"));
           return false;

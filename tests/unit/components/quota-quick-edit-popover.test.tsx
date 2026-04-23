@@ -35,11 +35,15 @@ describe("computeQuickEditLimit - set 模式", () => {
     expect(computeQuickEditLimit("set", "", 100, "currency", true)).toBeNull();
   });
 
+  test("空输入 + allowClear=false → null（拒绝清除，由 canSave 阻止保存）", () => {
+    expect(computeQuickEditLimit("set", "", 100, "integer", false)).toBeNull();
+  });
+
   test("输入 0 + allowClear=true → null", () => {
     expect(computeQuickEditLimit("set", "0", 100, "currency", true)).toBeNull();
   });
 
-  test("输入 0 + allowClear=false → 0（保留）", () => {
+  test("输入 0 + allowClear=false → 0（保留，由调用方逻辑/canSave 判定）", () => {
     expect(computeQuickEditLimit("set", "0", 100, "integer", false)).toBe(0);
   });
 

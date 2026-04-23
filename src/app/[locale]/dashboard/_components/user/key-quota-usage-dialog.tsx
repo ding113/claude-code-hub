@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getKeyQuotaUsage, type KeyQuotaItem, type KeyQuotaUsageResult } from "@/actions/key-quota";
-import { editKey } from "@/actions/keys";
+import { type PatchKeyLimitField, patchKeyLimit } from "@/actions/keys";
 import { QuotaProgress } from "@/components/quota/quota-progress";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils";
+
+const KEY_FIELD_MAP: Record<KeyQuotaItem["type"], PatchKeyLimitField> = {
+  limit5h: "limit5hUsd",
+  limitDaily: "limitDailyUsd",
+  limitWeekly: "limitWeeklyUsd",
+  limitMonthly: "limitMonthlyUsd",
+  limitTotal: "limitTotalUsd",
+  limitSessions: "limitConcurrentSessions",
+};
 
 export interface KeyQuotaUsageDialogProps {
   open: boolean;
@@ -112,15 +121,6 @@ export function KeyQuotaUsageDialog({
     return LIMIT_TYPE_ORDER.indexOf(a.type) - LIMIT_TYPE_ORDER.indexOf(b.type);
   });
 
-  const KEY_FIELD_MAP: Record<KeyQuotaItem["type"], string> = {
-    limit5h: "limit5hUsd",
-    limitDaily: "limitDailyUsd",
-    limitWeekly: "limitWeeklyUsd",
-    limitMonthly: "limitMonthlyUsd",
-    limitTotal: "limitTotalUsd",
-    limitSessions: "limitConcurrentSessions",
-  };
-
   const handleSaveLimit = useCallback(
     async (type: KeyQuotaItem["type"], newLimit: number | null) => {
       const field = KEY_FIELD_MAP[type];
@@ -128,10 +128,7 @@ export function KeyQuotaUsageDialog({
       try {
         const value =
           type === "limitSessions" ? (newLimit == null ? 0 : Math.round(newLimit)) : newLimit;
-        const res = await editKey(keyId, {
-          name: data?.keyName || keyName,
-          [field]: value,
-        } as Parameters<typeof editKey>[1]);
+        const res = await patchKeyLimit(keyId, field, value);
         if (!res.ok) {
           toast.error(res.error || tEdit("saveFailed"));
           return false;
@@ -145,7 +142,7 @@ export function KeyQuotaUsageDialog({
         return false;
       }
     },
-    [keyId, keyName, data?.keyName, fetchData, tEdit]
+    [keyId, fetchData, tEdit]
   );
 
   return (

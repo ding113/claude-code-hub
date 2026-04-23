@@ -234,6 +234,7 @@ export function UserKeyTableRow({
       }
       toast.success(tQuickEdit("saveSuccess"));
       clearUsageCache(user.id);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       router.refresh();
       return true;
     } catch (err) {
@@ -435,6 +436,7 @@ export function UserKeyTableRow({
               label={translations.columns.limitRpm}
               unit="integer"
               onSave={(v) => handleSaveUserLimit("rpm", v)}
+              allowClear={false}
             >
               <Badge
                 variant={rpm ? "secondary" : "outline"}

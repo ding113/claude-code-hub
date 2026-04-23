@@ -39,6 +39,7 @@ export function computeQuickEditLimit(
     return (currentLimit ?? 0) + parsed;
   }
   // set 模式
+  // 空输入：仅在允许 clear 时视为「清除限额」，否则视为非法（返回 null 由调用方拒绝保存）
   if (draft.trim().length === 0) return null;
   if (parsed == null) return null;
   if (allowClear && parsed === 0) return null;
@@ -123,9 +124,13 @@ export function QuotaQuickEditPopover({
       // 增量模式：必须输入大于 0 的值
       return parsedDelta != null && parsedDelta > 0;
     }
-    // set 模式：允许空（清除）或有效数值
+    // set 模式：
+    // - 空输入：仅 allowClear=true 时允许（=清除限额）
+    // - 有效数值：allowClear=false 时禁止 0（避免「封禁」语义如 RPM）
     if (trimmed.length === 0) return allowClear;
-    return parsedDelta != null;
+    if (parsedDelta == null) return false;
+    if (!allowClear && parsedDelta === 0) return false;
+    return true;
   }, [disabled, saving, validationError, mode, parsedDelta, trimmed, allowClear]);
 
   // 打开时聚焦
@@ -258,15 +263,23 @@ export function QuotaQuickEditPopover({
   if (!isDesktop) {
     return (
       <>
-        <span
+        <button
+          type="button"
+          disabled={disabled}
+          className={
+            disabled
+              ? "inline-flex items-center cursor-default"
+              : "inline-flex items-center cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          }
           onClick={(e) => {
             if (disabled) return;
             e.stopPropagation();
             handleOpenChange(true);
           }}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           {children}
-        </span>
+        </button>
         <Drawer open={open} onOpenChange={handleOpenChange}>
           <DrawerContent>
             <DrawerHeader>
@@ -281,7 +294,15 @@ export function QuotaQuickEditPopover({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverTrigger asChild>
+        <span
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {children}
+        </span>
+      </PopoverTrigger>
       <PopoverContent
         align="center"
         side="bottom"
