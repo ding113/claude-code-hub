@@ -72,9 +72,6 @@ describe("computeQuickEditLimit - add 模式", () => {
   });
 
   test("浮点累加（避免不必要四舍五入）", () => {
-    expect(computeQuickEditLimit("add", "0.1", 0.2, "currency", true)).toBeCloseTo(
-      0.3,
-      10
-    );
+    expect(computeQuickEditLimit("add", "0.1", 0.2, "currency", true)).toBeCloseTo(0.3, 10);
   });
 });

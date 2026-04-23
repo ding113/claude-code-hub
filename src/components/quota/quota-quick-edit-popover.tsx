@@ -16,10 +16,7 @@ export type QuickEditMode = "set" | "add";
 export type QuickEditUnit = "currency" | "integer";
 
 /** 解析输入串为合法数值（整数模式下只接受整数） */
-export function parseQuickEditDraft(
-  draft: string,
-  unit: QuickEditUnit
-): number | null {
+export function parseQuickEditDraft(draft: string, unit: QuickEditUnit): number | null {
   const trimmed = draft.trim();
   if (trimmed.length === 0) return null;
   const n = Number(trimmed);
@@ -98,10 +95,7 @@ export function QuotaQuickEditPopover({
 
   const trimmed = draft.trim();
 
-  const parsedDelta = useMemo(
-    () => parseQuickEditDraft(draft, unit),
-    [draft, unit]
-  );
+  const parsedDelta = useMemo(() => parseQuickEditDraft(draft, unit), [draft, unit]);
 
   // 计算最终限额
   const computedLimit = useMemo<number | null>(
