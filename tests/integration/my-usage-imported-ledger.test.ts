@@ -4,6 +4,7 @@ import { db } from "@/drizzle/db";
 import { keys, messageRequest, usageLedger, users } from "@/drizzle/schema";
 import "@/lib/auth-session-storage.node";
 import { runWithAuthSession } from "@/lib/auth";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { findKeyById } from "@/repository/key";
 import { findUserById } from "@/repository/user";
 import { findUsageLogsBatch } from "@/repository/usage-logs";
@@ -55,6 +56,26 @@ function getStableRecentUtcTimestamp(): number {
     0,
     0
   );
+}
+
+async function getServerDateString(timestamp: number): Promise<string> {
+  const timezone = await resolveSystemTimezone();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestamp));
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    throw new Error(`failed to derive server date parts for timezone ${timezone}`);
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
 async function createTestUser(name: string): Promise<TestUser> {
@@ -244,7 +265,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
     });
 
     const now = getStableRecentUtcTimestamp();
-    const today = new Date(now).toISOString().slice(0, 10);
+    const today = await getServerDateString(now);
     const visibleIp = "203.0.113.19";
 
     const oldA = await insertLedgerOnlyRow({
@@ -346,7 +367,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
     });
 
     const now = getStableRecentUtcTimestamp();
-    const today = new Date(now).toISOString().slice(0, 10);
+    const today = await getServerDateString(now);
 
     const importedRequestId = await insertLedgerOnlyRow({
       userId: user.id,
