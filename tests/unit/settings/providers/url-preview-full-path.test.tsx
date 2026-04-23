@@ -62,6 +62,34 @@ describe("UrlPreview full-path compatibility", () => {
     unmount();
   });
 
+  test("bare /openai preview stays single-versioned", () => {
+    const { container, unmount } = renderWithIntl(
+      <UrlPreview baseUrl="https://api.gptclubapi.xyz/openai" providerType="codex" />
+    );
+
+    expect(container.textContent).toContain("https://api.gptclubapi.xyz/openai/v1/responses");
+    expect(container.textContent).not.toContain(
+      "https://api.gptclubapi.xyz/openai/v1/v1/responses"
+    );
+    expect(container.textContent).not.toContain("Duplicate path detected");
+
+    unmount();
+  });
+
+  test("bare /openai/ preview stays single-versioned", () => {
+    const { container, unmount } = renderWithIntl(
+      <UrlPreview baseUrl="https://api.gptclubapi.xyz/openai/" providerType="codex" />
+    );
+
+    expect(container.textContent).toContain("https://api.gptclubapi.xyz/openai/v1/responses");
+    expect(container.textContent).not.toContain(
+      "https://api.gptclubapi.xyz/openai/v1/v1/responses"
+    );
+    expect(container.textContent).not.toContain("Duplicate path detected");
+
+    unmount();
+  });
+
   test("合法重复业务片段不应触发 duplicate warning", () => {
     const { container, unmount } = renderWithIntl(
       <UrlPreview

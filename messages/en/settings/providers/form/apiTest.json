@@ -52,11 +52,17 @@
       "latencyCheck": "Latency Check",
       "message": "Message",
       "model": "Model",
+      "requestUrl": "Request URL",
       "response": "Response",
       "status": "Status",
       "testedAt": "Tested At",
       "usage": "Usage",
       "validationDetails": "Validation Details"
+    },
+    "requestUrl": {
+      "hint": "This is the actual URL used for the last provider test attempt.",
+      "label": "Request URL",
+      "title": "Actual Request URL"
     },
     "dialogTitle": "Provider Test Details",
     "errorDetails": {

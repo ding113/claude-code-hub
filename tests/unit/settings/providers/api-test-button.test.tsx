@@ -93,6 +93,12 @@ describe("ApiTestButton", () => {
         },
       ],
     });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   test("供应商检测 UI 不应再要求手动选择格式、模板、关键字或超时", async () => {
@@ -184,6 +190,86 @@ describe("ApiTestButton", () => {
     expect(text).not.toContain(apiTestMessages.requestConfig);
     expect(text).not.toContain(apiTestMessages.successContains);
     expect(text).not.toContain(apiTestMessages.timeout.label);
+
+    unmount();
+  });
+
+  test("copies request url from the result details dialog", async () => {
+    testProviderUnifiedMock.mockResolvedValue({
+      ok: true,
+      data: {
+        success: false,
+        status: "red",
+        subStatus: "client_error",
+        message: "Provider unavailable: client error",
+        latencyMs: 321,
+        httpStatusCode: 400,
+        httpStatusText: "Bad Request",
+        requestUrl: "https://api.gptclubapi.xyz/openai/responses",
+        rawResponse: '{"error":"Invalid URL (POST /v1/v1/responses)"}',
+        errorMessage: "Invalid URL (POST /v1/v1/responses)",
+        errorType: "invalid_request_error",
+        testedAt: "2026-04-23T08:56:30.000Z",
+        validationDetails: {
+          httpPassed: false,
+          httpStatusCode: 400,
+          latencyPassed: false,
+          latencyMs: 321,
+          contentPassed: false,
+          contentTarget: "pong",
+        },
+      },
+    });
+
+    const { container, unmount } = render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerUrl="https://api.gptclubapi.xyz/openai"
+          apiKey="sk-test"
+          providerType="codex"
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(2);
+
+    const testButton = container.querySelector("button");
+    expect(testButton).not.toBeNull();
+
+    await act(async () => {
+      testButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    const detailsButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes(apiTestMessages.viewDetails)
+    );
+    expect(detailsButton).toBeTruthy();
+
+    await act(async () => {
+      detailsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(document.body.textContent || "").toContain("Actual Request URL");
+    expect(document.body.textContent || "").toContain(
+      "https://api.gptclubapi.xyz/openai/responses"
+    );
+
+    const copyButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes(apiTestMessages.copyResult)
+    );
+    expect(copyButton).toBeTruthy();
+
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("https://api.gptclubapi.xyz/openai/responses")
+    );
 
     unmount();
   });

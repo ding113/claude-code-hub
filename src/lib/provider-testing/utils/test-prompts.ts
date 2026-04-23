@@ -134,6 +134,12 @@ export const API_ENDPOINTS: Record<ProviderType, string> = {
   "gemini-cli": "/v1beta/models/{model}:generateContent",
 };
 
+const OPENAI_VERSIONED_FALLBACK_PATHS = [
+  ["/v1/responses", "/responses"],
+  ["/v1/chat/completions", "/chat/completions"],
+  ["/v1/models", "/models"],
+] as const;
+
 function looksLikeAnthropicProxy(providerUrl?: string): boolean {
   if (!providerUrl) {
     return false;
@@ -258,4 +264,45 @@ export function getTestUrl(
 
   // 与真实代理转发共用同一 URL 语义，避免 provider testing 再次分叉出一套拼接规则。
   return buildProxyUrl(baseUrl, requestUrl);
+}
+
+function rewriteOpenAiVersionedPath(
+  pathname: string,
+  versionedPath: string,
+  versionlessPath: string
+): string | null {
+  const matchIndex = pathname.lastIndexOf(versionedPath);
+  if (matchIndex === -1) {
+    return null;
+  }
+
+  const suffix = pathname.slice(matchIndex + versionedPath.length);
+  if (suffix.length > 0 && !suffix.startsWith("/")) {
+    return null;
+  }
+
+  return `${pathname.slice(0, matchIndex)}${versionlessPath}${suffix}`;
+}
+
+export function getVersionlessOpenAiFallbackUrl(requestUrl: string): string | null {
+  try {
+    const nextUrl = new URL(requestUrl);
+    for (const [versionedPath, versionlessPath] of OPENAI_VERSIONED_FALLBACK_PATHS) {
+      const rewrittenPath = rewriteOpenAiVersionedPath(
+        nextUrl.pathname,
+        versionedPath,
+        versionlessPath
+      );
+      if (!rewrittenPath || rewrittenPath === nextUrl.pathname) {
+        continue;
+      }
+
+      nextUrl.pathname = rewrittenPath;
+      return nextUrl.toString();
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }

@@ -52,11 +52,17 @@
       "latencyCheck": "レイテンシチェック",
       "message": "メッセージ",
       "model": "モデル",
+      "requestUrl": "リクエスト URL",
       "response": "応答",
       "status": "ステータス",
       "testedAt": "テスト日時",
       "usage": "使用量",
       "validationDetails": "検証詳細"
+    },
+    "requestUrl": {
+      "hint": "ここには直近の provider test で実際に送信した URL を表示します。relay の経路問題の切り分けに使えます。",
+      "label": "リクエスト URL",
+      "title": "実際のリクエスト URL"
     },
     "dialogTitle": "プロバイダーテスト詳細",
     "errorDetails": {

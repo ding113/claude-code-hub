@@ -112,6 +112,30 @@ describe("buildProxyUrl", () => {
     );
   });
 
+  test("bare /openai codex path stays absolute and single-versioned", () => {
+    expectBuiltUrl(
+      "https://api.gptclubapi.xyz/openai",
+      "/v1/responses?x=1",
+      "https://api.gptclubapi.xyz/openai/v1/responses?x=1"
+    );
+  });
+
+  test("bare /openai/ codex path stays absolute and single-versioned", () => {
+    expectBuiltUrl(
+      "https://api.gptclubapi.xyz/openai/",
+      "/v1/responses?x=1",
+      "https://api.gptclubapi.xyz/openai/v1/responses?x=1"
+    );
+  });
+
+  test("explicit /openai/v1 codex root only appends endpoint once", () => {
+    expectBuiltUrl(
+      "https://api.gptclubapi.xyz/openai/v1",
+      "/v1/responses?x=1",
+      "https://api.gptclubapi.xyz/openai/v1/responses?x=1"
+    );
+  });
+
   test("任意版本根路径：baseUrl=/api/coding/paas/v4 时只追加 endpoint", () => {
     expectBuiltUrl(
       "https://open.bigmodel.cn/api/coding/paas/v4",
