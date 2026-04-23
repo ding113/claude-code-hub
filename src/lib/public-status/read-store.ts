@@ -66,7 +66,12 @@ function buildNoDataPayload(): PublicStatusPayload {
 }
 
 function normalizeTimelineState(value: unknown): PublicStatusTimelineState {
-  if (value === "operational" || value === "failed" || value === "no_data") {
+  if (
+    value === "operational" ||
+    value === "degraded" ||
+    value === "failed" ||
+    value === "no_data"
+  ) {
     return value;
   }
   return "no_data";
@@ -90,7 +95,8 @@ function sanitizeTimelineBuckets(input: unknown): PublicStatusTimelineBucket[] {
     if (
       typeof value.bucketStart !== "string" ||
       typeof value.bucketEnd !== "string" ||
-      typeof value.sampleCount !== "number"
+      typeof value.sampleCount !== "number" ||
+      !Number.isFinite(value.sampleCount)
     ) {
       return [];
     }
