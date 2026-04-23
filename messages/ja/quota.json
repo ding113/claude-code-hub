@@ -361,5 +361,24 @@
         }
       }
     }
+  },
+  "quickEdit": {
+    "title": "上限の調整",
+    "currentLabel": "現在",
+    "noLimit": "無制限",
+    "tabs": {
+      "set": "値を設定",
+      "add": "値を追加"
+    },
+    "setPlaceholder": "新しい上限を入力（空=無制限）",
+    "addPlaceholder": "追加する値を入力",
+    "preview": "新しい上限：{value}",
+    "previewNoLimit": "上限をクリア（無制限）",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "saveSuccess": "上限を更新しました",
+    "saveFailed": "更新に失敗しました",
+    "invalidNumber": "有効な数値を入力してください",
+    "negativeNotAllowed": "負の値は入力できません"
   }
 }

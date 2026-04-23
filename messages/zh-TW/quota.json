@@ -359,5 +359,24 @@
         }
       }
     }
+  },
+  "quickEdit": {
+    "title": "調整限額",
+    "currentLabel": "當前",
+    "noLimit": "無限額",
+    "tabs": {
+      "set": "設定值",
+      "add": "增加值"
+    },
+    "setPlaceholder": "輸入新限額（留空=無限額）",
+    "addPlaceholder": "輸入要增加的值",
+    "preview": "新限額：{value}",
+    "previewNoLimit": "將清除限額（無限額）",
+    "save": "儲存",
+    "cancel": "取消",
+    "saveSuccess": "限額已更新",
+    "saveFailed": "更新失敗",
+    "invalidNumber": "請輸入有效數字",
+    "negativeNotAllowed": "不能為負數"
   }
 }

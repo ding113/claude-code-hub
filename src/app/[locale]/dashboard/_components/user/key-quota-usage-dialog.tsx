@@ -5,7 +5,9 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getKeyQuotaUsage, type KeyQuotaItem, type KeyQuotaUsageResult } from "@/actions/key-quota";
+import { editKey } from "@/actions/keys";
 import { QuotaProgress } from "@/components/quota/quota-progress";
+import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,6 +43,7 @@ export function KeyQuotaUsageDialog({
   currencyCode: propCurrencyCode,
 }: KeyQuotaUsageDialogProps) {
   const t = useTranslations("dashboard.userManagement.keyQuotaUsageDialog");
+  const tEdit = useTranslations("quota.quickEdit");
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<KeyQuotaUsageResult | null>(null);
   const [error, setError] = useState(false);
@@ -109,6 +112,42 @@ export function KeyQuotaUsageDialog({
     return LIMIT_TYPE_ORDER.indexOf(a.type) - LIMIT_TYPE_ORDER.indexOf(b.type);
   });
 
+  const KEY_FIELD_MAP: Record<KeyQuotaItem["type"], string> = {
+    limit5h: "limit5hUsd",
+    limitDaily: "limitDailyUsd",
+    limitWeekly: "limitWeeklyUsd",
+    limitMonthly: "limitMonthlyUsd",
+    limitTotal: "limitTotalUsd",
+    limitSessions: "limitConcurrentSessions",
+  };
+
+  const handleSaveLimit = useCallback(
+    async (type: KeyQuotaItem["type"], newLimit: number | null) => {
+      const field = KEY_FIELD_MAP[type];
+      if (!field) return false;
+      try {
+        const value =
+          type === "limitSessions" ? (newLimit == null ? 0 : Math.round(newLimit)) : newLimit;
+        const res = await editKey(keyId, {
+          name: data?.keyName || keyName,
+          [field]: value,
+        } as Parameters<typeof editKey>[1]);
+        if (!res.ok) {
+          toast.error(res.error || tEdit("saveFailed"));
+          return false;
+        }
+        toast.success(tEdit("saveSuccess"));
+        await fetchData();
+        return true;
+      } catch (err) {
+        console.error("[KeyQuotaUsageDialog] save failed", err);
+        toast.error(tEdit("saveFailed"));
+        return false;
+      }
+    },
+    [keyId, keyName, data?.keyName, fetchData, tEdit]
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -147,8 +186,24 @@ export function KeyQuotaUsageDialog({
               <div key={item.type} className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{t(getLabelKey(item.type))}</span>
-                  <span className="font-medium">
-                    {formatValue(item.type, item.current)} / {formatLimit(item.type, item.limit)}
+                  <span className="font-medium tabular-nums">
+                    {formatValue(item.type, item.current)} /{" "}
+                    <QuotaQuickEditPopover
+                      currentLimit={item.limit}
+                      label={t(getLabelKey(item.type))}
+                      unit={item.type === "limitSessions" ? "integer" : "currency"}
+                      currencyCode={currencyCode}
+                      onSave={(newLimit) => handleSaveLimit(item.type, newLimit)}
+                      allowClear={item.type !== "limitSessions"}
+                    >
+                      <button
+                        type="button"
+                        className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 rounded-sm cursor-pointer"
+                        aria-label={t(getLabelKey(item.type))}
+                      >
+                        {formatLimit(item.type, item.limit)}
+                      </button>
+                    </QuotaQuickEditPopover>
                   </span>
                 </div>
                 {item.limit !== null && item.limit > 0 && (

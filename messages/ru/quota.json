@@ -384,5 +384,24 @@
         }
       }
     }
+  },
+  "quickEdit": {
+    "title": "Изменить лимит",
+    "currentLabel": "Текущий",
+    "noLimit": "Без лимита",
+    "tabs": {
+      "set": "Задать значение",
+      "add": "Увеличить"
+    },
+    "setPlaceholder": "Введите новый лимит (пусто = без лимита)",
+    "addPlaceholder": "Введите прирост",
+    "preview": "Новый лимит: {value}",
+    "previewNoLimit": "Лимит будет снят (без лимита)",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "saveSuccess": "Лимит обновлён",
+    "saveFailed": "Ошибка обновления",
+    "invalidNumber": "Введите корректное число",
+    "negativeNotAllowed": "Не может быть отрицательным"
   }
 }
