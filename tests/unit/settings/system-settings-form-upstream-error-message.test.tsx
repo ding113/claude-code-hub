@@ -13,7 +13,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 const systemConfigActionMocks = vi.hoisted(() => ({
-  saveSystemSettings: vi.fn(async () => ({ ok: true })),
+  // Mirrors the real `saveSystemSettings` ActionResult shape: { ok: true, data: SystemSettings }.
+  // Individual cases override via mockResolvedValueOnce with richer payloads as needed.
+  saveSystemSettings: vi.fn(async () => ({ ok: true, data: {} })),
 }));
 vi.mock("@/actions/system-config", () => systemConfigActionMocks);
 

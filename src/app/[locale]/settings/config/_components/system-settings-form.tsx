@@ -519,6 +519,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           </div>
           <Switch
             id="pass-through-upstream-error-message"
+            aria-label={t("passThroughUpstreamErrorMessage")}
             checked={passThroughUpstreamErrorMessage}
             onCheckedChange={(checked) => setPassThroughUpstreamErrorMessage(checked)}
             disabled={isPending}

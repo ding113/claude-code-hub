@@ -682,16 +682,33 @@ export async function updateSystemSettings(
         delete downgradedUpdates.ipExtractionConfig;
         delete downgradedUpdates.ipGeoLookupEnabled;
 
-        [updated] = await executor
-          .update(systemSettings)
-          .set(downgradedUpdates)
-          .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutHighConcurrencyMode);
+        const legacyUpdates = { ...downgradedUpdates };
+        delete legacyUpdates.codexPriorityBillingSource;
+
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(downgradedUpdates)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutHighConcurrencyMode);
+        } catch (downgradedFallbackError) {
+          if (!isUndefinedColumnError(downgradedFallbackError)) {
+            throw downgradedFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
+            { error: downgradedFallbackError }
+          );
+
+          [updated] = await executor
+            .update(systemSettings)
+            .set(legacyUpdates)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutCodexAndHighConcurrency);
+        }
 
         if (!updated) {
-          const legacyUpdates = { ...downgradedUpdates };
-          delete legacyUpdates.codexPriorityBillingSource;
-
           [updated] = await executor
             .update(systemSettings)
             .set(legacyUpdates)

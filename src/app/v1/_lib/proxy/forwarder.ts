@@ -53,6 +53,7 @@ import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { isStrictStandardEndpointPath } from "./endpoint-paths";
 import {
+  ALL_PROVIDERS_UNAVAILABLE_MESSAGE,
   buildRequestDetails,
   categorizeErrorAsync,
   EmptyResponseError,
@@ -4101,7 +4102,7 @@ export class ProxyForwarder {
         finalError.upstreamError?.safeClientMessageCandidate ||
         finalError.upstreamError?.body)
         ? (deriveClientSafeUpstreamErrorMessage({
-            rawText: finalError.upstreamError?.rawBody,
+            rawText: finalError.upstreamError?.rawBody ?? finalError.upstreamError?.body,
             candidateMessage:
               finalError.upstreamError?.safeClientMessageCandidate ??
               finalError.upstreamError?.body ??
@@ -4110,7 +4111,7 @@ export class ProxyForwarder {
           }) ?? undefined)
         : undefined;
 
-    return new ProxyError("所有供应商暂时不可用，请稍后重试", 503, {
+    return new ProxyError(ALL_PROVIDERS_UNAVAILABLE_MESSAGE, 503, {
       body: "",
       safeClientMessageCandidate,
     });

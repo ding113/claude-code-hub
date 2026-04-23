@@ -13,6 +13,7 @@ import type { SystemSettings } from "@/types/system-config";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { attachSessionIdToErrorResponse } from "./error-session-id";
 import {
+  ALL_PROVIDERS_UNAVAILABLE_MESSAGE,
   getErrorOverrideAsync,
   isEmptyResponseError,
   isRateLimitError,
@@ -46,7 +47,7 @@ function getGenericProxyErrorFallbackMessage(
     return fallback;
   }
 
-  if (fallback === "所有供应商暂时不可用，请稍后重试") {
+  if (fallback === ALL_PROVIDERS_UNAVAILABLE_MESSAGE) {
     return fallback;
   }
 
