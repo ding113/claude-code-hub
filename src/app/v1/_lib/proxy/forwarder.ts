@@ -1299,8 +1299,16 @@ export class ProxyForwarder {
     );
     session.setCacheTtlResolved(resolvedCacheTtl);
 
+    // 应用模型重定向（如果配置了）
+    const wasRedirected = ModelRedirector.apply(session, provider);
+    if (wasRedirected) {
+      logger.debug("ProxyForwarder: Model redirected", {
+        providerId: provider.id,
+      });
+    }
+
     // 解析 1M 上下文是否应用
-    // 注意：此时模型重定向尚未发生，getCurrentModel() 返回原始模型
+    // 注意：此时模型重定向已发生，getCurrentModel() 返回重定向后的模型
     // 1M 功能仅对 Anthropic 类型供应商有效
     const isAnthropicProvider =
       provider.providerType === "claude" || provider.providerType === "claude-auth";
@@ -1319,10 +1327,27 @@ export class ProxyForwarder {
     }
 
     // 应用模型重定向（如果配置了）
+    logger.debug("ProxyForwarder: Before redirect", {
+      providerId: provider.id,
+      providerName: provider.name,
+      modelRedirects: provider.modelRedirects,
+      currentModel: session.getCurrentModel(),
+      requestModel: session.request.model,
+    });
     const wasRedirected = ModelRedirector.apply(session, provider);
     if (wasRedirected) {
       logger.debug("ProxyForwarder: Model redirected", {
         providerId: provider.id,
+        providerName: provider.name,
+        modelAfterRedirect: session.request.model,
+        messageModelAfterRedirect: (session.request.message as Record<string, unknown>).model,
+      });
+    } else {
+      logger.debug("ProxyForwarder: No redirect applied", {
+        providerId: provider.id,
+        currentModel: session.getCurrentModel(),
+        hasRedirects: !!provider.modelRedirects,
+        redirectKeys: provider.modelRedirects ? Object.keys(provider.modelRedirects) : [],
       });
     }
 
