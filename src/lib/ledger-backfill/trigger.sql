@@ -162,9 +162,11 @@ BEGIN
 
   IF NEW.blocked_by = 'warmup' THEN
     -- If a ledger row already exists (row was originally non-warmup), mark it as warmup
+    -- and sync the latest actual_response_model so audit stays consistent across tables.
     UPDATE usage_ledger
     SET blocked_by = 'warmup',
-        success_rate_outcome = v_success_rate_outcome
+        success_rate_outcome = v_success_rate_outcome,
+        actual_response_model = NEW.actual_response_model
     WHERE request_id = NEW.id;
     RETURN NEW;
   END IF;

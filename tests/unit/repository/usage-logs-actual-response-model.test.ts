@@ -148,7 +148,7 @@ describe("findUsageLogsBatch: actualResponseModel propagation", () => {
     });
   });
 
-  test("missing actualResponseModel in upstream row surfaces as null (not undefined)", async () => {
+  test("explicit null actualResponseModel surfaces as null (not undefined)", async () => {
     vi.resetModules();
 
     const ledgerRows = [

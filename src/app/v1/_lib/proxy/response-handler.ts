@@ -972,7 +972,9 @@ export class ProxyResponseHandler {
               responseText,
               statusCode,
               duration,
-              errorMessageForFinalize
+              errorMessageForFinalize,
+              undefined,
+              false // Gemini 非流式透传
             );
 
             emitLangfuseTrace(session, {
@@ -1861,7 +1863,8 @@ export class ProxyResponseHandler {
               finalized.effectiveStatusCode,
               duration,
               finalized.errorMessage ?? undefined,
-              finalized.providerIdForPersistence ?? undefined
+              finalized.providerIdForPersistence ?? undefined,
+              true // Gemini 流式透传(NDJSON 无 data:/event: 前缀,必须显式告知)
             );
 
             emitLangfuseTrace(session, {
@@ -1925,7 +1928,8 @@ export class ProxyResponseHandler {
                 finalized.effectiveStatusCode,
                 duration,
                 finalized.errorMessage ?? abortReason,
-                finalized.providerIdForPersistence ?? undefined
+                finalized.providerIdForPersistence ?? undefined,
+                true // 流式透传错误兜底也是流式上下文
               );
             } catch (finalizeError) {
               await persistRequestFailure({
@@ -3546,12 +3550,20 @@ export async function finalizeRequestStats(
   statusCode: number,
   duration: number,
   errorMessage?: string,
-  providerIdOverride?: number
+  providerIdOverride?: number,
+  /**
+   * 是否流式上下文。调用方已知时必须显式传入:
+   * - Gemini 透传 NDJSON 没有 `data:`/`event:` 头,isSSEText() 会判成非流式,
+   *   导致 extractActualResponseModelForProvider 走 non-stream JSON.parse 失败
+   * - 如果不传则回退为 isSSEText 嗅探(仅兼容保留)
+   */
+  isStreaming?: boolean
 ): Promise<UsageMetrics | null> {
   const { messageContext, provider } = session;
   if (!provider || !messageContext) {
     return null;
   }
+  const resolvedIsStream = isStreaming ?? isSSEText(responseText);
 
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
   const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
@@ -3571,7 +3583,7 @@ export async function finalizeRequestStats(
       model: session.getCurrentModel() ?? undefined,
       actualResponseModel: extractActualResponseModelForProvider(
         provider.providerType,
-        isSSEText(responseText),
+        resolvedIsStream,
         responseText
       ),
       providerId: providerIdForPersistence,
@@ -3680,7 +3692,7 @@ export async function finalizeRequestStats(
     model: session.getCurrentModel() ?? undefined,
     actualResponseModel: extractActualResponseModelForProvider(
       provider.providerType,
-      isSSEText(responseText),
+      resolvedIsStream,
       responseText
     ),
     providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）

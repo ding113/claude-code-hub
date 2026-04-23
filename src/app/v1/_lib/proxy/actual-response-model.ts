@@ -189,12 +189,27 @@ function scanStream(text: string, reader: (obj: unknown) => string | null): stri
 }
 
 function* extractJsonChunks(text: string): Generator<string, void, void> {
-  const lines = text.split(/\r?\n/);
+  // SSE 多行 `data:` 合并规则(W3C EventSource):同一事件内多个 `data:` 行
+  // 按 `\n` 连接;事件边界是空行或新事件开始。因此这里把 `data:` 行累积到
+  // sseDataBuffer,遇到空行/event: 头时再 flush。
+  //
+  // 使用 iterLines 而不是 text.split(/\r?\n/),避免对多 MB 响应体一次性切片;
+  // 配合 Generator + scanStream 的提前 return,找到首个模型即停止扫描。
   let ndjsonBuffer = "";
+  const sseDataLines: string[] = [];
 
-  for (const rawLine of lines) {
+  const flushSseEvent = function* (): Generator<string, void, void> {
+    if (sseDataLines.length === 0) return;
+    const payload = sseDataLines.join("\n").trim();
+    sseDataLines.length = 0;
+    if (!payload || payload === "[DONE]") return;
+    yield payload;
+  };
+
+  for (const rawLine of iterLines(text)) {
     const line = rawLine.trim();
     if (!line) {
+      yield* flushSseEvent();
       if (ndjsonBuffer) {
         yield ndjsonBuffer;
         ndjsonBuffer = "";
@@ -202,26 +217,28 @@ function* extractJsonChunks(text: string): Generator<string, void, void> {
       continue;
     }
 
+    // SSE 注释(`: keep-alive` 等)属于事件内容外,不触发边界
+    if (line.startsWith(":")) continue;
+
     // SSE 形式: data: {...}  或  data:{...}
     if (line.startsWith("data:")) {
-      const payload = line.slice(5).trimStart();
-      if (!payload || payload === "[DONE]") continue;
-      yield payload;
+      sseDataLines.push(line.slice(5).trimStart());
       continue;
     }
 
-    // 以 ':' 开头是 SSE 注释(例如 keep-alive),忽略
-    if (line.startsWith(":")) continue;
-    // event: ... / id: ... / retry: ... 这些头字段都跳过
-    if (/^(event|id|retry):/i.test(line)) continue;
+    // 非 data 的 SSE 头字段都跳过;但 event:/id:/retry: 出现时视作前一事件结束
+    if (/^(event|id|retry):/i.test(line)) {
+      yield* flushSseEvent();
+      continue;
+    }
 
     // 其余情况视为 NDJSON 的一行(Gemini alt=sse 以外的旧形态)
-    // 或者一条跨行 JSON 的一部分(极少见,用 buffer 合并)
+    // 或者一条跨行 JSON 的一部分;累积时用空格分隔避免 token 粘连
     if (line.startsWith("{") && line.endsWith("}")) {
       yield line;
       ndjsonBuffer = "";
     } else {
-      ndjsonBuffer += line;
+      ndjsonBuffer += (ndjsonBuffer ? " " : "") + line;
       // 尝试提前 flush 闭合的 JSON
       if (ndjsonBuffer.startsWith("{") && balanced(ndjsonBuffer)) {
         yield ndjsonBuffer;
@@ -230,7 +247,25 @@ function* extractJsonChunks(text: string): Generator<string, void, void> {
     }
   }
 
+  yield* flushSseEvent();
   if (ndjsonBuffer.startsWith("{")) yield ndjsonBuffer;
+}
+
+/**
+ * 惰性按行切分大文本,避免 `text.split(/\r?\n/)` 对多 MB 响应体一次性构造行数组。
+ * 消费方用 for-of + generator 可以在找到首个匹配后立即停止扫描。
+ */
+function* iterLines(text: string): Generator<string, void, void> {
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 10 /* \n */ || code === 13 /* \r */) {
+      yield text.slice(start, i);
+      if (code === 13 && text.charCodeAt(i + 1) === 10) i++; // \r\n
+      start = i + 1;
+    }
+  }
+  if (start < text.length) yield text.slice(start);
 }
 
 function balanced(s: string): boolean {

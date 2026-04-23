@@ -36,7 +36,9 @@ export function ModelDisplayWithRedirect({
     billingModelSource,
   });
   const isRedirected = audit.hasRedirect;
-  const billingModel = billingModelSource === "original" ? originalModel : currentModel;
+  // primaryBillingModel 已在 helper 里按 billingModelSource 选完并做了 null fallback,
+  // 和详情面板保持一致;避免历史数据某个字段缺失时 UI 显示 "-"。
+  const billingModel = audit.primaryBillingModel;
 
   const handleCopyModel = useCallback(
     (e: MouseEvent) => {

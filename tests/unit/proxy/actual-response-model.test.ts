@@ -297,6 +297,32 @@ describe("extractActualResponseModel - edge cases", () => {
     expect(extractActualResponseModel("gemini/non-stream", body)).toBe("gemini-2.5-flash");
   });
 
+  it("SSE multi-line data: concatenates all data: lines of one event before parsing", () => {
+    // W3C EventSource: 同一事件由多行 `data:` 组成,payload = 各行用 \n 连接
+    const stream = [
+      "event: message_start",
+      'data: {"type":"message_start","message":{',
+      'data: "id":"msg_x","type":"message","role":"assistant",',
+      'data: "model":"claude-opus-4-7","content":[]}}',
+      "",
+    ].join("\n");
+    expect(extractActualResponseModel("anthropic/stream", stream)).toBe("claude-opus-4-7");
+  });
+
+  it("multiple SSE events with event: delimiter without blank-line boundary still flush correctly", () => {
+    // 即使上游漏掉了事件之间的空行,新的 event: 头也视作前一事件结束
+    const stream = [
+      "event: message_start",
+      `data: ${JSON.stringify({
+        type: "message_start",
+        message: { type: "message", model: "claude-opus-4-7" },
+      })}`,
+      "event: content_block_start",
+      `data: ${JSON.stringify({ type: "content_block_start" })}`,
+    ].join("\n");
+    expect(extractActualResponseModel("anthropic/stream", stream)).toBe("claude-opus-4-7");
+  });
+
   it("openai-chat/stream caches first model hit and does not require every chunk to carry it", () => {
     const stream = [
       `data: ${JSON.stringify({
