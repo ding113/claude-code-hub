@@ -574,6 +574,7 @@ export class ProxySession {
       strictBlockCause?: ProviderChainItem["strictBlockCause"]; // endpoint pool exhaustion cause
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
       modelRedirect?: ProviderChainItem["modelRedirect"];
+      rawCrossProviderFallbackEnabled?: boolean;
     }
   ): void {
     const item: ProviderChainItem = {
@@ -604,6 +605,7 @@ export class ProxySession {
       strictBlockCause: metadata?.strictBlockCause,
       endpointFilterStats: metadata?.endpointFilterStats,
       modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
+      rawCrossProviderFallbackEnabled: metadata?.rawCrossProviderFallbackEnabled,
     };
 
     // 避免重复添加同一个供应商

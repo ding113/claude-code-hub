@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NON_BILLING_ENDPOINTS, isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
@@ -15,8 +15,14 @@ const triggerSqlSource = readFileSync(
   resolve(process.cwd(), "src/lib/ledger-backfill/trigger.sql"),
   "utf-8"
 );
+const nonBillingMigrationFile = readdirSync(resolve(process.cwd(), "drizzle")).find((file) =>
+  /_equal_selene\.sql$/.test(file)
+);
+if (!nonBillingMigrationFile) {
+  throw new Error("Expected to find the non-chat fallback Drizzle migration file");
+}
 const migrationSource = readFileSync(
-  resolve(process.cwd(), "drizzle/0096_equal_selene.sql"),
+  resolve(process.cwd(), "drizzle", nonBillingMigrationFile),
   "utf-8"
 );
 const sharedBillingConsumerSources = [

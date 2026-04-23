@@ -58,9 +58,7 @@ function scrubProviderChainRequestForReadonly(
         ...item,
         errorDetails: {
           ...restErrorDetails,
-          clientError: shouldStronglyScrubProviderError
-            ? undefined
-            : restErrorDetails.clientError,
+          clientError: shouldStronglyScrubProviderError ? undefined : restErrorDetails.clientError,
           provider: provider
             ? shouldStronglyScrubProviderError
               ? {
@@ -69,8 +67,8 @@ function scrubProviderChainRequestForReadonly(
                   upstreamParsed: undefined,
                 }
               : {
-                ...provider,
-              }
+                  ...provider,
+                }
             : undefined,
         },
       };

@@ -75,9 +75,16 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     method: "POST",
     originalFormat: "claude",
     highConcurrencyModeEnabled: false,
+    rawCrossProviderFallbackEnabled: false,
     addSpecialSetting: vi.fn(),
     setHighConcurrencyModeEnabled(enabled: boolean) {
       this.highConcurrencyModeEnabled = enabled;
+    },
+    setRawCrossProviderFallbackEnabled(enabled: boolean) {
+      this.rawCrossProviderFallbackEnabled = enabled;
+    },
+    isRawCrossProviderFallbackEnabled() {
+      return this.rawCrossProviderFallbackEnabled;
     },
     shouldPersistSessionDebugArtifacts() {
       return !this.highConcurrencyModeEnabled;

@@ -84,7 +84,7 @@ describe("getMyUsageLogsBatchFull", () => {
                   name: "provider-a",
                   statusCode: 401,
                   statusText: "Unauthorized",
-                  upstreamBody: "{\"error\":\"unauthorized\"}",
+                  upstreamBody: '{"error":"unauthorized"}',
                   upstreamParsed: { error: "unauthorized" },
                 },
               },
@@ -96,7 +96,7 @@ describe("getMyUsageLogsBatchFull", () => {
               errorDetails: {
                 request: {
                   headers: "authorization: Bearer raw-secret-token",
-                  body: "{\"model\":\"gpt-4.1\"}",
+                  body: '{"model":"gpt-4.1"}',
                 },
                 clientError: "raw fallback leaked error",
                 provider: {
@@ -104,7 +104,7 @@ describe("getMyUsageLogsBatchFull", () => {
                   name: "provider-b",
                   statusCode: 404,
                   statusText: "Not Found",
-                  upstreamBody: "{\"error\":\"missing\"}",
+                  upstreamBody: '{"error":"missing"}',
                   upstreamParsed: { error: "missing" },
                 },
               },
@@ -163,7 +163,7 @@ describe("getMyUsageLogsBatchFull", () => {
     );
     expect(
       result.ok && result.data.logs[0]?.providerChain?.[0]?.errorDetails?.provider?.upstreamBody
-    ).toBe("{\"error\":\"unauthorized\"}");
+    ).toBe('{"error":"unauthorized"}');
     expect(
       result.ok && result.data.logs[0]?.providerChain?.[1]?.errorDetails?.clientError
     ).toBeUndefined();

@@ -1720,7 +1720,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
-  test("endpoint resolution failure should not inflate launchedProviderCount, winner gets request_success not hedge_winner", async () => {
+  test("standard endpoint selector failure falls back to provider.url, later hedge winner stays hedge_winner", async () => {
     vi.useFakeTimers();
 
     try {
@@ -1755,16 +1755,29 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         "doForward"
       );
 
+      const controller1 = new AbortController();
       const controller2 = new AbortController();
 
-      // Only provider 2 reaches doForward (provider 1 fails at endpoint resolution)
+      // Standard endpoints now fall back to provider.url when selector lookup fails,
+      // so provider 1 still launches and the later provider 2 winner should remain hedge_winner.
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p1",
+          firstChunkDelayMs: 500,
+          controller: controller1,
+        });
+      });
+
       doForward.mockImplementationOnce(async (attemptSession) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller2;
         runtime.clearResponseTimeout = vi.fn();
         return createStreamingResponse({
           label: "p2",
-          firstChunkDelayMs: 10,
+          firstChunkDelayMs: 40,
           controller: controller2,
         });
       });
@@ -1777,8 +1790,6 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(await response.text()).toContain('"provider":"p2"');
       expect(session.provider?.id).toBe(2);
 
-      // Standard endpoints now fall back to provider.url when endpoint resolution fails,
-      // so provider 1 still counts as a launched attempt and the later winner is a hedge winner.
       const chain = session.getProviderChain();
       const winnerEntry = chain.find(
         (entry) => entry.reason === "request_success" || entry.reason === "hedge_winner"
