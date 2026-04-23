@@ -270,7 +270,7 @@ function rewriteOpenAiVersionedPath(
   pathname: string,
   versionedPath: string,
   versionlessPath: string
-): string | null {
+): { matchIndex: number; rewrittenPath: string } | null {
   const matchIndex = pathname.lastIndexOf(versionedPath);
   if (matchIndex === -1) {
     return null;
@@ -281,27 +281,40 @@ function rewriteOpenAiVersionedPath(
     return null;
   }
 
-  return `${pathname.slice(0, matchIndex)}${versionlessPath}${suffix}`;
+  return {
+    matchIndex,
+    rewrittenPath: `${pathname.slice(0, matchIndex)}${versionlessPath}${suffix}`,
+  };
 }
 
 export function getVersionlessOpenAiFallbackUrl(requestUrl: string): string | null {
   try {
     const nextUrl = new URL(requestUrl);
+    let bestRewrite: { matchIndex: number; rewrittenPath: string } | null = null;
+
     for (const [versionedPath, versionlessPath] of OPENAI_VERSIONED_FALLBACK_PATHS) {
-      const rewrittenPath = rewriteOpenAiVersionedPath(
+      const rewriteCandidate = rewriteOpenAiVersionedPath(
         nextUrl.pathname,
         versionedPath,
         versionlessPath
       );
-      if (!rewrittenPath || rewrittenPath === nextUrl.pathname) {
+      if (!rewriteCandidate || rewriteCandidate.rewrittenPath === nextUrl.pathname) {
         continue;
       }
 
-      nextUrl.pathname = rewrittenPath;
-      return nextUrl.toString();
+      // 多个候选都命中时，优先重写最靠近路径尾部的真实请求 endpoint，
+      // 避免误伤 base path 里碰巧同名的 /v1/... 片段。
+      if (!bestRewrite || rewriteCandidate.matchIndex > bestRewrite.matchIndex) {
+        bestRewrite = rewriteCandidate;
+      }
     }
 
-    return null;
+    if (!bestRewrite) {
+      return null;
+    }
+
+    nextUrl.pathname = bestRewrite.rewrittenPath;
+    return nextUrl.toString();
   } catch {
     return null;
   }

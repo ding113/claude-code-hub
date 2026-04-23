@@ -623,6 +623,56 @@ describe("executeProviderTest", () => {
     expect(result.content).toBe("pong");
   });
 
+  test("openai-compatible fallback rewrites the request endpoint instead of a matching base-path segment", async () => {
+    const errorBody = JSON.stringify({
+      error: {
+        message: "Invalid URL (POST /v1/chat/completions)",
+      },
+    });
+    const okBody = JSON.stringify({
+      id: "chatcmpl_test",
+      model: "gpt-4.1-mini",
+      choices: [
+        {
+          index: 0,
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: "pong",
+          },
+        },
+      ],
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(errorBody, {
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+        })
+      )
+      .mockResolvedValueOnce(createMockResponse(okBody));
+
+    const result = await executeProviderTest({
+      providerUrl: "https://relay.example.com/router/v1/responses",
+      apiKey: "sk-test-openai-compatible",
+      providerType: "openai-compatible",
+      model: "gpt-4.1-mini",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://relay.example.com/router/v1/responses/v1/chat/completions",
+      "https://relay.example.com/router/v1/responses/chat/completions",
+    ]);
+    expect(result.success).toBe(true);
+    expect(result.requestUrl).toBe(
+      "https://relay.example.com/router/v1/responses/chat/completions"
+    );
+    expect(result.content).toBe("pong");
+  });
+
   test("fallback result timing reflects the final request attempt", async () => {
     const nowValues = [0, 0, 0, 0, 5, 100, 160, 220];
     const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 220);
