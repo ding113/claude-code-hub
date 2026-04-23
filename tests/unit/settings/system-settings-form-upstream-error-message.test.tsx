@@ -6,7 +6,6 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { SystemSettingsForm } from "@/app/[locale]/settings/config/_components/system-settings-form";
-import { DEFAULT_IP_EXTRACTION_CONFIG } from "@/types/ip-extraction";
 import type { SystemSettings } from "@/types/system-config";
 
 vi.mock("next/navigation", () => ({
@@ -22,9 +21,41 @@ const sonnerMocks = vi.hoisted(() => ({
   toast: {
     success: vi.fn(),
     error: vi.fn(),
+    warning: vi.fn(),
   },
 }));
 vi.mock("sonner", () => sonnerMocks);
+
+type FormSettings = Pick<
+  SystemSettings,
+  | "siteTitle"
+  | "allowGlobalUsageView"
+  | "currencyDisplay"
+  | "billingModelSource"
+  | "codexPriorityBillingSource"
+  | "timezone"
+  | "verboseProviderError"
+  | "passThroughUpstreamErrorMessage"
+  | "enableHttp2"
+  | "enableHighConcurrencyMode"
+  | "interceptAnthropicWarmupRequests"
+  | "enableThinkingSignatureRectifier"
+  | "enableBillingHeaderRectifier"
+  | "enableResponseInputRectifier"
+  | "enableThinkingBudgetRectifier"
+  | "enableCodexSessionIdCompletion"
+  | "enableClaudeMetadataUserIdInjection"
+  | "enableResponseFixer"
+  | "responseFixerConfig"
+  | "quotaDbRefreshIntervalSeconds"
+  | "quotaLeasePercent5h"
+  | "quotaLeasePercentDaily"
+  | "quotaLeasePercentWeekly"
+  | "quotaLeasePercentMonthly"
+  | "quotaLeaseCapUsd"
+  | "ipGeoLookupEnabled"
+  | "ipExtractionConfig"
+>;
 
 function loadMessages() {
   const base = path.join(process.cwd(), "messages/en/settings");
@@ -38,7 +69,7 @@ function loadMessages() {
   };
 }
 
-const baseSettings = {
+const baseSettings: FormSettings = {
   siteTitle: "Claude Code Hub",
   allowGlobalUsageView: true,
   currencyDisplay: "USD",
@@ -70,40 +101,9 @@ const baseSettings = {
   quotaLeaseCapUsd: null,
   ipGeoLookupEnabled: true,
   ipExtractionConfig: null,
-} satisfies Pick<
-  SystemSettings,
-  | "siteTitle"
-  | "allowGlobalUsageView"
-  | "currencyDisplay"
-  | "billingModelSource"
-  | "codexPriorityBillingSource"
-  | "timezone"
-  | "verboseProviderError"
-  | "passThroughUpstreamErrorMessage"
-  | "enableHttp2"
-  | "enableHighConcurrencyMode"
-  | "interceptAnthropicWarmupRequests"
-  | "enableThinkingSignatureRectifier"
-  | "enableBillingHeaderRectifier"
-  | "enableResponseInputRectifier"
-  | "enableThinkingBudgetRectifier"
-  | "enableCodexSessionIdCompletion"
-  | "enableClaudeMetadataUserIdInjection"
-  | "enableResponseFixer"
-  | "responseFixerConfig"
-  | "quotaDbRefreshIntervalSeconds"
-  | "quotaLeasePercent5h"
-  | "quotaLeasePercentDaily"
-  | "quotaLeasePercentWeekly"
-  | "quotaLeasePercentMonthly"
-  | "quotaLeaseCapUsd"
-  | "ipGeoLookupEnabled"
-  | "ipExtractionConfig"
->;
+};
 
-function buildSettings(
-  overrides: Partial<Pick<SystemSettings, keyof typeof baseSettings>> = {}
-): Pick<SystemSettings, keyof typeof baseSettings> {
+function buildSettings(overrides: Partial<FormSettings> = {}): FormSettings {
   return {
     ...baseSettings,
     ...overrides,
@@ -132,35 +132,21 @@ function render(node: ReactNode) {
   };
 }
 
-function renderForm(settings: Pick<SystemSettings, keyof typeof baseSettings> = baseSettings) {
+function renderForm(settings: FormSettings = baseSettings) {
   return render(<SystemSettingsForm initialSettings={settings} />);
 }
 
-function getIpExtractionTextarea() {
-  const textarea = document.getElementById("ip-extraction-config") as HTMLTextAreaElement | null;
-  if (!textarea) throw new Error("未找到 IP 提取配置输入框");
-  return textarea;
+function getSwitch(id: string) {
+  const element = document.getElementById(id);
+  if (!(element instanceof HTMLButtonElement)) {
+    throw new Error(`未找到开关: ${id}`);
+  }
+  return element;
 }
 
-function setTextareaValue(textarea: HTMLTextAreaElement, value: string) {
+function clickSwitch(id: string) {
   act(() => {
-    const valueSetter = Object.getOwnPropertyDescriptor(
-      HTMLTextAreaElement.prototype,
-      "value"
-    )?.set;
-    valueSetter?.call(textarea, value);
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-function clickButtonByText(text: string) {
-  const button = Array.from(document.body.querySelectorAll("button")).find((element) =>
-    (element.textContent || "").includes(text)
-  );
-  if (!button) throw new Error(`未找到按钮: ${text}`);
-
-  act(() => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    getSwitch(id).dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -175,67 +161,71 @@ async function submitForm() {
   });
 }
 
-describe("SystemSettingsForm IP 提取配置 JSON 输入框", () => {
+describe("SystemSettingsForm upstream error message toggles", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
     vi.clearAllMocks();
   });
 
-  test("未配置自定义链时直接显示格式化后的内置默认 JSON", () => {
-    const { unmount } = renderForm(buildSettings({ ipExtractionConfig: null }));
+  test("新开关默认值从 initialSettings 读取", () => {
+    const { unmount } = renderForm(buildSettings({ passThroughUpstreamErrorMessage: true }));
 
-    const textarea = getIpExtractionTextarea();
-    const formattedDefault = JSON.stringify(DEFAULT_IP_EXTRACTION_CONFIG, null, 2);
-
-    expect(textarea.value).toBe(formattedDefault);
-    expect(textarea.placeholder).toBe(formattedDefault);
-
-    unmount();
-  });
-
-  test("恢复默认只把默认 JSON 插入输入框，不会立即保存", () => {
-    const { unmount } = renderForm(
-      buildSettings({
-        ipExtractionConfig: {
-          headers: [{ name: "cf-connecting-ip" }],
-        },
-      })
-    );
-
-    const textarea = getIpExtractionTextarea();
-    setTextareaValue(textarea, '{"headers":[]}');
-    clickButtonByText("Reset to default");
-
-    expect(textarea.value).toBe(JSON.stringify(DEFAULT_IP_EXTRACTION_CONFIG, null, 2));
-    expect(systemConfigActionMocks.saveSystemSettings).not.toHaveBeenCalled();
-
-    unmount();
-  });
-
-  test("直接保存默认 JSON 时提交默认对象", async () => {
-    const { unmount } = renderForm(buildSettings({ ipExtractionConfig: null }));
-
-    await submitForm();
-
-    expect(systemConfigActionMocks.saveSystemSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ipExtractionConfig: DEFAULT_IP_EXTRACTION_CONFIG,
-      })
+    expect(getSwitch("pass-through-upstream-error-message").getAttribute("aria-checked")).toBe(
+      "true"
     );
 
     unmount();
   });
 
-  test("用户显式清空输入框后保存仍提交 null", async () => {
-    const { unmount } = renderForm(buildSettings({ ipExtractionConfig: null }));
+  test("切换新开关后提交 payload，并在成功后按返回值回填 state", async () => {
+    systemConfigActionMocks.saveSystemSettings.mockResolvedValueOnce({
+      ok: true,
+      data: buildSettings({
+        passThroughUpstreamErrorMessage: true,
+      }),
+    });
 
-    setTextareaValue(getIpExtractionTextarea(), "");
+    const { unmount } = renderForm(buildSettings({ passThroughUpstreamErrorMessage: false }));
+
+    clickSwitch("pass-through-upstream-error-message");
     await submitForm();
 
     expect(systemConfigActionMocks.saveSystemSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        ipExtractionConfig: null,
+        passThroughUpstreamErrorMessage: true,
+        verboseProviderError: false,
       })
+    );
+    expect(getSwitch("pass-through-upstream-error-message").getAttribute("aria-checked")).toBe(
+      "true"
+    );
+
+    unmount();
+  });
+
+  test("旧开关仍可独立提交，不会连带修改新开关", async () => {
+    systemConfigActionMocks.saveSystemSettings.mockResolvedValueOnce({
+      ok: true,
+      data: buildSettings({
+        verboseProviderError: true,
+        passThroughUpstreamErrorMessage: true,
+      }),
+    });
+
+    const { unmount } = renderForm(buildSettings());
+
+    clickSwitch("verbose-provider-error");
+    await submitForm();
+
+    expect(systemConfigActionMocks.saveSystemSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verboseProviderError: true,
+        passThroughUpstreamErrorMessage: true,
+      })
+    );
+    expect(getSwitch("verbose-provider-error").getAttribute("aria-checked")).toBe("true");
+    expect(getSwitch("pass-through-upstream-error-message").getAttribute("aria-checked")).toBe(
+      "true"
     );
 
     unmount();

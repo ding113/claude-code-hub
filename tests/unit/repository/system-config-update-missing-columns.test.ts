@@ -53,6 +53,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
         cleanupBatchSize: 10000,
         enableClientVersionCheck: false,
         verboseProviderError: false,
+        passThroughUpstreamErrorMessage: true,
         enableHttp2: false,
         interceptAnthropicWarmupRequests: false,
         createdAt: now,
@@ -154,6 +155,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
             cleanupBatchSize: 5000,
             enableClientVersionCheck: true,
             verboseProviderError: true,
+            passThroughUpstreamErrorMessage: true,
             enableHttp2: true,
             interceptAnthropicWarmupRequests: true,
             enableThinkingSignatureRectifier: false,
@@ -199,6 +201,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     expect(result.enableHttp2).toBe(true);
     expect(result.interceptAnthropicWarmupRequests).toBe(true);
     expect(result.verboseProviderError).toBe(true);
+    expect(result.passThroughUpstreamErrorMessage).toBe(true);
     expect(result.quotaLeasePercentDaily).toBe(0.11);
 
     vi.useRealTimers();
@@ -356,6 +359,67 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     expect(result.siteTitle).toBe("Updated Title");
     expect(result.codexPriorityBillingSource).toBe("requested");
     expect(updateMock).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  test("getSystemSettings 在仅缺 passThrough 新列时仍保留 highConcurrency 与 IP 相关既有配置", async () => {
+    vi.resetModules();
+
+    const now = new Date("2026-01-04T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const selectMock = vi
+      .fn()
+      .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
+      .mockReturnValueOnce(
+        createThenableQuery([
+          {
+            id: 1,
+            siteTitle: "Claude Code Hub",
+            allowGlobalUsageView: false,
+            currencyDisplay: "USD",
+            billingModelSource: "original",
+            codexPriorityBillingSource: "requested",
+            enableAutoCleanup: false,
+            cleanupRetentionDays: 30,
+            cleanupSchedule: "0 2 * * *",
+            cleanupBatchSize: 10000,
+            enableClientVersionCheck: false,
+            verboseProviderError: false,
+            enableHttp2: false,
+            enableHighConcurrencyMode: true,
+            interceptAnthropicWarmupRequests: false,
+            ipExtractionConfig: {
+              headers: [{ name: "cf-connecting-ip" }],
+            },
+            ipGeoLookupEnabled: false,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ])
+      );
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        update: vi.fn(() => createThenableQuery([])),
+        insert: vi.fn(() => createThenableQuery([])),
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { getSystemSettings } = await import("@/repository/system-config");
+
+    const result = await getSystemSettings();
+
+    expect(result.passThroughUpstreamErrorMessage).toBe(true);
+    expect(result.enableHighConcurrencyMode).toBe(true);
+    expect(result.ipGeoLookupEnabled).toBe(false);
+    expect(result.ipExtractionConfig).toEqual({
+      headers: [{ name: "cf-connecting-ip" }],
+    });
 
     vi.useRealTimers();
   });

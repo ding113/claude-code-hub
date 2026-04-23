@@ -38,6 +38,7 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     cleanupBatchSize: 10000,
     enableClientVersionCheck: false,
     verboseProviderError: false,
+    passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
     enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
@@ -149,6 +150,7 @@ describe("SystemSettingsCache", () => {
         enableHighConcurrencyMode: false,
         interceptAnthropicWarmupRequests: false,
         codexPriorityBillingSource: "requested",
+        passThroughUpstreamErrorMessage: true,
       })
     );
     expect(loggerWarnMock).toHaveBeenCalledTimes(1);

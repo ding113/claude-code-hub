@@ -46,6 +46,7 @@ const DEFAULT_SETTINGS: Pick<
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
   | "responseFixerConfig"
+  | "passThroughUpstreamErrorMessage"
   | "publicStatusWindowHours"
   | "publicStatusAggregationIntervalMinutes"
 > = {
@@ -60,6 +61,7 @@ const DEFAULT_SETTINGS: Pick<
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
+  passThroughUpstreamErrorMessage: true,
   responseFixerConfig: {
     fixTruncatedJson: true,
     fixSseFormat: true,
@@ -123,6 +125,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       timezone: null,
       verboseProviderError: false,
+      passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,
       enableAutoCleanup: false,
       cleanupRetentionDays: 30,
       cleanupSchedule: "0 2 * * *",

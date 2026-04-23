@@ -69,6 +69,7 @@ export async function POST(req: Request) {
       cleanupBatchSize: validated.cleanupBatchSize,
       enableClientVersionCheck: validated.enableClientVersionCheck,
       verboseProviderError: validated.verboseProviderError,
+      passThroughUpstreamErrorMessage: validated.passThroughUpstreamErrorMessage,
       enableHttp2: validated.enableHttp2,
       enableHighConcurrencyMode: validated.enableHighConcurrencyMode,
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
@@ -93,6 +94,10 @@ export async function POST(req: Request) {
       changes: validated,
     });
     invalidateSystemSettingsCache();
+    const { invalidateProviderSelectorSystemSettingsCache } = await import(
+      "@/app/v1/_lib/proxy/provider-selector-settings-cache"
+    );
+    invalidateProviderSelectorSystemSettingsCache();
 
     return Response.json(updated);
   } catch (error) {

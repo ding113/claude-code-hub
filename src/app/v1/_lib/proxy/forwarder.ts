@@ -49,6 +49,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
+import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { isStrictStandardEndpointPath } from "./endpoint-paths";
 import {
@@ -1943,7 +1944,7 @@ export class ProxyForwarder {
 
     // ⭐ 不暴露供应商详情，仅返回简单错误
     await ProxyForwarder.clearSessionProviderBinding(session);
-    throw ProxyForwarder.buildAllProvidersUnavailableError(); // Service Unavailable
+    throw ProxyForwarder.buildAllProvidersUnavailableError(lastError); // Service Unavailable
   }
 
   /**
@@ -3385,7 +3386,7 @@ export class ProxyForwarder {
             providerName: initialProvider.name,
           });
 
-          lastError = ProxyForwarder.buildAllProvidersUnavailableError();
+          lastError = ProxyForwarder.buildAllProvidersUnavailableError(lastError);
           lastErrorCategory = null;
           noMoreProviders = true;
           abortAllAttempts(undefined, "hedge_launch_failed");
@@ -4093,8 +4094,26 @@ export class ProxyForwarder {
     await SessionManager.clearSessionProvider(session.sessionId);
   }
 
-  private static buildAllProvidersUnavailableError(): ProxyError {
-    return new ProxyError("所有供应商暂时不可用，请稍后重试", 503);
+  private static buildAllProvidersUnavailableError(finalError?: Error | null): ProxyError {
+    const safeClientMessageCandidate =
+      finalError instanceof ProxyError &&
+      (finalError.upstreamError?.rawBody ||
+        finalError.upstreamError?.safeClientMessageCandidate ||
+        finalError.upstreamError?.body)
+        ? (deriveClientSafeUpstreamErrorMessage({
+            rawText: finalError.upstreamError?.rawBody,
+            candidateMessage:
+              finalError.upstreamError?.safeClientMessageCandidate ??
+              finalError.upstreamError?.body ??
+              finalError.message,
+            providerName: finalError.upstreamError?.providerName ?? null,
+          }) ?? undefined)
+        : undefined;
+
+    return new ProxyError("所有供应商暂时不可用，请稍后重试", 503, {
+      body: "",
+      safeClientMessageCandidate,
+    });
   }
 
   private static resolveHedgeTerminalError(
@@ -4109,7 +4128,7 @@ export class ProxyForwarder {
       return lastError;
     }
 
-    return ProxyForwarder.buildAllProvidersUnavailableError();
+    return ProxyForwarder.buildAllProvidersUnavailableError(lastError);
   }
 
   private static async readFirstReadableChunk(

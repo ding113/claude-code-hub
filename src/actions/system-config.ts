@@ -63,6 +63,7 @@ export async function saveSystemSettings(formData: {
   cleanupBatchSize?: number;
   enableClientVersionCheck?: boolean;
   verboseProviderError?: boolean;
+  passThroughUpstreamErrorMessage?: boolean;
   enableHttp2?: boolean;
   enableHighConcurrencyMode?: boolean;
   interceptAnthropicWarmupRequests?: boolean;
@@ -109,6 +110,7 @@ export async function saveSystemSettings(formData: {
       cleanupBatchSize: validated.cleanupBatchSize,
       enableClientVersionCheck: validated.enableClientVersionCheck,
       verboseProviderError: validated.verboseProviderError,
+      passThroughUpstreamErrorMessage: validated.passThroughUpstreamErrorMessage,
       enableHttp2: validated.enableHttp2,
       enableHighConcurrencyMode: validated.enableHighConcurrencyMode,
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
@@ -134,6 +136,10 @@ export async function saveSystemSettings(formData: {
 
     // Invalidate the system settings cache so proxy requests get fresh settings
     invalidateSystemSettingsCache();
+    const { invalidateProviderSelectorSystemSettingsCache } = await import(
+      "@/app/v1/_lib/proxy/provider-selector-settings-cache"
+    );
+    invalidateProviderSelectorSystemSettingsCache();
 
     const shouldRepublishPublicStatusProjection =
       validated.siteTitle !== undefined ||

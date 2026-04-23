@@ -217,6 +217,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     cleanupBatchSize: dbSettings?.cleanupBatchSize ?? 10000,
     enableClientVersionCheck: dbSettings?.enableClientVersionCheck ?? false,
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
+    passThroughUpstreamErrorMessage: dbSettings?.passThroughUpstreamErrorMessage ?? true,
     enableHttp2: dbSettings?.enableHttp2 ?? false,
     enableHighConcurrencyMode: dbSettings?.enableHighConcurrencyMode ?? false,
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,

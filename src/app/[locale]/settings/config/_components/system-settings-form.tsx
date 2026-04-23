@@ -62,6 +62,7 @@ interface SystemSettingsFormProps {
     | "codexPriorityBillingSource"
     | "timezone"
     | "verboseProviderError"
+    | "passThroughUpstreamErrorMessage"
     | "enableHttp2"
     | "enableHighConcurrencyMode"
     | "interceptAnthropicWarmupRequests"
@@ -118,6 +119,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
+  );
+  const [passThroughUpstreamErrorMessage, setPassThroughUpstreamErrorMessage] = useState(
+    initialSettings.passThroughUpstreamErrorMessage
   );
   const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
   const [enableHighConcurrencyMode, setEnableHighConcurrencyMode] = useState(
@@ -233,6 +237,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         codexPriorityBillingSource,
         timezone,
         verboseProviderError,
+        passThroughUpstreamErrorMessage,
         enableHttp2,
         enableHighConcurrencyMode,
         interceptAnthropicWarmupRequests,
@@ -267,6 +272,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
+        setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
         setEnableHttp2(result.data.enableHttp2);
         setEnableHighConcurrencyMode(result.data.enableHighConcurrencyMode);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
@@ -313,6 +319,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     "bg-muted/50 border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary";
   const selectTriggerClassName =
     "bg-muted/50 border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary";
+  const tooltipButtonClassName =
+    "inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -464,7 +472,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
               <AlertTriangle className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">{t("verboseProviderError")}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-foreground">{t("verboseProviderError")}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t("verboseProviderErrorTooltip")}
+                      className={tooltipButtonClassName}
+                    >
+                      <CircleHelp className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                    {t("verboseProviderErrorTooltip")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {t("verboseProviderErrorDesc")}
               </p>
@@ -474,6 +498,29 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="verbose-provider-error"
             checked={verboseProviderError}
             onCheckedChange={(checked) => setVerboseProviderError(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Pass Through Upstream Error Message */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("passThroughUpstreamErrorMessage")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("passThroughUpstreamErrorMessageDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="pass-through-upstream-error-message"
+            checked={passThroughUpstreamErrorMessage}
+            onCheckedChange={(checked) => setPassThroughUpstreamErrorMessage(checked)}
             disabled={isPending}
           />
         </div>
@@ -1037,7 +1084,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <button
                     type="button"
                     aria-label={tIpLogging("extractionConfigHelpLabel")}
-                    className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className={tooltipButtonClassName}
                   >
                     <CircleHelp className="size-3.5" aria-hidden="true" />
                   </button>

@@ -10,39 +10,13 @@ import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getGroupCostMultiplier } from "@/repository/provider-groups";
-import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
 import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
+import { getVerboseProviderErrorCached } from "./provider-selector-settings-cache";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
-
-// 系统设置缓存 - 避免每次请求失败都查询数据库
-const SETTINGS_CACHE_TTL_MS = 60_000; // 60 seconds
-let cachedVerboseProviderError: { value: boolean; expiresAt: number } | null = null;
-
-async function getVerboseProviderErrorCached(): Promise<boolean> {
-  const now = Date.now();
-  if (cachedVerboseProviderError && cachedVerboseProviderError.expiresAt > now) {
-    return cachedVerboseProviderError.value;
-  }
-
-  try {
-    const systemSettings = await getSystemSettings();
-    cachedVerboseProviderError = {
-      value: systemSettings.verboseProviderError,
-      expiresAt: now + SETTINGS_CACHE_TTL_MS,
-    };
-    return systemSettings.verboseProviderError;
-  } catch (e) {
-    logger.warn(
-      "ProviderSelector: Failed to get system settings, using default verboseError=false",
-      { error: e }
-    );
-    return false;
-  }
-}
 
 /**
  * 解析逗号分隔的分组字符串为数组

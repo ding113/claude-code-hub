@@ -746,6 +746,11 @@ export const systemSettings = pgTable('system_settings', {
   // 供应商不可用时是否返回详细错误信息
   verboseProviderError: boolean('verbose_provider_error').notNull().default(false),
 
+  // 标准代理错误响应是否透传安全脱敏后的上游错误 message
+  passThroughUpstreamErrorMessage: boolean('pass_through_upstream_error_message')
+    .notNull()
+    .default(true),
+
   // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
   enableHttp2: boolean('enable_http2').notNull().default(false),
 
