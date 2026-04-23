@@ -37,6 +37,12 @@ export function extractTextFromSSE(body: string): string {
 
     try {
       const obj = JSON.parse(payload) as Record<string, unknown>;
+      const eventType = typeof obj.type === "string" ? obj.type : undefined;
+
+      if (eventType === "response.output_text.delta" && typeof obj.delta === "string") {
+        texts.push(obj.delta);
+        continue;
+      }
 
       // Anthropic format: {"type":"content_block_delta", "delta":{"type":"text_delta","text":"..."}}
       const delta = obj.delta as Record<string, unknown> | undefined;
@@ -89,7 +95,11 @@ export function extractTextFromSSE(body: string): string {
         continue;
       }
       if (obj.text && typeof obj.text === "string") {
+        if (eventType === "response.output_text.done" && texts.length > 0) {
+          continue;
+        }
         texts.push(obj.text);
+        continue;
       }
     } catch {
       // Not valid JSON, use raw payload (could be error message)
@@ -128,10 +138,20 @@ export function parseSSEStream(body: string): ParsedResponse {
 
     try {
       const obj = JSON.parse(payload) as Record<string, unknown>;
+      const eventType = typeof obj.type === "string" ? obj.type : undefined;
 
       // Extract model from first chunk
       if (!model && obj.model && typeof obj.model === "string") {
         model = obj.model;
+      }
+      if (eventType === "response.output_text.delta" && typeof obj.delta === "string") {
+        texts.push(obj.delta);
+      }
+      if (!model) {
+        const response = obj.response as Record<string, unknown> | undefined;
+        if (response?.model && typeof response.model === "string") {
+          model = response.model;
+        }
       }
 
       // Anthropic format
@@ -170,6 +190,13 @@ export function parseSSEStream(body: string): ParsedResponse {
         }
       }
 
+      if (typeof obj.text === "string") {
+        if (eventType === "response.output_text.done" && texts.length > 0) {
+          continue;
+        }
+        texts.push(obj.text);
+      }
+
       // Extract usage from final chunk (Anthropic message_delta)
       if (obj.type === "message_delta") {
         const msgUsage = obj.usage as
@@ -198,6 +225,23 @@ export function parseSSEStream(body: string): ParsedResponse {
           inputTokens: objUsage.prompt_tokens || 0,
           outputTokens: objUsage.completion_tokens || 0,
         };
+      }
+
+      if (!usage) {
+        const response = obj.response as
+          | {
+              usage?: {
+                input_tokens?: number;
+                output_tokens?: number;
+              };
+            }
+          | undefined;
+        if (response?.usage) {
+          usage = {
+            inputTokens: response.usage.input_tokens || 0,
+            outputTokens: response.usage.output_tokens || 0,
+          };
+        }
       }
     } catch {
       // Skip invalid JSON chunks

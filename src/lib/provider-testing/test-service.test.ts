@@ -102,6 +102,46 @@ describe("executeProviderTest", () => {
     expect(result.rawResponse?.length).toBe(responseBody.length);
   });
 
+  test("codex SSE 事件流应识别 response.output_text.delta/done 并通过内容校验", async () => {
+    const responseBody = [
+      'event: response.created',
+      'data: {"type":"response.created","response":{"id":"resp_test","model":"gpt-5.4","status":"in_progress"}}',
+      "",
+      'event: response.output_text.delta',
+      'data: {"type":"response.output_text.delta","delta":"pong"}',
+      "",
+      'event: response.output_text.done',
+      'data: {"type":"response.output_text.done","text":"pong"}',
+      "",
+      'event: response.completed',
+      'data: {"type":"response.completed","response":{"id":"resp_test","model":"gpt-5.4","status":"completed"}}',
+    ].join("\n");
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({
+        "content-type": "text/event-stream",
+      }),
+      text: async () => responseBody,
+    } as Response);
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.4",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.status).toBe("green");
+    expect(result.subStatus).toBe("success");
+    expect(result.model).toBe("gpt-5.4");
+    expect(result.content).toBe("pong");
+    expect(result.validationDetails.contentPassed).toBe(true);
+  });
+
   test("指定 preset 但未显式传 model 时，应使用 preset 的默认模型构造 Gemini URL", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
