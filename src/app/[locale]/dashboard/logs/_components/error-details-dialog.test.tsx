@@ -6,6 +6,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { Window } from "happy-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import ipDetailsMessages from "../../../../../../messages/en/ipDetails.json";
+import providerChainMessages from "../../../../../../messages/en/provider-chain.json";
 
 const hasSessionMessagesMock = vi.fn();
 
@@ -19,10 +20,14 @@ vi.mock("@/actions/session-origin-chain", () => ({
   getSessionOriginChain: (...args: [string]) => getSessionOriginChainMock(...args),
 }));
 
+const useRealProviderTimelineMock = vi.fn(() => false);
+
 beforeEach(() => {
   hasSessionMessagesMock.mockResolvedValue({ ok: true, data: false });
   getSessionOriginChainMock.mockReset();
   getSessionOriginChainMock.mockResolvedValue({ ok: false, error: "mock" });
+  useRealProviderTimelineMock.mockReset();
+  useRealProviderTimelineMock.mockReturnValue(false);
 });
 
 vi.mock("@/i18n/routing", () => ({
@@ -185,7 +190,10 @@ vi.mock("@/lib/utils/provider-chain-formatter", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/utils/provider-chain-formatter")>();
   return {
     ...actual,
-    formatProviderTimeline: () => ({ timeline: "timeline", totalDuration: 123 }),
+    formatProviderTimeline: (...args: Parameters<typeof actual.formatProviderTimeline>) =>
+      useRealProviderTimelineMock()
+        ? actual.formatProviderTimeline(...args)
+        : { timeline: "timeline", totalDuration: 123 },
   };
 });
 
@@ -339,44 +347,20 @@ const messages = {
           cacheWrite5m: "Cache write 5m",
           cacheWrite1h: "Cache write 1h",
           cacheRead: "Cache read",
+          providerMultiplier: "Provider multiplier",
           cacheTtl: "Cache TTL",
           context1m: "1M Context",
           context1mEnabled: "1M context window enabled",
           multiplier: "Multiplier",
           totalCost: "Total cost",
+          unit: {
+            tokens: "tokens",
+          },
         },
       },
     },
   },
-  "provider-chain": {
-    technicalTimeline: "Technical Timeline",
-    reasons: {
-      request_success: "Request success",
-      retry_success: "Retry success",
-      retry_failed: "Retry failed",
-      system_error: "System error",
-      client_error_non_retryable: "Client error",
-      concurrent_limit_failed: "Concurrent limit",
-      initial_selection: "Initial selection",
-    },
-    filterReasons: {
-      rate_limited: "Rate limited",
-      circuit_open: "Circuit open",
-    },
-    details: {
-      selectionMethod: "Selection method",
-      endpoint: "Endpoint",
-      circuitBreaker: "Circuit breaker",
-      circuitDisabled: "Disabled",
-      failures: "failures",
-      modelRedirect: "Model redirect",
-      error: "Error",
-      errorDetails: "Error details",
-      priority: "Priority",
-      weight: "Weight",
-      costMultiplier: "Cost",
-    },
-  },
+  "provider-chain": providerChainMessages,
   ipDetails: ipDetailsMessages,
 };
 
@@ -675,6 +659,64 @@ describe("error-details-dialog layout", () => {
     expect(html).toContain("Total duration");
   });
 
+  test("renders formatted candidate probabilities in the real technical timeline", () => {
+    useRealProviderTimelineMock.mockReturnValue(true);
+
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "low-weight-provider",
+              reason: "initial_selection",
+              timestamp: 0,
+              decisionContext: {
+                totalProviders: 13,
+                enabledProviders: 13,
+                targetType: "codex",
+                userGroup: "codex-internal",
+                groupFilterApplied: true,
+                afterGroupFilter: 13,
+                beforeHealthCheck: 13,
+                afterHealthCheck: 13,
+                priorityLevels: [1],
+                selectedPriority: 1,
+                candidatesAtPriority: [
+                  {
+                    id: 1,
+                    name: "low-weight-provider",
+                    weight: 1,
+                    costMultiplier: 1,
+                    probability: 1 / 22,
+                  },
+                  {
+                    id: 2,
+                    name: "high-weight-provider",
+                    weight: 10,
+                    costMultiplier: 1,
+                    probability: 10 / 22,
+                  },
+                ],
+              },
+            },
+          ] as any
+        }
+      />
+    );
+
+    expect(html).toContain("low-weight-provider");
+    expect(html).toContain("probability=4.5%");
+    expect(html).toContain("high-weight-provider");
+    expect(html).toContain("probability=45.5%");
+    expect(html).not.toContain("0.045454545454545456%");
+    expect(html).not.toContain("0.45454545454545453%");
+  });
+
   test("renders error message in summary tab", () => {
     const html = renderWithIntl(
       <ErrorDetailsDialog
@@ -881,7 +923,7 @@ describe("error-details-dialog multiplier", () => {
       />
     );
 
-    expect(html).toContain("Multiplier");
+    expect(html).toContain("Provider multiplier");
     expect(html).toContain("0.20x");
   });
 });

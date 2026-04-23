@@ -47,6 +47,43 @@ export function formatProbabilityCompact(probability: number | undefined | null)
   return formatProbability(probability, 0);
 }
 
+function formatDescriptionCandidate(
+  candidate: { name: string; probability?: number },
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  const formattedProbability = formatProbability(candidate.probability);
+
+  if (!formattedProbability) {
+    return t("description.candidateNoProbability", { name: candidate.name });
+  }
+
+  return t("description.candidate", {
+    name: candidate.name,
+    probability: formattedProbability,
+  });
+}
+
+function formatTimelineCandidate(
+  candidate: { name: string; weight: number; costMultiplier: number; probability?: number },
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  const baseValues = {
+    name: candidate.name,
+    weight: candidate.weight,
+    cost: candidate.costMultiplier,
+  };
+  const formattedProbability = formatProbability(candidate.probability);
+
+  if (!formattedProbability) {
+    return t("timeline.candidateInfoNoProbability", baseValues);
+  }
+
+  return t("timeline.candidateInfo", {
+    ...baseValues,
+    probability: formattedProbability,
+  });
+}
+
 /**
  * 辅助函数：判断供应商请求状态
  *
@@ -387,9 +424,7 @@ export function formatProviderDescription(
 
     if (ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0) {
       desc += `${t("description.priority", { priority: ctx.selectedPriority ?? 0 })}: `;
-      desc += ctx.candidatesAtPriority
-        .map((c) => t("description.candidate", { name: c.name, probability: c.probability ?? 0 }))
-        .join(" ");
+      desc += ctx.candidatesAtPriority.map((c) => formatDescriptionCandidate(c, t)).join(" ");
     }
   }
 
@@ -574,12 +609,7 @@ export function formatProviderTimeline(
           }) +
           ":\n";
         for (const c of ctx.candidatesAtPriority) {
-          timeline += `${t("timeline.candidateInfo", {
-            name: c.name,
-            weight: c.weight,
-            cost: c.costMultiplier,
-            probability: c.probability || "",
-          })}\n`;
+          timeline += `${formatTimelineCandidate(c, t)}\n`;
         }
       }
 
