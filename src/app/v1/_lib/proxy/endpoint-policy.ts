@@ -66,6 +66,12 @@ export function isStrictEndpointPoolPolicy(policy: Pick<EndpointPolicy, "endpoin
   return policy.endpointPoolStrictness === "strict";
 }
 
+export function shouldEnforceStrictEndpointPoolPolicy(
+  policy: Pick<EndpointPolicy, "endpointPoolStrictness">
+) {
+  return policy.endpointPoolStrictness === "strict" || policy.endpointPoolStrictness === "inherit";
+}
+
 export function resolveEndpointPolicy(pathname: string): EndpointPolicy {
   const normalizedPath = normalizeEndpointPath(pathname);
 

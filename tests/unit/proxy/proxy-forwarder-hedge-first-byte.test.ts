@@ -866,7 +866,14 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(2);
-      expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith("sess-hedge", 2, 0, false, true);
+      expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith(
+        "sess-hedge",
+        2,
+        0,
+        false,
+        true,
+        null
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -1720,7 +1727,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
-  test("standard endpoint selector failure falls back to provider.url, later hedge winner stays hedge_winner", async () => {
+  test("endpoint resolution failure should not inflate launchedProviderCount, winner gets request_success not hedge_winner", async () => {
     vi.useFakeTimers();
 
     try {
@@ -1755,29 +1762,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         "doForward"
       );
 
-      const controller1 = new AbortController();
       const controller2 = new AbortController();
 
-      // Standard endpoints now fall back to provider.url when selector lookup fails,
-      // so provider 1 still launches and the later provider 2 winner should remain hedge_winner.
-      doForward.mockImplementationOnce(async (attemptSession) => {
-        const runtime = attemptSession as ProxySession & AttemptRuntime;
-        runtime.responseController = controller1;
-        runtime.clearResponseTimeout = vi.fn();
-        return createStreamingResponse({
-          label: "p1",
-          firstChunkDelayMs: 500,
-          controller: controller1,
-        });
-      });
-
+      // Only provider 2 reaches doForward (provider 1 fails at endpoint resolution)
       doForward.mockImplementationOnce(async (attemptSession) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller2;
         runtime.clearResponseTimeout = vi.fn();
         return createStreamingResponse({
           label: "p2",
-          firstChunkDelayMs: 40,
+          firstChunkDelayMs: 10,
           controller: controller2,
         });
       });
@@ -1795,7 +1789,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         (entry) => entry.reason === "request_success" || entry.reason === "hedge_winner"
       );
       expect(winnerEntry).toBeDefined();
-      expect(winnerEntry!.reason).toBe("hedge_winner");
+      expect(winnerEntry!.reason).toBe("request_success");
     } finally {
       vi.useRealTimers();
     }

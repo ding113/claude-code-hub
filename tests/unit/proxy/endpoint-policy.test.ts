@@ -3,6 +3,7 @@ import {
   isRawPassthroughEndpointPath,
   isRawPassthroughEndpointPolicy,
   resolveEndpointPolicy,
+  shouldEnforceStrictEndpointPoolPolicy,
 } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 
@@ -59,5 +60,16 @@ describe("endpoint-policy", () => {
       bypassResponseRectifier: false,
       endpointPoolStrictness: "inherit",
     });
+  });
+
+  test("inherited endpoint pool policy still enforces strict endpoint selection", () => {
+    expect(
+      shouldEnforceStrictEndpointPoolPolicy(resolveEndpointPolicy(V1_ENDPOINT_PATHS.MESSAGES))
+    ).toBe(true);
+    expect(
+      shouldEnforceStrictEndpointPoolPolicy(
+        resolveEndpointPolicy(V1_ENDPOINT_PATHS.CHAT_COMPLETIONS)
+      )
+    ).toBe(true);
   });
 });

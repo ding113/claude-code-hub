@@ -51,7 +51,7 @@ import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
-import { isStrictEndpointPoolPolicy, resolveEndpointPolicy } from "./endpoint-policy";
+import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
 import {
   ALL_PROVIDERS_UNAVAILABLE_MESSAGE,
   buildRequestDetails,
@@ -974,7 +974,9 @@ export class ProxyForwarder {
       const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
       const shouldAccountCircuitBreaker = endpointPolicy.allowCircuitBreakerAccounting;
       const shouldEnforceStrictEndpointPool =
-        !isMcpRequest && isStrictEndpointPoolPolicy(endpointPolicy) && providerVendorId > 0;
+        !isMcpRequest &&
+        shouldEnforceStrictEndpointPoolPolicy(endpointPolicy) &&
+        providerVendorId > 0;
       let endpointSelectionError: Error | null = null;
 
       const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
@@ -1377,7 +1379,8 @@ export class ProxyForwarder {
               currentProvider.id,
               currentProvider.priority || 0,
               totalProvidersAttempted === 1 && attemptCount === 1, // isFirstAttempt
-              totalProvidersAttempted > 1 // isFailoverSuccess: 切换过供应商
+              totalProvidersAttempted > 1, // isFailoverSuccess: 切换过供应商
+              session.authState?.key?.id ?? null
             );
 
             if (result.updated) {
@@ -3842,7 +3845,8 @@ export class ProxyForwarder {
             attempt.provider.id,
             attempt.provider.priority || 0,
             launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
-            attempt.provider.id !== initialProvider.id
+            attempt.provider.id !== initialProvider.id,
+            session.authState?.key?.id ?? null
           );
 
           if (bindingResult.updated) {
@@ -4011,7 +4015,7 @@ export class ProxyForwarder {
       !isStandardProxyEndpointPath(requestPath);
     const shouldEnforceStrictEndpointPool =
       !isMcpRequest &&
-      isStrictEndpointPoolPolicy(ProxyForwarder.getEndpointPolicy(session)) &&
+      shouldEnforceStrictEndpointPoolPolicy(ProxyForwarder.getEndpointPolicy(session)) &&
       providerVendorId > 0;
 
     if (

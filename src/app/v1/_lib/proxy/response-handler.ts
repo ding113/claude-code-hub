@@ -735,7 +735,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
         meta.providerId,
         meta.providerPriority,
         meta.isFirstAttempt,
-        meta.isFailoverSuccess
+        meta.isFailoverSuccess,
+        session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
       );
 
       if (result.updated) {
@@ -1182,7 +1183,8 @@ export class ProxyResponseHandler {
               void SessionManager.updateSessionWithCodexCacheKey(
                 session.sessionId,
                 promptCacheKey,
-                provider.id
+                provider.id,
+                session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to update Codex session:", err);
               });
@@ -2302,7 +2304,8 @@ export class ProxyResponseHandler {
                   void SessionManager.updateSessionWithCodexCacheKey(
                     session.sessionId,
                     promptCacheKey,
-                    provider.id
+                    provider.id,
+                    session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
                   ).catch((err) => {
                     logger.error("[ResponseHandler] Failed to update Codex session (stream):", err);
                   });

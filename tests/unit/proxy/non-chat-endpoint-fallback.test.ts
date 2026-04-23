@@ -282,7 +282,8 @@ describe("non-chat endpoint fallback", () => {
       providerB.id,
       providerB.priority || 0,
       false,
-      true
+      true,
+      null
     );
   });
 

@@ -1662,8 +1662,14 @@ export async function findUsageLogsStats(
     conditions.push(hiddenStatsLedgerEndpointCondition);
   }
 
-  if (filters.endpoint) {
-    conditions.push(buildUsageLogEndpointMatchCondition(usageLedger.endpoint, filters.endpoint)!);
+  if (filters.endpoint?.trim()) {
+    const endpointMatchCondition = buildUsageLogEndpointMatchCondition(
+      usageLedger.endpoint,
+      filters.endpoint
+    );
+    if (endpointMatchCondition) {
+      conditions.push(endpointMatchCondition);
+    }
   }
 
   if (minRetryCount > 0 && !ledgerOnly) {

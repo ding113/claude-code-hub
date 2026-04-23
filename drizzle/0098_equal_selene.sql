@@ -22,7 +22,8 @@ BEGIN
   IF NEW.blocked_by = 'warmup' THEN
     UPDATE usage_ledger
     SET blocked_by = 'warmup',
-        success_rate_outcome = v_success_rate_outcome
+        success_rate_outcome = v_success_rate_outcome,
+        actual_response_model = NEW.actual_response_model
     WHERE request_id = NEW.id;
     RETURN NEW;
   END IF;
@@ -49,7 +50,7 @@ BEGIN
 
   INSERT INTO usage_ledger (
     request_id, user_id, key, provider_id, final_provider_id,
-    model, original_model, endpoint, api_type, session_id,
+    model, original_model, actual_response_model, endpoint, api_type, session_id,
     status_code, is_success, success_rate_outcome, blocked_by,
     cost_usd, cost_multiplier, group_cost_multiplier,
     input_tokens, output_tokens,
@@ -59,7 +60,8 @@ BEGIN
     duration_ms, ttfb_ms, client_ip, created_at
   ) VALUES (
     NEW.id, NEW.user_id, NEW.key, NEW.provider_id, v_final_provider_id,
-    NEW.model, NEW.original_model, NEW.endpoint, NEW.api_type, NEW.session_id,
+    NEW.model, NEW.original_model, NEW.actual_response_model, NEW.endpoint, NEW.api_type,
+    NEW.session_id,
     NEW.status_code, v_is_success, v_success_rate_outcome, NEW.blocked_by,
     NEW.cost_usd, NEW.cost_multiplier, NEW.group_cost_multiplier,
     NEW.input_tokens, NEW.output_tokens,
@@ -75,6 +77,7 @@ BEGIN
     final_provider_id = EXCLUDED.final_provider_id,
     model = EXCLUDED.model,
     original_model = EXCLUDED.original_model,
+    actual_response_model = EXCLUDED.actual_response_model,
     endpoint = EXCLUDED.endpoint,
     api_type = EXCLUDED.api_type,
     session_id = EXCLUDED.session_id,

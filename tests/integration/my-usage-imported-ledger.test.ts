@@ -47,14 +47,17 @@ function nextProviderId() {
 
 function getStableRecentUtcTimestamp(): number {
   const now = new Date();
-  return Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-    now.getUTCHours(),
-    now.getUTCMinutes(),
-    0,
-    0
+  return (
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      now.getUTCHours(),
+      now.getUTCMinutes(),
+      0,
+      0
+    ) -
+    10 * 60 * 1000
   );
 }
 

@@ -120,7 +120,7 @@ async function cleanupTestRows() {
   }
 }
 
-let originalAllowNonConversationEndpointProviderFallback: boolean | null = null;
+let originalAllowNonConversationEndpointProviderFallback: boolean | null | undefined;
 
 run("non-chat endpoint fallback observability", () => {
   beforeAll(async () => {
@@ -132,7 +132,7 @@ run("non-chat endpoint fallback observability", () => {
 
   afterAll(async () => {
     await cleanupTestRows();
-    if (originalAllowNonConversationEndpointProviderFallback !== null) {
+    if (originalAllowNonConversationEndpointProviderFallback !== undefined) {
       await updateSystemSettings({
         allowNonConversationEndpointProviderFallback:
           originalAllowNonConversationEndpointProviderFallback,
