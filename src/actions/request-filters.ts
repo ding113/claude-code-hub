@@ -451,8 +451,8 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
       .from(providers)
       .where(isNull(providers.deletedAt));
 
-    // Request-filter 配置面也要能选择 default 组：null/blank provider tags 视为 default。
-    const allTags = new Set<string>();
+    // Request-filter 配置面始终暴露 default，支持提前为默认组配置规则。
+    const allTags = new Set<string>([PROVIDER_GROUP.DEFAULT]);
     for (const row of result) {
       const tags = resolveProviderGroupsWithDefault(row.groupTag);
       for (const tag of tags) {
@@ -460,14 +460,15 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
       }
     }
 
-    const sorted = Array.from(allTags).sort();
-    if (!sorted.includes(PROVIDER_GROUP.DEFAULT)) {
-      return { ok: true, data: sorted };
-    }
+    const sorted = Array.from(allTags).sort((a, b) => {
+      if (a === PROVIDER_GROUP.DEFAULT) return -1;
+      if (b === PROVIDER_GROUP.DEFAULT) return 1;
+      return a.localeCompare(b);
+    });
 
     return {
       ok: true,
-      data: [PROVIDER_GROUP.DEFAULT, ...sorted.filter((tag) => tag !== PROVIDER_GROUP.DEFAULT)],
+      data: sorted,
     };
   } catch (error) {
     logger.error("[RequestFiltersAction] Failed to get distinct group tags", { error });

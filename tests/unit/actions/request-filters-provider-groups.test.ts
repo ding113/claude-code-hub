@@ -81,4 +81,21 @@ describe("getDistinctProviderGroupsAction", () => {
       data: ["default", "beta", "premium"],
     });
   });
+
+  it("keeps default selectable even when no provider currently belongs to it", async () => {
+    selectDistinctMock.mockReturnValue({
+      from: () => ({
+        where: async () => [{ groupTag: "premium" }, { groupTag: "beta" }],
+      }),
+    });
+
+    const { getDistinctProviderGroupsAction } = await import("@/actions/request-filters");
+
+    const result = await getDistinctProviderGroupsAction();
+
+    expect(result).toEqual({
+      ok: true,
+      data: ["default", "beta", "premium"],
+    });
+  });
 });

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const getSessionMock = vi.fn();
-const findAllProvidersFreshMock = vi.fn();
-const findProviderByIdMock = vi.fn();
-const getProviderStatisticsMock = vi.fn();
-const createProviderMock = vi.fn();
-const updateProviderMock = vi.fn();
-const deleteProviderMock = vi.fn();
-const updateProviderPrioritiesBatchMock = vi.fn();
+const getSessionMock = vi.hoisted(() => vi.fn());
+const findAllProvidersFreshMock = vi.hoisted(() => vi.fn());
+const findProviderByIdMock = vi.hoisted(() => vi.fn());
+const getProviderStatisticsMock = vi.hoisted(() => vi.fn());
+const createProviderMock = vi.hoisted(() => vi.fn());
+const updateProviderMock = vi.hoisted(() => vi.fn());
+const deleteProviderMock = vi.hoisted(() => vi.fn());
+const updateProviderPrioritiesBatchMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,

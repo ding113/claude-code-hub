@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockRedisSet = vi.hoisted(() => vi.fn());
 
@@ -11,6 +11,10 @@ vi.mock("@/lib/redis", () => ({
 }));
 
 describe("public-status rebuild lifecycle", () => {
+  beforeEach(() => {
+    mockRedisSet.mockClear();
+  });
+
   it("persists a rebuild hint for widened ranges and cold starts", async () => {
     const mod = await import("@/lib/public-status/rebuild-hints");
 
