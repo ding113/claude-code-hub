@@ -40,6 +40,7 @@ export interface UnifiedTestResultData {
   httpStatusText?: string;
   model?: string;
   content?: string;
+  requestUrl?: string;
   /** Raw response body for user inspection */
   rawResponse?: string;
   usage?: {
@@ -125,6 +126,7 @@ export function TestResultCard({ result }: TestResultCardProps) {
       `${ct("latency")}: ${result.latencyMs}ms`,
       result.httpStatusCode &&
         `${ct("httpStatus")}: ${result.httpStatusCode} ${result.httpStatusText || ""}`,
+      result.requestUrl && `${ct("requestUrl")}: ${result.requestUrl}`,
       result.model && `${ct("model")}: ${result.model}`,
       result.usage &&
         t("resultCard.copyText.inputOutput", {
@@ -235,6 +237,15 @@ export function TestResultCard({ result }: TestResultCardProps) {
       {result.errorMessage && (
         <div className="mt-3 p-2 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs">
           <span className="font-medium">{t("resultCard.labels.error")}:</span> {result.errorMessage}
+        </div>
+      )}
+
+      {result.requestUrl && (
+        <div className="mt-3 p-2 rounded bg-white/60 dark:bg-muted/50 text-xs">
+          <span className="font-medium text-muted-foreground">
+            {t("resultCard.requestUrl.label")}:
+          </span>{" "}
+          <span className="font-mono break-all">{result.requestUrl}</span>
         </div>
       )}
 
@@ -416,6 +427,19 @@ function TestResultDetails({
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Request URL - origin of the latest provider test request */}
+      {result.requestUrl && (
+        <div className="space-y-2">
+          <h4 className="font-semibold text-sm">{t("resultCard.requestUrl.title")}</h4>
+          <div className="rounded-md border bg-muted/50 p-3">
+            <pre className="text-xs whitespace-pre-wrap break-all font-mono overflow-x-hidden">
+              {result.requestUrl}
+            </pre>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("resultCard.requestUrl.hint")}</p>
         </div>
       )}
 

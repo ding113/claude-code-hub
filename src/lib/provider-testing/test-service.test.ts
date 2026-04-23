@@ -169,6 +169,34 @@ describe("executeProviderTest", () => {
     expectRequestUrl("https://relay.example.com/openai/v1/responses");
   });
 
+  test.each([
+    "https://api.gptclubapi.xyz/openai",
+    "https://api.gptclubapi.xyz/openai/",
+  ])("codex bare /openai base preserves absolute versioned request url: %s", async (providerUrl) => {
+    mockJsonResponse({
+      id: "resp_test",
+      model: "gpt-5.3-codex",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "pong" }],
+        },
+      ],
+    });
+
+    const result = await executeProviderTest({
+      providerUrl,
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
+  });
+
   test("openai-compatible 版本根路径应只追加 endpoint，不重复拼接 /v1", async () => {
     mockJsonResponse({
       id: "chatcmpl_test",
@@ -399,6 +427,327 @@ describe("executeProviderTest", () => {
       stream?: boolean;
     };
     expect(secondBody.stream).toBe(true);
+  });
+
+  test("codex bare /openai base retries versionless responses path after invalid url", async () => {
+    const errorBody = JSON.stringify({
+      error: {
+        message: "Invalid URL (POST /v1/v1/responses)",
+      },
+    });
+    const okBody = JSON.stringify({
+      id: "resp_test",
+      model: "gpt-5.3-codex",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "pong" }],
+        },
+      ],
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(errorBody, {
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+        })
+      )
+      .mockResolvedValueOnce(createMockResponse(okBody));
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.gptclubapi.xyz/openai",
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+      preset: "cx_codex_basic",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://api.gptclubapi.xyz/openai/responses");
+    expect(result.success).toBe(true);
+    expect(result.content).toBe("pong");
+    expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/responses");
+  });
+
+  test("codex provider test only retries versionless path once within a single attempt", async () => {
+    const errorBody = JSON.stringify({
+      error: {
+        message: "Invalid URL (POST /v1/v1/responses)",
+      },
+    });
+    const okBody = JSON.stringify({
+      id: "resp_test",
+      model: "gpt-5.3-codex",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "pong" }],
+        },
+      ],
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(errorBody, {
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+        })
+      )
+      .mockResolvedValueOnce(createMockResponse(okBody));
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.gptclubapi.xyz/openai",
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.gptclubapi.xyz/openai/v1/responses",
+      "https://api.gptclubapi.xyz/openai/responses",
+    ]);
+    expect(result.success).toBe(true);
+    expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/responses");
+  });
+
+  test("codex provider test reuses versionless path across preset candidates", async () => {
+    const invalidUrlBody = JSON.stringify({
+      error: {
+        message: "Invalid URL (POST /v1/responses)",
+      },
+    });
+    const stillInvalidBody = JSON.stringify({
+      error: {
+        message: "Unsupported responses body",
+      },
+    });
+    const okBody = JSON.stringify({
+      id: "resp_test",
+      model: "gpt-5.3-codex",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "pong" }],
+        },
+      ],
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(invalidUrlBody, {
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+        })
+      )
+      .mockResolvedValueOnce(
+        createMockResponse(stillInvalidBody, {
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+        })
+      )
+      .mockResolvedValueOnce(createMockResponse(okBody));
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.gptclubapi.xyz/openai",
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.gptclubapi.xyz/openai/v1/responses",
+      "https://api.gptclubapi.xyz/openai/responses",
+      "https://api.gptclubapi.xyz/openai/responses",
+    ]);
+    expect(result.success).toBe(true);
+    expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/responses");
+    expect(result.content).toBe("pong");
+  });
+
+  test("openai-compatible bare /openai base retries versionless chat path after invalid url", async () => {
+    const errorBody = JSON.stringify({
+      error: {
+        message: "Invalid URL (POST /v1/chat/completions)",
+      },
+    });
+    const okBody = JSON.stringify({
+      id: "chatcmpl_test",
+      model: "gpt-4.1-mini",
+      choices: [
+        {
+          index: 0,
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: "pong",
+          },
+        },
+      ],
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(errorBody, {
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+        })
+      )
+      .mockResolvedValueOnce(createMockResponse(okBody));
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.gptclubapi.xyz/openai",
+      apiKey: "sk-test-openai-compatible",
+      providerType: "openai-compatible",
+      model: "gpt-4.1-mini",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.gptclubapi.xyz/openai/v1/chat/completions",
+      "https://api.gptclubapi.xyz/openai/chat/completions",
+    ]);
+    expect(result.success).toBe(true);
+    expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/chat/completions");
+    expect(result.content).toBe("pong");
+  });
+
+  test("openai-compatible fallback rewrites the request endpoint instead of a matching base-path segment", async () => {
+    const errorBody = JSON.stringify({
+      error: {
+        message: "Invalid URL (POST /v1/chat/completions)",
+      },
+    });
+    const okBody = JSON.stringify({
+      id: "chatcmpl_test",
+      model: "gpt-4.1-mini",
+      choices: [
+        {
+          index: 0,
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: "pong",
+          },
+        },
+      ],
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(errorBody, {
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+        })
+      )
+      .mockResolvedValueOnce(createMockResponse(okBody));
+
+    const result = await executeProviderTest({
+      providerUrl: "https://relay.example.com/router/v1/responses",
+      apiKey: "sk-test-openai-compatible",
+      providerType: "openai-compatible",
+      model: "gpt-4.1-mini",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://relay.example.com/router/v1/responses/v1/chat/completions",
+      "https://relay.example.com/router/v1/responses/chat/completions",
+    ]);
+    expect(result.success).toBe(true);
+    expect(result.requestUrl).toBe(
+      "https://relay.example.com/router/v1/responses/chat/completions"
+    );
+    expect(result.content).toBe("pong");
+  });
+
+  test("fallback result timing reflects the final request attempt", async () => {
+    const nowValues = [0, 0, 0, 0, 5, 100, 160, 220];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 220);
+    const errorBody = JSON.stringify({
+      error: {
+        message: "Invalid URL (POST /v1/v1/responses)",
+      },
+    });
+    const okBody = JSON.stringify({
+      id: "resp_test",
+      model: "gpt-5.3-codex",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "pong" }],
+        },
+      ],
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createMockResponse(errorBody, {
+          ok: false,
+          status: 400,
+          statusText: "Bad Request",
+        })
+      )
+      .mockResolvedValueOnce(createMockResponse(okBody));
+
+    try {
+      const result = await executeProviderTest({
+        providerUrl: "https://api.gptclubapi.xyz/openai",
+        apiKey: "sk-test-codex",
+        providerType: "codex",
+        model: "gpt-5.3-codex",
+        preset: "cx_codex_basic",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/responses");
+      expect(result.firstByteMs).toBeGreaterThan(0);
+      expect(result.latencyMs).toBeGreaterThan(result.firstByteMs ?? 0);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  test("codex invalid request without invalid-url marker does not retry versionless path", async () => {
+    const errorBody = JSON.stringify({
+      error: {
+        message: "Invalid request payload",
+      },
+    });
+
+    fetchMock.mockResolvedValue(
+      createMockResponse(errorBody, {
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+      })
+    );
+
+    const result = await executeProviderTest({
+      providerUrl: "https://api.gptclubapi.xyz/openai",
+      apiKey: "sk-test-codex",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+      preset: "cx_codex_basic",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("red");
+    expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/v1/responses");
   });
 
   test("codex 新版 SSE 事件流应正确提取 output_text delta，避免误判为内容不匹配", async () => {

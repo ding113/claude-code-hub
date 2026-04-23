@@ -4510,6 +4510,7 @@ export type UnifiedTestResult = ActionResult<{
   httpStatusText?: string;
   model?: string;
   content?: string;
+  requestUrl?: string;
   rawResponse?: string;
   usage?: {
     inputTokens: number;
@@ -4634,6 +4635,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
         httpStatusText: result.httpStatusText,
         model: result.model,
         content: result.content,
+        requestUrl: result.requestUrl,
         rawResponse: result.rawResponse,
         usage: result.usage,
         streamInfo: result.streamInfo,
