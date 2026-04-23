@@ -126,7 +126,9 @@ detect_runtime() {
             fi
         fi
     elif command -v kubectl &>/dev/null && kubectl cluster-info &>/dev/null; then
-        if kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.kubeletVersion}' 2>/dev/null | grep -q 'k3s'; then
+        local kubelet_versions
+        kubelet_versions="$(kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.kubeletVersion}' 2>/dev/null || echo "")"
+        if [[ "$kubelet_versions" == *"k3s"* ]]; then
             RUNTIME="k3s"
         else
             RUNTIME="kubectl"
@@ -212,6 +214,58 @@ restore_update_scaling() {
     $KUBECTL -n "$NAMESPACE" scale deployment/claude-code-hub --replicas="$target_replicas" >/dev/null || true
 }
 
+resolve_k3s_image_digest() {
+    local image="$1"
+    sudo k3s ctr images ls 2>/dev/null | awk -v img="$image" 'found==0 && $1==img { print $3; found=1 }'
+}
+
+restart_k3s_rollout_with_image() {
+    local reason="$1"
+    local image="$2"
+    warn "$reason"
+    if ! $KUBECTL -n "$NAMESPACE" set image deployment/claude-code-hub app="$image" >/dev/null; then
+        err "set image 失败，未能应用目标镜像: $image"
+        return 1
+    fi
+    $KUBECTL -n "$NAMESPACE" rollout restart deployment/claude-code-hub >/dev/null
+}
+
+build_image_ref_with_digest() {
+    local image="$1"
+    local image_digest="$2"
+    local image_without_digest="${image%@*}"
+    local last_segment
+
+    if [[ "$image_without_digest" == "$image" ]]; then
+        last_segment="${image##*/}"
+        if [[ "$last_segment" == *:* ]]; then
+            image_without_digest="${image%:*}"
+        fi
+    fi
+
+    printf '%s@%s' "$image_without_digest" "$image_digest"
+}
+
+update_k3s_image_by_digest_or_restart() {
+    local image="$1"
+    local image_digest="" image_by_digest
+
+    # 这里不能在 awk 命中第一条后直接 exit:
+    # 在 set -euo pipefail 下,上游 ctr 仍继续写 pipe 时会收到 SIGPIPE(141),
+    # 进而让整个命令替换失败并静默退出升级流程。
+    if image_digest=$(resolve_k3s_image_digest "$image"); then
+        if [[ -n "$image_digest" ]] && [[ "${image_digest#sha256:}" != "$image_digest" ]]; then
+            image_by_digest="$(build_image_ref_with_digest "$image" "$image_digest")"
+            info "  digest: $image_digest"
+            $KUBECTL -n "$NAMESPACE" set image deployment/claude-code-hub app="$image_by_digest" >/dev/null
+        else
+            restart_k3s_rollout_with_image "未解析到可用 digest,回落到 rollout restart" "$image"
+        fi
+    else
+        restart_k3s_rollout_with_image "k3s ctr images ls 失败,回落到 rollout restart" "$image"
+    fi
+}
+
 ###############################################################################
 # Commands
 ###############################################################################
@@ -283,16 +337,9 @@ cmd_update() {
     info "Step 4/6: Updating image on single instance (auto-migration)..."
     if [[ "$RUNTIME" == "k3s" ]]; then
         # k3s: 用 digest 固定,避免 tag 相同导致 no-op rollout
-        local IMAGE_DIGEST IMAGE_BY_DIGEST
-        IMAGE_DIGEST=$(sudo k3s ctr images ls 2>/dev/null | awk -v img="$IMAGE" '$1==img {print $3; exit}')
-        if [[ -n "$IMAGE_DIGEST" ]] && [[ "${IMAGE_DIGEST#sha256:}" != "$IMAGE_DIGEST" ]]; then
-            IMAGE_BY_DIGEST="${IMAGE%:*}@${IMAGE_DIGEST}"
-            info "  digest: $IMAGE_DIGEST"
-            $KUBECTL -n "$NAMESPACE" set image deployment/claude-code-hub app="$IMAGE_BY_DIGEST" >/dev/null
-        else
-            warn "无法解析 digest,回落到 rollout restart"
-            $KUBECTL -n "$NAMESPACE" set image deployment/claude-code-hub app="$IMAGE" >/dev/null || true
-            $KUBECTL -n "$NAMESPACE" rollout restart deployment/claude-code-hub >/dev/null
+        if ! update_k3s_image_by_digest_or_restart "$IMAGE"; then
+            restore_update_scaling "$CURRENT_REPLICAS" "$MIN_REPLICAS"
+            exit 1
         fi
     else
         # 标准 k8s: set image 到目标 tag,触发 rollout;相同 tag 时强制 restart 拿最新 digest
@@ -530,7 +577,7 @@ cmd_doctor() {
 
     # kubectl
     if command -v kubectl &>/dev/null; then
-        check_pass "kubectl installed: $(kubectl version --client -o yaml 2>/dev/null | awk '/gitVersion/{print $2; exit}')"
+        check_pass "kubectl installed: $(kubectl version --client -o jsonpath='{.clientVersion.gitVersion}' 2>/dev/null)"
     elif [[ "$RUNTIME" == "k3s" ]] && command -v k3s &>/dev/null; then
         check_warn "kubectl 未安装,将使用 sudo k3s kubectl"
     else
@@ -703,23 +750,25 @@ EOF
 ###############################################################################
 # Dispatch
 ###############################################################################
-case "${1:-help}" in
-    update)    shift; cmd_update "$@" ;;
-    status)    shift; cmd_status "$@" ;;
-    logs)      shift; cmd_logs "$@" ;;
-    follow)    cmd_follow ;;
-    restart)   cmd_restart ;;
-    rollback)  cmd_rollback ;;
-    backup)    cmd_backup ;;
-    scale)     shift; cmd_scale "$@" ;;
-    env)       cmd_env ;;
-    secret)    shift; cmd_secret "$@" ;;
-    shell)     cmd_shell ;;
-    dbshell)   cmd_dbshell ;;
-    info)      cmd_info ;;
-    version|--version|-v) cmd_version ;;
-    doctor)    cmd_doctor ;;
-    install)   shift; cmd_install "$@" ;;
-    uninstall) cmd_uninstall ;;
-    help|--help|-h|*) cmd_help ;;
-esac
+if [[ "${CCH_SOURCE_ONLY:-0}" != "1" ]]; then
+    case "${1:-help}" in
+        update)    shift; cmd_update "$@" ;;
+        status)    shift; cmd_status "$@" ;;
+        logs)      shift; cmd_logs "$@" ;;
+        follow)    cmd_follow ;;
+        restart)   cmd_restart ;;
+        rollback)  cmd_rollback ;;
+        backup)    cmd_backup ;;
+        scale)     shift; cmd_scale "$@" ;;
+        env)       cmd_env ;;
+        secret)    shift; cmd_secret "$@" ;;
+        shell)     cmd_shell ;;
+        dbshell)   cmd_dbshell ;;
+        info)      cmd_info ;;
+        version|--version|-v) cmd_version ;;
+        doctor)    cmd_doctor ;;
+        install)   shift; cmd_install "$@" ;;
+        uninstall) cmd_uninstall ;;
+        help|--help|-h|*) cmd_help ;;
+    esac
+fi

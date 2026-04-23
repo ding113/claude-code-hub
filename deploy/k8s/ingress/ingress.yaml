@@ -9,6 +9,10 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    # 客户端 IP 透传依赖 ingress controller 级 forwarded-header / real-ip 配置。
+    # 不默认使用 configuration-snippet:
+    # - ingress-nginx 常见安装默认 allow-snippet-annotations=false
+    # - X-Real-IP 只有在 trusted proxies / real-ip 正确配置后才可靠
     # Traefik 注解(安装为 Ingress Controller 时生效)
     traefik.ingress.kubernetes.io/router.middlewares: "{{NAMESPACE}}-streaming-headers@kubernetescrd"
 spec:

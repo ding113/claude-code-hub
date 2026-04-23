@@ -213,6 +213,23 @@ bash scripts/deploy-k8s.sh --replicas 3 --hpa-min 3 --hpa-max 10 -y
 默认模板保留 `replicas=2`,但 `AUTO_MIGRATE` 入口 `src/instrumentation.ts` 会先获取 PostgreSQL advisory lock,
 因此首次多副本启动时迁移会串行执行。如果你更关心首启速度,也可以先用 `--replicas 1` 部署,确认健康后再扩容。
 
+### 客户端 IP 透传
+
+- 默认 k8s 部署保持 `main -> ghcr.io/ding113/claude-code-hub:latest`；只有显式传
+  `-b dev` 才会切到 `:dev`。
+- `deploy/k8s/ingress/ingress.yaml` 不默认依赖 `configuration-snippet`;
+  标准 Ingress 路径要求你在 controller 级别配置 forwarded headers / real-ip。
+- 若你希望应用优先信任 `X-Real-IP`,必须先在 ingress-nginx / 上游 LB 上配置
+  `use-forwarded-headers`、`proxy-real-ip-cidr` 等 trusted proxy / real-ip 选项。
+- 若你显式打算使用 `configuration-snippet`,还要确认 ingress-nginx 已打开
+  `allow-snippet-annotations=true`。
+- `deploy/k8s/ingress/traefik-ingressroute.yaml` 依赖 Traefik 默认透传
+  `X-Forwarded-For`; `X-Real-Ip` 是否可信取决于 `forwardedHeaders.trustedIPs`
+  (或等效 trusted proxy / proxy protocol 配置)。
+- 应用侧的默认 IP 提取链仍等价于
+  `{ headers: [{ name: "x-real-ip" }, { name: "x-forwarded-for", pick: "rightmost" }] }`,
+  不需要通过 SQL 或初始化脚本额外落库。
+
 ### NetworkPolicy 自定义
 
 默认 `deploy/k8s/app/networkpolicy.yaml` 只在 **Ingress 模式** 下应用,并放行以下三个 Ingress Controller namespace:
@@ -246,11 +263,18 @@ bash scripts/deploy-k8s.sh --replicas 3 --hpa-min 3 --hpa-max 10 -y
 ### 生命周期
 
 ```bash
-cch update            # 拉新镜像 + 自动迁移 + 滚动更新,失败自动回滚
+cch update            # 拉新镜像 + 自动迁移 + 滚动更新
 cch restart           # 滚动重启 (不换镜像)
 cch rollback          # 回滚到上一个 revision
 cch scale 3           # 调整副本数
 ```
+
+> 说明:
+> - `cch update` 在 rollout / 健康检查失败时会自动执行 `rollout undo` 并恢复副本数。
+> - 若 k3s digest 解析失败,会先回落到同 tag 的 `set image + rollout restart`;
+>   只有后续 rollout / 健康检查失败时才会执行 `rollout undo`。
+> - 在这种同 tag fallback 场景里,`rollout undo` 回退的是 Deployment 模板,
+>   不保证严格回到上一份镜像 digest。
 
 ### 观测
 
