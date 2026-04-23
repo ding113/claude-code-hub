@@ -59,4 +59,50 @@ describe("status-page loader", () => {
       ],
     });
   });
+
+  it("hydrates default groupName while preserving custom public slug and metadata", async () => {
+    mockGetSystemSettings.mockResolvedValue({
+      publicStatusWindowHours: 48,
+      publicStatusAggregationIntervalMinutes: 15,
+    });
+    mockBootstrapProviderGroupsFromProviders.mockResolvedValue({
+      groups: [
+        {
+          id: 2,
+          name: "default",
+          description: JSON.stringify({
+            version: 2,
+            note: "Default public note",
+            publicStatus: {
+              displayName: "Platform",
+              publicGroupSlug: "platform",
+              explanatoryCopy: "Default group status",
+              sortOrder: 3,
+              publicModels: [{ modelKey: "gpt-4.1", providerTypeOverride: "openai-compatible" }],
+            },
+          }),
+        },
+      ],
+      groupCounts: new Map(),
+    });
+
+    const mod = await import("@/app/[locale]/settings/status-page/loader");
+    const result = await mod.loadStatusPageSettings();
+
+    expect(result).toEqual({
+      initialWindowHours: 48,
+      initialAggregationIntervalMinutes: 15,
+      initialGroups: [
+        {
+          groupName: "default",
+          enabled: true,
+          displayName: "Platform",
+          publicGroupSlug: "platform",
+          explanatoryCopy: "Default group status",
+          sortOrder: 3,
+          publicModels: [{ modelKey: "gpt-4.1", providerTypeOverride: "openai-compatible" }],
+        },
+      ],
+    });
+  });
 });

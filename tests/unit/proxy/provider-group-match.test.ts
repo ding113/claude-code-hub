@@ -23,6 +23,16 @@ describe("checkProviderGroupMatch - 供应商分组匹配逻辑", () => {
       expect(checkProviderGroupMatch(null, "cli,default")).toBe(true);
     });
 
+    test("供应商分组为空字符串，用户分组包含 default，应匹配", () => {
+      expect(checkProviderGroupMatch("", "default")).toBe(true);
+      expect(checkProviderGroupMatch("  ", "cli,default")).toBe(true);
+    });
+
+    test("供应商分组显式为 default，用户分组包含 default，应匹配", () => {
+      expect(checkProviderGroupMatch("default", "default")).toBe(true);
+      expect(checkProviderGroupMatch("default", "cli,default")).toBe(true);
+    });
+
     test("供应商分组为 null，用户分组不包含 default，应不匹配", () => {
       expect(checkProviderGroupMatch(null, "premium")).toBe(false);
       expect(checkProviderGroupMatch(null, "cli,chat")).toBe(false);

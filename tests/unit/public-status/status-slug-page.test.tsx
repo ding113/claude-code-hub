@@ -133,4 +133,52 @@ describe("public status slug page", () => {
     });
     expect(mockNotFound).not.toHaveBeenCalled();
   });
+
+  it("resolves a custom default-group slug for metadata and page rendering", async () => {
+    mockLoadPublicStatusPageData.mockResolvedValue({
+      initialPayload: {
+        rebuildState: "fresh",
+        sourceGeneration: "",
+        generatedAt: "2026-04-22T00:00:00.000Z",
+        freshUntil: null,
+        groups: [
+          {
+            publicGroupSlug: "platform",
+            displayName: "Platform",
+            explanatoryCopy: "Default group status",
+            models: [],
+          },
+        ],
+      },
+      status: "ready",
+      intervalMinutes: 5,
+      rangeHours: 24,
+      followServerDefaults: true,
+      siteTitle: "Claude Code Hub",
+      timeZone: "UTC",
+      meta: {
+        siteTitle: "Claude Code Hub",
+        siteDescription: "Claude Code Hub public status",
+        timeZone: "UTC",
+      },
+      response: {} as never,
+    });
+
+    const mod = await import("@/app/[locale]/status/[slug]/page");
+    const metadata = (await mod.generateMetadata({
+      params: Promise.resolve({ slug: "platform" }),
+    })) as Metadata;
+
+    expect(metadata).toMatchObject({
+      title: "Platform · Claude Code Hub",
+      description: "Default group status",
+    });
+
+    await expect(
+      mod.default({
+        params: Promise.resolve({ locale: "en", slug: "platform" }),
+      })
+    ).resolves.toBeTruthy();
+    expect(mockLoadPublicStatusPageData).toHaveBeenCalledWith({ groupSlug: "platform" });
+  });
 });

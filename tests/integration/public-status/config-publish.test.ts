@@ -244,6 +244,51 @@ describe("public-status config publish integration", () => {
     expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
   });
 
+  it("accepts groupName default with a custom slug and still queues publish + rebuild", async () => {
+    mockFindAllProviderGroups.mockResolvedValue([
+      {
+        id: 20,
+        name: "default",
+        description: null,
+      },
+    ]);
+    mockFindProviderGroupById.mockResolvedValue({
+      id: 20,
+      name: "default",
+      description: null,
+    });
+
+    const { savePublicStatusSettings } = await import("@/actions/public-status");
+
+    const result = await savePublicStatusSettings({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+      groups: [
+        {
+          groupName: "default",
+          displayName: "Platform",
+          publicGroupSlug: "platform",
+          publicModels: [{ modelKey: "gpt-4.1" }],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockUpdateProviderGroup).toHaveBeenCalledWith(
+      20,
+      expect.objectContaining({
+        description: expect.stringContaining('"publicGroupSlug":"platform"'),
+      }),
+      {}
+    );
+    expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledTimes(1);
+    expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "config-updated",
+    });
+  });
+
   it("rejects aggregation intervals outside the public allowlist", async () => {
     const { savePublicStatusSettings } = await import("@/actions/public-status");
 

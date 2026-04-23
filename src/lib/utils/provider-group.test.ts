@@ -3,6 +3,7 @@ import {
   normalizeProviderGroup,
   normalizeProviderGroupTag,
   parseProviderGroups,
+  resolveProviderGroupsWithDefault,
 } from "./provider-group";
 
 describe("provider-group utils", () => {
@@ -20,5 +21,16 @@ describe("provider-group utils", () => {
 
   test("normalizeProviderGroupTag 在空输入时应返回 null", () => {
     expect(normalizeProviderGroupTag("  ， \n  ")).toBeNull();
+  });
+
+  test("returns default membership for null or blank group tags", () => {
+    expect(resolveProviderGroupsWithDefault(null)).toEqual(["default"]);
+    expect(resolveProviderGroupsWithDefault("   ")).toEqual(["default"]);
+    expect(resolveProviderGroupsWithDefault("openai,default")).toEqual(["openai", "default"]);
+  });
+
+  test("keeps raw parse semantics unchanged for empty input", () => {
+    expect(parseProviderGroups(null)).toEqual([]);
+    expect(parseProviderGroups("   ")).toEqual([]);
   });
 });

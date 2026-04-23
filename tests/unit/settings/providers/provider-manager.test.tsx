@@ -497,3 +497,45 @@ describe("ProviderManager layered circuit labels", () => {
     unmount();
   });
 });
+
+describe("ProviderManager default group filtering", () => {
+  test("default filter includes ungrouped providers", () => {
+    const providers = [
+      makeProvider({ id: 1, name: "Ungrouped Provider", groupTag: null, groupPriorities: null }),
+      makeProvider({
+        id: 2,
+        name: "Explicit Default Provider",
+        groupTag: "default",
+        groupPriorities: { default: 1 },
+      }),
+      makeProvider({
+        id: 3,
+        name: "Premium Provider",
+        groupTag: "premium",
+        groupPriorities: { premium: 1 },
+      }),
+    ];
+
+    const { unmount, container } = renderWithProviders(
+      <ProviderManager providers={providers} healthStatus={{}} enableMultiProviderTypes={true} />
+    );
+
+    const defaultFilterButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "default"
+    );
+    expect(defaultFilterButton).toBeTruthy();
+
+    act(() => {
+      defaultFilterButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const providerNames = Array.from(container.querySelectorAll("[data-testid^='provider-']")).map(
+      (node) => node.textContent
+    );
+    expect(providerNames).toContain("Ungrouped Provider");
+    expect(providerNames).toContain("Explicit Default Provider");
+    expect(providerNames).not.toContain("Premium Provider");
+
+    unmount();
+  });
+});

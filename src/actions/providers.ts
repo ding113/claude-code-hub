@@ -50,7 +50,11 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import { SessionManager } from "@/lib/session-manager";
-import { normalizeProviderGroupTag, parseProviderGroups } from "@/lib/utils/provider-group";
+import {
+  normalizeProviderGroupTag,
+  parseProviderGroups,
+  resolveProviderGroupsWithDefault,
+} from "@/lib/utils/provider-group";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -471,12 +475,7 @@ export async function getProviderGroupsWithCount(): Promise<
     const groupCounts = new Map<string, number>();
 
     for (const provider of providers) {
-      const groups = parseProviderGroups(provider.groupTag);
-      if (groups.length === 0) {
-        groupCounts.set(PROVIDER_GROUP.DEFAULT, (groupCounts.get(PROVIDER_GROUP.DEFAULT) || 0) + 1);
-        continue;
-      }
-
+      const groups = resolveProviderGroupsWithDefault(provider.groupTag);
       for (const group of groups) {
         groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
       }

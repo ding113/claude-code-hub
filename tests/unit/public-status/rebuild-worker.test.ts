@@ -238,6 +238,81 @@ describe("public-status rebuild worker", () => {
     expect(result.groups[0]?.models[0]?.latestState).toBe("failed");
   });
 
+  it("keeps default group samples when provider-chain tags are null blank or explicit default", async () => {
+    const mod = await importAggregationModule();
+
+    const result = mod.buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "default",
+          publicGroupSlug: "platform",
+          displayName: "Platform",
+          explanatoryCopy: "Default group",
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 31,
+          createdAt: "2026-04-21T10:10:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 311,
+              name: "provider-1",
+              groupTag: null,
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+        {
+          id: 32,
+          createdAt: "2026-04-21T10:20:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 321,
+              name: "provider-2",
+              groupTag: "",
+              reason: "retry_failed",
+              statusCode: 500,
+            },
+          ],
+        },
+        {
+          id: 33,
+          createdAt: "2026-04-21T10:30:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 331,
+              name: "provider-3",
+              groupTag: "default",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+      ],
+    });
+
+    const model = result.groups[0]?.models[0];
+    expect(model?.timeline.reduce((sum, bucket) => sum + bucket.sampleCount, 0)).toBe(3);
+    expect(model?.latestState).toBe("operational");
+  });
+
   it("collapses concurrent rebuild requests into a single in-flight computation", async () => {
     const mod = await importRebuildWorkerModule();
 

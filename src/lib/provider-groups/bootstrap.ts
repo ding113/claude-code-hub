@@ -1,6 +1,5 @@
-import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { findAllProvidersFresh } from "@/repository/provider";
 import { ensureProviderGroupsExist, findAllProviderGroups } from "@/repository/provider-groups";
 import type { ProviderGroup } from "@/types/provider-group";
@@ -39,13 +38,7 @@ export async function bootstrapProviderGroupsFromProviders(
   const referenced = new Set<string>();
   const groupCounts = new Map<string, number>();
   for (const provider of providers) {
-    const parsed = parseProviderGroups(provider.groupTag);
-    if (parsed.length === 0) {
-      referenced.add(PROVIDER_GROUP.DEFAULT);
-      groupCounts.set(PROVIDER_GROUP.DEFAULT, (groupCounts.get(PROVIDER_GROUP.DEFAULT) || 0) + 1);
-      continue;
-    }
-
+    const parsed = resolveProviderGroupsWithDefault(provider.groupTag);
     for (const name of parsed) {
       referenced.add(name);
       groupCounts.set(name, (groupCounts.get(name) || 0) + 1);

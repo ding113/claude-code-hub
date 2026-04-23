@@ -85,6 +85,46 @@ describe("GET /api/public-status", () => {
     });
   });
 
+  it("returns 200 for a configured default-group custom slug and preserves hasConfiguredGroups", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [{ slug: "platform" }],
+    });
+    mockReadPublicStatusPayload.mockResolvedValue({
+      rebuildState: "fresh",
+      sourceGeneration: "gen-platform",
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      freshUntil: "2026-04-21T10:05:00.000Z",
+      groups: [
+        {
+          publicGroupSlug: "platform",
+          displayName: "Platform",
+          explanatoryCopy: "Default group",
+          models: [],
+        },
+      ],
+    });
+
+    const { GET } = await import("@/app/api/public-status/route");
+    const response = await GET(new Request("http://localhost/api/public-status"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "ready",
+      rebuildState: {
+        state: "fresh",
+        hasSnapshot: true,
+        reason: null,
+      },
+    });
+    expect(mockReadPublicStatusPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasConfiguredGroups: true,
+      })
+    );
+  });
+
   it("returns 200 with stale payload and queues rebuild for the default query", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-1",
@@ -121,6 +161,66 @@ describe("GET /api/public-status", () => {
         reason: null,
       },
     });
+    expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "stale-generation",
+    });
+  });
+
+  it("returns 200 with stale payload for a configured default-group custom slug", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-platform",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [{ slug: "platform" }],
+    });
+    mockReadPublicStatusPayload.mockImplementation(
+      async ({ triggerRebuildHint }: { triggerRebuildHint: (reason: string) => Promise<void> }) => {
+        await triggerRebuildHint("stale-generation");
+        return {
+          rebuildState: "stale",
+          sourceGeneration: "gen-platform-stale",
+          generatedAt: "2026-04-21T09:55:00.000Z",
+          freshUntil: "2026-04-21T10:00:00.000Z",
+          groups: [
+            {
+              publicGroupSlug: "platform",
+              displayName: "Platform",
+              explanatoryCopy: "Default group",
+              models: [],
+            },
+          ],
+        };
+      }
+    );
+    mockSchedulePublicStatusRebuild.mockResolvedValue({
+      accepted: true,
+      rebuildState: "rebuilding",
+    });
+
+    const { GET } = await import("@/app/api/public-status/route");
+    const response = await GET(
+      new Request("http://localhost/api/public-status?groupSlug=platform")
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "stale",
+      rebuildState: {
+        state: "stale",
+        hasSnapshot: true,
+        reason: null,
+      },
+      resolvedQuery: expect.objectContaining({
+        groupSlugs: ["platform"],
+      }),
+    });
+    expect(mockReadPublicStatusPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hasConfiguredGroups: true,
+      })
+    );
     expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
       intervalMinutes: 5,
       rangeHours: 24,
