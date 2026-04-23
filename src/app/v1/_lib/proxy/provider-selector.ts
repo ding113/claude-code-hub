@@ -462,7 +462,10 @@ export class ProxyProviderResolver {
     }
 
     // 从 Redis 读取该 session 绑定的 provider
-    const providerId = await SessionManager.getSessionProvider(session.sessionId);
+    const providerId = await SessionManager.getSessionProvider(
+      session.sessionId,
+      session.authState?.key?.id ?? null
+    );
     if (!providerId) {
       logger.debug("ProviderSelector: Session has no bound provider", {
         sessionId: session.sessionId,
@@ -477,6 +480,7 @@ export class ProxyProviderResolver {
         sessionId: session.sessionId,
         providerId,
       });
+      await SessionManager.clearSessionProvider(session.sessionId);
       return null;
     }
 
@@ -530,9 +534,22 @@ export class ProxyProviderResolver {
       return null;
     }
 
+    if (
+      session.originalFormat &&
+      !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)
+    ) {
+      logger.debug("ProviderSelector: Session provider incompatible with request format", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        providerName: provider.name,
+        providerType: provider.providerType,
+        originalFormat: session.originalFormat,
+      });
+      await SessionManager.clearSessionProvider(session.sessionId);
+      return null;
+    }
+
     // 检查模型支持
-    // 注意：此处不检查格式兼容性（checkFormatProviderTypeCompatibility），
-    // 因为 session binding 仅由 pickRandomProvider 创建，该路径已保证格式兼容。
     const requestedModel = session.getOriginalModel();
     if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
       logger.debug("ProviderSelector: Session provider does not support requested model", {

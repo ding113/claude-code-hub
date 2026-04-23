@@ -36,13 +36,16 @@ function createThenableQuery<T>(result: T, whereArgs?: unknown[]) {
 
 describe("Usage logs minRetryCount filter", () => {
   test("buildUsageLogConditions: minRetryCount <= 0 视为不筛选", () => {
-    expect(buildUsageLogConditions({})).toHaveLength(0);
-    expect(buildUsageLogConditions({ minRetryCount: 0 })).toHaveLength(0);
-    expect(buildUsageLogConditions({ minRetryCount: -1 })).toHaveLength(0);
+    expect(buildUsageLogConditions({})).toHaveLength(1);
+    expect(buildUsageLogConditions({ minRetryCount: 0 })).toHaveLength(1);
+    expect(buildUsageLogConditions({ minRetryCount: -1 })).toHaveLength(1);
   });
 
   test("buildUsageLogConditions: 重试次数表达式应对齐 getRetryCount/isActualRequest", () => {
-    const [condition] = buildUsageLogConditions({ minRetryCount: 1 });
+    const condition = buildUsageLogConditions({ minRetryCount: 1 }).find((item) =>
+      sqlToString(item).toLowerCase().includes("jsonb_array_elements")
+    );
+    expect(condition).toBeDefined();
     const whereSql = sqlToString(condition).toLowerCase();
     expect(whereSql).toContain("jsonb_array_elements");
     expect(whereSql).toContain("bool_or");

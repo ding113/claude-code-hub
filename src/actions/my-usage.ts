@@ -47,15 +47,25 @@ function scrubProviderChainRequestForReadonly(
 ): ProviderChainItem[] | null {
   return (
     providerChain?.map((item) => {
-      if (!item.errorDetails?.request) {
+      if (!item.errorDetails) {
         return item;
       }
 
-      const { request: _request, ...errorDetailsWithoutRequest } = item.errorDetails;
+      const { request: _request, provider, ...restErrorDetails } = item.errorDetails;
 
       return {
         ...item,
-        errorDetails: errorDetailsWithoutRequest,
+        errorDetails: {
+          ...restErrorDetails,
+          clientError: undefined,
+          provider: provider
+            ? {
+                ...provider,
+                upstreamBody: undefined,
+                upstreamParsed: undefined,
+              }
+            : undefined,
+        },
       };
     }) ?? null
   );

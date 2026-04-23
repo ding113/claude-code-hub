@@ -9,6 +9,7 @@ export interface EndpointPolicy {
   readonly guardPreset: EndpointGuardPreset;
   readonly allowRetry: boolean;
   readonly allowProviderSwitch: boolean;
+  readonly allowRawCrossProviderFallback: boolean;
   readonly allowCircuitBreakerAccounting: boolean;
   readonly trackConcurrentRequests: boolean;
   readonly bypassRequestFilters: boolean;
@@ -23,6 +24,7 @@ const DEFAULT_ENDPOINT_POLICY: EndpointPolicy = Object.freeze({
   guardPreset: "chat",
   allowRetry: true,
   allowProviderSwitch: true,
+  allowRawCrossProviderFallback: false,
   allowCircuitBreakerAccounting: true,
   trackConcurrentRequests: true,
   bypassRequestFilters: false,
@@ -37,6 +39,7 @@ const RAW_PASSTHROUGH_ENDPOINT_POLICY: EndpointPolicy = Object.freeze({
   guardPreset: "raw_passthrough",
   allowRetry: false,
   allowProviderSwitch: false,
+  allowRawCrossProviderFallback: true,
   allowCircuitBreakerAccounting: false,
   trackConcurrentRequests: false,
   bypassRequestFilters: true,
@@ -59,8 +62,14 @@ export function isRawPassthroughEndpointPolicy(policy: EndpointPolicy): boolean 
   return policy.kind === "raw_passthrough";
 }
 
+export function isStrictEndpointPoolPolicy(policy: Pick<EndpointPolicy, "endpointPoolStrictness">) {
+  return policy.endpointPoolStrictness === "strict";
+}
+
 export function resolveEndpointPolicy(pathname: string): EndpointPolicy {
-  if (isRawPassthroughEndpointPath(pathname)) {
+  const normalizedPath = normalizeEndpointPath(pathname);
+
+  if (rawPassthroughEndpointPathSet.has(normalizedPath)) {
     return RAW_PASSTHROUGH_ENDPOINT_POLICY;
   }
 

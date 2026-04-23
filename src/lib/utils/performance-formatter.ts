@@ -1,4 +1,29 @@
-export const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
+export const NON_BILLING_ENDPOINTS = [
+  "/v1/messages/count_tokens",
+  "/v1/responses/compact",
+] as const;
+
+export const NON_BILLING_ENDPOINT = NON_BILLING_ENDPOINTS[0];
+
+function normalizeEndpointForBilling(endpoint: string): string {
+  const trimmed = endpoint.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed === "/" ? trimmed : trimmed.replace(/\/+$/, "");
+}
+
+export function isNonBillingEndpoint(endpoint: string | null | undefined): boolean {
+  if (!endpoint) {
+    return false;
+  }
+
+  const normalizedEndpoint = normalizeEndpointForBilling(endpoint);
+  return NON_BILLING_ENDPOINTS.includes(
+    normalizedEndpoint as (typeof NON_BILLING_ENDPOINTS)[number]
+  );
+}
 
 /**
  * 格式化请求耗时

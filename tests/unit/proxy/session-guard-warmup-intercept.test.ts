@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 
 const getCachedSystemSettingsMock = vi.fn();
@@ -100,6 +101,9 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     },
     getMessagesLength() {
       return 1;
+    },
+    getEndpointPolicy() {
+      return resolveEndpointPolicy("/v1/messages");
     },
     isWarmupRequest() {
       return true;

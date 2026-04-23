@@ -57,7 +57,7 @@ vi.mock("@/repository/message", () => ({
 
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
-    updateSessionUsage: vi.fn(),
+    updateSessionUsage: vi.fn(async () => undefined),
     storeSessionResponse: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
@@ -129,15 +129,26 @@ function createSession(opts: {
   redirectedModel: string;
   sessionId: string;
   messageId: number;
+  pathname?: string;
+  providerType?: "claude" | "codex";
+  originalFormat?: "claude" | "response";
 }): ProxySession {
-  const { originalModel, redirectedModel, sessionId, messageId } = opts;
+  const {
+    originalModel,
+    redirectedModel,
+    sessionId,
+    messageId,
+    pathname = "/v1/messages",
+    providerType = "claude",
+    originalFormat = "claude",
+  } = opts;
 
   const session = Object.create(ProxySession.prototype) as ProxySession;
   Object.assign(session, {
     request: { message: {}, log: "(test)", model: redirectedModel },
     startTime: Date.now(),
     method: "POST",
-    requestUrl: new URL("http://localhost/v1/messages"),
+    requestUrl: new URL(`http://localhost${pathname}`),
     headers: new Headers(),
     headerLog: "",
     userAgent: null,
@@ -149,7 +160,7 @@ function createSession(opts: {
     messageContext: null,
     sessionId: null,
     requestSequence: 1,
-    originalFormat: "claude",
+    originalFormat,
     providerType: null,
     originalModelName: null,
     originalUrlPathname: null,
@@ -160,7 +171,7 @@ function createSession(opts: {
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
     resolvedPricingCache: new Map(),
-    endpointPolicy: resolveEndpointPolicy("/v1/messages"),
+    endpointPolicy: resolveEndpointPolicy(pathname),
     isHeaderModified: () => false,
     getContext1mApplied: () => false,
     getGroupCostMultiplier: () => 1,
@@ -202,7 +213,7 @@ function createSession(opts: {
   const provider = {
     id: 99,
     name: "test-provider",
-    providerType: "claude",
+    providerType,
     costMultiplier: 1.0,
     streamingIdleTimeoutMs: 0,
     dailyResetTime: "00:00",
@@ -405,6 +416,34 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
 
     // Zero cost should NOT trigger decrement
     expect(RateLimitService.decrementLeaseBudget).not.toHaveBeenCalled();
+  });
+
+  it("should skip redis cost tracking and lease decrement for non-billing compact endpoint variants", async () => {
+    const session = createSession({
+      originalModel,
+      redirectedModel: originalModel,
+      sessionId: "sess-non-billing-compact",
+      messageId: 5999,
+      pathname: "/v1/responses/compact/",
+      providerType: "codex",
+      originalFormat: "response",
+    });
+
+    const response = createNonStreamResponse(usage);
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(RateLimitService.trackCost).not.toHaveBeenCalled();
+    expect(RateLimitService.trackUserDailyCost).not.toHaveBeenCalled();
+    expect(RateLimitService.decrementLeaseBudget).not.toHaveBeenCalled();
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      5999,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: usage.input_tokens,
+        outputTokens: usage.output_tokens,
+      })
+    );
   });
 
   it("should call decrementLeaseBudget exactly once per request (no duplicates)", async () => {

@@ -93,6 +93,13 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
           WHERE mr.id > ${lastId}
             AND mr.blocked_by IS DISTINCT FROM 'warmup'
             AND (
+              mr.endpoint IS NULL
+              OR LOWER(REGEXP_REPLACE(mr.endpoint, '/+$', '')) NOT IN (
+                '/v1/messages/count_tokens',
+                '/v1/responses/compact'
+              )
+            )
+            AND (
               ul.request_id IS NULL
               OR ul.success_rate_outcome IS NULL
             )

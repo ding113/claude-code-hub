@@ -187,7 +187,7 @@ describe("GuardPipeline：warmup 拦截点", () => {
     expect(callOrder).not.toContain("messageContext");
   });
 
-  test("COUNT_TOKENS pipeline 应走最小链路（且覆盖 fromRequestType 分支）", async () => {
+  test("COUNT_TOKENS pipeline 应增加 raw-safe session 与 request context，但仍绕过 chat-only guards", async () => {
     callOrder.length = 0;
 
     const { GuardPipelineBuilder, RequestType } = await import(
@@ -206,14 +206,21 @@ describe("GuardPipeline：warmup 拦截点", () => {
     const res = await pipeline.run(session);
 
     expect(res).toBeNull();
-    expect(callOrder).toEqual(["auth", "client", "model", "version", "probe", "provider"]);
-    expect(callOrder).not.toContain("session");
+    expect(callOrder).toEqual([
+      "auth",
+      "client",
+      "model",
+      "version",
+      "probe",
+      "session",
+      "provider",
+      "messageContext",
+    ]);
     expect(callOrder).not.toContain("warmup");
     expect(callOrder).not.toContain("sensitive");
     expect(callOrder).not.toContain("rateLimit");
     expect(callOrder).not.toContain("requestFilter");
     expect(callOrder).not.toContain("providerRequestFilter");
-    expect(callOrder).not.toContain("messageContext");
   });
 
   test("count_tokens 和 responses/compact 应通过 endpoint policy 选择同一 raw preset", async () => {
@@ -243,7 +250,16 @@ describe("GuardPipeline：warmup 拦截点", () => {
     }
 
     expect(orders[0]).toEqual(orders[1]);
-    expect(orders[0]).toEqual(["auth", "client", "model", "version", "probe", "provider"]);
+    expect(orders[0]).toEqual([
+      "auth",
+      "client",
+      "model",
+      "version",
+      "probe",
+      "session",
+      "provider",
+      "messageContext",
+    ]);
   });
 
   test("/v1/messages 仍应通过 endpoint policy 选择现有 chat preset", async () => {

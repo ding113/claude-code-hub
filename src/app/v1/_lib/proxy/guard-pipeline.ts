@@ -158,14 +158,28 @@ export class GuardPipelineBuilder {
     };
   }
 
-  static fromSession(session: Pick<ProxySession, "getEndpointPolicy">): GuardPipeline {
-    return GuardPipelineBuilder.fromEndpointPolicy(session.getEndpointPolicy());
+  static fromSession(
+    session: Pick<ProxySession, "getEndpointPolicy"> & {
+      isRawCrossProviderFallbackEnabled?: (() => boolean) | undefined;
+    }
+  ): GuardPipeline {
+    return GuardPipelineBuilder.fromEndpointPolicy(
+      session.getEndpointPolicy(),
+      typeof session.isRawCrossProviderFallbackEnabled === "function"
+        ? session.isRawCrossProviderFallbackEnabled()
+        : session.getEndpointPolicy().allowRawCrossProviderFallback
+    );
   }
 
-  static fromEndpointPolicy(policy: Pick<EndpointPolicy, "guardPreset">): GuardPipeline {
+  static fromEndpointPolicy(
+    policy: Pick<EndpointPolicy, "guardPreset" | "allowRawCrossProviderFallback">,
+    rawCrossProviderFallbackEnabled = policy.allowRawCrossProviderFallback
+  ): GuardPipeline {
     switch (policy.guardPreset) {
       case "raw_passthrough":
-        return GuardPipelineBuilder.build(RAW_PASSTHROUGH_PIPELINE);
+        return GuardPipelineBuilder.build(
+          rawCrossProviderFallbackEnabled ? RAW_SAFE_SESSION_PIPELINE : RAW_PASSTHROUGH_PIPELINE
+        );
       default:
         return GuardPipelineBuilder.build(CHAT_PIPELINE);
     }
@@ -175,7 +189,7 @@ export class GuardPipelineBuilder {
   static fromRequestType(type: RequestType): GuardPipeline {
     switch (type) {
       case RequestType.COUNT_TOKENS:
-        return GuardPipelineBuilder.build(RAW_PASSTHROUGH_PIPELINE);
+        return GuardPipelineBuilder.build(RAW_SAFE_SESSION_PIPELINE);
       default:
         return GuardPipelineBuilder.build(CHAT_PIPELINE);
     }
@@ -206,4 +220,8 @@ export const RAW_PASSTHROUGH_PIPELINE: GuardConfig = {
   steps: ["auth", "client", "model", "version", "probe", "provider"],
 };
 
-export const COUNT_TOKENS_PIPELINE: GuardConfig = RAW_PASSTHROUGH_PIPELINE;
+export const RAW_SAFE_SESSION_PIPELINE: GuardConfig = {
+  steps: ["auth", "client", "model", "version", "probe", "session", "provider", "messageContext"],
+};
+
+export const COUNT_TOKENS_PIPELINE: GuardConfig = RAW_SAFE_SESSION_PIPELINE;

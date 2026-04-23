@@ -1777,15 +1777,14 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(await response.text()).toContain('"provider":"p2"');
       expect(session.provider?.id).toBe(2);
 
-      // Key assertion: since only provider 2 actually launched (provider 1 failed at
-      // endpoint resolution before incrementing launchedProviderCount), the winner
-      // should be classified as "request_success" not "hedge_winner".
+      // Standard endpoints now fall back to provider.url when endpoint resolution fails,
+      // so provider 1 still counts as a launched attempt and the later winner is a hedge winner.
       const chain = session.getProviderChain();
       const winnerEntry = chain.find(
         (entry) => entry.reason === "request_success" || entry.reason === "hedge_winner"
       );
       expect(winnerEntry).toBeDefined();
-      expect(winnerEntry!.reason).toBe("request_success");
+      expect(winnerEntry!.reason).toBe("hedge_winner");
     } finally {
       vi.useRealTimers();
     }

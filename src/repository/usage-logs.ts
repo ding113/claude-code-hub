@@ -6,6 +6,7 @@ import { keys as keysTable, messageRequest, providers, usageLedger, users } from
 import { TTLMap } from "@/lib/cache/ttl-map";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { extractAnthropicEffortFromSpecialSettings } from "@/lib/utils/anthropic-effort";
+import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
@@ -13,7 +14,12 @@ import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { escapeLike } from "./_shared/like";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
-import { buildUsageLogConditions, RETRY_COUNT_EXPR } from "./_shared/usage-log-filters";
+import {
+  buildDefaultHiddenUsageLogEndpointCondition,
+  buildUsageLogConditions,
+  buildUsageLogEndpointMatchCondition,
+  RETRY_COUNT_EXPR,
+} from "./_shared/usage-log-filters";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -312,6 +318,14 @@ export async function findUsageLogsBatch(
 
   if (filters.model) {
     ledgerConditions.push(eq(usageLedger.model, filters.model));
+  }
+
+  const hiddenLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
+    usageLedger.endpoint,
+    filters.endpoint
+  );
+  if (hiddenLedgerEndpointCondition) {
+    ledgerConditions.push(hiddenLedgerEndpointCondition);
   }
 
   if (filters.endpoint) {
@@ -704,6 +718,14 @@ function buildKeyLedgerConditions(
 
   if (filters.model) {
     conditions.push(eq(usageLedger.model, filters.model));
+  }
+
+  const hiddenKeyLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
+    usageLedger.endpoint,
+    filters.endpoint
+  );
+  if (hiddenKeyLedgerEndpointCondition) {
+    conditions.push(hiddenKeyLedgerEndpointCondition);
   }
 
   if (filters.endpoint) {
@@ -1534,6 +1556,66 @@ export async function findUsageLogsStats(
     return EMPTY_USAGE_LOG_SUMMARY;
   }
 
+  if (!ledgerOnly && isNonBillingEndpoint(filters.endpoint)) {
+    const conditions = [isNull(messageRequest.deletedAt), EXCLUDE_WARMUP_CONDITION];
+
+    if (userId !== undefined) {
+      conditions.push(eq(messageRequest.userId, userId));
+    }
+
+    if (keyId !== undefined) {
+      conditions.push(eq(keysTable.id, keyId));
+    }
+
+    if (providerId !== undefined) {
+      conditions.push(eq(messageRequest.providerId, providerId));
+    }
+
+    conditions.push(...buildUsageLogConditions(filters));
+
+    const baseQuery = db
+      .select({
+        totalRequests: sql<number>`count(*)::double precision`,
+        totalCost: sql<string>`0`,
+        totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
+        totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
+        totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
+        totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
+        totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
+        totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
+      })
+      .from(messageRequest);
+
+    const query =
+      keyId !== undefined
+        ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+        : baseQuery;
+
+    const [summaryResult] = await query.where(and(...conditions));
+
+    const totalRequests = summaryResult?.totalRequests ?? 0;
+    const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
+    const totalTokens =
+      (summaryResult?.totalInputTokens ?? 0) +
+      (summaryResult?.totalOutputTokens ?? 0) +
+      (summaryResult?.totalCacheCreationTokens ?? 0) +
+      (summaryResult?.totalCacheReadTokens ?? 0) +
+      (summaryResult?.totalCacheCreation5mTokens ?? 0) +
+      (summaryResult?.totalCacheCreation1hTokens ?? 0);
+
+    return {
+      totalRequests,
+      totalCost,
+      totalTokens,
+      totalInputTokens: summaryResult?.totalInputTokens ?? 0,
+      totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
+      totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
+      totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
+      totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
+      totalCacheCreation1hTokens: summaryResult?.totalCacheCreation1hTokens ?? 0,
+    };
+  }
+
   const conditions = [LEDGER_BILLING_CONDITION];
 
   if (userId !== undefined) {
@@ -1571,8 +1653,16 @@ export async function findUsageLogsStats(
     conditions.push(eq(usageLedger.model, filters.model));
   }
 
+  const hiddenStatsLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
+    usageLedger.endpoint,
+    filters.endpoint
+  );
+  if (hiddenStatsLedgerEndpointCondition) {
+    conditions.push(hiddenStatsLedgerEndpointCondition);
+  }
+
   if (filters.endpoint) {
-    conditions.push(eq(usageLedger.endpoint, filters.endpoint));
+    conditions.push(buildUsageLogEndpointMatchCondition(usageLedger.endpoint, filters.endpoint)!);
   }
 
   if (minRetryCount > 0 && !ledgerOnly) {

@@ -32,7 +32,7 @@ import { Decimal, formatCurrency, toDecimal } from "@/lib/utils/currency";
 import {
   calculateOutputRate,
   formatDuration,
-  NON_BILLING_ENDPOINT,
+  isNonBillingEndpoint,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import { shouldShowCostBadgeInCell } from "@/lib/utils/provider-chain-display";
@@ -697,7 +697,7 @@ export function VirtualizedLogsTable({
                   );
                 }
 
-                const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+                const isNonBilling = isNonBillingEndpoint(log.endpoint);
                 const _isWarmupSkipped = log.blockedBy === "warmup";
                 return (
                   <div

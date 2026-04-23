@@ -143,6 +143,29 @@ describe("findReusable - model mismatch clears stale binding", () => {
     );
   });
 
+  test("should clear stale binding when bound provider type is incompatible with request format", async () => {
+    const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
+
+    sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(94);
+    providerRepositoryMocks.findProviderById.mockResolvedValueOnce(createOpusProvider());
+
+    const session = {
+      sessionId: "sess_response_format_mismatch",
+      shouldReuseProvider: () => true,
+      originalFormat: "response",
+      getOriginalModel: () => null,
+      authState: null,
+      getCurrentModel: () => null,
+    } as any;
+
+    const result = await (ProxyProviderResolver as any).findReusable(session);
+
+    expect(result).toBeNull();
+    expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
+      "sess_response_format_mismatch"
+    );
+  });
+
   test("should NOT clear binding when bound provider supports requested model", async () => {
     const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
 

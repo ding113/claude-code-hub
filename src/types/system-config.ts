@@ -75,6 +75,10 @@ export interface SystemSettings {
   // 自动规范化为数组格式，确保下游处理兼容 OpenAI 完整规范
   enableResponseInputRectifier: boolean;
 
+  // 非对话端点跨供应商 fallback（默认开启）
+  // 当前仅作用于 count_tokens / compact 这两个 raw endpoint
+  allowNonConversationEndpointProviderFallback: boolean;
+
   // Codex Session ID 补全（默认开启）
   // 目标：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean;
@@ -159,6 +163,9 @@ export interface UpdateSystemSettingsInput {
 
   // Response API input 整流器（可选）
   enableResponseInputRectifier?: boolean;
+
+  // 非对话端点跨供应商 fallback（可选）
+  allowNonConversationEndpointProviderFallback?: boolean;
 
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion?: boolean;

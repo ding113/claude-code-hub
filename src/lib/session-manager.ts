@@ -635,11 +635,26 @@ export class SessionManager {
   /**
    * 获取 session 绑定的 provider
    */
-  static async getSessionProvider(sessionId: string): Promise<number | null> {
+  static async getSessionProvider(
+    sessionId: string,
+    keyId?: number | null
+  ): Promise<number | null> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return null;
 
     try {
+      if (keyId != null) {
+        const boundKeyId = await redis.get(`session:${sessionId}:key`);
+        if (boundKeyId && boundKeyId !== keyId.toString()) {
+          logger.warn("SessionManager: Session provider binding key mismatch", {
+            sessionId,
+            expectedKeyId: keyId,
+            boundKeyId,
+          });
+          return null;
+        }
+      }
+
       const value = await redis.get(`session:${sessionId}:provider`);
       if (value) {
         const providerId = parseInt(value, 10);

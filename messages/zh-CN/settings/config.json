@@ -60,6 +60,8 @@
     "enableBillingHeaderRectifierDesc": "主动移除 Claude Code 客户端注入到 system 提示中的 x-anthropic-billing-header 文本块，防止 Amazon Bedrock 等非原生 Anthropic 上游返回 400 错误（默认开启）。",
     "enableResponseInputRectifier": "启用 Response Input 整流器",
     "enableResponseInputRectifierDesc": "自动将 /v1/responses 请求中的非数组 input（字符串简写或带 role/type 的单消息对象）规范化为标准数组格式后再处理（默认开启）。",
+    "allowNonConversationEndpointProviderFallback": "允许非对话端点跨供应商 fallback",
+    "allowNonConversationEndpointProviderFallbackDesc": "控制 /v1/messages/count_tokens 与 /v1/responses/compact 在当前供应商失败时，是否沿用现有决策链切换到兼容供应商重试。默认开启，并继续保持 raw passthrough 与非计费语义。",
     "enableCodexSessionIdCompletion": "启用 Codex Session ID 补全",
     "enableCodexSessionIdCompletionDesc": "当 Codex 请求仅提供 session_id（请求头）或 prompt_cache_key（请求体）之一时，自动补全另一个；若两者均缺失，则生成 UUID v7 会话 ID，并在同一对话内稳定复用。",
     "enableClaudeMetadataUserIdInjection": "启用 Claude metadata.user_id 注入",

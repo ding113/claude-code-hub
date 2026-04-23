@@ -158,6 +158,7 @@ function createFallbackSettings(): SystemSettings {
     enableThinkingBudgetRectifier: true,
     enableBillingHeaderRectifier: true,
     enableResponseInputRectifier: true,
+    allowNonConversationEndpointProviderFallback: true,
     enableCodexSessionIdCompletion: true,
     enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
@@ -208,6 +209,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+      allowNonConversationEndpointProviderFallback:
+        systemSettings.allowNonConversationEndpointProviderFallback,
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: systemSettings.enableResponseFixer,
@@ -248,6 +251,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+      allowNonConversationEndpointProviderFallback:
+        systemSettings.allowNonConversationEndpointProviderFallback,
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: systemSettings.enableResponseFixer,
@@ -362,6 +367,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           billingModelSource: "original",
           codexPriorityBillingSource: "requested",
           passThroughUpstreamErrorMessage: true,
+          allowNonConversationEndpointProviderFallback: true,
           enableHighConcurrencyMode: false,
           publicStatusWindowHours: 24,
           publicStatusAggregationIntervalMinutes: 5,
@@ -429,6 +435,8 @@ export async function updateSystemSettings(
     enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
     enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
     enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+    allowNonConversationEndpointProviderFallback:
+      systemSettings.allowNonConversationEndpointProviderFallback,
     enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
     enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
     enableResponseFixer: systemSettings.enableResponseFixer,
@@ -587,6 +595,12 @@ export async function updateSystemSettings(
       updates.enableResponseInputRectifier = payload.enableResponseInputRectifier;
     }
 
+    // 非对话端点跨供应商 fallback 开关（如果提供）
+    if (payload.allowNonConversationEndpointProviderFallback !== undefined) {
+      updates.allowNonConversationEndpointProviderFallback =
+        payload.allowNonConversationEndpointProviderFallback;
+    }
+
     // Codex Session ID 补全开关（如果提供）
     if (payload.enableCodexSessionIdCompletion !== undefined) {
       updates.enableCodexSessionIdCompletion = payload.enableCodexSessionIdCompletion;
@@ -684,6 +698,7 @@ export async function updateSystemSettings(
 
         const legacyUpdates = { ...downgradedUpdates };
         delete legacyUpdates.codexPriorityBillingSource;
+        delete legacyUpdates.allowNonConversationEndpointProviderFallback;
 
         try {
           [updated] = await executor

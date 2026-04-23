@@ -24,7 +24,7 @@ import { formatCurrency } from "@/lib/utils/currency";
 import {
   calculateOutputRate,
   formatDuration,
-  NON_BILLING_ENDPOINT,
+  isNonBillingEndpoint,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import { shouldShowCostBadgeInCell } from "@/lib/utils/provider-chain-display";
@@ -120,7 +120,7 @@ export function UsageLogsTable({
               </TableRow>
             ) : (
               logs.map((log) => {
-                const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+                const isNonBilling = isNonBillingEndpoint(log.endpoint);
                 const isWarmupSkipped = log.blockedBy === "warmup";
                 const isMutedRow = isNonBilling || isWarmupSkipped;
                 const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
