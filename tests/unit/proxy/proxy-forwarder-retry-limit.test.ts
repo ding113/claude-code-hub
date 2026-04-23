@@ -229,7 +229,9 @@ function createSession(requestUrl: URL = new URL("https://example.com/v1/message
     isHeaderModified: () => false,
   });
 
-  session.setRawCrossProviderFallbackEnabled(session.getEndpointPolicy().allowRawCrossProviderFallback);
+  session.setRawCrossProviderFallbackEnabled(
+    session.getEndpointPolicy().allowRawCrossProviderFallback
+  );
 
   return session as ProxySession;
 }
