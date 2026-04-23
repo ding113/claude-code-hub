@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { readPublicSiteMeta } from "@/lib/public-site-meta";
-import { resolvePublicStatusSiteDescription } from "@/lib/public-status/config-snapshot";
-import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
+import {
+  readCurrentPublicStatusConfigSnapshot,
+  resolvePublicStatusSiteDescription,
+} from "@/lib/public-status/config-snapshot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,8 +11,28 @@ const PUBLIC_SITE_META_CACHE_CONTROL = "public, max-age=30, stale-while-revalida
 
 export async function GET() {
   try {
-    const meta = await readPublicSiteMeta();
-    return NextResponse.json(meta, {
+    const snapshot = await readCurrentPublicStatusConfigSnapshot();
+    const responseBody = snapshot
+      ? {
+          available: true,
+          siteTitle: snapshot.siteTitle?.trim() || null,
+          siteDescription: resolvePublicStatusSiteDescription({
+            siteTitle: snapshot.siteTitle,
+            siteDescription: snapshot.siteDescription,
+          }),
+          timeZone: snapshot.timeZone ?? null,
+          source: "projection" as const,
+        }
+      : {
+          available: false,
+          siteTitle: null,
+          siteDescription: null,
+          timeZone: null,
+          source: "projection" as const,
+          reason: "projection_missing" as const,
+        };
+
+    return NextResponse.json(responseBody, {
       headers: {
         "Cache-Control": PUBLIC_SITE_META_CACHE_CONTROL,
       },
@@ -20,12 +41,12 @@ export async function GET() {
     logger.error("GET /api/public-site-meta failed", { error });
     return NextResponse.json(
       {
-        siteTitle: DEFAULT_SITE_TITLE,
-        siteDescription: resolvePublicStatusSiteDescription({ siteTitle: DEFAULT_SITE_TITLE }),
+        error: "Public site metadata unavailable",
       },
       {
+        status: 503,
         headers: {
-          "Cache-Control": PUBLIC_SITE_META_CACHE_CONTROL,
+          "Cache-Control": "no-store",
         },
       }
     );

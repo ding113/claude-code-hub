@@ -57,6 +57,7 @@
     "stale": "Stale",
     "staleDetail": "The latest completed snapshot is still shown while a refresh is pending.",
     "rebuilding": "Rebuilding",
+    "noSnapshot": "No snapshot yet",
     "emptyDescription": "We are preparing the first public snapshot for this page.",
     "past": "Past",
     "now": "Now",

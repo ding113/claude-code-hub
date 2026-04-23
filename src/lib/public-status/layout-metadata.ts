@@ -1,34 +1,29 @@
-const FALLBACK_SITE_TITLE = "Claude Code Hub";
-
-export async function resolveSiteMetadataSource(input: {
-  isPublicStatusRequest: boolean;
-}): Promise<{
+export async function resolveSiteMetadataSource(): Promise<{
   siteTitle: string;
   siteDescription: string;
 } | null> {
-  if (input.isPublicStatusRequest) {
-    const { readPublicStatusSiteMetadata } = await import("./config-snapshot");
-    return await readPublicStatusSiteMetadata();
+  try {
+    const { loadPublicSiteMeta } = await import("./public-api-loader");
+    const metadata = await loadPublicSiteMeta();
+    if (!metadata.available || !metadata.siteTitle?.trim()) {
+      return null;
+    }
+
+    return {
+      siteTitle: metadata.siteTitle,
+      siteDescription: metadata.siteDescription?.trim() || metadata.siteTitle,
+    };
+  } catch {
+    return null;
   }
-
-  const { getSystemSettings } = await import("@/repository/system-config");
-  const settings = await getSystemSettings();
-  const title = settings.siteTitle?.trim() || FALLBACK_SITE_TITLE;
-
-  return {
-    siteTitle: title,
-    siteDescription: title,
-  };
 }
 
-export async function resolveLayoutTimeZone(input: {
-  isPublicStatusRequest: boolean;
-}): Promise<string> {
-  if (input.isPublicStatusRequest) {
-    const { readPublicStatusTimeZone } = await import("./config-snapshot");
-    return (await readPublicStatusTimeZone()) || "UTC";
+export async function resolveLayoutTimeZone(): Promise<string> {
+  try {
+    const { loadPublicSiteMeta } = await import("./public-api-loader");
+    const metadata = await loadPublicSiteMeta();
+    return metadata.timeZone ?? "UTC";
+  } catch {
+    return "UTC";
   }
-
-  const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
-  return await resolveSystemTimezone();
 }

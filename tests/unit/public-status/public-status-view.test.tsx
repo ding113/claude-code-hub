@@ -8,37 +8,66 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PublicStatusView } from "@/app/[locale]/status/_components/public-status-view";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
+import type { PublicStatusRouteResponse } from "@/lib/public-status/public-api-contract";
 
 vi.mock("@/app/[locale]/status/status-page.css", () => ({}));
-
-vi.mock("@/i18n/routing", () => ({
-  Link: ({ children, href, ...props }: any) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
 
 vi.mock("@/components/ui/theme-switcher", () => ({
   ThemeSwitcher: () => <div data-testid="theme-switcher" />,
 }));
 
 vi.mock("@/lib/public-status/vendor-icon", () => ({
-  getPublicStatusVendorIconComponent: ({ modelName, vendorIconKey }: any) => {
-    const iconKey =
-      vendorIconKey === "generic" && modelName.startsWith("qwen") ? "qwen" : vendorIconKey;
-    return {
-      iconKey,
-      Icon: ({ className }: { className?: string }) => (
-        <span className={className} data-vendor-icon-key={iconKey} />
-      ),
-    };
-  },
+  getPublicStatusVendorIconComponent: ({
+    modelName,
+    vendorIconKey,
+  }: {
+    modelName: string;
+    vendorIconKey: string;
+  }) => ({
+    Icon: ({ className }: { className?: string }) => (
+      <span
+        className={className}
+        data-vendor-icon-key={
+          vendorIconKey === "generic" && modelName.startsWith("qwen") ? "qwen" : vendorIconKey
+        }
+      />
+    ),
+  }),
 }));
 
 vi.mock("@/app/[locale]/status/_components/public-status-timeline", () => ({
   PublicStatusTimeline: ({ cells }: { cells: unknown[] }) => (
     <div data-testid="public-status-timeline">{cells.length}</div>
+  ),
+}));
+
+vi.mock("@/app/[locale]/status/_components/status-hero", () => ({
+  StatusHero: ({
+    siteTitle,
+    statusLabel,
+    generatedAtLabel,
+    generatedAt,
+  }: {
+    siteTitle: string;
+    statusLabel: string;
+    generatedAtLabel: string;
+    generatedAt: string | null;
+  }) => (
+    <div>
+      <h1>{siteTitle}</h1>
+      <div>{statusLabel}</div>
+      {generatedAt ? <span>{generatedAtLabel}</span> : null}
+    </div>
+  ),
+}));
+
+vi.mock("@/app/[locale]/status/_components/status-toolbar", () => ({
+  StatusToolbar: () => <div data-testid="status-toolbar" />,
+}));
+
+vi.mock("@/app/[locale]/status/_components/sortable-group-panel", () => ({
+  SortableGroupPanel: ({ children }: { children: ReactNode }) => (
+    <div data-testid="sortable-group-panel">{children}</div>
   ),
 }));
 
@@ -90,6 +119,52 @@ function buildPayload(overrides: Partial<PublicStatusPayload> = {}): PublicStatu
   };
 }
 
+function buildRouteResponse(
+  payloadOverrides: Partial<PublicStatusPayload> = {}
+): PublicStatusRouteResponse {
+  const payload = buildPayload(payloadOverrides);
+  const status =
+    payload.rebuildState === "fresh"
+      ? "ready"
+      : payload.rebuildState === "stale"
+        ? "stale"
+        : payload.rebuildState === "no-data"
+          ? "no_data"
+          : payload.generatedAt
+            ? "stale"
+            : "no_snapshot";
+
+  return {
+    generatedAt: payload.generatedAt,
+    freshUntil: payload.freshUntil,
+    status,
+    rebuildState: {
+      state: payload.rebuildState,
+      hasSnapshot: Boolean(payload.generatedAt),
+      reason: null,
+    },
+    defaults: {
+      intervalMinutes: 5,
+      rangeHours: 24,
+    },
+    resolvedQuery: {
+      intervalMinutes: 5,
+      rangeHours: 24,
+      groupSlugs: [],
+      models: [],
+      statuses: [],
+      q: null,
+      include: ["meta", "defaults", "groups", "timeline"],
+    },
+    meta: {
+      siteTitle: "Acme AI Hub",
+      siteDescription: "Acme AI Hub public status",
+      timeZone: "UTC",
+    },
+    groups: payload.groups,
+  };
+}
+
 function buildLabels() {
   return {
     systemStatus: "System Status",
@@ -104,6 +179,7 @@ function buildLabels() {
     stale: "Stale",
     staleDetail: "Refresh delayed",
     rebuilding: "Rebuilding",
+    noSnapshot: "No snapshot yet",
     noData: "No data",
     emptyDescription: "Preparing first snapshot",
     requestTypes: {
@@ -119,20 +195,20 @@ function buildLabels() {
       noData: "No data",
     },
     tooltip: {
-      availability: "Availability",
-      ttfb: "TTFB",
-      tps: "TPS",
-      historyAriaLabel: "History",
+      availability: "Availability tooltip",
+      ttfb: "TTFB tooltip",
+      tps: "TPS tooltip",
+      historyAriaLabel: "History aria",
     },
-    searchPlaceholder: "Search models",
+    searchPlaceholder: "Search",
     customSort: "Custom sort",
     resetSort: "Reset sort",
-    emptyByFilter: "No models match",
+    emptyByFilter: "No results",
     modelsLabel: "Models",
     issuesLabel: "Issues",
-    clearSearch: "Clear search",
-    dragHandle: "Drag group",
-    toggleGroup: "Toggle group",
+    clearSearch: "Clear",
+    dragHandle: "Drag",
+    toggleGroup: "Toggle",
     openGroupPage: "Open group page",
   };
 }
@@ -142,8 +218,8 @@ describe("public-status view", () => {
 
   beforeEach(() => {
     global.fetch = vi.fn(async () => ({
-      ok: true,
-      json: async () => buildPayload(),
+      status: 200,
+      json: async () => buildRouteResponse(),
     })) as typeof global.fetch;
   });
 
@@ -155,6 +231,7 @@ describe("public-status view", () => {
     const { container, unmount } = render(
       <PublicStatusView
         initialPayload={buildPayload()}
+        initialStatus="ready"
         intervalMinutes={5}
         rangeHours={24}
         locale="en"
@@ -172,7 +249,7 @@ describe("public-status view", () => {
     unmount();
   });
 
-  it("keeps an empty status shell when there is no public snapshot yet", () => {
+  it("keeps rebuild messaging when there is no public snapshot yet", () => {
     const { container, unmount } = render(
       <PublicStatusView
         initialPayload={buildPayload({
@@ -181,6 +258,7 @@ describe("public-status view", () => {
           freshUntil: null,
           groups: [],
         })}
+        initialStatus="no_snapshot"
         intervalMinutes={5}
         rangeHours={24}
         locale="en"
@@ -190,7 +268,8 @@ describe("public-status view", () => {
       />
     );
 
-    expect(container.querySelector(".cch-status-bg")).not.toBeNull();
+    expect(container.textContent).toContain("No snapshot yet");
+    expect(container.textContent).toContain("Preparing first snapshot");
 
     unmount();
   });
@@ -199,9 +278,9 @@ describe("public-status view", () => {
     vi.useFakeTimers();
 
     const fetchMock = vi.fn(async () => ({
-      ok: true,
+      status: 200,
       json: async () =>
-        buildPayload({
+        buildRouteResponse({
           rebuildState: "stale",
           groups: [],
         }),
@@ -214,6 +293,7 @@ describe("public-status view", () => {
           rebuildState: "rebuilding",
           groups: [],
         })}
+        initialStatus="no_snapshot"
         intervalMinutes={5}
         rangeHours={24}
         locale="en"
@@ -236,7 +316,8 @@ describe("public-status view", () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector(".cch-status-bg")).not.toBeNull();
+    expect(container.textContent).toContain("Refresh delayed");
+    expect(container.textContent).toContain("Preparing first snapshot");
 
     vi.useRealTimers();
     unmount();
@@ -267,6 +348,7 @@ describe("public-status view", () => {
             },
           ],
         })}
+        initialStatus="ready"
         intervalMinutes={5}
         rangeHours={24}
         locale="en"
@@ -306,6 +388,7 @@ describe("public-status view", () => {
             },
           ],
         })}
+        initialStatus="ready"
         intervalMinutes={5}
         rangeHours={24}
         locale="en"

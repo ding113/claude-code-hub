@@ -330,4 +330,17 @@ describe("OpenAPI 端点完整性检查", () => {
 
     expect(pathsWithWrongTags).toEqual([]);
   });
+
+  test("公开状态 GET 路径应该被注册且声明无认证", () => {
+    const publicStatusOperation = openApiDoc.paths["/api/public-status"]?.get;
+    const publicSiteMetaOperation = openApiDoc.paths["/api/public-site-meta"]?.get;
+
+    expect(publicStatusOperation).toBeDefined();
+    expect(publicStatusOperation?.tags).toEqual(["公开状态"]);
+    expect(publicStatusOperation?.security).toEqual([]);
+
+    expect(publicSiteMetaOperation).toBeDefined();
+    expect(publicSiteMetaOperation?.tags).toEqual(["公开状态"]);
+    expect(publicSiteMetaOperation?.security).toEqual([]);
+  });
 });

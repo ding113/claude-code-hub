@@ -171,4 +171,58 @@ describe("public-status config publisher", () => {
       })
     );
   });
+
+  it("uses model price metadata to derive public labels and vendor icons", async () => {
+    mockFindAllProviderGroups.mockResolvedValue([
+      {
+        id: 1,
+        name: "openai",
+        description: JSON.stringify({
+          version: 2,
+          publicStatus: {
+            displayName: "OpenAI",
+            publicModels: [{ modelKey: "gpt-4.1" }],
+          },
+        }),
+      },
+    ]);
+    mockFindLatestPricesByModels.mockResolvedValue(
+      new Map([
+        [
+          "gpt-4.1",
+          {
+            priceData: {
+              display_name: "GPT-4.1 Turbo",
+              litellm_provider: "openai",
+            },
+          },
+        ],
+      ])
+    );
+
+    const mod = await import("@/lib/public-status/config-publisher");
+    await mod.publishCurrentPublicStatusConfigProjection({
+      reason: "test",
+      configVersion: "cfg-test",
+    });
+
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          groups: [
+            expect.objectContaining({
+              models: [
+                expect.objectContaining({
+                  publicModelKey: "gpt-4.1",
+                  label: "GPT-4.1 Turbo",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                }),
+              ],
+            }),
+          ],
+        }),
+      })
+    );
+  });
 });

@@ -1,25 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 
-const mockReadCurrentPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
-const mockReadPublicStatusPayload = vi.hoisted(() => vi.fn());
-const mockReadPublicSiteMeta = vi.hoisted(() => vi.fn());
+const mockLoadPublicStatusPageData = vi.hoisted(() => vi.fn());
 const mockPublicStatusView = vi.hoisted(() => vi.fn(() => null));
+
 vi.mock("next-intl/server", () => ({
   getTranslations: async () => (key: string) => key,
 }));
 
-vi.mock("@/lib/public-status/config-snapshot", () => ({
-  readCurrentPublicStatusConfigSnapshot: mockReadCurrentPublicStatusConfigSnapshot,
-  readPublicStatusSiteMetadata: mockReadPublicSiteMeta,
-}));
-
-vi.mock("@/lib/public-status/read-store", () => ({
-  readPublicStatusPayload: mockReadPublicStatusPayload,
-}));
-
-vi.mock("@/lib/public-status/rebuild-hints", () => ({
-  schedulePublicStatusRebuild: vi.fn(),
+vi.mock("@/lib/public-status/public-api-loader", () => ({
+  loadPublicStatusPageData: mockLoadPublicStatusPageData,
 }));
 
 vi.mock("@/app/[locale]/status/_components/public-status-view", () => ({
@@ -27,30 +17,26 @@ vi.mock("@/app/[locale]/status/_components/public-status-view", () => ({
 }));
 
 describe("public status page title", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    vi.clearAllMocks();
-  });
-
-  it("falls back to public site meta when the snapshot siteTitle is blank", async () => {
-    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
-      configVersion: "cfg-1",
-      siteTitle: "   ",
-      timeZone: "UTC",
-      defaultIntervalMinutes: 5,
-      defaultRangeHours: 24,
-      groups: [],
-    });
-    mockReadPublicSiteMeta.mockResolvedValue({
+  it("forwards the loader-provided site title", async () => {
+    mockLoadPublicStatusPageData.mockResolvedValue({
+      initialPayload: {
+        rebuildState: "fresh",
+        sourceGeneration: "",
+        generatedAt: "2026-04-22T00:00:00.000Z",
+        freshUntil: null,
+        groups: [],
+      },
+      status: "ready",
+      intervalMinutes: 5,
+      rangeHours: 24,
+      followServerDefaults: true,
       siteTitle: "Claude Code Hub",
-      siteDescription: "Claude Code Hub public status",
-    });
-    mockReadPublicStatusPayload.mockResolvedValue({
-      rebuildState: "fresh",
-      sourceGeneration: "gen-1",
-      generatedAt: "2026-04-22T00:00:00.000Z",
-      freshUntil: null,
-      groups: [],
+      timeZone: "UTC",
+      meta: {
+        siteTitle: "Claude Code Hub",
+        siteDescription: "Claude Code Hub public status",
+        timeZone: "UTC",
+      },
     });
 
     const mod = await import("@/app/[locale]/status/page");
@@ -67,25 +53,26 @@ describe("public status page title", () => {
     );
   });
 
-  it("falls back to a non-blank snapshot siteTitle when public site meta is blank", async () => {
-    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
-      configVersion: "cfg-1",
+  it("forwards the loader-provided timezone", async () => {
+    mockLoadPublicStatusPageData.mockResolvedValue({
+      initialPayload: {
+        rebuildState: "fresh",
+        sourceGeneration: "",
+        generatedAt: "2026-04-22T00:00:00.000Z",
+        freshUntil: null,
+        groups: [],
+      },
+      status: "ready",
+      intervalMinutes: 5,
+      rangeHours: 24,
+      followServerDefaults: true,
       siteTitle: "Snapshot Title",
-      timeZone: "UTC",
-      defaultIntervalMinutes: 5,
-      defaultRangeHours: 24,
-      groups: [],
-    });
-    mockReadPublicSiteMeta.mockResolvedValue({
-      siteTitle: "   ",
-      siteDescription: "Claude Code Hub public status",
-    });
-    mockReadPublicStatusPayload.mockResolvedValue({
-      rebuildState: "fresh",
-      sourceGeneration: "gen-1",
-      generatedAt: "2026-04-22T00:00:00.000Z",
-      freshUntil: null,
-      groups: [],
+      timeZone: "Asia/Shanghai",
+      meta: {
+        siteTitle: "Snapshot Title",
+        siteDescription: "Snapshot public status",
+        timeZone: "Asia/Shanghai",
+      },
     });
 
     const mod = await import("@/app/[locale]/status/page");
@@ -97,6 +84,7 @@ describe("public status page title", () => {
     expect(mockPublicStatusView).toHaveBeenCalledWith(
       expect.objectContaining({
         siteTitle: "Snapshot Title",
+        timeZone: "Asia/Shanghai",
       }),
       undefined
     );

@@ -7,6 +7,10 @@ import { getMessages } from "next-intl/server";
 import { Footer } from "@/components/customs/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { type Locale, locales } from "@/i18n/config";
+import {
+  resolveDefaultLayoutTimeZone,
+  resolveDefaultSiteMetadataSource,
+} from "@/lib/layout-site-metadata";
 import { logger } from "@/lib/logger";
 import {
   resolveLayoutTimeZone,
@@ -25,7 +29,9 @@ export async function generateMetadata({
   const isPublicStatusRequest = headersStore.get("x-cch-public-status") === "1";
 
   try {
-    const metadata = await resolveSiteMetadataSource({ isPublicStatusRequest });
+    const metadata = isPublicStatusRequest
+      ? await resolveSiteMetadataSource()
+      : await resolveDefaultSiteMetadataSource();
     const title = metadata?.siteTitle?.trim() || DEFAULT_SITE_TITLE;
     const description = metadata?.siteDescription?.trim() || title;
 
@@ -78,7 +84,9 @@ export default async function RootLayout({
 
   // Load translation messages
   const messages = await getMessages({ locale });
-  const timeZone = await resolveLayoutTimeZone({ isPublicStatusRequest });
+  const timeZone = isPublicStatusRequest
+    ? await resolveLayoutTimeZone()
+    : await resolveDefaultLayoutTimeZone();
   // Create a stable `now` timestamp to avoid SSR/CSR hydration mismatch for relative time
   const now = new Date();
 
