@@ -27,7 +27,7 @@ export async function generateMetadata({
   try {
     const metadata = await resolveSiteMetadataSource({ isPublicStatusRequest });
     const title = metadata?.siteTitle?.trim() || DEFAULT_SITE_TITLE;
-    const description = metadata?.siteDescription?.trim() || DEFAULT_SITE_TITLE;
+    const description = metadata?.siteDescription?.trim() || title;
 
     // Generate alternates for all locales
     const alternates: Record<string, string> = {};
@@ -77,7 +77,7 @@ export default async function RootLayout({
   }
 
   // Load translation messages
-  const messages = await getMessages();
+  const messages = await getMessages({ locale });
   const timeZone = await resolveLayoutTimeZone({ isPublicStatusRequest });
   // Create a stable `now` timestamp to avoid SSR/CSR hydration mismatch for relative time
   const now = new Date();

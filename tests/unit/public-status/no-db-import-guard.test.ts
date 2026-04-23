@@ -7,11 +7,11 @@ import {
 
 const guardedFiles = [
   "src/app/api/public-status/route.ts",
+  "src/app/[locale]/status/page.tsx",
+  "src/app/[locale]/layout.tsx",
   "src/lib/public-status/read-store.ts",
   "src/lib/public-status/config-snapshot.ts",
   "src/lib/public-status/layout-metadata.ts",
-  "src/app/[locale]/status/page.tsx",
-  "src/app/[locale]/layout.tsx",
 ];
 
 const bannedImports = [
@@ -25,9 +25,9 @@ const bannedImports = [
 const bannedTokens = ["findLatestPriceByModel", "getSystemSettings", "queryProviderAvailability"];
 const directTokenGuardFiles = new Set([
   "src/app/api/public-status/route.ts",
-  "src/lib/public-status/read-store.ts",
   "src/app/[locale]/status/page.tsx",
   "src/app/[locale]/layout.tsx",
+  "src/lib/public-status/read-store.ts",
 ]);
 
 describe("public-status no-db import guard", () => {

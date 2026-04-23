@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetSession = vi.hoisted(() => vi.fn());
 const mockUpdateSystemSettings = vi.hoisted(() => vi.fn());
+const mockGetSystemSettings = vi.hoisted(() => vi.fn());
 const mockFindAllProviderGroups = vi.hoisted(() => vi.fn());
 const mockFindProviderGroupById = vi.hoisted(() => vi.fn());
 const mockUpdateProviderGroup = vi.hoisted(() => vi.fn());
@@ -11,6 +12,7 @@ const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
 const mockInvalidateSystemSettingsCache = vi.hoisted(() => vi.fn());
 const mockRevalidatePath = vi.hoisted(() => vi.fn());
 const mockLoggerError = vi.hoisted(() => vi.fn());
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
 const mockDbTransaction = vi.hoisted(() =>
   vi.fn(async (callback: (tx: object) => unknown) => callback({}))
 );
@@ -20,6 +22,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/repository/system-config", () => ({
+  getSystemSettings: mockGetSystemSettings,
   updateSystemSettings: mockUpdateSystemSettings,
 }));
 
@@ -62,6 +65,7 @@ vi.mock("next-intl/server", () => ({
 vi.mock("@/lib/logger", () => ({
   logger: {
     error: mockLoggerError,
+    warn: mockLoggerWarn,
   },
 }));
 
@@ -78,6 +82,14 @@ describe("public-status config publish integration", () => {
     mockUpdateSystemSettings.mockResolvedValue({
       id: 1,
       siteTitle: "Claude Code Hub",
+      timezone: "UTC",
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+    });
+    mockGetSystemSettings.mockResolvedValue({
+      id: 1,
+      siteTitle: "Claude Code Hub",
+      timezone: "UTC",
       publicStatusWindowHours: 24,
       publicStatusAggregationIntervalMinutes: 5,
     });
@@ -164,6 +176,42 @@ describe("public-status config publish integration", () => {
     expect(mockRevalidatePath).toHaveBeenCalled();
   });
 
+  it("republishes Redis snapshot and queues rebuild metadata for relevant system setting changes", async () => {
+    const { saveSystemSettings } = await import("@/actions/system-config");
+
+    const result = await saveSystemSettings({
+      siteTitle: "Status Hub",
+      timezone: "Asia/Shanghai",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        publicStatusProjectionWarningCode: null,
+      },
+    });
+    expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledWith({
+      reason: "save-system-settings",
+    });
+    expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "system-settings-updated",
+    });
+  });
+
+  it("does not republish Redis snapshot for unrelated system setting changes", async () => {
+    const { saveSystemSettings } = await import("@/actions/system-config");
+
+    const result = await saveSystemSettings({
+      verboseProviderError: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockPublishCurrentPublicStatusConfigProjection).not.toHaveBeenCalled();
+    expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
+  });
+
   it("returns success with a warning when DB truth is saved but Redis projection is unavailable", async () => {
     mockPublishCurrentPublicStatusConfigProjection.mockResolvedValue({
       configVersion: "cfg-2",
@@ -207,5 +255,99 @@ describe("public-status config publish integration", () => {
 
     expect(result.ok).toBe(false);
     expect(mockUpdateSystemSettings).not.toHaveBeenCalled();
+    expect(mockPublishCurrentPublicStatusConfigProjection).not.toHaveBeenCalled();
+    expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate normalized publicGroupSlug values before saving DB truth", async () => {
+    const { savePublicStatusSettings } = await import("@/actions/public-status");
+
+    const result = await savePublicStatusSettings({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+      groups: [
+        {
+          groupName: "openai-primary",
+          displayName: "OpenAI Primary",
+          publicGroupSlug: "Open AI",
+          publicModels: [{ modelKey: "gpt-4.1" }],
+        },
+        {
+          groupName: "openai-fallback",
+          displayName: "OpenAI Fallback",
+          publicGroupSlug: "open-ai",
+          publicModels: [{ modelKey: "gpt-4.1" }],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(mockDbTransaction).not.toHaveBeenCalled();
+    expect(mockUpdateSystemSettings).not.toHaveBeenCalled();
+    expect(mockPublishCurrentPublicStatusConfigProjection).not.toHaveBeenCalled();
+    expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
+  });
+
+  it("keeps the last complete generation readable while the new config version is still rebuilding", async () => {
+    const { buildPublicStatusCurrentSnapshotKey, buildPublicStatusManifestKey } = await import(
+      "@/lib/public-status/redis-contract"
+    );
+    const { readPublicStatusPayload } = await import("@/lib/public-status/read-store");
+
+    const redis = {
+      get: vi.fn(async (key: string) => {
+        const entries: Record<string, unknown> = {
+          [buildPublicStatusManifestKey({
+            configVersion: "current",
+            intervalMinutes: 5,
+            rangeHours: 24,
+          })]: {
+            configVersion: "cfg-older",
+            intervalMinutes: 5,
+            rangeHours: 24,
+            generation: "gen-stale",
+            sourceGeneration: "gen-stale",
+            coveredFrom: "2026-04-20T10:00:00.000Z",
+            coveredTo: "2026-04-21T10:00:00.000Z",
+            generatedAt: "2026-04-21T09:55:00.000Z",
+            freshUntil: "2026-04-21T10:00:00.000Z",
+            rebuildState: "idle",
+            lastCompleteGeneration: "gen-stale",
+          },
+          [buildPublicStatusCurrentSnapshotKey({
+            intervalMinutes: 5,
+            rangeHours: 24,
+            generation: "gen-stale",
+          })]: {
+            rebuildState: "fresh",
+            sourceGeneration: "gen-stale",
+            generatedAt: "2026-04-21T09:55:00.000Z",
+            freshUntil: "2026-04-21T10:00:00.000Z",
+            groups: [],
+          },
+        };
+        const value = entries[key];
+        return value == null ? null : JSON.stringify(value);
+      }),
+      status: "ready",
+    };
+    const triggerRebuildHint = vi.fn();
+
+    const payload = await readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      nowIso: "2026-04-21T10:10:00.000Z",
+      configVersion: "cfg-newer",
+      hasConfiguredGroups: true,
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(payload).toMatchObject({
+      rebuildState: "stale",
+      sourceGeneration: "gen-stale",
+      generatedAt: "2026-04-21T09:55:00.000Z",
+    });
+    expect(triggerRebuildHint).toHaveBeenCalledWith("stale-generation");
   });
 });

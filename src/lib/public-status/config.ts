@@ -57,6 +57,18 @@ const CONFIG_CACHE_TTL_MS = 60 * 1000;
 let cachedConfiguredGroups: EnabledPublicStatusGroup[] | null = null;
 let cachedConfiguredGroupsAt = 0;
 
+export class DuplicatePublicStatusGroupSlugError extends Error {
+  constructor(
+    public readonly publicGroupSlug: string,
+    groupNames: string[]
+  ) {
+    super(
+      `Duplicate normalized publicGroupSlug "${publicGroupSlug}" for groups: ${groupNames.join(", ")}`
+    );
+    this.name = "DuplicatePublicStatusGroupSlugError";
+  }
+}
+
 function sanitizeString(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -134,6 +146,11 @@ export function slugifyPublicGroup(input: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
+}
+
+function normalizePublicGroupSlug(groupName: string, publicGroupSlug?: string): string {
+  const normalized = slugifyPublicGroup(publicGroupSlug?.trim() || groupName);
+  return normalized || slugifyPublicGroup(groupName);
 }
 
 export function parsePublicStatusDescription(
@@ -252,15 +269,30 @@ export function serializePublicStatusDescription(
 export function collectEnabledPublicStatusGroups(
   groups: PublicStatusConfiguredGroupInput[]
 ): EnabledPublicStatusGroup[] {
+  const seenGroupNamesBySlug = new Map<string, string>();
+
   return groups
     .map((group) => {
       const publicModels = sanitizePublicModels(group.publicStatus?.publicModels);
+      const publicGroupSlug = normalizePublicGroupSlug(
+        group.groupName,
+        group.publicStatus?.publicGroupSlug
+      );
+
+      const existingGroupName = seenGroupNamesBySlug.get(publicGroupSlug);
+      if (existingGroupName) {
+        throw new DuplicatePublicStatusGroupSlugError(publicGroupSlug, [
+          existingGroupName,
+          group.groupName,
+        ]);
+      }
+
+      seenGroupNamesBySlug.set(publicGroupSlug, group.groupName);
 
       return {
         groupName: group.groupName,
         displayName: group.publicStatus?.displayName?.trim() || group.groupName,
-        publicGroupSlug:
-          group.publicStatus?.publicGroupSlug?.trim() || slugifyPublicGroup(group.groupName),
+        publicGroupSlug,
         explanatoryCopy: group.publicStatus?.explanatoryCopy?.trim() || null,
         sortOrder: group.publicStatus?.sortOrder ?? 0,
         publicModels,

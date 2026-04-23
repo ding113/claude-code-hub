@@ -1,281 +1,471 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  createForbiddenCallSpy,
-  createRedisClientSpy,
-  importPublicStatusModule,
-} from "../../helpers/public-status-test-helpers";
+  buildPublicStatusCurrentSnapshotKey,
+  buildPublicStatusManifestKey,
+} from "@/lib/public-status/redis-contract";
+import { readPublicStatusPayload } from "@/lib/public-status/read-store";
 
-interface ReadStoreModule {
-  readPublicStatusPayload(input: {
-    intervalMinutes: number;
-    rangeHours: number;
-    nowIso: string;
-    hasConfiguredGroups?: boolean;
-    redis: ReturnType<typeof createRedisClientSpy>;
-    triggerRebuildHint: (reason: string) => Promise<void> | void;
-  }): Promise<{
-    rebuildState: string;
-    sourceGeneration: string;
-  }>;
+function createRedisReader(entries: Record<string, unknown>) {
+  return {
+    get: vi.fn(async (key: string) => {
+      const value = entries[key];
+      return value == null ? null : JSON.stringify(value);
+    }),
+    status: "ready",
+  };
 }
 
-describe("public-status read store", () => {
-  it("returns rebuilding when redis is unavailable", async () => {
+describe("readPublicStatusPayload", () => {
+  it("returns no-data immediately when no public groups are configured", async () => {
     const triggerRebuildHint = vi.fn();
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
 
-    const result = await mod.readPublicStatusPayload({
+    const payload = await readPublicStatusPayload({
       intervalMinutes: 5,
       rangeHours: 24,
-      nowIso: "2026-04-21T10:05:00.000Z",
-      redis: null as never,
-      triggerRebuildHint,
-    });
-
-    expect(result.rebuildState).toBe("rebuilding");
-    expect(triggerRebuildHint).toHaveBeenCalledWith("redis-unavailable");
-  });
-
-  it("returns no-data when public status has no configured groups", async () => {
-    const triggerRebuildHint = vi.fn();
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
-
-    const redis = createRedisClientSpy({
-      status: "ready",
-      get: vi.fn(),
-    });
-
-    const result = await mod.readPublicStatusPayload({
-      intervalMinutes: 5,
-      rangeHours: 24,
-      nowIso: "2026-04-21T10:05:00.000Z",
+      nowIso: "2026-04-21T10:00:00.000Z",
       hasConfiguredGroups: false,
-      redis,
       triggerRebuildHint,
     });
 
-    expect(result.rebuildState).toBe("no-data");
+    expect(payload).toEqual({
+      rebuildState: "no-data",
+      sourceGeneration: "",
+      generatedAt: null,
+      freshUntil: null,
+      groups: [],
+    });
     expect(triggerRebuildHint).not.toHaveBeenCalled();
-    expect(redis.get).not.toHaveBeenCalled();
   });
 
-  it("returns rebuilding when manifest is missing", async () => {
+  it("serves stale data from the current manifest when the versioned manifest is missing", async () => {
     const triggerRebuildHint = vi.fn();
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
-
-    const redis = createRedisClientSpy({
-      status: "ready",
-      get: vi.fn().mockResolvedValueOnce(null),
+    const redis = createRedisReader({
+      [buildPublicStatusManifestKey({
+        configVersion: "current",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      })]: {
+        configVersion: "cfg-older",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-stale",
+        sourceGeneration: "gen-stale",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T09:55:00.000Z",
+        freshUntil: "2026-04-21T10:00:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-stale",
+      },
+      [buildPublicStatusCurrentSnapshotKey({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-stale",
+      })]: {
+        rebuildState: "fresh",
+        sourceGeneration: "gen-stale",
+        generatedAt: "2026-04-21T09:55:00.000Z",
+        freshUntil: "2026-04-21T10:00:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "openai",
+            displayName: "OpenAI",
+            explanatoryCopy: null,
+            models: [],
+          },
+        ],
+      },
     });
 
-    const result = await mod.readPublicStatusPayload({
+    const payload = await readPublicStatusPayload({
       intervalMinutes: 5,
       rangeHours: 24,
-      nowIso: "2026-04-21T10:05:00.000Z",
+      nowIso: "2026-04-21T10:10:00.000Z",
+      configVersion: "cfg-1",
+      hasConfiguredGroups: true,
       redis,
       triggerRebuildHint,
     });
 
-    expect(result.rebuildState).toBe("rebuilding");
-    expect(triggerRebuildHint).toHaveBeenCalledWith("manifest-missing");
+    expect(payload).toMatchObject({
+      rebuildState: "stale",
+      sourceGeneration: "gen-stale",
+      generatedAt: "2026-04-21T09:55:00.000Z",
+      freshUntil: "2026-04-21T10:00:00.000Z",
+    });
+    expect(triggerRebuildHint).toHaveBeenCalledWith("stale-generation");
   });
 
-  it("degrades to rebuilding when redis.get rejects", async () => {
+  it("returns rebuilding when the manifest exists but the snapshot payload is missing", async () => {
     const triggerRebuildHint = vi.fn();
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
-
-    const redis = createRedisClientSpy({
-      status: "ready",
-      get: vi.fn().mockRejectedValueOnce(new Error("redis down")),
+    const redis = createRedisReader({
+      [buildPublicStatusManifestKey({
+        configVersion: "cfg-1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      })]: {
+        configVersion: "cfg-1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-1",
+        sourceGeneration: "gen-1",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-1",
+      },
     });
 
-    const result = await mod.readPublicStatusPayload({
-      intervalMinutes: 5,
-      rangeHours: 24,
-      nowIso: "2026-04-21T10:05:00.000Z",
-      redis,
-      triggerRebuildHint,
-    });
-
-    expect(result.rebuildState).toBe("rebuilding");
-    expect(triggerRebuildHint).toHaveBeenCalledWith("manifest-missing");
-  });
-
-  it("returns rebuilding when snapshot is missing", async () => {
-    const triggerRebuildHint = vi.fn();
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
-
-    const redis = createRedisClientSpy({
-      status: "ready",
-      get: vi
-        .fn()
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            generation: "gen-1",
-            freshUntil: "2026-04-21T10:05:00.000Z",
-            lastCompleteGeneration: "gen-1",
-            rebuildState: "idle",
-          })
-        )
-        .mockResolvedValueOnce(null),
-    });
-
-    const result = await mod.readPublicStatusPayload({
+    const payload = await readPublicStatusPayload({
       intervalMinutes: 5,
       rangeHours: 24,
       nowIso: "2026-04-21T10:00:00.000Z",
+      configVersion: "cfg-1",
+      hasConfiguredGroups: true,
       redis,
       triggerRebuildHint,
     });
 
-    expect(result.rebuildState).toBe("rebuilding");
+    expect(payload).toEqual({
+      rebuildState: "rebuilding",
+      sourceGeneration: "",
+      generatedAt: null,
+      freshUntil: null,
+      groups: [],
+    });
     expect(triggerRebuildHint).toHaveBeenCalledWith("snapshot-missing");
   });
 
-  it("serves current manifest as stale fallback when the requested config version is not ready", async () => {
+  it("marks config-version drift as stale and strips unexpected fields from redis snapshots", async () => {
     const triggerRebuildHint = vi.fn();
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
-
-    const redis = createRedisClientSpy({
-      status: "ready",
-      get: vi
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            configVersion: "cfg-old",
-            generation: "gen-old",
-            freshUntil: "2026-04-21T10:05:00.000Z",
-            lastCompleteGeneration: "gen-old",
-            rebuildState: "idle",
-          })
-        )
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            sourceGeneration: "gen-old",
-            generatedAt: "2026-04-21T10:00:00.000Z",
-            freshUntil: "2026-04-21T10:05:00.000Z",
-            groups: [],
-          })
-        ),
+    const redis = createRedisReader({
+      [buildPublicStatusManifestKey({
+        configVersion: "current",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      })]: {
+        configVersion: "cfg-old",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-stale",
+        sourceGeneration: "gen-stale",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        freshUntil: "2026-04-21T10:05:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-stale",
+      },
+      [buildPublicStatusCurrentSnapshotKey({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-stale",
+      })]: {
+        rebuildState: "fresh",
+        sourceGeneration: "gen-stale",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        freshUntil: "2026-04-21T10:05:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "openai",
+            displayName: "OpenAI",
+            explanatoryCopy: "Public projection only",
+            sourceGroupName: "internal-openai",
+            models: [
+              {
+                publicModelKey: "gpt-4.1",
+                label: "GPT-4.1",
+                vendorIconKey: "openai",
+                requestTypeBadge: "openaiCompatible",
+                latestState: "operational",
+                availabilityPct: 99.5,
+                latestTtfbMs: 120,
+                latestTps: 4.2,
+                endpointUrl: "https://internal.example.com",
+                timeline: [
+                  {
+                    bucketStart: "2026-04-21T09:55:00.000Z",
+                    bucketEnd: "2026-04-21T10:00:00.000Z",
+                    state: "operational",
+                    availabilityPct: 99.5,
+                    ttfbMs: 120,
+                    tps: 4.2,
+                    sampleCount: 10,
+                    providerFailures: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
     });
 
-    const result = await mod.readPublicStatusPayload({
+    const payload = await readPublicStatusPayload({
       intervalMinutes: 5,
       rangeHours: 24,
+      nowIso: "2026-04-21T10:01:00.000Z",
       configVersion: "cfg-new",
-      nowIso: "2026-04-21T10:00:00.000Z",
+      hasConfiguredGroups: true,
       redis,
       triggerRebuildHint,
     });
 
-    expect(result.rebuildState).toBe("stale");
-    expect(result.sourceGeneration).toBe("gen-old");
-    expect(triggerRebuildHint).toHaveBeenCalledWith("config-version-mismatch");
+    expect(triggerRebuildHint.mock.calls.map(([reason]) => reason)).toEqual([
+      "stale-generation",
+      "config-version-mismatch",
+    ]);
+    expect(payload).toEqual({
+      rebuildState: "stale",
+      sourceGeneration: "gen-stale",
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      freshUntil: "2026-04-21T10:05:00.000Z",
+      groups: [
+        {
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: "Public projection only",
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+              latestState: "operational",
+              availabilityPct: 99.5,
+              latestTtfbMs: 120,
+              latestTps: 4.2,
+              timeline: [
+                {
+                  bucketStart: "2026-04-21T09:55:00.000Z",
+                  bucketEnd: "2026-04-21T10:00:00.000Z",
+                  state: "operational",
+                  availabilityPct: 99.5,
+                  ttfbMs: 120,
+                  tps: 4.2,
+                  sampleCount: 10,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
   });
 
-  it("treats malformed redis records as rebuilding instead of throwing", async () => {
+  it("preserves degraded latestState and timeline states from redis snapshots", async () => {
     const triggerRebuildHint = vi.fn();
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
-
-    const redis = createRedisClientSpy({
-      status: "ready",
-      get: vi.fn().mockResolvedValueOnce("{not-json"),
+    const redis = createRedisReader({
+      [buildPublicStatusManifestKey({
+        configVersion: "cfg-1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      })]: {
+        configVersion: "cfg-1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-1",
+        sourceGeneration: "gen-1",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-1",
+      },
+      [buildPublicStatusCurrentSnapshotKey({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-1",
+      })]: {
+        sourceGeneration: "gen-1",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "openai",
+            displayName: "OpenAI",
+            explanatoryCopy: null,
+            models: [
+              {
+                publicModelKey: "gpt-4.1",
+                label: "GPT-4.1",
+                vendorIconKey: "openai",
+                requestTypeBadge: "openaiCompatible",
+                latestState: "degraded",
+                availabilityPct: 92.5,
+                latestTtfbMs: 180,
+                latestTps: 3.1,
+                timeline: [
+                  {
+                    bucketStart: "2026-04-21T09:55:00.000Z",
+                    bucketEnd: "2026-04-21T10:00:00.000Z",
+                    state: "degraded",
+                    availabilityPct: 92.5,
+                    ttfbMs: 180,
+                    tps: 3.1,
+                    sampleCount: 8,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
     });
 
-    const result = await mod.readPublicStatusPayload({
+    const payload = await readPublicStatusPayload({
       intervalMinutes: 5,
       rangeHours: 24,
       nowIso: "2026-04-21T10:00:00.000Z",
+      configVersion: "cfg-1",
+      hasConfiguredGroups: true,
       redis,
       triggerRebuildHint,
     });
 
-    expect(result.rebuildState).toBe("rebuilding");
-    expect(triggerRebuildHint).toHaveBeenCalledWith("manifest-missing");
+    expect(payload.groups[0]?.models[0]).toMatchObject({
+      latestState: "degraded",
+      timeline: [
+        {
+          bucketStart: "2026-04-21T09:55:00.000Z",
+          bucketEnd: "2026-04-21T10:00:00.000Z",
+          state: "degraded",
+          availabilityPct: 92.5,
+          ttfbMs: 180,
+          tps: 3.1,
+          sampleCount: 8,
+        },
+      ],
+    });
   });
 
-  it("treats malformed snapshot payload as rebuilding instead of throwing", async () => {
+  it("drops timeline buckets with non-finite sampleCount values", async () => {
     const triggerRebuildHint = vi.fn();
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
-
-    const redis = createRedisClientSpy({
-      status: "ready",
-      get: vi
-        .fn()
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            generation: "gen-1",
-            freshUntil: "2026-04-21T10:05:00.000Z",
-            lastCompleteGeneration: "gen-1",
-            rebuildState: "idle",
-          })
-        )
-        .mockResolvedValueOnce("{broken-json"),
-    });
-
-    const result = await mod.readPublicStatusPayload({
+    const manifestKey = buildPublicStatusManifestKey({
+      configVersion: "cfg-1",
       intervalMinutes: 5,
       rangeHours: 24,
-      nowIso: "2026-04-21T10:00:00.000Z",
-      redis,
-      triggerRebuildHint,
     });
-
-    expect(result.rebuildState).toBe("rebuilding");
-    expect(triggerRebuildHint).toHaveBeenCalledWith("snapshot-missing");
-  });
-
-  it("serves stale data and requests a background rebuild without DB reads", async () => {
-    const forbiddenDbRead = createForbiddenCallSpy("db-read");
-    const forbiddenPriceLookup = createForbiddenCallSpy("findLatestPriceByModel");
-    const triggerRebuildHint = vi.fn();
-
-    const mod = await importPublicStatusModule<ReadStoreModule>("@/lib/public-status/read-store");
-
-    const redis = createRedisClientSpy({
-      status: "ready",
-      get: vi
-        .fn()
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            generation: "gen-1",
-            freshUntil: "2026-04-21T10:00:00.000Z",
-            lastCompleteGeneration: "gen-1",
-            rebuildState: "idle",
-          })
-        )
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            generation: "gen-1",
-            freshUntil: "2026-04-21T10:00:00.000Z",
-            lastCompleteGeneration: "gen-1",
-            rebuildState: "idle",
-          })
-        )
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            sourceGeneration: "gen-1",
-            generatedAt: "2026-04-21T09:55:00.000Z",
-            freshUntil: "2026-04-21T10:00:00.000Z",
-          })
-        ),
-      dbRead: forbiddenDbRead,
-      priceLookup: forbiddenPriceLookup,
-    });
-
-    const result = await mod.readPublicStatusPayload({
+    const snapshotKey = buildPublicStatusCurrentSnapshotKey({
       intervalMinutes: 5,
       rangeHours: 24,
-      nowIso: "2026-04-21T10:05:00.000Z",
-      redis,
-      triggerRebuildHint,
+      generation: "gen-1",
+    });
+    const redis = {
+      get: vi.fn(async (key: string) => {
+        if (key === manifestKey) {
+          return "__manifest__";
+        }
+        if (key === snapshotKey) {
+          return "__snapshot__";
+        }
+        return null;
+      }),
+      status: "ready",
+    };
+    const parseSpy = vi.spyOn(JSON, "parse").mockImplementation((raw: string) => {
+      if (raw === "__manifest__") {
+        return {
+          configVersion: "cfg-1",
+          intervalMinutes: 5,
+          rangeHours: 24,
+          generation: "gen-1",
+          sourceGeneration: "gen-1",
+          coveredFrom: "2026-04-20T10:00:00.000Z",
+          coveredTo: "2026-04-21T10:00:00.000Z",
+          generatedAt: "2026-04-21T09:59:00.000Z",
+          freshUntil: "2026-04-21T10:04:00.000Z",
+          rebuildState: "idle",
+          lastCompleteGeneration: "gen-1",
+        };
+      }
+
+      if (raw === "__snapshot__") {
+        return {
+          sourceGeneration: "gen-1",
+          generatedAt: "2026-04-21T09:59:00.000Z",
+          freshUntil: "2026-04-21T10:04:00.000Z",
+          groups: [
+            {
+              publicGroupSlug: "openai",
+              displayName: "OpenAI",
+              explanatoryCopy: null,
+              models: [
+                {
+                  publicModelKey: "gpt-4.1",
+                  label: "GPT-4.1",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "operational",
+                  availabilityPct: 99.5,
+                  latestTtfbMs: 120,
+                  latestTps: 4.2,
+                  timeline: [
+                    {
+                      bucketStart: "2026-04-21T09:45:00.000Z",
+                      bucketEnd: "2026-04-21T09:50:00.000Z",
+                      state: "operational",
+                      availabilityPct: 99.1,
+                      ttfbMs: 110,
+                      tps: 4,
+                      sampleCount: Number.NaN,
+                    },
+                    {
+                      bucketStart: "2026-04-21T09:50:00.000Z",
+                      bucketEnd: "2026-04-21T09:55:00.000Z",
+                      state: "operational",
+                      availabilityPct: 99.3,
+                      ttfbMs: 115,
+                      tps: 4.1,
+                      sampleCount: Number.POSITIVE_INFINITY,
+                    },
+                    {
+                      bucketStart: "2026-04-21T09:55:00.000Z",
+                      bucketEnd: "2026-04-21T10:00:00.000Z",
+                      state: "operational",
+                      availabilityPct: 99.5,
+                      ttfbMs: 120,
+                      tps: 4.2,
+                      sampleCount: 10,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
+      }
+
+      throw new Error(`Unexpected JSON.parse input: ${raw}`);
     });
 
-    expect(result.rebuildState).toBe("stale");
-    expect(result.sourceGeneration).toBe("gen-1");
-    expect(triggerRebuildHint).toHaveBeenCalledTimes(1);
-    expect(forbiddenDbRead).not.toHaveBeenCalled();
-    expect(forbiddenPriceLookup).not.toHaveBeenCalled();
+    try {
+      const payload = await readPublicStatusPayload({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        nowIso: "2026-04-21T10:00:00.000Z",
+        configVersion: "cfg-1",
+        hasConfiguredGroups: true,
+        redis,
+        triggerRebuildHint,
+      });
+
+      expect(payload.groups[0]?.models[0]?.timeline).toEqual([
+        {
+          bucketStart: "2026-04-21T09:55:00.000Z",
+          bucketEnd: "2026-04-21T10:00:00.000Z",
+          state: "operational",
+          availabilityPct: 99.5,
+          ttfbMs: 120,
+          tps: 4.2,
+          sampleCount: 10,
+        },
+      ]);
+    } finally {
+      parseSpy.mockRestore();
+    }
   });
 });

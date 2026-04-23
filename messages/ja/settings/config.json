@@ -87,6 +87,8 @@
     "saveFailed": "保存に失敗しました",
     "saveSettings": "設定を保存",
     "saveSuccess": "正常に保存されました",
+    "publicStatusProjectionWarning": "システム設定は保存されましたが、public status の Redis 投影は更新されませんでした。",
+    "publicStatusBackgroundRefreshPending": "システム設定は保存されましたが、バックグラウンド更新が成功するまで公開ステータスページに古いデータが表示される場合があります。",
     "siteTitle": "サイトタイトル",
     "siteTitleDesc": "ブラウザタブのタイトルとシステムのデフォルト表示名を設定するために使用されます。",
     "siteTitlePlaceholder": "例：Claude Code Hub",

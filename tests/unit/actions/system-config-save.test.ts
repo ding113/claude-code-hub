@@ -155,6 +155,61 @@ describe("saveSystemSettings", () => {
     expect(invalidateSystemSettingsCacheMock).toHaveBeenCalled();
   });
 
+  it("should republish the public-status projection and queue a rebuild for relevant config changes", async () => {
+    await saveSystemSettings({
+      siteTitle: "New Title",
+      timezone: "UTC",
+    });
+
+    expect(publishCurrentPublicStatusConfigProjectionMock).toHaveBeenCalledWith({
+      reason: "save-system-settings",
+    });
+    expect(schedulePublicStatusRebuildMock).toHaveBeenCalledWith({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "system-settings-updated",
+    });
+  });
+
+  it("should skip public-status projection updates for unrelated system settings", async () => {
+    await saveSystemSettings({ verboseProviderError: true });
+
+    expect(publishCurrentPublicStatusConfigProjectionMock).not.toHaveBeenCalled();
+    expect(schedulePublicStatusRebuildMock).not.toHaveBeenCalled();
+  });
+
+  it("should surface a warning when the public-status projection publish fails", async () => {
+    publishCurrentPublicStatusConfigProjectionMock.mockResolvedValueOnce({
+      configVersion: "cfg-2",
+      key: "public-status:v1:config:cfg-2",
+      written: false,
+      groupCount: 0,
+    });
+
+    const result = await saveSystemSettings({ siteTitle: "New Title" });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        publicStatusProjectionWarningCode: "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED",
+      },
+    });
+    expect(schedulePublicStatusRebuildMock).not.toHaveBeenCalled();
+  });
+
+  it("should surface a warning when rebuild hint scheduling fails", async () => {
+    schedulePublicStatusRebuildMock.mockRejectedValueOnce(new Error("redis unavailable"));
+
+    const result = await saveSystemSettings({ siteTitle: "New Title" });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        publicStatusProjectionWarningCode: "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING",
+      },
+    });
+  });
+
   describe("revalidatePath locale coverage", () => {
     it("should revalidate paths for ALL supported locales", async () => {
       await saveSystemSettings({ siteTitle: "New Title" });

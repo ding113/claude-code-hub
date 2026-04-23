@@ -1,5 +1,11 @@
 import { getRedisClient } from "@/lib/redis";
-import type { PublicStatusPayload } from "./payload";
+import type {
+  PublicStatusGroupSnapshot,
+  PublicStatusModelSnapshot,
+  PublicStatusPayload,
+  PublicStatusTimelineBucket,
+  PublicStatusTimelineState,
+} from "./payload";
 import {
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
@@ -12,10 +18,11 @@ interface RedisReader {
   status?: string;
 }
 
-interface PublicStatusSnapshotRecord extends PublicStatusPayload {
+interface PublicStatusSnapshotRecord {
   sourceGeneration: string;
   generatedAt: string;
   freshUntil: string;
+  groups: unknown;
 }
 
 async function safeGet(redis: RedisReader, key: string): Promise<string | null> {
@@ -58,6 +65,119 @@ function buildNoDataPayload(): PublicStatusPayload {
   };
 }
 
+function normalizeTimelineState(value: unknown): PublicStatusTimelineState {
+  if (
+    value === "operational" ||
+    value === "degraded" ||
+    value === "failed" ||
+    value === "no_data"
+  ) {
+    return value;
+  }
+  return "no_data";
+}
+
+function normalizeNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function sanitizeTimelineBuckets(input: unknown): PublicStatusTimelineBucket[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input.flatMap((bucket) => {
+    if (!bucket || typeof bucket !== "object") {
+      return [];
+    }
+
+    const value = bucket as Record<string, unknown>;
+    if (
+      typeof value.bucketStart !== "string" ||
+      typeof value.bucketEnd !== "string" ||
+      typeof value.sampleCount !== "number" ||
+      !Number.isFinite(value.sampleCount)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        bucketStart: value.bucketStart,
+        bucketEnd: value.bucketEnd,
+        state: normalizeTimelineState(value.state),
+        availabilityPct: normalizeNullableNumber(value.availabilityPct),
+        ttfbMs: normalizeNullableNumber(value.ttfbMs),
+        tps: normalizeNullableNumber(value.tps),
+        sampleCount: value.sampleCount,
+      },
+    ];
+  });
+}
+
+function sanitizeModelSnapshots(input: unknown): PublicStatusModelSnapshot[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input.flatMap((model) => {
+    if (!model || typeof model !== "object") {
+      return [];
+    }
+
+    const value = model as Record<string, unknown>;
+    if (
+      typeof value.publicModelKey !== "string" ||
+      typeof value.label !== "string" ||
+      typeof value.vendorIconKey !== "string" ||
+      typeof value.requestTypeBadge !== "string"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        publicModelKey: value.publicModelKey,
+        label: value.label,
+        vendorIconKey: value.vendorIconKey,
+        requestTypeBadge: value.requestTypeBadge,
+        latestState: normalizeTimelineState(value.latestState),
+        availabilityPct: normalizeNullableNumber(value.availabilityPct),
+        latestTtfbMs: normalizeNullableNumber(value.latestTtfbMs),
+        latestTps: normalizeNullableNumber(value.latestTps),
+        timeline: sanitizeTimelineBuckets(value.timeline),
+      },
+    ];
+  });
+}
+
+// Redis 快照跨版本持久化，公开响应必须按白名单重建，避免内部字段泄漏到 /status。
+function sanitizeGroupSnapshots(input: unknown): PublicStatusGroupSnapshot[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input.flatMap((group) => {
+    if (!group || typeof group !== "object") {
+      return [];
+    }
+
+    const value = group as Record<string, unknown>;
+    if (typeof value.publicGroupSlug !== "string" || typeof value.displayName !== "string") {
+      return [];
+    }
+
+    return [
+      {
+        publicGroupSlug: value.publicGroupSlug,
+        displayName: value.displayName,
+        explanatoryCopy: typeof value.explanatoryCopy === "string" ? value.explanatoryCopy : null,
+        models: sanitizeModelSnapshots(value.models),
+      },
+    ];
+  });
+}
+
 export async function readPublicStatusPayload(input: {
   intervalMinutes: number;
   rangeHours: number;
@@ -92,6 +212,7 @@ export async function readPublicStatusPayload(input: {
 
   let selectedManifest = manifest;
   let resolution = resolvePublicStatusManifestState(selectedManifest, input.nowIso);
+
   if (!resolution.sourceGeneration && currentManifest) {
     selectedManifest = currentManifest;
     resolution = {
@@ -111,6 +232,7 @@ export async function readPublicStatusPayload(input: {
     generation: resolution.sourceGeneration,
   });
   const snapshot = parseJson<PublicStatusSnapshotRecord>(await safeGet(redis, snapshotKey));
+
   if (!snapshot) {
     await input.triggerRebuildHint("snapshot-missing");
     return buildRebuildingPayload();
@@ -119,6 +241,7 @@ export async function readPublicStatusPayload(input: {
   if (resolution.rebuildState !== "fresh") {
     await input.triggerRebuildHint("stale-generation");
   }
+
   if (input.configVersion && selectedManifest?.configVersion !== input.configVersion) {
     await input.triggerRebuildHint("config-version-mismatch");
     resolution = {
@@ -132,6 +255,6 @@ export async function readPublicStatusPayload(input: {
     sourceGeneration: snapshot.sourceGeneration,
     generatedAt: snapshot.generatedAt,
     freshUntil: snapshot.freshUntil,
-    groups: snapshot.groups ?? [],
+    groups: sanitizeGroupSnapshots(snapshot.groups),
   };
 }

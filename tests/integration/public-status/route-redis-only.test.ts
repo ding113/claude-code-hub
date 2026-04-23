@@ -67,6 +67,45 @@ describe("GET /api/public-status", () => {
     });
   });
 
+  it("returns 200 with stale payload and queues rebuild for the default query", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [{ slug: "openai" }],
+    });
+    mockReadPublicStatusPayload.mockImplementation(
+      async ({ triggerRebuildHint }: { triggerRebuildHint: (reason: string) => Promise<void> }) => {
+        await triggerRebuildHint("stale-generation");
+        return {
+          rebuildState: "stale",
+          sourceGeneration: "gen-stale",
+          generatedAt: "2026-04-21T09:55:00.000Z",
+          freshUntil: "2026-04-21T10:00:00.000Z",
+          groups: [],
+        };
+      }
+    );
+    mockSchedulePublicStatusRebuild.mockResolvedValue({
+      accepted: true,
+      rebuildState: "rebuilding",
+    });
+
+    const { GET } = await import("@/app/api/public-status/route");
+    const response = await GET(new Request("http://localhost/api/public-status"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      rebuildState: "stale",
+      sourceGeneration: "gen-stale",
+    });
+    expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "stale-generation",
+    });
+  });
+
   it("returns 200 with no-data payload when no public groups are configured", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-empty",
@@ -98,7 +137,7 @@ describe("GET /api/public-status", () => {
     expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
   });
 
-  it("does not trigger rebuild for non-default public queries", async () => {
+  it("queues rebuilds for non-default public queries when wider data is missing", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-1",
       defaultIntervalMinutes: 5,
@@ -124,6 +163,10 @@ describe("GET /api/public-status", () => {
     );
 
     expect(response.status).toBe(503);
-    expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
+    expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
+      intervalMinutes: 15,
+      rangeHours: 48,
+      reason: "manifest-missing",
+    });
   });
 });

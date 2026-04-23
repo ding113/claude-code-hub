@@ -87,6 +87,8 @@
     "saveFailed": "Ошибка сохранения",
     "saveSettings": "Сохранить настройки",
     "saveSuccess": "Сохранено успешно",
+    "publicStatusProjectionWarning": "Системные настройки сохранены, но Redis-проекция public status не была обновлена.",
+    "publicStatusBackgroundRefreshPending": "Системные настройки сохранены, но публичная статус-страница может временно показывать устаревшие данные, пока фоновое обновление не завершится.",
     "siteTitle": "Название сайта",
     "siteTitleDesc": "Используется для установки заголовка вкладки браузера и имени системы по умолчанию.",
     "siteTitlePlaceholder": "например: Claude Code Hub",
