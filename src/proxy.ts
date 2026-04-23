@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
 import type { Locale } from "@/i18n/config";
 import { routing } from "@/i18n/routing";
@@ -28,6 +28,12 @@ const intlMiddleware = createMiddleware(routing);
 function proxyHandler(request: NextRequest) {
   const method = request.method;
   const pathname = request.nextUrl.pathname;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete("x-cch-public-status");
+  const sanitizedRequest = new NextRequest(request.url, {
+    method: request.method,
+    headers: requestHeaders,
+  });
 
   if (isDevelopment()) {
     logger.info("Request received", { method: method.toUpperCase(), pathname });
@@ -42,7 +48,6 @@ function proxyHandler(request: NextRequest) {
     (locale) => pathname === `/${locale}/status` || pathname.startsWith(`/${locale}/status/`)
   );
   if (isLocalePrefixedPublicStatusPath) {
-    const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-cch-public-status", "1");
     return NextResponse.next({
       request: {
@@ -57,7 +62,7 @@ function proxyHandler(request: NextRequest) {
   }
 
   // Apply locale middleware first (handles locale detection and routing)
-  const localeResponse = intlMiddleware(request);
+  const localeResponse = intlMiddleware(sanitizedRequest);
 
   const isExplicitPublicStatusPath = pathname === "/status" || pathname.startsWith("/status/");
 
@@ -90,7 +95,7 @@ function proxyHandler(request: NextRequest) {
   // by downstream layouts (dashboard/layout.tsx, etc.) which run in Node.js
   // runtime with guaranteed Redis/DB access. This avoids a death loop where
   // the proxy deletes the cookie on transient validation failures.
-  const authToken = request.cookies.get(AUTH_COOKIE_NAME);
+  const authToken = sanitizedRequest.cookies.get(AUTH_COOKIE_NAME);
 
   if (!authToken) {
     // Not authenticated, redirect to login page

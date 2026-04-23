@@ -2296,7 +2296,16 @@ app.get("/openapi.json", (c) => {
     const document = app.getOpenAPIDocument(openApiDocumentConfig);
     return c.json(appendPublicStatusOpenApi(document));
   } catch (error) {
-    return c.json(error, 500);
+    logger.error("GET /api/actions/openapi.json failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json(
+      {
+        error: "OpenAPI generation failed",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      500
+    );
   }
 });
 

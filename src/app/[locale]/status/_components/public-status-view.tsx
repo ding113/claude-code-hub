@@ -187,7 +187,7 @@ export function PublicStatusView({
         const requestUrl =
           params.size > 0 ? `/api/public-status?${params.toString()}` : "/api/public-status";
         const response = await fetch(requestUrl, { cache: "no-store" });
-        if (!response.ok && response.status === 400) return;
+        if (response.status !== 200 && response.status !== 503) return;
         const nextResponse = (await response.json()) as PublicStatusRouteResponse;
         const next = toPublicStatusPayload(nextResponse);
         // 单分组页面(/status/[slug]):每次轮询后仍只保留目标分组,避免刷新后展开成全站视图

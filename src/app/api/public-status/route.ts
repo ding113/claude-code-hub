@@ -63,6 +63,7 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
 
+    console.error("GET /api/public-status failed", error);
     throw error;
   }
 }

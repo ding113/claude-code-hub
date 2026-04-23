@@ -34,7 +34,7 @@ export async function GET() {
 
     return NextResponse.json(responseBody, {
       headers: {
-        "Cache-Control": PUBLIC_SITE_META_CACHE_CONTROL,
+        "Cache-Control": snapshot ? PUBLIC_SITE_META_CACHE_CONTROL : "no-store",
       },
     });
   } catch (error) {

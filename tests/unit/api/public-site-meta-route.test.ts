@@ -67,6 +67,7 @@ describe("GET /api/public-site-meta", () => {
     const res = await GET();
 
     expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
     await expect(res.json()).resolves.toEqual({
       available: false,
       siteTitle: null,

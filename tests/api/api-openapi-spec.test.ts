@@ -232,6 +232,7 @@ describe("OpenAPI 规范验证", () => {
     expect(publicStatusOperation?.responses?.["200"]).toBeDefined();
     expect(publicStatusOperation?.responses?.["400"]).toBeDefined();
     expect(publicStatusOperation?.responses?.["503"]).toBeDefined();
+    expect(publicStatusOperation?.parameters).toBeDefined();
 
     const parameterNames = (publicStatusOperation?.parameters as Array<{ name?: string }>).map(
       (parameter) => parameter.name
