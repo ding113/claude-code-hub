@@ -135,7 +135,7 @@
     "requestUrl": {
       "title": "实际请求 URL",
       "label": "请求 URL",
-      "hint": "这里展示的是最近一次 provider test 实际发出的请求 URL，便于定位 relay 路径问题。"
+      "hint": "这里展示的是最近一次供应商测试实际发出的请求 URL，便于定位中转路径问题。"
     },
     "errorDetails": {
       "title": "错误详情",

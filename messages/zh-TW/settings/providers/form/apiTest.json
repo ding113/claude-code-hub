@@ -60,7 +60,7 @@
       "validationDetails": "驗證詳情"
     },
     "requestUrl": {
-      "hint": "這裡顯示最近一次 provider test 實際發出的請求 URL，方便定位 relay 路徑問題。",
+      "hint": "這裡顯示最近一次供應商測試實際發出的請求 URL，方便定位中轉路徑問題。",
       "label": "請求 URL",
       "title": "實際請求 URL"
     },

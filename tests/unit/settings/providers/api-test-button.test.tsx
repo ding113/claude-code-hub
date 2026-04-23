@@ -252,7 +252,7 @@ describe("ApiTestButton", () => {
     });
     await flushTicks(2);
 
-    expect(document.body.textContent || "").toContain("Actual Request URL");
+    expect(document.body.textContent || "").toContain(apiTestMessages.resultCard.requestUrl.title);
     expect(document.body.textContent || "").toContain(
       "https://api.gptclubapi.xyz/openai/responses"
     );

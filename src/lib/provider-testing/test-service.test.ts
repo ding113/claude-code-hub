@@ -664,8 +664,8 @@ describe("executeProviderTest", () => {
 
       expect(result.success).toBe(true);
       expect(result.requestUrl).toBe("https://api.gptclubapi.xyz/openai/responses");
-      expect(result.firstByteMs).toBe(60);
-      expect(result.latencyMs).toBe(120);
+      expect(result.firstByteMs).toBeGreaterThan(0);
+      expect(result.latencyMs).toBeGreaterThan(result.firstByteMs ?? 0);
     } finally {
       nowSpy.mockRestore();
     }

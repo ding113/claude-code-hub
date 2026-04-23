@@ -60,7 +60,7 @@
       "validationDetails": "検証詳細"
     },
     "requestUrl": {
-      "hint": "ここには直近の provider test で実際に送信した URL を表示します。relay の経路問題の切り分けに使えます。",
+      "hint": "ここには直近のプロバイダーテストで実際に送信した URL を表示します。リレーサービスの経路問題の切り分けに使えます。",
       "label": "リクエスト URL",
       "title": "実際のリクエスト URL"
     },

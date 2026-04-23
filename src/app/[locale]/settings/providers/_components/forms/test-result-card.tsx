@@ -430,7 +430,7 @@ function TestResultDetails({
         </div>
       )}
 
-      {/* Raw Response Body - Full response for user inspection */}
+      {/* Request URL - origin of the latest provider test request */}
       {result.requestUrl && (
         <div className="space-y-2">
           <h4 className="font-semibold text-sm">{t("resultCard.requestUrl.title")}</h4>
@@ -443,6 +443,7 @@ function TestResultDetails({
         </div>
       )}
 
+      {/* Raw Response Body - Full response for user inspection */}
       {(result.rawResponse || result.content) && (
         <div className="space-y-2">
           <h4 className="font-semibold text-sm">{t("resultCard.rawResponse.title")}</h4>

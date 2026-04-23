@@ -233,6 +233,7 @@ async function runSingleAttempt(
       // provider testing 只在这条受控链路里做一次 versionless fallback，避免影响 runtime proxy 行为。
       while (true) {
         attemptStartTime = Date.now();
+        firstByteMs = undefined;
         const response = await fetch(requestUrl, fetchOptions);
         firstByteMs = Date.now() - attemptStartTime;
 
@@ -251,7 +252,7 @@ async function runSingleAttempt(
           continue;
         }
 
-        const latencyMs = Date.now() - attemptStartTime;
+        const latencyMs = Date.now() - startTime;
         const contentType = response.headers.get("content-type") || undefined;
 
         // best-effort 解析：即使解析失败也保留 HTTP 状态信息，避免 4xx/5xx 被误判为 network_error
@@ -310,7 +311,7 @@ async function runSingleAttempt(
       clearTimeout(timeoutId);
     }
   } catch (error) {
-    const latencyMs = Date.now() - attemptStartTime;
+    const latencyMs = Date.now() - startTime;
     const { subStatus, errorType, errorMessage } = classifyError(error);
 
     return {
