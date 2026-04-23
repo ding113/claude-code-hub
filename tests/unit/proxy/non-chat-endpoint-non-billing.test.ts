@@ -57,13 +57,16 @@ describe("non-chat endpoint non-billing parity", () => {
     expect(backfillSource).toContain("/v1/messages/count_tokens");
     expect(backfillSource).toContain("/v1/responses/compact");
     expect(backfillSource).toContain("REGEXP_REPLACE");
+    expect(backfillSource).toContain("actual_response_model");
     expect(triggerSqlSource).toContain("/v1/messages/count_tokens");
     expect(triggerSqlSource).toContain("/v1/responses/compact");
     expect(triggerSqlSource).toContain("REGEXP_REPLACE");
+    expect(triggerSqlSource).toContain("actual_response_model");
     expect(migrationSource).toContain("CREATE OR REPLACE FUNCTION fn_upsert_usage_ledger()");
     expect(migrationSource).toContain("/v1/messages/count_tokens");
     expect(migrationSource).toContain("/v1/responses/compact");
     expect(migrationSource).toContain("REGEXP_REPLACE");
+    expect(migrationSource).toContain("actual_response_model");
   });
 
   it("overview leaderboard and my-usage consumers exclude target endpoints from billable views", () => {
