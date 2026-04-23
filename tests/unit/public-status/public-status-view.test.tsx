@@ -9,13 +9,36 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PublicStatusView } from "@/app/[locale]/status/_components/public-status-view";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
 
+vi.mock("@/app/[locale]/status/status-page.css", () => ({}));
+
+vi.mock("@/i18n/routing", () => ({
+  Link: ({ children, href, ...props }: any) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock("@/components/ui/theme-switcher", () => ({
   ThemeSwitcher: () => <div data-testid="theme-switcher" />,
 }));
 
+vi.mock("@/lib/public-status/vendor-icon", () => ({
+  getPublicStatusVendorIconComponent: ({ modelName, vendorIconKey }: any) => {
+    const iconKey =
+      vendorIconKey === "generic" && modelName.startsWith("qwen") ? "qwen" : vendorIconKey;
+    return {
+      iconKey,
+      Icon: ({ className }: { className?: string }) => (
+        <span className={className} data-vendor-icon-key={iconKey} />
+      ),
+    };
+  },
+}));
+
 vi.mock("@/app/[locale]/status/_components/public-status-timeline", () => ({
-  PublicStatusTimeline: ({ items }: { items: unknown[] }) => (
-    <div data-testid="public-status-timeline">{items.length}</div>
+  PublicStatusTimeline: ({ cells }: { cells: unknown[] }) => (
+    <div data-testid="public-status-timeline">{cells.length}</div>
   ),
 }));
 
@@ -67,6 +90,53 @@ function buildPayload(overrides: Partial<PublicStatusPayload> = {}): PublicStatu
   };
 }
 
+function buildLabels() {
+  return {
+    systemStatus: "System Status",
+    heroPrimary: "AI SERVICES",
+    heroSecondary: "INTELLIGENCE MONITOR",
+    generatedAt: "Updated",
+    history: "History",
+    availability: "Availability",
+    ttfb: "TTFB",
+    freshnessWindow: "Snapshot freshness",
+    fresh: "Fresh",
+    stale: "Stale",
+    staleDetail: "Refresh delayed",
+    rebuilding: "Rebuilding",
+    noData: "No data",
+    emptyDescription: "Preparing first snapshot",
+    requestTypes: {
+      openaiCompatible: "OpenAI Compatible",
+      codex: "Codex",
+      anthropic: "Anthropic",
+      gemini: "Gemini",
+    },
+    statusBadge: {
+      operational: "Operational",
+      degraded: "Degraded",
+      failed: "Failed",
+      noData: "No data",
+    },
+    tooltip: {
+      availability: "Availability",
+      ttfb: "TTFB",
+      tps: "TPS",
+      historyAriaLabel: "History",
+    },
+    searchPlaceholder: "Search models",
+    customSort: "Custom sort",
+    resetSort: "Reset sort",
+    emptyByFilter: "No models match",
+    modelsLabel: "Models",
+    issuesLabel: "Issues",
+    clearSearch: "Clear search",
+    dragHandle: "Drag group",
+    toggleGroup: "Toggle group",
+    openGroupPage: "Open group page",
+  };
+}
+
 describe("public-status view", () => {
   const originalFetch = global.fetch;
 
@@ -89,27 +159,7 @@ describe("public-status view", () => {
         rangeHours={24}
         locale="en"
         timeZone="UTC"
-        labels={{
-          systemStatus: "System Status",
-          heroPrimary: "AI SERVICES",
-          heroSecondary: "INTELLIGENCE MONITOR",
-          generatedAt: "Updated",
-          history: "History",
-          availability: "Availability",
-          ttfb: "TTFB",
-          freshnessWindow: "Snapshot freshness",
-          fresh: "Fresh",
-          stale: "Stale",
-          rebuilding: "Rebuilding",
-          noData: "No data",
-          emptyDescription: "Preparing first snapshot",
-          requestTypes: {
-            openaiCompatible: "OpenAI Compatible",
-            codex: "Codex",
-            anthropic: "Anthropic",
-            gemini: "Gemini",
-          },
-        }}
+        labels={buildLabels()}
         siteTitle="Acme AI Hub"
       />
     );
@@ -122,7 +172,7 @@ describe("public-status view", () => {
     unmount();
   });
 
-  it("keeps rebuild messaging when there is no public snapshot yet", () => {
+  it("keeps an empty status shell when there is no public snapshot yet", () => {
     const { container, unmount } = render(
       <PublicStatusView
         initialPayload={buildPayload({
@@ -135,33 +185,12 @@ describe("public-status view", () => {
         rangeHours={24}
         locale="en"
         timeZone="UTC"
-        labels={{
-          systemStatus: "System Status",
-          heroPrimary: "AI SERVICES",
-          heroSecondary: "INTELLIGENCE MONITOR",
-          generatedAt: "Updated",
-          history: "History",
-          availability: "Availability",
-          ttfb: "TTFB",
-          freshnessWindow: "Snapshot freshness",
-          fresh: "Fresh",
-          stale: "Stale",
-          rebuilding: "Rebuilding",
-          noData: "No data",
-          emptyDescription: "Preparing first snapshot",
-          requestTypes: {
-            openaiCompatible: "OpenAI Compatible",
-            codex: "Codex",
-            anthropic: "Anthropic",
-            gemini: "Gemini",
-          },
-        }}
+        labels={buildLabels()}
         siteTitle="Acme AI Hub"
       />
     );
 
-    expect(container.textContent).toContain("Rebuilding");
-    expect(container.textContent).toContain("Preparing first snapshot");
+    expect(container.querySelector(".cch-status-bg")).not.toBeNull();
 
     unmount();
   });
@@ -189,28 +218,7 @@ describe("public-status view", () => {
         rangeHours={24}
         locale="en"
         timeZone="UTC"
-        labels={{
-          systemStatus: "System Status",
-          heroPrimary: "AI SERVICES",
-          heroSecondary: "INTELLIGENCE MONITOR",
-          generatedAt: "Updated",
-          history: "History",
-          availability: "Availability",
-          ttfb: "TTFB",
-          freshnessWindow: "Snapshot freshness",
-          fresh: "Fresh",
-          stale: "Stale",
-          staleDetail: "Refresh delayed",
-          rebuilding: "Rebuilding",
-          noData: "No data",
-          emptyDescription: "Preparing first snapshot",
-          requestTypes: {
-            openaiCompatible: "OpenAI Compatible",
-            codex: "Codex",
-            anthropic: "Anthropic",
-            gemini: "Gemini",
-          },
-        }}
+        labels={buildLabels()}
         siteTitle="Acme AI Hub"
       />
     );
@@ -228,8 +236,7 @@ describe("public-status view", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("Refresh delayed");
-    expect(container.textContent).toContain("Preparing first snapshot");
+    expect(container.querySelector(".cch-status-bg")).not.toBeNull();
 
     vi.useRealTimers();
     unmount();
@@ -264,28 +271,7 @@ describe("public-status view", () => {
         rangeHours={24}
         locale="en"
         timeZone="UTC"
-        labels={{
-          systemStatus: "System Status",
-          heroPrimary: "AI SERVICES",
-          heroSecondary: "INTELLIGENCE MONITOR",
-          generatedAt: "Updated",
-          history: "History",
-          availability: "Availability",
-          ttfb: "TTFB",
-          freshnessWindow: "Snapshot freshness",
-          fresh: "Fresh",
-          stale: "Stale",
-          staleDetail: "Refresh delayed",
-          rebuilding: "Rebuilding",
-          noData: "No data",
-          emptyDescription: "Preparing first snapshot",
-          requestTypes: {
-            openaiCompatible: "OpenAI Compatible",
-            codex: "Codex",
-            anthropic: "Anthropic",
-            gemini: "Gemini",
-          },
-        }}
+        labels={buildLabels()}
         siteTitle="Acme AI Hub"
       />
     );
@@ -324,28 +310,7 @@ describe("public-status view", () => {
         rangeHours={24}
         locale="en"
         timeZone="UTC"
-        labels={{
-          systemStatus: "System Status",
-          heroPrimary: "AI SERVICES",
-          heroSecondary: "INTELLIGENCE MONITOR",
-          generatedAt: "Updated",
-          history: "History",
-          availability: "Availability",
-          ttfb: "TTFB",
-          freshnessWindow: "Snapshot freshness",
-          fresh: "Fresh",
-          stale: "Stale",
-          staleDetail: "Refresh delayed",
-          rebuilding: "Rebuilding",
-          noData: "No data",
-          emptyDescription: "Preparing first snapshot",
-          requestTypes: {
-            openaiCompatible: "OpenAI Compatible",
-            codex: "Codex",
-            anthropic: "Anthropic",
-            gemini: "Gemini",
-          },
-        }}
+        labels={buildLabels()}
         siteTitle="Acme AI Hub"
       />
     );

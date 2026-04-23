@@ -40,6 +40,7 @@ import type {
 import type { ProviderType } from "@/types/provider";
 import { DateRangePicker } from "./date-range-picker";
 import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
+import { getSuccessRateCellDisplay } from "./success-rate-display";
 
 interface LeaderboardViewProps {
   isAdmin: boolean;
@@ -78,6 +79,21 @@ type AnyEntry =
   | ProviderEntry
   | ProviderCacheHitRateEntry
   | ModelEntry;
+
+function renderSuccessRateCell(
+  row: { successRate: number | null; basisDisclosureRequired?: boolean },
+  t: ReturnType<typeof useTranslations>
+) {
+  const display = getSuccessRateCellDisplay(row, t);
+  return (
+    <span
+      className={typeof row.successRate === "number" ? undefined : "text-muted-foreground"}
+      title={display.title}
+    >
+      {display.label}
+    </span>
+  );
+}
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
 
@@ -319,7 +335,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.successRate"),
       className: "text-right",
-      cell: (row) => `${(Number(row.successRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => renderSuccessRateCell(row, t),
       sortKey: "successRate",
       getValue: (row) => row.successRate,
     },
@@ -520,7 +536,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.successRate"),
       className: "text-right",
-      cell: (row) => `${(Number(row.successRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => renderSuccessRateCell(row, t),
       sortKey: "successRate",
       getValue: (row) => row.successRate,
     },

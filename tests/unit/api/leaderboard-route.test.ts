@@ -167,6 +167,40 @@ describe("GET /api/leaderboard", () => {
       expect(entry.avgCostPerMillionTokens).toBeNull();
     });
 
+    it("preserves model-basis metadata for model leaderboard rows", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
+      mocks.getLeaderboardWithCache.mockResolvedValue([
+        {
+          model: "glm-4.6",
+          totalRequests: 12,
+          totalCost: 3.5,
+          totalTokens: 12345,
+          successRate: null,
+          rowIdentityBasis: "redirected",
+          successRateBasis: "unavailable",
+          costTokensBasis: "redirected",
+          basisDisclosureRequired: true,
+          successRateUnavailableReason: "redirected_billing_model",
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url = "http://localhost/api/leaderboard?scope=model&period=daily";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body[0]).toMatchObject({
+        model: "glm-4.6",
+        successRate: null,
+        rowIdentityBasis: "redirected",
+        successRateBasis: "unavailable",
+        costTokensBasis: "redirected",
+        basisDisclosureRequired: true,
+        successRateUnavailableReason: "redirected_billing_model",
+      });
+    });
+
     it("includes modelStats in providerCacheHitRate scope response", async () => {
       mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
       mocks.getLeaderboardWithCache.mockResolvedValue([

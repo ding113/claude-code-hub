@@ -1,3 +1,5 @@
+ALTER TABLE "usage_ledger" ADD COLUMN "success_rate_outcome" varchar(16);
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION fn_is_message_request_finalized(
   blocked_by varchar,
   status_code integer,
@@ -54,7 +56,7 @@ BEGIN
   RETURN FALSE;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION fn_compute_message_request_success_rate_outcome(
   blocked_by varchar,
   status_code integer,
@@ -145,7 +147,7 @@ BEGIN
   RETURN 'failure';
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION fn_upsert_usage_ledger()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -161,7 +163,6 @@ BEGIN
   );
 
   IF NEW.blocked_by = 'warmup' THEN
-    -- If a ledger row already exists (row was originally non-warmup), mark it as warmup
     UPDATE usage_ledger
     SET blocked_by = 'warmup',
         success_rate_outcome = v_success_rate_outcome
@@ -232,8 +233,6 @@ BEGIN
     duration_ms = EXCLUDED.duration_ms,
     ttfb_ms = EXCLUDED.ttfb_ms,
     client_ip = EXCLUDED.client_ip;
-    -- created_at deliberately NOT updated on conflict: it represents the
-    -- original insert time of the ledger row, which is immutable by design.
 
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
@@ -241,10 +240,3 @@ EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_upsert_usage_ledger ON message_request;
-
-CREATE TRIGGER trg_upsert_usage_ledger
-AFTER INSERT OR UPDATE ON message_request
-FOR EACH ROW
-EXECUTE FUNCTION fn_upsert_usage_ledger();

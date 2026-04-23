@@ -4,7 +4,7 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
-import { and, eq, inArray, isNotNull, isNull, type SQLWrapper, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, type SQLWrapper, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
 import type {
@@ -42,14 +42,9 @@ export const MAX_BUCKET_SIZE_MINUTES = 1440;
 const DEFAULT_MAX_BUCKETS = 100;
 const AVAILABILITY_SUCCESS_STATUS_CODE_MIN = 200;
 const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE = 400;
-const FINALIZED_REQUEST_STATUS_CODE_ALIAS = "statusCode" as const;
-const AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL = sql.raw(
-  String(AVAILABILITY_SUCCESS_STATUS_CODE_MIN)
-);
-const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL = sql.raw(
-  String(AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE)
-);
-const FINALIZED_REQUEST_STATUS_CODE_SQL = sql.raw(`"${FINALIZED_REQUEST_STATUS_CODE_ALIAS}"`);
+const FINALIZED_REQUEST_OUTCOME_ALIAS = "successRateOutcome" as const;
+const FINALIZED_REQUEST_OUTCOME_SQL = sql.raw(`"${FINALIZED_REQUEST_OUTCOME_ALIAS}"`);
+const COUNTABLE_REQUEST_OUTCOME_SQL = sql`${FINALIZED_REQUEST_OUTCOME_SQL} IN ('success', 'failure')`;
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
@@ -74,7 +69,12 @@ export class AvailabilityQueryValidationError extends Error {
  * 届时应引入独立的 finalized 谓词，而不是直接放宽为 `durationMs IS NOT NULL`。
  */
 function buildAvailabilityFinalizedCondition() {
-  return isNotNull(messageRequest.statusCode);
+  return sql`fn_is_message_request_finalized(
+    ${messageRequest.blockedBy},
+    ${messageRequest.statusCode},
+    ${messageRequest.providerChain},
+    ${messageRequest.errorMessage}
+  )`;
 }
 
 function assertValidDate(date: Date, fieldName: string): Date {
@@ -161,14 +161,26 @@ function isAvailabilitySuccessStatusCode(statusCode: number): boolean {
   );
 }
 
-function buildAvailabilitySuccessStatusCondition(statusCodeExpression: SQLWrapper) {
-  return sql`${statusCodeExpression} >= ${AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL}
-    AND ${statusCodeExpression} < ${AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL}`;
+function buildRequestOutcomeSql(
+  blockedByExpression: SQLWrapper,
+  statusCodeExpression: SQLWrapper,
+  errorMessageExpression: SQLWrapper,
+  providerChainExpression: SQLWrapper
+) {
+  return sql`fn_compute_message_request_success_rate_outcome(
+    ${blockedByExpression},
+    ${statusCodeExpression},
+    ${errorMessageExpression},
+    ${providerChainExpression}
+  )`;
 }
 
-function buildAvailabilityFailureStatusCondition(statusCodeExpression: SQLWrapper) {
-  return sql`(${statusCodeExpression} < ${AVAILABILITY_SUCCESS_STATUS_CODE_MIN_SQL}
-    OR ${statusCodeExpression} >= ${AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE_SQL})`;
+function buildAvailabilitySuccessOutcomeCondition(outcomeExpression: SQLWrapper) {
+  return sql`${outcomeExpression} = 'success'`;
+}
+
+function buildAvailabilityFailureOutcomeCondition(outcomeExpression: SQLWrapper) {
+  return sql`${outcomeExpression} = 'failure'`;
 }
 
 /**
@@ -358,7 +370,12 @@ export async function queryProviderAvailability(
       SELECT
         ${messageRequest.providerId} AS "providerId",
         ${messageRequest.createdAt} AS "createdAt",
-        ${messageRequest.statusCode} AS ${FINALIZED_REQUEST_STATUS_CODE_SQL},
+        ${buildRequestOutcomeSql(
+          messageRequest.blockedBy,
+          messageRequest.statusCode,
+          messageRequest.errorMessage,
+          messageRequest.providerChain
+        )} AS ${FINALIZED_REQUEST_OUTCOME_SQL},
         ${messageRequest.durationMs} AS "durationMs",
         to_timestamp(
           floor(extract(epoch from ${messageRequest.createdAt}) / ${bucketSizeSeconds}) * ${bucketSizeSeconds}
@@ -370,24 +387,30 @@ export async function queryProviderAvailability(
       SELECT
         "providerId",
         "bucketStart",
-        COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessStatusCondition(FINALIZED_REQUEST_STATUS_CODE_SQL)})::int AS "greenCount",
-        COUNT(*) FILTER (WHERE ${buildAvailabilityFailureStatusCondition(FINALIZED_REQUEST_STATUS_CODE_SQL)})::int AS "redCount",
-        COUNT("durationMs")::int AS "latencyCount",
-        COALESCE(SUM("durationMs")::double precision, 0) AS "latencySumMs",
-        COALESCE(AVG("durationMs")::double precision, 0) AS "avgLatencyMs",
+        COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessOutcomeCondition(FINALIZED_REQUEST_OUTCOME_SQL)})::int AS "greenCount",
+        COUNT(*) FILTER (WHERE ${buildAvailabilityFailureOutcomeCondition(FINALIZED_REQUEST_OUTCOME_SQL)})::int AS "redCount",
+        COUNT("durationMs") FILTER (WHERE ${COUNTABLE_REQUEST_OUTCOME_SQL})::int AS "latencyCount",
+        COALESCE(
+          SUM("durationMs") FILTER (WHERE ${COUNTABLE_REQUEST_OUTCOME_SQL})::double precision,
+          0
+        ) AS "latencySumMs",
+        COALESCE(
+          AVG("durationMs") FILTER (WHERE ${COUNTABLE_REQUEST_OUTCOME_SQL})::double precision,
+          0
+        ) AS "avgLatencyMs",
         COALESCE(
           percentile_cont(0.5) WITHIN GROUP (ORDER BY "durationMs"::double precision)
-            FILTER (WHERE "durationMs" IS NOT NULL),
+            FILTER (WHERE "durationMs" IS NOT NULL AND ${COUNTABLE_REQUEST_OUTCOME_SQL}),
           0
         )::double precision AS "p50LatencyMs",
         COALESCE(
           percentile_cont(0.95) WITHIN GROUP (ORDER BY "durationMs"::double precision)
-            FILTER (WHERE "durationMs" IS NOT NULL),
+            FILTER (WHERE "durationMs" IS NOT NULL AND ${COUNTABLE_REQUEST_OUTCOME_SQL}),
           0
         )::double precision AS "p95LatencyMs",
         COALESCE(
           percentile_cont(0.99) WITHIN GROUP (ORDER BY "durationMs"::double precision)
-            FILTER (WHERE "durationMs" IS NOT NULL),
+            FILTER (WHERE "durationMs" IS NOT NULL AND ${COUNTABLE_REQUEST_OUTCOME_SQL}),
           0
         )::double precision AS "p99LatencyMs",
         MAX("createdAt") AS "lastRequestAt"
@@ -488,10 +511,11 @@ export async function queryProviderAvailability(
       const recentBuckets = timeBuckets.slice(-3); // Last 3 buckets
       const recentGreen = recentBuckets.reduce((sum, bucket) => sum + bucket.greenCount, 0);
       const recentRed = recentBuckets.reduce((sum, bucket) => sum + bucket.redCount, 0);
+      const recentTotal = recentGreen + recentRed;
       const recentScore = calculateAvailabilityScore(recentGreen, recentRed);
 
       // Simple: >= 50% success = green, otherwise red
-      currentStatus = recentScore >= 0.5 ? "green" : "red";
+      currentStatus = recentTotal === 0 ? "unknown" : recentScore >= 0.5 ? "green" : "red";
     }
 
     providerSummaries.push({
@@ -571,8 +595,22 @@ export async function getCurrentProviderStatus(): Promise<
   const aggregateQuery = sql<AggregatedCurrentProviderStatusRow>`
     SELECT
       ${messageRequest.providerId} AS "providerId",
-      COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessStatusCondition(messageRequest.statusCode)})::int AS "greenCount",
-      COUNT(*) FILTER (WHERE ${buildAvailabilityFailureStatusCondition(messageRequest.statusCode)})::int AS "redCount",
+      COUNT(*) FILTER (WHERE ${buildAvailabilitySuccessOutcomeCondition(
+        buildRequestOutcomeSql(
+          messageRequest.blockedBy,
+          messageRequest.statusCode,
+          messageRequest.errorMessage,
+          messageRequest.providerChain
+        )
+      )})::int AS "greenCount",
+      COUNT(*) FILTER (WHERE ${buildAvailabilityFailureOutcomeCondition(
+        buildRequestOutcomeSql(
+          messageRequest.blockedBy,
+          messageRequest.statusCode,
+          messageRequest.errorMessage,
+          messageRequest.providerChain
+        )
+      )})::int AS "redCount",
       MAX(${messageRequest.createdAt}) AS "lastRequestAt"
     FROM ${messageRequest}
     WHERE ${requestConditions}

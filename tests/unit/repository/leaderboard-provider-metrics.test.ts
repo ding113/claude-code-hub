@@ -49,6 +49,7 @@ vi.mock("@/drizzle/schema", () => ({
     cacheCreationInputTokens: "cacheCreationInputTokens",
     cacheReadInputTokens: "cacheReadInputTokens",
     isSuccess: "isSuccess",
+    successRateOutcome: "successRateOutcome",
     blockedBy: "blockedBy",
     createdAt: "createdAt",
     ttfbMs: "ttfbMs",
@@ -234,6 +235,28 @@ describe("Provider Leaderboard Average Cost Metrics", () => {
     expect(result).toHaveLength(2);
     expect(result[0].totalCost).toBeGreaterThanOrEqual(result[1].totalCost);
   });
+
+  it("preserves null successRate when a provider has no countable samples", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          providerId: 1,
+          providerName: "excluded-only",
+          totalRequests: 4,
+          totalCost: "1.0",
+          totalTokens: 1000,
+          successRate: null,
+          avgTtfbMs: 200,
+          avgTokensPerSecond: 10,
+        },
+      ]),
+    ];
+
+    const { findDailyProviderLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyProviderLeaderboard();
+
+    expect(result[0]?.successRate).toBeNull();
+  });
 });
 
 describe("Provider Leaderboard Model Breakdown", () => {
@@ -332,6 +355,49 @@ describe("Provider Leaderboard Model Breakdown", () => {
     // Empty model must be excluded
     expect(p2!.modelStats).toHaveLength(1);
     expect(p2!.modelStats![0].model).toBe("model-c");
+  });
+
+  it("marks model-grain successRate as unavailable when billingModelSource is redirected", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          providerId: 1,
+          providerName: "provider-a",
+          totalRequests: 10,
+          totalCost: "1.0",
+          totalTokens: 100,
+          successRate: 0.9,
+          avgTtfbMs: 100,
+          avgTokensPerSecond: 10,
+        },
+      ]),
+      createChainMock([
+        {
+          providerId: 1,
+          model: "redirected-model",
+          totalRequests: 10,
+          totalCost: "1.0",
+          totalTokens: 100,
+          successRate: 0.9,
+          avgTtfbMs: 100,
+          avgTokensPerSecond: 10,
+        },
+      ]),
+    ];
+
+    const { findDailyProviderLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyProviderLeaderboard(undefined, true);
+    const modelStat = result[0]?.modelStats?.[0];
+
+    expect(modelStat).toMatchObject({
+      model: "redirected-model",
+      successRate: null,
+      rowIdentityBasis: "redirected",
+      successRateBasis: "unavailable",
+      costTokensBasis: "redirected",
+      basisDisclosureRequired: true,
+      successRateUnavailableReason: "redirected_billing_model",
+    });
   });
 });
 
@@ -585,5 +651,43 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     expect(p2).toBeDefined();
     expect(p2!.modelStats).toHaveLength(1);
     expect(p2!.modelStats[0].model).toBe("model-c");
+  });
+});
+
+describe("Model Leaderboard basis handling", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    selectCallIndex = 0;
+    chainMocks = [];
+    mockSelect.mockClear();
+    mocks.resolveSystemTimezone.mockResolvedValue("UTC");
+    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+  });
+
+  it("marks top-level model successRate as unavailable when billingModelSource is redirected", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          model: "redirected-model",
+          totalRequests: 12,
+          totalCost: "3.0",
+          totalTokens: 1200,
+          successRate: 0.8,
+        },
+      ]),
+    ];
+
+    const { findDailyModelLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyModelLeaderboard();
+
+    expect(result[0]).toMatchObject({
+      model: "redirected-model",
+      successRate: null,
+      rowIdentityBasis: "redirected",
+      successRateBasis: "unavailable",
+      costTokensBasis: "redirected",
+      basisDisclosureRequired: true,
+      successRateUnavailableReason: "redirected_billing_model",
+    });
   });
 });

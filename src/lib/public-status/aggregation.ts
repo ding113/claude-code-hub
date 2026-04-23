@@ -1,14 +1,19 @@
 import { and, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
+import {
+  classifyProviderChainItemOutcome,
+  resolveSuccessRateModelKey,
+} from "@/lib/request-outcome";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
+import type { ProviderChainItem } from "@/types/message";
 import type { InternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import type { PublicStatusPayload, PublicStatusTimelineBucket } from "./payload";
 
 export interface PublicStatusFailureSignal {
   statusCode?: number | null;
-  reason?: string;
+  reason?: ProviderChainItem["reason"];
   errorMessage?: string;
   matchedRule?: {
     ruleId: number;
@@ -119,46 +124,14 @@ export function computeTokensPerSecond(input: {
 }
 
 export function isExcludedFromPublicStatusFailure(signal: PublicStatusFailureSignal): boolean {
-  if (signal.statusCode === 404 || signal.statusCode === 499) {
-    return true;
-  }
-
-  if (signal.matchedRule) {
-    return true;
-  }
-
-  if (
-    signal.reason === "resource_not_found" ||
-    signal.reason === "concurrent_limit_failed" ||
-    signal.reason === "hedge_loser_cancelled" ||
-    signal.reason === "client_error_non_retryable"
-  ) {
-    return true;
-  }
-
-  const normalizedError = signal.errorMessage?.toLowerCase() ?? "";
-  if (
-    normalizedError.includes("no available provider") ||
-    normalizedError.includes("insufficient quota") ||
-    normalizedError.includes("quota exceeded") ||
-    normalizedError.includes("rate limit") ||
-    normalizedError.includes("rate_limit") ||
-    normalizedError.includes("concurrency limit") ||
-    normalizedError.includes("concurrent limit") ||
-    normalizedError.includes("limit exceeded")
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-function isSuccessReason(reason: string | undefined, statusCode?: number | null): boolean {
-  if (reason === "request_success" || reason === "retry_success" || reason === "hedge_winner") {
-    return true;
-  }
-
-  return statusCode != null && statusCode >= 200 && statusCode < 400;
+  return (
+    classifyProviderChainItemOutcome({
+      statusCode: signal.statusCode ?? undefined,
+      reason: signal.reason ?? undefined,
+      errorMessage: signal.errorMessage ?? undefined,
+      errorDetails: signal.matchedRule ? { matchedRule: signal.matchedRule } : undefined,
+    })?.outcome === "excluded"
+  );
 }
 
 function alignWindowEnd(now: Date, intervalMinutes: number): Date {
@@ -290,7 +263,10 @@ export function buildPublicStatusPayloadFromRequests(input: {
   }
 
   for (const request of input.requests) {
-    const modelKey = request.originalModel ?? request.model ?? null;
+    const modelKey = resolveSuccessRateModelKey({
+      originalModel: request.originalModel,
+      model: request.model,
+    });
     if (!modelKey) {
       continue;
     }
@@ -324,28 +300,12 @@ export function buildPublicStatusPayloadFromRequests(input: {
         continue;
       }
 
-      const outcome = (() => {
-        if (
-          isExcludedFromPublicStatusFailure({
-            statusCode: item.statusCode,
-            reason: item.reason,
-            errorMessage: item.errorMessage,
-            matchedRule: item.matchedRule,
-          })
-        ) {
-          return "excluded" as const;
-        }
-
-        if (isSuccessReason(item.reason, item.statusCode)) {
-          return "success" as const;
-        }
-
-        if (item.statusCode !== undefined || item.reason) {
-          return "failure" as const;
-        }
-
-        return null;
-      })();
+      const outcome = classifyProviderChainItemOutcome({
+        statusCode: item.statusCode ?? undefined,
+        reason: item.reason ?? undefined,
+        errorMessage: item.errorMessage ?? undefined,
+        errorDetails: item.matchedRule ? { matchedRule: item.matchedRule } : undefined,
+      })?.outcome;
 
       if (!outcome) {
         continue;

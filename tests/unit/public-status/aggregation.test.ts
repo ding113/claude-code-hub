@@ -129,4 +129,154 @@ describe("public-status aggregation", () => {
       "PUBLIC_STATUS_REQUEST_ROW_CAP_EXCEEDED"
     );
   });
+
+  it("excludes non-upstream failures from availability counts", () => {
+    const result = buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: null,
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 4,
+          createdAt: "2026-04-21T10:25:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 11,
+              name: "provider-1",
+              groupTag: "openai",
+              reason: "client_error_non_retryable",
+              statusCode: 499,
+              matchedRule: {
+                ruleId: 1,
+                pattern: "blocked",
+                matchType: "contains",
+                category: "content_filter",
+                hasOverrideResponse: false,
+                hasOverrideStatusCode: false,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const model = result.groups[0]?.models[0];
+    expect(model?.availabilityPct).toBeNull();
+    expect(model?.timeline.every((bucket) => bucket.sampleCount === 0)).toBe(true);
+  });
+
+  it("uses originalModel before redirected model for grouping", () => {
+    const result = buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: null,
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1-original",
+              label: "GPT-4.1 Original",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 5,
+          createdAt: "2026-04-21T10:30:00.000Z",
+          model: "redirected-model",
+          originalModel: "gpt-4.1-original",
+          providerChain: [
+            {
+              id: 11,
+              name: "provider-1",
+              groupTag: "openai",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+      ],
+    });
+
+    const model = result.groups[0]?.models[0];
+    expect(model?.availabilityPct).toBe(100);
+    expect(model?.timeline.some((bucket) => bucket.sampleCount === 1)).toBe(true);
+  });
+
+  it("ignores informational chain items before an excluded terminal event", () => {
+    const result = buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: null,
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 6,
+          createdAt: "2026-04-21T10:35:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 11,
+              name: "provider-1",
+              groupTag: "openai",
+              reason: "initial_selection",
+            },
+            {
+              id: 11,
+              name: "provider-1",
+              groupTag: "openai",
+              reason: "client_abort",
+              statusCode: 499,
+            },
+          ],
+        },
+      ],
+    });
+
+    const model = result.groups[0]?.models[0];
+    expect(model?.availabilityPct).toBeNull();
+    expect(model?.latestState).toBe("no_data");
+  });
 });

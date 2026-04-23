@@ -492,7 +492,9 @@
       "avgTokensPerSecond": "Avg tok/s",
       "avgCostPerRequest": "Avg Cost/Req",
       "avgCostPerMillionTokens": "Avg Cost/1M Tokens",
-      "unknownModel": "Unknown"
+      "unknownModel": "Unknown",
+      "successRateUnavailable": "N/A",
+      "successRateBasisDisclosure": "Success rate is unavailable here because redirected billing mode can merge multiple original models into one row."
     },
     "expandModelStats": "Expand model details",
     "collapseModelStats": "Collapse model details",

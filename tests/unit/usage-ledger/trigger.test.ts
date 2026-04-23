@@ -5,6 +5,11 @@ import { describe, expect, it } from "vitest";
 const sql = readFileSync(resolve(process.cwd(), "src/lib/ledger-backfill/trigger.sql"), "utf-8");
 
 describe("fn_upsert_usage_ledger trigger SQL", () => {
+  it("defines shared request outcome helpers", () => {
+    expect(sql).toContain("fn_compute_message_request_success_rate_outcome");
+    expect(sql).toContain("fn_is_message_request_finalized");
+  });
+
   it("contains warmup exclusion check", () => {
     expect(sql).toContain("blocked_by = 'warmup'");
   });
@@ -23,6 +28,10 @@ describe("fn_upsert_usage_ledger trigger SQL", () => {
 
   it("computes is_success from error_message", () => {
     expect(sql).toContain("error_message IS NULL");
+  });
+
+  it("persists success_rate_outcome into usage_ledger", () => {
+    expect(sql).toContain("success_rate_outcome");
   });
 
   it("creates trigger binding", () => {
