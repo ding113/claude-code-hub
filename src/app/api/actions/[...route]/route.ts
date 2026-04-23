@@ -38,6 +38,7 @@ import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
 import { PROVIDER_MODEL_REDIRECT_RULE_SCHEMA } from "@/lib/provider-model-redirect-schema";
+import { appendPublicStatusOpenApi } from "@/lib/public-status/openapi";
 // 导入 validation schemas
 import {
   CreateProviderSchema,
@@ -2080,7 +2081,7 @@ function getOpenAPIServers() {
 }
 
 // 生成 OpenAPI 3.1.0 规范文档
-app.doc("/openapi.json", {
+const openApiDocumentConfig = {
   openapi: "3.1.0",
   info: {
     title: "Claude Code Hub API",
@@ -2100,7 +2101,9 @@ Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能
 
 ## 认证方式
 
-所有 API 端点通过 **HTTP Cookie** 进行认证，Cookie 名称为 \`auth-token\`。
+管理类 API 端点通过 **HTTP Cookie** 进行认证，Cookie 名称为 \`auth-token\`。
+
+公开状态接口 \`GET /api/public-status\` 与 \`GET /api/public-site-meta\` 无需认证，仅返回公开安全字段。
 
 ### 如何获取认证 Token
 
@@ -2286,6 +2289,24 @@ HTTP 状态码:
     description: "GitHub 仓库 - 查看完整文档、功能介绍和部署指南",
     url: "https://github.com/ding113/claude-code-hub",
   },
+};
+
+app.get("/openapi.json", (c) => {
+  try {
+    const document = app.getOpenAPIDocument(openApiDocumentConfig);
+    return c.json(appendPublicStatusOpenApi(document));
+  } catch (error) {
+    logger.error("GET /api/actions/openapi.json failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json(
+      {
+        error: "OpenAPI generation failed",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      500
+    );
+  }
 });
 
 // Swagger UI (传统风格)

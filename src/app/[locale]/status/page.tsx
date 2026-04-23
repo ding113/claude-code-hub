@@ -1,15 +1,8 @@
 import { getTranslations } from "next-intl/server";
-import {
-  readCurrentPublicStatusConfigSnapshot,
-  readPublicStatusSiteMetadata,
-} from "@/lib/public-status/config-snapshot";
-import { readPublicStatusPayload } from "@/lib/public-status/read-store";
-import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
+import { loadPublicStatusPageData } from "@/lib/public-status/public-api-loader";
 import { PublicStatusView } from "./_components/public-status-view";
 
 export const dynamic = "force-dynamic";
-
-const FALLBACK_SITE_TITLE = "Claude Code Hub";
 
 export default async function PublicStatusPage({
   params,
@@ -18,37 +11,26 @@ export default async function PublicStatusPage({
 }) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "settings.statusPage.public" });
-  const configSnapshot = await readCurrentPublicStatusConfigSnapshot();
-  const siteMetadata = await readPublicStatusSiteMetadata();
-  const intervalMinutes = configSnapshot?.defaultIntervalMinutes ?? 5;
-  const rangeHours = configSnapshot?.defaultRangeHours ?? 24;
-  const followServerDefaults = !configSnapshot;
-  const payload = await readPublicStatusPayload({
+  const {
+    followServerDefaults,
+    initialPayload,
     intervalMinutes,
     rangeHours,
-    configVersion: configSnapshot?.configVersion,
-    hasConfiguredGroups: configSnapshot ? configSnapshot.groups.length > 0 : undefined,
-    nowIso: new Date().toISOString(),
-    triggerRebuildHint: async (reason) => {
-      await schedulePublicStatusRebuild({
-        intervalMinutes,
-        rangeHours,
-        reason,
-      });
-    },
-  });
+    siteTitle,
+    status,
+    timeZone,
+  } = await loadPublicStatusPageData();
 
   return (
     <PublicStatusView
-      initialPayload={payload}
+      initialPayload={initialPayload}
       intervalMinutes={intervalMinutes}
       rangeHours={rangeHours}
       followServerDefaults={followServerDefaults}
+      initialStatus={status}
       locale={locale}
-      siteTitle={
-        siteMetadata?.siteTitle?.trim() || configSnapshot?.siteTitle?.trim() || FALLBACK_SITE_TITLE
-      }
-      timeZone={configSnapshot?.timeZone ?? "UTC"}
+      siteTitle={siteTitle}
+      timeZone={timeZone}
       labels={{
         systemStatus: t("systemStatus"),
         heroPrimary: t("heroPrimary"),
@@ -62,6 +44,7 @@ export default async function PublicStatusPage({
         stale: t("stale"),
         staleDetail: t("staleDetail"),
         rebuilding: t("rebuilding"),
+        noSnapshot: t("noSnapshot"),
         noData: t("noData"),
         emptyDescription: t("emptyDescription"),
         requestTypes: {

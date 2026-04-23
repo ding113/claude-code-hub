@@ -1,8 +1,16 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
+const mockIntlMiddleware = vi.hoisted(() =>
+  vi.fn((request: NextRequest) => {
+    const response = new Response(null, { status: 200 });
+    response.headers.set("x-seen-public-status", request.headers.get("x-cch-public-status") ?? "");
+    return response;
+  })
+);
+
 vi.mock("next-intl/middleware", () => ({
-  default: () => () => new Response(null, { status: 200 }),
+  default: () => mockIntlMiddleware,
 }));
 
 vi.mock("@/i18n/routing", () => ({
@@ -37,5 +45,19 @@ describe("public status proxy path", () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(new NextRequest("http://localhost/en/dashboard"));
     expect(response.headers.get("location")).toContain("/en/login");
+  });
+
+  it("strips spoofed x-cch-public-status on non-status requests", async () => {
+    const { default: proxyHandler } = await import("@/proxy");
+    const response = proxyHandler(
+      new NextRequest("http://localhost/en/dashboard", {
+        headers: {
+          "x-cch-public-status": "1",
+          cookie: "cch_auth=test",
+        },
+      })
+    );
+
+    expect(response.headers.get("x-seen-public-status")).toBeNull();
   });
 });

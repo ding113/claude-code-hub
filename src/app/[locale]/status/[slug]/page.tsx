@@ -1,39 +1,15 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { readPublicSiteMeta } from "@/lib/public-site-meta";
-import { readCurrentPublicStatusConfigSnapshot } from "@/lib/public-status/config-snapshot";
-import { readPublicStatusPayload } from "@/lib/public-status/read-store";
-import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
-import { resolveSiteTitle } from "@/lib/site-title";
+import { loadPublicStatusPageData } from "@/lib/public-status/public-api-loader";
 import { PublicStatusView } from "../_components/public-status-view";
 
 export const dynamic = "force-dynamic";
 
 async function loadGroupContext(slug: string) {
-  const configSnapshot = await readCurrentPublicStatusConfigSnapshot();
-  const siteMeta = await readPublicSiteMeta();
-  const intervalMinutes = configSnapshot?.defaultIntervalMinutes ?? 5;
-  const rangeHours = configSnapshot?.defaultRangeHours ?? 24;
-  const followServerDefaults = !configSnapshot;
-  const payload = await readPublicStatusPayload({
-    intervalMinutes,
-    rangeHours,
-    configVersion: configSnapshot?.configVersion,
-    hasConfiguredGroups: configSnapshot ? configSnapshot.groups.length > 0 : undefined,
-    nowIso: new Date().toISOString(),
-    triggerRebuildHint: async (reason) => {
-      if (followServerDefaults) {
-        await schedulePublicStatusRebuild({
-          intervalMinutes,
-          rangeHours,
-          reason,
-        });
-      }
-    },
-  });
-  const targetGroup = payload.groups.find((group) => group.publicGroupSlug === slug);
-  return { configSnapshot, siteMeta, intervalMinutes, rangeHours, payload, targetGroup };
+  const loaded = await loadPublicStatusPageData({ groupSlug: slug });
+  const targetGroup = loaded.initialPayload.groups.find((group) => group.publicGroupSlug === slug);
+  return { ...loaded, targetGroup };
 }
 
 export async function generateMetadata({
@@ -42,8 +18,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const { configSnapshot, siteMeta, targetGroup } = await loadGroupContext(slug);
-  const siteTitle = resolveSiteTitle(configSnapshot?.siteTitle, siteMeta.siteTitle);
+  const { siteTitle, targetGroup } = await loadGroupContext(slug);
   if (!targetGroup) {
     return { title: siteTitle };
   }
@@ -60,14 +35,21 @@ export default async function PublicStatusGroupPage({
 }) {
   const { locale, slug } = await params;
   const t = await getTranslations("settings");
-  const { configSnapshot, siteMeta, intervalMinutes, rangeHours, payload, targetGroup } =
-    await loadGroupContext(slug);
+  const {
+    followServerDefaults,
+    initialPayload,
+    intervalMinutes,
+    rangeHours,
+    siteTitle,
+    status,
+    timeZone,
+    targetGroup,
+  } = await loadGroupContext(slug);
   if (!targetGroup) {
     notFound();
   }
 
-  const followServerDefaults = !configSnapshot;
-  const filteredPayload = { ...payload, groups: [targetGroup] };
+  const filteredPayload = { ...initialPayload, groups: [targetGroup] };
 
   return (
     <PublicStatusView
@@ -76,9 +58,10 @@ export default async function PublicStatusGroupPage({
       rangeHours={rangeHours}
       followServerDefaults={followServerDefaults}
       filterSlug={slug}
+      initialStatus={status}
       locale={locale}
-      siteTitle={resolveSiteTitle(configSnapshot?.siteTitle, siteMeta.siteTitle)}
-      timeZone={configSnapshot?.timeZone ?? "UTC"}
+      siteTitle={siteTitle}
+      timeZone={timeZone}
       labels={{
         systemStatus: t("statusPage.public.systemStatus"),
         heroPrimary: t("statusPage.public.heroPrimary"),
@@ -92,6 +75,7 @@ export default async function PublicStatusGroupPage({
         stale: t("statusPage.public.stale"),
         staleDetail: t("statusPage.public.staleDetail"),
         rebuilding: t("statusPage.public.rebuilding"),
+        noSnapshot: t("statusPage.public.noSnapshot"),
         noData: t("statusPage.public.noData"),
         emptyDescription: t("statusPage.public.emptyDescription"),
         requestTypes: {

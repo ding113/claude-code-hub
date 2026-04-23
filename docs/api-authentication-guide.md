@@ -2,7 +2,9 @@
 
 ## 📋 概述
 
-Claude Code Hub 的所有 API 端点通过 **HTTP Cookie** 进行认证，Cookie 名称为 `auth-token`。
+Claude Code Hub 的管理 API 端点通过 **HTTP Cookie** 进行认证，Cookie 名称为 `auth-token`。
+
+公开状态接口 `GET /api/public-status` 和 `GET /api/public-site-meta` 无需认证。详细契约、过滤参数和示例见 [Public Status API](public-status-api.md)。
 
 ## 🔐 认证方式
 
@@ -289,4 +291,5 @@ fetch('/api/actions/users/getUsers', {
 
 - [OpenAPI 文档](/api/actions/docs) - Swagger UI
 - [Scalar API 文档](/api/actions/scalar) - 现代化 API 文档界面
+- [Public Status API](public-status-api.md) - 公开状态接口与响应示例
 - [GitHub 仓库](https://github.com/ding113/claude-code-hub) - 查看源码和更多文档

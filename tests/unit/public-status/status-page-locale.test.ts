@@ -1,29 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetTranslations = vi.hoisted(() => vi.fn());
-const mockReadCurrentPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
-const mockReadPublicStatusSiteMetadata = vi.hoisted(() => vi.fn());
-const mockResolvePublicStatusSiteDescription = vi.hoisted(() => vi.fn());
-const mockReadPublicStatusPayload = vi.hoisted(() => vi.fn());
-const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
+const mockLoadPublicStatusPageData = vi.hoisted(() => vi.fn());
 const mockPublicStatusView = vi.hoisted(() => vi.fn(() => null));
 
 vi.mock("next-intl/server", () => ({
   getTranslations: mockGetTranslations,
 }));
 
-vi.mock("@/lib/public-status/config-snapshot", () => ({
-  readCurrentPublicStatusConfigSnapshot: mockReadCurrentPublicStatusConfigSnapshot,
-  readPublicStatusSiteMetadata: mockReadPublicStatusSiteMetadata,
-  resolvePublicStatusSiteDescription: mockResolvePublicStatusSiteDescription,
-}));
-
-vi.mock("@/lib/public-status/read-store", () => ({
-  readPublicStatusPayload: mockReadPublicStatusPayload,
-}));
-
-vi.mock("@/lib/public-status/rebuild-hints", () => ({
-  schedulePublicStatusRebuild: mockSchedulePublicStatusRebuild,
+vi.mock("@/lib/public-status/public-api-loader", () => ({
+  loadPublicStatusPageData: mockLoadPublicStatusPageData,
 }));
 
 vi.mock("@/app/[locale]/status/_components/public-status-view", () => ({
@@ -48,27 +34,41 @@ describe("PublicStatusPage locale handling", () => {
           const entries: Record<string, string> = {
             systemStatus: "System Status",
             heroPrimary: "AI SERVICES",
-            heroSecondary: "Redis-backed public runtime health overview.",
+            heroSecondary: "Public API status overview.",
             generatedAt: "Updated",
             history: "History",
             availability: "Availability",
             ttfb: "TTFB",
-            tps: "TPS",
             freshnessWindow: "Snapshot freshness",
             fresh: "Fresh",
             stale: "Stale",
-            staleDetail: "The latest completed snapshot is still shown while a refresh is pending.",
+            staleDetail: "Refresh delayed",
             rebuilding: "Rebuilding",
+            noSnapshot: "No snapshot yet",
             noData: "No data",
-            operational: "Operational",
-            failed: "Failed",
-            emptyDescription: "We are preparing the first public snapshot for this page.",
-            past: "Past",
-            now: "Now",
+            emptyDescription: "Preparing first snapshot",
+            modelsLabel: "Models",
+            issuesLabel: "Issues",
+            clearSearch: "Clear",
+            dragHandle: "Drag",
+            toggleGroup: "Toggle",
+            openGroupPage: "Open group page",
+            customSort: "Custom sort",
+            resetSort: "Reset sort",
+            searchPlaceholder: "Search",
+            emptyByFilter: "No results",
             "requestTypes.openaiCompatible": "OpenAI Compatible",
             "requestTypes.codex": "Codex",
             "requestTypes.anthropic": "Anthropic",
             "requestTypes.gemini": "Gemini",
+            "statusBadge.operational": "Operational",
+            "statusBadge.degraded": "Degraded",
+            "statusBadge.failed": "Failed",
+            "statusBadge.noData": "No data",
+            "tooltip.availability": "Availability tooltip",
+            "tooltip.ttfb": "TTFB tooltip",
+            "tooltip.tps": "TPS tooltip",
+            "tooltip.historyAriaLabel": "History aria",
           };
 
           return entries[key] ?? key;
@@ -77,18 +77,27 @@ describe("PublicStatusPage locale handling", () => {
 
       return (key: string) => `zh:${key}`;
     });
-    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue(null);
-    mockReadPublicStatusSiteMetadata.mockResolvedValue(null);
-    mockResolvePublicStatusSiteDescription.mockImplementation(
-      ({ siteTitle, siteDescription }: { siteTitle?: string; siteDescription?: string }) =>
-        siteDescription ?? `${siteTitle ?? "Claude Code Hub"} public status`
-    );
-    mockReadPublicStatusPayload.mockResolvedValue({
-      rebuildState: "fresh",
-      sourceGeneration: "gen-1",
-      generatedAt: "2026-04-22T10:00:00.000Z",
-      freshUntil: "2026-04-22T10:05:00.000Z",
-      groups: [],
+
+    mockLoadPublicStatusPageData.mockResolvedValue({
+      initialPayload: {
+        rebuildState: "fresh",
+        sourceGeneration: "",
+        generatedAt: "2026-04-22T10:00:00.000Z",
+        freshUntil: "2026-04-22T10:05:00.000Z",
+        groups: [],
+      },
+      status: "ready",
+      intervalMinutes: 5,
+      rangeHours: 24,
+      followServerDefaults: true,
+      siteTitle: "Claude Code Hub",
+      timeZone: "UTC",
+      meta: {
+        siteTitle: "Claude Code Hub",
+        siteDescription: "Claude Code Hub public status",
+        timeZone: "UTC",
+      },
+      response: {} as never,
     });
   });
 
@@ -103,15 +112,64 @@ describe("PublicStatusPage locale handling", () => {
       locale: "en",
       namespace: "settings.statusPage.public",
     });
+    expect(
+      (
+        element as {
+          props: {
+            locale: string;
+            labels: { heroPrimary: string; heroSecondary: string; fresh: string };
+          };
+        }
+      ).props
+    ).toMatchObject({
+      locale: "en",
+      labels: {
+        heroPrimary: "AI SERVICES",
+        heroSecondary: "Public API status overview.",
+        fresh: "Fresh",
+      },
+    });
+  });
 
-    const props = (
-      element as {
-        props: { labels: { heroPrimary: string; heroSecondary: string; fresh: string } };
-      }
-    ).props;
+  it("loads slug page through public API", async () => {
+    mockLoadPublicStatusPageData.mockResolvedValue({
+      initialPayload: {
+        rebuildState: "fresh",
+        sourceGeneration: "",
+        generatedAt: "2026-04-22T10:00:00.000Z",
+        freshUntil: "2026-04-22T10:05:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "anthropic",
+            displayName: "Anthropic",
+            explanatoryCopy: "Anthropic public models",
+            models: [],
+          },
+        ],
+      },
+      status: "ready",
+      intervalMinutes: 5,
+      rangeHours: 24,
+      followServerDefaults: true,
+      siteTitle: "Claude Code Hub",
+      timeZone: "UTC",
+      meta: {
+        siteTitle: "Claude Code Hub",
+        siteDescription: "Claude Code Hub public status",
+        timeZone: "UTC",
+      },
+      response: {} as never,
+    });
 
-    expect(props.labels.heroPrimary).toBe("AI SERVICES");
-    expect(props.labels.heroSecondary).toBe("Redis-backed public runtime health overview.");
-    expect(props.labels.fresh).toBe("Fresh");
+    const mod = await import("@/app/[locale]/status/[slug]/page");
+
+    const element = await mod.default({
+      params: Promise.resolve({ locale: "en", slug: "anthropic" }),
+    });
+
+    expect(mockLoadPublicStatusPageData).toHaveBeenCalledWith({ groupSlug: "anthropic" });
+    expect((element as { props: { filterSlug: string } }).props).toMatchObject({
+      filterSlug: "anthropic",
+    });
   });
 });

@@ -35,7 +35,10 @@ export function listStaticImports(source: string): string[] {
   const sideEffectMatches = [...source.matchAll(/import\\s+["']([^"']+)["']/g)].map(
     (match) => match[1]
   );
-  return Array.from(new Set([...fromMatches, ...sideEffectMatches]));
+  const dynamicMatches = [...source.matchAll(/import\\(\\s*["']([^"']+)["']\\s*\\)/g)].map(
+    (match) => match[1]
+  );
+  return Array.from(new Set([...fromMatches, ...sideEffectMatches, ...dynamicMatches]));
 }
 
 export function createForbiddenCallSpy(label: string) {

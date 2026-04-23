@@ -19,6 +19,11 @@ import { Activity } from "lucide-react";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { PublicStatusPayload } from "@/lib/public-status/payload";
+import {
+  type PublicStatusRouteResponse,
+  type PublicStatusRouteStatus,
+  toPublicStatusPayload,
+} from "@/lib/public-status/public-api-contract";
 import { getPublicStatusVendorIconComponent } from "@/lib/public-status/vendor-icon";
 import { cn } from "@/lib/utils";
 import { type DisplayState, deriveLatestModelState } from "../_lib/derive-display-state";
@@ -46,6 +51,7 @@ import { StatusToolbar } from "./status-toolbar";
 
 interface PublicStatusViewProps {
   initialPayload: PublicStatusPayload;
+  initialStatus?: PublicStatusRouteStatus;
   intervalMinutes: number;
   rangeHours: number;
   followServerDefaults?: boolean;
@@ -66,6 +72,7 @@ interface PublicStatusViewProps {
     stale: string;
     staleDetail: string;
     rebuilding: string;
+    noSnapshot: string;
     noData: string;
     emptyDescription: string;
     requestTypes: Record<string, string>;
@@ -92,6 +99,19 @@ interface PublicStatusViewProps {
     toggleGroup: string;
     openGroupPage: string;
   };
+}
+
+function inferRouteStatus(payload: PublicStatusPayload): PublicStatusRouteStatus {
+  if (payload.rebuildState === "fresh") {
+    return "ready";
+  }
+  if (payload.rebuildState === "stale") {
+    return "stale";
+  }
+  if (payload.rebuildState === "no-data") {
+    return "no_data";
+  }
+  return payload.generatedAt ? "stale" : "rebuilding";
 }
 
 function badgeVariant(state: DisplayState): {
@@ -133,6 +153,7 @@ function aggregateByFailed(states: DisplayState[]): DisplayState {
 
 export function PublicStatusView({
   initialPayload,
+  initialStatus,
   intervalMinutes,
   rangeHours,
   followServerDefaults = false,
@@ -143,6 +164,9 @@ export function PublicStatusView({
   labels,
 }: PublicStatusViewProps) {
   const [payload, setPayload] = useState(initialPayload);
+  const [routeStatus, setRouteStatus] = useState<PublicStatusRouteStatus>(
+    initialStatus ?? inferRouteStatus(initialPayload)
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [customSort, setCustomSort] = useState(false);
   const [orderHydrated, setOrderHydrated] = useState(false);
@@ -152,19 +176,28 @@ export function PublicStatusView({
   useEffect(() => {
     const refresh = async () => {
       try {
-        const response = await fetch(
-          followServerDefaults
-            ? "/api/public-status"
-            : `/api/public-status?interval=${intervalMinutes}&rangeHours=${rangeHours}`,
-          { cache: "no-store" }
-        );
-        if (!response.ok) return;
-        const next = (await response.json()) as PublicStatusPayload;
+        const params = new URLSearchParams();
+        if (!followServerDefaults) {
+          params.set("interval", String(intervalMinutes));
+          params.set("rangeHours", String(rangeHours));
+        }
+        if (filterSlug) {
+          params.set("groupSlug", filterSlug);
+        }
+        const requestUrl =
+          params.size > 0 ? `/api/public-status?${params.toString()}` : "/api/public-status";
+        const response = await fetch(requestUrl, { cache: "no-store" });
+        if (response.status !== 200 && response.status !== 503) return;
+        const nextResponse = (await response.json()) as PublicStatusRouteResponse;
+        const next = toPublicStatusPayload(nextResponse);
         // 单分组页面(/status/[slug]):每次轮询后仍只保留目标分组,避免刷新后展开成全站视图
         const scoped = filterSlug
           ? { ...next, groups: next.groups.filter((g) => g.publicGroupSlug === filterSlug) }
           : next;
-        startTransition(() => setPayload(scoped));
+        startTransition(() => {
+          setPayload(scoped);
+          setRouteStatus(nextResponse.status);
+        });
       } catch {
         // keep last payload until next tick
       }
@@ -287,9 +320,28 @@ export function PublicStatusView({
   };
 
   if (payload.groups.length === 0) {
+    const emptyHeadline =
+      routeStatus === "rebuilding"
+        ? labels.rebuilding
+        : routeStatus === "no_snapshot"
+          ? labels.noSnapshot
+          : routeStatus === "stale"
+            ? labels.staleDetail
+            : labels.noData;
+
     return (
-      <div className="cch-status-bg relative flex min-h-screen items-center justify-center text-foreground">
-        <Activity className="size-16 text-muted-foreground/50" aria-hidden="true" />
+      <div className="cch-status-bg relative flex min-h-screen items-center justify-center px-4 text-foreground">
+        <div className="flex max-w-lg flex-col items-center gap-4 rounded-3xl border border-border/60 bg-background/60 px-8 py-10 text-center backdrop-blur-sm">
+          <Activity className="size-16 text-muted-foreground/50" aria-hidden="true" />
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              {labels.systemStatus}
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight">{siteTitle}</h1>
+            <p className="text-base font-medium text-foreground">{emptyHeadline}</p>
+            <p className="text-sm text-muted-foreground">{labels.emptyDescription}</p>
+          </div>
+        </div>
       </div>
     );
   }

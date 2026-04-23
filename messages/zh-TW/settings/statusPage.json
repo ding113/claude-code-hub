@@ -57,6 +57,7 @@
     "stale": "陳舊",
     "staleDetail": "目前仍顯示最近一次完成的快照，新的刷新尚未完成。",
     "rebuilding": "重建中",
+    "noSnapshot": "暫無快照",
     "emptyDescription": "我們正在為此頁面準備第一份公開快照。",
     "past": "過去",
     "now": "現在",

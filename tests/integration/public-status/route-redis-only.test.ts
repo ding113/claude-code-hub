@@ -21,22 +21,32 @@ describe("GET /api/public-status", () => {
     vi.clearAllMocks();
   });
 
-  it("returns 503 with rebuilding payload when snapshot is missing", async () => {
+  it("returns 200 with an explicit no-snapshot body when snapshot is missing", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue(null);
-    mockReadPublicStatusPayload.mockResolvedValue({
-      rebuildState: "rebuilding",
-      sourceGeneration: "",
-      generatedAt: null,
-      freshUntil: null,
-      groups: [],
-    });
+    mockReadPublicStatusPayload.mockImplementation(
+      async ({ triggerRebuildHint }: { triggerRebuildHint: (reason: string) => Promise<void> }) => {
+        await triggerRebuildHint("manifest-missing");
+        return {
+          rebuildState: "rebuilding",
+          sourceGeneration: "",
+          generatedAt: null,
+          freshUntil: null,
+          groups: [],
+        };
+      }
+    );
 
     const { GET } = await import("@/app/api/public-status/route");
     const response = await GET(new Request("http://localhost/api/public-status"));
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      rebuildState: "rebuilding",
+      status: "no_snapshot",
+      rebuildState: {
+        state: "rebuilding",
+        hasSnapshot: false,
+        reason: null,
+      },
       groups: [],
     });
   });
@@ -62,8 +72,16 @@ describe("GET /api/public-status", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      rebuildState: "fresh",
-      sourceGeneration: "gen-1",
+      status: "ready",
+      rebuildState: {
+        state: "fresh",
+        hasSnapshot: true,
+        reason: null,
+      },
+      defaults: {
+        intervalMinutes: 5,
+        rangeHours: 24,
+      },
     });
   });
 
@@ -96,8 +114,12 @@ describe("GET /api/public-status", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      rebuildState: "stale",
-      sourceGeneration: "gen-stale",
+      status: "stale",
+      rebuildState: {
+        state: "stale",
+        hasSnapshot: true,
+        reason: null,
+      },
     });
     expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
       intervalMinutes: 5,
@@ -126,7 +148,12 @@ describe("GET /api/public-status", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      rebuildState: "no-data",
+      status: "no_data",
+      rebuildState: {
+        state: "no-data",
+        hasSnapshot: false,
+        reason: null,
+      },
       groups: [],
     });
     expect(mockReadPublicStatusPayload).toHaveBeenCalledWith(
@@ -137,7 +164,7 @@ describe("GET /api/public-status", () => {
     expect(mockSchedulePublicStatusRebuild).not.toHaveBeenCalled();
   });
 
-  it("queues rebuilds for non-default public queries when wider data is missing", async () => {
+  it("returns 200 no-snapshot for non-default public queries when wider data is missing", async () => {
     mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       configVersion: "cfg-1",
       defaultIntervalMinutes: 5,
@@ -162,11 +189,46 @@ describe("GET /api/public-status", () => {
       new Request("http://localhost/api/public-status?interval=15&rangeHours=48")
     );
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "no_snapshot",
+      rebuildState: {
+        state: "rebuilding",
+        hasSnapshot: false,
+        reason: null,
+      },
+    });
     expect(mockSchedulePublicStatusRebuild).toHaveBeenCalledWith({
       intervalMinutes: 15,
       rangeHours: 48,
       reason: "manifest-missing",
     });
+  });
+
+  it("returns no-store for rebuilding 503 responses", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [{ slug: "openai" }],
+    });
+    mockReadPublicStatusPayload.mockImplementation(
+      async ({ triggerRebuildHint }: { triggerRebuildHint: (reason: string) => Promise<void> }) => {
+        await triggerRebuildHint("redis-unavailable");
+        return {
+          rebuildState: "rebuilding",
+          sourceGeneration: "",
+          generatedAt: null,
+          freshUntil: null,
+          groups: [],
+        };
+      }
+    );
+
+    const { GET } = await import("@/app/api/public-status/route");
+    const response = await GET(new Request("http://localhost/api/public-status"));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 });

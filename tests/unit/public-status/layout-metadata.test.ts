@@ -1,25 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { importPublicStatusModule } from "../../helpers/public-status-test-helpers";
 
-vi.mock("@/lib/public-status/config-snapshot", () => ({
-  readPublicStatusSiteMetadata: vi.fn(),
-  readPublicStatusTimeZone: vi.fn(),
+const mockLoadPublicSiteMeta = vi.hoisted(() => vi.fn());
+const mockGetSystemSettings = vi.hoisted(() => vi.fn());
+const mockResolveSystemTimezone = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/public-status/public-api-loader", () => ({
+  loadPublicSiteMeta: mockLoadPublicSiteMeta,
 }));
 
 vi.mock("@/repository/system-config", () => ({
-  getSystemSettings: vi.fn(),
+  getSystemSettings: mockGetSystemSettings,
 }));
 
 vi.mock("@/lib/utils/timezone", () => ({
-  resolveSystemTimezone: vi.fn(),
+  resolveSystemTimezone: mockResolveSystemTimezone,
 }));
 
 interface LayoutMetadataModule {
-  resolveSiteMetadataSource(input: { isPublicStatusRequest: boolean }): Promise<{
+  resolveSiteMetadataSource(): Promise<{
     siteTitle: string;
     siteDescription: string;
   } | null>;
-  resolveLayoutTimeZone(input: { isPublicStatusRequest: boolean }): Promise<string>;
+  resolveLayoutTimeZone(): Promise<string>;
 }
 
 describe("public-status layout metadata", () => {
@@ -28,39 +31,60 @@ describe("public-status layout metadata", () => {
     vi.resetModules();
   });
 
-  it("reads site metadata from the redis projection for public status requests", async () => {
-    const { readPublicStatusSiteMetadata } = await import("@/lib/public-status/config-snapshot");
-    vi.mocked(readPublicStatusSiteMetadata).mockResolvedValue({
+  it("reads site metadata from the public site meta loader for public status requests", async () => {
+    mockLoadPublicSiteMeta.mockResolvedValue({
+      available: true,
       siteTitle: "Claude Code Hub Status",
-      siteDescription: "Redis-only public status",
+      siteDescription: "Projection-only public status",
+      timeZone: "UTC",
+      source: "projection",
     });
 
     const mod = await importPublicStatusModule<LayoutMetadataModule>(
       "@/lib/public-status/layout-metadata"
     );
 
-    await expect(mod.resolveSiteMetadataSource({ isPublicStatusRequest: true })).resolves.toEqual({
+    await expect(mod.resolveSiteMetadataSource()).resolves.toEqual({
       siteTitle: "Claude Code Hub Status",
-      siteDescription: "Redis-only public status",
+      siteDescription: "Projection-only public status",
     });
 
-    const { getSystemSettings } = await import("@/repository/system-config");
-    expect(vi.mocked(getSystemSettings)).not.toHaveBeenCalled();
+    expect(mockGetSystemSettings).not.toHaveBeenCalled();
   });
 
-  it("reads timezone from the redis projection for public status requests", async () => {
-    const { readPublicStatusTimeZone } = await import("@/lib/public-status/config-snapshot");
-    vi.mocked(readPublicStatusTimeZone).mockResolvedValue("Asia/Shanghai");
+  it("falls back to null metadata when the projection is unavailable", async () => {
+    mockLoadPublicSiteMeta.mockResolvedValue({
+      available: false,
+      siteTitle: null,
+      siteDescription: null,
+      timeZone: null,
+      source: "projection",
+      reason: "projection_missing",
+    });
 
     const mod = await importPublicStatusModule<LayoutMetadataModule>(
       "@/lib/public-status/layout-metadata"
     );
 
-    await expect(mod.resolveLayoutTimeZone({ isPublicStatusRequest: true })).resolves.toBe(
-      "Asia/Shanghai"
+    await expect(mod.resolveSiteMetadataSource()).resolves.toBeNull();
+    expect(mockGetSystemSettings).not.toHaveBeenCalled();
+  });
+
+  it("reads timezone from the public site meta loader for public status requests", async () => {
+    mockLoadPublicSiteMeta.mockResolvedValue({
+      available: true,
+      siteTitle: "Claude Code Hub Status",
+      siteDescription: "Projection-only public status",
+      timeZone: "Asia/Shanghai",
+      source: "projection",
+    });
+
+    const mod = await importPublicStatusModule<LayoutMetadataModule>(
+      "@/lib/public-status/layout-metadata"
     );
 
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
-    expect(vi.mocked(resolveSystemTimezone)).not.toHaveBeenCalled();
+    await expect(mod.resolveLayoutTimeZone()).resolves.toBe("Asia/Shanghai");
+
+    expect(mockResolveSystemTimezone).not.toHaveBeenCalled();
   });
 });

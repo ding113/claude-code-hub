@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 
-const mockReadPublicSiteMeta = vi.hoisted(() => vi.fn());
+const mockReadCurrentPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
+const mockResolvePublicStatusSiteDescription = vi.hoisted(() => vi.fn());
+const mockGetSystemSettings = vi.hoisted(() => vi.fn());
 const mockLoggerError = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/public-site-meta", () => ({
-  readPublicSiteMeta: mockReadPublicSiteMeta,
+vi.mock("@/lib/public-status/config-snapshot", () => ({
+  readCurrentPublicStatusConfigSnapshot: mockReadCurrentPublicStatusConfigSnapshot,
+  resolvePublicStatusSiteDescription: mockResolvePublicStatusSiteDescription,
+}));
+
+vi.mock("@/repository/system-config", () => ({
+  getSystemSettings: mockGetSystemSettings,
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -20,15 +26,25 @@ describe("GET /api/public-site-meta", () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
+    mockResolvePublicStatusSiteDescription.mockImplementation(
+      ({
+        siteTitle,
+        siteDescription,
+      }: {
+        siteTitle?: string | null;
+        siteDescription?: string | null;
+      }) => siteDescription?.trim() || `${siteTitle ?? "Claude Code Hub"} public status`
+    );
 
     const mod = await import("@/app/api/public-site-meta/route");
     GET = mod.GET;
   });
 
-  it("returns public branding metadata with cache headers", async () => {
-    mockReadPublicSiteMeta.mockResolvedValue({
+  it("returns projected public site metadata", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue({
       siteTitle: "Acme AI Hub",
-      siteDescription: "Acme AI Hub public status",
+      siteDescription: "Projected public status",
+      timeZone: "Asia/Shanghai",
     });
 
     const res = await GET();
@@ -36,22 +52,45 @@ describe("GET /api/public-site-meta", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("public, max-age=30, stale-while-revalidate=60");
     await expect(res.json()).resolves.toEqual({
+      available: true,
       siteTitle: "Acme AI Hub",
-      siteDescription: "Acme AI Hub public status",
+      siteDescription: "Projected public status",
+      timeZone: "Asia/Shanghai",
+      source: "projection",
     });
+    expect(mockGetSystemSettings).not.toHaveBeenCalled();
   });
 
-  it("logs and falls back to default metadata when the read fails", async () => {
+  it("does not fallback when projection is missing", async () => {
+    mockReadCurrentPublicStatusConfigSnapshot.mockResolvedValue(null);
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    await expect(res.json()).resolves.toEqual({
+      available: false,
+      siteTitle: null,
+      siteDescription: null,
+      timeZone: null,
+      source: "projection",
+      reason: "projection_missing",
+    });
+    expect(mockGetSystemSettings).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 instead of default metadata when the projection read throws", async () => {
     const error = new Error("boom");
-    mockReadPublicSiteMeta.mockRejectedValue(error);
+    mockReadCurrentPublicStatusConfigSnapshot.mockRejectedValue(error);
 
     const res = await GET();
 
     expect(mockLoggerError).toHaveBeenCalledWith("GET /api/public-site-meta failed", { error });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
     await expect(res.json()).resolves.toEqual({
-      siteTitle: DEFAULT_SITE_TITLE,
-      siteDescription: `${DEFAULT_SITE_TITLE} public status`,
+      error: "Public site metadata unavailable",
     });
+    expect(mockGetSystemSettings).not.toHaveBeenCalled();
   });
 });

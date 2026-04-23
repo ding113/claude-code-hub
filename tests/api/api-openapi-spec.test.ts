@@ -52,6 +52,8 @@ type JsonSchemaProperty = {
   properties?: Record<string, JsonSchemaProperty>;
 };
 
+type OpenApiOperation = OpenAPIDocument["paths"][string][string];
+
 function getJsonRequestSchema(
   openApiDoc: OpenAPIDocument,
   path: string
@@ -67,6 +69,14 @@ function getJsonRequestSchema(
     | undefined;
 
   return requestBody?.content?.["application/json"]?.schema;
+}
+
+function getOperation(
+  openApiDoc: OpenAPIDocument,
+  path: string,
+  method: string
+): OpenApiOperation | undefined {
+  return openApiDoc.paths[path]?.[method];
 }
 
 describe("OpenAPI 规范验证", () => {
@@ -120,6 +130,7 @@ describe("OpenAPI 规范验证", () => {
       "统计分析",
       "使用日志",
       "概览",
+      "公开状态",
       "敏感词管理",
       "Session 管理",
       "通知管理",
@@ -201,15 +212,51 @@ describe("OpenAPI 规范验证", () => {
   });
 
   test("应该包含标准错误响应定义", () => {
-    const paths = openApiDoc.paths;
-    const firstPath = Object.values(paths)[0];
-    const firstOperation = Object.values(firstPath)[0];
+    const firstOperation = getOperation(openApiDoc, "/api/actions/users/getUsers", "post");
 
     expect(firstOperation.responses).toBeDefined();
     expect(firstOperation.responses!["200"]).toBeDefined();
     expect(firstOperation.responses!["400"]).toBeDefined();
     expect(firstOperation.responses!["401"]).toBeDefined();
     expect(firstOperation.responses!["500"]).toBeDefined();
+  });
+
+  test("documents public status endpoints", () => {
+    const publicStatusOperation = getOperation(openApiDoc, "/api/public-status", "get");
+    const publicSiteMetaOperation = getOperation(openApiDoc, "/api/public-site-meta", "get");
+
+    expect(publicStatusOperation).toBeDefined();
+    expect(publicStatusOperation?.summary).toBe("读取公开状态投影");
+    expect(publicStatusOperation?.tags).toEqual(["公开状态"]);
+    expect(publicStatusOperation?.security).toEqual([]);
+    expect(publicStatusOperation?.responses?.["200"]).toBeDefined();
+    expect(publicStatusOperation?.responses?.["400"]).toBeDefined();
+    expect(publicStatusOperation?.responses?.["503"]).toBeDefined();
+    expect(publicStatusOperation?.parameters).toBeDefined();
+
+    const parameterNames = (publicStatusOperation?.parameters as Array<{ name?: string }>).map(
+      (parameter) => parameter.name
+    );
+    expect(parameterNames).toEqual(
+      expect.arrayContaining([
+        "interval",
+        "rangeHours",
+        "groupSlug",
+        "groupSlugs",
+        "model",
+        "models",
+        "status",
+        "q",
+        "include",
+      ])
+    );
+
+    expect(publicSiteMetaOperation).toBeDefined();
+    expect(publicSiteMetaOperation?.summary).toBe("读取公开站点元数据投影");
+    expect(publicSiteMetaOperation?.tags).toEqual(["公开状态"]);
+    expect(publicSiteMetaOperation?.security).toEqual([]);
+    expect(publicSiteMetaOperation?.responses?.["200"]).toBeDefined();
+    expect(publicSiteMetaOperation?.responses?.["503"]).toBeDefined();
   });
 
   test("端点数量应该符合预期", () => {
