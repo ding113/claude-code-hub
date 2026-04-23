@@ -44,6 +44,9 @@ export interface SystemSettings {
   // 供应商不可用时是否返回详细错误信息
   verboseProviderError: boolean;
 
+  // 是否在标准代理错误响应中透传安全脱敏后的上游错误 message
+  passThroughUpstreamErrorMessage: boolean;
+
   // 启用 HTTP/2 连接供应商
   enableHttp2: boolean;
 
@@ -132,6 +135,9 @@ export interface UpdateSystemSettingsInput {
 
   // 供应商不可用时是否返回详细错误信息（可选）
   verboseProviderError?: boolean;
+
+  // 是否在标准代理错误响应中透传安全脱敏后的上游错误 message（可选）
+  passThroughUpstreamErrorMessage?: boolean;
 
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2?: boolean;

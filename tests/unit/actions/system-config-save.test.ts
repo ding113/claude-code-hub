@@ -74,6 +74,7 @@ describe("saveSystemSettings", () => {
       cleanupBatchSize: 1000,
       enableClientVersionCheck: false,
       verboseProviderError: false,
+      passThroughUpstreamErrorMessage: true,
       enableHttp2: false,
       enableHighConcurrencyMode: false,
       interceptAnthropicWarmupRequests: false,
@@ -138,6 +139,7 @@ describe("saveSystemSettings", () => {
     const result = await saveSystemSettings({
       siteTitle: "New Site Title",
       verboseProviderError: true,
+      passThroughUpstreamErrorMessage: false,
     });
 
     expect(result.ok).toBe(true);
@@ -145,6 +147,7 @@ describe("saveSystemSettings", () => {
       expect.objectContaining({
         siteTitle: "New Site Title",
         verboseProviderError: true,
+        passThroughUpstreamErrorMessage: false,
       })
     );
   });
@@ -176,6 +179,16 @@ describe("saveSystemSettings", () => {
 
     expect(publishCurrentPublicStatusConfigProjectionMock).not.toHaveBeenCalled();
     expect(schedulePublicStatusRebuildMock).not.toHaveBeenCalled();
+  });
+
+  it("should preserve omission of passThroughUpstreamErrorMessage on partial updates", async () => {
+    await saveSystemSettings({ siteTitle: "No Toggle Change" });
+
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        passThroughUpstreamErrorMessage: false,
+      })
+    );
   });
 
   it("should surface a warning when the public-status projection publish fails", async () => {
@@ -267,6 +280,7 @@ describe("saveSystemSettings", () => {
       cleanupBatchSize: 1000,
       enableClientVersionCheck: false,
       verboseProviderError: true,
+      passThroughUpstreamErrorMessage: false,
       enableHttp2: true,
       enableHighConcurrencyMode: true,
       interceptAnthropicWarmupRequests: false,
@@ -304,6 +318,7 @@ describe("saveSystemSettings", () => {
       codexPriorityBillingSource: "actual",
       timezone: "America/New_York",
       verboseProviderError: true,
+      passThroughUpstreamErrorMessage: false,
       enableHttp2: true,
       enableHighConcurrencyMode: true,
     });

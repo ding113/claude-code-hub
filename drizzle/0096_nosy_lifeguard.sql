@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "pass_through_upstream_error_message" boolean DEFAULT true NOT NULL;

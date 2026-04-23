@@ -46,6 +46,7 @@ const baseSettings = {
   codexPriorityBillingSource: "requested",
   timezone: "UTC",
   verboseProviderError: false,
+  passThroughUpstreamErrorMessage: true,
   enableHttp2: true,
   enableHighConcurrencyMode: false,
   interceptAnthropicWarmupRequests: true,
@@ -78,6 +79,7 @@ const baseSettings = {
   | "codexPriorityBillingSource"
   | "timezone"
   | "verboseProviderError"
+  | "passThroughUpstreamErrorMessage"
   | "enableHttp2"
   | "enableHighConcurrencyMode"
   | "interceptAnthropicWarmupRequests"

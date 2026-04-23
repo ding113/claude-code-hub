@@ -150,6 +150,7 @@ function createFallbackSettings(): SystemSettings {
     cleanupBatchSize: 10000,
     enableClientVersionCheck: false,
     verboseProviderError: false,
+    passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
     enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
@@ -222,6 +223,12 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
+    const selectionWithoutPassThrough = {
+      ...selectionWithoutHighConcurrencyMode,
+      enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+      ipExtractionConfig: systemSettings.ipExtractionConfig,
+      ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
+    };
     const selectionWithoutCodexAndHighConcurrency = {
       id: systemSettings.id,
       siteTitle: systemSettings.siteTitle,
@@ -257,10 +264,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       updatedAt: systemSettings.updatedAt,
     };
     const fullSelection = {
-      ...selectionWithoutHighConcurrencyMode,
-      enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
-      ipExtractionConfig: systemSettings.ipExtractionConfig,
-      ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
+      passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+      ...selectionWithoutPassThrough,
     };
 
     try {
@@ -274,48 +279,64 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         });
 
         try {
-          const [row] = await db
-            .select(selectionWithoutHighConcurrencyMode)
-            .from(systemSettings)
-            .limit(1);
+          const [row] = await db.select(selectionWithoutPassThrough).from(systemSettings).limit(1);
           return row ?? null;
-        } catch (fallbackError) {
-          if (!isUndefinedColumnError(fallbackError)) {
-            throw fallbackError;
+        } catch (passThroughFallbackError) {
+          if (!isUndefinedColumnError(passThroughFallbackError)) {
+            throw passThroughFallbackError;
           }
 
-          logger.warn("system_settings 表存在多个缺失列，继续使用 legacy 字段集读取。", {
-            error: fallbackError,
-          });
+          logger.warn(
+            "system_settings 表缺少 passThroughUpstreamErrorMessage 之外的新列，继续降级读取。",
+            {
+              error: passThroughFallbackError,
+            }
+          );
 
           try {
             const [row] = await db
-              .select(selectionWithoutCodexAndHighConcurrency)
+              .select(selectionWithoutHighConcurrencyMode)
               .from(systemSettings)
               .limit(1);
             return row ?? null;
-          } catch (legacyFallbackError) {
-            if (!isUndefinedColumnError(legacyFallbackError)) {
-              throw legacyFallbackError;
+          } catch (fallbackError) {
+            if (!isUndefinedColumnError(fallbackError)) {
+              throw fallbackError;
             }
 
-            logger.warn("system_settings 表存在更多缺失列，继续使用最小字段集读取。", {
-              error: legacyFallbackError,
+            logger.warn("system_settings 表存在多个缺失列，继续使用 legacy 字段集读取。", {
+              error: fallbackError,
             });
 
-            // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
-            const minimalSelection = {
-              id: systemSettings.id,
-              siteTitle: systemSettings.siteTitle,
-              allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-              currencyDisplay: systemSettings.currencyDisplay,
-              billingModelSource: systemSettings.billingModelSource,
-              createdAt: systemSettings.createdAt,
-              updatedAt: systemSettings.updatedAt,
-            };
+            try {
+              const [row] = await db
+                .select(selectionWithoutCodexAndHighConcurrency)
+                .from(systemSettings)
+                .limit(1);
+              return row ?? null;
+            } catch (legacyFallbackError) {
+              if (!isUndefinedColumnError(legacyFallbackError)) {
+                throw legacyFallbackError;
+              }
 
-            const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
-            return row ?? null;
+              logger.warn("system_settings 表存在更多缺失列，继续使用最小字段集读取。", {
+                error: legacyFallbackError,
+              });
+
+              // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
+              const minimalSelection = {
+                id: systemSettings.id,
+                siteTitle: systemSettings.siteTitle,
+                allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+                currencyDisplay: systemSettings.currencyDisplay,
+                billingModelSource: systemSettings.billingModelSource,
+                createdAt: systemSettings.createdAt,
+                updatedAt: systemSettings.updatedAt,
+              };
+
+              const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
+              return row ?? null;
+            }
           }
         }
       }
@@ -340,6 +361,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           currencyDisplay: "USD",
           billingModelSource: "original",
           codexPriorityBillingSource: "requested",
+          passThroughUpstreamErrorMessage: true,
           enableHighConcurrencyMode: false,
           publicStatusWindowHours: 24,
           publicStatusAggregationIntervalMinutes: 5,
@@ -422,6 +444,12 @@ export async function updateSystemSettings(
     createdAt: systemSettings.createdAt,
     updatedAt: systemSettings.updatedAt,
   };
+  const returningWithoutPassThrough = {
+    ...returningWithoutHighConcurrencyMode,
+    enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+    ipExtractionConfig: systemSettings.ipExtractionConfig,
+    ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
+  };
   const returningWithoutCodexAndHighConcurrency = {
     id: systemSettings.id,
     siteTitle: systemSettings.siteTitle,
@@ -457,10 +485,8 @@ export async function updateSystemSettings(
     updatedAt: systemSettings.updatedAt,
   };
   const fullReturning = {
-    ...returningWithoutHighConcurrencyMode,
-    enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
-    ipExtractionConfig: systemSettings.ipExtractionConfig,
-    ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
+    passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+    ...returningWithoutPassThrough,
   };
 
   try {
@@ -519,6 +545,11 @@ export async function updateSystemSettings(
     // 供应商错误详情配置字段（如果提供）
     if (payload.verboseProviderError !== undefined) {
       updates.verboseProviderError = payload.verboseProviderError;
+    }
+
+    // 上游错误 message 透传开关（如果提供）
+    if (payload.passThroughUpstreamErrorMessage !== undefined) {
+      updates.passThroughUpstreamErrorMessage = payload.passThroughUpstreamErrorMessage;
     }
 
     // HTTP/2 配置字段（如果提供）
@@ -630,32 +661,60 @@ export async function updateSystemSettings(
         error,
       });
 
-      const downgradedUpdates = { ...updates };
-      delete downgradedUpdates.enableHighConcurrencyMode;
-      delete downgradedUpdates.publicStatusWindowHours;
-      delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
-      delete downgradedUpdates.ipExtractionConfig;
-      delete downgradedUpdates.ipGeoLookupEnabled;
-
       try {
+        const withoutPassThroughUpdates = { ...updates };
+        delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
         [updated] = await executor
           .update(systemSettings)
-          .set(downgradedUpdates)
+          .set(withoutPassThroughUpdates)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutHighConcurrencyMode);
-      } catch (fallbackError) {
-        if (!isUndefinedColumnError(fallbackError)) {
-          throw fallbackError;
+          .returning(returningWithoutPassThrough);
+      } catch (passThroughFallbackError) {
+        if (!isUndefinedColumnError(passThroughFallbackError)) {
+          throw passThroughFallbackError;
         }
+
+        const downgradedUpdates = { ...updates };
+        delete downgradedUpdates.passThroughUpstreamErrorMessage;
+        delete downgradedUpdates.enableHighConcurrencyMode;
+        delete downgradedUpdates.publicStatusWindowHours;
+        delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
+        delete downgradedUpdates.ipExtractionConfig;
+        delete downgradedUpdates.ipGeoLookupEnabled;
 
         const legacyUpdates = { ...downgradedUpdates };
         delete legacyUpdates.codexPriorityBillingSource;
 
-        [updated] = await executor
-          .update(systemSettings)
-          .set(legacyUpdates)
-          .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutCodexAndHighConcurrency);
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(downgradedUpdates)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutHighConcurrencyMode);
+        } catch (downgradedFallbackError) {
+          if (!isUndefinedColumnError(downgradedFallbackError)) {
+            throw downgradedFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
+            { error: downgradedFallbackError }
+          );
+
+          [updated] = await executor
+            .update(systemSettings)
+            .set(legacyUpdates)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutCodexAndHighConcurrency);
+        }
+
+        if (!updated) {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(legacyUpdates)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutCodexAndHighConcurrency);
+        }
       }
     }
 

@@ -47,6 +47,7 @@ async function SettingsConfigContent() {
             codexPriorityBillingSource: settings.codexPriorityBillingSource,
             timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
+            passThroughUpstreamErrorMessage: settings.passThroughUpstreamErrorMessage,
             enableHttp2: settings.enableHttp2,
             enableHighConcurrencyMode: settings.enableHighConcurrencyMode,
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
