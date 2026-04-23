@@ -5,6 +5,9 @@ metadata:
   namespace: {{NAMESPACE}}
 spec:
   headers:
+    # Traefik 默认会继续透传 X-Forwarded-For;
+    # 若要让 X-Real-Ip 可信,还需要在 entrypoint 上配置 forwardedHeaders.trustedIPs。
+    # 这里仅补充流式响应所需的响应头,不覆盖源 IP 链。
     customResponseHeaders:
       X-Accel-Buffering: "no"
 ---
@@ -22,6 +25,8 @@ spec:
       middlewares:
         - name: streaming-headers
       services:
+        # 依赖 Traefik 默认透传 X-Forwarded-For;
+        # X-Real-Ip 是否可信取决于 forwardedHeaders.trustedIPs / 等效 trusted proxy 配置。
         - name: claude-code-hub
           port: 80
           passHostHeader: true

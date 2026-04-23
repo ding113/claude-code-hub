@@ -39,6 +39,10 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 
+has_command() {
+    command -v "$1" >/dev/null 2>&1
+}
+
 # 跨平台 base64 decode (macOS BSD 旧版只认 -D)
 b64d() {
     if base64 -d </dev/null >/dev/null 2>&1; then
@@ -54,6 +58,7 @@ b64d() {
 # Defaults
 ###############################################################################
 DEFAULT_NAMESPACE="claude-code-hub"
+# k8s 部署默认跟随 main 分支发布镜像;仅显式传 -b dev 时才切到 :dev。
 DEFAULT_IMAGE="ghcr.io/ding113/claude-code-hub:latest"
 DEFAULT_REPLICAS=2
 DEFAULT_HPA_MIN=2
@@ -129,7 +134,7 @@ Cluster:
 
 Application:
   -i, --image <ref>             应用镜像 (default: ${DEFAULT_IMAGE})
-  -b, --branch <name>           分支捷径 main→:latest / dev→:dev
+  -b, --branch <name>           分支捷径 默认 main→:latest / dev→:dev
   -t, --admin-token <token>     自定义 ADMIN_TOKEN (default: auto-generated)
       --replicas <n>            Deployment 基线副本数 (default: ${DEFAULT_REPLICAS})
       --hpa-min <n>             HPA 最小副本 (default: ${DEFAULT_HPA_MIN})
@@ -281,7 +286,9 @@ detect_runtime() {
             RUNTIME="kubectl"
             KUBECTL="kubectl"
             # 探测当前集群是否是 k3s (观察节点 kubelet version 或 rancher 标识)
-            if kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.kubeletVersion}' 2>/dev/null | grep -q 'k3s'; then
+            local kubelet_versions
+            kubelet_versions="$(kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.kubeletVersion}' 2>/dev/null || echo "")"
+            if [[ "$kubelet_versions" == *"k3s"* ]]; then
                 RUNTIME="k3s"
                 log_info "Runtime: k3s (via kubectl)"
             else
@@ -369,7 +376,7 @@ preflight_checks() {
 resolve_config() {
     NAMESPACE="${NAMESPACE_ARG:-$DEFAULT_NAMESPACE}"
 
-    # 分支捷径
+    # 分支捷径：不传时保持 main/latest 为默认语义
     if [[ -n "$BRANCH_ARG" ]]; then
         case "$BRANCH_ARG" in
             main|master) APP_IMAGE="ghcr.io/ding113/claude-code-hub:latest" ;;
@@ -426,9 +433,17 @@ detect_storage_class() {
     fi
     # 尝试找默认 StorageClass
     local default_sc
-    default_sc=$($KUBECTL get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1)
+    if default_sc=$($KUBECTL get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}' 2>/dev/null); then
+        default_sc="${default_sc%%$'\n'*}"
+    else
+        default_sc=""
+    fi
     if [[ -z "$default_sc" ]]; then
-        default_sc=$($KUBECTL get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.beta\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | head -1)
+        if default_sc=$($KUBECTL get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.beta\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}' 2>/dev/null); then
+            default_sc="${default_sc%%$'\n'*}"
+        else
+            default_sc=""
+        fi
     fi
     if [[ -n "$default_sc" ]]; then
         STORAGE_CLASS="$default_sc"
@@ -464,7 +479,9 @@ detect_ingress_variant() {
     fi
 
     # 标准 Ingress
-    if $KUBECTL api-resources 2>/dev/null | grep -q '^ingresses.*networking.k8s.io'; then
+    local api_resources
+    api_resources="$($KUBECTL api-resources --api-group=networking.k8s.io -o name 2>/dev/null || echo "")"
+    if [[ "$api_resources" == *"ingresses.networking.k8s.io"* ]]; then
         INGRESS_CLASS="${INGRESS_CLASS_ARG:-}"
         if [[ -z "$INGRESS_CLASS" ]]; then
             # 查找 IngressClass
@@ -546,11 +563,26 @@ detect_existing_deployment() {
 ###############################################################################
 generate_random() {
     local length="${1:-32}"
-    if command -v openssl &>/dev/null; then
-        openssl rand -base64 48 | tr -d '=/+' | head -c "$length"
+    local random=""
+    local chunk=""
+    if has_command openssl; then
+        while [[ "${#random}" -lt "$length" ]]; do
+            if ! chunk=$(openssl rand -base64 48 | tr -d '=/+'); then
+                log_error "使用 openssl 生成随机串失败"
+                return 1
+            fi
+            random+="$chunk"
+        done
     else
-        tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length"
+        while [[ "${#random}" -lt "$length" ]]; do
+            if ! chunk=$(LC_ALL=C dd if=/dev/urandom bs=256 count=1 status=none | tr -dc 'A-Za-z0-9'); then
+                log_error "从 /dev/urandom 生成随机串失败"
+                return 1
+            fi
+            random+="$chunk"
+        done
     fi
+    printf '%s' "${random:0:length}"
 }
 
 prepare_secret_values() {
@@ -911,4 +943,6 @@ main() {
     print_success_message
 }
 
-main "$@"
+if [[ "${DEPLOY_K8S_SOURCE_ONLY:-0}" != "1" ]]; then
+    main "$@"
+fi

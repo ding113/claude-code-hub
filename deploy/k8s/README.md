@@ -27,6 +27,18 @@ deploy/k8s/
     └── traefik-ingressroute.yaml      # Traefik IngressRoute 备选 (k3s 默认)
 ```
 
+## 客户端 IP 透传
+
+- `ingress/ingress.yaml` 不默认依赖 `configuration-snippet`; 标准 Ingress 路径要求你在
+  controller 级别打开 forwarded-header / real-ip 配置,避免被
+  `allow-snippet-annotations=false` 的默认安装直接拒绝。
+- 若你还希望应用优先信任 `X-Real-IP`,请先在 ingress controller / 上游 LB 上正确配置
+  trusted proxies / real-ip(`use-forwarded-headers`、`proxy-real-ip-cidr` 等)。
+- `ingress/traefik-ingressroute.yaml` 依赖 Traefik 默认透传 `X-Forwarded-For`;
+  `X-Real-Ip` 是否可信取决于 `forwardedHeaders.trustedIPs` 等 entrypoint 配置。
+- 应用侧的默认提取链仍等价于
+  `{ headers: [{ name: "x-real-ip" }, { name: "x-forwarded-for", pick: "rightmost" }] }`。
+
 ## 占位符参考
 
 | 占位符 | 含义 | 默认值 |
@@ -59,6 +71,7 @@ deploy/k8s/
 
 ```bash
 # 集群侧一键部署 (推荐)
+# 默认等价 main 分支发布镜像 -> ghcr.io/ding113/claude-code-hub:latest
 bash scripts/deploy-k8s.sh -y
 
 # 自定义 namespace / 镜像 / 域名
