@@ -492,6 +492,9 @@ export const messageRequest = pgTable('message_request', {
   // 模型重定向：原始模型名称（用户请求的模型，用于前端显示和计费）
   originalModel: varchar('original_model', { length: 128 }),
 
+  // 上游响应中实际返回的模型名（audit 用途，不影响计费/配额）
+  actualResponseModel: varchar('actual_response_model', { length: 128 }),
+
   // Token 使用信息
   inputTokens: bigint('input_tokens', { mode: 'number' }),
   outputTokens: bigint('output_tokens', { mode: 'number' }),
@@ -955,6 +958,7 @@ export const usageLedger = pgTable('usage_ledger', {
   finalProviderId: integer('final_provider_id').notNull(),
   model: varchar('model', { length: 128 }),
   originalModel: varchar('original_model', { length: 128 }),
+  actualResponseModel: varchar('actual_response_model', { length: 128 }),
   endpoint: varchar('endpoint', { length: 256 }),
   apiType: varchar('api_type', { length: 20 }),
   sessionId: varchar('session_id', { length: 64 }),

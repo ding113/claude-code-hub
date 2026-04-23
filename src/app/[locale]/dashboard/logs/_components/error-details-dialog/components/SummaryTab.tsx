@@ -21,10 +21,12 @@ import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-displa
 import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { extractAnthropicEffortInfo } from "@/lib/utils/anthropic-effort";
 import { formatCurrency } from "@/lib/utils/currency";
+import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
 import {
   getPricingResolutionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
@@ -44,6 +46,7 @@ export function SummaryTab({
   errorMessage,
   originalModel,
   currentModel,
+  actualResponseModel,
   billingModelSource = "original",
   inputTokens,
   outputTokens,
@@ -79,6 +82,14 @@ export function SummaryTab({
   const hideRate = shouldHideOutputRate(outputRate, durationMs, ttfbMs);
   const totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
   const hasRedirect = originalModel && currentModel && originalModel !== currentModel;
+  const modelAudit = resolveModelAuditDisplay({
+    originalModel: originalModel ?? null,
+    model: currentModel ?? null,
+    actualResponseModel: actualResponseModel ?? null,
+    billingModelSource,
+  });
+  const hasAnyModel =
+    Boolean(modelAudit.effectiveRequestModel) || Boolean(modelAudit.secondaryActualModel);
   const specialSettingsContent =
     specialSettings && specialSettings.length > 0 ? JSON.stringify(specialSettings, null, 2) : null;
   const pricingResolution = getPricingResolutionSpecialSetting(specialSettings);
@@ -611,6 +622,59 @@ export function SummaryTab({
             <pre className="text-xs whitespace-pre-wrap break-words font-mono">
               {specialSettingsContent}
             </pre>
+          </div>
+        </div>
+      )}
+
+      {/* Request / Actual Response Model (audit) */}
+      {hasAnyModel && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-slate-600" />
+            {t("modelAudit.unifiedLabel")}
+            {modelAudit.hasActualMismatch && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center cursor-help text-muted-foreground">
+                      <InfoIcon className="h-3.5 w-3.5" aria-hidden />
+                      <span className="sr-only">{t("modelAudit.mismatchTooltip")}</span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs max-w-xs">{t("modelAudit.mismatchTooltip")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </h4>
+          <div className="rounded-lg border bg-card p-3">
+            {modelAudit.dialogShowsSplitFields ? (
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground min-w-[6rem]">
+                    {t("modelAudit.requestModelLabel")}
+                  </span>
+                  <code className="px-1.5 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
+                    {modelAudit.effectiveRequestModel}
+                  </code>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground min-w-[6rem]">
+                    {t("modelAudit.responseModelLabel")}
+                  </span>
+                  <code className="px-1.5 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
+                    {modelAudit.secondaryActualModel}
+                  </code>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-2 text-sm">
+                <code className="px-1.5 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
+                  {modelAudit.effectiveRequestModel ?? "-"}
+                </code>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -227,13 +227,17 @@ export class GeminiAdapter {
         }
       : undefined;
 
+    // 从上游 Gemini 响应抓取真实模型版本;缺失时退回 placeholder,保持历史行为
+    const resolvedModel =
+      actualResponse.modelVersion || actualResponse.model_version || "gemini-model";
+
     if (isStream) {
       // Return a chunk structure
       return {
         id: `chatcmpl-${Date.now()}`,
         object: "chat.completion.chunk",
         created: Math.floor(Date.now() / 1000),
-        model: "gemini-model", // Placeholder
+        model: resolvedModel,
         choices: [
           {
             index: 0,
@@ -248,7 +252,7 @@ export class GeminiAdapter {
         id: `chatcmpl-${Date.now()}`,
         object: "chat.completion",
         created: Math.floor(Date.now() / 1000),
-        model: "gemini-model",
+        model: resolvedModel,
         choices: [
           {
             index: 0,

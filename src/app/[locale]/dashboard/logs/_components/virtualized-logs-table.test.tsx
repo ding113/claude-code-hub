@@ -125,6 +125,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     providerName: "p",
     model: "m",
     originalModel: null,
+    actualResponseModel: null,
     endpoint: "/v1/messages",
     statusCode: 200,
     inputTokens: 1,

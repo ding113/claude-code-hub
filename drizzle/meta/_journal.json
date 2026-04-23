@@ -680,6 +680,13 @@
       "when": 1776930506029,
       "tag": "0096_nosy_lifeguard",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1776965161942,
+      "tag": "0097_flaky_bishop",
+      "breakpoints": true
     }
   ]
 }

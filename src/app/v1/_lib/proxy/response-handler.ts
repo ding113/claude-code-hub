@@ -38,6 +38,7 @@ import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
+import { extractActualResponseModelForProvider } from "./actual-response-model";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
@@ -971,7 +972,9 @@ export class ProxyResponseHandler {
               responseText,
               statusCode,
               duration,
-              errorMessageForFinalize
+              errorMessageForFinalize,
+              undefined,
+              false // Gemini 非流式透传
             );
 
             emitLangfuseTrace(session, {
@@ -1347,6 +1350,11 @@ export class ProxyResponseHandler {
             cacheTtlApplied: usageMetrics?.cache_ttl ?? null,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+            actualResponseModel: extractActualResponseModelForProvider(
+              provider.providerType,
+              false,
+              responseText
+            ),
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
             swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
@@ -1855,7 +1863,8 @@ export class ProxyResponseHandler {
               finalized.effectiveStatusCode,
               duration,
               finalized.errorMessage ?? undefined,
-              finalized.providerIdForPersistence ?? undefined
+              finalized.providerIdForPersistence ?? undefined,
+              true // Gemini 流式透传(NDJSON 无 data:/event: 前缀,必须显式告知)
             );
 
             emitLangfuseTrace(session, {
@@ -1919,7 +1928,8 @@ export class ProxyResponseHandler {
                 finalized.effectiveStatusCode,
                 duration,
                 finalized.errorMessage ?? abortReason,
-                finalized.providerIdForPersistence ?? undefined
+                finalized.providerIdForPersistence ?? undefined,
+                true // 流式透传错误兜底也是流式上下文
               );
             } catch (finalizeError) {
               await persistRequestFailure({
@@ -2416,6 +2426,11 @@ export class ProxyResponseHandler {
           providerChain: session.getProviderChain(),
           ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
           model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+          actualResponseModel: extractActualResponseModelForProvider(
+            provider.providerType,
+            true,
+            allContent
+          ),
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
           swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
@@ -3535,12 +3550,20 @@ export async function finalizeRequestStats(
   statusCode: number,
   duration: number,
   errorMessage?: string,
-  providerIdOverride?: number
+  providerIdOverride?: number,
+  /**
+   * 是否流式上下文。调用方已知时必须显式传入:
+   * - Gemini 透传 NDJSON 没有 `data:`/`event:` 头,isSSEText() 会判成非流式,
+   *   导致 extractActualResponseModelForProvider 走 non-stream JSON.parse 失败
+   * - 如果不传则回退为 isSSEText 嗅探(仅兼容保留)
+   */
+  isStreaming?: boolean
 ): Promise<UsageMetrics | null> {
   const { messageContext, provider } = session;
   if (!provider || !messageContext) {
     return null;
   }
+  const resolvedIsStream = isStreaming ?? isSSEText(responseText);
 
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
   const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
@@ -3558,6 +3581,11 @@ export async function finalizeRequestStats(
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
+      actualResponseModel: extractActualResponseModelForProvider(
+        provider.providerType,
+        resolvedIsStream,
+        responseText
+      ),
       providerId: providerIdForPersistence,
       context1mApplied: session.getContext1mApplied(),
       swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
@@ -3662,6 +3690,11 @@ export async function finalizeRequestStats(
     providerChain: session.getProviderChain(),
     ...(errorMessage ? { errorMessage } : {}),
     model: session.getCurrentModel() ?? undefined,
+    actualResponseModel: extractActualResponseModelForProvider(
+      provider.providerType,
+      resolvedIsStream,
+      responseText
+    ),
     providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
     swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,

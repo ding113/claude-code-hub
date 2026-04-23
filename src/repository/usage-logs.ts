@@ -46,6 +46,7 @@ export interface UsageLogRow {
   providerName: string | null; // 改为可选：被拦截的请求没有 provider
   model: string | null;
   originalModel: string | null; // 原始模型（重定向前）
+  actualResponseModel: string | null; // 上游响应实际返回的模型名(audit)
   endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
@@ -181,6 +182,7 @@ export async function findUsageLogsBatch(
       providerName: providers.name,
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
+      actualResponseModel: messageRequest.actualResponseModel,
       endpoint: messageRequest.endpoint,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
@@ -335,6 +337,7 @@ export async function findUsageLogsBatch(
       providerName: providers.name,
       model: usageLedger.model,
       originalModel: usageLedger.originalModel,
+      actualResponseModel: usageLedger.actualResponseModel,
       endpoint: usageLedger.endpoint,
       statusCode: usageLedger.statusCode,
       inputTokens: usageLedger.inputTokens,
@@ -387,6 +390,7 @@ export async function findUsageLogsBatch(
       providerName: row.providerName,
       model: row.model,
       originalModel: row.originalModel,
+      actualResponseModel: row.actualResponseModel,
       endpoint: row.endpoint,
       statusCode: row.statusCode,
       inputTokens: row.inputTokens,
@@ -446,6 +450,7 @@ interface UsageLogSlimRow {
   createdAt: Date | null;
   model: string | null;
   originalModel: string | null;
+  actualResponseModel: string | null;
   endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
@@ -577,6 +582,7 @@ function mapUsageLogSlimRow(row: {
   createdAt: Date | null;
   model: string | null;
   originalModel: string | null;
+  actualResponseModel: string | null;
   endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
@@ -726,6 +732,7 @@ async function selectKeyScopedMessageSlimRows(
       createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
+      actualResponseModel: messageRequest.actualResponseModel,
       endpoint: messageRequest.endpoint,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
@@ -769,6 +776,7 @@ async function selectKeyScopedLedgerSlimRows(
       createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       model: usageLedger.model,
       originalModel: usageLedger.originalModel,
+      actualResponseModel: usageLedger.actualResponseModel,
       endpoint: usageLedger.endpoint,
       statusCode: usageLedger.statusCode,
       inputTokens: usageLedger.inputTokens,
@@ -793,6 +801,7 @@ async function selectKeyScopedLedgerSlimRows(
     createdAtRaw: row.createdAtRaw,
     model: row.model,
     originalModel: row.originalModel,
+    actualResponseModel: row.actualResponseModel,
     endpoint: row.endpoint,
     statusCode: row.statusCode,
     inputTokens: row.inputTokens,
@@ -898,6 +907,7 @@ function mapUsageLogRowFromMessageResult(row: {
   providerName: string | null;
   model: string | null;
   originalModel: string | null;
+  actualResponseModel: string | null;
   endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
@@ -965,6 +975,7 @@ function mapUsageLogRowFromLedgerResult(row: {
   providerName: string | null;
   model: string | null;
   originalModel: string | null;
+  actualResponseModel: string | null;
   endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
@@ -999,6 +1010,7 @@ function mapUsageLogRowFromLedgerResult(row: {
     providerName: row.providerName,
     model: row.model,
     originalModel: row.originalModel,
+    actualResponseModel: row.actualResponseModel,
     endpoint: row.endpoint,
     statusCode: row.statusCode,
     inputTokens: row.inputTokens,
@@ -1052,6 +1064,7 @@ export async function findReadonlyUsageLogsBatchForKey(
         providerName: providers.name,
         model: messageRequest.model,
         originalModel: messageRequest.originalModel,
+        actualResponseModel: messageRequest.actualResponseModel,
         endpoint: messageRequest.endpoint,
         statusCode: messageRequest.statusCode,
         inputTokens: messageRequest.inputTokens,
@@ -1099,6 +1112,7 @@ export async function findReadonlyUsageLogsBatchForKey(
             providerName: providers.name,
             model: usageLedger.model,
             originalModel: usageLedger.originalModel,
+            actualResponseModel: usageLedger.actualResponseModel,
             endpoint: usageLedger.endpoint,
             statusCode: usageLedger.statusCode,
             inputTokens: usageLedger.inputTokens,
@@ -1300,6 +1314,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       providerName: providers.name, // 被拦截的请求为 null
       model: messageRequest.model,
       originalModel: messageRequest.originalModel, // 原始模型（重定向前）
+      actualResponseModel: messageRequest.actualResponseModel, // 实际响应模型（audit）
       endpoint: messageRequest.endpoint,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,

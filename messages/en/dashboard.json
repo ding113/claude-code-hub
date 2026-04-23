@@ -247,6 +247,14 @@
         "billingOriginal": "billing: original",
         "billingRedirected": "billing: redirected"
       },
+      "modelAudit": {
+        "unifiedLabel": "Model",
+        "requestModelLabel": "Request Model",
+        "responseModelLabel": "Actual Response Model",
+        "mismatchTooltip": "The upstream provider returned a different model than the one requested. Billing is still based on the requested model.",
+        "secondaryLineAriaLabel": "Actual response model: {model}",
+        "arrowPrefix": "\u21b3"
+      },
       "errorMessage": "Error Message",
       "fake200ForwardedNotice": "Note: For streaming requests, this failure may be detected only after the stream ends; the response content may already have been forwarded to the client.",
       "fake200DetectedReason": "Detected reason: {reason}",

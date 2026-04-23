@@ -251,6 +251,9 @@ export interface MessageRequest {
   // 模型重定向：原始模型名称（用户请求的模型）
   originalModel?: string;
 
+  // 上游响应中实际返回的模型名（audit 用途，不影响计费）
+  actualResponseModel?: string | null;
+
   // Token 使用信息
   inputTokens?: number;
   outputTokens?: number;
@@ -320,6 +323,9 @@ export interface CreateMessageRequestData {
 
   // 模型重定向：原始模型名称（用户请求的模型）
   original_model?: string;
+
+  // 上游响应中实际返回的模型名（audit 用途，不影响计费）
+  actual_response_model?: string | null;
 
   // Token 使用信息
   input_tokens?: number;

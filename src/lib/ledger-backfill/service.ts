@@ -60,6 +60,7 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
             ) AS final_provider_id,
             mr.model,
             mr.original_model,
+            mr.actual_response_model,
             mr.endpoint,
             mr.api_type,
             mr.session_id,
@@ -101,7 +102,7 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
         inserted_rows AS (
           INSERT INTO usage_ledger (
             request_id, user_id, key, provider_id, final_provider_id,
-            model, original_model, endpoint, api_type, session_id,
+            model, original_model, actual_response_model, endpoint, api_type, session_id,
             status_code, is_success, success_rate_outcome, blocked_by,
             cost_usd, cost_multiplier,
             input_tokens, output_tokens,
@@ -118,6 +119,7 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
             batch.final_provider_id,
             batch.model,
             batch.original_model,
+            batch.actual_response_model,
             batch.endpoint,
             batch.api_type,
             batch.session_id,

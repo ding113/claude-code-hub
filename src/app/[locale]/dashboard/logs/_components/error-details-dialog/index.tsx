@@ -25,6 +25,7 @@ interface ErrorDetailsDialogProps {
   blockedReason?: string | null;
   originalModel?: string | null;
   currentModel?: string | null;
+  actualResponseModel?: string | null;
   userAgent?: string | null;
   clientIp?: string | null;
   messagesCount?: number | null;
@@ -67,6 +68,7 @@ export function ErrorDetailsDialog({
   blockedReason,
   originalModel,
   currentModel,
+  actualResponseModel,
   userAgent,
   clientIp,
   messagesCount,
@@ -214,6 +216,7 @@ export function ErrorDetailsDialog({
     blockedReason,
     originalModel,
     currentModel,
+    actualResponseModel,
     userAgent,
     clientIp,
     messagesCount,
