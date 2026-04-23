@@ -4,7 +4,7 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
@@ -84,9 +84,7 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
     return true;
   }
 
-  const providerTags = providerGroupTag
-    ? parseProviderGroups(providerGroupTag)
-    : [PROVIDER_GROUP.DEFAULT];
+  const providerTags = resolveProviderGroupsWithDefault(providerGroupTag);
 
   return providerTags.some((tag) => groups.includes(tag));
 }

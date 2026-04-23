@@ -402,4 +402,111 @@ describe("public-status view", () => {
 
     unmount();
   });
+
+  it("keeps filterSlug-scoped default group after polling refresh", async () => {
+    vi.useFakeTimers();
+
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      json: async () =>
+        buildRouteResponse({
+          groups: [
+            {
+              publicGroupSlug: "platform",
+              displayName: "Platform",
+              explanatoryCopy: "Default group",
+              models: [
+                {
+                  publicModelKey: "platform-model",
+                  label: "Platform Model",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "operational",
+                  availabilityPct: 99.9,
+                  latestTtfbMs: 420,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+            {
+              publicGroupSlug: "openai",
+              displayName: "OpenAI",
+              explanatoryCopy: "Named group",
+              models: [
+                {
+                  publicModelKey: "openai-model",
+                  label: "OpenAI Model",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "failed",
+                  availabilityPct: 50,
+                  latestTtfbMs: 700,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+          ],
+        }),
+    }));
+    global.fetch = fetchMock as typeof global.fetch;
+
+    const { container, unmount } = render(
+      <PublicStatusView
+        initialPayload={buildPayload({
+          groups: [
+            {
+              publicGroupSlug: "platform",
+              displayName: "Platform",
+              explanatoryCopy: "Default group",
+              models: [
+                {
+                  publicModelKey: "platform-model",
+                  label: "Platform Model",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "operational",
+                  availabilityPct: 99.9,
+                  latestTtfbMs: 420,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+          ],
+        })}
+        initialStatus="ready"
+        intervalMinutes={5}
+        rangeHours={24}
+        followServerDefaults={true}
+        filterSlug="platform"
+        locale="en"
+        timeZone="UTC"
+        labels={buildLabels()}
+        siteTitle="Acme AI Hub"
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/public-status?groupSlug=platform", {
+      cache: "no-store",
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+
+    const text = container.textContent || "";
+    expect(text).toContain("Platform Model");
+    expect(text).not.toContain("OpenAI Model");
+    expect(container.querySelectorAll('[data-testid="sortable-group-panel"]')).toHaveLength(1);
+
+    vi.useRealTimers();
+    unmount();
+  });
 });

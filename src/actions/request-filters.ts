@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import safeRegex from "safe-regex";
 import { getSession } from "@/lib/auth";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { requestFilterEngine } from "@/lib/request-filter-engine";
 import type { FilterMatcher, FilterOperation, InsertOp } from "@/lib/request-filter-types";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import {
   createRequestFilter,
   deleteRequestFilter,
@@ -443,30 +444,31 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
   try {
     const { db } = await import("@/drizzle/db");
     const { providers } = await import("@/drizzle/schema");
-    const { isNull, isNotNull, ne, and } = await import("drizzle-orm");
+    const { isNull } = await import("drizzle-orm");
 
     const result = await db
       .selectDistinct({ groupTag: providers.groupTag })
       .from(providers)
-      .where(
-        and(
-          isNull(providers.deletedAt),
-          and(isNotNull(providers.groupTag), ne(providers.groupTag, ""))
-        )
-      );
+      .where(isNull(providers.deletedAt));
 
-    // Parse comma-separated tags and flatten into unique array
+    // Request-filter 配置面也要能选择 default 组：null/blank provider tags 视为 default。
     const allTags = new Set<string>();
     for (const row of result) {
-      if (row.groupTag) {
-        const tags = parseProviderGroups(row.groupTag);
-        for (const tag of tags) {
-          if (tag) allTags.add(tag);
-        }
+      const tags = resolveProviderGroupsWithDefault(row.groupTag);
+      for (const tag of tags) {
+        if (tag) allTags.add(tag);
       }
     }
 
-    return { ok: true, data: Array.from(allTags).sort() };
+    const sorted = Array.from(allTags).sort();
+    if (!sorted.includes(PROVIDER_GROUP.DEFAULT)) {
+      return { ok: true, data: sorted };
+    }
+
+    return {
+      ok: true,
+      data: [PROVIDER_GROUP.DEFAULT, ...sorted.filter((tag) => tag !== PROVIDER_GROUP.DEFAULT)],
+    };
   } catch (error) {
     logger.error("[RequestFiltersAction] Failed to get distinct group tags", { error });
     return { ok: false, error: "获取 Group Tags 失败" };

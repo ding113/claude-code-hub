@@ -229,6 +229,144 @@ describe("public-status aggregation", () => {
     expect(model?.timeline.some((bucket) => bucket.sampleCount === 1)).toBe(true);
   });
 
+  it("counts null or blank provider-chain group tags inside the default group", () => {
+    const result = buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "default",
+          publicGroupSlug: "platform",
+          displayName: "Platform",
+          explanatoryCopy: "Default group",
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 7,
+          createdAt: "2026-04-21T10:10:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 71,
+              name: "provider-1",
+              groupTag: null,
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+        {
+          id: 8,
+          createdAt: "2026-04-21T10:20:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 81,
+              name: "provider-2",
+              groupTag: "",
+              reason: "retry_failed",
+              statusCode: 500,
+            },
+          ],
+        },
+        {
+          id: 9,
+          createdAt: "2026-04-21T10:30:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 91,
+              name: "provider-3",
+              groupTag: "default",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+        {
+          id: 10,
+          createdAt: "2026-04-21T10:45:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: null,
+        },
+      ],
+    });
+
+    const model = result.groups[0]?.models[0];
+    expect(model?.timeline.reduce((sum, bucket) => sum + bucket.sampleCount, 0)).toBe(3);
+    expect(model?.latestState).toBe("operational");
+  });
+
+  it("does not leak ungrouped traffic into named groups", () => {
+    const result = buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: null,
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 11,
+          createdAt: "2026-04-21T10:10:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 111,
+              name: "provider-1",
+              groupTag: null,
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+        {
+          id: 12,
+          createdAt: "2026-04-21T10:25:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 121,
+              name: "provider-2",
+              groupTag: "openai",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+      ],
+    });
+
+    const model = result.groups[0]?.models[0];
+    expect(model?.timeline.reduce((sum, bucket) => sum + bucket.sampleCount, 0)).toBe(1);
+    expect(model?.latestState).toBe("operational");
+  });
+
   it("ignores informational chain items before an excluded terminal event", () => {
     const result = buildPublicStatusPayloadFromRequests({
       rangeHours: 1,

@@ -46,3 +46,16 @@ export function normalizeProviderGroupTag(value: unknown): string | null {
 export function parseProviderGroups(value: unknown): string[] {
   return splitProviderGroupValue(value);
 }
+
+/**
+ * 仅在明确需要“未分组 provider 也属于 default 组”语义的调用点使用。
+ * 原始解析语义保持不变：空输入仍然由 parseProviderGroups 返回 []。
+ */
+export function resolveProviderGroupsWithDefault(value: unknown): string[] {
+  const groups = parseProviderGroups(value);
+  if (groups.length === 0) {
+    return [PROVIDER_GROUP.DEFAULT];
+  }
+
+  return groups;
+}

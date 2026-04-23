@@ -249,4 +249,57 @@ describe("ProviderGroupTab", () => {
 
     unmount();
   });
+
+  it("default group member list includes null-tag provider", async () => {
+    mockGetProviderGroups.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        {
+          id: 7,
+          name: "default",
+          costMultiplier: 1,
+          description: null,
+          providerCount: 2,
+        },
+      ],
+    });
+
+    const providers = [
+      makeProvider({ id: 1, name: "Ungrouped Provider", groupTag: null, groupPriorities: null }),
+      makeProvider({
+        id: 2,
+        name: "Explicit Default Provider",
+        groupTag: "default",
+        groupPriorities: { default: 1 },
+      }),
+      makeProvider({
+        id: 3,
+        name: "Premium Provider",
+        groupTag: "premium",
+        groupPriorities: { premium: 1 },
+      }),
+    ];
+
+    const { container, unmount } = render(
+      <ProviderGroupTab providers={providers} isAdmin={true} onRequestEditProvider={() => {}} />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const expandButton = container.querySelector('button[aria-label="groupMembers"]');
+    expect(expandButton).toBeTruthy();
+
+    act(() => {
+      expandButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const text = container.textContent || "";
+    expect(text).toContain("Ungrouped Provider");
+    expect(text).toContain("Explicit Default Provider");
+    expect(text).not.toContain("Premium Provider");
+
+    unmount();
+  });
 });

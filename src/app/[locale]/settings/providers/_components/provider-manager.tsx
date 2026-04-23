@@ -27,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
 import {
@@ -158,18 +158,14 @@ export function ProviderManager({
     const groups = new Set<string>();
     let hasDefaultGroup = false;
     providers.forEach((p) => {
-      const tags = parseProviderGroups(p.groupTag);
-      if (!tags || tags.length === 0) {
-        hasDefaultGroup = true;
-      } else {
-        tags.forEach((g) => {
-          if (g === "default") {
-            hasDefaultGroup = true;
-          } else {
-            groups.add(g);
-          }
-        });
-      }
+      const tags = resolveProviderGroupsWithDefault(p.groupTag);
+      tags.forEach((g) => {
+        if (g === "default") {
+          hasDefaultGroup = true;
+        } else {
+          groups.add(g);
+        }
+      });
     });
 
     // Sort groups: "default" first, then alphabetically
@@ -217,13 +213,7 @@ export function ProviderManager({
     // Filter by groups
     if (groupFilter.length > 0) {
       result = result.filter((p) => {
-        const providerGroups = parseProviderGroups(p.groupTag);
-
-        // If provider has no groups and "default" is selected, include it
-        if (providerGroups.length === 0 && groupFilter.includes("default")) {
-          return true;
-        }
-
+        const providerGroups = resolveProviderGroupsWithDefault(p.groupTag);
         return groupFilter.some((g) => providerGroups.includes(g));
       });
     }
@@ -347,8 +337,8 @@ export function ProviderManager({
       setSelectedProviderIds((prev) => {
         const next = new Set(prev);
         for (const p of filteredProviders) {
-          const tags = parseProviderGroups(p.groupTag);
-          if (tags.includes(group) || (group === "default" && tags.length === 0)) {
+          const tags = resolveProviderGroupsWithDefault(p.groupTag);
+          if (tags.includes(group)) {
             next.add(p.id);
           }
         }

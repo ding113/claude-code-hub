@@ -5,7 +5,7 @@ import {
   classifyProviderChainItemOutcome,
   resolveSuccessRateModelKey,
 } from "@/lib/request-outcome";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import type { ProviderChainItem } from "@/types/message";
 import type { InternalPublicStatusConfigSnapshot } from "./config-snapshot";
@@ -295,10 +295,8 @@ export function buildPublicStatusPayloadFromRequests(input: {
 
     const groupOutcome = new Map<string, "success" | "failure" | "excluded">();
     for (const item of request.providerChain ?? []) {
-      const itemGroups = Array.from(new Set(parseProviderGroups(item.groupTag)));
-      if (itemGroups.length === 0) {
-        continue;
-      }
+      // public status 只在存在 chain item 时，把空 groupTag 视为 default 归因。
+      const itemGroups = Array.from(new Set(resolveProviderGroupsWithDefault(item.groupTag)));
 
       const outcome = classifyProviderChainItemOutcome({
         statusCode: item.statusCode ?? undefined,

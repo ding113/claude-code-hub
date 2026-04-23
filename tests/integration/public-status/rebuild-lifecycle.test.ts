@@ -24,4 +24,18 @@ describe("public-status rebuild lifecycle", () => {
     expect(result.rebuildState).toBe("rebuilding");
     expect(mockRedisSet).toHaveBeenCalledTimes(1);
   });
+
+  it("persists a rebuild hint for default-group refresh reasons", async () => {
+    const mod = await import("@/lib/public-status/rebuild-hints");
+
+    const result = await mod.schedulePublicStatusRebuild({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "default-group-refresh",
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(result.rebuildState).toBe("rebuilding");
+    expect(mockRedisSet).toHaveBeenCalledTimes(1);
+  });
 });

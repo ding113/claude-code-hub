@@ -59,6 +59,8 @@ describe("provider-group bootstrap", () => {
       findAllProviderGroups: async () => currentGroups,
       findAllProvidersFresh: async () => [
         { groupTag: null },
+        { groupTag: "   " },
+        { groupTag: "default" },
         { groupTag: "openai,premium" },
         { groupTag: "premium" },
       ],
@@ -80,7 +82,7 @@ describe("provider-group bootstrap", () => {
 
     expect(ensureProviderGroupsExist).toHaveBeenCalledWith(["premium"]);
     expect(result.groups.map((group) => group.name)).toEqual(["default", "openai", "premium"]);
-    expect(result.groupCounts.get("default")).toBe(1);
+    expect(result.groupCounts.get("default")).toBe(3);
     expect(result.groupCounts.get("openai")).toBe(1);
     expect(result.groupCounts.get("premium")).toBe(2);
   });

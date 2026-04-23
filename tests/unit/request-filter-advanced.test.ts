@@ -957,6 +957,56 @@ describe("Advanced Mode - Final Phase Integration", () => {
     expect(body.other_applied).toBeUndefined();
   });
 
+  test("group binding in final phase treats null or blank provider tags as default", async () => {
+    const defaultFilter = createAdvancedFilter(
+      [{ op: "set", scope: "body", path: "default_applied", value: true }],
+      {
+        bindingType: "groups",
+        groupTags: ["default"],
+      }
+    );
+    const premiumFilter = createAdvancedFilter(
+      [{ op: "set", scope: "body", path: "premium_applied", value: true }],
+      {
+        bindingType: "groups",
+        groupTags: ["premium"],
+      }
+    );
+    requestFilterEngine.setFiltersForTest([defaultFilter, premiumFilter]);
+
+    const nullBody: Record<string, unknown> = {};
+    const blankBody: Record<string, unknown> = {};
+    const premiumBody: Record<string, unknown> = {};
+    const headers = new Headers();
+
+    await requestFilterEngine.applyFinal(
+      { provider: { id: 1, groupTag: null } } as Parameters<
+        typeof requestFilterEngine.applyFinal
+      >[0],
+      nullBody,
+      headers
+    );
+    await requestFilterEngine.applyFinal(
+      { provider: { id: 2, groupTag: "   " } } as Parameters<
+        typeof requestFilterEngine.applyFinal
+      >[0],
+      blankBody,
+      headers
+    );
+    await requestFilterEngine.applyFinal(
+      { provider: { id: 3, groupTag: "premium" } } as Parameters<
+        typeof requestFilterEngine.applyFinal
+      >[0],
+      premiumBody,
+      headers
+    );
+
+    expect(nullBody.default_applied).toBe(true);
+    expect(blankBody.default_applied).toBe(true);
+    expect(premiumBody.default_applied).toBeUndefined();
+    expect(premiumBody.premium_applied).toBe(true);
+  });
+
   test("simple mode filters in final phase use existing logic on body/headers", async () => {
     const filter = createFilter({
       ruleMode: "simple",

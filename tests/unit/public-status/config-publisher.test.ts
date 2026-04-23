@@ -225,4 +225,55 @@ describe("public-status config publisher", () => {
       })
     );
   });
+
+  it("publishes internal snapshot sourceGroupName for default group while public snapshot keeps custom slug", async () => {
+    mockFindAllProviderGroups.mockResolvedValue([
+      {
+        id: 2,
+        name: "default",
+        description: JSON.stringify({
+          version: 2,
+          publicStatus: {
+            displayName: "Platform",
+            publicGroupSlug: "platform",
+            explanatoryCopy: "Default group status",
+            sortOrder: 2,
+            publicModels: [{ modelKey: "gpt-4.1", providerTypeOverride: "openai-compatible" }],
+          },
+        }),
+      },
+    ]);
+
+    const mod = await import("@/lib/public-status/config-publisher");
+    await mod.publishCurrentPublicStatusConfigProjection({
+      reason: "test",
+      configVersion: "cfg-test",
+    });
+
+    expect(mockPublishInternalPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          groups: [
+            expect.objectContaining({
+              sourceGroupName: "default",
+              slug: "platform",
+              displayName: "Platform",
+            }),
+          ],
+        }),
+      })
+    );
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          groups: [
+            expect.objectContaining({
+              slug: "platform",
+              displayName: "Platform",
+            }),
+          ],
+        }),
+      })
+    );
+  }, 20_000);
 });

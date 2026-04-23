@@ -424,8 +424,8 @@ describe("Request Filter Engine - Binding Types", () => {
       expect(session.headers.has("x-special")).toBe(false);
     });
 
-    test("should NOT apply filter when provider has no groupTag (null)", async () => {
-      const filter = createGroupFilter(["any-tag"], "header", "set", "x-null", "applied");
+    test("should apply default group filter when provider has no groupTag (null)", async () => {
+      const filter = createGroupFilter(["default"], "header", "set", "x-null", "applied");
       requestFilterEngine.setFiltersForTest([filter]);
 
       const session = createSessionWithProvider(1, null);
@@ -434,11 +434,11 @@ describe("Request Filter Engine - Binding Types", () => {
         session as Parameters<typeof requestFilterEngine.applyForProvider>[0]
       );
 
-      expect(session.headers.has("x-null")).toBe(false);
+      expect(session.headers.get("x-null")).toBe("applied");
     });
 
-    test("should NOT apply filter when provider has empty groupTag", async () => {
-      const filter = createGroupFilter(["tag"], "header", "set", "x-empty-tag", "applied");
+    test("should apply default group filter when provider has empty groupTag", async () => {
+      const filter = createGroupFilter(["default"], "header", "set", "x-empty-tag", "applied");
       requestFilterEngine.setFiltersForTest([filter]);
 
       const session = createSessionWithProvider(1, "");
@@ -447,7 +447,20 @@ describe("Request Filter Engine - Binding Types", () => {
         session as Parameters<typeof requestFilterEngine.applyForProvider>[0]
       );
 
-      expect(session.headers.has("x-empty-tag")).toBe(false);
+      expect(session.headers.get("x-empty-tag")).toBe("applied");
+    });
+
+    test("should NOT apply default group filter to explicitly named non-default provider", async () => {
+      const filter = createGroupFilter(["default"], "header", "set", "x-default-only", "applied");
+      requestFilterEngine.setFiltersForTest([filter]);
+
+      const session = createSessionWithProvider(1, "premium");
+
+      await requestFilterEngine.applyForProvider(
+        session as Parameters<typeof requestFilterEngine.applyForProvider>[0]
+      );
+
+      expect(session.headers.has("x-default-only")).toBe(false);
     });
 
     test("should skip group filter with empty groupTags array", async () => {

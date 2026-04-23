@@ -52,7 +52,7 @@ import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/prov
 import { parsePublicStatusDescription } from "@/lib/public-status/config";
 import { exceedsProviderGroupDescriptionLimit } from "@/lib/public-status/description-limit";
 import { cn } from "@/lib/utils";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type { ProviderDisplay } from "@/types/provider";
 import { ProviderBatchActions, ProviderBatchDialog, ProviderBatchToolbar } from "./batch-edit";
 import { InlineEditPopover } from "./inline-edit-popover";
@@ -523,12 +523,9 @@ export function ProviderGroupTab({
 }
 
 function filterGroupMembers(providers: ProviderDisplay[], groupName: string): ProviderDisplay[] {
-  return providers.filter((provider) => {
-    const tags = parseProviderGroups(provider.groupTag);
-    if (tags.includes(groupName)) return true;
-    if (groupName === PROVIDER_GROUP.DEFAULT && tags.length === 0) return true;
-    return false;
-  });
+  return providers.filter((provider) =>
+    resolveProviderGroupsWithDefault(provider.groupTag).includes(groupName)
+  );
 }
 
 interface GroupMembersPanelProps {

@@ -89,4 +89,54 @@ describe("public status page title", () => {
       undefined
     );
   });
+
+  it("accepts a default-group payload on the root status page", async () => {
+    mockLoadPublicStatusPageData.mockResolvedValue({
+      initialPayload: {
+        rebuildState: "fresh",
+        sourceGeneration: "",
+        generatedAt: "2026-04-22T00:00:00.000Z",
+        freshUntil: null,
+        groups: [
+          {
+            publicGroupSlug: "platform",
+            displayName: "Platform",
+            explanatoryCopy: "Default group",
+            models: [],
+          },
+        ],
+      },
+      status: "ready",
+      intervalMinutes: 5,
+      rangeHours: 24,
+      followServerDefaults: true,
+      siteTitle: "Claude Code Hub",
+      timeZone: "UTC",
+      meta: {
+        siteTitle: "Claude Code Hub",
+        siteDescription: "Claude Code Hub public status",
+        timeZone: "UTC",
+      },
+    });
+
+    const mod = await import("@/app/[locale]/status/page");
+    const pageElement = await mod.default({
+      params: Promise.resolve({ locale: "en" }),
+    });
+    renderToStaticMarkup(pageElement);
+
+    expect(mockPublicStatusView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialPayload: expect.objectContaining({
+          groups: [
+            expect.objectContaining({
+              publicGroupSlug: "platform",
+              displayName: "Platform",
+            }),
+          ],
+        }),
+      }),
+      undefined
+    );
+  });
 });

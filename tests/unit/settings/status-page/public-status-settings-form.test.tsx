@@ -325,4 +325,53 @@ describe("public-status settings form", () => {
 
     unmount();
   });
+
+  it("default group keeps groupName while submitting a custom public slug", async () => {
+    const { container, unmount } = render(
+      <PublicStatusSettingsForm
+        initialWindowHours={24}
+        initialAggregationIntervalMinutes={5}
+        initialGroups={
+          [
+            {
+              groupName: "default",
+              enabled: true,
+              displayName: "Platform",
+              publicGroupSlug: "platform",
+              explanatoryCopy: "Default route",
+              sortOrder: 2,
+              publicModels: [{ modelKey: "gpt-4.1", providerTypeOverride: "openai-compatible" }],
+            },
+          ] as never
+        }
+      />
+    );
+
+    const submitButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("statusPage.form.save")
+    );
+    expect(submitButton).toBeTruthy();
+
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mockSavePublicStatusSettings).toHaveBeenLastCalledWith({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+      groups: [
+        {
+          groupName: "default",
+          displayName: "Platform",
+          publicGroupSlug: "platform",
+          explanatoryCopy: "Default route",
+          sortOrder: 2,
+          publicModels: [{ modelKey: "gpt-4.1", providerTypeOverride: "openai-compatible" }],
+        },
+      ],
+    });
+
+    unmount();
+  });
 });
