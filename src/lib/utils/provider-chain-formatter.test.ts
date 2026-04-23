@@ -186,6 +186,144 @@ describe("endpoint_pool_exhausted", () => {
   });
 
   describe("formatProviderTimeline", () => {
+    test("formats priority candidate probabilities before passing them to timeline translations", () => {
+      const chain: ProviderChainItem[] = [
+        {
+          id: 7,
+          name: "selected-provider",
+          reason: "initial_selection",
+          timestamp: 0,
+          decisionContext: {
+            totalProviders: 13,
+            enabledProviders: 13,
+            targetType: "codex",
+            userGroup: "codex-internal",
+            groupFilterApplied: true,
+            afterGroupFilter: 13,
+            beforeHealthCheck: 13,
+            afterHealthCheck: 13,
+            priorityLevels: [1],
+            selectedPriority: 1,
+            candidatesAtPriority: [
+              {
+                id: 1,
+                name: "low-weight-provider",
+                weight: 1,
+                costMultiplier: 1,
+                probability: 1 / 22,
+              },
+              {
+                id: 2,
+                name: "high-weight-provider",
+                weight: 10,
+                costMultiplier: 1,
+                probability: 10 / 22,
+              },
+            ],
+          },
+        },
+      ];
+
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      expect(timeline).toContain("name=low-weight-provider");
+      expect(timeline).toContain("probability=4.5%");
+      expect(timeline).toContain("name=high-weight-provider");
+      expect(timeline).toContain("probability=45.5%");
+      expect(timeline).not.toContain("probability=0.045454545454545456");
+    });
+
+    test("formats priority candidate probabilities before passing them to description translations", () => {
+      const chain: ProviderChainItem[] = [
+        {
+          id: 1,
+          name: "selected-provider",
+          reason: "initial_selection",
+          timestamp: 0,
+          decisionContext: {
+            totalProviders: 2,
+            enabledProviders: 2,
+            targetType: "codex",
+            groupFilterApplied: false,
+            beforeHealthCheck: 2,
+            afterHealthCheck: 2,
+            priorityLevels: [1],
+            selectedPriority: 1,
+            candidatesAtPriority: [
+              {
+                id: 1,
+                name: "low-weight-provider",
+                weight: 1,
+                costMultiplier: 1,
+                probability: 1 / 22,
+              },
+            ],
+          },
+        },
+      ];
+
+      const description = formatProviderDescription(chain, mockT);
+
+      expect(description).toContain("description.candidate");
+      expect(description).toContain("probability=4.5%");
+      expect(description).not.toContain("probability=0.045454545454545456");
+    });
+
+    test("omits empty probability fragments from description and timeline when probability is invalid", () => {
+      const chain: ProviderChainItem[] = [
+        {
+          id: 1,
+          name: "selected-provider",
+          reason: "initial_selection",
+          timestamp: 0,
+          decisionContext: {
+            totalProviders: 2,
+            enabledProviders: 2,
+            targetType: "codex",
+            groupFilterApplied: false,
+            beforeHealthCheck: 2,
+            afterHealthCheck: 2,
+            priorityLevels: [1],
+            selectedPriority: 1,
+            candidatesAtPriority: [
+              {
+                id: 1,
+                name: "missing-probability-provider",
+                weight: 1,
+                costMultiplier: 1,
+              },
+              {
+                id: 2,
+                name: "nan-probability-provider",
+                weight: 1,
+                costMultiplier: 1,
+                probability: Number.NaN,
+              },
+            ],
+          },
+        },
+      ];
+
+      const description = formatProviderDescription(chain, mockT);
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      expect(description).toContain(
+        "description.candidateNoProbability [name=missing-probability-provider]"
+      );
+      expect(description).toContain(
+        "description.candidateNoProbability [name=nan-probability-provider]"
+      );
+      expect(description).not.toContain("missing-probability-provider()");
+      expect(description).not.toContain("probability=");
+      expect(timeline).toContain(
+        "timeline.candidateInfoNoProbability [name=missing-probability-provider, weight=1, cost=1]"
+      );
+      expect(timeline).toContain(
+        "timeline.candidateInfoNoProbability [name=nan-probability-provider, weight=1, cost=1]"
+      );
+      expect(timeline).not.toContain("probability=");
+    });
+
     test("renders endpoint pool exhausted with filter stats", () => {
       const chain: ProviderChainItem[] = [
         {

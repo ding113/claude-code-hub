@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { NextIntlClientProvider } from "next-intl";
 import { Window } from "happy-dom";
 import { describe, expect, test, vi } from "vitest";
+import providerChainMessages from "../../../../../../messages/en/provider-chain.json";
 
 vi.mock("@/lib/utils/provider-chain-formatter", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/utils/provider-chain-formatter")>();
@@ -108,7 +109,11 @@ const messages = {
     },
   },
   "provider-chain": {
-    summary: { originHint: "Session reuse - originally selected via {method}" },
+    ...providerChainMessages,
+    summary: {
+      ...providerChainMessages.summary,
+      originHint: "Session reuse - originally selected via {method}",
+    },
   },
 };
 
@@ -355,7 +360,7 @@ describe("provider-chain-popover layout", () => {
         finalProvider="p1"
       />
     );
-    expect(html).toContain("weighted_random");
+    expect(html).toContain("Weighted Random");
     expect(html).toContain("Session reuse - originally selected via");
   });
 
