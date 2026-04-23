@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
 import type { Locale } from "@/i18n/config";
 import { routing } from "@/i18n/routing";
@@ -30,10 +30,11 @@ function proxyHandler(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("x-cch-public-status");
-  const sanitizedRequest = new NextRequest(request.url, {
-    method: request.method,
+  const sanitizedRequest = {
+    ...request,
     headers: requestHeaders,
-  });
+    cookies: request.cookies,
+  } as NextRequest;
 
   if (isDevelopment()) {
     logger.info("Request received", { method: method.toUpperCase(), pathname });
