@@ -405,7 +405,7 @@ describe("UploadPriceDialog: 上传流程", () => {
       await flushPromises();
     });
 
-    expect(navigationMocks.__push).toHaveReturnedWith("/en/dashboard");
+    expect(navigationMocks.__push).toHaveBeenCalledWith("/dashboard");
 
     globalThis.fetch = originalFetch;
     unmount();
