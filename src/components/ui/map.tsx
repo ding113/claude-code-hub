@@ -9,7 +9,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useEffectEvent,
   useId,
   useImperativeHandle,
   useMemo,
@@ -26,6 +25,7 @@ const defaultStyles = {
 };
 
 const defaultMarkerOffset: NonNullable<MarkerOptions["offset"]> = [0, 0];
+const defaultProjection: MapLibreGL.ProjectionSpecification = { type: "mercator" };
 
 type Theme = "light" | "dark";
 
@@ -218,12 +218,12 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   const projectionKey = useMemo(() => getProjectionKey(projection), [projection]);
   const projectionRef = useRef(projection);
   projectionRef.current = projection;
-  const syncProjection = useEffectEvent((targetMap: MapLibreGL.Map) => {
+  const syncProjection = useCallback((targetMap: MapLibreGL.Map, nextProjectionKey: string) => {
     const nextProjection = projectionRef.current;
-    if (!nextProjection) return;
+    if (nextProjectionKey && !nextProjection) return;
 
-    targetMap.setProjection(nextProjection);
-  });
+    targetMap.setProjection(nextProjection ?? defaultProjection);
+  }, []);
 
   // Expose the map instance to the parent component
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
@@ -245,6 +245,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       },
       ...props,
       ...viewport,
+      ...(projectionRef.current ? { projection: projectionRef.current } : {}),
     });
 
     const loadHandler = () => setIsLoaded(true);
@@ -328,10 +329,10 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   }, [mapInstance, resolvedTheme, mapStyles]);
 
   useEffect(() => {
-    if (!mapInstance || !projectionKey || !isStyleLoaded) return;
+    if (!mapInstance || !isStyleLoaded) return;
 
-    syncProjection(mapInstance);
-  }, [mapInstance, projectionKey, isStyleLoaded]);
+    syncProjection(mapInstance, projectionKey);
+  }, [mapInstance, projectionKey, isStyleLoaded, syncProjection]);
 
   const contextValue = useMemo(
     () => ({

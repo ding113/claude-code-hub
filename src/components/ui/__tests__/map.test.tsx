@@ -176,6 +176,7 @@ const maplibreMocks = vi.hoisted(() => {
     zoom: number;
     bearing: number;
     pitch: number;
+    projection: unknown;
     style: unknown;
     sources = new globalThis.Map<string, FakeGeoJSONSource>();
     layers = new globalThis.Map<string, Record<string, unknown>>();
@@ -204,7 +205,9 @@ const maplibreMocks = vi.hoisted(() => {
         this.pitch = next.pitch ?? this.pitch;
       }
     );
-    setProjection = vi.fn();
+    setProjection = vi.fn((nextProjection: unknown) => {
+      this.projection = nextProjection;
+    });
     setPaintProperty = vi.fn();
     resize = vi.fn();
 
@@ -214,6 +217,7 @@ const maplibreMocks = vi.hoisted(() => {
       this.zoom = (options.zoom as number | undefined) ?? 0;
       this.bearing = (options.bearing as number | undefined) ?? 0;
       this.pitch = (options.pitch as number | undefined) ?? 0;
+      this.projection = options.projection;
       this.style = options.style;
       this.container.requestFullscreen = vi.fn(async () => undefined);
       maps.push(this);
@@ -549,6 +553,7 @@ describe("Map UI", () => {
     await flushMicrotasks();
     const map = maplibreMocks.maps.at(-1);
     expect(maplibreMocks.maps.length).toBe(1);
+    expect(map?.projection).toEqual({ type: "mercator" });
     expect(map?.setProjection).toHaveBeenLastCalledWith({ type: "mercator" });
     const initialProjectionCalls = map?.setProjection.mock.calls.length ?? 0;
 
@@ -572,6 +577,16 @@ describe("Map UI", () => {
 
     expect(maplibreMocks.maps.length).toBe(1);
     expect(map?.setProjection).toHaveBeenLastCalledWith({ type: "globe" });
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }} />
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(map?.setProjection).toHaveBeenLastCalledWith({ type: "mercator" });
 
     unmount();
   });
