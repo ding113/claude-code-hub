@@ -422,43 +422,24 @@ function MapMarker({
   };
 
   const markerRef = useRef<MapLibreGL.Marker | null>(null);
-  if (!markerRef.current) {
-    markerRef.current = new MapLibreGL.Marker({
-      ...markerOptions,
-      element: document.createElement("div"),
-      draggable,
-    }).setLngLat([longitude, latitude]);
-
-    const handleClick = (event: MouseEvent) => callbacksRef.current.onClick?.(event);
-    const handleMouseEnter = (event: MouseEvent) => callbacksRef.current.onMouseEnter?.(event);
-    const handleMouseLeave = (event: MouseEvent) => callbacksRef.current.onMouseLeave?.(event);
-
-    markerRef.current.getElement()?.addEventListener("click", handleClick);
-    markerRef.current.getElement()?.addEventListener("mouseenter", handleMouseEnter);
-    markerRef.current.getElement()?.addEventListener("mouseleave", handleMouseLeave);
-
-    const handleDragStart = () => {
-      const lngLat = markerRef.current?.getLngLat();
-      if (!lngLat) return;
-      callbacksRef.current.onDragStart?.({ lng: lngLat.lng, lat: lngLat.lat });
-    };
-    const handleDrag = () => {
-      const lngLat = markerRef.current?.getLngLat();
-      if (!lngLat) return;
-      callbacksRef.current.onDrag?.({ lng: lngLat.lng, lat: lngLat.lat });
-    };
-    const handleDragEnd = () => {
-      const lngLat = markerRef.current?.getLngLat();
-      if (!lngLat) return;
-      callbacksRef.current.onDragEnd?.({ lng: lngLat.lng, lat: lngLat.lat });
-    };
-
-    markerRef.current.on("dragstart", handleDragStart);
-    markerRef.current.on("drag", handleDrag);
-    markerRef.current.on("dragend", handleDragEnd);
-  }
-
-  const marker = markerRef.current;
+  const markerOptionsRef = useRef(markerOptions);
+  markerOptionsRef.current = markerOptions;
+  const markerStateRef = useRef({ longitude, latitude, draggable });
+  markerStateRef.current = { longitude, latitude, draggable };
+  const [marker, setMarker] = useState<MapLibreGL.Marker | null>(null);
+  const markerAnchor = markerOptions.anchor;
+  const markerClickTolerance = markerOptions.clickTolerance;
+  const markerColor = markerOptions.color;
+  const markerScale = markerOptions.scale;
+  const markerConstructorOptions = useMemo(
+    () => ({
+      anchor: markerAnchor,
+      clickTolerance: markerClickTolerance,
+      color: markerColor,
+      scale: markerScale,
+    }),
+    [markerAnchor, markerClickTolerance, markerColor, markerScale]
+  );
   const markerOffset = markerOptions.offset ?? defaultMarkerOffset;
   const [markerOffsetX, markerOffsetY] = getMarkerOffsetTuple(markerOffset);
   const markerRotation = markerOptions.rotation ?? 0;
@@ -466,6 +447,58 @@ function MapMarker({
   const markerPitchAlignment = markerOptions.pitchAlignment ?? "auto";
 
   useEffect(() => {
+    const initialState = markerStateRef.current;
+    const nextMarker = new MapLibreGL.Marker({
+      ...markerOptionsRef.current,
+      ...markerConstructorOptions,
+      element: document.createElement("div"),
+      draggable: initialState.draggable,
+    }).setLngLat([initialState.longitude, initialState.latitude]);
+    markerRef.current = nextMarker;
+
+    const handleClick = (event: MouseEvent) => callbacksRef.current.onClick?.(event);
+    const handleMouseEnter = (event: MouseEvent) => callbacksRef.current.onMouseEnter?.(event);
+    const handleMouseLeave = (event: MouseEvent) => callbacksRef.current.onMouseLeave?.(event);
+
+    const element = nextMarker.getElement();
+    element.addEventListener("click", handleClick);
+    element.addEventListener("mouseenter", handleMouseEnter);
+    element.addEventListener("mouseleave", handleMouseLeave);
+
+    const handleDragStart = () => {
+      const lngLat = nextMarker.getLngLat();
+      callbacksRef.current.onDragStart?.({ lng: lngLat.lng, lat: lngLat.lat });
+    };
+    const handleDrag = () => {
+      const lngLat = nextMarker.getLngLat();
+      callbacksRef.current.onDrag?.({ lng: lngLat.lng, lat: lngLat.lat });
+    };
+    const handleDragEnd = () => {
+      const lngLat = nextMarker.getLngLat();
+      callbacksRef.current.onDragEnd?.({ lng: lngLat.lng, lat: lngLat.lat });
+    };
+
+    nextMarker.on("dragstart", handleDragStart);
+    nextMarker.on("drag", handleDrag);
+    nextMarker.on("dragend", handleDragEnd);
+    setMarker(nextMarker);
+
+    return () => {
+      element.removeEventListener("click", handleClick);
+      element.removeEventListener("mouseenter", handleMouseEnter);
+      element.removeEventListener("mouseleave", handleMouseLeave);
+      nextMarker.off("dragstart", handleDragStart);
+      nextMarker.off("drag", handleDrag);
+      nextMarker.off("dragend", handleDragEnd);
+      nextMarker.remove();
+      if (markerRef.current === nextMarker) {
+        markerRef.current = null;
+      }
+    };
+  }, [markerConstructorOptions]);
+
+  useEffect(() => {
+    if (!marker) return;
     if (!map) return;
 
     marker.addTo(map);
@@ -476,6 +509,8 @@ function MapMarker({
   }, [map, marker]);
 
   useEffect(() => {
+    if (!marker) return;
+
     const currentLngLat = marker.getLngLat();
     if (currentLngLat.lng !== longitude || currentLngLat.lat !== latitude) {
       marker.setLngLat([longitude, latitude]);
@@ -510,6 +545,8 @@ function MapMarker({
     markerRotationAlignment,
     markerPitchAlignment,
   ]);
+
+  if (!marker) return null;
 
   return <MarkerContext.Provider value={{ marker, map }}>{children}</MarkerContext.Provider>;
 }

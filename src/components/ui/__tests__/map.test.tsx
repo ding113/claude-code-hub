@@ -95,9 +95,13 @@ const maplibreMocks = vi.hoisted(() => {
     draggable = false;
     popup: FakePopup | null = null;
     element = globalThis.document?.createElement("div") ?? ({} as HTMLElement);
+    options: Record<string, unknown>;
+    events = new globalThis.Map<string, Set<() => void>>();
 
     constructor(options: Record<string, unknown>) {
+      this.options = options;
       this.draggable = Boolean(options.draggable);
+      markers.push(this);
     }
 
     setLngLat([lng, lat]: [number, number]) {
@@ -166,9 +170,23 @@ const maplibreMocks = vi.hoisted(() => {
     getPitchAlignment() {
       return "auto";
     }
+
+    on(event: string, handler: () => void) {
+      if (!this.events.has(event)) {
+        this.events.set(event, new Set());
+      }
+      this.events.get(event)?.add(handler);
+      return this;
+    }
+
+    off(event: string, handler: () => void) {
+      this.events.get(event)?.delete(handler);
+      return this;
+    }
   }
 
   const maps: FakeMap[] = [];
+  const markers: FakeMarker[] = [];
 
   class FakeMap {
     container: HTMLElement;
@@ -342,6 +360,7 @@ const maplibreMocks = vi.hoisted(() => {
     FakeMarker,
     FakePopup,
     maps,
+    markers,
   };
 });
 
@@ -354,7 +373,15 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
-import { Map, MapClusterLayer, MapControls, MapPopup, MapRoute } from "@/components/ui/map";
+import {
+  Map,
+  MapClusterLayer,
+  MapControls,
+  MapMarker,
+  MapPopup,
+  MapRoute,
+  MarkerContent,
+} from "@/components/ui/map";
 
 function render(node: ReactNode) {
   const container = document.createElement("div");
@@ -399,6 +426,7 @@ function click(element: Element) {
 describe("Map UI", () => {
   beforeEach(() => {
     maplibreMocks.maps.length = 0;
+    maplibreMocks.markers.length = 0;
     document.body.innerHTML = "";
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
@@ -701,6 +729,42 @@ describe("Map UI", () => {
     const map = maplibreMocks.maps.at(-1);
     const source = Array.from(map?.sources.values() ?? [])[0];
     expect(source?.data).toBe("https://example.com/b.geojson");
+
+    unmount();
+  });
+
+  test("MapMarker recreates construction-only options outside render", async () => {
+    const { rerender, unmount } = render(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapMarker longitude={1} latitude={2} anchor="bottom" color="#111111">
+            <MarkerContent>marker</MarkerContent>
+          </MapMarker>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(maplibreMocks.markers).toHaveLength(1);
+    expect(maplibreMocks.markers[0]?.options.anchor).toBe("bottom");
+    expect(maplibreMocks.markers[0]?.options.color).toBe("#111111");
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapMarker longitude={1} latitude={2} anchor="top" color="#222222">
+            <MarkerContent>marker</MarkerContent>
+          </MapMarker>
+        </Map>
+      </div>
+    );
+    await flushMicrotasks();
+
+    expect(maplibreMocks.maps.length).toBe(1);
+    expect(maplibreMocks.markers).toHaveLength(2);
+    expect(maplibreMocks.markers[1]?.options.anchor).toBe("top");
+    expect(maplibreMocks.markers[1]?.options.color).toBe("#222222");
 
     unmount();
   });
