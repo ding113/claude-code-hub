@@ -255,34 +255,7 @@ function UsageLogsViewContent({
     };
   }, []);
 
-  const statsFilters = useMemo(
-    () => ({
-      userId: filters.userId,
-      keyId: filters.keyId,
-      providerId: filters.providerId,
-      sessionId: filters.sessionId,
-      startTime: filters.startTime,
-      endTime: filters.endTime,
-      statusCode: filters.statusCode,
-      excludeStatusCode200: filters.excludeStatusCode200,
-      model: filters.model,
-      endpoint: filters.endpoint,
-      minRetryCount: filters.minRetryCount,
-    }),
-    [
-      filters.userId,
-      filters.keyId,
-      filters.providerId,
-      filters.sessionId,
-      filters.startTime,
-      filters.endTime,
-      filters.statusCode,
-      filters.excludeStatusCode200,
-      filters.model,
-      filters.endpoint,
-      filters.minRetryCount,
-    ]
-  );
+  const statsFilters = filters;
 
   const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
 
