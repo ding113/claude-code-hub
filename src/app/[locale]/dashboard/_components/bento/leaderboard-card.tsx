@@ -1,8 +1,8 @@
 "use client";
 
 import { Award, ChevronRight, Medal, Trophy } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/routing";
 import { cn, formatCurrency, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { BentoCard } from "./bento-grid";
