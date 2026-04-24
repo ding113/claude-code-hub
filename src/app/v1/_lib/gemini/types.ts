@@ -87,4 +87,12 @@ export interface GeminiResponse {
     blockReason?: string;
   };
   usageMetadata?: GeminiUsageMetadata;
+  /**
+   * 上游 Gemini API 返回的实际模型版本(GenerateContentResponse.modelVersion)。
+   * 由于 Gemini 请求模型名放在 URL path 里,响应里的 modelVersion 才是权威的真实模型。
+   */
+  modelVersion?: string;
+  /** 官方 SDK 的 snake_case 别名,保持兼容 */
+  model_version?: string;
+  responseId?: string;
 }

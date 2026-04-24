@@ -7,6 +7,7 @@ import {
   Check,
   Copy,
   Inbox,
+  Info,
   MessageSquare,
   Settings2,
   Terminal,
@@ -18,6 +19,7 @@ import { CodeDisplay } from "@/components/ui/code-display";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { isSSEText } from "@/lib/utils/sse";
+import type { SessionDetailSnapshots, SessionDetailViewMode } from "@/types/session";
 
 export type SessionMessages = Record<string, unknown> | Record<string, unknown>[];
 
@@ -43,32 +45,42 @@ function formatHeaders(
 }
 
 interface SessionMessagesDetailsTabsProps {
-  requestBody: unknown | null;
-  messages: SessionMessages | null;
+  snapshots: SessionDetailSnapshots | null;
+  viewMode: SessionDetailViewMode;
+  onViewModeChange: (mode: SessionDetailViewMode) => void;
   specialSettings: unknown | null;
-  requestHeaders: Record<string, string> | null;
-  responseHeaders: Record<string, string> | null;
-  response: string | null;
-  requestMeta: { clientUrl: string | null; upstreamUrl: string | null; method: string | null };
-  responseMeta: { upstreamUrl: string | null; statusCode: number | null };
   onCopyResponse?: () => void;
   isResponseCopied?: boolean;
 }
 
 export function SessionMessagesDetailsTabs({
-  requestBody,
-  messages,
+  snapshots,
+  viewMode,
+  onViewModeChange,
   specialSettings,
-  response,
-  requestHeaders,
-  responseHeaders,
-  requestMeta,
-  responseMeta,
   onCopyResponse,
   isResponseCopied,
 }: SessionMessagesDetailsTabsProps) {
   const t = useTranslations("dashboard.sessions");
   const codeExpandedMaxHeight = "calc(var(--cch-viewport-height, 100vh) - 260px)";
+  const clientLabel = t("details.snapshotSourceClient");
+  const upstreamLabel = t("details.snapshotSourceUpstream");
+  const requestSnapshot = snapshots?.request[viewMode] ?? null;
+  const responseSnapshot = snapshots?.response[viewMode] ?? null;
+  const requestBody = requestSnapshot?.body ?? null;
+  const messages = requestSnapshot?.messages ?? null;
+  const requestHeaders = requestSnapshot?.headers ?? null;
+  const responseHeaders = responseSnapshot?.headers ?? null;
+  const response = responseSnapshot?.body ?? null;
+  const requestMeta = requestSnapshot?.meta ?? {
+    clientUrl: null,
+    upstreamUrl: null,
+    method: null,
+  };
+  const responseMeta = responseSnapshot?.meta ?? {
+    upstreamUrl: null,
+    statusCode: null,
+  };
 
   // 后端已根据 STORE_SESSION_MESSAGES 配置进行脱敏，前端直接显示
   const requestBodyContent = useMemo(() => {
@@ -90,40 +102,47 @@ export function SessionMessagesDetailsTabs({
   const requestHeadersPreamble = useMemo(() => {
     const lines: string[] = [];
     const method = requestMeta.method?.trim() || null;
+    const label = viewMode === "before" ? clientLabel : upstreamLabel;
+    const targetUrl = viewMode === "before" ? requestMeta.clientUrl : requestMeta.upstreamUrl;
 
-    if (requestMeta.upstreamUrl) {
-      lines.push(
-        method
-          ? `UPSTREAM: ${method} ${requestMeta.upstreamUrl}`
-          : `UPSTREAM: ${requestMeta.upstreamUrl}`
-      );
-    }
-    if (requestMeta.clientUrl) {
-      lines.push(
-        method ? `CLIENT: ${method} ${requestMeta.clientUrl}` : `CLIENT: ${requestMeta.clientUrl}`
-      );
+    if (targetUrl) {
+      lines.push(method ? `${label}: ${method} ${targetUrl}` : `${label}: ${targetUrl}`);
     }
 
     return lines;
-  }, [requestMeta.clientUrl, requestMeta.method, requestMeta.upstreamUrl]);
+  }, [
+    clientLabel,
+    requestMeta.clientUrl,
+    requestMeta.method,
+    requestMeta.upstreamUrl,
+    upstreamLabel,
+    viewMode,
+  ]);
 
   const responseHeadersPreamble = useMemo(() => {
     const lines: string[] = [];
 
-    if (responseMeta.statusCode !== null && responseMeta.upstreamUrl) {
-      lines.push(`UPSTREAM: HTTP ${responseMeta.statusCode} ${responseMeta.upstreamUrl}`);
+    if (viewMode === "before") {
+      if (responseMeta.statusCode !== null && responseMeta.upstreamUrl) {
+        lines.push(`${upstreamLabel}: HTTP ${responseMeta.statusCode} ${responseMeta.upstreamUrl}`);
+        return lines;
+      }
+      if (responseMeta.statusCode !== null) {
+        lines.push(`${upstreamLabel}: HTTP ${responseMeta.statusCode}`);
+        return lines;
+      }
+      if (responseMeta.upstreamUrl) {
+        lines.push(`${upstreamLabel}: ${responseMeta.upstreamUrl}`);
+      }
       return lines;
     }
+
     if (responseMeta.statusCode !== null) {
-      lines.push(`UPSTREAM: HTTP ${responseMeta.statusCode}`);
-      return lines;
-    }
-    if (responseMeta.upstreamUrl) {
-      lines.push(`UPSTREAM: ${responseMeta.upstreamUrl}`);
+      lines.push(`${clientLabel}: HTTP ${responseMeta.statusCode}`);
     }
 
     return lines;
-  }, [responseMeta.statusCode, responseMeta.upstreamUrl]);
+  }, [clientLabel, responseMeta.statusCode, responseMeta.upstreamUrl, upstreamLabel, viewMode]);
 
   const formattedRequestHeaders = useMemo(
     () => formatHeaders(requestHeaders, requestHeadersPreamble),
@@ -135,6 +154,12 @@ export function SessionMessagesDetailsTabs({
   );
 
   const responseLanguage = response && isSSEText(response) ? "sse" : "json";
+  const requestMessagesEmptyMessage =
+    viewMode === "after" && requestSnapshot !== null && requestBodyContent !== null
+      ? t("details.afterRequestMessagesEmpty", {
+          requestBodyLabel: t("details.requestBody"),
+        })
+      : t("details.storageTip");
 
   // Reusable Empty State Component
   const EmptyState = ({ message }: { message: string }) => (
@@ -210,8 +235,57 @@ export function SessionMessagesDetailsTabs({
           </TabsTrigger>
         </TabsList>
 
+        <div
+          className="inline-flex items-center rounded-lg border bg-background p-1 shrink-0"
+          role="group"
+          aria-label={t("details.viewMode")}
+        >
+          <Button
+            type="button"
+            variant={viewMode === "before" ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 px-3"
+            aria-pressed={viewMode === "before"}
+            data-testid="session-view-mode-before"
+            onClick={() => onViewModeChange("before")}
+          >
+            {t("details.before")}
+          </Button>
+          <Button
+            type="button"
+            variant={viewMode === "after" ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 px-3"
+            aria-pressed={viewMode === "after"}
+            data-testid="session-view-mode-after"
+            onClick={() => onViewModeChange("after")}
+          >
+            {t("details.after")}
+          </Button>
+        </div>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                data-testid="session-view-mode-tooltip-trigger"
+                aria-label={t("details.viewModeTooltipLabel")}
+              >
+                <Info className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-sm text-xs leading-5">
+              {t("details.viewModeTooltip")}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
         {/* Copy Response Button */}
-        {response && onCopyResponse && (
+        {responseSnapshot?.body && onCopyResponse && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -288,7 +362,7 @@ export function SessionMessagesDetailsTabs({
           data-testid="session-tab-request-messages"
         >
           {requestMessagesContent === null ? (
-            <EmptyState message={t("details.storageTip")} />
+            <EmptyState message={requestMessagesEmptyMessage} />
           ) : (
             <CodeDisplay
               content={requestMessagesContent}
@@ -309,21 +383,26 @@ export function SessionMessagesDetailsTabs({
           className="m-0 focus-visible:outline-none"
           data-testid="session-tab-special-settings"
         >
-          {specialSettingsContent === null ? (
-            <EmptyState message={t("details.noData")} />
-          ) : (
-            <CodeDisplay
-              content={specialSettingsContent}
-              language="json"
-              fileName="specialSettings.json"
-              maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
-              maxLines={SESSION_DETAILS_MAX_LINES}
-              maxHeight="600px"
-              defaultExpanded
-              expandedMaxHeight={codeExpandedMaxHeight}
-              className="border-0 rounded-none"
-            />
-          )}
+          <div className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
+            {t("details.specialSettingsStaticNote")}
+          </div>
+          <div>
+            {specialSettingsContent === null ? (
+              <EmptyState message={t("details.specialSettingsEmpty")} />
+            ) : (
+              <CodeDisplay
+                content={specialSettingsContent}
+                language="json"
+                fileName="specialSettings.json"
+                maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
+                maxLines={SESSION_DETAILS_MAX_LINES}
+                maxHeight="600px"
+                defaultExpanded
+                expandedMaxHeight={codeExpandedMaxHeight}
+                className="border-0 rounded-none"
+              />
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent

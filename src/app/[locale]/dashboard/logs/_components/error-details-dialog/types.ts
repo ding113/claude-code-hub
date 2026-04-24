@@ -1,3 +1,4 @@
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
@@ -24,8 +25,12 @@ export interface TabSharedProps {
   originalModel?: string | null;
   /** Current model after redirect */
   currentModel?: string | null;
+  /** Upstream response's actually returned model name (audit; not billing) */
+  actualResponseModel?: string | null;
   /** User-Agent header */
   userAgent?: string | null;
+  /** Client IP (IPv4/IPv6) */
+  clientIp?: string | null;
   /** Number of messages in request */
   messagesCount?: number | null;
   /** API endpoint */
@@ -54,6 +59,10 @@ export interface TabSharedProps {
   costUsd?: string | null;
   /** Cost multiplier */
   costMultiplier?: string | null;
+  /** Group cost multiplier */
+  groupCostMultiplier?: string | null;
+  /** Cost breakdown per component */
+  costBreakdown?: StoredCostBreakdown | null;
   /** Whether 1M context pricing was applied */
   context1mApplied?: boolean | null;
   /** Total request duration in ms */

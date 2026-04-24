@@ -35,7 +35,7 @@ export interface ColumnDef<T> {
    */
   cell: (row: T, index: number, isSubRow?: boolean) => React.ReactNode;
   sortKey?: string; // 用于排序的字段名
-  getValue?: (row: T) => number | string; // 获取排序值的函数
+  getValue?: (row: T) => number | string | null; // 获取排序值的函数
   defaultBold?: boolean; // 默认加粗（无排序时显示加粗）
 }
 
@@ -128,6 +128,11 @@ export function LeaderboardTable<TParent, TSub = TParent>({
     return [...data].sort((a, b) => {
       const valueA = column.getValue!(a);
       const valueB = column.getValue!(b);
+
+      // N/A/null values should always sort after real values.
+      if (valueA == null && valueB == null) return 0;
+      if (valueA == null) return 1;
+      if (valueB == null) return -1;
 
       if (typeof valueA === "number" && typeof valueB === "number") {
         return sortDirection === "asc" ? valueA - valueB : valueB - valueA;

@@ -96,6 +96,7 @@ function createRawPassthroughSession(bodyText: string, extraHeaders?: HeadersIni
     clientRequestsContext1m: vi.fn(() => false),
     setContext1mApplied: vi.fn(),
     getContext1mApplied: vi.fn(() => false),
+    getGroupCostMultiplier: vi.fn(() => 1),
     getEndpointPolicy: vi.fn(() => resolveEndpointPolicy("/v1/responses/compact")),
     addSpecialSetting: vi.fn((setting: unknown) => {
       specialSettings.push(setting);

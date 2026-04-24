@@ -172,10 +172,10 @@
   "deleteConfirm": "Are you sure you want to delete model {name}? This action cannot be undone.",
   "form": {
     "modelName": "Model ID",
-    "modelNamePlaceholder": "e.g., gpt-5.2-codex",
+    "modelNamePlaceholder": "e.g., gpt-5.3-codex",
     "modelNameRequired": "Model ID is required",
     "displayName": "Display Name (Optional)",
-    "displayNamePlaceholder": "e.g., GPT-5.2 Codex",
+    "displayNamePlaceholder": "e.g., GPT-5.3 Codex",
     "type": "Type",
     "provider": "Provider",
     "providerPlaceholder": "e.g., openai",
@@ -192,13 +192,47 @@
     "prefillEmpty": "No matching models found",
     "prefillFailed": "Search failed",
     "promptCachingHint": "Enable if the model supports prompt caching",
-    "cachePricingTitle": "Cache Pricing"
+    "cachePricingTitle": "Cache Pricing",
+    "advancedFieldsTitle": "Advanced fields",
+    "advancedFieldsJson": "Additional price fields JSON",
+    "advancedFieldsPlaceholder": "Example: '{\"input_cost_per_second\": 0.5}'",
+    "advancedFieldsHint": "Use a JSON object to store extra cloud or local fields not covered by the basic form."
   },
   "actions": {
     "edit": "Edit",
     "more": "More actions",
     "delete": "Delete",
-    "comparePricing": "Compare pricing"
+    "comparePricing": "Compare pricing",
+    "viewDetails": "View details"
+  },
+  "details": {
+    "coreFieldsTitle": "Core fields",
+    "additionalBillableTitle": "Additional billable fields",
+    "additionalMetadataTitle": "Additional metadata",
+    "providerPricingTitle": "Provider pricing nodes",
+    "kindSupported": "Chargeable",
+    "kindUnsupported": "Review",
+    "kindDisplay": "Display",
+    "booleanTrue": "Yes",
+    "booleanFalse": "No",
+    "fields": {
+      "mode": "Mode",
+      "displayName": "Display name",
+      "litellmProvider": "LiteLLM provider",
+      "selectedPricingProvider": "Selected pricing provider",
+      "selectedPricingSourceModel": "Selected source model",
+      "selectedPricingResolution": "Selected resolution",
+      "maxInputTokens": "Max input tokens",
+      "maxOutputTokens": "Max output tokens",
+      "maxTokens": "Max tokens",
+      "outputVectorSize": "Output vector size",
+      "inputCostPerToken": "Input Cost Per Token",
+      "outputCostPerToken": "Output Cost Per Token",
+      "inputCostPerRequest": "Input Cost Per Request",
+      "outputCostPerImage": "Output Cost Per Image",
+      "inputCostPerSecond": "Input Cost Per Second",
+      "fileSearchCostPer1kCalls": "File Search Cost Per 1k Calls"
+    }
   },
   "toast": {
     "createSuccess": "Model added",

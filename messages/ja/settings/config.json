@@ -36,6 +36,8 @@
     "cleanupSchedulePlaceholder": "0 2 * * *",
     "cleanupScheduleRequired": "実行時間（Cron）*",
     "configUpdated": "システム設定が更新されました。ページが更新され、通貨表示の変更が適用されます。",
+    "publicStatusProjectionWarning": "システム設定は保存されましたが、public status の Redis 投影は更新されませんでした。",
+    "publicStatusBackgroundRefreshPending": "システム設定は保存されましたが、バックグラウンド更新が成功するまで公開ステータスページに古いデータが表示される場合があります。",
     "currencies": {
       "CNY": "¥ 人民元 (CNY)",
       "EUR": "€ ユーロ (EUR)",
@@ -66,6 +68,8 @@
     "enableBillingHeaderRectifierDesc": "Claude Code クライアントが system プロンプトに注入する x-anthropic-billing-header テキストブロックを事前に削除し、Amazon Bedrock などの非ネイティブ Anthropic 上流による 400 エラーを防止します（既定で有効）。",
     "enableResponseInputRectifier": "Response Input 整流器を有効化",
     "enableResponseInputRectifierDesc": "/v1/responses リクエストの非配列 input（文字列ショートカットまたは role/type 付き単一メッセージオブジェクト）を処理前に標準の配列形式に自動正規化します（既定で有効）。",
+    "allowNonConversationEndpointProviderFallback": "非会話エンドポイントのクロスプロバイダ fallback を許可",
+    "allowNonConversationEndpointProviderFallbackDesc": "/v1/messages/count_tokens と /v1/responses/compact で現在のプロバイダが失敗した際に、既存の決定チェーンを使って互換プロバイダへ切り替えて再試行するかを制御します。既定で有効で、raw passthrough と非課金の意味論は維持されます。",
     "enableCodexSessionIdCompletion": "Codex セッションID補完を有効化",
     "enableCodexSessionIdCompletionDesc": "Codex リクエストで session_id（ヘッダー）または prompt_cache_key（ボディ）のどちらか一方しか提供されない場合に、欠けている方を自動補完します。両方ない場合は UUID v7 のセッションIDを生成し、同一対話内で安定して再利用します。",
     "enableClaudeMetadataUserIdInjection": "Claude metadata.user_id 注入を有効化",
@@ -85,12 +89,19 @@
     "saveFailed": "保存に失敗しました",
     "saveSettings": "設定を保存",
     "saveSuccess": "正常に保存されました",
+    "publicStatusProjectionWarning": "システム設定は保存されましたが、public status の Redis 投影は更新されませんでした。",
+    "publicStatusBackgroundRefreshPending": "システム設定は保存されましたが、バックグラウンド更新が成功するまで公開ステータスページに古いデータが表示される場合があります。",
     "siteTitle": "サイトタイトル",
     "siteTitleDesc": "ブラウザタブのタイトルとシステムのデフォルト表示名を設定するために使用されます。",
     "siteTitlePlaceholder": "例：Claude Code Hub",
     "siteTitleRequired": "サイトタイトルは空にできません",
+    "ipLoggingInvalidJson": "IP 抽出設定が有効な JSON ではありません：{message}",
+    "ipLoggingInvalidShape": "IP 抽出設定は `headers` 配列を持つオブジェクトである必要があります。",
     "verboseProviderError": "詳細なプロバイダーエラー",
-    "verboseProviderErrorDesc": "有効にすると、すべてのプロバイダーが利用不可の場合に詳細なエラーメッセージ（プロバイダー数、レート制限の理由など）を返します。無効の場合は簡潔なエラーコードのみを返します。",
+    "verboseProviderErrorDesc": "有効にすると、一部の上流障害タイプで `error.details` により詳細な診断情報（プロバイダー可用性の診断やサニタイズ済み上流断片など）を含める場合があります。",
+    "verboseProviderErrorTooltip": "この設定を有効にすると、プロバイダー名、内部ルーティングの手掛かり、上流障害の理由などの診断情報が露出する可能性があります。クライアントに低レベルのトラブルシュート文脈を見せてもよい場合にのみ有効化してください。",
+    "passThroughUpstreamErrorMessage": "上流エラーメッセージを透過",
+    "passThroughUpstreamErrorMessageDesc": "有効にすると、安全にサニタイズされた上流エラーメッセージを抽出できる場合に `error.message` を置き換えます。抽出できない場合、`error.message` は汎用プロキシエラーに戻ります。Verbose Provider Error が制御する `error.details` 診断は無効化しません。",
     "timezoneLabel": "システムタイムゾーン",
     "timezoneDescription": "バックエンドの時間境界計算とフロントエンドの日付/時刻表示を統一するためのシステムタイムゾーンを設定します。空のままにすると環境変数 TZ またはデフォルトの UTC が使用されます。",
     "timezoneAuto": "自動 (環境変数 TZ を使用)",
@@ -116,6 +127,16 @@
         "leaseCapZero": "上限が 0 です。リースごとの予算が 0 になる可能性があります。"
       }
     }
+  },
+  "ipLogging": {
+    "title": "IP ログと抽出",
+    "description": "クライアント IP を特定する際に参照するリクエストヘッダー、および IP 地理情報照会の有効化を設定します。",
+    "geoLookup": "IP 地理情報照会を有効化",
+    "geoLookupHint": "有効にすると、ダッシュボードは設定済みの IP 地理情報サービスを用いて IP を国・都市・ASN に解決します。",
+    "extractionConfigLabel": "ヘッダー抽出チェーン（JSON）",
+    "extractionConfigHint": "空の場合は安全な組み込み既定（x-real-ip → x-forwarded-for の最右値）を使用します。Cloudflare や同等の CDN 経由の場合は、そのヘッダーを明示的に追加してください（例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。各項目には `name` と任意の `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）を含められます。",
+    "extractionConfigHelpLabel": "ヘッダー抽出 JSON のヘルプを表示",
+    "resetToDefault": "既定に戻す"
   },
   "section": {
     "autoCleanup": {

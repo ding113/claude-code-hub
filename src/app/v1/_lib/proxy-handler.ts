@@ -21,11 +21,18 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     try {
       const systemSettings = await getCachedSystemSettings();
       session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
+      session.setRawCrossProviderFallbackEnabled(
+        systemSettings.allowNonConversationEndpointProviderFallback ?? true
+      );
     } catch (settingsError) {
-      logger.warn("[ProxyHandler] Failed to load high concurrency setting, fallback to disabled", {
-        error: settingsError,
-      });
+      logger.warn(
+        "[ProxyHandler] Failed to load proxy system settings, fallback highConcurrency=false and rawCrossProviderFallback=false",
+        {
+          error: settingsError,
+        }
+      );
       session.setHighConcurrencyModeEnabled(false);
+      session.setRawCrossProviderFallbackEnabled(false);
     }
 
     // 自动检测请求格式（端点优先，请求体补充）

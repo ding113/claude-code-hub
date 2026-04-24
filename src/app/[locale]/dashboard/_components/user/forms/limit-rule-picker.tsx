@@ -32,11 +32,12 @@ export type LimitType =
   | "limitSessions";
 
 export type DailyResetMode = "fixed" | "rolling";
+export type LimitResetMode = DailyResetMode;
 
 export interface LimitRulePickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (type: LimitType, value: number, mode?: DailyResetMode, time?: string) => void;
+  onConfirm: (type: LimitType, value: number, mode?: LimitResetMode, time?: string) => void;
   /** Types that are already configured (used for showing overwrite hint). */
   existingTypes: string[];
   /**
@@ -45,7 +46,10 @@ export interface LimitRulePickerProps {
    * - title, description, cancel, confirm
    * - fields.type.label, fields.type.placeholder
    * - fields.value.label, fields.value.placeholder
+   * - limit5h.mode.label, limit5h.mode.fixed, limit5h.mode.rolling
+   * - limit5h.mode.helperFixed, limit5h.mode.helperRolling
    * - daily.mode.label, daily.mode.fixed, daily.mode.rolling
+   * - daily.mode.helperFixed, daily.mode.helperRolling
    * - daily.time.label, daily.time.placeholder
    * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions}
    * - errors.missingType, errors.invalidValue, errors.invalidTime
@@ -82,6 +86,25 @@ function isValidTime(value: string) {
   return /^\d{2}:\d{2}$/.test(value);
 }
 
+function getResetConfig(type: LimitType | "") {
+  switch (type) {
+    case "limit5h":
+      return {
+        modePath: "limit5h.mode",
+        timePath: null,
+        defaultMode: "rolling" as const,
+      };
+    case "limitDaily":
+      return {
+        modePath: "daily.mode",
+        timePath: "daily.time",
+        defaultMode: "fixed" as const,
+      };
+    default:
+      return null;
+  }
+}
+
 export function LimitRulePicker({
   open,
   onOpenChange,
@@ -99,8 +122,8 @@ export function LimitRulePicker({
 
   const [type, setType] = useState<LimitType | "">("");
   const [rawValue, setRawValue] = useState("");
-  const [dailyMode, setDailyMode] = useState<DailyResetMode>("fixed");
-  const [dailyTime, setDailyTime] = useState("00:00");
+  const [resetMode, setResetMode] = useState<LimitResetMode>("rolling");
+  const [resetTime, setResetTime] = useState("00:00");
   const [error, setError] = useState<string | null>(null);
 
   // Reset state when dialog opens
@@ -109,10 +132,23 @@ export function LimitRulePicker({
     const first = availableTypes[0]?.type ?? "";
     setType((prev) => (prev ? prev : first));
     setRawValue("");
-    setDailyMode("fixed");
-    setDailyTime("00:00");
+    setResetMode("rolling");
+    setResetTime("00:00");
     setError(null);
-  }, [open, availableTypes]);
+  }, [open]);
+
+  useEffect(() => {
+    if (!type) return;
+    const resetConfig = getResetConfig(type);
+    if (!resetConfig) {
+      setResetMode("rolling");
+      setResetTime("00:00");
+      return;
+    }
+
+    setResetMode(resetConfig.defaultMode);
+    setResetTime("00:00");
+  }, [type]);
 
   const numericValue = useMemo(() => {
     const trimmed = rawValue.trim();
@@ -120,14 +156,14 @@ export function LimitRulePicker({
     return Number(trimmed);
   }, [rawValue]);
 
-  const isDaily = type === "limitDaily";
-  const needsTime = isDaily && dailyMode === "fixed";
+  const resetConfig = getResetConfig(type);
+  const needsTime = Boolean(resetConfig?.timePath) && resetMode === "fixed";
 
   const canConfirm =
     type !== "" &&
     Number.isFinite(numericValue) &&
     numericValue >= 0 &&
-    (!needsTime || isValidTime(dailyTime));
+    (!needsTime || isValidTime(resetTime));
 
   const handleCancel = () => onOpenChange(false);
 
@@ -144,13 +180,13 @@ export function LimitRulePicker({
       return;
     }
 
-    if (needsTime && !isValidTime(dailyTime)) {
+    if (needsTime && !isValidTime(resetTime)) {
       setError(t("errors.invalidTime", "Please enter a valid time (HH:mm)"));
       return;
     }
 
-    if (type === "limitDaily") {
-      onConfirm(type, numericValue, dailyMode, dailyMode === "fixed" ? dailyTime : undefined);
+    if (resetConfig) {
+      onConfirm(type, numericValue, resetMode, needsTime ? resetTime : undefined);
     } else {
       onConfirm(type, numericValue);
     }
@@ -247,42 +283,46 @@ export function LimitRulePicker({
             </div>
           </div>
 
-          {isDaily && (
-            <div className={cn("grid gap-4", dailyMode === "fixed" ? "sm:grid-cols-2" : "")}>
+          {resetConfig && (
+            <div className={cn("grid gap-4", needsTime ? "sm:grid-cols-2" : "")}>
               <div className="space-y-2">
-                <Label>{t("daily.mode.label", "Daily mode")}</Label>
+                <Label>{t(`${resetConfig.modePath}.label`, "Reset mode")}</Label>
                 <Select
-                  value={dailyMode}
-                  onValueChange={(val) => setDailyMode(val as DailyResetMode)}
+                  value={resetMode}
+                  onValueChange={(val) => setResetMode(val as LimitResetMode)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fixed">{t("daily.mode.fixed", "fixed")}</SelectItem>
-                    <SelectItem value="rolling">{t("daily.mode.rolling", "rolling")}</SelectItem>
+                    <SelectItem value="fixed">
+                      {t(`${resetConfig.modePath}.fixed`, "fixed")}
+                    </SelectItem>
+                    <SelectItem value="rolling">
+                      {t(`${resetConfig.modePath}.rolling`, "rolling")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    `${resetConfig.modePath}.${resetMode === "fixed" ? "helperFixed" : "helperRolling"}`,
+                    resetMode === "fixed" ? "fixed window" : "rolling window"
+                  )}
+                </p>
               </div>
 
-              {dailyMode === "fixed" && (
+              {needsTime && resetConfig.timePath && (
                 <div className="space-y-2">
-                  <Label>{t("daily.time.label", "Reset time")}</Label>
+                  <Label>{t(`${resetConfig.timePath}.label`, "Reset time")}</Label>
                   <Input
                     type="time"
                     step={60}
-                    value={dailyTime}
-                    onChange={(e) => setDailyTime(e.target.value)}
-                    placeholder={t("daily.time.placeholder", "HH:mm")}
+                    value={resetTime}
+                    onChange={(e) => setResetTime(e.target.value)}
+                    placeholder={t(`${resetConfig.timePath}.placeholder`, "HH:mm")}
                     aria-invalid={Boolean(error)}
                   />
                 </div>
-              )}
-
-              {dailyMode === "rolling" && (
-                <p className="text-xs text-muted-foreground">
-                  {t("daily.mode.helperRolling", "rolling 24h")}
-                </p>
               )}
             </div>
           )}

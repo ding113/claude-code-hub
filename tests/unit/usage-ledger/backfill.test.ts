@@ -31,7 +31,12 @@ describe("backfillUsageLedger", () => {
     expect(serviceSource).toContain("ON CONFLICT");
   });
 
-  it("uses DO NOTHING in backfill SQL", () => {
-    expect(serviceSource).toContain("DO NOTHING");
+  it("uses ON CONFLICT DO UPDATE in backfill SQL", () => {
+    expect(serviceSource).toContain("DO UPDATE");
+  });
+
+  it("computes success_rate_outcome during backfill", () => {
+    expect(serviceSource).toContain("success_rate_outcome");
+    expect(serviceSource).toContain("fn_compute_message_request_success_rate_outcome");
   });
 });

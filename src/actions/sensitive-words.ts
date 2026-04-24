@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { sensitiveWordDetector } from "@/lib/sensitive-word-detector";
@@ -80,12 +81,36 @@ export async function createSensitiveWordAction(data: {
       userId: session.user.id,
     });
 
+    emitActionAudit({
+      category: "sensitive_word",
+      action: "sensitive_word.create",
+      targetType: "sensitive_word",
+      targetId: String(result.id),
+      targetName: result.word,
+      after: {
+        id: result.id,
+        word: result.word,
+        matchType: result.matchType,
+        description: result.description,
+        isEnabled: result.isEnabled,
+      },
+      success: true,
+    });
+
     return {
       ok: true,
       data: result,
     };
   } catch (error) {
     logger.error("[SensitiveWordsAction] Failed to create sensitive word:", error);
+    emitActionAudit({
+      category: "sensitive_word",
+      action: "sensitive_word.create",
+      targetType: "sensitive_word",
+      targetName: data.word ?? null,
+      success: false,
+      errorMessage: "CREATE_FAILED",
+    });
     return {
       ok: false,
       error: "创建敏感词失败",
@@ -143,12 +168,36 @@ export async function updateSensitiveWordAction(
       userId: session.user.id,
     });
 
+    emitActionAudit({
+      category: "sensitive_word",
+      action: "sensitive_word.update",
+      targetType: "sensitive_word",
+      targetId: String(id),
+      targetName: result.word,
+      after: {
+        id: result.id,
+        word: result.word,
+        matchType: result.matchType,
+        description: result.description,
+        isEnabled: result.isEnabled,
+      },
+      success: true,
+    });
+
     return {
       ok: true,
       data: result,
     };
   } catch (error) {
     logger.error("[SensitiveWordsAction] Failed to update sensitive word:", error);
+    emitActionAudit({
+      category: "sensitive_word",
+      action: "sensitive_word.update",
+      targetType: "sensitive_word",
+      targetId: String(id),
+      success: false,
+      errorMessage: "UPDATE_FAILED",
+    });
     return {
       ok: false,
       error: "更新敏感词失败",
@@ -185,11 +234,27 @@ export async function deleteSensitiveWordAction(id: number): Promise<ActionResul
       userId: session.user.id,
     });
 
+    emitActionAudit({
+      category: "sensitive_word",
+      action: "sensitive_word.delete",
+      targetType: "sensitive_word",
+      targetId: String(id),
+      success: true,
+    });
+
     return {
       ok: true,
     };
   } catch (error) {
     logger.error("[SensitiveWordsAction] Failed to delete sensitive word:", error);
+    emitActionAudit({
+      category: "sensitive_word",
+      action: "sensitive_word.delete",
+      targetType: "sensitive_word",
+      targetId: String(id),
+      success: false,
+      errorMessage: "DELETE_FAILED",
+    });
     return {
       ok: false,
       error: "删除敏感词失败",

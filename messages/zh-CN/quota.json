@@ -247,7 +247,18 @@
       "clearSuccess": "限额已清除",
       "error": "设置失败",
       "clearError": "清除失败",
-      "retryError": "设置失败,请稍后重试"
+      "retryError": "设置失败,请稍后重试",
+      "limit5hResetMode": {
+        "label": "5小时重置模式",
+        "options": {
+          "fixed": "固定窗口",
+          "rolling": "滚动窗口（5小时）"
+        },
+        "desc": {
+          "fixed": "从首次成功记账开始锁定 5 小时固定窗口",
+          "rolling": "按最近 5 小时滚动窗口统计额度"
+        }
+      }
     },
     "editUserDialog": {
       "title": "设置用户限额",
@@ -360,7 +371,37 @@
         "error": "重置限额失败",
         "success": "所有限额已重置",
         "lastResetAt": "上次重置: {date}"
+      },
+      "limit5hResetMode": {
+        "label": "5小时重置模式",
+        "options": {
+          "fixed": "固定窗口",
+          "rolling": "滚动窗口（5小时）"
+        },
+        "desc": {
+          "fixed": "从首次成功记账开始锁定 5 小时固定窗口",
+          "rolling": "按最近 5 小时滚动窗口统计额度"
+        }
       }
     }
+  },
+  "quickEdit": {
+    "title": "调整限额",
+    "currentLabel": "当前",
+    "noLimit": "无限额",
+    "tabs": {
+      "set": "设置值",
+      "add": "增加值"
+    },
+    "setPlaceholder": "输入新限额（留空=无限额）",
+    "addPlaceholder": "输入要增加的值",
+    "preview": "新限额：{value}",
+    "previewNoLimit": "将清除限额（无限额）",
+    "save": "保存",
+    "cancel": "取消",
+    "saveSuccess": "限额已更新",
+    "saveFailed": "更新失败",
+    "invalidNumber": "请输入有效数字",
+    "negativeNotAllowed": "不能为负数"
   }
 }

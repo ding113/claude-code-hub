@@ -122,7 +122,8 @@
       }
     },
     "dailyResetTime": {
-      "label": "日次リセット時刻 (HH:mm)"
+      "label": "日次リセット時刻 (HH:mm)",
+      "placeholder": "HH:mm"
     },
     "limit5h": {
       "label": "5時間の上限 (USD)",
@@ -157,12 +158,23 @@
       "total": "総: ${amount}",
       "weekly": "週: ${amount}"
     },
-    "title": "レート制限"
+    "limit5hResetMode": {
+      "label": "5時間リセットモード",
+      "options": {
+        "fixed": "固定ウィンドウ",
+        "rolling": "ローリングウィンドウ（5時間）"
+      },
+      "desc": {
+        "fixed": "最初の成功課金から 5 時間の固定ウィンドウを開始します",
+        "rolling": "直近5時間のローリングウィンドウで集計します"
+      }
+    }
   },
   "limits": {
     "timeBased": "時間ベースの制限",
     "dailyReset": "日次リセット設定",
-    "otherLimits": "その他の制限"
+    "otherLimits": "その他の制限",
+    "windowReset": "ウィンドウのリセット方式"
   },
   "routing": {
     "cacheTtl": {
@@ -202,7 +214,7 @@
         }
       },
       "reasoningEffort": {
-        "help": "回答前にモデルが使う推論の強度（推論トークン量）を制御します。「クライアントに従う」はリクエストを変更しません。その他の値は reasoning.effort を強制します。注意: none は GPT-5.1 のみ、xhigh は GPT-5.1-Codex-Max のみ対応で、未対応モデルではエラーになります。",
+        "help": "回答前にモデルが使う推論の強度（推論トークン量）を制御します。「クライアントに従う」はリクエストを変更しません。その他の値は reasoning.effort を強制します。注意: none は GPT-5.4 mini のみ、未対応モデルではエラーになります。",
         "label": "推論強度オーバーライド",
         "options": {
           "high": "high",
@@ -210,8 +222,8 @@
           "low": "low",
           "medium": "medium（デフォルト）",
           "minimal": "minimal",
-          "none": "none（GPT-5.1 のみ）",
-          "xhigh": "xhigh（GPT-5.1-Codex-Max のみ）"
+          "none": "none（GPT-5.4 mini のみ）",
+          "xhigh": "xhigh"
         }
       },
       "reasoningSummary": {
@@ -263,7 +275,8 @@
           "options": {
             "low": "低",
             "medium": "中",
-            "high": "高（推奨）",
+            "high": "高",
+            "xhigh": "超高（推奨）",
             "max": "最大"
           }
         },
@@ -299,11 +312,11 @@
       "label": "モデルリダイレクト設定",
       "optional": "（任意）"
     },
-  "modelWhitelist": {
-    "allowAll": "✓ すべてのモデルを許可（推奨）",
-    "desc": "このプロバイダーが処理できるモデルを制限します。既定では同タイプのすべてのモデルを処理できます。",
-    "legacyExactOnlyWarning": "この旧フォームでは完全一致の allowlist ルールしか表示できません。ここで保存すると prefix / suffix / keyword / regex ルールは失われます。高度なルールは新しいプロバイダーフォームで編集してください。",
-    "label": "許可するモデル",
+    "modelWhitelist": {
+      "allowAll": "✓ すべてのモデルを許可（推奨）",
+      "desc": "このプロバイダーが処理できるモデルを制限します。既定では同タイプのすべてのモデルを処理できます。",
+      "legacyExactOnlyWarning": "この旧フォームでは完全一致の allowlist ルールしか表示できません。ここで保存すると prefix / suffix / keyword / regex ルールは失われます。高度なルールは新しいプロバイダーフォームで編集してください。",
+      "label": "許可するモデル",
       "moreModels": "+{count} 件 さらに表示",
       "optional": "（任意）",
       "selectedOnly": "設定済みの {count} 件のルールに一致したモデルのみ許可します。他のモデルはこのプロバイダーにルーティングされません。",

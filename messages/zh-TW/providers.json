@@ -26,5 +26,27 @@
       "label": "OpenAI Compatible",
       "description": "OpenAI 兼容 API"
     }
+  },
+
+  "providerGroups": {
+    "title": "供應商分組",
+    "description": "管理供應商分組及其費用倍率",
+    "addGroup": "新增分組",
+    "editGroup": "編輯分組",
+    "deleteGroup": "刪除分組",
+    "name": "分組名稱",
+    "multiplier": "費用倍率",
+    "groupDescription": "描述",
+    "providerCount": "供應商數",
+    "defaultGroup": "預設",
+    "cannotDeleteDefault": "無法刪除預設分組",
+    "deleteConfirm": "確定要刪除此分組嗎？",
+    "createSuccess": "供應商分組建立成功",
+    "updateSuccess": "供應商分組更新成功",
+    "deleteSuccess": "供應商分組刪除成功",
+    "nameRequired": "分組名稱不可為空",
+    "duplicateName": "同名分組已存在",
+    "invalidMultiplier": "費用倍率必須為非負數",
+    "noGroups": "未找到供應商分組"
   }
 }

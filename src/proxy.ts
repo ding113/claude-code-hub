@@ -8,9 +8,19 @@ import { logger } from "@/lib/logger";
 
 // Public paths that don't require authentication
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
-const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout"];
+const PUBLIC_PATH_PATTERNS = [
+  "/login",
+  "/usage-doc",
+  "/status",
+  "/api/auth/login",
+  "/api/auth/logout",
+];
 
 const API_PROXY_PATH = "/v1";
+
+function matchesPublicPath(pathname: string, pattern: string) {
+  return pathname === pattern || pathname.startsWith(`${pattern}/`);
+}
 
 // Create next-intl middleware for locale detection and routing
 const intlMiddleware = createMiddleware(routing);
@@ -18,6 +28,13 @@ const intlMiddleware = createMiddleware(routing);
 function proxyHandler(request: NextRequest) {
   const method = request.method;
   const pathname = request.nextUrl.pathname;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete("x-cch-public-status");
+  const sanitizedRequest = {
+    ...request,
+    headers: requestHeaders,
+    cookies: request.cookies,
+  } as NextRequest;
 
   if (isDevelopment()) {
     logger.info("Request received", { method: method.toUpperCase(), pathname });
@@ -28,13 +45,31 @@ function proxyHandler(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const isLocalePrefixedPublicStatusPath = routing.locales.some(
+    (locale) => pathname === `/${locale}/status` || pathname.startsWith(`/${locale}/status/`)
+  );
+  if (isLocalePrefixedPublicStatusPath) {
+    requestHeaders.set("x-cch-public-status", "1");
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  }
+
   // Skip locale handling for static files and Next.js internals
   if (pathname.startsWith("/_next") || pathname === "/favicon.ico") {
     return NextResponse.next();
   }
 
   // Apply locale middleware first (handles locale detection and routing)
-  const localeResponse = intlMiddleware(request);
+  const localeResponse = intlMiddleware(sanitizedRequest);
+
+  const isExplicitPublicStatusPath = pathname === "/status" || pathname.startsWith("/status/");
+
+  if (isExplicitPublicStatusPath) {
+    return localeResponse;
+  }
 
   // Extract locale from pathname (format: /[locale]/path or just /path)
   const localeMatch = pathname.match(/^\/([^/]+)/);
@@ -48,10 +83,9 @@ function proxyHandler(request: NextRequest) {
     : pathname;
 
   // Check if current path (without locale) is a public path
-  const isPublicPath = PUBLIC_PATH_PATTERNS.some(
-    (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(pattern)
+  const isPublicPath = PUBLIC_PATH_PATTERNS.some((pattern) =>
+    matchesPublicPath(pathWithoutLocale, pattern)
   );
-
   // Public paths don't require authentication
   if (isPublicPath) {
     return localeResponse;
@@ -62,7 +96,7 @@ function proxyHandler(request: NextRequest) {
   // by downstream layouts (dashboard/layout.tsx, etc.) which run in Node.js
   // runtime with guaranteed Redis/DB access. This avoids a death loop where
   // the proxy deletes the cookie on transient validation failures.
-  const authToken = request.cookies.get(AUTH_COOKIE_NAME);
+  const authToken = sanitizedRequest.cookies.get(AUTH_COOKIE_NAME);
 
   if (!authToken) {
     // Not authenticated, redirect to login page
@@ -80,6 +114,8 @@ function proxyHandler(request: NextRequest) {
 
 // Default export required for Next.js 16 proxy file
 export default proxyHandler;
+
+export { matchesPublicPath };
 
 export const config = {
   matcher: [

@@ -11,85 +11,232 @@ vi.mock("@/lib/logger", () => ({
 
 import { buildProxyUrl } from "@/app/v1/_lib/url";
 
+function expectBuiltUrl(baseUrl: string, requestPath: string, expectedUrl: string): void {
+  expect(buildProxyUrl(baseUrl, new URL(`https://dummy.com${requestPath}`))).toBe(expectedUrl);
+}
+
 describe("buildProxyUrl", () => {
   test("标准拼接：baseUrl 无路径时使用 requestPath + search", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://api.example.com",
-      new URL("https://dummy.com/v1/messages?x=1")
+      "/v1/messages?x=1",
+      "https://api.example.com/v1/messages?x=1"
     );
-
-    expect(out).toBe("https://api.example.com/v1/messages?x=1");
   });
 
   test("避免重复拼接：baseUrl 已包含 /responses 时不追加 /v1/responses", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://example.com/openai/responses",
-      new URL("https://dummy.com/v1/responses?x=1")
+      "/v1/responses?x=1",
+      "https://example.com/openai/responses?x=1"
     );
-
-    expect(out).toBe("https://example.com/openai/responses?x=1");
   });
 
   test("避免重复拼接：baseUrl 已包含 /embeddings 时不追加 /v1/embeddings", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://example.com/openai/embeddings",
-      new URL("https://dummy.com/v1/embeddings?x=1")
+      "/v1/embeddings?x=1",
+      "https://example.com/openai/embeddings?x=1"
     );
-
-    expect(out).toBe("https://example.com/openai/embeddings?x=1");
   });
 
   test("子路径不丢失：baseUrl=/v1/messages + request=/v1/messages/count_tokens", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://api.example.com/v1/messages",
-      new URL("https://dummy.com/v1/messages/count_tokens")
+      "/v1/messages/count_tokens",
+      "https://api.example.com/v1/messages/count_tokens"
     );
-
-    expect(out).toBe("https://api.example.com/v1/messages/count_tokens");
   });
 
   test("带前缀路径的 baseUrl：/openai/messages + /v1/messages/count_tokens", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://example.com/openai/messages",
-      new URL("https://dummy.com/v1/messages/count_tokens")
+      "/v1/messages/count_tokens",
+      "https://example.com/openai/messages/count_tokens"
     );
-
-    expect(out).toBe("https://example.com/openai/messages/count_tokens");
   });
 
   test("query 以 requestUrl 为准（覆盖 baseUrl 自带 query）", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://api.example.com/v1/messages?from=base",
-      new URL("https://dummy.com/v1/messages?from=request")
+      "/v1/messages?from=request",
+      "https://api.example.com/v1/messages?from=request"
     );
-
-    expect(out).toBe("https://api.example.com/v1/messages?from=request");
   });
 
   test("baseUrl 以 /models 结尾时去除请求中的版本前缀", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://api.example.com/gemini/models",
-      new URL("https://dummy.com/v1beta/models/gemini-1.5-pro:streamGenerateContent")
+      "/v1beta/models/gemini-1.5-pro:streamGenerateContent",
+      "https://api.example.com/gemini/models/gemini-1.5-pro:streamGenerateContent"
     );
-
-    expect(out).toBe("https://api.example.com/gemini/models/gemini-1.5-pro:streamGenerateContent");
   });
 
   test("支持 v1internal 版本前缀", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://example.com/gemini/models",
-      new URL("https://dummy.com/v1internal/models/gemini-2.5-flash:generateContent")
+      "/v1internal/models/gemini-2.5-flash:generateContent",
+      "https://example.com/gemini/models/gemini-2.5-flash:generateContent"
     );
-
-    expect(out).toBe("https://example.com/gemini/models/gemini-2.5-flash:generateContent");
   });
 
   test("支持未来的版本前缀如 v2", () => {
-    const out = buildProxyUrl(
+    expectBuiltUrl(
       "https://example.com/api/models",
-      new URL("https://dummy.com/v2/models/some-model:action")
+      "/v2/models/some-model:action",
+      "https://example.com/api/models/some-model:action"
     );
+  });
 
-    expect(out).toBe("https://example.com/api/models/some-model:action");
+  test("完整 Codex path：baseUrl 已包含 /openai/v1/responses 时保持原路径", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1/responses",
+      "/v1/responses?x=1",
+      "https://relay.example.com/openai/v1/responses?x=1"
+    );
+  });
+
+  test("完整 OpenAI Chat path：baseUrl 已包含 /openai/v1/chat/completions 时保持原路径", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1/chat/completions",
+      "/v1/chat/completions?x=1",
+      "https://relay.example.com/openai/v1/chat/completions?x=1"
+    );
+  });
+
+  test("版本根路径：baseUrl=/openai/v1 时只追加 endpoint，不重复追加 /v1", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1",
+      "/v1/chat/completions?x=1",
+      "https://relay.example.com/openai/v1/chat/completions?x=1"
+    );
+  });
+
+  test("bare /openai codex path stays absolute and single-versioned", () => {
+    expectBuiltUrl(
+      "https://api.gptclubapi.xyz/openai",
+      "/v1/responses?x=1",
+      "https://api.gptclubapi.xyz/openai/v1/responses?x=1"
+    );
+  });
+
+  test("bare /openai/ codex path stays absolute and single-versioned", () => {
+    expectBuiltUrl(
+      "https://api.gptclubapi.xyz/openai/",
+      "/v1/responses?x=1",
+      "https://api.gptclubapi.xyz/openai/v1/responses?x=1"
+    );
+  });
+
+  test("explicit /openai/v1 codex root only appends endpoint once", () => {
+    expectBuiltUrl(
+      "https://api.gptclubapi.xyz/openai/v1",
+      "/v1/responses?x=1",
+      "https://api.gptclubapi.xyz/openai/v1/responses?x=1"
+    );
+  });
+
+  test("任意版本根路径：baseUrl=/api/coding/paas/v4 时只追加 endpoint", () => {
+    expectBuiltUrl(
+      "https://open.bigmodel.cn/api/coding/paas/v4",
+      "/v1/chat/completions?x=1",
+      "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions?x=1"
+    );
+  });
+
+  test("带 alpha/beta 数字后缀的版本根路径也应被识别", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1beta1",
+      "/v1/chat/completions?x=1",
+      "https://relay.example.com/openai/v1beta1/chat/completions?x=1"
+    );
+  });
+
+  test("带 rc 后缀的版本根路径也应被识别", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1rc1",
+      "/v1/chat/completions?x=1",
+      "https://relay.example.com/openai/v1rc1/chat/completions?x=1"
+    );
+  });
+
+  test("版本根路径 + Chat 资源后缀：应保留 suffix", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1",
+      "/v1/chat/completions/cmpl_123/messages?x=1",
+      "https://relay.example.com/openai/v1/chat/completions/cmpl_123/messages?x=1"
+    );
+  });
+
+  test("版本根路径 + Responses 资源后缀：应保留 suffix", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1",
+      "/v1/responses/resp_123/input_items?x=1",
+      "https://relay.example.com/openai/v1/responses/resp_123/input_items?x=1"
+    );
+  });
+
+  test("版本根路径 + Models 资源后缀：应保留 suffix", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1",
+      "/v1/models/gpt-4o?x=1",
+      "https://relay.example.com/openai/v1/models/gpt-4o?x=1"
+    );
+  });
+
+  test("版本根路径 + Images 端点：不应重复追加 /v1", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1",
+      "/v1/images/generations?x=1",
+      "https://relay.example.com/openai/v1/images/generations?x=1"
+    );
+  });
+
+  test("完整 Images path：baseUrl 已包含 /openai/v1/images 时保持原路径", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1/images",
+      "/v1/images/edits?x=1",
+      "https://relay.example.com/openai/v1/images/edits?x=1"
+    );
+  });
+
+  test("版本根路径 + Audio 端点：不应重复追加 /v1", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/v1",
+      "/v1/audio/transcriptions?x=1",
+      "https://relay.example.com/openai/v1/audio/transcriptions?x=1"
+    );
+  });
+
+  test("完整子端点：baseUrl 已包含 /v1/messages/count_tokens 时不应重复拼接", () => {
+    expectBuiltUrl(
+      "https://proxy.example.com/anthropic/v1/messages/count_tokens",
+      "/v1/messages/count_tokens?x=1",
+      "https://proxy.example.com/anthropic/v1/messages/count_tokens?x=1"
+    );
+  });
+
+  test("无版本 endpoint 根路径：baseUrl=/openai/responses + /v1/responses/abc 应只追加 suffix", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/responses",
+      "/v1/responses/abc?x=1",
+      "https://relay.example.com/openai/responses/abc?x=1"
+    );
+  });
+
+  test("相似但非标准 endpoint：responses-archive 不应被折叠成标准 /responses", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/openai/responses-archive",
+      "/v1/responses?x=1",
+      "https://relay.example.com/openai/responses-archive/v1/responses?x=1"
+    );
+  });
+
+  test("version root 识别不应误伤普通路径尾巴，如 /v1api", () => {
+    expectBuiltUrl(
+      "https://relay.example.com/proxy/v1api",
+      "/v1/chat/completions?x=1",
+      "https://relay.example.com/proxy/v1api/v1/chat/completions?x=1"
+    );
   });
 });

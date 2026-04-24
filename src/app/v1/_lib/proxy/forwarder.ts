@@ -46,12 +46,14 @@ import type {
 
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
-import { HeaderProcessor } from "../headers";
+import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
+import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
-import { isStrictStandardEndpointPath } from "./endpoint-paths";
+import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
 import {
+  ALL_PROVIDERS_UNAVAILABLE_MESSAGE,
   buildRequestDetails,
   categorizeErrorAsync,
   EmptyResponseError,
@@ -65,6 +67,13 @@ import {
   sanitizeUrl,
 } from "./errors";
 import { ModelRedirector } from "./model-redirector";
+import {
+  cloneOpenAIImageRequestMetadata,
+  sanitizeGenerationsRequestForProvider,
+  serializeOpenAIImageMultipartRequest,
+  syncOpenAIImageMultipartFromLogicalBody,
+  validateOpenAIImageRequest,
+} from "./openai-image-compat";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
@@ -133,6 +142,29 @@ type ReactiveRectifierResult =
       trigger: string;
       requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>;
     };
+
+type DetailRequestAfterSnapshot = {
+  body: string | null;
+  headers: Headers;
+  meta: {
+    clientUrl: null;
+    upstreamUrl: string;
+    method: string;
+  };
+};
+
+type DetailResponseBeforeSnapshot = {
+  headers: Headers;
+  meta: {
+    upstreamUrl: string;
+    statusCode: number;
+  };
+};
+
+type ProxySessionWithDetailSnapshotRuntime = ProxySession & {
+  detailSnapshotRequestAfter?: DetailRequestAfterSnapshot | null;
+  detailSnapshotResponseBefore?: DetailResponseBeforeSnapshot | null;
+};
 
 // 非流式响应体检查的上限（字节）：避免上游在 2xx 场景返回超大内容导致内存占用失控。
 // 说明：
@@ -391,6 +423,49 @@ function addSpecialSettingForPersistence(
   }
 }
 
+async function persistRequestAfterSnapshot(
+  session: ProxySession,
+  snapshot: DetailRequestAfterSnapshot | null | undefined
+): Promise<void> {
+  if (!snapshot || !session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
+    return;
+  }
+
+  await SessionManager.storeSessionRequestPhaseSnapshot(
+    session.sessionId,
+    "after",
+    {
+      body: snapshot.body,
+      headers: snapshot.headers,
+      meta: snapshot.meta,
+    },
+    session.requestSequence
+  ).catch((err) => {
+    logger.error("Failed to store request after snapshot:", err);
+  });
+}
+
+async function persistResponseBeforeSnapshot(
+  session: ProxySession,
+  snapshot: DetailResponseBeforeSnapshot | null | undefined
+): Promise<void> {
+  if (!snapshot || !session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
+    return;
+  }
+
+  await SessionManager.storeSessionResponsePhaseSnapshot(
+    session.sessionId,
+    "before",
+    {
+      headers: snapshot.headers,
+      meta: snapshot.meta,
+    },
+    session.requestSequence
+  ).catch((err) => {
+    logger.error("Failed to store response before snapshot meta:", err);
+  });
+}
+
 type MatchedRuleDetails = NonNullable<
   NonNullable<ProviderChainItem["errorDetails"]>["matchedRule"]
 >;
@@ -444,26 +519,37 @@ function buildClientErrorChainEntry(
   error: Error,
   errorMessage: string,
   requestDetails: ReturnType<typeof buildRequestDetails>,
-  matchedRule: MatchedRuleDetails | undefined
+  matchedRule: MatchedRuleDetails | undefined,
+  rawCrossProviderFallbackEnabled: boolean
 ): NonNullable<Parameters<ProxySession["addProviderToChain"]>[1]> {
   if (error instanceof ProxyError) {
-    return {
-      ...endpointAudit,
-      reason: "client_error_non_retryable",
-      circuitState: getCircuitState(provider.id),
-      attemptNumber,
-      errorMessage,
-      statusCode: error.statusCode,
-      statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
-      errorDetails: {
-        provider: {
+    const providerDetails = rawCrossProviderFallbackEnabled
+      ? {
+          id: provider.id,
+          name: provider.name,
+          statusCode: error.statusCode,
+          statusText: error.message,
+        }
+      : {
           id: provider.id,
           name: provider.name,
           statusCode: error.statusCode,
           statusText: error.message,
           upstreamBody: error.upstreamError?.body,
           upstreamParsed: error.upstreamError?.parsed,
-        },
+        };
+
+    return {
+      ...endpointAudit,
+      reason: "client_error_non_retryable",
+      circuitState: getCircuitState(provider.id),
+      attemptNumber,
+      rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
+      errorMessage,
+      statusCode: error.statusCode,
+      statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+      errorDetails: {
+        provider: providerDetails,
         clientError: error.getDetailedErrorMessage(),
         matchedRule,
         request: requestDetails,
@@ -491,26 +577,37 @@ function buildRetryFailedChainEntry(
   attemptNumber: number,
   error: Error,
   errorMessage: string,
-  requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>
+  requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>,
+  rawCrossProviderFallbackEnabled: boolean
 ): NonNullable<Parameters<ProxySession["addProviderToChain"]>[1]> {
   if (error instanceof ProxyError) {
-    return {
-      ...endpointAudit,
-      reason: "retry_failed",
-      circuitState: getCircuitState(provider.id),
-      attemptNumber,
-      errorMessage,
-      statusCode: error.statusCode,
-      statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
-      errorDetails: {
-        provider: {
+    const providerDetails = rawCrossProviderFallbackEnabled
+      ? {
+          id: provider.id,
+          name: provider.name,
+          statusCode: error.statusCode,
+          statusText: error.message,
+        }
+      : {
           id: provider.id,
           name: provider.name,
           statusCode: error.statusCode,
           statusText: error.message,
           upstreamBody: error.upstreamError?.body,
           upstreamParsed: error.upstreamError?.parsed,
-        },
+        };
+
+    return {
+      ...endpointAudit,
+      reason: "retry_failed",
+      circuitState: getCircuitState(provider.id),
+      attemptNumber,
+      rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
+      errorMessage,
+      statusCode: error.statusCode,
+      statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+      errorDetails: {
+        provider: providerDetails,
         request: requestDetailsBeforeRectify,
       },
     };
@@ -841,6 +938,10 @@ export class ProxyForwarder {
 
     const env = getEnvConfig();
     const envDefaultMaxAttempts = clampRetryAttempts(env.MAX_RETRY_ATTEMPTS_DEFAULT);
+    const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
+    const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
+    const shouldSkipRawRetryAndProviderSwitch =
+      !endpointPolicy.allowRetry && !rawCrossProviderFallbackEnabled;
 
     let lastError: Error | null = null;
     let currentProvider = session.provider;
@@ -856,6 +957,9 @@ export class ProxyForwarder {
         currentProvider,
         envDefaultMaxAttempts
       );
+      if (rawCrossProviderFallbackEnabled) {
+        maxAttemptsPerProvider = 1;
+      }
       const reactiveRectifierRetryState: ReactiveRectifierRetryState = {
         thinkingSignatureRetried: false,
         thinkingBudgetRetried: false,
@@ -867,8 +971,12 @@ export class ProxyForwarder {
         currentProvider.providerType !== "gemini" &&
         currentProvider.providerType !== "gemini-cli" &&
         !isStandardProxyEndpointPath(requestPath);
+      const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
+      const shouldAccountCircuitBreaker = endpointPolicy.allowCircuitBreakerAccounting;
       const shouldEnforceStrictEndpointPool =
-        !isMcpRequest && isStrictStandardEndpointPath(requestPath) && providerVendorId > 0;
+        !isMcpRequest &&
+        shouldEnforceStrictEndpointPoolPolicy(endpointPolicy) &&
+        providerVendorId > 0;
       let endpointSelectionError: Error | null = null;
 
       const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
@@ -950,6 +1058,24 @@ export class ProxyForwarder {
             ...(filterStats ? { endpointFilterStats: filterStats } : {}),
             errorMessage: endpointSelectionError?.message,
           });
+
+          if (shouldSkipRawRetryAndProviderSwitch) {
+            logger.debug(
+              "ProxyForwarder: raw passthrough endpoint pool exhaustion, skipping provider switch",
+              {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                strictBlockCause,
+                selectorError: endpointSelectionError?.message,
+                policyKind: endpointPolicy.kind,
+              }
+            );
+            throw new ProxyError("No available provider endpoints", 503, {
+              body: "",
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+            });
+          }
 
           failedProviderIds.push(currentProvider.id);
           attemptCount = maxAttemptsPerProvider;
@@ -1259,7 +1385,9 @@ export class ProxyForwarder {
             await recordEndpointSuccess(activeEndpoint.endpointId);
           }
 
-          recordSuccess(currentProvider.id);
+          if (shouldAccountCircuitBreaker) {
+            recordSuccess(currentProvider.id);
+          }
 
           // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
           if (session.sessionId) {
@@ -1269,7 +1397,8 @@ export class ProxyForwarder {
               currentProvider.id,
               currentProvider.priority || 0,
               totalProvidersAttempted === 1 && attemptCount === 1, // isFirstAttempt
-              totalProvidersAttempted > 1 // isFailoverSuccess: 切换过供应商
+              totalProvidersAttempted > 1, // isFailoverSuccess: 切换过供应商
+              session.authState?.key?.id ?? null
             );
 
             if (result.updated) {
@@ -1435,7 +1564,8 @@ export class ProxyForwarder {
                   attemptCount,
                   lastError,
                   errorMessage,
-                  reactiveRectifierResult.requestDetailsBeforeRectify
+                  reactiveRectifierResult.requestDetailsBeforeRectify,
+                  rawCrossProviderFallbackEnabled
                 )
               );
 
@@ -1457,7 +1587,8 @@ export class ProxyForwarder {
               lastError,
               errorMessage,
               buildRequestDetails(session),
-              matchedRule
+              matchedRule,
+              rawCrossProviderFallbackEnabled
             );
 
             if (lastError instanceof ProxyError) {
@@ -1536,6 +1667,19 @@ export class ProxyForwarder {
               },
             });
 
+            if (shouldSkipRawRetryAndProviderSwitch) {
+              logger.debug(
+                "ProxyForwarder: raw passthrough endpoint system error, skipping retry and provider switch",
+                {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  error: errorMessage,
+                  policyKind: endpointPolicy.kind,
+                }
+              );
+              throw lastError;
+            }
+
             // 第1次失败：等待100ms后重试当前供应商
             if (attemptCount < maxAttemptsPerProvider) {
               // Network error: advance to next endpoint for retry
@@ -1578,7 +1722,9 @@ export class ProxyForwarder {
               );
 
               // 计入熔断器
-              await recordFailure(currentProvider.id, lastError);
+              if (shouldAccountCircuitBreaker) {
+                await recordFailure(currentProvider.id, lastError);
+              }
             } else {
               logger.debug(
                 "ProxyForwarder: Network error not counted towards circuit breaker (disabled by default)",
@@ -1614,21 +1760,42 @@ export class ProxyForwarder {
               reason: "resource_not_found",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
+              rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
               errorMessage: errorMessage,
               statusCode: 404,
               statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
-                provider: {
-                  id: currentProvider.id,
-                  name: currentProvider.name,
-                  statusCode: 404,
-                  statusText: proxyError.message,
-                  upstreamBody: proxyError.upstreamError?.body,
-                  upstreamParsed: proxyError.upstreamError?.parsed,
-                },
+                provider: rawCrossProviderFallbackEnabled
+                  ? {
+                      id: currentProvider.id,
+                      name: currentProvider.name,
+                      statusCode: 404,
+                      statusText: proxyError.message,
+                    }
+                  : {
+                      id: currentProvider.id,
+                      name: currentProvider.name,
+                      statusCode: 404,
+                      statusText: proxyError.message,
+                      upstreamBody: proxyError.upstreamError?.body,
+                      upstreamParsed: proxyError.upstreamError?.parsed,
+                    },
                 request: buildRequestDetails(session),
               },
             });
+
+            if (shouldSkipRawRetryAndProviderSwitch) {
+              logger.debug(
+                "ProxyForwarder: raw passthrough endpoint 404, skipping retry and provider switch",
+                {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  error: errorMessage,
+                  policyKind: endpointPolicy.kind,
+                }
+              );
+              throw lastError;
+            }
 
             // 不调用 recordFailure()，不计入熔断器
 
@@ -1669,6 +1836,7 @@ export class ProxyForwarder {
                 reason: "retry_failed",
                 circuitState: getCircuitState(currentProvider.id),
                 attemptNumber: attemptCount,
+                rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
                 errorMessage: emptyError.message,
                 circuitFailureCount: health.failureCount + 1,
                 circuitFailureThreshold: config.failureThreshold,
@@ -1684,6 +1852,19 @@ export class ProxyForwarder {
                 },
               });
 
+              if (shouldSkipRawRetryAndProviderSwitch) {
+                logger.debug(
+                  "ProxyForwarder: raw passthrough empty response, skipping retry and provider switch",
+                  {
+                    providerId: currentProvider.id,
+                    providerName: currentProvider.name,
+                    error: emptyError.message,
+                    policyKind: endpointPolicy.kind,
+                  }
+                );
+                throw lastError;
+              }
+
               // 未耗尽重试次数：等待 100ms 后继续重试当前供应商
               if (willRetry) {
                 await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1692,7 +1873,9 @@ export class ProxyForwarder {
 
               // 重试耗尽：计入熔断器并切换供应商
               if (!session.isProbeRequest()) {
-                await recordFailure(currentProvider.id, lastError);
+                if (shouldAccountCircuitBreaker) {
+                  await recordFailure(currentProvider.id, lastError);
+                }
               }
 
               failedProviderIds.push(currentProvider.id);
@@ -1717,17 +1900,25 @@ export class ProxyForwarder {
                 ...endpointAudit,
                 reason: "vendor_type_all_timeout",
                 attemptNumber: attemptCount,
+                rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
                 statusCode: 524,
                 errorMessage: errorMessage,
                 errorDetails: {
-                  provider: {
-                    id: currentProvider.id,
-                    name: currentProvider.name,
-                    statusCode: 524,
-                    statusText: proxyError.message,
-                    upstreamBody: proxyError.upstreamError?.body,
-                    upstreamParsed: proxyError.upstreamError?.parsed,
-                  },
+                  provider: rawCrossProviderFallbackEnabled
+                    ? {
+                        id: currentProvider.id,
+                        name: currentProvider.name,
+                        statusCode: 524,
+                        statusText: proxyError.message,
+                      }
+                    : {
+                        id: currentProvider.id,
+                        name: currentProvider.name,
+                        statusCode: 524,
+                        statusText: proxyError.message,
+                        upstreamBody: proxyError.upstreamError?.body,
+                        upstreamParsed: proxyError.upstreamError?.parsed,
+                      },
                   request: buildRequestDetails(session),
                 },
               });
@@ -1741,8 +1932,7 @@ export class ProxyForwarder {
             }
 
             // Raw passthrough endpoints: no circuit breaker, no provider switch, no retry
-            const endpointPolicy = session.getEndpointPolicy();
-            if (!endpointPolicy.allowRetry) {
+            if (!endpointPolicy.allowRetry && !rawCrossProviderFallbackEnabled) {
               logger.debug(
                 "ProxyForwarder: raw passthrough endpoint error, skipping circuit breaker and provider switch",
                 {
@@ -1777,20 +1967,28 @@ export class ProxyForwarder {
               reason: "retry_failed",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
+              rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
               errorMessage: errorMessage,
               circuitFailureCount: health.failureCount + 1, // 包含本次失败
               circuitFailureThreshold: config.failureThreshold,
               statusCode: statusCode,
               statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
-                provider: {
-                  id: currentProvider.id,
-                  name: currentProvider.name,
-                  statusCode: statusCode,
-                  statusText: proxyError.message,
-                  upstreamBody: proxyError.upstreamError?.body,
-                  upstreamParsed: proxyError.upstreamError?.parsed,
-                },
+                provider: rawCrossProviderFallbackEnabled
+                  ? {
+                      id: currentProvider.id,
+                      name: currentProvider.name,
+                      statusCode: statusCode,
+                      statusText: proxyError.message,
+                    }
+                  : {
+                      id: currentProvider.id,
+                      name: currentProvider.name,
+                      statusCode: statusCode,
+                      statusText: proxyError.message,
+                      upstreamBody: proxyError.upstreamError?.body,
+                      upstreamParsed: proxyError.upstreamError?.parsed,
+                    },
                 request: buildRequestDetails(session),
               },
             });
@@ -1819,7 +2017,9 @@ export class ProxyForwarder {
                 messagesCount: session.getMessagesLength(),
               });
             } else {
-              await recordFailure(currentProvider.id, lastError);
+              if (shouldAccountCircuitBreaker) {
+                await recordFailure(currentProvider.id, lastError);
+              }
             }
 
             // 加入失败列表并切换供应商
@@ -1870,7 +2070,7 @@ export class ProxyForwarder {
 
     // ⭐ 不暴露供应商详情，仅返回简单错误
     await ProxyForwarder.clearSessionProviderBinding(session);
-    throw ProxyForwarder.buildAllProvidersUnavailableError(); // Service Unavailable
+    throw ProxyForwarder.buildAllProvidersUnavailableError(lastError); // Service Unavailable
   }
 
   /**
@@ -1881,7 +2081,8 @@ export class ProxyForwarder {
     provider: typeof session.provider,
     baseUrl: string,
     endpointAudit?: { endpointId: number | null; endpointUrl: string },
-    attemptNumber?: number
+    attemptNumber?: number,
+    deferDetailSnapshotPersistence: boolean = false
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -1901,7 +2102,7 @@ export class ProxyForwarder {
     }
 
     // Apply model redirect (if configured) - skip for raw passthrough endpoints
-    if (!session.getEndpointPolicy().bypassForwarderPreprocessing) {
+    if (!ProxyForwarder.getEndpointPolicy(session).bypassForwarderPreprocessing) {
       const wasRedirected = ModelRedirector.apply(session, provider);
       if (wasRedirected) {
         logger.debug("ProxyForwarder: Model redirected", {
@@ -1998,7 +2199,7 @@ export class ProxyForwarder {
 
         // Final-phase request filter for Gemini: after headers built, before body serialization
         // Clone body to prevent in-place mutation of session.request.message on retries
-        if (!session.getEndpointPolicy().bypassRequestFilters) {
+        if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
           const { requestFilterEngine } = await import("@/lib/request-filter-engine");
           const bodyForFinal = structuredClone(bodyToSerialize);
           await requestFilterEngine.applyFinal(session, bodyForFinal, processedHeaders);
@@ -2037,7 +2238,7 @@ export class ProxyForwarder {
         );
 
         // Final-phase request filter for no-body requests (header-only operations)
-        if (!session.getEndpointPolicy().bypassRequestFilters) {
+        if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
           const { requestFilterEngine } = await import("@/lib/request-filter-engine");
           await requestFilterEngine.applyFinal(
             session,
@@ -2071,7 +2272,7 @@ export class ProxyForwarder {
       });
     } else {
       // --- STANDARD HANDLING ---
-      if (!session.getEndpointPolicy().bypassForwarderPreprocessing) {
+      if (!ProxyForwarder.getEndpointPolicy(session).bypassForwarderPreprocessing) {
         // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
         if (provider.providerType === "codex") {
           const { request: overridden, audit } = applyCodexProviderOverridesWithAudit(
@@ -2192,24 +2393,6 @@ export class ProxyForwarder {
         }
       } // end bypassForwarderPreprocessing gate
 
-      processedHeaders = ProxyForwarder.buildHeaders(session, provider);
-
-      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
-        void SessionManager.storeSessionRequestHeaders(
-          session.sessionId,
-          processedHeaders,
-          session.requestSequence
-        ).catch((err) => logger.error("Failed to store request headers:", err));
-      }
-
-      if (process.env.NODE_ENV === "development") {
-        logger.trace("ProxyForwarder: Final request headers", {
-          provider: provider.name,
-          providerType: provider.providerType,
-          headers: Object.fromEntries(processedHeaders.entries()),
-        });
-      }
-
       // ⭐ MCP 透传处理：检测是否为 MCP 请求，并使用相应的 URL
       let effectiveBaseUrl = baseUrl || provider.url;
 
@@ -2269,6 +2452,8 @@ export class ProxyForwarder {
         );
       }
 
+      processedHeaders = ProxyForwarder.buildHeaders(session, provider, effectiveBaseUrl);
+
       // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
       // 移除了强制 /v1/responses 路径重写，解决 Issue #139
       // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
@@ -2278,6 +2463,22 @@ export class ProxyForwarder {
       // When provider has multiple endpoints, provider.url and proxyUrl hosts may differ
       const actualHost = HeaderProcessor.extractHost(proxyUrl);
       processedHeaders.set("host", actualHost);
+
+      if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+        void SessionManager.storeSessionRequestHeaders(
+          session.sessionId,
+          new Headers(processedHeaders),
+          session.requestSequence
+        ).catch((err) => logger.error("Failed to store request headers:", err));
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        logger.trace("ProxyForwarder: Final request headers", {
+          provider: provider.name,
+          providerType: provider.providerType,
+          headers: Object.fromEntries(processedHeaders.entries()),
+        });
+      }
 
       logger.debug("ProxyForwarder: Final proxy URL", {
         url: proxyUrl,
@@ -2298,7 +2499,10 @@ export class ProxyForwarder {
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 
       if (hasBody) {
-        if (session.getEndpointPolicy().bypassForwarderPreprocessing && session.request.buffer) {
+        if (
+          ProxyForwarder.getEndpointPolicy(session).bypassForwarderPreprocessing &&
+          session.request.buffer
+        ) {
           // Raw passthrough: preserve original request body bytes as-is
           requestBody = session.request.buffer;
           session.forwardedRequestBody = session.request.log;
@@ -2307,6 +2511,55 @@ export class ProxyForwarder {
             isStreaming = (session.request.message as Record<string, unknown>).stream === true;
           } catch {
             isStreaming = false;
+          }
+        } else if (session.isOpenAIImageMultipartRequest()) {
+          const imageRequestMetadata = session.getOpenAIImageRequestMetadata();
+          if (!imageRequestMetadata) {
+            throw new ProxyError("Invalid request: image multipart metadata is missing.", 400);
+          }
+
+          const logicalBody = filterPrivateParameters(
+            structuredClone(session.request.message)
+          ) as Record<string, unknown>;
+
+          if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
+            const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+            await requestFilterEngine.applyFinal(session, logicalBody, processedHeaders);
+          }
+
+          syncOpenAIImageMultipartFromLogicalBody(imageRequestMetadata, logicalBody);
+
+          const validation = await validateOpenAIImageRequest({
+            pathname: requestPath,
+            body: logicalBody,
+            imageRequestMetadata,
+          });
+          if (!validation.ok) {
+            throw new ProxyError(validation.message ?? "Invalid request.", 400);
+          }
+
+          const serializedMultipart =
+            await serializeOpenAIImageMultipartRequest(imageRequestMetadata);
+          requestBody = serializedMultipart.body;
+          session.forwardedRequestBody = serializedMultipart.summary;
+          isStreaming = serializedMultipart.isStreaming;
+
+          if (serializedMultipart.contentType) {
+            processedHeaders.set("content-type", serializedMultipart.contentType);
+          } else {
+            processedHeaders.delete("content-type");
+          }
+
+          if (process.env.NODE_ENV === "development") {
+            logger.trace("ProxyForwarder: Forwarding multipart image request", {
+              provider: provider.name,
+              providerId: provider.id,
+              proxyUrl: proxyUrl,
+              format: session.originalFormat,
+              method: session.method,
+              bodyLength: serializedMultipart.body.byteLength,
+              isStreaming,
+            });
           }
         } else {
           const filteredMessage = filterPrivateParameters(session.request.message) as Record<
@@ -2333,9 +2586,22 @@ export class ProxyForwarder {
           }
 
           // Final-phase request filter: after all provider overrides, before serialization
-          if (!session.getEndpointPolicy().bypassRequestFilters) {
+          if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
             const { requestFilterEngine } = await import("@/lib/request-filter-engine");
             await requestFilterEngine.applyFinal(session, messageToSend, processedHeaders);
+          }
+
+          if (requestPath === "/v1/images/generations") {
+            sanitizeGenerationsRequestForProvider(messageToSend, provider);
+          }
+
+          const validation = await validateOpenAIImageRequest({
+            pathname: requestPath,
+            body: messageToSend,
+            imageRequestMetadata: session.getOpenAIImageRequestMetadata(),
+          });
+          if (!validation.ok) {
+            throw new ProxyError(validation.message ?? "Invalid request.", 400);
           }
 
           const bodyString = JSON.stringify(messageToSend);
@@ -2364,7 +2630,7 @@ export class ProxyForwarder {
         }
       } else {
         // No body (GET/HEAD): still run final-phase for header-only filter operations
-        if (!session.getEndpointPolicy().bypassRequestFilters) {
+        if (!ProxyForwarder.getEndpointPolicy(session).bypassRequestFilters) {
           const { requestFilterEngine } = await import("@/lib/request-filter-engine");
           await requestFilterEngine.applyFinal(
             session,
@@ -2372,6 +2638,23 @@ export class ProxyForwarder {
             processedHeaders
           );
         }
+      }
+    }
+
+    if (session.shouldPersistSessionDebugArtifacts()) {
+      const detailSnapshotSession = session as ProxySessionWithDetailSnapshotRuntime;
+      detailSnapshotSession.detailSnapshotRequestAfter = {
+        body: session.forwardedRequestBody ?? null,
+        headers: new Headers(processedHeaders),
+        meta: {
+          clientUrl: null,
+          upstreamUrl: proxyUrl,
+          method: session.method,
+        },
+      };
+      // 这里是 request.after 唯一稳定时机：最终 headers、proxyUrl、body 都已确定，但尚未真正发往上游。
+      if (!deferDetailSnapshotPersistence) {
+        void persistRequestAfterSnapshot(session, detailSnapshotSession.detailSnapshotRequestAfter);
       }
     }
 
@@ -2543,7 +2826,8 @@ export class ProxyForwarder {
             init,
             provider.id,
             provider.name,
-            session
+            session,
+            deferDetailSnapshotPersistence
           )
         : await fetch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
@@ -2768,7 +3052,8 @@ export class ProxyForwarder {
                 http1FallbackInit,
                 provider.id,
                 provider.name,
-                session
+                session,
+                deferDetailSnapshotPersistence
               )
             : await fetch(proxyUrl, http1FallbackInit);
 
@@ -2850,7 +3135,8 @@ export class ProxyForwarder {
                     fallbackInit,
                     provider.id,
                     provider.name,
-                    session
+                    session,
+                    deferDetailSnapshotPersistence
                   )
                 : await fetch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
@@ -3065,7 +3351,7 @@ export class ProxyForwarder {
   }
 
   private static shouldUseStreamingHedge(session: ProxySession): boolean {
-    const endpointPolicy = session.getEndpointPolicy?.();
+    const endpointPolicy = ProxyForwarder.getEndpointPolicy(session);
     return (
       (endpointPolicy?.allowRetry ?? true) &&
       (endpointPolicy?.allowProviderSwitch ?? true) &&
@@ -3074,12 +3360,34 @@ export class ProxyForwarder {
     );
   }
 
+  private static getEndpointPolicy(session: ProxySession) {
+    const policySession = session as unknown as {
+      getEndpointPolicy?: (() => ReturnType<typeof resolveEndpointPolicy>) | undefined;
+      endpointPolicy?: ReturnType<typeof resolveEndpointPolicy>;
+      requestUrl?: URL;
+    };
+    const endpointPolicyGetter = policySession.getEndpointPolicy;
+    const getterResult =
+      typeof endpointPolicyGetter === "function" ? endpointPolicyGetter.call(session) : null;
+    if (getterResult) {
+      return getterResult;
+    }
+
+    const attachedPolicy = policySession.endpointPolicy;
+    if (attachedPolicy) {
+      return attachedPolicy;
+    }
+
+    return resolveEndpointPolicy(policySession.requestUrl?.pathname ?? "/");
+  }
+
   private static async sendStreamingWithHedge(session: ProxySession): Promise<Response> {
     const initialProvider = session.provider;
     if (!initialProvider) {
       throw new Error("代理上下文缺少供应商");
     }
 
+    const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
     const launchedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
     let settled = false;
@@ -3229,7 +3537,7 @@ export class ProxyForwarder {
             providerName: initialProvider.name,
           });
 
-          lastError = ProxyForwarder.buildAllProvidersUnavailableError();
+          lastError = ProxyForwarder.buildAllProvidersUnavailableError(lastError);
           lastErrorCategory = null;
           noMoreProviders = true;
           abortAllAttempts(undefined, "hedge_launch_failed");
@@ -3253,7 +3561,8 @@ export class ProxyForwarder {
         providerForRequest,
         attempt.baseUrl,
         attempt.endpointAudit,
-        attempt.requestAttemptCount
+        attempt.requestAttemptCount,
+        true
       )
         .then(async (response) => {
           if (settled || winnerCommitted || attempt.settled) {
@@ -3420,7 +3729,8 @@ export class ProxyForwarder {
               attempt.requestAttemptCount,
               error,
               errorMessage,
-              reactiveRectifierResult.requestDetailsBeforeRectify
+              reactiveRectifierResult.requestDetailsBeforeRectify,
+              rawCrossProviderFallbackEnabled
             ),
             modelRedirect: getAttemptModelRedirect(attempt),
           });
@@ -3473,7 +3783,8 @@ export class ProxyForwarder {
                 error,
                 errorMessage,
                 buildRequestDetails(session),
-                matchedRule
+                matchedRule,
+                rawCrossProviderFallbackEnabled
               ),
               modelRedirect: getAttemptModelRedirect(attempt),
             }
@@ -3522,6 +3833,12 @@ export class ProxyForwarder {
       if (attempt.session !== session) {
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
       }
+      const detailSnapshotSession = attempt.session as ProxySessionWithDetailSnapshotRuntime;
+      void persistRequestAfterSnapshot(session, detailSnapshotSession.detailSnapshotRequestAfter);
+      void persistResponseBeforeSnapshot(
+        session,
+        detailSnapshotSession.detailSnapshotResponseBefore
+      );
       session.setProvider(attempt.provider);
 
       // Determine if this is truly a hedge winner or just a regular success
@@ -3546,7 +3863,8 @@ export class ProxyForwarder {
             attempt.provider.id,
             attempt.provider.priority || 0,
             launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
-            attempt.provider.id !== initialProvider.id
+            attempt.provider.id !== initialProvider.id,
+            session.authState?.key?.id ?? null
           );
 
           if (bindingResult.updated) {
@@ -3714,7 +4032,9 @@ export class ProxyForwarder {
       provider.providerType !== "gemini-cli" &&
       !isStandardProxyEndpointPath(requestPath);
     const shouldEnforceStrictEndpointPool =
-      !isMcpRequest && isStrictStandardEndpointPath(requestPath) && providerVendorId > 0;
+      !isMcpRequest &&
+      shouldEnforceStrictEndpointPoolPolicy(ProxyForwarder.getEndpointPolicy(session)) &&
+      providerVendorId > 0;
 
     if (
       !isMcpRequest &&
@@ -3826,6 +4146,7 @@ export class ProxyForwarder {
       ...session.request,
       message: structuredClone(session.request.message),
       buffer: session.request.buffer ? session.request.buffer.slice(0) : undefined,
+      imageRequestMetadata: cloneOpenAIImageRequestMetadata(session.request.imageRequestMetadata),
     };
     shadow.requestUrl = new URL(session.requestUrl.toString());
     shadowState.headers = new Headers(session.headers);
@@ -3857,6 +4178,9 @@ export class ProxyForwarder {
     target.request.log = source.request.log;
     target.request.note = source.request.note;
     target.request.model = source.request.model;
+    target.request.imageRequestMetadata = cloneOpenAIImageRequestMetadata(
+      source.request.imageRequestMetadata
+    );
     target.requestUrl = new URL(source.requestUrl.toString());
     target.forwardedRequestBody = source.forwardedRequestBody;
     target.setCacheTtlResolved(source.getCacheTtlResolved());
@@ -3926,8 +4250,26 @@ export class ProxyForwarder {
     await SessionManager.clearSessionProvider(session.sessionId);
   }
 
-  private static buildAllProvidersUnavailableError(): ProxyError {
-    return new ProxyError("所有供应商暂时不可用，请稍后重试", 503);
+  private static buildAllProvidersUnavailableError(finalError?: Error | null): ProxyError {
+    const safeClientMessageCandidate =
+      finalError instanceof ProxyError &&
+      (finalError.upstreamError?.rawBody ||
+        finalError.upstreamError?.safeClientMessageCandidate ||
+        finalError.upstreamError?.body)
+        ? (deriveClientSafeUpstreamErrorMessage({
+            rawText: finalError.upstreamError?.rawBody ?? finalError.upstreamError?.body,
+            candidateMessage:
+              finalError.upstreamError?.safeClientMessageCandidate ??
+              finalError.upstreamError?.body ??
+              finalError.message,
+            providerName: finalError.upstreamError?.providerName ?? null,
+          }) ?? undefined)
+        : undefined;
+
+    return new ProxyError(ALL_PROVIDERS_UNAVAILABLE_MESSAGE, 503, {
+      body: "",
+      safeClientMessageCandidate,
+    });
   }
 
   private static resolveHedgeTerminalError(
@@ -3942,7 +4284,7 @@ export class ProxyForwarder {
       return lastError;
     }
 
-    return ProxyForwarder.buildAllProvidersUnavailableError();
+    return ProxyForwarder.buildAllProvidersUnavailableError(lastError);
   }
 
   private static async readFirstReadableChunk(
@@ -3997,7 +4339,8 @@ export class ProxyForwarder {
 
   private static buildHeaders(
     session: ProxySession,
-    provider: NonNullable<typeof session.provider>
+    provider: NonNullable<typeof session.provider>,
+    upstreamBaseUrl: string
   ): Headers {
     const outboundKey = provider.key;
     const preserveClientIp = provider.preserveClientIp ?? false;
@@ -4005,16 +4348,22 @@ export class ProxyForwarder {
 
     // 构建请求头覆盖规则
     const overrides: Record<string, string> = {
-      host: HeaderProcessor.extractHost(provider.url),
-      authorization: `Bearer ${outboundKey}`,
-      "x-api-key": outboundKey,
+      host: HeaderProcessor.extractHost(upstreamBaseUrl),
       "content-type": "application/json", // 确保 Content-Type
       "accept-encoding": "identity", // 禁用压缩：避免 undici ZlibError（代理应透传原始数据）
     };
 
-    // claude-auth: 移除 x-api-key（避免中转服务冲突）
-    if (provider.providerType === "claude-auth") {
-      delete overrides["x-api-key"];
+    if (provider.providerType === "claude-auth" || provider.providerType === "claude") {
+      Object.assign(
+        overrides,
+        resolveAnthropicAuthHeaders(outboundKey, upstreamBaseUrl, {
+          forceBearerOnly: provider.providerType === "claude-auth",
+        })
+      );
+    }
+
+    if (provider.providerType === "codex" || provider.providerType === "openai-compatible") {
+      overrides.authorization = `Bearer ${outboundKey}`;
     }
 
     // Codex 特殊处理：优先使用过滤器修改的 User-Agent
@@ -4071,14 +4420,13 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
+      blacklist: [...OUTBOUND_TRANSPORT_HEADER_BLACKLIST, "x-api-key"],
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
 
     return headerProcessor.process(session.headers);
   }
-
   private static buildGeminiHeaders(
     session: ProxySession,
     provider: NonNullable<typeof session.provider>,
@@ -4168,7 +4516,8 @@ export class ProxyForwarder {
     init: RequestInit & { dispatcher?: Dispatcher },
     providerId: number,
     providerName: string,
-    session?: ProxySession
+    session?: ProxySession,
+    deferDetailSnapshotPersistence: boolean = false
   ): Promise<Response> {
     const { FETCH_HEADERS_TIMEOUT: headersTimeout, FETCH_BODY_TIMEOUT: bodyTimeout } =
       getEnvConfig();
@@ -4239,6 +4588,17 @@ export class ProxyForwarder {
       }
     }
 
+    if (session?.shouldPersistSessionDebugArtifacts()) {
+      const detailSnapshotSession = session as ProxySessionWithDetailSnapshotRuntime;
+      detailSnapshotSession.detailSnapshotResponseBefore = {
+        headers: new Headers(responseHeaders),
+        meta: {
+          upstreamUrl: url,
+          statusCode: undiciRes.statusCode,
+        },
+      };
+    }
+
     if (session?.sessionId && session.shouldPersistSessionDebugArtifacts()) {
       void SessionManager.storeSessionResponseHeaders(
         session.sessionId,
@@ -4251,6 +4611,13 @@ export class ProxyForwarder {
         { url, statusCode: undiciRes.statusCode },
         session.requestSequence
       ).catch((err) => logger.error("Failed to store upstream response meta:", err));
+
+      if (!deferDetailSnapshotPersistence) {
+        void persistResponseBeforeSnapshot(
+          session,
+          (session as ProxySessionWithDetailSnapshotRuntime).detailSnapshotResponseBefore
+        );
+      }
     }
 
     // 检测响应是否为 gzip 压缩

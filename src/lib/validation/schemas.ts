@@ -7,6 +7,10 @@ import {
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { PROVIDER_ALLOWED_MODEL_RULES_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_MODEL_REDIRECT_RULES_SCHEMA } from "@/lib/provider-model-redirect-schema";
+import {
+  MAX_PUBLIC_STATUS_RANGE_HOURS,
+  PUBLIC_STATUS_INTERVAL_OPTIONS,
+} from "@/lib/public-status/constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 import { isValidIANATimezone } from "@/lib/utils/timezone";
 
@@ -60,7 +64,7 @@ const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
 
 const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
   .object({
-    effort: z.enum(["low", "medium", "high", "max"]),
+    effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
     modelMatchMode: z.enum(["specific", "all"]),
     models: z.array(z.string().min(1).max(100)).max(50),
   })
@@ -76,6 +80,14 @@ const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
 // - 'enabled': force inject googleSearch tool
 // - 'disabled': force remove googleSearch tool from request
 const GEMINI_GOOGLE_SEARCH_PREFERENCE = z.enum(["inherit", "enabled", "disabled"]);
+const XFF_PICK_SCHEMA = z.union([
+  z.literal("leftmost"),
+  z.literal("rightmost"),
+  z.object({
+    kind: z.literal("index"),
+    index: z.number().int().min(0),
+  }),
+]);
 
 const CLIENT_PATTERN_SCHEMA = z
   .string()
@@ -128,6 +140,7 @@ export const CreateUserSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  limit5hResetMode: z.enum(["fixed", "rolling"]).optional().default("rolling"),
   limitWeeklyUsd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -255,6 +268,7 @@ export const UpdateUserSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  limit5hResetMode: z.enum(["fixed", "rolling"]).optional(),
   limitWeeklyUsd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -367,6 +381,7 @@ export const KeyFormSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  limit5hResetMode: z.enum(["fixed", "rolling"]).optional().default("rolling"),
   limitDailyUsd: z.coerce
     .number()
     .min(0, "每日消费上限不能为负数")
@@ -481,6 +496,7 @@ export const CreateProviderSchema = z
       .max(10000, "5小时消费上限不能超过10000美元")
       .nullable()
       .optional(),
+    limit_5h_reset_mode: z.enum(["fixed", "rolling"]).optional().default("rolling"),
     limit_daily_usd: z.coerce
       .number()
       .min(0, "每日消费上限不能为负数")
@@ -718,6 +734,7 @@ export const UpdateProviderSchema = z
       .max(10000, "5小时消费上限不能超过10000美元")
       .nullable()
       .optional(),
+    limit_5h_reset_mode: z.enum(["fixed", "rolling"]).optional(),
     limit_daily_usd: z.coerce
       .number()
       .min(0, "每日消费上限不能为负数")
@@ -939,6 +956,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableClientVersionCheck: z.boolean().optional(),
   // 供应商不可用时是否返回详细错误信息（可选）
   verboseProviderError: z.boolean().optional(),
+  // 标准代理错误响应是否透传安全脱敏后的上游错误 message（可选）
+  passThroughUpstreamErrorMessage: z.boolean().optional(),
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2: z.boolean().optional(),
   // 高并发模式（可选）
@@ -953,6 +972,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableBillingHeaderRectifier: z.boolean().optional(),
   // Response API input 整流器（可选）
   enableResponseInputRectifier: z.boolean().optional(),
+  // 非对话端点跨供应商 fallback（可选）
+  allowNonConversationEndpointProviderFallback: z.boolean().optional(),
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion: z.boolean().optional(),
   // Claude metadata.user_id 注入（可选）
@@ -1003,6 +1024,42 @@ export const UpdateSystemSettingsSchema = z.object({
     .max(1, "Lease percent cannot exceed 1")
     .optional(),
   quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
+  publicStatusWindowHours: z.coerce
+    .number()
+    .int("PUBLIC_STATUS_WINDOW_INVALID_INT")
+    .min(1, "PUBLIC_STATUS_WINDOW_TOO_SMALL")
+    .max(MAX_PUBLIC_STATUS_RANGE_HOURS, "PUBLIC_STATUS_WINDOW_TOO_LARGE")
+    .optional(),
+  publicStatusAggregationIntervalMinutes: z.coerce
+    .number()
+    .int("PUBLIC_STATUS_INTERVAL_INVALID_INT")
+    .refine(
+      (value) =>
+        PUBLIC_STATUS_INTERVAL_OPTIONS.includes(
+          value as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]
+        ),
+      {
+        message: "PUBLIC_STATUS_INTERVAL_INVALID",
+      }
+    )
+    .optional(),
+
+  // 客户端 IP 提取链（可选；null 表示使用内置默认）
+  ipExtractionConfig: z
+    .union([
+      z.null(),
+      z.object({
+        headers: z.array(
+          z.object({
+            name: z.string(),
+            pick: XFF_PICK_SCHEMA.optional(),
+          })
+        ),
+      }),
+    ])
+    .optional(),
+  // 是否启用 IP 归属地查询（可选）
+  ipGeoLookupEnabled: z.boolean().optional(),
 });
 
 // 导出类型推断

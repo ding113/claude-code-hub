@@ -18,6 +18,17 @@ import type { ParsedResponse, TokenUsage } from "../types";
 export function extractTextFromSSE(body: string): string {
   const lines = body.split("\n");
   const texts: string[] = [];
+  const fallbackTexts: string[] = [];
+  let fallbackPriority = Number.POSITIVE_INFINITY;
+
+  const assignFallback = (priority: number, nextTexts: string[]) => {
+    if (nextTexts.length === 0 || fallbackPriority < priority) {
+      return;
+    }
+    fallbackPriority = priority;
+    fallbackTexts.length = 0;
+    fallbackTexts.push(...nextTexts);
+  };
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -37,11 +48,59 @@ export function extractTextFromSSE(body: string): string {
 
     try {
       const obj = JSON.parse(payload) as Record<string, unknown>;
+      const eventType = obj.type;
 
       // Anthropic format: {"type":"content_block_delta", "delta":{"type":"text_delta","text":"..."}}
       const delta = obj.delta as Record<string, unknown> | undefined;
       if (delta?.text && typeof delta.text === "string") {
         texts.push(delta.text);
+        continue;
+      }
+
+      // Codex Responses SSE format: {"type":"response.output_text.delta","delta":"..."}
+      if (eventType === "response.output_text.delta" && typeof obj.delta === "string") {
+        texts.push(obj.delta);
+        continue;
+      }
+
+      if (eventType === "response.output_text.done" && typeof obj.text === "string") {
+        assignFallback(1, [obj.text]);
+        continue;
+      }
+
+      const part = obj.part as Record<string, unknown> | undefined;
+      if (eventType === "response.content_part.done" && typeof part?.text === "string") {
+        assignFallback(2, [part.text]);
+        continue;
+      }
+
+      const item = obj.item as
+        | {
+            content?: Array<{ text?: string }>;
+          }
+        | undefined;
+      if (eventType === "response.output_item.done" && item?.content) {
+        assignFallback(
+          3,
+          item.content.map((contentItem) => contentItem.text || "").filter(Boolean)
+        );
+        continue;
+      }
+
+      const response = obj.response as
+        | {
+            output?: Array<{
+              content?: Array<{ text?: string }>;
+            }>;
+          }
+        | undefined;
+      if (eventType === "response.completed" && response?.output) {
+        assignFallback(
+          4,
+          response.output.flatMap(
+            (outputItem) => outputItem.content?.map((contentItem) => contentItem.text || "") || []
+          )
+        );
         continue;
       }
 
@@ -99,7 +158,7 @@ export function extractTextFromSSE(body: string): string {
     }
   }
 
-  return texts.join("");
+  return texts.length > 0 ? texts.join("") : fallbackTexts.join("");
 }
 
 /**
@@ -108,9 +167,20 @@ export function extractTextFromSSE(body: string): string {
 export function parseSSEStream(body: string): ParsedResponse {
   const lines = body.split("\n");
   const texts: string[] = [];
+  const fallbackTexts: string[] = [];
+  let fallbackPriority = Number.POSITIVE_INFINITY;
   let model: string | undefined;
   let usage: TokenUsage | undefined;
   let chunksReceived = 0;
+
+  const assignFallback = (priority: number, nextTexts: string[]) => {
+    if (nextTexts.length === 0 || fallbackPriority < priority) {
+      return;
+    }
+    fallbackPriority = priority;
+    fallbackTexts.length = 0;
+    fallbackTexts.push(...nextTexts);
+  };
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -128,16 +198,61 @@ export function parseSSEStream(body: string): ParsedResponse {
 
     try {
       const obj = JSON.parse(payload) as Record<string, unknown>;
+      const eventType = obj.type;
+      const response = obj.response as Record<string, unknown> | undefined;
 
       // Extract model from first chunk
       if (!model && obj.model && typeof obj.model === "string") {
         model = obj.model;
+      }
+      if (!model && response?.model && typeof response.model === "string") {
+        model = response.model;
       }
 
       // Anthropic format
       const delta = obj.delta as Record<string, unknown> | undefined;
       if (delta?.text && typeof delta.text === "string") {
         texts.push(delta.text);
+      }
+
+      // Codex Responses SSE format
+      if (eventType === "response.output_text.delta" && typeof obj.delta === "string") {
+        texts.push(obj.delta);
+      }
+
+      if (eventType === "response.output_text.done" && typeof obj.text === "string") {
+        assignFallback(1, [obj.text]);
+      }
+
+      const part = obj.part as Record<string, unknown> | undefined;
+      if (eventType === "response.content_part.done" && typeof part?.text === "string") {
+        assignFallback(2, [part.text]);
+      }
+
+      const item = obj.item as
+        | {
+            content?: Array<{ text?: string }>;
+          }
+        | undefined;
+      if (eventType === "response.output_item.done" && item?.content) {
+        assignFallback(
+          3,
+          item.content.map((contentItem) => contentItem.text || "").filter(Boolean)
+        );
+      }
+
+      const responseOutput = response?.output as
+        | Array<{
+            content?: Array<{ text?: string }>;
+          }>
+        | undefined;
+      if (eventType === "response.completed" && responseOutput) {
+        assignFallback(
+          4,
+          responseOutput.flatMap(
+            (outputItem) => outputItem.content?.map((contentItem) => contentItem.text || "") || []
+          )
+        );
       }
 
       // OpenAI format
@@ -199,13 +314,26 @@ export function parseSSEStream(body: string): ParsedResponse {
           outputTokens: objUsage.completion_tokens || 0,
         };
       }
+
+      const responseUsage = response?.usage as
+        | {
+            input_tokens?: number;
+            output_tokens?: number;
+          }
+        | undefined;
+      if (responseUsage) {
+        usage = {
+          inputTokens: responseUsage.input_tokens || 0,
+          outputTokens: responseUsage.output_tokens || 0,
+        };
+      }
     } catch {
       // Skip invalid JSON chunks
     }
   }
 
   return {
-    content: texts.join(""),
+    content: texts.length > 0 ? texts.join("") : fallbackTexts.join(""),
     model,
     usage,
     isStreaming: true,
@@ -243,7 +371,7 @@ export function isSSEResponse(body: string, contentType?: string): boolean {
  * Key feature: Falls back to raw body if SSE parsing fails
  */
 export function aggregateResponseText(body: string, _contentType?: string): string {
-  if (!body || !body.trim()) {
+  if (!body?.trim()) {
     return "";
   }
 

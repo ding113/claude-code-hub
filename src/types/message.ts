@@ -11,6 +11,9 @@ export interface ProviderChainItem {
   id: number;
   name: string;
 
+  // 仅用于只读日志脱敏：标记该链路是否走了 raw 跨供应商 fallback。
+  rawCrossProviderFallbackEnabled?: boolean;
+
   // 供应商维度（便于日志审计，无需额外 join）
   vendorId?: number;
   providerType?: ProviderType;
@@ -251,6 +254,9 @@ export interface MessageRequest {
   // 模型重定向：原始模型名称（用户请求的模型）
   originalModel?: string;
 
+  // 上游响应中实际返回的模型名（audit 用途，不影响计费）
+  actualResponseModel?: string | null;
+
   // Token 使用信息
   inputTokens?: number;
   outputTokens?: number;
@@ -265,6 +271,9 @@ export interface MessageRequest {
 
   // User-Agent（用于客户端类型分析）
   userAgent?: string;
+
+  // 客户端 IP（IPv4/IPv6；由统一 IP 提取中间件写入）
+  clientIp?: string | null;
 
   // 请求的 API endpoint（例如：/v1/messages），从 URL.pathname 提取
   endpoint?: string;
@@ -300,6 +309,9 @@ export interface CreateMessageRequestData {
   // 供应商倍率（记录该请求使用的 cost_multiplier）
   cost_multiplier?: number;
 
+  // 供应商分组倍率（记录该请求使用的 group_cost_multiplier）
+  group_cost_multiplier?: number;
+
   // Session ID（用于会话粘性和日志追踪）
   session_id?: string;
 
@@ -315,6 +327,9 @@ export interface CreateMessageRequestData {
   // 模型重定向：原始模型名称（用户请求的模型）
   original_model?: string;
 
+  // 上游响应中实际返回的模型名（audit 用途，不影响计费）
+  actual_response_model?: string | null;
+
   // Token 使用信息
   input_tokens?: number;
   output_tokens?: number;
@@ -329,6 +344,9 @@ export interface CreateMessageRequestData {
 
   // User-Agent（用于客户端类型分析）
   user_agent?: string;
+
+  // 客户端 IP（IPv4/IPv6）
+  client_ip?: string;
 
   // 请求的 API endpoint（例如：/v1/messages），从 URL.pathname 提取
   endpoint?: string;

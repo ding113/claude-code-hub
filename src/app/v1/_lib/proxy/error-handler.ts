@@ -9,8 +9,11 @@ import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
 import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
+import type { SystemSettings } from "@/types/system-config";
+import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { attachSessionIdToErrorResponse } from "./error-session-id";
 import {
+  ALL_PROVIDERS_UNAVAILABLE_MESSAGE,
   getErrorOverrideAsync,
   isEmptyResponseError,
   isRateLimitError,
@@ -24,6 +27,115 @@ import type { ProxySession } from "./session";
 const OVERRIDE_STATUS_CODE_MIN = 400;
 /** 覆写状态码最大值 */
 const OVERRIDE_STATUS_CODE_MAX = 599;
+
+type ErrorOverrideForMessageResolver = { response?: unknown; statusCode?: number | null } | null;
+
+function stripUpstreamDetailSuffix(message: string): string {
+  return message.replace(/\s+Upstream detail:\s*[\s\S]*$/u, "").trim() || message;
+}
+
+function getGenericProxyErrorFallbackMessage(
+  statusCode: number,
+  error: unknown,
+  fallback: string
+): string {
+  if (isEmptyResponseError(error)) {
+    return fallback;
+  }
+
+  if (!(error instanceof ProxyError)) {
+    return fallback;
+  }
+
+  if (fallback === ALL_PROVIDERS_UNAVAILABLE_MESSAGE) {
+    return fallback;
+  }
+
+  if (error.message.startsWith("FAKE_200_")) {
+    return fallback;
+  }
+
+  switch (statusCode) {
+    case 400:
+      return "上游请求参数无效，请检查后重试";
+    case 401:
+      return "上游鉴权失败，请稍后重试";
+    case 402:
+      return "上游服务当前无法处理该请求";
+    case 403:
+      return "上游拒绝了本次请求";
+    case 404:
+      return "上游资源不存在";
+    case 408:
+    case 504:
+    case 524:
+      return "上游服务响应超时，请稍后重试";
+    case 409:
+      return "上游请求发生冲突，请稍后重试";
+    case 413:
+      return "请求内容过大，上游无法处理";
+    case 415:
+      return "上游不支持当前请求格式";
+    case 422:
+      return "上游无法处理当前请求";
+    case 429:
+      return "上游服务当前限流，请稍后重试";
+    default:
+      if (statusCode >= 500) {
+        return "上游服务暂时不可用，请稍后重试";
+      }
+      return "请求上游服务失败，请稍后重试";
+  }
+}
+
+export function resolveFinalClientErrorMessage({
+  error,
+  currentFallbackMessage,
+  settings,
+  override,
+}: {
+  error: unknown;
+  currentFallbackMessage: string;
+  settings?: Pick<SystemSettings, "passThroughUpstreamErrorMessage"> | null;
+  override?: ErrorOverrideForMessageResolver;
+}): string {
+  if (override?.response) {
+    return currentFallbackMessage;
+  }
+
+  const strippedFallback =
+    error instanceof ProxyError || isEmptyResponseError(error)
+      ? stripUpstreamDetailSuffix(currentFallbackMessage)
+      : currentFallbackMessage;
+  const fallback = getGenericProxyErrorFallbackMessage(
+    error instanceof ProxyError ? error.statusCode : 500,
+    error,
+    strippedFallback
+  );
+  const shouldPassThrough = settings?.passThroughUpstreamErrorMessage ?? true;
+  if (!shouldPassThrough) {
+    return fallback;
+  }
+
+  if (error instanceof ProxyError) {
+    return (
+      deriveClientSafeUpstreamErrorMessage({
+        rawText: error.upstreamError?.rawBody,
+        candidateMessage:
+          error.upstreamError?.safeClientMessageCandidate ??
+          error.upstreamError?.body ??
+          error.message,
+        providerName: error.upstreamError?.providerName ?? null,
+      }) ?? fallback
+    );
+  }
+
+  if (isEmptyResponseError(error)) {
+    return fallback;
+  }
+
+  return fallback;
+}
 
 /**
  * 根据限流类型计算 HTTP 状态码
@@ -43,6 +155,23 @@ export class ProxyErrorHandler {
     let logErrorMessage: string;
     let statusCode = 500;
     let rateLimitMetadata: Record<string, unknown> | null = null;
+    let settingsResolved = false;
+    let cachedSettings: SystemSettings | null = null;
+
+    const getSettings = async (): Promise<SystemSettings | null> => {
+      if (settingsResolved) return cachedSettings;
+      try {
+        cachedSettings = await getCachedSystemSettings();
+        settingsResolved = true;
+        return cachedSettings;
+      } catch (settingsError) {
+        settingsResolved = true;
+        logger.warn("ProxyErrorHandler: failed to load system settings, using defaults", {
+          error: settingsError instanceof Error ? settingsError.message : String(settingsError),
+        });
+        return null;
+      }
+    };
 
     // 优先处理 RateLimitError（新增）
     if (isRateLimitError(error)) {
@@ -119,6 +248,7 @@ export class ProxyErrorHandler {
 
         // 使用覆写状态码，如果未配置或无效则使用上游状态码
         const responseStatusCode = validatedStatusCode ?? statusCode;
+        const settings = await getSettings();
 
         // 提取上游 request_id（用于覆写场景透传）
         const upstreamRequestId =
@@ -135,11 +265,17 @@ export class ProxyErrorHandler {
             });
             // 跳过响应体覆写，但仍可应用状态码覆写
             if (override.statusCode !== null) {
+              const finalClientErrorMessage = resolveFinalClientErrorMessage({
+                error,
+                currentFallbackMessage: clientErrorMessage,
+                settings,
+                override: { response: null, statusCode: override.statusCode },
+              });
               return await attachSessionIdToErrorResponse(
                 session.sessionId,
                 ProxyResponses.buildError(
                   responseStatusCode,
-                  clientErrorMessage,
+                  finalClientErrorMessage,
                   undefined,
                   undefined,
                   safeRequestId
@@ -147,11 +283,17 @@ export class ProxyErrorHandler {
               );
             }
             // 两者都无效，返回原始错误（但仍透传 request_id，因为有覆写意图）
+            const finalClientErrorMessage = resolveFinalClientErrorMessage({
+              error,
+              currentFallbackMessage: clientErrorMessage,
+              settings,
+              override: { response: null, statusCode: null },
+            });
             return await attachSessionIdToErrorResponse(
               session.sessionId,
               ProxyResponses.buildError(
                 statusCode,
-                clientErrorMessage,
+                finalClientErrorMessage,
                 undefined,
                 undefined,
                 safeRequestId
@@ -161,20 +303,28 @@ export class ProxyErrorHandler {
 
           // 覆写消息为空时回退到客户端安全消息
           const overrideErrorObj = override.response.error as Record<string, unknown>;
-          const overrideMessage =
+          const hasExplicitOverrideMessage =
             typeof overrideErrorObj?.message === "string" &&
-            overrideErrorObj.message.trim().length > 0
-              ? overrideErrorObj.message
-              : clientErrorMessage;
+            overrideErrorObj.message.trim().length > 0;
+          const overrideMessage = hasExplicitOverrideMessage
+            ? overrideErrorObj.message
+            : clientErrorMessage;
 
           // 构建覆写响应体
           // 设计原则：只输出用户配置的字段，不额外注入 request_id 等字段
           // 唯一的特殊处理：message 为空时回退到原始错误消息
+          const finalClientErrorMessage = resolveFinalClientErrorMessage({
+            error,
+            currentFallbackMessage: clientErrorMessage,
+            settings,
+            override: hasExplicitOverrideMessage ? override : null,
+          });
           const responseBody = {
             ...override.response,
             error: {
               ...overrideErrorObj,
-              message: overrideMessage,
+              message:
+                overrideMessage === clientErrorMessage ? finalClientErrorMessage : overrideMessage,
             },
           };
 
@@ -219,11 +369,18 @@ export class ProxyErrorHandler {
           overridden: true,
         });
 
+        const finalClientErrorMessage = resolveFinalClientErrorMessage({
+          error,
+          currentFallbackMessage: clientErrorMessage,
+          settings,
+          override: { response: null, statusCode: override.statusCode },
+        });
+
         return await attachSessionIdToErrorResponse(
           session.sessionId,
           ProxyResponses.buildError(
             responseStatusCode,
-            clientErrorMessage,
+            finalClientErrorMessage,
             undefined,
             undefined,
             safeRequestId
@@ -251,8 +408,8 @@ export class ProxyErrorHandler {
 
     if (shouldAttachVerboseDetails) {
       try {
-        const settings = await getCachedSystemSettings();
-        if (settings.verboseProviderError) {
+        const settings = await getSettings();
+        if (settings?.verboseProviderError) {
           if (error instanceof ProxyError) {
             upstreamRequestId = error.upstreamError?.requestId;
             const rawBodySrc = error.upstreamError?.rawBody;
@@ -298,10 +455,23 @@ export class ProxyErrorHandler {
       typeof upstreamRequestId === "string" && upstreamRequestId.trim()
         ? upstreamRequestId.trim()
         : undefined;
+    const settings = await getSettings();
+    const finalClientErrorMessage = resolveFinalClientErrorMessage({
+      error,
+      currentFallbackMessage: clientErrorMessage,
+      settings,
+      override: null,
+    });
 
     return await attachSessionIdToErrorResponse(
       session.sessionId,
-      ProxyResponses.buildError(statusCode, clientErrorMessage, undefined, details, safeRequestId)
+      ProxyResponses.buildError(
+        statusCode,
+        finalClientErrorMessage,
+        undefined,
+        details,
+        safeRequestId
+      )
     );
   }
 
@@ -321,7 +491,7 @@ export class ProxyErrorHandler {
    * - error.limit: 限制值
    * - error.reset_time: 重置时间（ISO-8601格式，滚动窗口为 null）
    *
-   * 响应头（3个标准 rate limit 头）：
+   * 响应头（标准 rate limit 头）：
    * - X-RateLimit-Limit: 限制值
    * - X-RateLimit-Remaining: 剩余配额（max(0, limit - current)）
    * - X-RateLimit-Reset: Unix 时间戳（秒），滚动窗口不设置此头
@@ -338,8 +508,6 @@ export class ProxyErrorHandler {
       // 标准 rate limit 响应头
       "X-RateLimit-Limit": error.limitValue.toString(),
       "X-RateLimit-Remaining": remaining.toString(),
-      // 额外的自定义头（便于客户端快速识别限流类型）
-      "X-RateLimit-Type": error.limitType,
     });
 
     // 只有固定窗口才设置重置时间相关头（滚动窗口 resetTime 为 null）

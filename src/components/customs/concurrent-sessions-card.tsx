@@ -2,10 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Activity } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { getConcurrentSessions } from "@/actions/concurrent-sessions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useRouter } from "@/i18n/routing";
 
 const REFRESH_INTERVAL = 5000; // 5秒刷新一次
 

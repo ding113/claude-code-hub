@@ -1,4 +1,5 @@
 import type { CurrencyCode } from "@/lib/utils";
+import type { IpExtractionConfig } from "@/types/ip-extraction";
 
 // 计费模型来源: 'original' (重定向前) | 'redirected' (重定向后)
 export type BillingModelSource = "original" | "redirected";
@@ -43,6 +44,9 @@ export interface SystemSettings {
   // 供应商不可用时是否返回详细错误信息
   verboseProviderError: boolean;
 
+  // 是否在标准代理错误响应中透传安全脱敏后的上游错误 message
+  passThroughUpstreamErrorMessage: boolean;
+
   // 启用 HTTP/2 连接供应商
   enableHttp2: boolean;
 
@@ -71,6 +75,10 @@ export interface SystemSettings {
   // 自动规范化为数组格式，确保下游处理兼容 OpenAI 完整规范
   enableResponseInputRectifier: boolean;
 
+  // 非对话端点跨供应商 fallback（默认开启）
+  // 当前仅作用于 count_tokens / compact 这两个 raw endpoint
+  allowNonConversationEndpointProviderFallback: boolean;
+
   // Codex Session ID 补全（默认开启）
   // 目标：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean;
@@ -90,6 +98,14 @@ export interface SystemSettings {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+
+  // 客户端 IP 提取链（null 走内置默认）
+  ipExtractionConfig: IpExtractionConfig | null;
+  // 是否启用 IP 归属地查询
+  ipGeoLookupEnabled: boolean;
+  // Public Status 全局配置
+  publicStatusWindowHours: number;
+  publicStatusAggregationIntervalMinutes: number;
 
   createdAt: Date;
   updatedAt: Date;
@@ -124,6 +140,9 @@ export interface UpdateSystemSettingsInput {
   // 供应商不可用时是否返回详细错误信息（可选）
   verboseProviderError?: boolean;
 
+  // 是否在标准代理错误响应中透传安全脱敏后的上游错误 message（可选）
+  passThroughUpstreamErrorMessage?: boolean;
+
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2?: boolean;
 
@@ -145,6 +164,9 @@ export interface UpdateSystemSettingsInput {
   // Response API input 整流器（可选）
   enableResponseInputRectifier?: boolean;
 
+  // 非对话端点跨供应商 fallback（可选）
+  allowNonConversationEndpointProviderFallback?: boolean;
+
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion?: boolean;
 
@@ -162,4 +184,12 @@ export interface UpdateSystemSettingsInput {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+
+  // 客户端 IP 提取链（可选，null = 使用默认）
+  ipExtractionConfig?: IpExtractionConfig | null;
+  // 是否启用 IP 归属地查询（可选）
+  ipGeoLookupEnabled?: boolean;
+  // Public Status 全局配置（可选）
+  publicStatusWindowHours?: number;
+  publicStatusAggregationIntervalMinutes?: number;
 }

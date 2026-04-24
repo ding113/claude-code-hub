@@ -1,0 +1,97 @@
+{
+  "title": "Audit logs",
+  "description": "Every login and admin mutation, with operator IP, user-agent, and before/after snapshots.",
+  "filters": {
+    "category": "Category",
+    "success": "Status",
+    "all": "All",
+    "succeeded": "Success",
+    "failed": "Failure",
+    "allCategories": "All categories"
+  },
+  "categories": {
+    "auth": "Authentication",
+    "user": "Users",
+    "provider": "Providers",
+    "provider_group": "Provider groups",
+    "system_settings": "System settings",
+    "key": "Keys",
+    "notification": "Notifications",
+    "sensitive_word": "Sensitive words",
+    "model_price": "Model prices"
+  },
+  "columns": {
+    "time": "Time",
+    "category": "Category",
+    "action": "Action",
+    "operator": "Operator",
+    "ip": "IP",
+    "target": "Target",
+    "status": "Status"
+  },
+  "actions": {
+    "login": {
+      "success": "Login succeeded",
+      "failure": "Login failed",
+      "rate_limited": "Login rate limited"
+    },
+    "user": {
+      "create": "Create user",
+      "update": "Update user",
+      "delete": "Delete user",
+      "reset_5h_limit": "Reset user 5H limit",
+      "reset_5h_limit_only": "Reset user-only 5H limit"
+    },
+    "provider": {
+      "create": "Create provider",
+      "update": "Update provider",
+      "delete": "Delete provider"
+    },
+    "provider_group": {
+      "create": "Create provider group",
+      "update": "Update provider group",
+      "delete": "Delete provider group"
+    },
+    "system_settings": {
+      "update": "Update system settings"
+    },
+    "key": {
+      "create": "Create key",
+      "update": "Update key",
+      "delete": "Delete key"
+    },
+    "notification": {
+      "update": "Update notification"
+    },
+    "sensitive_word": {
+      "create": "Create sensitive word",
+      "update": "Update sensitive word",
+      "delete": "Delete sensitive word"
+    },
+    "model_price": {
+      "bulk_upload": "Bulk upload model prices",
+      "sync_litellm": "Sync LiteLLM model prices",
+      "upsert": "Upsert model price",
+      "delete": "Delete model price"
+    }
+  },
+  "detail": {
+    "title": "Audit entry",
+    "before": "Before",
+    "after": "After",
+    "errorMessage": "Error",
+    "noChange": "No snapshot captured",
+    "userAgent": "User-Agent",
+    "keyLabel": "key: {name}",
+    "userIdLabel": "user id: {id}",
+    "targetIdLabel": "id: {id}"
+  },
+  "adminTokenOperator": "Admin Token",
+  "loadError": "Failed to load audit entries.",
+  "errors": {
+    "unauthorized": "Administrator access is required.",
+    "listFailed": "Failed to list audit entries.",
+    "detailFailed": "Failed to load audit entry detail."
+  },
+  "empty": "No audit entries found for the selected filters."
+}

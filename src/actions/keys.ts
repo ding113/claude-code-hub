@@ -6,11 +6,13 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
+import { invalidateCachedKey } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
@@ -67,6 +69,7 @@ export interface BatchUpdateKeysParams {
   updates: {
     providerGroup?: string | null;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitDailyUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -94,6 +97,7 @@ export async function addKey(data: {
   isEnabled?: boolean;
   canLoginWebUi?: boolean;
   limit5hUsd?: number | null;
+  limit5hResetMode?: "fixed" | "rolling";
   limitDailyUsd?: number | null;
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
@@ -167,6 +171,7 @@ export async function addKey(data: {
       expiresAt: data.expiresAt,
       canLoginWebUi: data.canLoginWebUi,
       limit5hUsd: data.limit5hUsd,
+      limit5hResetMode: data.limit5hResetMode,
       limitDailyUsd: data.limitDailyUsd,
       dailyResetMode: data.dailyResetMode,
       dailyResetTime: data.dailyResetTime,
@@ -293,7 +298,7 @@ export async function addKey(data: {
         ? null
         : parseDateInputAsTimezone(validatedData.expiresAt, timezone);
 
-    await createKey({
+    const createdKey = await createKey({
       user_id: data.userId,
       name: validatedData.name,
       key: generatedKey,
@@ -301,6 +306,7 @@ export async function addKey(data: {
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
+      limit_5h_reset_mode: validatedData.limit5hResetMode,
       limit_daily_usd: validatedData.limitDailyUsd,
       daily_reset_mode: validatedData.dailyResetMode,
       daily_reset_time: validatedData.dailyResetTime,
@@ -319,11 +325,51 @@ export async function addKey(data: {
 
     revalidatePath("/dashboard");
 
+    emitActionAudit({
+      category: "key",
+      action: "key.create",
+      targetType: "key",
+      targetId: String(createdKey.id),
+      targetName: createdKey.name,
+      after: {
+        id: createdKey.id,
+        userId: createdKey.userId,
+        name: createdKey.name,
+        isEnabled: createdKey.isEnabled,
+        expiresAt: createdKey.expiresAt,
+        canLoginWebUi: createdKey.canLoginWebUi,
+        providerGroup: createdKey.providerGroup,
+        limit5hUsd: createdKey.limit5hUsd,
+        limit5hResetMode: createdKey.limit5hResetMode,
+        limitDailyUsd: createdKey.limitDailyUsd,
+        limitWeeklyUsd: createdKey.limitWeeklyUsd,
+        limitMonthlyUsd: createdKey.limitMonthlyUsd,
+        limitTotalUsd: createdKey.limitTotalUsd,
+        limitConcurrentSessions: createdKey.limitConcurrentSessions,
+        dailyResetMode: createdKey.dailyResetMode,
+        dailyResetTime: createdKey.dailyResetTime,
+        cacheTtlPreference: createdKey.cacheTtlPreference,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
     // 返回生成的key供前端显示
     return { ok: true, data: { generatedKey, name: validatedData.name } };
   } catch (error) {
     logger.error("添加密钥失败:", error);
     const message = error instanceof Error ? error.message : "添加密钥失败，请稍后重试";
+    emitActionAudit({
+      category: "key",
+      action: "key.create",
+      targetType: "key",
+      targetName: data.name ?? null,
+      success: false,
+      // Stable code only — raw `error.message` from pg may include secrets or
+      // user-controlled input (duplicate key values, constraint names).
+      errorMessage: "CREATE_FAILED",
+      redactExtraKeys: ["key"],
+    });
     return { ok: false, error: message };
   }
 }
@@ -337,6 +383,7 @@ export async function editKey(
     canLoginWebUi?: boolean;
     isEnabled?: boolean;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
@@ -539,6 +586,7 @@ export async function editKey(
       can_login_web_ui: validatedData.canLoginWebUi,
       ...(data.isEnabled !== undefined ? { is_enabled: data.isEnabled } : {}),
       limit_5h_usd: validatedData.limit5hUsd,
+      limit_5h_reset_mode: validatedData.limit5hResetMode,
       limit_daily_usd: validatedData.limitDailyUsd,
       daily_reset_mode: validatedData.dailyResetMode,
       daily_reset_time: validatedData.dailyResetTime,
@@ -560,11 +608,77 @@ export async function editKey(
       await syncUserProviderGroupFromKeys(key.userId);
     }
 
+    if (
+      validatedData.limit5hResetMode !== undefined &&
+      validatedData.limit5hResetMode !== key.limit5hResetMode
+    ) {
+      const { clearSingleKeyCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await invalidateCachedKey(key.key).catch(() => null);
+      await clearSingleKeyCostCache({
+        keyId,
+        keyHash: key.key,
+      }).catch(() => null);
+    }
+
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "key",
+      action: "key.update",
+      targetType: "key",
+      targetId: String(keyId),
+      targetName: validatedData.name,
+      before: {
+        id: key.id,
+        userId: key.userId,
+        name: key.name,
+        isEnabled: key.isEnabled,
+        expiresAt: key.expiresAt,
+        canLoginWebUi: key.canLoginWebUi,
+        providerGroup: key.providerGroup,
+        limit5hUsd: key.limit5hUsd,
+        limit5hResetMode: key.limit5hResetMode,
+        limitDailyUsd: key.limitDailyUsd,
+        limitWeeklyUsd: key.limitWeeklyUsd,
+        limitMonthlyUsd: key.limitMonthlyUsd,
+        limitTotalUsd: key.limitTotalUsd,
+        limitConcurrentSessions: key.limitConcurrentSessions,
+        dailyResetMode: key.dailyResetMode,
+        dailyResetTime: key.dailyResetTime,
+        cacheTtlPreference: key.cacheTtlPreference,
+      },
+      after: {
+        name: validatedData.name,
+        isEnabled: data.isEnabled,
+        expiresAt: hasExpiresAtField ? expiresAt : undefined,
+        canLoginWebUi: validatedData.canLoginWebUi,
+        providerGroup: isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : undefined,
+        limit5hUsd: validatedData.limit5hUsd,
+        limit5hResetMode: validatedData.limit5hResetMode,
+        limitDailyUsd: validatedData.limitDailyUsd,
+        limitWeeklyUsd: validatedData.limitWeeklyUsd,
+        limitMonthlyUsd: validatedData.limitMonthlyUsd,
+        limitTotalUsd: validatedData.limitTotalUsd,
+        limitConcurrentSessions: validatedData.limitConcurrentSessions,
+        dailyResetMode: validatedData.dailyResetMode,
+        dailyResetTime: validatedData.dailyResetTime,
+        cacheTtlPreference: validatedData.cacheTtlPreference,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
     return { ok: true };
   } catch (error) {
     logger.error("Failed to update key:", error);
     const message = error instanceof Error ? error.message : "更新密钥失败，请稍后重试";
+    emitActionAudit({
+      category: "key",
+      action: "key.update",
+      targetType: "key",
+      targetId: String(keyId),
+      success: false,
+      errorMessage: "UPDATE_FAILED",
+      redactExtraKeys: ["key"],
+    });
     return { ok: false, error: message };
   }
 }
@@ -629,10 +743,43 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
     await syncUserProviderGroupFromKeys(key.userId);
 
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "key",
+      action: "key.delete",
+      targetType: "key",
+      targetId: String(keyId),
+      targetName: key.name,
+      before: {
+        id: key.id,
+        userId: key.userId,
+        name: key.name,
+        isEnabled: key.isEnabled,
+        expiresAt: key.expiresAt,
+        canLoginWebUi: key.canLoginWebUi,
+        providerGroup: key.providerGroup,
+        limit5hUsd: key.limit5hUsd,
+        limitDailyUsd: key.limitDailyUsd,
+        limitWeeklyUsd: key.limitWeeklyUsd,
+        limitMonthlyUsd: key.limitMonthlyUsd,
+        limitTotalUsd: key.limitTotalUsd,
+        limitConcurrentSessions: key.limitConcurrentSessions,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
     return { ok: true };
   } catch (error) {
     logger.error("删除密钥失败:", error);
     const message = error instanceof Error ? error.message : "删除密钥失败，请稍后重试";
+    emitActionAudit({
+      category: "key",
+      action: "key.delete",
+      targetType: "key",
+      targetId: String(keyId),
+      success: false,
+      errorMessage: "DELETE_FAILED",
+      redactExtraKeys: ["key"],
+    });
     return { ok: false, error: message };
   }
 }
@@ -730,6 +877,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       getTimeRangeForPeriod,
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
     const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import("@/repository/statistics");
     const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
       key.limitConcurrentSessions,
@@ -739,6 +887,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     const costResetAt = resolveKeyCostResetAt(key.costResetAt ?? null, result.userCostResetAt);
     const clipStart = (start: Date): Date =>
       costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
+    const limit5hResetMode = key.limit5hResetMode ?? "rolling";
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
@@ -747,15 +896,18 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       key.dailyResetMode ?? "fixed"
     );
 
-    // 5h/weekly/monthly use unified time ranges
     const range5h = await getTimeRangeForPeriod("5h");
+
+    // 5h fixed 走运行时状态，rolling/weekly/monthly 继续沿用 DB 时间范围
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     // 获取金额消费（使用 DB direct，与 my-usage.ts 保持一致）
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
-        sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
+        limit5hResetMode === "fixed"
+          ? RateLimitService.getCurrentCost(keyId, "key", "5h", "00:00", limit5hResetMode)
+          : sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
         sumKeyCostInTimeRange(
           keyId,
           clipStart(keyDailyTimeRange.startTime),
@@ -768,7 +920,10 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       ]);
 
     // 获取重置时间
-    const resetInfo5h = await getResetInfo("5h");
+    const resetAt5h =
+      limit5hResetMode === "fixed"
+        ? await RateLimitService.get5hWindowResetAt(keyId, "key", limit5hResetMode)
+        : null;
     const resetInfoDaily = await getResetInfoWithMode(
       "daily",
       key.dailyResetTime,
@@ -783,7 +938,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
         cost5h: {
           current: cost5h,
           limit: key.limit5hUsd,
-          resetAt: resetInfo5h.resetAt, // 滚动窗口无 resetAt
+          resetAt: resetAt5h ?? undefined,
         },
         costDaily: {
           current: costDaily,
@@ -990,6 +1145,17 @@ export async function batchUpdateKeys(
     }
 
     const updates = params.updates ?? {};
+    if (
+      updates.limit5hResetMode !== undefined &&
+      updates.limit5hResetMode !== "fixed" &&
+      updates.limit5hResetMode !== "rolling"
+    ) {
+      return {
+        ok: false,
+        error: tError("INVALID_FORMAT"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
     const hasAnyUpdate = Object.values(updates).some((v) => v !== undefined);
     if (!hasAnyUpdate) {
       return {
@@ -1006,10 +1172,11 @@ export async function batchUpdateKeys(
 
     let updatedIds: number[] = [];
     let affectedUserIds: number[] = [];
+    let affectedKeys: Array<{ id: number; userId: number; key: string }> = [];
 
     await db.transaction(async (tx) => {
       const existingRows = await tx
-        .select({ id: keysTable.id, userId: keysTable.userId })
+        .select({ id: keysTable.id, userId: keysTable.userId, key: keysTable.key })
         .from(keysTable)
         .where(and(inArray(keysTable.id, requestedIds), isNull(keysTable.deletedAt)));
 
@@ -1079,6 +1246,7 @@ export async function batchUpdateKeys(
       }
 
       affectedUserIds = Array.from(new Set(existingRows.map((r) => r.userId)));
+      affectedKeys = existingRows;
 
       const dbUpdates: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -1087,6 +1255,8 @@ export async function batchUpdateKeys(
       if (normalizedProviderGroup !== undefined) dbUpdates.providerGroup = normalizedProviderGroup;
       if (updates.limit5hUsd !== undefined)
         dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
+      if (updates.limit5hResetMode !== undefined)
+        dbUpdates.limit5hResetMode = updates.limit5hResetMode;
       if (updates.limitDailyUsd !== undefined)
         dbUpdates.limitDailyUsd =
           updates.limitDailyUsd === null ? null : updates.limitDailyUsd.toString();
@@ -1138,6 +1308,19 @@ export async function batchUpdateKeys(
     // 同步用户分组（用户分组 = Key 分组并集）
     if (normalizedProviderGroup !== undefined && affectedUserIds.length > 0) {
       await Promise.all(affectedUserIds.map((userId) => syncUserProviderGroupFromKeys(userId)));
+    }
+
+    if (updates.limit5hResetMode !== undefined && affectedKeys.length > 0) {
+      const { clearSingleKeyCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await Promise.all(
+        affectedKeys.map(async (keyRow) => {
+          await invalidateCachedKey(keyRow.key).catch(() => null);
+          await clearSingleKeyCostCache({
+            keyId: keyRow.id,
+            keyHash: keyRow.key,
+          }).catch(() => null);
+        })
+      );
     }
 
     revalidatePath("/dashboard");
@@ -1214,6 +1397,140 @@ export async function renewKeyExpiresAt(
     return { ok: true };
   } catch (error) {
     logger.error("快捷续期密钥失败:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
+  }
+}
+
+/**
+ * 仅更新密钥的某个限额字段，避免触发完整 KeyFormSchema 默认值覆盖（保护 providerGroup
+ * / canLoginWebUi / dailyResetMode 等未传字段）。
+ *
+ * 用于 Key 限额使用情况弹窗 / 限额管理页的快捷编辑。
+ */
+export type PatchKeyLimitField =
+  | "limit5hUsd"
+  | "limitDailyUsd"
+  | "limitWeeklyUsd"
+  | "limitMonthlyUsd"
+  | "limitTotalUsd"
+  | "limitConcurrentSessions";
+
+export async function patchKeyLimit(
+  keyId: number,
+  field: PatchKeyLimitField,
+  value: number | null
+): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    if (session.user.role !== "admin" && session.user.id !== key.userId) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // 校验：负数与整数列
+    if (field === "limitConcurrentSessions") {
+      if (value == null || !Number.isInteger(value) || value < 0 || value > 1000) {
+        return {
+          ok: false,
+          error: tError("INVALID_FORMAT"),
+          errorCode: ERROR_CODES.INVALID_FORMAT,
+        };
+      }
+    } else if (value != null && (!Number.isFinite(value) || value < 0)) {
+      return { ok: false, error: tError("INVALID_FORMAT"), errorCode: ERROR_CODES.INVALID_FORMAT };
+    }
+
+    // 服务端校验：Key 限额不能超过用户限额
+    const { findUserById } = await import("@/repository/user");
+    const user = await findUserById(key.userId);
+    if (!user) {
+      return { ok: false, error: "用户不存在" };
+    }
+
+    const checkExceed = (
+      keyVal: number | null,
+      userVal: number | null | undefined,
+      errKey: string
+    ): ActionResult | null => {
+      if (keyVal != null && keyVal > 0 && userVal != null && userVal > 0 && keyVal > userVal) {
+        return {
+          ok: false,
+          error: tError(errKey, { keyLimit: String(keyVal), userLimit: String(userVal) }),
+        };
+      }
+      return null;
+    };
+
+    const exceed =
+      field === "limit5hUsd"
+        ? checkExceed(value, user.limit5hUsd, "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT")
+        : field === "limitDailyUsd"
+          ? checkExceed(value, user.dailyQuota, "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT")
+          : field === "limitWeeklyUsd"
+            ? checkExceed(value, user.limitWeeklyUsd, "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT")
+            : field === "limitMonthlyUsd"
+              ? checkExceed(value, user.limitMonthlyUsd, "KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT")
+              : field === "limitTotalUsd"
+                ? checkExceed(value, user.limitTotalUsd, "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT")
+                : field === "limitConcurrentSessions"
+                  ? checkExceed(
+                      value,
+                      user.limitConcurrentSessions,
+                      "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT"
+                    )
+                  : null;
+    if (exceed) return exceed;
+
+    // 字段映射：camelCase → snake_case（updateKey 仓库层只写 defined 字段）
+    const dbFieldMap: Record<PatchKeyLimitField, string> = {
+      limit5hUsd: "limit_5h_usd",
+      limitDailyUsd: "limit_daily_usd",
+      limitWeeklyUsd: "limit_weekly_usd",
+      limitMonthlyUsd: "limit_monthly_usd",
+      limitTotalUsd: "limit_total_usd",
+      limitConcurrentSessions: "limit_concurrent_sessions",
+    };
+
+    await updateKey(keyId, {
+      [dbFieldMap[field]]: value,
+    } as Parameters<typeof updateKey>[1]);
+
+    await invalidateCachedKey(key.key).catch(() => null);
+    revalidatePath("/dashboard");
+
+    emitActionAudit({
+      category: "key",
+      action: "key.update",
+      targetType: "key",
+      targetId: String(keyId),
+      targetName: key.name,
+      after: { [field]: value },
+      success: true,
+    });
+
+    return { ok: true };
+  } catch (error) {
+    logger.error("快捷更新密钥限额失败:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };

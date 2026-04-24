@@ -29,9 +29,12 @@ const row = {
   userDailyQuota: "10.00",
   userProviderGroup: "default",
   userLimit5hUsd: "1.25",
+  userLimit5hResetMode: "rolling",
   userLimitWeeklyUsd: "2.5",
   userLimitMonthlyUsd: "3.75",
   userLimitTotalUsd: "20.00",
+  userCostResetAt: new Date("2024-01-01T01:00:00.000Z"),
+  userLimit5hCostResetAt: new Date("2024-01-01T02:00:00.000Z"),
   userLimitConcurrentSessions: 7,
   userDailyResetMode: "rolling",
   userDailyResetTime: "01:00",
@@ -90,9 +93,12 @@ vi.mock("@/drizzle/schema", () => ({
     dailyLimitUsd: "users.dailyLimitUsd",
     providerGroup: "users.providerGroup",
     limit5hUsd: "users.limit5hUsd",
+    limit5hResetMode: "users.limit5hResetMode",
     limitWeeklyUsd: "users.limitWeeklyUsd",
     limitMonthlyUsd: "users.limitMonthlyUsd",
     limitTotalUsd: "users.limitTotalUsd",
+    costResetAt: "users.costResetAt",
+    limit5hCostResetAt: "users.limit5hCostResetAt",
     limitConcurrentSessions: "users.limitConcurrentSessions",
     dailyResetMode: "users.dailyResetMode",
     dailyResetTime: "users.dailyResetTime",
@@ -109,8 +115,12 @@ vi.mock("@/drizzle/schema", () => ({
   },
   usageLedger: {
     blockedBy: "usageLedger.blockedBy",
+    endpoint: "usageLedger.endpoint",
   },
 }));
+
+const sqlMock = (...args: unknown[]) => args;
+sqlMock.join = (...args: unknown[]) => args;
 
 vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => args,
@@ -123,7 +133,7 @@ vi.mock("drizzle-orm", () => ({
   gte: (...args: unknown[]) => args,
   inArray: (...args: unknown[]) => args,
   lt: (...args: unknown[]) => args,
-  sql: (...args: unknown[]) => args,
+  sql: sqlMock,
   sum: (...args: unknown[]) => args,
 }));
 
@@ -137,6 +147,7 @@ describe("repository/key validateApiKeyAndGetUser", () => {
     expect(result?.user.limitWeeklyUsd).toBe(2.5);
     expect(result?.user.limitMonthlyUsd).toBe(3.75);
     expect(result?.user.limitTotalUsd).toBe(20);
+    expect(result?.user.limit5hCostResetAt).toEqual(new Date("2024-01-01T02:00:00.000Z"));
     expect(result?.user.limitConcurrentSessions).toBe(7);
     expect(result?.user.dailyResetMode).toBe("rolling");
     expect(result?.user.dailyResetTime).toBe("01:00");

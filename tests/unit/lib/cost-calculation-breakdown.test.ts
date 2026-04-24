@@ -75,7 +75,7 @@ describe("calculateRequestCostBreakdown", () => {
     expect(result.output).toBeCloseTo(0.01075, 6);
   });
 
-  test("tiered pricing with context1mApplied", () => {
+  test("context1mApplied alone does not change breakdown without explicit long-context price fields", () => {
     const result = calculateRequestCostBreakdown(
       {
         input_tokens: 300000, // crosses 200k threshold
@@ -85,10 +85,8 @@ describe("calculateRequestCostBreakdown", () => {
       true // context1mApplied
     );
 
-    // input: 300000 * 0.000003 * 2.0 = 1.8 (all tokens at premium when context > 200K)
-    expect(result.input).toBeCloseTo(1.8, 4);
-    // output: 100 * 0.000015 * 1.5 = 0.00225 (output also at premium when context > 200K)
-    expect(result.output).toBeCloseTo(0.00225, 6);
+    expect(result.input).toBeCloseTo(0.9, 6);
+    expect(result.output).toBeCloseTo(0.0015, 6);
   });
 
   test("200k tier pricing (Gemini style)", () => {
@@ -188,6 +186,8 @@ describe("calculateRequestCostBreakdown", () => {
       input: 0,
       output: 0,
       cache_creation: 0,
+      cache_creation_5m: 0,
+      cache_creation_1h: 0,
       cache_read: 0,
       total: 0,
     });

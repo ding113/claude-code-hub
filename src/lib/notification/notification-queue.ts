@@ -558,7 +558,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         const { getWebhookTargetById } = await import("@/repository/webhook-targets");
         const target = await getWebhookTargetById(targetId);
 
-        if (!target || !target.isEnabled) {
+        if (!target?.isEnabled) {
           logger.warn({
             action: "notification_target_missing_or_disabled",
             jobId: job.id,

@@ -29,6 +29,40 @@ const mocks = vi.hoisted(() => ({
   getSystemSettings: vi.fn(),
 }));
 
+function sqlToString(sqlObj: unknown): string {
+  const visited = new Set<unknown>();
+
+  const walk = (node: unknown): string => {
+    if (!node || visited.has(node)) return "";
+    visited.add(node);
+
+    if (typeof node === "string") return node;
+    if (typeof node === "number") return String(node);
+
+    if (typeof node === "object") {
+      const anyNode = node as Record<string, unknown>;
+      if (Array.isArray(anyNode)) {
+        return anyNode.map(walk).join("");
+      }
+
+      if (anyNode.value !== undefined) {
+        if (Array.isArray(anyNode.value)) {
+          return (anyNode.value as unknown[]).map(walk).join("");
+        }
+        return walk(anyNode.value);
+      }
+
+      if (anyNode.queryChunks) {
+        return walk(anyNode.queryChunks);
+      }
+    }
+
+    return "";
+  };
+
+  return walk(sqlObj);
+}
+
 vi.mock("@/drizzle/db", () => ({
   db: {
     select: (...args: unknown[]) => mockSelect(...args),
@@ -46,6 +80,7 @@ vi.mock("@/drizzle/schema", () => ({
     cacheCreationInputTokens: "cacheCreationInputTokens",
     cacheReadInputTokens: "cacheReadInputTokens",
     isSuccess: "isSuccess",
+    successRateOutcome: "successRateOutcome",
     blockedBy: "blockedBy",
     createdAt: "createdAt",
     ttfbMs: "ttfbMs",
@@ -322,5 +357,157 @@ describe("User Leaderboard Model Stats", () => {
     expect(stats[0].totalCost).toBeGreaterThanOrEqual(stats[1].totalCost);
     expect(stats[0].model).toBe("expensive-model");
     expect(stats[1].model).toBe("cheap-model");
+  });
+});
+
+describe("User Cache Hit Rate Leaderboard", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    selectCallIndex = 0;
+    chainMocks = [];
+    mockSelect.mockClear();
+    mocks.resolveSystemTimezone.mockResolvedValue("UTC");
+    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+  });
+
+  it("returns user cache hit rankings with stable ordering and base fields", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          userId: 1,
+          userName: "alice",
+          totalRequests: 30,
+          totalCost: "3.0",
+          cacheReadTokens: 600,
+          cacheCreationCost: "1.0",
+          totalInputTokens: 1000,
+          cacheHitRate: 0.6,
+        },
+        {
+          userId: 2,
+          userName: "bob",
+          totalRequests: 30,
+          totalCost: "2.0",
+          cacheReadTokens: 300,
+          cacheCreationCost: "0.5",
+          totalInputTokens: 1000,
+          cacheHitRate: 0.3,
+        },
+      ]),
+    ];
+
+    const { findDailyUserCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyUserCacheHitRateLeaderboard();
+
+    expect(result).toHaveLength(2);
+    expect(result[0].cacheHitRate).toBeGreaterThanOrEqual(result[1].cacheHitRate);
+    expect(result[0]).toMatchObject({
+      userId: 1,
+      userName: "alice",
+      totalRequests: 30,
+      totalCost: 3,
+      cacheReadTokens: 600,
+      cacheCreationCost: 1,
+      totalInputTokens: 1000,
+      totalTokens: 1000,
+      cacheHitRate: 0.6,
+    });
+  });
+
+  it("includes modelStats when includeModelStats=true and preserves null model rows", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          userId: 1,
+          userName: "alice",
+          totalRequests: 30,
+          totalCost: "3.0",
+          cacheReadTokens: 600,
+          cacheCreationCost: "1.0",
+          totalInputTokens: 1000,
+          cacheHitRate: 0.6,
+        },
+      ]),
+      createChainMock([
+        {
+          userId: 1,
+          model: "claude-sonnet-4",
+          totalRequests: 20,
+          cacheReadTokens: 500,
+          totalInputTokens: 700,
+          cacheHitRate: 0.714,
+        },
+        {
+          userId: 1,
+          model: null,
+          totalRequests: 10,
+          cacheReadTokens: 100,
+          totalInputTokens: 300,
+          cacheHitRate: 0.333,
+        },
+      ]),
+    ];
+
+    const { findDailyUserCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyUserCacheHitRateLeaderboard(undefined, true);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].modelStats).toHaveLength(2);
+    expect(result[0].modelStats?.[0].model).toBe("claude-sonnet-4");
+    expect(result[0].modelStats?.[0].cacheHitRate).toBeCloseTo(0.714, 3);
+
+    const nullModelStat = result[0].modelStats?.find((item) => item.model === null);
+    expect(nullModelStat).toBeDefined();
+    expect(nullModelStat?.totalRequests).toBe(10);
+    expect(nullModelStat?.cacheReadTokens).toBe(100);
+  });
+
+  it("does not query model breakdown when includeModelStats is false", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          userId: 1,
+          userName: "alice",
+          totalRequests: 10,
+          totalCost: "1.0",
+          cacheReadTokens: 100,
+          cacheCreationCost: "0.2",
+          totalInputTokens: 400,
+          cacheHitRate: 0.25,
+        },
+      ]),
+    ];
+
+    const { findDailyUserCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyUserCacheHitRateLeaderboard(undefined, false);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].modelStats).toBeUndefined();
+    expect(mockSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps chinese comma and newline support in providerGroup filter", async () => {
+    const whereArgs: unknown[] = [];
+    chainMocks = [
+      {
+        from: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn((arg: unknown) => {
+          whereArgs.push(arg);
+          return {
+            groupBy: vi.fn().mockReturnThis(),
+            orderBy: vi.fn().mockResolvedValue([]),
+          };
+        }),
+      } as any,
+    ];
+
+    const { findDailyUserCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    await findDailyUserCacheHitRateLeaderboard({ userGroups: ["研发"] }, false);
+
+    expect(whereArgs).toHaveLength(1);
+    const whereSql = sqlToString(whereArgs[0]).replace(/\r/g, "\\r").replace(/\n/g, "\\n");
+    expect(whereSql).toContain("regexp_split_to_array");
+    expect(whereSql).toContain("\\s*[,，\\n\\r]+\\s*");
   });
 });

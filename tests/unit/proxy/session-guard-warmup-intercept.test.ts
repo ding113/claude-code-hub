@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 
 const getCachedSystemSettingsMock = vi.fn();
@@ -9,6 +10,7 @@ const getNextRequestSequenceMock = vi.fn();
 const storeSessionRequestBodyMock = vi.fn(async () => undefined);
 const storeSessionClientRequestMetaMock = vi.fn(async () => undefined);
 const storeSessionMessagesMock = vi.fn(async () => undefined);
+const storeSessionRequestPhaseSnapshotMock = vi.fn(async () => undefined);
 const storeSessionInfoMock = vi.fn(async () => undefined);
 const generateSessionIdMock = vi.fn();
 
@@ -19,6 +21,7 @@ vi.mock("@/lib/config", () => ({
 }));
 
 vi.mock("@/lib/session-manager", () => ({
+  headersToSanitizedObject: (headers: Headers) => Object.fromEntries(headers.entries()),
   SessionManager: {
     extractClientSessionId: extractClientSessionIdMock,
     getOrCreateSessionId: getOrCreateSessionIdMock,
@@ -26,6 +29,7 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionRequestBody: storeSessionRequestBodyMock,
     storeSessionClientRequestMeta: storeSessionClientRequestMetaMock,
     storeSessionMessages: storeSessionMessagesMock,
+    storeSessionRequestPhaseSnapshot: storeSessionRequestPhaseSnapshotMock,
     storeSessionInfo: storeSessionInfoMock,
     generateSessionId: generateSessionIdMock,
   },
@@ -71,9 +75,16 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     method: "POST",
     originalFormat: "claude",
     highConcurrencyModeEnabled: false,
+    rawCrossProviderFallbackEnabled: false,
     addSpecialSetting: vi.fn(),
     setHighConcurrencyModeEnabled(enabled: boolean) {
       this.highConcurrencyModeEnabled = enabled;
+    },
+    setRawCrossProviderFallbackEnabled(enabled: boolean) {
+      this.rawCrossProviderFallbackEnabled = enabled;
+    },
+    isRawCrossProviderFallbackEnabled() {
+      return this.rawCrossProviderFallbackEnabled;
     },
     shouldPersistSessionDebugArtifacts() {
       return !this.highConcurrencyModeEnabled;
@@ -97,6 +108,9 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     },
     getMessagesLength() {
       return 1;
+    },
+    getEndpointPolicy() {
+      return resolveEndpointPolicy("/v1/messages");
     },
     isWarmupRequest() {
       return true;
@@ -160,8 +174,50 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     expect(storeSessionRequestBodyMock).not.toHaveBeenCalled();
     expect(storeSessionClientRequestMetaMock).not.toHaveBeenCalled();
     expect(storeSessionMessagesMock).not.toHaveBeenCalled();
+    expect(storeSessionRequestPhaseSnapshotMock).not.toHaveBeenCalled();
     expect(storeSessionInfoMock).not.toHaveBeenCalled();
     expect(trackSessionMock).not.toHaveBeenCalled();
+  });
+
+  test("落 request.before 快照时保留原始请求体，并过滤客户端网络标识 headers", async () => {
+    const ProxySessionGuard = await loadGuard();
+    const session = createMockSession({
+      headers: new Headers({
+        "content-type": "application/json",
+        "x-forwarded-for": "1.2.3.4",
+      }),
+      request: {
+        message: {
+          metadata: {
+            session_id: "sess_seed",
+          },
+          messages: [{ role: "user", content: "hello" }],
+        },
+        model: "claude-sonnet-4-5-20250929",
+      },
+      getMessages() {
+        return [{ role: "user", content: "hello" }];
+      },
+      isWarmupRequest: () => false,
+    });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect(storeSessionRequestPhaseSnapshotMock).toHaveBeenCalledWith(
+      "session_assigned",
+      "before",
+      expect.objectContaining({
+        body: {
+          metadata: {
+            session_id: "sess_seed",
+          },
+          messages: [{ role: "user", content: "hello" }],
+        },
+        headers: { "content-type": "application/json" },
+        messages: [{ role: "user", content: "hello" }],
+      }),
+      1
+    );
   });
 
   test("Claude 旧版本请求缺少 user_id 但有 metadata.session_id 时，应使用最终 sessionId 补全 user_id", async () => {

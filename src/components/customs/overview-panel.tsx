@@ -2,11 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Clock, DollarSign, TrendingUp } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRouter } from "@/i18n/routing";
 import type { CurrencyCode } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { ActiveSessionsList } from "./active-sessions-list";

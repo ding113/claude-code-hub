@@ -3,11 +3,13 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
+import { resolveAnthropicAuthHeaders as resolveAnthropicAuthHeaderSet } from "@/app/v1/_lib/headers";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { buildProxyUrl } from "@/app/v1/_lib/url";
 import { db } from "@/drizzle/db";
 import { providers as providersTable } from "@/drizzle/schema";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
@@ -48,7 +50,11 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import { SessionManager } from "@/lib/session-manager";
-import { normalizeProviderGroupTag, parseProviderGroups } from "@/lib/utils/provider-group";
+import {
+  normalizeProviderGroupTag,
+  parseProviderGroups,
+  resolveProviderGroupsWithDefault,
+} from "@/lib/utils/provider-group";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -74,6 +80,7 @@ import {
   getOrCreateProviderVendorIdFromUrls,
   tryDeleteProviderVendorIfEmpty,
 } from "@/repository/provider-endpoints";
+import { ensureProviderGroupsExist } from "@/repository/provider-groups";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
   AllowedModelRuleInput,
@@ -313,6 +320,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         mcpPassthroughType: provider.mcpPassthroughType,
         mcpPassthroughUrl: provider.mcpPassthroughUrl,
         limit5hUsd: provider.limit5hUsd,
+        limit5hResetMode: provider.limit5hResetMode,
         limitDailyUsd: provider.limitDailyUsd,
         dailyResetMode: provider.dailyResetMode,
         dailyResetTime: provider.dailyResetTime,
@@ -467,12 +475,7 @@ export async function getProviderGroupsWithCount(): Promise<
     const groupCounts = new Map<string, number>();
 
     for (const provider of providers) {
-      const groups = parseProviderGroups(provider.groupTag);
-      if (groups.length === 0) {
-        groupCounts.set(PROVIDER_GROUP.DEFAULT, (groupCounts.get(PROVIDER_GROUP.DEFAULT) || 0) + 1);
-        continue;
-      }
-
+      const groups = resolveProviderGroupsWithDefault(provider.groupTag);
       for (const group of groups) {
         groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
       }
@@ -513,6 +516,7 @@ export async function addProvider(data: {
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
   limit_5h_usd?: number | null;
+  limit_5h_reset_mode?: "fixed" | "rolling";
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
@@ -592,6 +596,7 @@ export async function addProvider(data: {
       ...validated,
       group_tag: normalizeProviderGroupTag(validated.group_tag),
       limit_5h_usd: validated.limit_5h_usd ?? null,
+      limit_5h_reset_mode: validated.limit_5h_reset_mode ?? "rolling",
       limit_daily_usd: validated.limit_daily_usd ?? null,
       daily_reset_mode: validated.daily_reset_mode ?? "fixed",
       daily_reset_time: validated.daily_reset_time ?? "00:00",
@@ -636,6 +641,16 @@ export async function addProvider(data: {
       providerId: provider.id,
     });
 
+    // 同步 provider_groups 表（系统级，失败不影响主流程）
+    try {
+      await ensureProviderGroupsExist(parseProviderGroups(payload.group_tag));
+    } catch (error) {
+      logger.warn("addProvider:provider_groups_sync_failed", {
+        providerId: provider.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     // 同步熔断器配置到 Redis
     try {
       await saveProviderCircuitConfig(provider.id, {
@@ -657,6 +672,20 @@ export async function addProvider(data: {
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "add", providerId: provider.id });
 
+    emitActionAudit({
+      category: "provider",
+      action: "provider.create",
+      targetType: "provider",
+      targetId: String(provider.id),
+      targetName: provider.name,
+      after: {
+        id: provider.id,
+        name: provider.name,
+        url: provider.url,
+        isEnabled: provider.isEnabled,
+      },
+      success: true,
+    });
     return { ok: true };
   } catch (error) {
     logger.trace("addProvider:error", {
@@ -665,6 +694,14 @@ export async function addProvider(data: {
     });
     logger.error("创建服务商失败:", error);
     const message = error instanceof Error ? error.message : "创建服务商失败";
+    emitActionAudit({
+      category: "provider",
+      action: "provider.create",
+      targetType: "provider",
+      targetName: data.name,
+      success: false,
+      errorMessage: "CREATE_FAILED",
+    });
     return { ok: false, error: message };
   }
 }
@@ -692,7 +729,9 @@ export async function editProvider(
     allowed_clients?: string[] | null;
     blocked_clients?: string[] | null;
     limit_5h_usd?: number | null;
+    limit_5h_reset_mode?: "fixed" | "rolling";
     limit_daily_usd?: number | null;
+    daily_reset_mode?: "fixed" | "rolling";
     daily_reset_time?: string;
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
@@ -805,8 +844,43 @@ export async function editProvider(
       return { ok: false, error: "供应商不存在" };
     }
 
+    // 同步 provider_groups 表（系统级，失败不影响主流程）
+    // 同时覆盖 group_tag 新增 tag 与 group_priorities 引用的分组名（如 admin 在 Tab 里给某 provider
+    // 设置了新组的优先级，该组名也应立即物化为表行）
+    const groupNamesToEnsure = new Set<string>();
+    if (payload.group_tag !== undefined) {
+      for (const n of parseProviderGroups(payload.group_tag)) groupNamesToEnsure.add(n);
+    }
+    if (validated.group_priorities !== undefined && validated.group_priorities !== null) {
+      for (const n of Object.keys(validated.group_priorities)) groupNamesToEnsure.add(n);
+    }
+    if (groupNamesToEnsure.size > 0) {
+      try {
+        await ensureProviderGroupsExist([...groupNamesToEnsure]);
+      } catch (error) {
+        logger.warn("editProvider:provider_groups_sync_failed", {
+          providerId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     if (shouldInvalidateStickySessionsOnProviderEdit(preimageFields)) {
       await SessionManager.terminateStickySessionsForProviders([providerId], "editProvider");
+    }
+
+    if (
+      payload.limit_5h_reset_mode !== undefined &&
+      payload.limit_5h_reset_mode !== currentProvider.limit5hResetMode
+    ) {
+      const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await clearSingleProviderCostCache({ providerId }).catch((error) => {
+        logger.warn("editProvider:clear_provider_cost_cache_failed", {
+          providerId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
     }
 
     // 同步熔断器配置到 Redis（如果配置有变化）
@@ -854,6 +928,16 @@ export async function editProvider(
       patch: EMPTY_PROVIDER_BATCH_PATCH,
     });
 
+    emitActionAudit({
+      category: "provider",
+      action: "provider.update",
+      targetType: "provider",
+      targetId: String(providerId),
+      before: preimageFields,
+      after: data,
+      success: true,
+      redactExtraKeys: ["key"],
+    });
     return {
       ok: true,
       data: {
@@ -864,6 +948,14 @@ export async function editProvider(
   } catch (error) {
     logger.error("更新服务商失败:", error);
     const message = error instanceof Error ? error.message : "更新服务商失败";
+    emitActionAudit({
+      category: "provider",
+      action: "provider.update",
+      targetType: "provider",
+      targetId: String(providerId),
+      success: false,
+      errorMessage: "UPDATE_FAILED",
+    });
     return { ok: false, error: message };
   }
 }
@@ -923,6 +1015,15 @@ export async function removeProvider(
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "remove", providerId });
 
+    emitActionAudit({
+      category: "provider",
+      action: "provider.delete",
+      targetType: "provider",
+      targetId: String(providerId),
+      targetName: provider?.name ?? null,
+      before: provider ? { id: provider.id, name: provider.name, url: provider.url } : undefined,
+      success: true,
+    });
     return {
       ok: true,
       data: {
@@ -933,6 +1034,14 @@ export async function removeProvider(
   } catch (error) {
     logger.error("删除服务商失败:", error);
     const message = error instanceof Error ? error.message : "删除服务商失败";
+    emitActionAudit({
+      category: "provider",
+      action: "provider.delete",
+      targetType: "provider",
+      targetId: String(providerId),
+      success: false,
+      errorMessage: "DELETE_FAILED",
+    });
     return { ok: false, error: message };
   }
 }
@@ -1319,6 +1428,7 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   allowed_clients: "allowedClients",
   blocked_clients: "blockedClients",
   limit_5h_usd: "limit5hUsd",
+  limit_5h_reset_mode: "limit5hResetMode",
   limit_daily_usd: "limitDailyUsd",
   daily_reset_mode: "dailyResetMode",
   daily_reset_time: "dailyResetTime",
@@ -1524,6 +1634,9 @@ function mapApplyUpdatesToRepositoryFormat(
     result.limit5hUsd =
       applyUpdates.limit_5h_usd != null ? applyUpdates.limit_5h_usd.toString() : null;
   }
+  if (applyUpdates.limit_5h_reset_mode !== undefined) {
+    result.limit5hResetMode = applyUpdates.limit_5h_reset_mode;
+  }
   if (applyUpdates.limit_daily_usd !== undefined) {
     result.limitDailyUsd =
       applyUpdates.limit_daily_usd != null ? applyUpdates.limit_daily_usd.toString() : null;
@@ -1614,6 +1727,7 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
   gemini_google_search_preference: "geminiGoogleSearchPreference",
   limit_5h_usd: "limit5hUsd",
+  limit_5h_reset_mode: "limit5hResetMode",
   limit_daily_usd: "limitDailyUsd",
   daily_reset_mode: "dailyResetMode",
   daily_reset_time: "dailyResetTime",
@@ -1995,6 +2109,21 @@ export async function applyProviderBatchPatch(
       }
     }
 
+    if (repositoryUpdates.limit5hResetMode !== undefined) {
+      const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await Promise.all(
+        effectiveProviderIds.map((providerId) =>
+          clearSingleProviderCostCache({ providerId }).catch((error) => {
+            logger.warn("applyProviderBatchPatch:clear_provider_cost_cache_failed", {
+              providerId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+          })
+        )
+      );
+    }
+
     await publishProviderCacheInvalidation();
 
     const hasCbFieldChange = changedFields.some(
@@ -2207,6 +2336,11 @@ export interface BatchUpdateProvidersParams {
     allowed_models?: AllowedModelRuleInput[] | null;
     allowed_clients?: string[];
     blocked_clients?: string[];
+    limit_5h_usd?: number | null;
+    limit_5h_reset_mode?: "fixed" | "rolling";
+    limit_daily_usd?: number | null;
+    daily_reset_mode?: "fixed" | "rolling";
+    daily_reset_time?: string;
     codex_service_tier_preference?: CodexServiceTierPreference | null;
     anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
     anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
@@ -2289,6 +2423,23 @@ export async function batchUpdateProviders(
     if (updates.blocked_clients !== undefined) {
       repositoryUpdates.blockedClients = updates.blocked_clients;
     }
+    if (updates.limit_5h_usd !== undefined) {
+      repositoryUpdates.limit5hUsd =
+        updates.limit_5h_usd === null ? null : updates.limit_5h_usd.toString();
+    }
+    if (updates.limit_5h_reset_mode !== undefined) {
+      repositoryUpdates.limit5hResetMode = updates.limit_5h_reset_mode;
+    }
+    if (updates.limit_daily_usd !== undefined) {
+      repositoryUpdates.limitDailyUsd =
+        updates.limit_daily_usd === null ? null : updates.limit_daily_usd.toString();
+    }
+    if (updates.daily_reset_mode !== undefined) {
+      repositoryUpdates.dailyResetMode = updates.daily_reset_mode;
+    }
+    if (updates.daily_reset_time !== undefined) {
+      repositoryUpdates.dailyResetTime = updates.daily_reset_time;
+    }
     if (updates.codex_service_tier_preference !== undefined) {
       repositoryUpdates.codexServiceTierPreference = updates.codex_service_tier_preference;
     }
@@ -2301,6 +2452,32 @@ export async function batchUpdateProviders(
     }
 
     const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
+
+    if (repositoryUpdates.limit5hResetMode !== undefined) {
+      const { clearSingleProviderCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      await Promise.all(
+        providerIds.map((providerId) =>
+          clearSingleProviderCostCache({ providerId }).catch((error) => {
+            logger.warn("batchUpdateProviders:clear_provider_cost_cache_failed", {
+              providerId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+          })
+        )
+      );
+    }
+
+    // 同步 provider_groups 表（系统级，失败不影响主流程）
+    if (repositoryUpdates.groupTag !== undefined) {
+      try {
+        await ensureProviderGroupsExist(parseProviderGroups(repositoryUpdates.groupTag));
+      } catch (error) {
+        logger.warn("batchUpdateProviders:provider_groups_sync_failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     const shouldInvalidateStickySessions =
       updates.group_tag !== undefined ||
@@ -2535,11 +2712,16 @@ export async function getProviderLimitUsage(providerId: number): Promise<
       getTimeRangeForPeriod,
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
+    const { RateLimitService } = await import("@/lib/rate-limit");
     const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
+    const limit5hResetMode = provider.limit5hResetMode ?? "rolling";
 
     // 计算各周期的时间范围
-    const [range5h, rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
+    const [range5h, resetAt5h, rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
       getTimeRangeForPeriod("5h"),
+      limit5hResetMode === "fixed"
+        ? RateLimitService.get5hWindowResetAt(providerId, "provider", limit5hResetMode)
+        : Promise.resolve(null),
       getTimeRangeForPeriodWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
@@ -2551,7 +2733,9 @@ export async function getProviderLimitUsage(providerId: number): Promise<
 
     // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
     const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
-      sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
+      limit5hResetMode === "fixed"
+        ? RateLimitService.getCurrentCost(providerId, "provider", "5h", undefined, limit5hResetMode)
+        : sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
       sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
       sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
       sumProviderCostInTimeRange(providerId, rangeMonthly.startTime, rangeMonthly.endTime),
@@ -2559,7 +2743,6 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     ]);
 
     // 获取重置时间信息
-    const reset5h = await getResetInfo("5h");
     const resetDaily = await getResetInfoWithMode(
       "daily",
       provider.dailyResetTime,
@@ -2574,7 +2757,12 @@ export async function getProviderLimitUsage(providerId: number): Promise<
         cost5h: {
           current: cost5h,
           limit: provider.limit5hUsd,
-          resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+          resetInfo:
+            limit5hResetMode === "rolling"
+              ? "滚动窗口（5 小时）"
+              : resetAt5h
+                ? `固定窗口（重置于 ${resetAt5h.toISOString()}）`
+                : "固定窗口（等待首次成功记账）",
         },
         costDaily: {
           current: costDaily,
@@ -2627,6 +2815,7 @@ export async function getProviderLimitUsageBatch(
     id: number;
     dailyResetTime?: string | null;
     dailyResetMode?: string | null;
+    limit5hResetMode?: string | null;
     limit5hUsd?: number | null;
     limitDailyUsd?: number | null;
     limitWeeklyUsd?: number | null;
@@ -2655,6 +2844,7 @@ export async function getProviderLimitUsageBatch(
       getTimeRangeForPeriod,
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
+    const { RateLimitService } = await import("@/lib/rate-limit");
     const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
 
     const providerIds = providers.map((p) => p.id);
@@ -2673,6 +2863,7 @@ export async function getProviderLimitUsageBatch(
     for (const provider of providers) {
       // 获取该供应商的 daily 时间范围（根据其 dailyResetMode 配置）
       const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
+      const limit5hResetMode = (provider.limit5hResetMode ?? "rolling") as "fixed" | "rolling";
       const rangeDaily = await getTimeRangeForPeriodWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
@@ -2680,8 +2871,19 @@ export async function getProviderLimitUsageBatch(
       );
 
       // 并行查询该供应商的各周期消费（直接查询数据库）
-      const [cost5h, costDaily, costWeekly, costMonthly] = await Promise.all([
-        sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),
+      const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly] = await Promise.all([
+        limit5hResetMode === "fixed"
+          ? RateLimitService.getCurrentCost(
+              provider.id,
+              "provider",
+              "5h",
+              undefined,
+              limit5hResetMode
+            )
+          : sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),
+        limit5hResetMode === "fixed"
+          ? RateLimitService.get5hWindowResetAt(provider.id, "provider", limit5hResetMode)
+          : Promise.resolve(null),
         sumProviderCostInTimeRange(provider.id, rangeDaily.startTime, rangeDaily.endTime),
         sumProviderCostInTimeRange(provider.id, rangeWeekly.startTime, rangeWeekly.endTime),
         sumProviderCostInTimeRange(provider.id, rangeMonthly.startTime, rangeMonthly.endTime),
@@ -2690,7 +2892,6 @@ export async function getProviderLimitUsageBatch(
       const sessionCount = sessionCountMap.get(provider.id) || 0;
 
       // 获取重置时间信息
-      const reset5h = await getResetInfo("5h");
       const resetDaily = await getResetInfoWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
@@ -2703,7 +2904,12 @@ export async function getProviderLimitUsageBatch(
         cost5h: {
           current: cost5h,
           limit: provider.limit5hUsd ?? null,
-          resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+          resetInfo:
+            limit5hResetMode === "rolling"
+              ? "滚动窗口（5 小时）"
+              : resetAt5h
+                ? `固定窗口（重置于 ${resetAt5h.toISOString()}）`
+                : "固定窗口（等待首次成功记账）",
         },
         costDaily: {
           current: costDaily,
@@ -3975,44 +4181,16 @@ async function executeProviderApiTest(
   }
 }
 
-/**
- * 测试 Anthropic Messages API 连通性
- */
-function getHostnameFromUrl(url: string): string | null {
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-function resolveAnthropicAuthHeaders(apiKey: string, providerUrl: string): Record<string, string> {
-  const headers: Record<string, string> = {
+function resolveAnthropicAuthHeaders(
+  apiKey: string,
+  providerUrl: string,
+  options?: { forceBearerOnly?: boolean }
+): Record<string, string> {
+  return {
     "Content-Type": "application/json",
     "anthropic-version": "2023-06-01",
+    ...resolveAnthropicAuthHeaderSet(apiKey, providerUrl, options),
   };
-
-  const hostname = getHostnameFromUrl(providerUrl);
-  const isOfficialAnthropic = hostname
-    ? hostname.endsWith("anthropic.com") || hostname.endsWith("claude.ai")
-    : false;
-  const looksLikeProxy = hostname
-    ? /proxy|relay|gateway|router|openai|api2d|openrouter|worker|gpt/i.test(hostname)
-    : false;
-
-  if (isOfficialAnthropic) {
-    headers["x-api-key"] = apiKey;
-    return headers;
-  }
-
-  if (looksLikeProxy) {
-    headers.Authorization = `Bearer ${apiKey}`;
-    return headers;
-  }
-
-  headers["x-api-key"] = apiKey;
-  headers.Authorization = `Bearer ${apiKey}`;
-  return headers;
 }
 
 export async function testProviderAnthropicMessages(
@@ -4020,7 +4198,7 @@ export async function testProviderAnthropicMessages(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/messages",
-    defaultModel: "claude-sonnet-4-5-20250929",
+    defaultModel: "claude-sonnet-4-6",
     headers: (apiKey, context) => resolveAnthropicAuthHeaders(apiKey, context.providerUrl),
     body: (model) => ({
       model,
@@ -4028,7 +4206,7 @@ export async function testProviderAnthropicMessages(
       stream: false, // 显式禁用流式响应，避免 Cloudflare 520 错误
       messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
     }),
-    userAgent: "claude-cli/2.0.50 (external, cli)",
+    userAgent: "claude-cli/2.1.76 (external, cli)",
     successMessage: "Anthropic Messages API 测试成功",
     extract: (result) => ({
       model: "model" in result ? result.model : undefined,
@@ -4046,7 +4224,7 @@ export async function testProviderOpenAIChatCompletions(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/chat/completions",
-    defaultModel: "gpt-5.1-codex",
+    defaultModel: "gpt-5.3-codex",
     headers: (apiKey, context) => {
       void context;
       return {
@@ -4080,7 +4258,7 @@ export async function testProviderOpenAIResponses(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/responses",
-    defaultModel: "gpt-5.1-codex",
+    defaultModel: "gpt-5.3-codex",
     headers: (apiKey, context) => {
       void context;
       return {
@@ -4332,6 +4510,7 @@ export type UnifiedTestResult = ActionResult<{
   httpStatusText?: string;
   model?: string;
   content?: string;
+  requestUrl?: string;
   rawResponse?: string;
   usage?: {
     inputTokens: number;
@@ -4456,6 +4635,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
         httpStatusText: result.httpStatusText,
         model: result.model,
         content: result.content,
+        requestUrl: result.requestUrl,
         rawResponse: result.rawResponse,
         usage: result.usage,
         streamInfo: result.streamInfo,
@@ -4832,7 +5012,9 @@ async function fetchAnthropicModels(
   const url = `${normalizedUrl}/v1/models`;
 
   // 复用认证逻辑：官方 API 用 x-api-key，代理用 Bearer token
-  const authHeaders = resolveAnthropicAuthHeaders(data.apiKey, normalizedUrl);
+  const authHeaders = resolveAnthropicAuthHeaders(data.apiKey, normalizedUrl, {
+    forceBearerOnly: data.providerType === "claude-auth",
+  });
 
   try {
     const response = await executeProxiedFetch(

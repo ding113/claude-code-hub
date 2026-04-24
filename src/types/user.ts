@@ -15,10 +15,12 @@ export interface User {
   deletedAt?: Date;
   // User-level quota fields
   limit5hUsd?: number; // 5小时消费上限（美元）
+  limit5hResetMode: "fixed" | "rolling"; // 5小时限额重置模式
   limitWeeklyUsd?: number; // 周消费上限（美元）
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
   costResetAt?: Date | null; // Cost reset timestamp for limits-only reset
+  limit5hCostResetAt?: Date | null; // Rolling 5h reset boundary timestamp
   limitConcurrentSessions?: number; // 并发 Session 上限
   // Daily quota reset mode
   dailyResetMode: "fixed" | "rolling"; // 每日限额重置模式
@@ -45,6 +47,7 @@ export interface CreateUserData {
   tags?: string[]; // 可选，用户标签
   // User-level quota fields
   limit5hUsd?: number;
+  limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number;
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
@@ -74,6 +77,7 @@ export interface UpdateUserData {
   tags?: string[]; // 可选，用户标签
   // User-level quota fields
   limit5hUsd?: number | null;
+  limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -122,6 +126,7 @@ export interface UserKeyDisplay {
   canLoginWebUi: boolean; // 是否允许使用该 Key 登录 Web UI
   // 限额配置
   limit5hUsd: number | null; // 5小时消费上限（美元）
+  limit5hResetMode: "fixed" | "rolling"; // 5小时重置模式
   limitDailyUsd: number | null; // 每日消费上限
   dailyResetMode: "fixed" | "rolling"; // 每日重置模式
   dailyResetTime: string; // 每日重置时间
@@ -149,6 +154,7 @@ export interface UserDisplay {
   keys: UserKeyDisplay[];
   // User-level quota fields
   limit5hUsd?: number | null;
+  limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -175,6 +181,7 @@ export interface KeyDialogUserContext {
   id: number;
   providerGroup?: string | null;
   limit5hUsd?: number;
+  limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number;
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;

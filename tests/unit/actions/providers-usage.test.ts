@@ -76,10 +76,12 @@ vi.mock("next/cache", () => ({
 // Mock rate-limit service - should NOT be called after refactor
 const getCurrentCostMock = vi.fn();
 const getCurrentCostBatchMock = vi.fn();
+const get5hWindowResetAtMock = vi.fn();
 vi.mock("@/lib/rate-limit", () => ({
   RateLimitService: {
     getCurrentCost: (...args: unknown[]) => getCurrentCostMock(...args),
     getCurrentCostBatch: (...args: unknown[]) => getCurrentCostBatchMock(...args),
+    get5hWindowResetAt: (...args: unknown[]) => get5hWindowResetAtMock(...args),
   },
 }));
 
@@ -90,6 +92,7 @@ describe("getProviderLimitUsage", () => {
     name: "Test Provider",
     dailyResetTime: "18:00",
     dailyResetMode: "fixed" as const,
+    limit5hResetMode: "rolling" as const,
     limit5hUsd: 10,
     limitDailyUsd: 50,
     limitWeeklyUsd: 200,
@@ -159,6 +162,7 @@ describe("getProviderLimitUsage", () => {
       type: "custom",
       resetAt: new Date(nowMs + 6 * 60 * 60 * 1000),
     });
+    get5hWindowResetAtMock.mockResolvedValue(null);
 
     // Default DB costs
     sumProviderCostInTimeRangeMock.mockResolvedValue(5.5);
@@ -285,6 +289,26 @@ describe("getProviderLimitUsage", () => {
     expect(result.ok).toBe(false);
     expect(sumProviderCostInTimeRangeMock).not.toHaveBeenCalled();
   });
+
+  it("should use RateLimitService for fixed 5h provider usage", async () => {
+    findProviderByIdMock.mockResolvedValue({
+      ...mockProvider,
+      limit5hResetMode: "fixed" as const,
+    });
+    getCurrentCostMock.mockResolvedValueOnce(7.5);
+    get5hWindowResetAtMock.mockResolvedValueOnce(new Date(nowMs + 30 * 60 * 1000));
+
+    const { getProviderLimitUsage } = await import("@/actions/providers");
+
+    const result = await getProviderLimitUsage(1);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(getCurrentCostMock).toHaveBeenCalledWith(1, "provider", "5h", undefined, "fixed");
+    expect(result.data.cost5h.current).toBe(7.5);
+    expect(result.data.cost5h.resetInfo).toContain("固定窗口");
+  });
 });
 
 describe("getProviderLimitUsageBatch", () => {
@@ -294,6 +318,7 @@ describe("getProviderLimitUsageBatch", () => {
       id: 1,
       dailyResetTime: "00:00",
       dailyResetMode: "fixed" as const,
+      limit5hResetMode: "rolling" as const,
       limit5hUsd: 10,
       limitDailyUsd: 50,
       limitWeeklyUsd: 200,
@@ -304,6 +329,7 @@ describe("getProviderLimitUsageBatch", () => {
       id: 2,
       dailyResetTime: "18:00",
       dailyResetMode: "rolling" as const,
+      limit5hResetMode: "rolling" as const,
       limit5hUsd: 20,
       limitDailyUsd: 100,
       limitWeeklyUsd: 400,
@@ -374,6 +400,7 @@ describe("getProviderLimitUsageBatch", () => {
       type: "custom",
       resetAt: new Date(nowMs + 6 * 60 * 60 * 1000),
     });
+    get5hWindowResetAtMock.mockResolvedValue(null);
 
     sumProviderCostInTimeRangeMock.mockResolvedValue(5.5);
   });
@@ -465,5 +492,21 @@ describe("getProviderLimitUsageBatch", () => {
     await getProviderLimitUsageBatch(mockProviders);
 
     expect(getProviderSessionCountBatchMock).toHaveBeenCalledWith([1, 2]);
+  });
+
+  it("should use RateLimitService for fixed 5h providers in batch mode", async () => {
+    const providersWithFixed = [
+      { ...mockProviders[0], limit5hResetMode: "fixed" as const },
+      mockProviders[1],
+    ];
+    getCurrentCostMock.mockResolvedValueOnce(9.5);
+    get5hWindowResetAtMock.mockResolvedValueOnce(new Date(nowMs + 45 * 60 * 1000));
+
+    const { getProviderLimitUsageBatch } = await import("@/actions/providers");
+    const result = await getProviderLimitUsageBatch(providersWithFixed);
+
+    expect(getCurrentCostMock).toHaveBeenCalledWith(1, "provider", "5h", undefined, "fixed");
+    expect(result.get(1)?.cost5h.current).toBe(9.5);
+    expect(result.get(1)?.cost5h.resetInfo).toContain("固定窗口");
   });
 });

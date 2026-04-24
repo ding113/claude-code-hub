@@ -92,6 +92,48 @@ describe("Model Price Actions", () => {
     findAllLatestPricesMock.mockResolvedValue([]);
   });
 
+  describe("getAvailableModelCatalog", () => {
+    it("returns chat models only by default", async () => {
+      findAllLatestPricesMock.mockResolvedValue([
+        makeMockPrice("gpt-4.1", { mode: "chat" }),
+        makeMockPrice("gpt-image-2", { mode: "image_generation" }),
+      ]);
+
+      const { getAvailableModelCatalog } = await import("@/actions/model-prices");
+      const result = await getAvailableModelCatalog();
+
+      expect(result.map((item) => item.modelName)).toEqual(["gpt-4.1"]);
+    });
+
+    it("returns all model types when scope is all", async () => {
+      findAllLatestPricesMock.mockResolvedValue([
+        makeMockPrice("gpt-image-2", { mode: "image_generation" }),
+        makeMockPrice("gpt-4.1", { mode: "chat" }),
+      ]);
+
+      const { getAvailableModelCatalog } = await import("@/actions/model-prices");
+      const result = await getAvailableModelCatalog({ scope: "all" });
+
+      expect(result.map((item) => item.modelName)).toEqual(
+        expect.arrayContaining(["gpt-image-2", "gpt-4.1"])
+      );
+    });
+  });
+
+  describe("getAvailableModelsByProviderType", () => {
+    it("keeps using the chat-only catalog", async () => {
+      findAllLatestPricesMock.mockResolvedValue([
+        makeMockPrice("gpt-4.1", { mode: "chat" }),
+        makeMockPrice("gpt-image-2", { mode: "image_generation" }),
+      ]);
+
+      const { getAvailableModelsByProviderType } = await import("@/actions/model-prices");
+      const result = await getAvailableModelsByProviderType();
+
+      expect(result).toEqual(["gpt-4.1"]);
+    });
+  });
+
   describe("upsertSingleModelPrice", () => {
     it("should create a new model price for admin", async () => {
       const mockResult = makeMockPrice("gpt-5.2-codex", {
@@ -170,6 +212,80 @@ describe("Model Price Actions", () => {
         expect.objectContaining({
           mode: "image_generation",
           output_cost_per_image: 0.04,
+        })
+      );
+    });
+
+    it("should merge extra JSON fields into price data", async () => {
+      const mockResult = makeMockPrice("omni-model", {
+        mode: "chat",
+        input_cost_per_second: 0.5,
+        file_search_cost_per_1k_calls: 2,
+      });
+      upsertModelPriceMock.mockResolvedValue(mockResult);
+
+      const { upsertSingleModelPrice } = await import("@/actions/model-prices");
+      const result = await upsertSingleModelPrice({
+        modelName: "omni-model",
+        mode: "chat",
+        inputCostPerToken: 0.000015,
+        extraFieldsJson: JSON.stringify({
+          input_cost_per_second: 0.5,
+          file_search_cost_per_1k_calls: 2,
+        }),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "omni-model",
+        expect.objectContaining({
+          mode: "chat",
+          input_cost_per_token: 0.000015,
+          input_cost_per_second: 0.5,
+          file_search_cost_per_1k_calls: 2,
+        })
+      );
+    });
+
+    it("should reject invalid extra JSON", async () => {
+      const { upsertSingleModelPrice } = await import("@/actions/model-prices");
+      const result = await upsertSingleModelPrice({
+        modelName: "broken-model",
+        mode: "chat",
+        extraFieldsJson: "{invalid",
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("JSON");
+      expect(upsertModelPriceMock).not.toHaveBeenCalled();
+    });
+
+    it("should let managed form fields override conflicting extra JSON fields", async () => {
+      const mockResult = makeMockPrice("conflict-model", {
+        mode: "chat",
+        input_cost_per_token: 0.000015,
+      });
+      upsertModelPriceMock.mockResolvedValue(mockResult);
+
+      const { upsertSingleModelPrice } = await import("@/actions/model-prices");
+      const result = await upsertSingleModelPrice({
+        modelName: "conflict-model",
+        mode: "chat",
+        inputCostPerToken: 0.000015,
+        extraFieldsJson: JSON.stringify({
+          mode: "image_generation",
+          input_cost_per_token: 999,
+          input_cost_per_second: 0.25,
+        }),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "conflict-model",
+        expect.objectContaining({
+          mode: "chat",
+          input_cost_per_token: 0.000015,
+          input_cost_per_second: 0.25,
         })
       );
     });

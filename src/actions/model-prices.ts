@@ -1,18 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import {
   fetchCloudPriceTableToml,
   parseCloudPriceTableToml,
 } from "@/lib/price-sync/cloud-price-table";
+import { isPriceLikeFieldPath } from "@/lib/utils/model-price-fields";
 import {
   createModelPrice,
   deleteModelPriceByName,
   findAllLatestPrices,
   findAllLatestPricesPaginated,
   findAllManualPrices,
+  findLatestPriceByModel,
   findLatestPriceByModelAndSource,
   hasAnyPriceRecords,
   type PaginatedResult,
@@ -246,12 +249,47 @@ export async function uploadPriceTable(
   } catch {
     const parseResult = parseCloudPriceTableToml(content);
     if (!parseResult.ok) {
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.bulk_upload",
+        targetType: "model_price",
+        success: false,
+        errorMessage: parseResult.error,
+      });
       return { ok: false, error: parseResult.error };
     }
     jsonContent = JSON.stringify(parseResult.data.models);
   }
 
-  return processPriceTableInternal(jsonContent, overwriteManual);
+  const result = await processPriceTableInternal(jsonContent, overwriteManual);
+
+  if (result.ok) {
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.bulk_upload",
+      targetType: "model_price",
+      after: {
+        added: result.data.added.length,
+        updated: result.data.updated.length,
+        unchanged: result.data.unchanged.length,
+        failed: result.data.failed.length,
+        skippedConflicts: result.data.skippedConflicts?.length ?? 0,
+        total: result.data.total,
+        overwriteManualCount: overwriteManual?.length ?? 0,
+      },
+      success: true,
+    });
+  } else {
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.bulk_upload",
+      targetType: "model_price",
+      success: false,
+      errorMessage: result.error,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -278,21 +316,26 @@ export interface AvailableModelCatalogItem {
   updatedAt: string;
 }
 
+export type AvailableModelCatalogScope = "chat" | "all";
+
 /**
- * 获取本地价格表中的聊天模型目录。
- * 供供应商白名单模型选择器回退使用，按更新时间倒序返回。
+ * 获取本地价格表中的模型目录。
+ * 默认只返回聊天模型；调用方可显式放宽到任意类型。
  */
-export async function getAvailableModelCatalog(): Promise<AvailableModelCatalogItem[]> {
+export async function getAvailableModelCatalog(options?: {
+  scope?: AvailableModelCatalogScope;
+}): Promise<AvailableModelCatalogItem[]> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return [];
     }
 
+    const scope = options?.scope ?? "chat";
     const allPrices = await findAllLatestPrices();
 
     return allPrices
-      .filter((price) => price.priceData.mode === "chat")
+      .filter((price) => scope === "all" || price.priceData.mode === "chat")
       .sort((left, right) => {
         const timeDelta = right.updatedAt.getTime() - left.updatedAt.getTime();
         if (timeDelta !== 0) {
@@ -369,7 +412,7 @@ export async function hasPriceTable(): Promise<boolean> {
  */
 export async function getAvailableModelsByProviderType(): Promise<string[]> {
   try {
-    const catalog = await getAvailableModelCatalog();
+    const catalog = await getAvailableModelCatalog({ scope: "chat" });
     return catalog.map((item) => item.modelName);
   } catch (error) {
     logger.error("获取可用模型列表失败:", error);
@@ -463,12 +506,26 @@ export async function syncLiteLLMPrices(
     const tomlResult = await fetchCloudPriceTableToml();
     if (!tomlResult.ok) {
       logger.error("[PriceSync] Failed to fetch cloud price table", { error: tomlResult.error });
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.sync_litellm",
+        targetType: "model_price",
+        success: false,
+        errorMessage: tomlResult.error,
+      });
       return { ok: false, error: tomlResult.error };
     }
 
     const parseResult = parseCloudPriceTableToml(tomlResult.data);
     if (!parseResult.ok) {
       logger.error("[PriceSync] Failed to parse cloud price table", { error: parseResult.error });
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.sync_litellm",
+        targetType: "model_price",
+        success: false,
+        errorMessage: parseResult.error,
+      });
       return { ok: false, error: parseResult.error };
     }
 
@@ -484,14 +541,43 @@ export async function syncLiteLLMPrices(
         skippedConflicts: result.data.skippedConflicts?.length ?? 0,
         total: result.data.total,
       });
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.sync_litellm",
+        targetType: "model_price",
+        after: {
+          added: result.data.added.length,
+          updated: result.data.updated.length,
+          unchanged: result.data.unchanged.length,
+          failed: result.data.failed.length,
+          skippedConflicts: result.data.skippedConflicts?.length ?? 0,
+          total: result.data.total,
+          overwriteManualCount: overwriteManual?.length ?? 0,
+        },
+        success: true,
+      });
     } else {
       logger.error("[PriceSync] Cloud price sync failed", { error: result.error });
+      emitActionAudit({
+        category: "model_price",
+        action: "model_price.sync_litellm",
+        targetType: "model_price",
+        success: false,
+        errorMessage: result.error,
+      });
     }
 
     return result;
   } catch (error) {
     logger.error("[PriceSync] Cloud price sync failed", error);
     const message = error instanceof Error ? error.message : "同步失败，请稍后重试";
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.sync_litellm",
+      targetType: "model_price",
+      success: false,
+      errorMessage: "SYNC_FAILED",
+    });
     return { ok: false, error: message };
   }
 }
@@ -512,6 +598,43 @@ export interface SingleModelPriceInput {
   cacheReadInputTokenCost?: number;
   cacheCreationInputTokenCost?: number;
   cacheCreationInputTokenCostAbove1hr?: number;
+  extraFieldsJson?: string;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeExtraPriceData(value: unknown, path = ""): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => sanitizeExtraPriceData(item, `${path}[${index}]`));
+  }
+
+  if (!isPlainObject(value)) {
+    if (path && isPriceLikeFieldPath(path)) {
+      if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        throw new Error(`${path} 必须是非负数`);
+      }
+    }
+
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "__proto__" && key !== "constructor" && key !== "prototype")
+      .map(([key, nestedValue]) => [
+        key,
+        sanitizeExtraPriceData(nestedValue, path ? `${path}.${key}` : key),
+      ])
+  );
 }
 
 /**
@@ -577,20 +700,61 @@ export async function upsertSingleModelPrice(
       return { ok: false, error: "缓存创建(1h)价格必须为非负数" };
     }
 
+    let extraPriceData: Record<string, unknown> = {};
+    if (input.extraFieldsJson?.trim()) {
+      try {
+        const parsed = JSON.parse(input.extraFieldsJson);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return { ok: false, error: "高级字段必须是 JSON 对象" };
+        }
+        extraPriceData = sanitizeExtraPriceData(parsed) as Record<string, unknown>;
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? `高级字段 JSON 解析失败: ${error.message}`
+              : "高级字段 JSON 解析失败",
+        };
+      }
+    }
+
     // 构建价格数据
+    const displayName = input.displayName?.trim();
+    const litellmProvider = input.litellmProvider?.trim();
     const priceData: ModelPriceData = {
+      ...extraPriceData,
       mode: input.mode,
-      display_name: input.displayName?.trim() || undefined,
-      litellm_provider: input.litellmProvider || undefined,
-      supports_prompt_caching: input.supportsPromptCaching,
-      input_cost_per_token: input.inputCostPerToken,
-      output_cost_per_token: input.outputCostPerToken,
-      output_cost_per_image: input.outputCostPerImage,
-      input_cost_per_request: input.inputCostPerRequest,
-      cache_read_input_token_cost: input.cacheReadInputTokenCost,
-      cache_creation_input_token_cost: input.cacheCreationInputTokenCost,
-      cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr,
+      ...(displayName ? { display_name: displayName } : {}),
+      ...(litellmProvider ? { litellm_provider: litellmProvider } : {}),
+      ...(input.supportsPromptCaching !== undefined
+        ? { supports_prompt_caching: input.supportsPromptCaching }
+        : {}),
+      ...(input.inputCostPerToken !== undefined
+        ? { input_cost_per_token: input.inputCostPerToken }
+        : {}),
+      ...(input.outputCostPerToken !== undefined
+        ? { output_cost_per_token: input.outputCostPerToken }
+        : {}),
+      ...(input.outputCostPerImage !== undefined
+        ? { output_cost_per_image: input.outputCostPerImage }
+        : {}),
+      ...(input.inputCostPerRequest !== undefined
+        ? { input_cost_per_request: input.inputCostPerRequest }
+        : {}),
+      ...(input.cacheReadInputTokenCost !== undefined
+        ? { cache_read_input_token_cost: input.cacheReadInputTokenCost }
+        : {}),
+      ...(input.cacheCreationInputTokenCost !== undefined
+        ? { cache_creation_input_token_cost: input.cacheCreationInputTokenCost }
+        : {}),
+      ...(input.cacheCreationInputTokenCostAbove1hr !== undefined
+        ? { cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr }
+        : {}),
     };
+
+    // 捕获 before 快照
+    const beforePrice = await findLatestPriceByModel(input.modelName.trim());
 
     // 执行更新
     const result = await upsertModelPrice(input.modelName.trim(), priceData);
@@ -605,10 +769,33 @@ export async function upsertSingleModelPrice(
       });
     }
 
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.upsert",
+      targetType: "model_price",
+      targetId: String(result.id),
+      targetName: result.modelName,
+      before: beforePrice ?? undefined,
+      after: {
+        id: result.id,
+        modelName: result.modelName,
+        source: result.source,
+        priceData: result.priceData,
+      },
+      success: true,
+    });
     return { ok: true, data: result };
   } catch (error) {
     logger.error("更新模型价格失败:", error);
     const message = error instanceof Error ? error.message : "操作失败，请稍后重试";
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.upsert",
+      targetType: "model_price",
+      targetName: input.modelName?.trim() ?? null,
+      success: false,
+      errorMessage: "UPSERT_FAILED",
+    });
     return { ok: false, error: message };
   }
 }
@@ -629,6 +816,9 @@ export async function deleteSingleModelPrice(modelName: string): Promise<ActionR
       return { ok: false, error: "模型名称不能为空" };
     }
 
+    // 捕获 before 快照
+    const beforePrice = await findLatestPriceByModel(modelName.trim());
+
     // 执行删除
     await deleteModelPriceByName(modelName.trim());
 
@@ -641,10 +831,27 @@ export async function deleteSingleModelPrice(modelName: string): Promise<ActionR
       });
     }
 
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.delete",
+      targetType: "model_price",
+      targetId: beforePrice ? String(beforePrice.id) : null,
+      targetName: modelName.trim(),
+      before: beforePrice ?? undefined,
+      success: true,
+    });
     return { ok: true, data: undefined };
   } catch (error) {
     logger.error("删除模型价格失败:", error);
     const message = error instanceof Error ? error.message : "删除失败，请稍后重试";
+    emitActionAudit({
+      category: "model_price",
+      action: "model_price.delete",
+      targetType: "model_price",
+      targetName: modelName?.trim() ?? null,
+      success: false,
+      errorMessage: "DELETE_FAILED",
+    });
     return { ok: false, error: message };
   }
 }

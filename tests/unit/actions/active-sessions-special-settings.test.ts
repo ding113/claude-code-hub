@@ -15,6 +15,8 @@ const getSessionClientRequestMetaMock = vi.fn();
 const getSessionUpstreamRequestMetaMock = vi.fn();
 const getSessionUpstreamResponseMetaMock = vi.fn();
 const getSessionSpecialSettingsMock = vi.fn();
+const getSessionRequestPhaseSnapshotMock = vi.fn();
+const getSessionResponsePhaseSnapshotMock = vi.fn();
 
 const aggregateSessionStatsMock = vi.fn();
 const findAdjacentRequestSequencesMock = vi.fn();
@@ -56,6 +58,8 @@ vi.mock("@/lib/session-manager", () => ({
     getSessionUpstreamRequestMeta: getSessionUpstreamRequestMetaMock,
     getSessionUpstreamResponseMeta: getSessionUpstreamResponseMetaMock,
     getSessionSpecialSettings: getSessionSpecialSettingsMock,
+    getSessionRequestPhaseSnapshot: getSessionRequestPhaseSnapshotMock,
+    getSessionResponsePhaseSnapshot: getSessionResponsePhaseSnapshotMock,
   },
 }));
 
@@ -105,6 +109,8 @@ describe("getSessionDetails - unified specialSettings", () => {
     getSessionClientRequestMetaMock.mockResolvedValue(null);
     getSessionUpstreamRequestMetaMock.mockResolvedValue(null);
     getSessionUpstreamResponseMetaMock.mockResolvedValue(null);
+    getSessionRequestPhaseSnapshotMock.mockResolvedValue(null);
+    getSessionResponsePhaseSnapshotMock.mockResolvedValue(null);
   });
 
   test("当 Redis specialSettings 为空时，应由 DB 审计字段派生特殊设置", async () => {

@@ -31,8 +31,14 @@ const sonnerMocks = vi.hoisted(() => ({
 vi.mock("sonner", () => sonnerMocks);
 
 const providersActionMocks = vi.hoisted(() => ({
-  addProvider: vi.fn(async (_data: unknown) => ({ ok: true })),
-  editProvider: vi.fn(async (_providerId: number, _data: unknown) => ({ ok: true })),
+  addProvider: vi.fn(async (_data: unknown) => ({
+    ok: true,
+    data: { operationId: "op-add", undoToken: "undo-add" },
+  })),
+  editProvider: vi.fn(async (_providerId: number, _data: unknown) => ({
+    ok: true,
+    data: { operationId: "op-edit", undoToken: "undo-edit" },
+  })),
   removeProvider: vi.fn(async (_providerId: number) => ({ ok: true })),
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: true, data: { key: "test-key" } })),
   getProviderTestPresets: vi.fn(async () => ({ ok: true, data: [] })),

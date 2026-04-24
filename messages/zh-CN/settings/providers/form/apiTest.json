@@ -132,6 +132,11 @@
       "title": "完整响应体",
       "hint": "此处显示原始响应内容，您可以在此检查关键词是否存在于响应中"
     },
+    "requestUrl": {
+      "title": "实际请求 URL",
+      "label": "请求 URL",
+      "hint": "这里展示的是最近一次供应商测试实际发出的请求 URL，便于定位中转路径问题。"
+    },
     "errorDetails": {
       "title": "错误详情",
       "type": "错误类型"
@@ -150,7 +155,8 @@
       "validationDetails": "验证详情",
       "httpCheck": "HTTP 检查",
       "latencyCheck": "延迟检查",
-      "contentCheck": "内容验证"
+      "contentCheck": "内容验证",
+      "requestUrl": "请求 URL"
     },
     "judgment": "判定"
   }

@@ -424,7 +424,7 @@ export function UserStatisticsChart({
               cursor={false}
               wrapperStyle={{ transform: "translateY(-100%)", marginTop: "-20px", zIndex: 1000 }}
               content={({ active, payload, label }) => {
-                if (!active || !payload || !payload.length) return <div className="hidden" />;
+                if (!active || !payload?.length) return <div className="hidden" />;
 
                 const filteredPayload = payload.filter((entry) => {
                   const value =

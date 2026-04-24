@@ -9,7 +9,7 @@
  * - 1-minute TTL for fresh settings
  * - Lazy loading on first access
  * - Manual invalidation when settings are saved
- * - Fail-open: returns default settings on error
+ * - DB 读取失败时优先复用旧缓存，否则回退到保守默认值
  */
 
 import { logger } from "@/lib/logger";
@@ -42,10 +42,14 @@ const DEFAULT_SETTINGS: Pick<
   | "enableThinkingBudgetRectifier"
   | "enableBillingHeaderRectifier"
   | "enableResponseInputRectifier"
+  | "allowNonConversationEndpointProviderFallback"
   | "enableCodexSessionIdCompletion"
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
   | "responseFixerConfig"
+  | "passThroughUpstreamErrorMessage"
+  | "publicStatusWindowHours"
+  | "publicStatusAggregationIntervalMinutes"
 > = {
   enableHttp2: false,
   enableHighConcurrencyMode: false,
@@ -55,9 +59,12 @@ const DEFAULT_SETTINGS: Pick<
   enableThinkingBudgetRectifier: true,
   enableBillingHeaderRectifier: true,
   enableResponseInputRectifier: true,
+  // 安全敏感开关：冷缓存 / DB 读取失败时 fail-closed，避免意外重新开启跨供应商 raw fallback。
+  allowNonConversationEndpointProviderFallback: false,
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
+  passThroughUpstreamErrorMessage: true,
   responseFixerConfig: {
     fixTruncatedJson: true,
     fixSseFormat: true,
@@ -65,6 +72,8 @@ const DEFAULT_SETTINGS: Pick<
     maxJsonDepth: 200,
     maxFixSize: 1024 * 1024,
   },
+  publicStatusWindowHours: 24,
+  publicStatusAggregationIntervalMinutes: 5,
 };
 
 /**
@@ -98,7 +107,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 
     return settings;
   } catch (error) {
-    // Fail-open: return previous cached value or defaults
+    // 优先返回旧缓存；若没有缓存，则回退到保守默认值。
     logger.warn("[SystemSettingsCache] Failed to fetch settings, using fallback", {
       hasCachedValue: !!cachedSettings,
       error,
@@ -119,6 +128,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       timezone: null,
       verboseProviderError: false,
+      passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,
       enableAutoCleanup: false,
       cleanupRetentionDays: 30,
       cleanupSchedule: "0 2 * * *",
@@ -131,16 +141,23 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: DEFAULT_SETTINGS.enableBillingHeaderRectifier,
       enableResponseInputRectifier: DEFAULT_SETTINGS.enableResponseInputRectifier,
+      allowNonConversationEndpointProviderFallback:
+        DEFAULT_SETTINGS.allowNonConversationEndpointProviderFallback,
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: DEFAULT_SETTINGS.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
       responseFixerConfig: DEFAULT_SETTINGS.responseFixerConfig,
+      publicStatusWindowHours: DEFAULT_SETTINGS.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes:
+        DEFAULT_SETTINGS.publicStatusAggregationIntervalMinutes,
       quotaDbRefreshIntervalSeconds: 10,
       quotaLeasePercent5h: 0.05,
       quotaLeasePercentDaily: 0.05,
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      ipExtractionConfig: null,
+      ipGeoLookupEnabled: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies SystemSettings;

@@ -4,10 +4,12 @@ import { eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { systemSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import type { SystemSettings, UpdateSystemSettingsInput } from "@/types/system-config";
 import { toSystemSettings } from "./_shared/transformers";
 
-const DEFAULT_SITE_TITLE = "Claude Code Hub";
+type TransactionExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type SystemSettingsMutationExecutor = Pick<TransactionExecutor, "update">;
 
 function isTableMissingError(error: unknown, depth = 0): boolean {
   if (!error || depth > 5) {
@@ -148,6 +150,7 @@ function createFallbackSettings(): SystemSettings {
     cleanupBatchSize: 10000,
     enableClientVersionCheck: false,
     verboseProviderError: false,
+    passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
     enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
@@ -155,6 +158,7 @@ function createFallbackSettings(): SystemSettings {
     enableThinkingBudgetRectifier: true,
     enableBillingHeaderRectifier: true,
     enableResponseInputRectifier: true,
+    allowNonConversationEndpointProviderFallback: true,
     enableCodexSessionIdCompletion: true,
     enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
@@ -171,6 +175,10 @@ function createFallbackSettings(): SystemSettings {
     quotaLeasePercentWeekly: 0.05,
     quotaLeasePercentMonthly: 0.05,
     quotaLeaseCapUsd: null,
+    publicStatusWindowHours: 24,
+    publicStatusAggregationIntervalMinutes: 5,
+    ipExtractionConfig: null,
+    ipGeoLookupEnabled: true,
     createdAt: now,
     updatedAt: now,
   };
@@ -201,6 +209,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+      allowNonConversationEndpointProviderFallback:
+        systemSettings.allowNonConversationEndpointProviderFallback,
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: systemSettings.enableResponseFixer,
@@ -211,8 +221,16 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+      publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
+    };
+    const selectionWithoutPassThrough = {
+      ...selectionWithoutHighConcurrencyMode,
+      enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+      ipExtractionConfig: systemSettings.ipExtractionConfig,
+      ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
     };
     const selectionWithoutCodexAndHighConcurrency = {
       id: systemSettings.id,
@@ -233,6 +251,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+      allowNonConversationEndpointProviderFallback:
+        systemSettings.allowNonConversationEndpointProviderFallback,
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: systemSettings.enableResponseFixer,
@@ -243,12 +263,14 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+      publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
     const fullSelection = {
-      ...selectionWithoutHighConcurrencyMode,
-      enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+      passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+      ...selectionWithoutPassThrough,
     };
 
     try {
@@ -261,49 +283,89 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
+        // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
+        // 其它已迁移的现代字段保留，避免只缺该列时其它设置被连带默认化。
+        const {
+          allowNonConversationEndpointProviderFallback: _omitNonConversationFallback,
+          ...selectionWithoutNonConversationFallback
+        } = fullSelection;
+
         try {
           const [row] = await db
-            .select(selectionWithoutHighConcurrencyMode)
+            .select(selectionWithoutNonConversationFallback)
             .from(systemSettings)
             .limit(1);
           return row ?? null;
-        } catch (fallbackError) {
-          if (!isUndefinedColumnError(fallbackError)) {
-            throw fallbackError;
+        } catch (nonConversationFallbackError) {
+          if (!isUndefinedColumnError(nonConversationFallbackError)) {
+            throw nonConversationFallbackError;
           }
 
-          logger.warn("system_settings 表存在多个缺失列，继续使用 legacy 字段集读取。", {
-            error: fallbackError,
-          });
+          logger.warn(
+            "system_settings 表除新增列外仍有列缺失，继续回退到 withoutHighConcurrencyMode 字段集。",
+            { error: nonConversationFallbackError }
+          );
+        }
+
+        try {
+          const [row] = await db.select(selectionWithoutPassThrough).from(systemSettings).limit(1);
+          return row ?? null;
+        } catch (passThroughFallbackError) {
+          if (!isUndefinedColumnError(passThroughFallbackError)) {
+            throw passThroughFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表缺少 passThroughUpstreamErrorMessage 之外的新列，继续降级读取。",
+            {
+              error: passThroughFallbackError,
+            }
+          );
 
           try {
             const [row] = await db
-              .select(selectionWithoutCodexAndHighConcurrency)
+              .select(selectionWithoutHighConcurrencyMode)
               .from(systemSettings)
               .limit(1);
             return row ?? null;
-          } catch (legacyFallbackError) {
-            if (!isUndefinedColumnError(legacyFallbackError)) {
-              throw legacyFallbackError;
+          } catch (fallbackError) {
+            if (!isUndefinedColumnError(fallbackError)) {
+              throw fallbackError;
             }
 
-            logger.warn("system_settings 表存在更多缺失列，继续使用最小字段集读取。", {
-              error: legacyFallbackError,
+            logger.warn("system_settings 表存在多个缺失列，继续使用 legacy 字段集读取。", {
+              error: fallbackError,
             });
 
-            // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
-            const minimalSelection = {
-              id: systemSettings.id,
-              siteTitle: systemSettings.siteTitle,
-              allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-              currencyDisplay: systemSettings.currencyDisplay,
-              billingModelSource: systemSettings.billingModelSource,
-              createdAt: systemSettings.createdAt,
-              updatedAt: systemSettings.updatedAt,
-            };
+            try {
+              const [row] = await db
+                .select(selectionWithoutCodexAndHighConcurrency)
+                .from(systemSettings)
+                .limit(1);
+              return row ?? null;
+            } catch (legacyFallbackError) {
+              if (!isUndefinedColumnError(legacyFallbackError)) {
+                throw legacyFallbackError;
+              }
 
-            const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
-            return row ?? null;
+              logger.warn("system_settings 表存在更多缺失列，继续使用最小字段集读取。", {
+                error: legacyFallbackError,
+              });
+
+              // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
+              const minimalSelection = {
+                id: systemSettings.id,
+                siteTitle: systemSettings.siteTitle,
+                allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+                currencyDisplay: systemSettings.currencyDisplay,
+                billingModelSource: systemSettings.billingModelSource,
+                createdAt: systemSettings.createdAt,
+                updatedAt: systemSettings.updatedAt,
+              };
+
+              const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
+              return row ?? null;
+            }
           }
         }
       }
@@ -328,7 +390,11 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           currencyDisplay: "USD",
           billingModelSource: "original",
           codexPriorityBillingSource: "requested",
+          passThroughUpstreamErrorMessage: true,
+          allowNonConversationEndpointProviderFallback: true,
           enableHighConcurrencyMode: false,
+          publicStatusWindowHours: 24,
+          publicStatusAggregationIntervalMinutes: 5,
         })
         .onConflictDoNothing();
     } catch (error) {
@@ -370,7 +436,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
  * 更新系统设置
  */
 export async function updateSystemSettings(
-  payload: UpdateSystemSettingsInput
+  payload: UpdateSystemSettingsInput,
+  executor: SystemSettingsMutationExecutor = db
 ): Promise<SystemSettings> {
   const returningWithoutHighConcurrencyMode = {
     id: systemSettings.id,
@@ -392,6 +459,8 @@ export async function updateSystemSettings(
     enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
     enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
     enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+    allowNonConversationEndpointProviderFallback:
+      systemSettings.allowNonConversationEndpointProviderFallback,
     enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
     enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
     enableResponseFixer: systemSettings.enableResponseFixer,
@@ -402,8 +471,16 @@ export async function updateSystemSettings(
     quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
     quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
     quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+    publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+    publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
     createdAt: systemSettings.createdAt,
     updatedAt: systemSettings.updatedAt,
+  };
+  const returningWithoutPassThrough = {
+    ...returningWithoutHighConcurrencyMode,
+    enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+    ipExtractionConfig: systemSettings.ipExtractionConfig,
+    ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
   };
   const returningWithoutCodexAndHighConcurrency = {
     id: systemSettings.id,
@@ -434,12 +511,14 @@ export async function updateSystemSettings(
     quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
     quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
     quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+    publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+    publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
     createdAt: systemSettings.createdAt,
     updatedAt: systemSettings.updatedAt,
   };
   const fullReturning = {
-    ...returningWithoutHighConcurrencyMode,
-    enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+    passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+    ...returningWithoutPassThrough,
   };
 
   try {
@@ -500,6 +579,11 @@ export async function updateSystemSettings(
       updates.verboseProviderError = payload.verboseProviderError;
     }
 
+    // 上游错误 message 透传开关（如果提供）
+    if (payload.passThroughUpstreamErrorMessage !== undefined) {
+      updates.passThroughUpstreamErrorMessage = payload.passThroughUpstreamErrorMessage;
+    }
+
     // HTTP/2 配置字段（如果提供）
     if (payload.enableHttp2 !== undefined) {
       updates.enableHttp2 = payload.enableHttp2;
@@ -533,6 +617,12 @@ export async function updateSystemSettings(
     // Response API input 整流器开关（如果提供）
     if (payload.enableResponseInputRectifier !== undefined) {
       updates.enableResponseInputRectifier = payload.enableResponseInputRectifier;
+    }
+
+    // 非对话端点跨供应商 fallback 开关（如果提供）
+    if (payload.allowNonConversationEndpointProviderFallback !== undefined) {
+      updates.allowNonConversationEndpointProviderFallback =
+        payload.allowNonConversationEndpointProviderFallback;
     }
 
     // Codex Session ID 补全开关（如果提供）
@@ -577,10 +667,25 @@ export async function updateSystemSettings(
       updates.quotaLeaseCapUsd =
         payload.quotaLeaseCapUsd === null ? null : String(payload.quotaLeaseCapUsd);
     }
+    if (payload.publicStatusWindowHours !== undefined) {
+      updates.publicStatusWindowHours = payload.publicStatusWindowHours;
+    }
+    if (payload.publicStatusAggregationIntervalMinutes !== undefined) {
+      updates.publicStatusAggregationIntervalMinutes =
+        payload.publicStatusAggregationIntervalMinutes;
+    }
+
+    // 客户端 IP 提取链（如果提供；null 表示显式清空走默认）
+    if (payload.ipExtractionConfig !== undefined) {
+      updates.ipExtractionConfig = payload.ipExtractionConfig;
+    }
+    if (payload.ipGeoLookupEnabled !== undefined) {
+      updates.ipGeoLookupEnabled = payload.ipGeoLookupEnabled;
+    }
 
     let updated;
     try {
-      [updated] = await db
+      [updated] = await executor
         .update(systemSettings)
         .set(updates)
         .where(eq(systemSettings.id, current.id))
@@ -594,28 +699,89 @@ export async function updateSystemSettings(
         error,
       });
 
-      const downgradedUpdates = { ...updates };
-      delete downgradedUpdates.enableHighConcurrencyMode;
+      // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
+      // 其它字段继续原值更新 / 返回，避免只缺该列时连带丢失 codex/highConcurrency 等更新。
+      const {
+        allowNonConversationEndpointProviderFallback: _omitUpdate,
+        ...updatesWithoutNonConversationFallback
+      } = updates;
+      const {
+        allowNonConversationEndpointProviderFallback: _omitReturning,
+        ...returningWithoutNonConversationFallback
+      } = fullReturning;
 
       try {
-        [updated] = await db
+        [updated] = await executor
           .update(systemSettings)
-          .set(downgradedUpdates)
+          .set(updatesWithoutNonConversationFallback)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutHighConcurrencyMode);
-      } catch (fallbackError) {
-        if (!isUndefinedColumnError(fallbackError)) {
-          throw fallbackError;
+          .returning(returningWithoutNonConversationFallback);
+      } catch (nonConversationFallbackError) {
+        if (!isUndefinedColumnError(nonConversationFallbackError)) {
+          throw nonConversationFallbackError;
         }
 
-        const legacyUpdates = { ...downgradedUpdates };
-        delete legacyUpdates.codexPriorityBillingSource;
+        logger.warn(
+          "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
+          { error: nonConversationFallbackError }
+        );
 
-        [updated] = await db
-          .update(systemSettings)
-          .set(legacyUpdates)
-          .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutCodexAndHighConcurrency);
+        try {
+          const withoutPassThroughUpdates = { ...updates };
+          delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
+          [updated] = await executor
+            .update(systemSettings)
+            .set(withoutPassThroughUpdates)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutPassThrough);
+        } catch (passThroughFallbackError) {
+          if (!isUndefinedColumnError(passThroughFallbackError)) {
+            throw passThroughFallbackError;
+          }
+
+          const downgradedUpdates = { ...updates };
+          delete downgradedUpdates.passThroughUpstreamErrorMessage;
+          delete downgradedUpdates.enableHighConcurrencyMode;
+          delete downgradedUpdates.publicStatusWindowHours;
+          delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
+          delete downgradedUpdates.ipExtractionConfig;
+          delete downgradedUpdates.ipGeoLookupEnabled;
+
+          const legacyUpdates = { ...downgradedUpdates };
+          delete legacyUpdates.codexPriorityBillingSource;
+          delete legacyUpdates.allowNonConversationEndpointProviderFallback;
+
+          try {
+            [updated] = await executor
+              .update(systemSettings)
+              .set(downgradedUpdates)
+              .where(eq(systemSettings.id, current.id))
+              .returning(returningWithoutHighConcurrencyMode);
+          } catch (downgradedFallbackError) {
+            if (!isUndefinedColumnError(downgradedFallbackError)) {
+              throw downgradedFallbackError;
+            }
+
+            logger.warn(
+              "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
+              { error: downgradedFallbackError }
+            );
+
+            [updated] = await executor
+              .update(systemSettings)
+              .set(legacyUpdates)
+              .where(eq(systemSettings.id, current.id))
+              .returning(returningWithoutCodexAndHighConcurrency);
+          }
+
+          if (!updated) {
+            [updated] = await executor
+              .update(systemSettings)
+              .set(legacyUpdates)
+              .where(eq(systemSettings.id, current.id))
+              .returning(returningWithoutCodexAndHighConcurrency);
+          }
+        }
       }
     }
 

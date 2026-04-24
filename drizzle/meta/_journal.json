@@ -617,6 +617,83 @@
       "when": 1774678770349,
       "tag": "0087_nappy_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1776095902010,
+      "tag": "0088_amazing_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1776409181358,
+      "tag": "0089_curly_grey_gargoyle",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1776421578713,
+      "tag": "0090_demonic_captain_universe",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1776767493777,
+      "tag": "0091_daily_carnage",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1776800253243,
+      "tag": "0092_smart_stone_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1776823153912,
+      "tag": "0093_tricky_shockwave",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1776831143074,
+      "tag": "0094_third_spacker_dave",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1776916341782,
+      "tag": "0095_young_lily_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1776930506029,
+      "tag": "0096_nosy_lifeguard",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1776965161942,
+      "tag": "0097_flaky_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1776965161943,
+      "tag": "0098_equal_selene",
+      "breakpoints": true
     }
   ]
 }

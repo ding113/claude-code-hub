@@ -47,6 +47,7 @@ async function SettingsConfigContent() {
             codexPriorityBillingSource: settings.codexPriorityBillingSource,
             timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
+            passThroughUpstreamErrorMessage: settings.passThroughUpstreamErrorMessage,
             enableHttp2: settings.enableHttp2,
             enableHighConcurrencyMode: settings.enableHighConcurrencyMode,
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
@@ -54,6 +55,8 @@ async function SettingsConfigContent() {
             enableThinkingBudgetRectifier: settings.enableThinkingBudgetRectifier,
             enableBillingHeaderRectifier: settings.enableBillingHeaderRectifier,
             enableResponseInputRectifier: settings.enableResponseInputRectifier,
+            allowNonConversationEndpointProviderFallback:
+              settings.allowNonConversationEndpointProviderFallback,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableClaudeMetadataUserIdInjection: settings.enableClaudeMetadataUserIdInjection,
             enableResponseFixer: settings.enableResponseFixer,
@@ -64,6 +67,8 @@ async function SettingsConfigContent() {
             quotaLeasePercentWeekly: settings.quotaLeasePercentWeekly,
             quotaLeasePercentMonthly: settings.quotaLeasePercentMonthly,
             quotaLeaseCapUsd: settings.quotaLeaseCapUsd,
+            ipGeoLookupEnabled: settings.ipGeoLookupEnabled,
+            ipExtractionConfig: settings.ipExtractionConfig,
           }}
         />
       </Section>

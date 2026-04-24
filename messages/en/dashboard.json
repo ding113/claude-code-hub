@@ -124,6 +124,7 @@
       "user": "User",
       "key": "Key",
       "sessionId": "Session ID",
+      "ip": "IP",
       "provider": "Provider",
       "model": "Billing Model",
       "endpoint": "Endpoint",
@@ -246,9 +247,21 @@
         "billingOriginal": "billing: original",
         "billingRedirected": "billing: redirected"
       },
+      "modelAudit": {
+        "unifiedLabel": "Model",
+        "requestModelLabel": "Request Model",
+        "responseModelLabel": "Actual Response Model",
+        "mismatchTooltip": "The upstream provider returned a different model than the one requested. Billing is still based on the requested model.",
+        "secondaryLineAriaLabel": "Actual response model: {model}",
+        "arrowPrefix": "\u21b3"
+      },
       "errorMessage": "Error Message",
       "fake200ForwardedNotice": "Note: For streaming requests, this failure may be detected only after the stream ends; the response content may already have been forwarded to the client.",
       "fake200DetectedReason": "Detected reason: {reason}",
+      "fake200RetryTooltipLabel": "Why no server retry?",
+      "fake200RetryTooltipTitle": "Why CCH cannot retry this response on the server",
+      "fake200RetryTooltipServerRetry": "The upstream already returned HTTP 200, so CCH had started forwarding the SSE body before the error appeared in-stream. Once that error is recognized, this response can no longer be retried gracefully on the server.",
+      "fake200RetryTooltipSessionFallback": "Clients can retry on their side; later requests in the same session will avoid this fake-200 provider and continue fallback.",
       "fake200Reasons": {
         "emptyBody": "Empty response body",
         "htmlBody": "HTML document returned (likely an error page)",
@@ -300,6 +313,14 @@
           "priority_fallback": "Priority provider fallback pricing",
           "single_provider_top_level": "Top-level single-provider pricing",
           "official_fallback": "Official pricing"
+        },
+        "baseCost": "Base Cost",
+        "providerMultiplier": "Provider Multiplier",
+        "groupMultiplier": "Group Multiplier",
+        "baseTotal": "Base Total",
+        "unitPricePer1M": "@ {price} / 1M",
+        "unit": {
+          "tokens": "tokens"
         }
       },
       "performance": {
@@ -394,6 +415,7 @@
       "cacheTtlSwapped": "Billing TTL (swapped)",
       "multiplier": "Provider Multiplier",
       "totalCost": "Total Cost",
+      "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
       "fastPriority": "Priority service tier (fast mode)",
       "context1m": "1M Context",
@@ -407,6 +429,13 @@
         "priority_fallback": "Priority provider fallback pricing",
         "single_provider_top_level": "Top-level single-provider pricing",
         "official_fallback": "Official pricing"
+      },
+      "baseCost": "Base Cost",
+      "providerMultiplier": "Provider Multiplier",
+      "groupMultiplier": "Group Multiplier",
+      "baseTotal": "Base Total",
+      "unit": {
+        "tokens": "tokens"
       }
     }
   },
@@ -425,9 +454,15 @@
       "users": "User Rankings",
       "keys": "Key Rankings",
       "userRanking": "User Rankings",
+      "userCacheHitRateRanking": "User Cache Hit Rate",
       "providerRanking": "Provider Rankings",
       "providerCacheHitRateRanking": "Provider Cache Hit Rate",
       "modelRanking": "Model Rankings",
+      "primaryUser": "Users",
+      "primaryProvider": "Providers",
+      "primaryModel": "Models",
+      "secondaryCost": "Cost",
+      "secondaryCacheHit": "Cache Hit Rate",
       "dailyRanking": "Today",
       "weeklyRanking": "This Week",
       "monthlyRanking": "This Month",
@@ -465,7 +500,9 @@
       "avgTokensPerSecond": "Avg tok/s",
       "avgCostPerRequest": "Avg Cost/Req",
       "avgCostPerMillionTokens": "Avg Cost/1M Tokens",
-      "unknownModel": "Unknown"
+      "unknownModel": "Unknown",
+      "successRateUnavailable": "N/A",
+      "successRateBasisDisclosure": "Success rate is unavailable here because redirected billing mode can merge multiple original models into one row."
     },
     "expandModelStats": "Expand model details",
     "collapseModelStats": "Collapse model details",
@@ -588,8 +625,18 @@
       "requestHeaders": "Request Headers",
       "requestBody": "Request Body",
       "requestMessages": "Request Messages",
+      "viewMode": "View",
+      "before": "Before",
+      "after": "After",
+      "viewModeTooltip": "Before shows the request and response snapshots CCH recorded before its final upstream forwarding or final client-response rewrite. After shows the final request CCH sent upstream and the final response CCH returned to the client.",
+      "viewModeTooltipLabel": "Explain before and after views",
+      "snapshotSourceClient": "Client",
+      "snapshotSourceUpstream": "Upstream",
       "specialSettings": "Special",
+      "specialSettingsStaticNote": "Special settings are derived audit results and do not switch between before and after.",
       "requestMessagesDescription": "Message content sent by the client",
+      "afterRequestMessagesEmpty": "The processed request body has no root-level messages field. Check {requestBodyLabel} instead.",
+      "specialSettingsEmpty": "No special settings were recorded for this request.",
       "responseHeaders": "Response Headers",
       "responseBody": "Response Body",
       "responseBodyDescription": "Complete server response (5-minute TTL)",
@@ -735,6 +782,7 @@
     "quotasManagement": "Quotas",
     "userManagement": "Users",
     "providers": "Providers",
+    "auditLogs": "Audit logs",
     "documentation": "Docs",
     "systemSettings": "Settings",
     "feedback": "Feedback",
@@ -1005,6 +1053,17 @@
       "userIdMissing": "User ID does not exist",
       "createFailed": "Failed to create, please try again later",
       "noKeyReturned": "Created successfully but key was not returned"
+    },
+    "limit5hResetMode": {
+      "label": "5-Hour Reset Mode",
+      "options": {
+        "fixed": "Fixed window",
+        "rolling": "Rolling Window (5h)"
+      },
+      "desc": {
+        "fixed": "Start a fixed 5-hour window from the first successful charge",
+        "rolling": "Use a rolling 5-hour window from the latest usage"
+      }
     }
   },
   "userForm": {
@@ -1584,16 +1643,28 @@
         "title": "Reset Options"
       },
       "resetLimits": {
-        "title": "Reset Limits",
-        "description": "Reset accumulated cost counters for all limits. Request logs and statistics are preserved.",
-        "button": "Reset Limits",
-        "confirmTitle": "Reset Limits Only?",
+        "title": "Reset All Limits",
+        "description": "Reset accumulated cost counters for all limits (5h, daily, weekly, monthly, total). Request logs and statistics are preserved.",
+        "button": "Reset All Limits",
+        "confirmTitle": "Reset All Limits?",
         "confirmDescription": "This will reset all accumulated cost counters (5h, daily, weekly, monthly, total) to zero. Request logs and usage statistics will be preserved.",
-        "confirm": "Yes, Reset Limits",
+        "confirm": "Yes, Reset All Limits",
         "loading": "Resetting...",
-        "error": "Failed to reset limits",
+        "error": "Failed to reset all limits",
         "success": "All limits have been reset",
-        "lastResetAt": "Last reset: {date}"
+        "lastResetAt": "Last full reset: {date}"
+      },
+      "reset5h": {
+        "button": "Reset 5H Limit",
+        "confirm": "Yes, Reset 5H Limit",
+        "confirmDescriptionFixed": "This will clear only this user's current fixed 5-hour window. Daily, weekly, monthly, total, and child key usage are not affected.",
+        "confirmDescriptionRolling": "This will reset only this user's aggregated rolling 5-hour usage from now on. Daily, weekly, monthly, total, and child key usage are not affected.",
+        "confirmTitle": "Reset 5H Limit?",
+        "error": "Failed to reset 5H limit",
+        "loading": "Resetting...",
+        "successFixed": "The user's fixed 5H limit window has been reset",
+        "successRolling": "The user's rolling 5H limit has been reset",
+        "unavailableReason": "Available only when a user-level 5H limit is configured."
       },
       "resetData": {
         "title": "Reset Statistics",
@@ -2072,5 +2143,77 @@
     "autoDetected": "Auto-detected",
     "selectPlatform": "Select platform",
     "successStats": "Created {targets} targets, {bindings} bindings"
+  },
+  "limitRules": {
+    "addRule": "Add limit rule",
+    "title": "Add Limit Rule",
+    "description": "Select limit type and set value",
+    "cancel": "Cancel",
+    "confirm": "Save",
+    "fields": {
+      "type": {
+        "label": "Limit Type",
+        "placeholder": "Select"
+      },
+      "value": {
+        "label": "Value",
+        "placeholder": "Enter"
+      }
+    },
+    "limit5h": {
+      "mode": {
+        "label": "5-Hour Reset Mode",
+        "fixed": "Fixed window",
+        "rolling": "Rolling window (5h)",
+        "helperFixed": "Start a fixed 5-hour window from the first successful charge.",
+        "helperRolling": "Use a rolling 5-hour window from the latest usage."
+      }
+    },
+    "daily": {
+      "mode": {
+        "label": "Daily Reset Mode",
+        "fixed": "Fixed time reset",
+        "rolling": "Rolling window (24h)",
+        "helperFixed": "Reset quota at a specific time each day.",
+        "helperRolling": "Rolling 24-hour window from first request"
+      },
+      "time": {
+        "label": "Reset Time",
+        "placeholder": "HH:mm"
+      }
+    },
+    "limitTypes": {
+      "limitRpm": "RPM Limit",
+      "limit5h": "5-Hour Limit",
+      "limitDaily": "Daily Limit",
+      "limitWeekly": "Weekly Limit",
+      "limitMonthly": "Monthly Limit",
+      "limitTotal": "Total Limit",
+      "limitSessions": "Concurrent Sessions"
+    },
+    "ruleTypes": {
+      "limitRpm": "RPM limit",
+      "limit5h": "5-hour limit",
+      "limitDaily": "Daily limit",
+      "limitWeekly": "Weekly limit",
+      "limitMonthly": "Monthly limit",
+      "limitTotal": "Total limit",
+      "limitSessions": "Concurrent sessions"
+    },
+    "errors": {
+      "missingType": "Please select a limit type",
+      "invalidValue": "Please enter a valid value",
+      "invalidTime": "Please enter a valid time (HH:mm)"
+    },
+    "overwriteHint": "This type already exists, saving will overwrite the existing value",
+    "quickValues": {
+      "10": "$10",
+      "50": "$50",
+      "100": "$100",
+      "500": "$500",
+      "unlimited": "Unlimited"
+    },
+    "alreadySet": "Configured",
+    "confirmAdd": "Add"
   }
 }

@@ -23,12 +23,14 @@ vi.mock("next/cache", () => ({
 // Mock repository/user
 const findUserByIdMock = vi.fn();
 const resetUserCostResetAtMock = vi.fn();
+const updateUserCostResetMarkersMock = vi.fn();
 vi.mock("@/repository/user", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/repository/user")>();
   return {
     ...actual,
     findUserById: findUserByIdMock,
     resetUserCostResetAt: resetUserCostResetAtMock,
+    updateUserCostResetMarkers: updateUserCostResetMarkersMock,
   };
 });
 
@@ -92,6 +94,7 @@ describe("resetUserLimitsOnly", () => {
     redisPipelineMock.exec.mockResolvedValue([]);
     dbUpdateWhereMock.mockResolvedValue(undefined);
     resetUserCostResetAtMock.mockResolvedValue(true);
+    updateUserCostResetMarkersMock.mockResolvedValue(true);
   });
 
   test("should return PERMISSION_DENIED for non-admin user", async () => {
@@ -142,8 +145,13 @@ describe("resetUserLimitsOnly", () => {
     const result = await resetUserLimitsOnly(123);
 
     expect(result.ok).toBe(true);
-    // costResetAt set via repository function
-    expect(resetUserCostResetAtMock).toHaveBeenCalledWith(123, expect.any(Date));
+    expect(updateUserCostResetMarkersMock).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        costResetAt: expect.any(Date),
+        limit5hCostResetAt: expect.any(Date),
+      })
+    );
     // Redis cost keys scanned and deleted
     expect(scanPatternMock).toHaveBeenCalled();
     expect(redisMock.pipeline).toHaveBeenCalled();
@@ -153,6 +161,32 @@ describe("resetUserLimitsOnly", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/users");
     // No DB deletes (messageRequest/usageLedger must NOT be deleted)
     expect(dbDeleteMock).not.toHaveBeenCalled();
+  });
+
+  test("should return partial failure when fixed 5h cleanup fails after DB markers advance", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    findUserByIdMock.mockResolvedValue({
+      id: 123,
+      name: "Test User",
+      limit5hUsd: 5,
+      limit5hResetMode: "fixed",
+    });
+    findKeyListMock.mockResolvedValue([]);
+    scanPatternMock.mockResolvedValue(["user:123:cost_5h_fixed"]);
+    redisPipelineMock.exec.mockResolvedValue([[new Error("fixed cleanup failed"), null]]);
+
+    const { resetUserLimitsOnly } = await import("@/actions/users");
+    const result = await resetUserLimitsOnly(123);
+
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe(ERROR_CODES.USER_LIMITS_RESET_PARTIAL_FAILURE);
+    expect(updateUserCostResetMarkersMock).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        costResetAt: expect.any(Date),
+        limit5hCostResetAt: expect.any(Date),
+      })
+    );
   });
 
   test("should NOT delete messageRequest or usageLedger rows", async () => {
@@ -179,8 +213,13 @@ describe("resetUserLimitsOnly", () => {
     const result = await resetUserLimitsOnly(123);
 
     expect(result.ok).toBe(true);
-    // costResetAt still set via repo function
-    expect(resetUserCostResetAtMock).toHaveBeenCalledWith(123, expect.any(Date));
+    expect(updateUserCostResetMarkersMock).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        costResetAt: expect.any(Date),
+        limit5hCostResetAt: expect.any(Date),
+      })
+    );
     // Redis pipeline NOT called
     expect(redisMock.pipeline).not.toHaveBeenCalled();
   });
@@ -246,8 +285,59 @@ describe("resetUserLimitsOnly", () => {
     const result = await resetUserLimitsOnly(123);
 
     expect(result.ok).toBe(true);
-    expect(resetUserCostResetAtMock).toHaveBeenCalledWith(123, expect.any(Date));
+    expect(updateUserCostResetMarkersMock).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        costResetAt: expect.any(Date),
+        limit5hCostResetAt: expect.any(Date),
+      })
+    );
     // No DB deletes
     expect(dbDeleteMock).not.toHaveBeenCalled();
+  });
+
+  test("should fail when a fixed 5h limit exists and Redis is not ready", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    findUserByIdMock.mockResolvedValue({
+      id: 123,
+      name: "Test User",
+      limit5hUsd: 5,
+      limit5hResetMode: "fixed",
+    });
+    findKeyListMock.mockResolvedValue([]);
+    redisMock.status = "connecting";
+
+    const { resetUserLimitsOnly } = await import("@/actions/users");
+    const result = await resetUserLimitsOnly(123);
+
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe(ERROR_CODES.OPERATION_FAILED);
+    expect(updateUserCostResetMarkersMock).not.toHaveBeenCalled();
+  });
+
+  test("should fail when a child key has fixed 5h limit and Redis is not ready", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    findUserByIdMock.mockResolvedValue({
+      id: 123,
+      name: "Test User",
+      limit5hUsd: null,
+      limit5hResetMode: "rolling",
+    });
+    findKeyListMock.mockResolvedValue([
+      {
+        id: 11,
+        key: "sk-child-11",
+        limit5hUsd: 2,
+        limit5hResetMode: "fixed",
+      },
+    ]);
+    redisMock.status = "connecting";
+
+    const { resetUserLimitsOnly } = await import("@/actions/users");
+    const result = await resetUserLimitsOnly(123);
+
+    expect(result.ok).toBe(false);
+    expect(result.errorCode).toBe(ERROR_CODES.OPERATION_FAILED);
+    expect(updateUserCostResetMarkersMock).not.toHaveBeenCalled();
   });
 });

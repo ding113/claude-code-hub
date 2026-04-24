@@ -2,6 +2,16 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   return {
+    getCachedSystemSettings: vi.fn(async () => ({
+      allowNonConversationEndpointProviderFallback: true,
+      enableClaudeMetadataUserIdInjection: false,
+      enableBillingHeaderRectifier: false,
+      enableResponseFixer: false,
+      enableResponseInputRectifier: true,
+      enableThinkingSignatureRectifier: true,
+      enableThinkingBudgetRectifier: true,
+    })),
+    isHttp2Enabled: vi.fn(async () => false),
     getPreferredProviderEndpoints: vi.fn(),
     getEndpointFilterStats: vi.fn(async () => null),
     recordEndpointSuccess: vi.fn(async () => {}),
@@ -29,6 +39,15 @@ vi.mock("@/lib/logger", () => ({
     fatal: vi.fn(),
   },
 }));
+
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return {
+    ...actual,
+    getCachedSystemSettings: mocks.getCachedSystemSettings,
+    isHttp2Enabled: mocks.isHttp2Enabled,
+  };
+});
 
 vi.mock("@/lib/provider-endpoints/endpoint-selector", () => ({
   getPreferredProviderEndpoints: mocks.getPreferredProviderEndpoints,
@@ -62,6 +81,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
 
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { logger } from "@/lib/logger";
 import type { Provider, ProviderEndpoint, ProviderType } from "@/types/provider";
@@ -184,11 +204,15 @@ function createSession(requestUrl: URL = new URL("https://example.com/v1/message
     originalModelName: null,
     originalUrlPathname: null,
     providerChain: [],
+    endpointPolicy: resolveEndpointPolicy(requestUrl.pathname),
     cacheTtlResolved: null,
     context1mApplied: false,
     specialSettings: [],
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
+    getEndpointPolicy() {
+      return this.endpointPolicy;
+    },
     isHeaderModified: () => false,
   });
 
@@ -391,10 +415,9 @@ describe("ProxyForwarder - endpoint audit", () => {
   });
 
   test.each([
-    { requestPath: "/v1/messages", providerType: "claude" as const },
-    { requestPath: "/v1/responses", providerType: "codex" as const },
-    { requestPath: "/v1/chat/completions", providerType: "openai-compatible" as const },
-  ])("标准端点 $requestPath: endpoint 选择失败时不应静默回退到 provider.url", async ({
+    { requestPath: "/v1/messages/count_tokens", providerType: "claude" as const },
+    { requestPath: "/v1/responses/compact", providerType: "codex" as const },
+  ])("raw 端点 $requestPath: endpoint 选择失败时不应静默回退到 provider.url", async ({
     requestPath,
     providerType,
   }) => {
@@ -426,7 +449,7 @@ describe("ProxyForwarder - endpoint audit", () => {
       .then(() => false)
       .catch(() => true);
 
-    expect(rejected, `标准端点 ${requestPath} endpoint 选择失败后不允许静默回退 provider.url`).toBe(
+    expect(rejected, `raw 端点 ${requestPath} endpoint 选择失败后不允许静默回退 provider.url`).toBe(
       true
     );
     expect(doForward).not.toHaveBeenCalled();
@@ -457,8 +480,8 @@ describe("ProxyForwarder - endpoint audit", () => {
     );
   });
 
-  test("标准端点空候选应记录 no_endpoint_candidates 且不混淆为 selector_error", async () => {
-    const requestPath = "/v1/messages";
+  test("raw 端点空候选应记录 no_endpoint_candidates 且不混淆为 selector_error", async () => {
+    const requestPath = "/v1/messages/count_tokens";
     const providerType = "claude" as const;
     const session = createSession(new URL(`https://example.com${requestPath}`));
     const provider = createProvider({
@@ -508,8 +531,8 @@ describe("ProxyForwarder - endpoint audit", () => {
     expect(warnMessages).not.toContain("[ProxyForwarder] Failed to load provider endpoints");
   });
 
-  test("endpoint pool exhausted (no_endpoint_candidates) should record endpoint_pool_exhausted in provider chain", async () => {
-    const requestPath = "/v1/messages";
+  test("raw endpoint pool exhausted (no_endpoint_candidates) should record endpoint_pool_exhausted in provider chain", async () => {
+    const requestPath = "/v1/messages/count_tokens";
     const session = createSession(new URL(`https://example.com${requestPath}`));
     const provider = createProvider({
       providerType: "claude",
@@ -563,12 +586,12 @@ describe("ProxyForwarder - endpoint audit", () => {
   });
 
   test("endpoint_pool_exhausted should not be deduped away when initial_selection already recorded", async () => {
-    const requestPath = "/v1/messages";
+    const requestPath = "/v1/messages/count_tokens";
     const session = createSession(new URL(`https://example.com${requestPath}`));
     const provider = createProvider({
       providerType: "claude",
       providerVendorId: 123,
-      url: "https://provider.example.com/v1/messages",
+      url: "https://provider.example.com/v1/messages/count_tokens",
     });
     session.setProvider(provider);
 
@@ -615,8 +638,8 @@ describe("ProxyForwarder - endpoint audit", () => {
     );
   });
 
-  test("endpoint pool exhausted (selector_error) should record endpoint_pool_exhausted with selectorError in decisionContext", async () => {
-    const requestPath = "/v1/responses";
+  test("raw endpoint pool exhausted (selector_error) should record endpoint_pool_exhausted with selectorError in decisionContext", async () => {
+    const requestPath = "/v1/responses/compact";
     const session = createSession(new URL(`https://example.com${requestPath}`));
     const provider = createProvider({
       providerType: "codex",
@@ -661,11 +684,11 @@ describe("ProxyForwarder - endpoint audit", () => {
 
   test("selector_error and no_endpoint_candidates are correctly distinguished in provider chain", async () => {
     // Test 1: selector_error (exception thrown)
-    const session1 = createSession(new URL("https://example.com/v1/chat/completions"));
+    const session1 = createSession(new URL("https://example.com/v1/responses/compact"));
     const provider1 = createProvider({
       id: 10,
       name: "p-selector-err",
-      providerType: "openai-compatible",
+      providerType: "codex",
       providerVendorId: 789,
     });
     session1.setProvider(provider1);
@@ -681,11 +704,11 @@ describe("ProxyForwarder - endpoint audit", () => {
     expect(item1!.errorMessage).toBe("timeout");
 
     // Test 2: no_endpoint_candidates (empty array returned)
-    const session2 = createSession(new URL("https://example.com/v1/chat/completions"));
+    const session2 = createSession(new URL("https://example.com/v1/messages/count_tokens"));
     const provider2 = createProvider({
       id: 20,
       name: "p-empty-pool",
-      providerType: "openai-compatible",
+      providerType: "claude",
       providerVendorId: 789,
     });
     session2.setProvider(provider2);
@@ -712,8 +735,8 @@ describe("ProxyForwarder - endpoint audit", () => {
     expect(item2!.errorMessage).toBeUndefined();
   });
 
-  test("endpointFilterStats should gracefully handle getEndpointFilterStats failure", async () => {
-    const requestPath = "/v1/messages";
+  test("raw endpointFilterStats should gracefully handle getEndpointFilterStats failure", async () => {
+    const requestPath = "/v1/messages/count_tokens";
     const session = createSession(new URL(`https://example.com${requestPath}`));
     const provider = createProvider({
       providerType: "claude",

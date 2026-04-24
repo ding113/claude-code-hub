@@ -18,9 +18,14 @@ const h = vi.hoisted(() => ({
     getProviderChain: () => [],
     setOriginalFormat: () => {},
     setHighConcurrencyModeEnabled: () => {},
+    setRawCrossProviderFallbackEnabled(enabled: boolean) {
+      h.session.rawCrossProviderFallbackEnabled = enabled;
+    },
+    isRawCrossProviderFallbackEnabled: () => !!h.session.rawCrossProviderFallbackEnabled,
     recordForwardStart: () => {},
     messageContext: null,
     provider: null,
+    rawCrossProviderFallbackEnabled: false,
   } as any,
 
   fromContextError: null as unknown,
@@ -105,10 +110,22 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
   },
 }));
 
+async function expectMessageSuffixOnly(
+  response: Response,
+  expectedStatus: number,
+  expectedMessage: string
+) {
+  expect(response.status).toBe(expectedStatus);
+  expect(response.headers.get("x-cch-session-id")).toBeNull();
+
+  const body = await response.json();
+  expect(body.error.message).toBe(`${expectedMessage} (cch_session_id: s_123)`);
+}
+
 describe("handleProxyRequest - session id on errors", async () => {
   const { handleProxyRequest } = await import("@/app/v1/_lib/proxy-handler");
 
-  test("decorates early error response with x-cch-session-id and message suffix", async () => {
+  test("decorates early error response with message suffix only", async () => {
     h.fromContextError = null;
     h.session.originalFormat = "openai";
     h.endpointFormat = null;
@@ -117,14 +134,10 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.earlyResponse = ProxyResponses.buildError(400, "bad request");
     const res = await handleProxyRequest({} as any);
 
-    expect(res.status).toBe(400);
-    expect(res.headers.get("x-cch-session-id")).toBe("s_123");
-
-    const body = await res.json();
-    expect(body.error.message).toBe("bad request (cch_session_id: s_123)");
+    await expectMessageSuffixOnly(res, 400, "bad request");
   });
 
-  test("decorates dispatch error response with x-cch-session-id and message suffix", async () => {
+  test("decorates dispatch error response with message suffix only", async () => {
     h.fromContextError = null;
     h.session.originalFormat = "openai";
     h.endpointFormat = null;
@@ -136,11 +149,7 @@ describe("handleProxyRequest - session id on errors", async () => {
 
     const res = await handleProxyRequest({} as any);
 
-    expect(res.status).toBe(502);
-    expect(res.headers.get("x-cch-session-id")).toBe("s_123");
-
-    const body = await res.json();
-    expect(body.error.message).toBe("bad gateway (cch_session_id: s_123)");
+    await expectMessageSuffixOnly(res, 502, "bad gateway");
   });
 
   test("covers claude format detection branch without breaking behavior", async () => {
@@ -154,8 +163,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.request = { model: "gpt", message: { contents: [] } };
 
     const res = await handleProxyRequest({} as any);
-    expect(res.status).toBe(400);
-    expect(res.headers.get("x-cch-session-id")).toBe("s_123");
+    await expectMessageSuffixOnly(res, 400, "bad request");
   });
 
   test("covers endpoint format detection + tracking + finally decrement", async () => {
@@ -187,10 +195,7 @@ describe("handleProxyRequest - session id on errors", async () => {
       pathname: V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
       isCountTokensRequest: false,
     },
-  ])("RED: raw endpoint $pathname 应统一跳过并发计数（Wave2 未实现前会失败）", async ({
-    pathname,
-    isCountTokensRequest,
-  }) => {
+  ])("raw endpoint $pathname 应统一跳过并发计数", async ({ pathname, isCountTokensRequest }) => {
     h.fromContextError = null;
     h.session.originalFormat = "claude";
     h.endpointFormat = "openai";

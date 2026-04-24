@@ -1,5 +1,6 @@
 {
   "config": "配置",
+  "statusPage": "状态页",
   "prices": "价格表",
   "providers": "供应商",
   "sensitiveWords": "敏感词",
@@ -8,6 +9,7 @@
   "data": "数据管理",
   "logs": "日志",
   "notifications": "消息推送",
+  "auditLogs": "审计日志",
   "apiDocs": "API 文档",
   "errorRules": "错误规则",
   "feedback": "反馈问题",

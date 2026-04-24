@@ -52,11 +52,17 @@
       "latencyCheck": "延遲檢查",
       "message": "訊息",
       "model": "Model",
+      "requestUrl": "請求 URL",
       "response": "回應",
       "status": "狀態",
       "testedAt": "測試時間",
       "usage": "使用量",
       "validationDetails": "驗證詳情"
+    },
+    "requestUrl": {
+      "hint": "這裡顯示最近一次供應商測試實際發出的請求 URL，方便定位中轉路徑問題。",
+      "label": "請求 URL",
+      "title": "實際請求 URL"
     },
     "dialogTitle": "供應商測試詳情",
     "errorDetails": {

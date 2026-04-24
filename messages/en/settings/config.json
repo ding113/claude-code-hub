@@ -36,6 +36,8 @@
     "cleanupSchedulePlaceholder": "0 2 * * *",
     "cleanupScheduleRequired": "Execution Time (Cron) *",
     "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",
+    "publicStatusProjectionWarning": "System settings were saved, but the public status Redis projection was not refreshed.",
+    "publicStatusBackgroundRefreshPending": "System settings were saved, but the public status page may stay stale until the background refresh succeeds.",
     "currencies": {
       "CNY": "¥ Chinese Yuan (CNY)",
       "EUR": "€ Euro (EUR)",
@@ -66,6 +68,8 @@
     "enableBillingHeaderRectifierDesc": "Proactively removes x-anthropic-billing-header text blocks injected by Claude Code client into the system prompt, preventing Amazon Bedrock and other non-native Anthropic upstreams from returning 400 errors (enabled by default).",
     "enableResponseInputRectifier": "Enable Response Input Rectifier",
     "enableResponseInputRectifierDesc": "Automatically normalizes non-array input (string shortcut or single message object) in /v1/responses requests to standard array format before processing (enabled by default).",
+    "allowNonConversationEndpointProviderFallback": "Allow cross-provider fallback for non-conversation endpoints",
+    "allowNonConversationEndpointProviderFallbackDesc": "Controls whether /v1/messages/count_tokens and /v1/responses/compact may reuse the existing decision chain to switch to a compatible provider after the current provider fails. Enabled by default while preserving raw passthrough and non-billing semantics.",
     "enableCodexSessionIdCompletion": "Enable Codex Session ID Completion",
     "enableCodexSessionIdCompletionDesc": "When Codex requests provide only one of session_id (header) or prompt_cache_key (body), automatically completes the other. If both are missing, generates a UUID v7 session id and reuses it stably within the same conversation.",
     "enableClaudeMetadataUserIdInjection": "Enable Claude metadata.user_id Injection",
@@ -89,8 +93,13 @@
     "siteTitleDesc": "Used to set browser tab title and system default display name.",
     "siteTitlePlaceholder": "e.g. Claude Code Hub",
     "siteTitleRequired": "Site title cannot be empty",
+    "ipLoggingInvalidJson": "IP extraction config is not valid JSON: {message}",
+    "ipLoggingInvalidShape": "IP extraction config must be an object with a `headers` array.",
     "verboseProviderError": "Verbose Provider Error",
-    "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
+    "verboseProviderErrorDesc": "When enabled, CCH may return detailed diagnostic information for some upstream failure types in `error.details` (for example provider availability diagnostics or sanitized upstream snippets).",
+    "verboseProviderErrorTooltip": "May expose provider names, internal routing clues, upstream failure reasons, and other diagnostic details. Enable only if clients are allowed to see low-level troubleshooting context.",
+    "passThroughUpstreamErrorMessage": "Pass Through Upstream Error Message",
+    "passThroughUpstreamErrorMessageDesc": "When enabled, CCH may replace `error.message` with a sanitized upstream error message when a safe one can be derived; otherwise `error.message` falls back to the generic proxy error. It does not disable `error.details` diagnostics controlled by Verbose Provider Error.",
     "timezoneLabel": "System Timezone",
     "timezoneDescription": "Set the system timezone for unified backend time boundary calculations and frontend date/time display. Leave empty to use the TZ environment variable or default to UTC.",
     "timezoneAuto": "Auto (use TZ env variable)",
@@ -116,6 +125,16 @@
         "leaseCapZero": "Lease cap is 0. This may cause the per-lease budget to be 0."
       }
     }
+  },
+  "ipLogging": {
+    "title": "IP logging & extraction",
+    "description": "Configure which request headers are consulted to determine the client IP, and whether IP geolocation lookup is enabled.",
+    "geoLookup": "Enable IP geolocation lookup",
+    "geoLookupHint": "When enabled, the dashboard will resolve IP addresses to country / city / ASN via the configured IP geolocation service.",
+    "extractionConfigLabel": "Header extraction chain (JSON)",
+    "extractionConfigHint": "Leave empty to use the safe built-in default: x-real-ip → x-forwarded-for (rightmost). If fronted by Cloudflare or a CDN that strips client-supplied headers, add its header explicitly (example: `{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`). Each entry has `name` and optional `pick` (\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}).",
+    "extractionConfigHelpLabel": "Show header extraction JSON help",
+    "resetToDefault": "Reset to default"
   },
   "section": {
     "autoCleanup": {

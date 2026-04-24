@@ -1,0 +1,761 @@
+import type { SQL } from "drizzle-orm";
+import { CasingCache } from "drizzle-orm/casing";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+function createThenableQuery<T>(result: T) {
+  const query: {
+    from: ReturnType<typeof vi.fn>;
+    where: ReturnType<typeof vi.fn>;
+    orderBy: ReturnType<typeof vi.fn>;
+    limit: ReturnType<typeof vi.fn>;
+    then: Promise<T>["then"];
+    catch: Promise<T>["catch"];
+    finally: Promise<T>["finally"];
+  } & Promise<T> = Promise.resolve(result) as never;
+
+  query.from = vi.fn(() => query);
+  query.where = vi.fn(() => query);
+  query.orderBy = vi.fn(() => query);
+  query.limit = vi.fn(() => query);
+
+  return query;
+}
+
+function sqlToQuery(sqlObject: unknown) {
+  return (sqlObject as SQL).toQuery({
+    escapeName: (name: string) => `"${name}"`,
+    escapeParam: (num: number, _value: unknown) => `$${num}`,
+    escapeString: (value: string) => `'${value}'`,
+    casing: new CasingCache(),
+    paramStartIndex: { value: 1 },
+  });
+}
+
+function sqlToString(sqlObject: unknown): string {
+  return sqlToQuery(sqlObject).sql;
+}
+
+function normalizeSql(sqlObject: unknown): string {
+  return sqlToString(sqlObject).replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function extractFinalizedRequestsSql(queryText: string): string {
+  const start = queryText.indexOf("finalized_requests as");
+  const end = queryText.indexOf("provider_bucket_stats as");
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("Could not locate finalized_requests CTE in query text");
+  }
+
+  return queryText.slice(start, end);
+}
+
+describe("availability-service", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  it("classifyRequestStatus 不应把 1xx 当成成功", async () => {
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: vi.fn(),
+        execute: vi.fn(),
+      },
+    }));
+
+    const { classifyRequestStatus } = await import("@/lib/availability/availability-service");
+
+    expect(classifyRequestStatus(101)).toEqual({
+      status: "red",
+      isSuccess: false,
+      isError: true,
+    });
+  });
+
+  it("queryProviderAvailability 在非法时间参数时抛出明确错误且不访问数据库", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: "invalid-start-time",
+      })
+    ).rejects.toThrow("Invalid startTime");
+
+    await expect(
+      queryProviderAvailability({
+        endTime: new Date("invalid-end-time"),
+      })
+    ).rejects.toThrow("Invalid endTime");
+
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("queryProviderAvailability 在 endTime 早于 startTime 时抛出明确错误且不访问数据库", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: new Date("2026-04-13T09:00:00.000Z"),
+        endTime: new Date("2026-04-13T07:00:00.000Z"),
+      })
+    ).rejects.toThrow("Invalid time range");
+
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("queryProviderAvailability 在时间跨度超过 100 天时抛出明确错误且不访问数据库", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: new Date("2025-12-01T00:00:00.000Z"),
+        endTime: new Date("2026-04-13T00:00:00.000Z"),
+      })
+    ).rejects.toThrow("requested range must not exceed 100 days");
+
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("queryProviderAvailability 在时间跨度恰好等于 100 天时允许继续执行", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    const startTime = new Date("2026-01-03T00:00:00.000Z");
+    const endTime = new Date(startTime.getTime() + 100 * 24 * 60 * 60 * 1000);
+
+    await expect(
+      queryProviderAvailability({
+        startTime,
+        endTime,
+      })
+    ).resolves.toEqual({
+      queriedAt: expect.any(String),
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      bucketSizeMinutes: 1440,
+      providers: [],
+      systemAvailability: 0,
+    });
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("queryProviderAvailability 在显式 bucket 配置超出 maxBuckets 预算时直接报错且不访问数据库", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: new Date("2026-04-13T07:00:00.000Z"),
+        endTime: new Date("2026-04-13T09:00:00.000Z"),
+        bucketSizeMinutes: 1,
+        maxBuckets: 100,
+      })
+    ).rejects.toThrow("Invalid bucket configuration");
+
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("queryProviderAvailability 在自动分桶且 maxBuckets 较小时会上调 bucket 以匹配预算", async () => {
+    const selectMock = vi.fn(() => createThenableQuery([]));
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+
+    await expect(
+      queryProviderAvailability({
+        startTime: new Date("2026-04-13T00:00:00.000Z"),
+        endTime: new Date("2026-04-14T00:00:00.000Z"),
+        maxBuckets: 10,
+      })
+    ).resolves.toEqual({
+      queriedAt: expect.any(String),
+      startTime: "2026-04-13T00:00:00.000Z",
+      endTime: "2026-04-14T00:00:00.000Z",
+      bucketSizeMinutes: 144,
+      providers: [],
+      systemAvailability: 0,
+    });
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("queryProviderAvailability 改为数据库聚合后仍只统计终态请求", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => [
+      {
+        providerId: 1,
+        bucketStart: new Date("2026-04-13T08:00:00.000Z"),
+        greenCount: 2,
+        redCount: 1,
+        latencyCount: 2,
+        latencySumMs: 360,
+        avgLatencyMs: 180,
+        p50LatencyMs: 120,
+        p95LatencyMs: 240,
+        p99LatencyMs: 240,
+        lastRequestAt: new Date("2026-04-13T08:03:00.000Z"),
+      },
+    ]);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    const result = await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result.providers).toHaveLength(1);
+    expect(result.providers[0]).toMatchObject({
+      providerId: 1,
+      totalRequests: 3,
+      currentAvailability: 2 / 3,
+      successRate: 2 / 3,
+      currentStatus: "green",
+      avgLatencyMs: 180,
+      lastRequestAt: "2026-04-13T08:03:00.000Z",
+    });
+    expect(result.providers[0]?.timeBuckets).toHaveLength(1);
+    expect(result.providers[0]?.timeBuckets[0]).toMatchObject({
+      totalRequests: 3,
+      greenCount: 2,
+      redCount: 1,
+      availabilityScore: 2 / 3,
+      avgLatencyMs: 180,
+      p50LatencyMs: 120,
+      p95LatencyMs: 240,
+      p99LatencyMs: 240,
+    });
+
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+    const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
+    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    expect(queryText).toContain("group by");
+    expect(queryText).toContain("percentile_cont(0.95)");
+    expect(queryText).toContain("row_number() over");
+    expect(queryText).toContain(`"successrateoutcome" in ('success', 'failure')`);
+    expect(queryText).toContain('avg("durationms") filter');
+  });
+
+  it("queryProviderAvailability 计算 currentStatus 时会按最近 buckets 的请求量加权", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => [
+      {
+        providerId: 1,
+        bucketStart: new Date("2026-04-13T08:00:00.000Z"),
+        greenCount: 1,
+        redCount: 0,
+        latencyCount: 1,
+        latencySumMs: 100,
+        avgLatencyMs: 100,
+        p50LatencyMs: 100,
+        p95LatencyMs: 100,
+        p99LatencyMs: 100,
+        lastRequestAt: new Date("2026-04-13T08:00:30.000Z"),
+      },
+      {
+        providerId: 1,
+        bucketStart: new Date("2026-04-13T09:00:00.000Z"),
+        greenCount: 0,
+        redCount: 100,
+        latencyCount: 100,
+        latencySumMs: 20000,
+        avgLatencyMs: 200,
+        p50LatencyMs: 200,
+        p95LatencyMs: 250,
+        p99LatencyMs: 300,
+        lastRequestAt: new Date("2026-04-13T09:59:59.000Z"),
+      },
+    ]);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    const result = await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T10:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    expect(result.providers[0]).toMatchObject({
+      providerId: 1,
+      totalRequests: 101,
+      currentAvailability: 1 / 101,
+      currentStatus: "red",
+      lastRequestAt: "2026-04-13T09:59:59.000Z",
+    });
+  });
+
+  it("queryProviderAvailability 在 bucketSizeMinutes 为 Infinity 时回退到自动分桶", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    const result = await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: Number.POSITIVE_INFINITY,
+    });
+
+    const query = sqlToQuery(executeMock.mock.calls[0]?.[0]);
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result.bucketSizeMinutes).toBe(5);
+    expect(query.params).toContain(300);
+    expect(query.params).not.toContain(Number.POSITIVE_INFINITY);
+  });
+
+  it("queryProviderAvailability 在 bucketSizeMinutes 为超大有限值时钳制到 1440 分钟", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    const result = await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: Number.MAX_SAFE_INTEGER,
+    });
+
+    const query = sqlToQuery(executeMock.mock.calls[0]?.[0]);
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result.bucketSizeMinutes).toBe(1440);
+    expect(query.params).toContain(86400);
+    expect(query.params).not.toContain(Number.MAX_SAFE_INTEGER * 60);
+  });
+
+  it("queryProviderAvailability 会排除进行中请求(statusCode=null 且 durationMs=null)", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    const finalizedRequestsSql = extractFinalizedRequestsSql(
+      normalizeSql(executeMock.mock.calls[0]?.[0])
+    );
+    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+  });
+
+  it("queryProviderAvailability 会保留 Gemini passthrough 终态(statusCode!=null 且 durationMs=null)", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    const finalizedRequestsSql = extractFinalizedRequestsSql(
+      normalizeSql(executeMock.mock.calls[0]?.[0])
+    );
+    expect(finalizedRequestsSql).not.toMatch(/where .*duration_?ms.*is not null/);
+  });
+
+  it("queryProviderAvailability 当前不会把中间持久化状态(statusCode=null 且 durationMs!=null)误算为 red", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+    const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
+
+    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
+    expect(queryText).toContain(`"successrateoutcome" = 'failure'`);
+  });
+
+  it("queryProviderAvailability 在 maxBuckets 为 Infinity 时仍使用默认桶上限", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+      maxBuckets: Number.POSITIVE_INFINITY,
+    });
+
+    const query = sqlToQuery(executeMock.mock.calls[0]?.[0]);
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(queryText).toContain("row_number() over");
+    expect(queryText).toContain("where rn <=");
+    expect(query.params).toContain(100);
+    expect(query.params).not.toContain(Number.POSITIVE_INFINITY);
+  });
+
+  it("queryProviderAvailability 在 maxBuckets 为超大有限值时也会收紧到硬上限", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+      maxBuckets: Number.MAX_SAFE_INTEGER,
+    });
+
+    const query = sqlToQuery(executeMock.mock.calls[0]?.[0]);
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(queryText).toContain("row_number() over");
+    expect(queryText).toContain("where rn <=");
+    expect(query.params).toContain(100);
+    expect(query.params).not.toContain(Number.MAX_SAFE_INTEGER);
+  });
+
+  it("queryProviderAvailability 在无聚合数据时仍返回 unknown 提供商状态", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+          providerType: "claude",
+          enabled: true,
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { queryProviderAvailability } = await import("@/lib/availability/availability-service");
+    const result = await queryProviderAvailability({
+      startTime: new Date("2026-04-13T07:00:00.000Z"),
+      endTime: new Date("2026-04-13T09:00:00.000Z"),
+      bucketSizeMinutes: 60,
+    });
+
+    expect(result.providers).toEqual([
+      {
+        providerId: 1,
+        providerName: "Provider A",
+        providerType: "claude",
+        isEnabled: true,
+        currentStatus: "unknown",
+        currentAvailability: 0,
+        totalRequests: 0,
+        successRate: 0,
+        avgLatencyMs: 0,
+        lastRequestAt: null,
+        timeBuckets: [],
+      },
+    ]);
+  });
+
+  it("getCurrentProviderStatus 改为数据库聚合后仍只统计终态请求", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => [
+      {
+        providerId: 1,
+        greenCount: 1,
+        redCount: 1,
+        lastRequestAt: new Date("2026-04-13T08:02:00.000Z"),
+      },
+    ]);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { getCurrentProviderStatus } = await import("@/lib/availability/availability-service");
+    const result = await getCurrentProviderStatus();
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      {
+        providerId: 1,
+        providerName: "Provider A",
+        status: "green",
+        availability: 0.5,
+        requestCount: 2,
+        lastRequestAt: "2026-04-13T08:02:00.000Z",
+      },
+    ]);
+
+    const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
+    expect(queryText).toContain("fn_is_message_request_finalized");
+    expect(queryText).toContain(">= now() - (15 * interval '1 minute')");
+    expect(queryText).toContain("<= now()");
+    expect(queryText).toContain("count(*) filter");
+    expect(queryText).toContain("max(");
+  });
+
+  it("getCurrentProviderStatus 在提供商无聚合数据时返回 unknown", async () => {
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 1,
+          name: "Provider A",
+        },
+      ])
+    );
+    const executeMock = vi.fn(async () => []);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: executeMock,
+      },
+    }));
+
+    const { getCurrentProviderStatus } = await import("@/lib/availability/availability-service");
+    const result = await getCurrentProviderStatus();
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      {
+        providerId: 1,
+        providerName: "Provider A",
+        status: "unknown",
+        availability: 0,
+        requestCount: 0,
+        lastRequestAt: null,
+      },
+    ]);
+  });
+});

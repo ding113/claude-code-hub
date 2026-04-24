@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import { buildLeaseKey } from "@/lib/rate-limit/lease";
 import { getRedisClient } from "@/lib/redis";
 import { getKeyActiveSessionsKey, getUserActiveSessionsKey } from "@/lib/redis/active-session-keys";
 import { scanPattern } from "@/lib/redis/scan-helper";
@@ -14,11 +15,30 @@ export interface ClearUserCostCacheResult {
   costKeysDeleted: number;
   activeSessionsDeleted: number;
   durationMs: number;
+  cleanupFailed?: boolean;
+  errorCount?: number;
 }
 
 export interface ClearSingleKeyCostCacheOptions {
   keyId: number;
   keyHash: string;
+}
+
+export interface ClearSingleProviderCostCacheOptions {
+  providerId: number;
+}
+
+export interface ClearUser5hCostCacheOptions {
+  userId: number;
+  resetMode: "fixed" | "rolling";
+}
+
+export interface ClearUser5hCostCacheResult {
+  costKeysDeleted: number;
+  leaseKeysDeleted: number;
+  durationMs: number;
+  cleanupFailed?: boolean;
+  errorCount?: number;
 }
 
 /**
@@ -144,6 +164,7 @@ export async function clearUserCostCache(
       costKeysDeleted: allCostKeys.length,
       activeSessionsDeleted,
       durationMs: Date.now() - startTime,
+      cleanupFailed: true,
     };
   }
 
@@ -159,6 +180,65 @@ export async function clearUserCostCache(
   return {
     costKeysDeleted: allCostKeys.length,
     activeSessionsDeleted,
+    durationMs: Date.now() - startTime,
+    cleanupFailed: !!errors && errors.length > 0,
+    errorCount: errors?.length || 0,
+  };
+}
+
+export async function clearUser5hCostCache(
+  options: ClearUser5hCostCacheOptions
+): Promise<ClearUser5hCostCacheResult | null> {
+  const { userId, resetMode } = options;
+
+  const redis = getRedisClient();
+  if (!redis || redis.status !== "ready") {
+    return null;
+  }
+
+  const startTime = Date.now();
+  const costKey = `user:${userId}:cost_5h_${resetMode}`;
+  const leaseKey = buildLeaseKey("user", userId, "5h", resetMode);
+  const pipeline = redis.pipeline();
+
+  pipeline.del(costKey);
+  pipeline.del(leaseKey);
+
+  try {
+    const results = await pipeline.exec();
+    const errors = results?.filter(([error]) => error);
+    if (errors && errors.length > 0) {
+      logger.warn("Some Redis deletes failed during user 5h cache cleanup", {
+        userId,
+        resetMode,
+        errorCount: errors.length,
+      });
+      return {
+        costKeysDeleted: 1,
+        leaseKeysDeleted: 1,
+        durationMs: Date.now() - startTime,
+        cleanupFailed: true,
+        errorCount: errors.length,
+      };
+    }
+  } catch (error) {
+    logger.warn("Redis pipeline.exec() failed during user 5h cache cleanup", {
+      userId,
+      resetMode,
+      error,
+    });
+    return {
+      costKeysDeleted: 1,
+      leaseKeysDeleted: 1,
+      durationMs: Date.now() - startTime,
+      cleanupFailed: true,
+      errorCount: 1,
+    };
+  }
+
+  return {
+    costKeysDeleted: 1,
+    leaseKeysDeleted: 1,
     durationMs: Date.now() - startTime,
   };
 }
@@ -238,6 +318,91 @@ export async function clearSingleKeyCostCache(
     logger.warn("Some Redis deletes failed during single key cost cache cleanup", {
       errorCount: errors.length,
       keyId,
+    });
+  }
+
+  return {
+    costKeysDeleted: allCostKeys.length,
+    activeSessionsDeleted: 0,
+    durationMs: Date.now() - startTime,
+  };
+}
+
+export async function clearSingleProviderCostCache(
+  options: ClearSingleProviderCostCacheOptions
+): Promise<ClearUserCostCacheResult | null> {
+  const { providerId } = options;
+
+  const redis = getRedisClient();
+  if (!redis || redis.status !== "ready") {
+    return null;
+  }
+
+  const startTime = Date.now();
+  const scanResults = await Promise.all([
+    scanPattern(redis, `provider:${providerId}:cost_*`).catch((err) => {
+      logger.warn("Failed to scan provider cost pattern", { providerId, error: err });
+      return [];
+    }),
+    scanPattern(redis, `total_cost:provider:${providerId}`).catch((err) => {
+      logger.warn("Failed to scan total cost provider pattern", {
+        providerId,
+        pattern: `total_cost:provider:${providerId}`,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
+    scanPattern(redis, `total_cost:provider:${providerId}:*`).catch((err) => {
+      logger.warn("Failed to scan total cost provider pattern", {
+        providerId,
+        pattern: `total_cost:provider:${providerId}:*`,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
+    scanPattern(redis, `lease:provider:${providerId}:*`).catch((err) => {
+      logger.warn("Failed to scan provider lease pattern", {
+        providerId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
+  ]);
+
+  const allCostKeys = scanResults.flat();
+  if (allCostKeys.length === 0) {
+    return {
+      costKeysDeleted: 0,
+      activeSessionsDeleted: 0,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  const pipeline = redis.pipeline();
+  for (const key of allCostKeys) {
+    pipeline.del(key);
+  }
+
+  let results: Array<[Error | null, unknown]> | null = null;
+  try {
+    results = await pipeline.exec();
+  } catch (error) {
+    logger.warn("Redis pipeline.exec() failed during provider cost cache cleanup", {
+      providerId,
+      error,
+    });
+    return {
+      costKeysDeleted: 0,
+      activeSessionsDeleted: 0,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  const errors = results?.filter(([err]) => err);
+  if (errors && errors.length > 0) {
+    logger.warn("Some Redis deletes failed during provider cost cache cleanup", {
+      errorCount: errors.length,
+      providerId,
     });
   }
 

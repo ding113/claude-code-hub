@@ -42,9 +42,6 @@ export class ProxyWarmupGuard {
 
     const responseHeaders = new Headers({
       "content-type": "application/json; charset=utf-8",
-      // 标注：这是 CCH 抢答的响应（便于客户端/排查）
-      "x-cch-intercepted": "warmup",
-      "x-cch-intercepted-by": "claude-code-hub",
     });
 
     // 尽量把“本地抢答”的响应写入 Session 详情（用于排查/审计）

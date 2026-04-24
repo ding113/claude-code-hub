@@ -78,7 +78,7 @@ export function collectLegacyWebhooks(settings: NotificationSettings): LegacyWeb
   const webhookMap = new Map<string, LegacyWebhookInfo>();
 
   const addWebhook = (url: string | null, type: NotificationType) => {
-    if (!url || !url.trim()) {
+    if (!url?.trim()) {
       return;
     }
 

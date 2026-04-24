@@ -35,6 +35,7 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
     try {
       let totalProcessed = 0;
       let totalInserted = 0;
+      let totalAlreadyExisted = 0;
       let lastId = 0;
 
       while (true) {
@@ -59,10 +60,17 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
             ) AS final_provider_id,
             mr.model,
             mr.original_model,
+            mr.actual_response_model,
             mr.endpoint,
             mr.api_type,
             mr.session_id,
             mr.status_code,
+            fn_compute_message_request_success_rate_outcome(
+              mr.blocked_by,
+              mr.status_code,
+              mr.error_message,
+              mr.provider_chain
+            ) AS success_rate_outcome,
             (mr.error_message IS NULL OR mr.error_message = '') AS is_success,
             mr.blocked_by,
             mr.cost_usd,
@@ -78,12 +86,22 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
             mr.swap_cache_ttl_applied,
             mr.duration_ms,
             mr.ttfb_ms,
-            mr.created_at
+            mr.created_at,
+            ul.request_id AS existing_request_id
           FROM message_request mr
+          LEFT JOIN usage_ledger ul ON ul.request_id = mr.id
           WHERE mr.id > ${lastId}
             AND mr.blocked_by IS DISTINCT FROM 'warmup'
-            AND NOT EXISTS (
-              SELECT 1 FROM usage_ledger ul WHERE ul.request_id = mr.id
+            AND (
+              mr.endpoint IS NULL
+              OR LOWER(REGEXP_REPLACE(mr.endpoint, '/+$', '')) NOT IN (
+                '/v1/messages/count_tokens',
+                '/v1/responses/compact'
+              )
+            )
+            AND (
+              ul.request_id IS NULL
+              OR ul.success_rate_outcome IS NULL
             )
           ORDER BY mr.id ASC
           LIMIT 10000
@@ -91,8 +109,8 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
         inserted_rows AS (
           INSERT INTO usage_ledger (
             request_id, user_id, key, provider_id, final_provider_id,
-            model, original_model, endpoint, api_type, session_id,
-            status_code, is_success, blocked_by,
+            model, original_model, actual_response_model, endpoint, api_type, session_id,
+            status_code, is_success, success_rate_outcome, blocked_by,
             cost_usd, cost_multiplier,
             input_tokens, output_tokens,
             cache_creation_input_tokens, cache_read_input_tokens,
@@ -108,11 +126,13 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
             batch.final_provider_id,
             batch.model,
             batch.original_model,
+            batch.actual_response_model,
             batch.endpoint,
             batch.api_type,
             batch.session_id,
             batch.status_code,
             batch.is_success,
+            batch.success_rate_outcome,
             batch.blocked_by,
             batch.cost_usd,
             batch.cost_multiplier,
@@ -129,12 +149,30 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
             batch.ttfb_ms,
             batch.created_at
           FROM batch
-          ON CONFLICT (request_id) DO NOTHING
+          ON CONFLICT (request_id) DO UPDATE SET
+            success_rate_outcome = EXCLUDED.success_rate_outcome
           RETURNING request_id
         )
         SELECT
           COALESCE((SELECT COUNT(*) FROM batch), 0)::integer AS processed,
-          COALESCE((SELECT COUNT(*) FROM inserted_rows), 0)::integer AS inserted,
+          COALESCE(
+            (
+              SELECT COUNT(*)
+              FROM inserted_rows ir
+              JOIN batch b ON b.id = ir.request_id
+              WHERE b.existing_request_id IS NULL
+            ),
+            0
+          )::integer AS inserted,
+          COALESCE(
+            (
+              SELECT COUNT(*)
+              FROM inserted_rows ir
+              JOIN batch b ON b.id = ir.request_id
+              WHERE b.existing_request_id IS NOT NULL
+            ),
+            0
+          )::integer AS updated,
           COALESCE((SELECT MAX(id) FROM batch), 0)::integer AS max_id
       `);
 
@@ -142,12 +180,14 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
           batchResult as unknown as Array<{
             processed?: number | string;
             inserted?: number | string;
+            updated?: number | string;
             max_id?: number | string;
           }>
         )[0];
 
         const processed = Number(batchRow?.processed ?? 0);
         const inserted = Number(batchRow?.inserted ?? 0);
+        const updated = Number(batchRow?.updated ?? 0);
         const maxId = Number(batchRow?.max_id ?? 0);
 
         if (processed === 0) {
@@ -156,6 +196,7 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
 
         totalProcessed += processed;
         totalInserted += inserted;
+        totalAlreadyExisted += updated;
         lastId = maxId;
 
         logger.info("Backfill progress", {
@@ -170,7 +211,7 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
         totalProcessed,
         totalInserted,
         durationMs,
-        alreadyExisted: totalProcessed - totalInserted,
+        alreadyExisted: totalAlreadyExisted,
       };
     } finally {
       // pg_try_advisory_xact_lock is automatically released when the transaction ends

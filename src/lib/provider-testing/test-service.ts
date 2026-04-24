@@ -26,6 +26,7 @@ import {
   getTestBody,
   getTestHeaders,
   getTestUrl,
+  getVersionlessOpenAiFallbackUrl,
 } from "./utils/test-prompts";
 import { evaluateContentValidation } from "./validators/content-validator";
 import { classifyHttpStatus } from "./validators/http-validator";
@@ -39,7 +40,13 @@ interface AttemptPlan {
   url: string;
 }
 
+interface VersionlessFallbackState {
+  hasRetriedVersionlessUrl: boolean;
+  preferVersionlessUrl: boolean;
+}
+
 const RETRYABLE_HTTP_STATUS_CODES = [400, 404, 405, 415, 422] as const;
+const INVALID_OPENAI_URL_MARKER = /Invalid URL \(POST \/v1\/.+\)/i;
 
 function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
   const customPayload = config.customPayload?.trim();
@@ -120,16 +127,21 @@ function shouldRetryWithNextTemplate(result: ProviderTestResult): boolean {
     return false;
   }
 
-  if (
-    result.httpStatusCode &&
-    RETRYABLE_HTTP_STATUS_CODES.includes(
-      result.httpStatusCode as (typeof RETRYABLE_HTTP_STATUS_CODES)[number]
-    )
-  ) {
+  if (result.httpStatusCode && isRetryableHttpStatus(result.httpStatusCode)) {
     return true;
   }
 
   return ["client_error", "invalid_request", "content_mismatch"].includes(result.subStatus);
+}
+
+function isRetryableHttpStatus(responseStatus: number): boolean {
+  return RETRYABLE_HTTP_STATUS_CODES.includes(
+    responseStatus as (typeof RETRYABLE_HTTP_STATUS_CODES)[number]
+  );
+}
+
+function isOpenAiStyleProvider(providerType: ProviderTestConfig["providerType"]): boolean {
+  return providerType === "codex" || providerType === "openai-compatible";
 }
 
 function buildValidationDetails(
@@ -150,15 +162,43 @@ function buildValidationDetails(
   };
 }
 
+function resolveVersionlessOpenAiFallbackUrl(
+  config: ProviderTestConfig,
+  requestUrl: string,
+  responseStatus: number,
+  responseBody: string,
+  fallbackState: VersionlessFallbackState
+): string | null {
+  if (fallbackState.hasRetriedVersionlessUrl) {
+    return null;
+  }
+
+  if (!isOpenAiStyleProvider(config.providerType)) {
+    return null;
+  }
+
+  if (responseStatus !== 400 || !INVALID_OPENAI_URL_MARKER.test(responseBody)) {
+    return null;
+  }
+
+  return getVersionlessOpenAiFallbackUrl(requestUrl);
+}
+
 async function runSingleAttempt(
   config: ProviderTestConfig,
   plan: AttemptPlan,
   timeoutMs: number,
-  slowThresholdMs: number
+  slowThresholdMs: number,
+  fallbackState: VersionlessFallbackState
 ): Promise<ProviderTestResult> {
   const startTime = Date.now();
+  let attemptStartTime = startTime;
   let firstByteMs: number | undefined;
   let usedProxy = false;
+  let requestUrl =
+    fallbackState.preferVersionlessUrl && isOpenAiStyleProvider(config.providerType)
+      ? (getVersionlessOpenAiFallbackUrl(plan.url) ?? plan.url)
+      : plan.url;
 
   try {
     let dispatcher: unknown | undefined;
@@ -190,58 +230,83 @@ async function runSingleAttempt(
         fetchOptions.dispatcher = dispatcher;
       }
 
-      const response = await fetch(plan.url, fetchOptions);
-      firstByteMs = Date.now() - startTime;
+      // provider testing 只在这条受控链路里做一次 versionless fallback，避免影响 runtime proxy 行为。
+      while (true) {
+        attemptStartTime = Date.now();
+        firstByteMs = undefined;
+        const response = await fetch(requestUrl, fetchOptions);
+        firstByteMs = Date.now() - attemptStartTime;
 
-      const responseBody = await response.text();
-      const latencyMs = Date.now() - startTime;
-      const contentType = response.headers.get("content-type") || undefined;
-
-      // best-effort 解析：即使解析失败也保留 HTTP 状态信息，避免 4xx/5xx 被误判为 network_error
-      let parsed: ParsedResponse;
-      try {
-        parsed = parseResponse(config.providerType, responseBody, contentType);
-      } catch {
-        parsed = { content: responseBody, model: undefined, usage: undefined, isStreaming: false };
-      }
-
-      const validationInput = parsed.content ?? responseBody;
-      const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
-      const contentResult = evaluateContentValidation(
-        httpResult.status,
-        httpResult.subStatus,
-        validationInput,
-        plan.successContains
-      );
-
-      return {
-        success: contentResult.status !== "red",
-        status: contentResult.status,
-        subStatus: contentResult.subStatus,
-        latencyMs,
-        firstByteMs,
-        httpStatusCode: response.status,
-        httpStatusText: response.statusText,
-        model: parsed.model,
-        content: parsed.content ?? responseBody,
-        rawResponse: responseBody,
-        usage: parsed.usage,
-        streamInfo: parsed.isStreaming
-          ? {
-              isStreaming: true,
-              chunksReceived: parsed.chunksReceived,
-            }
-          : undefined,
-        testedAt: new Date(),
-        validationDetails: buildValidationDetails(
+        const responseBody = await response.text();
+        const fallbackUrl = resolveVersionlessOpenAiFallbackUrl(
+          config,
+          requestUrl,
           response.status,
-          latencyMs,
-          slowThresholdMs,
-          contentResult.contentPassed,
+          responseBody,
+          fallbackState
+        );
+        if (fallbackUrl && fallbackUrl !== requestUrl) {
+          requestUrl = fallbackUrl;
+          fallbackState.hasRetriedVersionlessUrl = true;
+          fallbackState.preferVersionlessUrl = true;
+          continue;
+        }
+
+        const latencyMs = Date.now() - startTime;
+        const contentType = response.headers.get("content-type") || undefined;
+
+        // best-effort 解析：即使解析失败也保留 HTTP 状态信息，避免 4xx/5xx 被误判为 network_error
+        let parsed: ParsedResponse;
+        try {
+          parsed = parseResponse(config.providerType, responseBody, contentType);
+        } catch {
+          parsed = {
+            content: responseBody,
+            model: undefined,
+            usage: undefined,
+            isStreaming: false,
+          };
+        }
+
+        const validationInput = parsed.content ?? responseBody;
+        const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
+        const contentResult = evaluateContentValidation(
+          httpResult.status,
+          httpResult.subStatus,
+          validationInput,
           plan.successContains
-        ),
-        usedProxy,
-      };
+        );
+
+        return {
+          success: contentResult.status !== "red",
+          status: contentResult.status,
+          subStatus: contentResult.subStatus,
+          latencyMs,
+          firstByteMs,
+          httpStatusCode: response.status,
+          httpStatusText: response.statusText,
+          model: parsed.model,
+          content: parsed.content ?? responseBody,
+          rawResponse: responseBody,
+          requestUrl,
+          usage: parsed.usage,
+          streamInfo: parsed.isStreaming
+            ? {
+                isStreaming: true,
+                chunksReceived: parsed.chunksReceived,
+              }
+            : undefined,
+          testedAt: new Date(),
+          validationDetails: buildValidationDetails(
+            response.status,
+            latencyMs,
+            slowThresholdMs,
+            contentResult.contentPassed,
+            plan.successContains
+          ),
+          usedProxy,
+        };
+      }
     } finally {
       clearTimeout(timeoutId);
     }
@@ -258,6 +323,7 @@ async function runSingleAttempt(
       errorMessage,
       errorType,
       rawError: error,
+      requestUrl,
       testedAt: new Date(),
       validationDetails: buildValidationDetails(
         undefined,
@@ -276,11 +342,21 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
   const slowThresholdMs = config.latencyThresholdMs ?? TEST_DEFAULTS.SLOW_LATENCY_MS;
   const plans = buildAttemptPlans(config);
   const deadline = Date.now() + timeoutMs;
+  const fallbackState: VersionlessFallbackState = {
+    hasRetriedVersionlessUrl: false,
+    preferVersionlessUrl: false,
+  };
 
   let fallbackResult: ProviderTestResult | null = null;
   for (const plan of plans) {
     const remainingTimeoutMs = Math.max(1000, deadline - Date.now());
-    const result = await runSingleAttempt(config, plan, remainingTimeoutMs, slowThresholdMs);
+    const result = await runSingleAttempt(
+      config,
+      plan,
+      remainingTimeoutMs,
+      slowThresholdMs,
+      fallbackState
+    );
     if (result.success || !shouldRetryWithNextTemplate(result)) {
       return result;
     }

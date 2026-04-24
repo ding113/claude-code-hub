@@ -19,11 +19,17 @@ const h = vi.hoisted(() => ({
     getProviderChain: () => [],
     setOriginalFormat: vi.fn(),
     setHighConcurrencyModeEnabled: vi.fn(),
+    setRawCrossProviderFallbackEnabled(enabled: boolean) {
+      h.session.rawCrossProviderFallbackEnabled = enabled;
+    },
+    isRawCrossProviderFallbackEnabled: () => !!h.session.rawCrossProviderFallbackEnabled,
     recordForwardStart: vi.fn(),
+    rawCrossProviderFallbackEnabled: false,
   } as any,
   forwarderError: null as unknown,
   override: undefined as unknown,
   verboseProviderError: false,
+  passThroughUpstreamErrorMessage: true,
   trackerCalls: [] as string[],
 }));
 
@@ -57,6 +63,7 @@ vi.mock("@/app/v1/_lib/proxy/forwarder", () => ({
 vi.mock("@/lib/config/system-settings-cache", () => ({
   getCachedSystemSettings: async () => ({
     verboseProviderError: h.verboseProviderError,
+    passThroughUpstreamErrorMessage: h.passThroughUpstreamErrorMessage,
   }),
 }));
 
@@ -110,6 +117,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
     h.trackerCalls.length = 0;
     h.override = undefined;
     h.verboseProviderError = false;
+    h.passThroughUpstreamErrorMessage = true;
     h.forwarderError = new ProxyError("所有供应商暂时不可用，请稍后重试", 503);
     h.session.requestUrl = new URL("http://localhost/v1/messages");
     h.session.originalFormat = "openai";
@@ -121,7 +129,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
     const res = await handleProxyRequest({} as any);
 
     expect(res.status).toBe(503);
-    expect(res.headers.get("x-cch-session-id")).toBe("s_hedge");
+    expect(res.headers.get("x-cch-session-id")).toBeNull();
 
     const body = await res.json();
     expect(body.error.message).toBe("所有供应商暂时不可用，请稍后重试 (cch_session_id: s_hedge)");
@@ -129,7 +137,38 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
     expect(body.error.details).toBeUndefined();
   });
 
-  test("命中 error override 时，应返回 override body/status，且保留 session id header", async () => {
+  test("新开关开启且 hedge 终态带 safe candidate 时，应透传脱敏后的上游 message", async () => {
+    h.forwarderError = new ProxyError("所有供应商暂时不可用，请稍后重试", 503, {
+      body: "",
+      safeClientMessageCandidate:
+        "Quota exceeded for key sk-test-1234567890abcdef at https://api.vendor.example/v1/messages request_id=req_abc123",
+    });
+
+    const res = await handleProxyRequest({} as any);
+    const body = await res.json();
+
+    expect(body.error.message).toContain("Quota exceeded");
+    expect(body.error.message).not.toContain("sk-test");
+    expect(body.error.message).not.toContain("https://");
+    expect(body.error.message).not.toContain("req_abc123");
+  });
+
+  test("passThrough=false + verbose=true 时，hedge 终态仍使用通用 message", async () => {
+    h.verboseProviderError = true;
+    h.passThroughUpstreamErrorMessage = false;
+    h.forwarderError = new ProxyError("所有供应商暂时不可用，请稍后重试", 503, {
+      body: "",
+      safeClientMessageCandidate:
+        "Quota exceeded for key sk-test-1234567890abcdef at https://api.vendor.example/v1/messages request_id=req_abc123",
+    });
+
+    const res = await handleProxyRequest({} as any);
+    const body = await res.json();
+
+    expect(body.error.message).toBe("所有供应商暂时不可用，请稍后重试 (cch_session_id: s_hedge)");
+  });
+
+  test("命中 error override 时，应返回 override body/status，并仅保留消息后缀", async () => {
     h.verboseProviderError = true;
     h.override = {
       statusCode: 451,
@@ -145,7 +184,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
     const res = await handleProxyRequest({} as any);
 
     expect(res.status).toBe(451);
-    expect(res.headers.get("x-cch-session-id")).toBe("s_hedge");
+    expect(res.headers.get("x-cch-session-id")).toBeNull();
 
     const body = await res.json();
     expect(body).toEqual({

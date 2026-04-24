@@ -1,3 +1,4 @@
+import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
 import { validateApiKeyAndGetUser } from "@/repository/key";
@@ -20,29 +21,25 @@ const proxyAuthPolicy = new LoginAbusePolicy({
   lockoutSeconds: 600,
 });
 
-function extractClientIp(session: ProxySession): string {
-  // Prefer x-real-ip (set by trusted reverse proxy), then rightmost
-  // x-forwarded-for entry, avoiding the client-spoofable leftmost value.
-  const realIp = session.headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-
-  const forwarded = session.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const ips = forwarded
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (ips.length > 0) return ips[ips.length - 1];
-  }
-
-  return "unknown";
-}
-
 export class ProxyAuthenticator {
   static async ensure(session: ProxySession): Promise<Response | null> {
-    // Pre-auth rate limit: block IPs with too many recent auth failures
-    const clientIp = extractClientIp(session);
-    const rateLimitDecision = proxyAuthPolicy.check(clientIp);
+    // Pre-auth rate limit: block IPs with too many recent auth failures.
+    // Extracted once here and stashed on the session for later consumers
+    // (message-service / audit writer) so we only parse headers once.
+    const clientIp = (await getClientIpWithFreshSettings(session.headers)) ?? "unknown";
+    session.clientIp = clientIp === "unknown" ? null : clientIp;
+    const authHeader = session.headers.get("authorization") ?? undefined;
+    const apiKeyHeader = session.headers.get("x-api-key") ?? undefined;
+    // Gemini CLI 认证：支持 x-goog-api-key 头部和 key 查询参数
+    const geminiApiKeyHeader = session.headers.get(GEMINI_PROTOCOL.HEADERS.API_KEY) ?? undefined;
+    const geminiApiKeyQuery = session.requestUrl.searchParams.get("key") ?? undefined;
+    const candidateApiKey = ProxyAuthenticator.resolvePreAuthCandidateKey({
+      authHeader,
+      apiKeyHeader,
+      geminiApiKeyHeader,
+      geminiApiKeyQuery,
+    });
+    const rateLimitDecision = proxyAuthPolicy.check(clientIp, candidateApiKey ?? undefined);
     if (!rateLimitDecision.allowed) {
       const retryAfter = rateLimitDecision.retryAfterSeconds;
       const response = ProxyResponses.buildError(
@@ -62,12 +59,6 @@ export class ProxyAuthenticator {
       return response;
     }
 
-    const authHeader = session.headers.get("authorization") ?? undefined;
-    const apiKeyHeader = session.headers.get("x-api-key") ?? undefined;
-    // Gemini CLI 认证：支持 x-goog-api-key 头部和 key 查询参数
-    const geminiApiKeyHeader = session.headers.get(GEMINI_PROTOCOL.HEADERS.API_KEY) ?? undefined;
-    const geminiApiKeyQuery = session.requestUrl.searchParams.get("key") ?? undefined;
-
     const authState = await ProxyAuthenticator.validate({
       authHeader,
       apiKeyHeader,
@@ -77,15 +68,39 @@ export class ProxyAuthenticator {
     session.setAuthState(authState);
 
     if (authState.success) {
-      proxyAuthPolicy.recordSuccess(clientIp);
+      proxyAuthPolicy.recordSuccess(clientIp, authState.apiKey ?? undefined);
       return null;
     }
 
     // Record failure for rate limiting
-    proxyAuthPolicy.recordFailure(clientIp);
+    proxyAuthPolicy.recordFailure(clientIp, authState.apiKey ?? candidateApiKey ?? undefined);
 
     // 返回详细的错误信息，帮助用户快速定位问题
     return authState.errorResponse ?? ProxyResponses.buildError(401, "认证失败");
+  }
+
+  private static resolvePreAuthCandidateKey(headers: {
+    authHeader?: string;
+    apiKeyHeader?: string;
+    geminiApiKeyHeader?: string;
+    geminiApiKeyQuery?: string;
+  }): string | null {
+    const bearerKey = ProxyAuthenticator.extractKeyFromAuthorization(headers.authHeader);
+    const apiKeyHeader = ProxyAuthenticator.normalizeKey(headers.apiKeyHeader);
+    const geminiApiKey =
+      ProxyAuthenticator.normalizeKey(headers.geminiApiKeyHeader) ||
+      ProxyAuthenticator.normalizeKey(headers.geminiApiKeyQuery);
+
+    const providedKeys = [bearerKey, apiKeyHeader, geminiApiKey].filter(
+      (value): value is string => typeof value === "string" && value.length > 0
+    );
+
+    if (providedKeys.length === 0) {
+      return null;
+    }
+
+    const [firstKey] = providedKeys;
+    return providedKeys.every((key) => key === firstKey) ? firstKey : null;
   }
 
   private static async validate(headers: {

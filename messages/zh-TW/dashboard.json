@@ -124,6 +124,7 @@
       "user": "使用者",
       "key": "金鑰",
       "sessionId": "Session ID",
+      "ip": "IP",
       "provider": "供應商",
       "model": "計費模型",
       "endpoint": "端點",
@@ -246,9 +247,21 @@
         "billingOriginal": "計費: 原始",
         "billingRedirected": "計費: 實際"
       },
+      "modelAudit": {
+        "unifiedLabel": "模型",
+        "requestModelLabel": "請求模型",
+        "responseModelLabel": "實際回應模型",
+        "mismatchTooltip": "上游供應商實際回傳的模型與請求的模型不一致。計費仍然依據請求模型。",
+        "secondaryLineAriaLabel": "實際回應模型：{model}",
+        "arrowPrefix": "\u21b3"
+      },
       "errorMessage": "錯誤訊息",
       "fake200ForwardedNotice": "提示：對於串流請求，此失敗可能在串流結束後才被識別；回應內容可能已原樣透傳給用戶端。",
       "fake200DetectedReason": "檢測原因：{reason}",
+      "fake200RetryTooltipLabel": "為何這次不能由伺服器重試？",
+      "fake200RetryTooltipTitle": "為什麼 CCH 無法在伺服器端重試這次回應",
+      "fake200RetryTooltipServerRetry": "上游已先回傳 HTTP 200，CCH 也已開始向用戶端透傳 SSE 回應體；等到後續串流事件才識別出錯誤時，這次回應已無法再由伺服器端優雅重試。",
+      "fake200RetryTooltipSessionFallback": "用戶端仍可自行重試；同一 Session 的後續請求會避開剛剛 fake200 的供應商，並繼續自動 fallback。",
       "fake200Reasons": {
         "emptyBody": "回應本文為空",
         "htmlBody": "回傳了 HTML 文件（可能是錯誤頁）",
@@ -300,6 +313,14 @@
           "priority_fallback": "優先級回退價格",
           "single_provider_top_level": "頂層單供應商價格",
           "official_fallback": "官方價格"
+        },
+        "baseCost": "基礎費用",
+        "providerMultiplier": "供應商倍率",
+        "groupMultiplier": "分組倍率",
+        "baseTotal": "基礎合計",
+        "unitPricePer1M": "@ {price} / 1M",
+        "unit": {
+          "tokens": "tokens"
         }
       },
       "performance": {
@@ -394,6 +415,7 @@
       "cacheTtlSwapped": "計費 TTL（已互換）",
       "multiplier": "供應商倍率",
       "totalCost": "總費用",
+      "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
       "fastPriority": "優先服務層級（fast 模式）",
       "context1m": "1M 上下文長度",
@@ -407,6 +429,13 @@
         "priority_fallback": "優先級回退價格",
         "single_provider_top_level": "頂層單供應商價格",
         "official_fallback": "官方價格"
+      },
+      "baseCost": "基礎費用",
+      "providerMultiplier": "供應商倍率",
+      "groupMultiplier": "分組倍率",
+      "baseTotal": "基礎合計",
+      "unit": {
+        "tokens": "tokens"
       }
     }
   },
@@ -425,9 +454,15 @@
       "users": "使用者排名",
       "keys": "密鑰排名",
       "userRanking": "使用者排名",
+      "userCacheHitRateRanking": "使用者快取命中率排行",
       "providerRanking": "供應商排名",
       "providerCacheHitRateRanking": "供應商快取命中率排行",
       "modelRanking": "模型排名",
+      "primaryUser": "使用者",
+      "primaryProvider": "供應商",
+      "primaryModel": "模型榜",
+      "secondaryCost": "成本排名",
+      "secondaryCacheHit": "快取命中榜",
       "dailyRanking": "今天",
       "weeklyRanking": "本週",
       "monthlyRanking": "當月",
@@ -465,7 +500,9 @@
       "avgTokensPerSecond": "平均輸出速率",
       "avgCostPerRequest": "平均每次請求成本",
       "avgCostPerMillionTokens": "平均每百萬 Token 成本",
-      "unknownModel": "未知"
+      "unknownModel": "未知",
+      "successRateUnavailable": "不適用",
+      "successRateBasisDisclosure": "在 redirected 計費模型模式下，一列可能合併多個原始模型，因此這裡不顯示成功率以避免口徑誤導。"
     },
     "expandModelStats": "展開模型詳情",
     "collapseModelStats": "收起模型詳情",
@@ -588,8 +625,18 @@
       "requestHeaders": "請求頭",
       "requestBody": "請求體",
       "requestMessages": "請求訊息",
+      "viewMode": "視圖",
+      "before": "處理前",
+      "after": "處理後",
+      "viewModeTooltip": "處理前顯示 CCH 在最終送往上游或最終回傳給用戶端之前記錄的請求與回應快照；處理後顯示 CCH 最終送往上游的請求，以及最終回傳給用戶端的回應。",
+      "viewModeTooltipLabel": "說明處理前與處理後視圖",
+      "snapshotSourceClient": "用戶端",
+      "snapshotSourceUpstream": "上游",
       "specialSettings": "特殊設定",
+      "specialSettingsStaticNote": "特殊設定是衍生出的稽核結果，不區分處理前或處理後。",
       "requestMessagesDescription": "用戶端傳送的訊息內容",
+      "afterRequestMessagesEmpty": "處理後的請求內容沒有根層級 messages 欄位，請改看 {requestBodyLabel}。",
+      "specialSettingsEmpty": "本次請求沒有記錄特殊設定。",
       "responseHeaders": "響應頭",
       "responseBody": "響應體",
       "responseBodyDescription": "伺服器傳回的完整回覆（5分鐘 TTL）",
@@ -733,6 +780,7 @@
     "quotasManagement": "額度管理",
     "userManagement": "使用者管理",
     "providers": "供應商管理",
+    "auditLogs": "稽核日誌",
     "documentation": "文件",
     "systemSettings": "系統設定",
     "feedback": "意見回饋",
@@ -996,6 +1044,17 @@
       "userIdMissing": "使用者 ID 不存在",
       "createFailed": "建立失敗，請稍後重試",
       "noKeyReturned": "建立成功但未傳回金鑰"
+    },
+    "limit5hResetMode": {
+      "label": "5 小時重設模式",
+      "options": {
+        "fixed": "固定視窗",
+        "rolling": "滾動視窗（5 小時）"
+      },
+      "desc": {
+        "fixed": "從首次成功記帳開始鎖定 5 小時固定視窗",
+        "rolling": "依最近 5 小時滾動視窗統計額度"
+      }
     }
   },
   "userForm": {
@@ -1570,16 +1629,28 @@
         "title": "重置選項"
       },
       "resetLimits": {
-        "title": "重設限額",
-        "description": "重設所有限額的累計消費計數器。請求日誌和統計資料將被保留。",
-        "button": "重設限額",
-        "confirmTitle": "僅重設限額？",
+        "title": "重設全部限額",
+        "description": "重設全部限額（5小時、每日、每週、每月、總計）的累計消費計數器。請求日誌和統計資料將被保留。",
+        "button": "重設全部限額",
+        "confirmTitle": "確認重設全部限額？",
         "confirmDescription": "這將把所有累計消費計數器（5小時、每日、每週、每月、總計）歸零。請求日誌和使用統計將被保留。",
-        "confirm": "是的，重設限額",
+        "confirm": "是的，重設全部限額",
         "loading": "正在重設...",
-        "error": "重設限額失敗",
+        "error": "重設全部限額失敗",
         "success": "所有限額已重設",
-        "lastResetAt": "上次重設: {date}"
+        "lastResetAt": "上次全部重設: {date}"
+      },
+      "reset5h": {
+        "button": "重設 5H 限額",
+        "confirm": "是的，重設 5H 限額",
+        "confirmDescriptionFixed": "這只會清空目前使用者聚合層的固定 5 小時視窗，不影響每日、每週、每月、總計，也不會影響該使用者底下的子 Key。",
+        "confirmDescriptionRolling": "這只會讓目前使用者聚合層的滾動 5 小時用量從現在起重新累計，不影響每日、每週、每月、總計，也不會影響該使用者底下的子 Key。",
+        "confirmTitle": "確認重設 5H 限額？",
+        "error": "重設 5H 限額失敗",
+        "loading": "正在重設...",
+        "successFixed": "該使用者目前固定 5H 視窗已重設",
+        "successRolling": "該使用者滾動 5H 限額已重設",
+        "unavailableReason": "僅在該使用者已設定使用者層級 5H 限額時可用。"
       },
       "resetData": {
         "title": "重置統計",
@@ -2009,5 +2080,77 @@
     "autoDetected": "自動識別",
     "selectPlatform": "請選擇平台",
     "successStats": "已建立 {targets} 個目標，{bindings} 個綁定"
+  },
+  "limitRules": {
+    "addRule": "新增限額規則",
+    "title": "新增限額規則",
+    "description": "選擇限額類型並設定數值",
+    "cancel": "取消",
+    "confirm": "儲存",
+    "fields": {
+      "type": {
+        "label": "限額類型",
+        "placeholder": "請選擇"
+      },
+      "value": {
+        "label": "數值",
+        "placeholder": "請輸入"
+      }
+    },
+    "limit5h": {
+      "mode": {
+        "label": "5 小時重設模式",
+        "fixed": "固定視窗",
+        "rolling": "滾動視窗（5 小時）",
+        "helperFixed": "從首次成功記帳開始鎖定 5 小時固定視窗。",
+        "helperRolling": "依最近 5 小時滾動視窗統計額度。"
+      }
+    },
+    "daily": {
+      "mode": {
+        "label": "每日重設模式",
+        "fixed": "固定時間重置",
+        "rolling": "滾動視窗（24 小時）",
+        "helperFixed": "每天在指定時間重置額度。",
+        "helperRolling": "從首次請求開始計算 24 小時滾動視窗"
+      },
+      "time": {
+        "label": "重設時間",
+        "placeholder": "HH:mm"
+      }
+    },
+    "limitTypes": {
+      "limitRpm": "RPM 限額",
+      "limit5h": "5 小時限額",
+      "limitDaily": "每日限額",
+      "limitWeekly": "週限額",
+      "limitMonthly": "月限額",
+      "limitTotal": "總限額",
+      "limitSessions": "並發 Session"
+    },
+    "ruleTypes": {
+      "limitRpm": "RPM 限額",
+      "limit5h": "5 小時限額",
+      "limitDaily": "每日限額",
+      "limitWeekly": "週限額",
+      "limitMonthly": "月限額",
+      "limitTotal": "總限額",
+      "limitSessions": "並發 Session"
+    },
+    "errors": {
+      "missingType": "請選擇限額類型",
+      "invalidValue": "請輸入有效數值",
+      "invalidTime": "請輸入有效時間（HH:mm）"
+    },
+    "overwriteHint": "此類型已存在，儲存後會覆蓋現有設定",
+    "quickValues": {
+      "10": "$10",
+      "50": "$50",
+      "100": "$100",
+      "500": "$500",
+      "unlimited": "無限"
+    },
+    "alreadySet": "已設定",
+    "confirmAdd": "新增"
   }
 }

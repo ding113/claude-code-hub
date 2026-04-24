@@ -50,6 +50,7 @@ describe("T11: raw passthrough endpoint parity", () => {
       guardPreset: "raw_passthrough",
       allowRetry: false,
       allowProviderSwitch: false,
+      allowRawCrossProviderFallback: true,
       allowCircuitBreakerAccounting: false,
       trackConcurrentRequests: false,
       bypassRequestFilters: true,
@@ -189,6 +190,7 @@ describe("T13: non-target regression (default policy preserved)", () => {
     guardPreset: "chat",
     allowRetry: true,
     allowProviderSwitch: true,
+    allowRawCrossProviderFallback: false,
     allowCircuitBreakerAccounting: true,
     trackConcurrentRequests: true,
     bypassRequestFilters: false,
@@ -239,6 +241,7 @@ describe("T13: non-target regression (default policy preserved)", () => {
       const policy = resolveEndpointPolicy(pathname);
       expect(policy.allowRetry).toBe(true);
       expect(policy.allowProviderSwitch).toBe(true);
+      expect(policy.allowRawCrossProviderFallback).toBe(false);
       expect(policy.allowCircuitBreakerAccounting).toBe(true);
       expect(policy.trackConcurrentRequests).toBe(true);
     }

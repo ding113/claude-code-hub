@@ -15,9 +15,12 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
+import type { StoredCostBreakdown } from '@/types/cost-breakdown';
 import type { ResponseFixerConfig } from '@/types/system-config';
 import type { AllowedModelRuleInput, ProviderModelRedirectRule, ProviderType } from "@/types/provider";
 import type { FilterOperation } from "@/lib/request-filter-types";
+import type { IpExtractionConfig } from "@/types/ip-extraction";
+import type { AuditCategory } from "@/types/audit-log";
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -49,10 +52,14 @@ export const users = pgTable('users', {
 
   // New user-level quota fields (nullable for backward compatibility)
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limit5hResetMode: dailyResetModeEnum('limit_5h_reset_mode')
+    .default('rolling')
+    .notNull(),
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   costResetAt: timestamp('cost_reset_at', { withTimezone: true }),
+  limit5hCostResetAt: timestamp('limit_5h_cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
 
   // Daily quota reset mode (fixed: reset at specific time, rolling: 24h window)
@@ -112,6 +119,9 @@ export const keys = pgTable('keys', {
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limit5hResetMode: dailyResetModeEnum('limit_5h_reset_mode')
+    .default('rolling')
+    .notNull(), // fixed: 首次成功记账后 5 小时整窗, rolling: 过去 5 小时滑窗
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
   dailyResetMode: dailyResetModeEnum('daily_reset_mode')
     .default('fixed')
@@ -157,6 +167,16 @@ export const providerVendors = pgTable('provider_vendors', {
   ),
   providerVendorsCreatedAtIdx: index('idx_provider_vendors_created_at').on(table.createdAt),
 }));
+
+// Provider Groups table
+export const providerGroups = pgTable('provider_groups', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 200 }).notNull().unique(),
+  costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).notNull().default('1.0'),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
 
 // Providers table
 export const providers = pgTable('providers', {
@@ -239,6 +259,9 @@ export const providers = pgTable('providers', {
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limit5hResetMode: dailyResetModeEnum('limit_5h_reset_mode')
+    .default('rolling')
+    .notNull(), // fixed: 首次成功记账后 5 小时整窗, rolling: 过去 5 小时滑窗
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
   dailyResetMode: dailyResetModeEnum('daily_reset_mode')
     .default('fixed')
@@ -442,6 +465,12 @@ export const messageRequest = pgTable('message_request', {
   // 供应商倍率（用于日志展示，记录该请求使用的 cost_multiplier）
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }),
 
+  // 供应商分组倍率（用于日志展示，记录该请求使用的 group_cost_multiplier）
+  groupCostMultiplier: numeric('group_cost_multiplier', { precision: 10, scale: 4 }),
+
+  // 费用明细（记录各组件的基础费用及倍率，用于请求详情展示）
+  costBreakdown: jsonb('cost_breakdown').$type<StoredCostBreakdown>(),
+
   // Session ID（用于会话粘性和日志追踪）
   sessionId: varchar('session_id', { length: 64 }),
 
@@ -462,6 +491,9 @@ export const messageRequest = pgTable('message_request', {
 
   // 模型重定向：原始模型名称（用户请求的模型，用于前端显示和计费）
   originalModel: varchar('original_model', { length: 128 }),
+
+  // 上游响应中实际返回的模型名（audit 用途，不影响计费/配额）
+  actualResponseModel: varchar('actual_response_model', { length: 128 }),
 
   // Token 使用信息
   inputTokens: bigint('input_tokens', { mode: 'number' }),
@@ -494,6 +526,9 @@ export const messageRequest = pgTable('message_request', {
   // User-Agent（用于客户端类型分析）
   userAgent: varchar('user_agent', { length: 512 }),
 
+  // 客户端 IP（IPv4/IPv6，最长 45 字符；由统一 IP 提取中间件写入）
+  clientIp: varchar('client_ip', { length: 45 }),
+
   // Messages 数量（用于短请求检测和分析）
   messagesCount: integer('messages_count'),
 
@@ -511,6 +546,12 @@ export const messageRequest = pgTable('message_request', {
   messageRequestProviderCreatedAtActiveIdx: index('idx_message_request_provider_created_at_active')
     .on(table.providerId, table.createdAt)
     .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
+  // #slow-query: availability 终态聚合热路径（provider + 时间范围 + status_code 已落库）
+  messageRequestProviderCreatedAtFinalizedActiveIdx: index(
+    'idx_message_request_provider_created_at_finalized_active'
+  )
+    .on(table.providerId, table.createdAt.desc())
+    .where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
   // Session ID 前缀查询索引（LIKE 'prefix%'，可稳定命中 B-tree）
@@ -569,6 +610,10 @@ export const messageRequest = pgTable('message_request', {
   messageRequestSessionUserInfoIdx: index('idx_message_request_session_user_info')
     .on(table.sessionId, table.createdAt, table.userId, table.key)
     .where(sql`${table.deletedAt} IS NULL`),
+  // client_ip 按时间倒序索引（用于审计 & IP 维度查询）
+  messageRequestClientIpCreatedAtIdx: index('idx_message_request_client_ip_created_at')
+    .on(table.clientIp, table.createdAt.desc())
+    .where(sql`${table.deletedAt} IS NULL AND ${table.clientIp} IS NOT NULL`),
 }));
 
 // Model Prices table
@@ -704,6 +749,11 @@ export const systemSettings = pgTable('system_settings', {
   // 供应商不可用时是否返回详细错误信息
   verboseProviderError: boolean('verbose_provider_error').notNull().default(false),
 
+  // 标准代理错误响应是否透传安全脱敏后的上游错误 message
+  passThroughUpstreamErrorMessage: boolean('pass_through_upstream_error_message')
+    .notNull()
+    .default(true),
+
   // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
   enableHttp2: boolean('enable_http2').notNull().default(false),
 
@@ -741,6 +791,14 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // 非对话端点跨供应商 fallback（默认开启）
+  // 当前仅允许 /v1/messages/count_tokens 与 /v1/responses/compact 复用决策链跨供应商切换
+  allowNonConversationEndpointProviderFallback: boolean(
+    'allow_non_conversation_endpoint_provider_fallback'
+  )
+    .notNull()
+    .default(true),
+
   // Codex Session ID 补全（默认开启）
   // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean('enable_codex_session_id_completion')
@@ -772,6 +830,16 @@ export const systemSettings = pgTable('system_settings', {
   quotaLeasePercentWeekly: numeric('quota_lease_percent_weekly', { precision: 5, scale: 4 }).default('0.05'),
   quotaLeasePercentMonthly: numeric('quota_lease_percent_monthly', { precision: 5, scale: 4 }).default('0.05'),
   quotaLeaseCapUsd: numeric('quota_lease_cap_usd', { precision: 10, scale: 2 }),
+
+  // 客户端 IP 提取配置（null 表示使用内置默认链：x-real-ip → x-forwarded-for rightmost）
+  ipExtractionConfig: jsonb('ip_extraction_config').$type<IpExtractionConfig>(),
+  // 是否启用 IP 归属地查询（默认开启）
+  ipGeoLookupEnabled: boolean('ip_geo_lookup_enabled').notNull().default(true),
+  // Public Status 全局配置
+  publicStatusWindowHours: integer('public_status_window_hours').notNull().default(24),
+  publicStatusAggregationIntervalMinutes: integer('public_status_aggregation_interval_minutes')
+    .notNull()
+    .default(5),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -898,14 +966,17 @@ export const usageLedger = pgTable('usage_ledger', {
   finalProviderId: integer('final_provider_id').notNull(),
   model: varchar('model', { length: 128 }),
   originalModel: varchar('original_model', { length: 128 }),
+  actualResponseModel: varchar('actual_response_model', { length: 128 }),
   endpoint: varchar('endpoint', { length: 256 }),
   apiType: varchar('api_type', { length: 20 }),
   sessionId: varchar('session_id', { length: 64 }),
   statusCode: integer('status_code'),
   isSuccess: boolean('is_success').notNull().default(false),
+  successRateOutcome: varchar('success_rate_outcome', { length: 16 }),
   blockedBy: varchar('blocked_by', { length: 50 }),
   costUsd: numeric('cost_usd', { precision: 21, scale: 15 }).default('0'),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }),
+  groupCostMultiplier: numeric('group_cost_multiplier', { precision: 10, scale: 4 }),
   inputTokens: bigint('input_tokens', { mode: 'number' }),
   outputTokens: bigint('output_tokens', { mode: 'number' }),
   cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
@@ -917,6 +988,8 @@ export const usageLedger = pgTable('usage_ledger', {
   swapCacheTtlApplied: boolean('swap_cache_ttl_applied').default(false),
   durationMs: integer('duration_ms'),
   ttfbMs: integer('ttfb_ms'),
+  // 客户端 IP（从 message_request 拷贝；永久保留，避免被清理任务删除）
+  clientIp: varchar('client_ip', { length: 45 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 }, (table) => ({
   // UNIQUE on requestId (survives message_request log deletion)
@@ -959,6 +1032,48 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerKeyCreatedAtDescCoverIdx: index('idx_usage_ledger_key_created_at_desc_cover')
     .on(table.key, sql`${table.createdAt} DESC NULLS LAST`, table.finalProviderId)
     .where(sql`${table.blockedBy} IS NULL`),
+}));
+
+// Audit Log table - 面板登录和后台操作审计日志
+export const auditLog = pgTable('audit_log', {
+  id: serial('id').primaryKey(),
+  // 操作分类（auth / user / provider / system_settings / ...）
+  actionCategory: varchar('action_category', { length: 32 }).notNull().$type<AuditCategory>(),
+  // 操作类型（login.success / user.create / provider.update / ...）
+  actionType: varchar('action_type', { length: 64 }).notNull(),
+  // 目标对象信息（可选）
+  targetType: varchar('target_type', { length: 32 }),
+  targetId: varchar('target_id', { length: 64 }),
+  targetName: varchar('target_name', { length: 256 }),
+  // 操作前 / 操作后快照（敏感字段在写入前已脱敏）
+  beforeValue: jsonb('before_value'),
+  afterValue: jsonb('after_value'),
+  // 操作人身份
+  operatorUserId: integer('operator_user_id'),
+  operatorUserName: varchar('operator_user_name', { length: 128 }),
+  operatorKeyId: integer('operator_key_id'),
+  operatorKeyName: varchar('operator_key_name', { length: 128 }),
+  operatorIp: varchar('operator_ip', { length: 45 }),
+  userAgent: varchar('user_agent', { length: 512 }),
+  // 结果
+  success: boolean('success').notNull(),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  auditLogCategoryCreatedAtIdx: index('idx_audit_log_category_created_at')
+    .on(table.actionCategory, table.createdAt.desc()),
+  auditLogOperatorUserCreatedAtIdx: index('idx_audit_log_operator_user_created_at')
+    .on(table.operatorUserId, table.createdAt.desc())
+    .where(sql`${table.operatorUserId} IS NOT NULL`),
+  auditLogOperatorIpCreatedAtIdx: index('idx_audit_log_operator_ip_created_at')
+    .on(table.operatorIp, table.createdAt.desc())
+    .where(sql`${table.operatorIp} IS NOT NULL`),
+  auditLogTargetIdx: index('idx_audit_log_target')
+    .on(table.targetType, table.targetId)
+    .where(sql`${table.targetType} IS NOT NULL`),
+  // keyset 分页热路径
+  auditLogCreatedAtIdIdx: index('idx_audit_log_created_at_id')
+    .on(table.createdAt.desc(), table.id.desc()),
 }));
 
 // Relations

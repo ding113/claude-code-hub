@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import safeRegex from "safe-regex";
 import { getSession } from "@/lib/auth";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { requestFilterEngine } from "@/lib/request-filter-engine";
 import type { FilterMatcher, FilterOperation, InsertOp } from "@/lib/request-filter-types";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import {
   createRequestFilter,
   deleteRequestFilter,
@@ -443,30 +444,32 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
   try {
     const { db } = await import("@/drizzle/db");
     const { providers } = await import("@/drizzle/schema");
-    const { isNull, isNotNull, ne, and } = await import("drizzle-orm");
+    const { isNull } = await import("drizzle-orm");
 
     const result = await db
       .selectDistinct({ groupTag: providers.groupTag })
       .from(providers)
-      .where(
-        and(
-          isNull(providers.deletedAt),
-          and(isNotNull(providers.groupTag), ne(providers.groupTag, ""))
-        )
-      );
+      .where(isNull(providers.deletedAt));
 
-    // Parse comma-separated tags and flatten into unique array
-    const allTags = new Set<string>();
+    // Request-filter 配置面始终暴露 default，支持提前为默认组配置规则。
+    const allTags = new Set<string>([PROVIDER_GROUP.DEFAULT]);
     for (const row of result) {
-      if (row.groupTag) {
-        const tags = parseProviderGroups(row.groupTag);
-        for (const tag of tags) {
-          if (tag) allTags.add(tag);
-        }
+      const tags = resolveProviderGroupsWithDefault(row.groupTag);
+      for (const tag of tags) {
+        if (tag) allTags.add(tag);
       }
     }
 
-    return { ok: true, data: Array.from(allTags).sort() };
+    const sorted = Array.from(allTags).sort((a, b) => {
+      if (a === PROVIDER_GROUP.DEFAULT) return -1;
+      if (b === PROVIDER_GROUP.DEFAULT) return 1;
+      return a.localeCompare(b);
+    });
+
+    return {
+      ok: true,
+      data: sorted,
+    };
   } catch (error) {
     logger.error("[RequestFiltersAction] Failed to get distinct group tags", { error });
     return { ok: false, error: "获取 Group Tags 失败" };

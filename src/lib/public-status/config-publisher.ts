@@ -1,0 +1,171 @@
+import { getRedisClient } from "@/lib/redis";
+import { findLatestPricesByModels } from "@/repository/model-price";
+import { findAllProviderGroups } from "@/repository/provider-groups";
+import { getSystemSettings } from "@/repository/system-config";
+import type { ProviderType } from "@/types/provider";
+import {
+  collectEnabledPublicStatusGroups,
+  getPublicStatusModelKeys,
+  parsePublicStatusDescription,
+} from "./config";
+import {
+  buildInternalPublicStatusConfigSnapshot,
+  buildPublicStatusConfigSnapshot,
+  publishCurrentPublicStatusConfigPointers,
+  publishInternalPublicStatusConfigSnapshot,
+  publishPublicStatusConfigSnapshot,
+  resolvePublicStatusSiteDescription,
+} from "./config-snapshot";
+import { MAX_PUBLIC_STATUS_RANGE_HOURS, PUBLIC_STATUS_INTERVAL_SET } from "./constants";
+import { resolvePublicStatusVendorIconKey } from "./vendor-icon-key";
+
+function resolveRequestTypeBadge(modelName: string, providerTypeOverride?: ProviderType): string {
+  if (providerTypeOverride === "claude" || providerTypeOverride === "claude-auth") {
+    return "anthropic";
+  }
+  if (providerTypeOverride === "codex") {
+    return "codex";
+  }
+  if (providerTypeOverride === "gemini" || providerTypeOverride === "gemini-cli") {
+    return "gemini";
+  }
+  if (providerTypeOverride === "openai-compatible") {
+    return "openaiCompatible";
+  }
+
+  const normalized = modelName.toLowerCase();
+  if (normalized.includes("codex")) {
+    return "codex";
+  }
+  if (normalized.includes("claude")) {
+    return "anthropic";
+  }
+  if (normalized.includes("gemini")) {
+    return "gemini";
+  }
+  return "openaiCompatible";
+}
+
+function normalizePublicInterval(value: number | undefined): number {
+  return value && PUBLIC_STATUS_INTERVAL_SET.has(value) ? value : 5;
+}
+
+function normalizePublicRange(value: number | undefined): number {
+  return value && value >= 1 && value <= MAX_PUBLIC_STATUS_RANGE_HOURS ? value : 24;
+}
+
+export async function publishCurrentPublicStatusConfigProjection(input: {
+  reason: string;
+  configVersion?: string;
+}): Promise<{
+  configVersion: string;
+  key: string;
+  written: boolean;
+  groupCount: number;
+}> {
+  const settings = await getSystemSettings();
+  const providerGroups = await findAllProviderGroups();
+  const enabledGroups = collectEnabledPublicStatusGroups(
+    providerGroups.map((group) => ({
+      groupName: group.name,
+      ...parsePublicStatusDescription(group.description),
+    }))
+  );
+  const latestPrices = await findLatestPricesByModels(
+    enabledGroups.flatMap((group) => getPublicStatusModelKeys(group.publicModels))
+  );
+  const defaultIntervalMinutes = normalizePublicInterval(
+    settings.publicStatusAggregationIntervalMinutes
+  );
+  const defaultRangeHours = normalizePublicRange(settings.publicStatusWindowHours);
+
+  const snapshot = buildPublicStatusConfigSnapshot({
+    configVersion: input.configVersion ?? `cfg-${Date.now()}`,
+    siteTitle: settings.siteTitle,
+    siteDescription: resolvePublicStatusSiteDescription({ siteTitle: settings.siteTitle }),
+    timeZone: settings.timezone,
+    defaultIntervalMinutes,
+    defaultRangeHours,
+    groups: enabledGroups.map((group) => ({
+      slug: group.publicGroupSlug,
+      displayName: group.displayName,
+      sortOrder: group.sortOrder,
+      description: group.explanatoryCopy,
+      models: group.publicModels.map((model) => {
+        const modelName = model.modelKey;
+        const price = latestPrices.get(modelName);
+        return {
+          publicModelKey: modelName,
+          label: price?.priceData.display_name?.trim() || modelName,
+          vendorIconKey: resolvePublicStatusVendorIconKey({
+            modelName,
+            vendorIconKey:
+              typeof price?.priceData.litellm_provider === "string"
+                ? price.priceData.litellm_provider
+                : undefined,
+            providerTypeOverride: model.providerTypeOverride,
+          }),
+          requestTypeBadge: resolveRequestTypeBadge(modelName, model.providerTypeOverride),
+        };
+      }),
+    })),
+  });
+  const internalSnapshot = buildInternalPublicStatusConfigSnapshot({
+    configVersion: snapshot.configVersion,
+    siteTitle: snapshot.siteTitle,
+    siteDescription: snapshot.siteDescription,
+    timeZone: snapshot.timeZone,
+    defaultIntervalMinutes: snapshot.defaultIntervalMinutes,
+    defaultRangeHours: snapshot.defaultRangeHours,
+    groups: enabledGroups.map((group) => ({
+      sourceGroupName: group.groupName,
+      slug: group.publicGroupSlug,
+      displayName: group.displayName,
+      sortOrder: group.sortOrder,
+      description: group.explanatoryCopy,
+      models: group.publicModels.map((model) => {
+        const modelName = model.modelKey;
+        const price = latestPrices.get(modelName);
+        return {
+          publicModelKey: modelName,
+          label: price?.priceData.display_name?.trim() || modelName,
+          vendorIconKey: resolvePublicStatusVendorIconKey({
+            modelName,
+            vendorIconKey:
+              typeof price?.priceData.litellm_provider === "string"
+                ? price.priceData.litellm_provider
+                : undefined,
+            providerTypeOverride: model.providerTypeOverride,
+          }),
+          requestTypeBadge: resolveRequestTypeBadge(modelName, model.providerTypeOverride),
+        };
+      }),
+    })),
+  });
+
+  const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
+  const internalResult = await publishInternalPublicStatusConfigSnapshot({
+    snapshot: internalSnapshot,
+    redis,
+    setCurrentPointer: false,
+  });
+  const result = await publishPublicStatusConfigSnapshot({
+    reason: input.reason,
+    snapshot,
+    redis,
+    setCurrentPointer: false,
+  });
+  const pointersWritten =
+    internalResult.written && result.written
+      ? await publishCurrentPublicStatusConfigPointers({
+          configVersion: snapshot.configVersion,
+          redis,
+        })
+      : false;
+
+  return {
+    ...result,
+    written: result.written && internalResult.written && pointersWritten,
+    groupCount: enabledGroups.length,
+  };
+}

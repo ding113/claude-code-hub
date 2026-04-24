@@ -153,6 +153,7 @@ describe("OpenAPI 端点完整性检查", () => {
       "/api/actions/my-usage/getMyUsageLogsBatch",
       "/api/actions/my-usage/getMyAvailableModels",
       "/api/actions/my-usage/getMyAvailableEndpoints",
+      "/api/actions/my-usage/getMyIpGeoDetails",
     ];
 
     for (const path of expectedPaths) {
@@ -188,6 +189,26 @@ describe("OpenAPI 端点完整性检查", () => {
       expect(openApiDoc.paths[path]).toBeDefined();
       expect(openApiDoc.paths[path].post).toBeDefined();
     }
+  });
+
+  test("issue-947: key/user OpenAPI 契约应注册 5h reset mode 字段", () => {
+    const addKeyRequest =
+      openApiDoc.paths["/api/actions/keys/addKey"]?.post?.requestBody?.content?.["application/json"]
+        ?.schema;
+    const editKeyRequest =
+      openApiDoc.paths["/api/actions/keys/editKey"]?.post?.requestBody?.content?.[
+        "application/json"
+      ]?.schema;
+    const addUserResponse =
+      openApiDoc.paths["/api/actions/users/addUser"]?.post?.responses?.["200"]?.content?.[
+        "application/json"
+      ]?.schema;
+
+    expect(addKeyRequest?.properties?.limit5hResetMode).toBeDefined();
+    expect(editKeyRequest?.properties?.limit5hResetMode).toBeDefined();
+    expect(
+      addUserResponse?.properties?.data?.properties?.user?.properties?.limit5hResetMode
+    ).toBeDefined();
   });
 
   test("敏感词管理模块的所有端点应该被注册", () => {
@@ -293,7 +314,7 @@ describe("OpenAPI 端点完整性检查", () => {
 
     for (const [path, methods] of Object.entries(openApiDoc.paths)) {
       const postOperation = methods.post;
-      if (!postOperation || !postOperation.tags) continue;
+      if (!postOperation?.tags) continue;
 
       // 查找对应的标签
       const expectedTag = Object.entries(moduleTagMapping).find(([prefix]) =>
@@ -308,5 +329,18 @@ describe("OpenAPI 端点完整性检查", () => {
     }
 
     expect(pathsWithWrongTags).toEqual([]);
+  });
+
+  test("公开状态 GET 路径应该被注册且声明无认证", () => {
+    const publicStatusOperation = openApiDoc.paths["/api/public-status"]?.get;
+    const publicSiteMetaOperation = openApiDoc.paths["/api/public-site-meta"]?.get;
+
+    expect(publicStatusOperation).toBeDefined();
+    expect(publicStatusOperation?.tags).toEqual(["公开状态"]);
+    expect(publicStatusOperation?.security).toEqual([]);
+
+    expect(publicSiteMetaOperation).toBeDefined();
+    expect(publicSiteMetaOperation?.tags).toEqual(["公开状态"]);
+    expect(publicSiteMetaOperation?.security).toEqual([]);
   });
 });

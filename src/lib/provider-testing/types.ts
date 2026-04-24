@@ -162,6 +162,8 @@ export interface ProviderTestResult {
   content?: string;
   /** Raw response body for user inspection (truncated to 5000 chars) */
   rawResponse?: string;
+  /** Final request URL used by the last executed attempt */
+  requestUrl?: string;
   /** Token usage (deprecated - kept for backward compatibility) */
   usage?: TokenUsage;
   /** Stream info (deprecated - kept for backward compatibility) */

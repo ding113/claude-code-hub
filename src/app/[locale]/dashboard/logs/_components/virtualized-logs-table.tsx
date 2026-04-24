@@ -5,6 +5,7 @@ import { ArrowUp, GitBranch, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   type MouseEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -13,30 +14,32 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import type { ActionResult } from "@/actions/types";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
+import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
+import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { IpGeoLookupMode } from "@/hooks/use-ip-geo";
 import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
 import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { formatCurrency } from "@/lib/utils/currency";
+import { Decimal, formatCurrency, toDecimal } from "@/lib/utils/currency";
 import {
   calculateOutputRate,
   formatDuration,
-  NON_BILLING_ENDPOINT,
+  isNonBillingEndpoint,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import { shouldShowCostBadgeInCell } from "@/lib/utils/provider-chain-display";
 import { getFinalProviderName } from "@/lib/utils/provider-chain-formatter";
 import { isProviderFinalized } from "@/lib/utils/provider-display";
-import {
-  getPricingResolutionSpecialSetting,
-  hasPriorityServiceTierSpecialSetting,
-} from "@/lib/utils/special-settings";
+import { hasPriorityServiceTierSpecialSetting } from "@/lib/utils/special-settings";
+import type { UsageLogRow, UsageLogsBatchResult } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
@@ -44,6 +47,13 @@ import { ProviderChainPopover } from "./provider-chain-popover";
 
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 52; // Estimated row height in pixels
+
+export type LogsFetchFn = (
+  params: VirtualizedLogsTableFilters & {
+    cursor?: { createdAt: string; id: number };
+    limit: number;
+  }
+) => Promise<ActionResult<UsageLogsBatchResult>>;
 
 export interface VirtualizedLogsTableFilters {
   userId?: number;
@@ -59,6 +69,30 @@ export interface VirtualizedLogsTableFilters {
   minRetryCount?: number;
 }
 
+const STATUS_BADGE_FALLBACK =
+  "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
+
+function getStatusBadgeClassName(statusCode: number | null): string {
+  if (statusCode != null && statusCode >= 200 && statusCode < 300) {
+    return "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700";
+  }
+  if (statusCode != null && statusCode >= 400 && statusCode < 500) {
+    return "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-700";
+  }
+  if (statusCode != null && statusCode >= 500) {
+    return "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700";
+  }
+  return STATUS_BADGE_FALLBACK;
+}
+
+function StatusBadgeOnly({ statusCode }: { statusCode: number | null }) {
+  return (
+    <Badge variant="outline" className={getStatusBadgeClassName(statusCode)}>
+      {statusCode ?? "-"}
+    </Badge>
+  );
+}
+
 interface VirtualizedLogsTableProps {
   filters: VirtualizedLogsTableFilters;
   currencyCode?: CurrencyCode;
@@ -70,6 +104,14 @@ interface VirtualizedLogsTableProps {
   hiddenColumns?: LogsTableColumn[];
   bodyClassName?: string;
   serverTimeZone?: string;
+  /** Custom fetch function (defaults to getUsageLogsBatch) */
+  fetchFn?: LogsFetchFn;
+  /** Custom query key prefix (defaults to "usage-logs-batch") */
+  queryKeyPrefix?: string;
+  /** Disable the detail side-panel dialog on status badge click */
+  disableDetailDialog?: boolean;
+  /** Select which IP lookup authorization model the detail dialog should use */
+  ipLookupMode?: IpGeoLookupMode;
 }
 
 export function VirtualizedLogsTable({
@@ -83,10 +125,12 @@ export function VirtualizedLogsTable({
   hiddenColumns,
   bodyClassName,
   serverTimeZone: _serverTimeZone,
+  fetchFn,
+  queryKeyPrefix = "usage-logs-batch",
+  disableDetailDialog = false,
+  ipLookupMode = "default",
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
-  const getPricingSourceLabel = (source: string) =>
-    t(`logs.billingDetails.pricingSource.${source}`);
   const tChain = useTranslations("provider-chain");
   const [isHistoryBrowsing, setIsHistoryBrowsing] = useState(false);
   const shouldPoll = autoRefreshEnabled && !isHistoryBrowsing;
@@ -95,6 +139,7 @@ export function VirtualizedLogsTable({
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
   const hideKeyColumn = hiddenColumns?.includes("key") ?? false;
   const hideSessionIdColumn = hiddenColumns?.includes("sessionId") ?? false;
+  const hideIpColumn = hiddenColumns?.includes("ip") ?? false;
   const hideTokensColumn = hiddenColumns?.includes("tokens") ?? false;
   const hideCacheColumn = hiddenColumns?.includes("cache") ?? false;
   const hideCostColumn = hiddenColumns?.includes("cost") ?? false;
@@ -107,6 +152,9 @@ export function VirtualizedLogsTable({
     targetTab?: "summary" | "logic-trace" | "performance";
     expandedChainIndex?: number;
   }>({ logId: null, scrollToRedirect: false });
+
+  const [ipDialogOpen, setIpDialogOpen] = useState(false);
+  const [ipDialogValue, setIpDialogValue] = useState<string | null>(null);
 
   const handleCopySessionIdClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
@@ -123,9 +171,10 @@ export function VirtualizedLogsTable({
   // Infinite query with cursor-based pagination
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error } =
     useInfiniteQuery({
-      queryKey: ["usage-logs-batch", filters],
+      queryKey: [queryKeyPrefix, filters],
       queryFn: async ({ pageParam }) => {
-        const result = await getUsageLogsBatch({
+        const fetcher = fetchFn ?? getUsageLogsBatch;
+        const result = await fetcher({
           ...filters,
           cursor: pageParam,
           limit: BATCH_SIZE,
@@ -210,6 +259,296 @@ export function VirtualizedLogsTable({
     return <div className="text-center py-8 text-muted-foreground">{t("logs.table.noData")}</div>;
   }
 
+  const renderCostTooltip = (log: UsageLogRow) => {
+    const title = t("logs.details.billingDetails.title");
+    const totalCostLabel = t("logs.billingDetails.totalCost");
+    const amountClassName = "font-mono tabular-nums text-right";
+    const headerChip = log.context1mApplied ? (
+      <Badge
+        variant="outline"
+        className="shrink-0 text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+      >
+        {t("logs.billingDetails.context1m")}
+      </Badge>
+    ) : null;
+
+    const resolveCacheCreationRows = () => {
+      const breakdown = log.costBreakdown;
+      if (!breakdown) {
+        return [] as Array<{
+          amount: string;
+          tokens: number | null | undefined;
+          ttl?: "5m" | "1h";
+        }>;
+      }
+
+      const tokens5m = log.cacheCreation5mInputTokens ?? 0;
+      const tokens1h = log.cacheCreation1hInputTokens ?? 0;
+      const totalCacheTokens = log.cacheCreationInputTokens;
+      const has5m = breakdown.cache_creation_5m !== undefined;
+      const has1h = breakdown.cache_creation_1h !== undefined;
+      if (has5m || has1h) {
+        return [
+          {
+            amount: breakdown.cache_creation_5m ?? "0",
+            tokens: tokens5m > 0 ? tokens5m : log.cacheTtlApplied !== "1h" ? totalCacheTokens : 0,
+            ttl: "5m" as const,
+          },
+          {
+            amount: breakdown.cache_creation_1h ?? "0",
+            tokens: tokens1h > 0 ? tokens1h : log.cacheTtlApplied === "1h" ? totalCacheTokens : 0,
+            ttl: "1h" as const,
+          },
+        ];
+      }
+
+      const aggregate = toDecimal(breakdown.cache_creation);
+      if (!aggregate || aggregate.lte(0)) {
+        return [];
+      }
+
+      if (log.cacheTtlApplied === "mixed" && tokens5m + tokens1h > 0) {
+        const totalTokens = new Decimal(tokens5m + tokens1h);
+        const fiveMShare = aggregate.mul(tokens5m).div(totalTokens);
+        return [
+          {
+            amount: fiveMShare.toString(),
+            tokens: tokens5m,
+            ttl: "5m" as const,
+          },
+          {
+            amount: aggregate.minus(fiveMShare).toString(),
+            tokens: tokens1h,
+            ttl: "1h" as const,
+          },
+        ];
+      }
+
+      if (log.cacheTtlApplied === "1h") {
+        return [
+          {
+            amount: aggregate.toString(),
+            tokens: tokens1h > 0 ? tokens1h : totalCacheTokens,
+            ttl: "1h" as const,
+          },
+        ];
+      }
+
+      if (log.cacheTtlApplied === "5m") {
+        return [
+          {
+            amount: aggregate.toString(),
+            tokens: tokens5m > 0 ? tokens5m : totalCacheTokens,
+            ttl: "5m" as const,
+          },
+        ];
+      }
+
+      return [
+        {
+          amount: aggregate.toString(),
+          tokens: totalCacheTokens,
+        },
+      ];
+    };
+
+    const createCostRow = (
+      label: string,
+      amount: string | null | undefined,
+      tokens: number | null | undefined,
+      ttl?: "5m" | "1h"
+    ) => {
+      const parsedAmount = toDecimal(amount);
+      if (!parsedAmount || parsedAmount.lte(0)) return null;
+
+      const tokenCount = tokens ?? 0;
+      const unitPrice = tokenCount > 0 ? parsedAmount.mul(1_000_000).div(tokenCount) : null;
+
+      return {
+        key: `${label}-${ttl ?? "default"}`,
+        label,
+        ttl,
+        unitPrice: unitPrice
+          ? t("logs.billingDetails.unitPricePer1M", {
+              price: formatCurrency(unitPrice, currencyCode, 2),
+            })
+          : null,
+        amount: formatCurrency(parsedAmount, currencyCode, 6),
+      };
+    };
+
+    const renderTtlChip = (ttl: "5m" | "1h") => (
+      <Badge
+        variant="outline"
+        className="px-1 text-[10px] leading-tight text-background/80 border-background/30"
+      >
+        {ttl}
+      </Badge>
+    );
+
+    const renderValueBlock = ({
+      primary,
+      secondary,
+      emphasize = false,
+      secondaryClassName,
+    }: {
+      primary: string;
+      secondary?: ReactNode;
+      emphasize?: boolean;
+      secondaryClassName?: string;
+    }) => (
+      <div className={cn("flex flex-col items-end", amountClassName)}>
+        {secondary ? (
+          <span className={cn("text-[11px] text-background/70", secondaryClassName)}>
+            {secondary}
+          </span>
+        ) : null}
+        <span className={cn(emphasize ? "text-sm font-semibold text-emerald-300" : "")}>
+          {primary}
+        </span>
+      </div>
+    );
+
+    const renderSummaryRow = ({
+      label,
+      primary,
+      secondary,
+      emphasize = false,
+      className,
+      secondaryClassName,
+    }: {
+      label: string;
+      primary: string;
+      secondary?: ReactNode;
+      emphasize?: boolean;
+      className?: string;
+      secondaryClassName?: string;
+    }) => (
+      <div className={cn("flex items-start justify-between gap-3", className)}>
+        <span className="text-[11px] font-medium text-background/70">{label}</span>
+        {renderValueBlock({ primary, secondary, emphasize, secondaryClassName })}
+      </div>
+    );
+
+    const isActiveMultiplier = (value: number) =>
+      Number.isFinite(value) && value > 0 && value !== 1;
+
+    if (!log.costBreakdown) {
+      return (
+        <TooltipContent align="end" className="max-w-[320px] p-3">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-background">{title}</span>
+              {headerChip}
+            </div>
+            <div className="border-t border-background/20 pt-2">
+              {renderSummaryRow({
+                label: totalCostLabel,
+                primary: formatCurrency(log.costUsd, currencyCode, 6),
+                emphasize: true,
+              })}
+            </div>
+          </div>
+        </TooltipContent>
+      );
+    }
+
+    const cacheCreationRows = resolveCacheCreationRows();
+    const costRows = [
+      createCostRow(t("logs.billingDetails.input"), log.costBreakdown.input, log.inputTokens),
+      createCostRow(t("logs.billingDetails.output"), log.costBreakdown.output, log.outputTokens),
+      ...cacheCreationRows.map((row) =>
+        createCostRow(t("logs.columns.cacheWrite"), row.amount, row.tokens, row.ttl)
+      ),
+      createCostRow(
+        t("logs.billingDetails.cacheRead"),
+        log.costBreakdown.cache_read,
+        log.cacheReadInputTokens
+      ),
+    ].filter((row): row is NonNullable<typeof row> => row !== null);
+
+    const activeMultiplierRows = [
+      isActiveMultiplier(log.costBreakdown.provider_multiplier)
+        ? {
+            key: "provider",
+            label: t("logs.billingDetails.providerMultiplier"),
+            value: `${log.costBreakdown.provider_multiplier.toFixed(2)}x`,
+          }
+        : null,
+      isActiveMultiplier(log.costBreakdown.group_multiplier)
+        ? {
+            key: "group",
+            label: t("logs.billingDetails.groupMultiplier"),
+            value: `${log.costBreakdown.group_multiplier.toFixed(2)}x`,
+          }
+        : null,
+    ].filter((row): row is NonNullable<typeof row> => row !== null);
+
+    const hasActiveMultipliers = activeMultiplierRows.length > 0;
+    const baseTotal = formatCurrency(log.costBreakdown.base_total, currencyCode, 6);
+    const finalTotal = formatCurrency(log.costBreakdown.total, currencyCode, 6);
+
+    return (
+      <TooltipContent align="end" className="max-w-[320px] p-3">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-background">{title}</span>
+            {headerChip}
+          </div>
+
+          {costRows.length > 0 ? (
+            <div className="space-y-2">
+              {costRows.map((row) => (
+                <div key={row.key} className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-background/70">
+                    <span>{row.label}</span>
+                    {row.ttl ? renderTtlChip(row.ttl) : null}
+                  </div>
+                  {renderValueBlock({ primary: row.amount, secondary: row.unitPrice })}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {hasActiveMultipliers ? (
+            <>
+              {renderSummaryRow({
+                label: t("logs.billingDetails.baseTotal"),
+                primary: baseTotal,
+                className: costRows.length > 0 ? "border-t border-background/20 pt-2" : undefined,
+              })}
+
+              <div className="space-y-2 rounded-md border border-background/20 bg-background/10 p-2">
+                {activeMultiplierRows.map((row) => (
+                  <div key={row.key} className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-background/70">{row.label}</span>
+                    <span className={cn(amountClassName, "text-[11px]")}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {renderSummaryRow({
+                label: totalCostLabel,
+                primary: finalTotal,
+                secondary: baseTotal,
+                secondaryClassName: "line-through",
+                emphasize: true,
+                className: "border-t border-background/20 pt-2",
+              })}
+            </>
+          ) : (
+            renderSummaryRow({
+              label: totalCostLabel,
+              primary: finalTotal,
+              emphasize: true,
+              className: costRows.length > 0 ? "border-t border-background/20 pt-2" : undefined,
+            })
+          )}
+        </div>
+      </TooltipContent>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Status bar */}
@@ -257,6 +596,14 @@ export function VirtualizedLogsTable({
                   title={t("logs.columns.sessionId")}
                 >
                   {t("logs.columns.sessionId")}
+                </div>
+              )}
+              {hideIpColumn ? null : (
+                <div
+                  className="flex-[0.8] min-w-[90px] px-1.5 truncate"
+                  title={t("logs.columns.ip")}
+                >
+                  {t("logs.columns.ip")}
                 </div>
               )}
               {hideProviderColumn ? null : (
@@ -350,10 +697,8 @@ export function VirtualizedLogsTable({
                   );
                 }
 
-                const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+                const isNonBilling = isNonBillingEndpoint(log.endpoint);
                 const _isWarmupSkipped = log.blockedBy === "warmup";
-                const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
-
                 return (
                   <div
                     key={log.id}
@@ -421,6 +766,19 @@ export function VirtualizedLogsTable({
                         ) : (
                           <span className="font-mono text-xs text-muted-foreground">-</span>
                         )}
+                      </div>
+                    )}
+
+                    {/* IP */}
+                    {hideIpColumn ? null : (
+                      <div className="flex-[0.8] min-w-[90px] px-1.5 overflow-hidden">
+                        <IpDisplayTrigger
+                          ip={log.clientIp}
+                          onClick={() => {
+                            setIpDialogValue(log.clientIp as string);
+                            setIpDialogOpen(true);
+                          }}
+                        />
                       </div>
                     )}
 
@@ -543,9 +901,13 @@ export function VirtualizedLogsTable({
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
+                                actualResponseModel={log.actualResponseModel}
                                 billingModelSource={billingModelSource}
-                                onRedirectClick={() =>
-                                  setDialogState({ logId: log.id, scrollToRedirect: true })
+                                onRedirectClick={
+                                  disableDetailDialog
+                                    ? undefined
+                                    : () =>
+                                        setDialogState({ logId: log.id, scrollToRedirect: true })
                                 }
                               />
                             </div>
@@ -683,40 +1045,7 @@ export function VirtualizedLogsTable({
                                   )}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent
-                                align="end"
-                                className="text-xs space-y-1 max-w-[300px]"
-                              >
-                                {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
-                                  <div className="text-orange-600 dark:text-orange-400 font-medium">
-                                    {t("logs.billingDetails.fastPriority")}
-                                  </div>
-                                )}
-                                {log.context1mApplied && (
-                                  <div className="text-purple-600 dark:text-purple-400 font-medium">
-                                    {t("logs.billingDetails.context1m")}
-                                  </div>
-                                )}
-                                {pricingResolution && (
-                                  <>
-                                    <div>
-                                      {t("logs.billingDetails.pricingProvider")}:{" "}
-                                      <span className="font-mono">
-                                        {pricingResolution.resolvedPricingProviderKey}
-                                      </span>
-                                    </div>
-                                    <div>{getPricingSourceLabel(pricingResolution.source)}</div>
-                                  </>
-                                )}
-                                <div>
-                                  {t("logs.billingDetails.input")}:{" "}
-                                  {formatTokenAmount(log.inputTokens)} tokens
-                                </div>
-                                <div>
-                                  {t("logs.billingDetails.output")}:{" "}
-                                  {formatTokenAmount(log.outputTokens)} tokens
-                                </div>
-                              </TooltipContent>
+                              {renderCostTooltip(log)}
                             </Tooltip>
                           </TooltipProvider>
                         ) : (
@@ -787,48 +1116,58 @@ export function VirtualizedLogsTable({
 
                     {/* Status */}
                     <div className="flex-[0.7] min-w-[70px] pr-3">
-                      <ErrorDetailsDialog
-                        statusCode={log.statusCode}
-                        errorMessage={log.errorMessage}
-                        providerChain={log.providerChain}
-                        sessionId={log.sessionId}
-                        requestSequence={log.requestSequence}
-                        blockedBy={log.blockedBy}
-                        blockedReason={log.blockedReason}
-                        originalModel={log.originalModel}
-                        currentModel={log.model}
-                        userAgent={log.userAgent}
-                        messagesCount={log.messagesCount}
-                        endpoint={log.endpoint}
-                        billingModelSource={billingModelSource}
-                        specialSettings={log.specialSettings}
-                        inputTokens={log.inputTokens}
-                        outputTokens={log.outputTokens}
-                        cacheCreationInputTokens={log.cacheCreationInputTokens}
-                        cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
-                        cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
-                        cacheReadInputTokens={log.cacheReadInputTokens}
-                        cacheTtlApplied={log.cacheTtlApplied}
-                        swapCacheTtlApplied={log.swapCacheTtlApplied}
-                        costUsd={log.costUsd}
-                        costMultiplier={log.costMultiplier}
-                        context1mApplied={log.context1mApplied}
-                        durationMs={log.durationMs}
-                        ttfbMs={log.ttfbMs}
-                        externalOpen={dialogState.logId === log.id ? true : undefined}
-                        onExternalOpenChange={(open) => {
-                          if (!open) setDialogState({ logId: null, scrollToRedirect: false });
-                        }}
-                        scrollToRedirect={
-                          dialogState.logId === log.id && dialogState.scrollToRedirect
-                        }
-                        initialTab={
-                          dialogState.logId === log.id ? dialogState.targetTab : undefined
-                        }
-                        initialExpandedChainIndex={
-                          dialogState.logId === log.id ? dialogState.expandedChainIndex : undefined
-                        }
-                      />
+                      {disableDetailDialog ? (
+                        <StatusBadgeOnly statusCode={log.statusCode} />
+                      ) : (
+                        <ErrorDetailsDialog
+                          statusCode={log.statusCode}
+                          errorMessage={log.errorMessage}
+                          providerChain={log.providerChain}
+                          sessionId={log.sessionId}
+                          requestSequence={log.requestSequence}
+                          blockedBy={log.blockedBy}
+                          blockedReason={log.blockedReason}
+                          originalModel={log.originalModel}
+                          currentModel={log.model}
+                          actualResponseModel={log.actualResponseModel}
+                          userAgent={log.userAgent}
+                          clientIp={log.clientIp}
+                          messagesCount={log.messagesCount}
+                          endpoint={log.endpoint}
+                          billingModelSource={billingModelSource}
+                          specialSettings={log.specialSettings}
+                          inputTokens={log.inputTokens}
+                          outputTokens={log.outputTokens}
+                          cacheCreationInputTokens={log.cacheCreationInputTokens}
+                          cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
+                          cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
+                          cacheReadInputTokens={log.cacheReadInputTokens}
+                          cacheTtlApplied={log.cacheTtlApplied}
+                          swapCacheTtlApplied={log.swapCacheTtlApplied}
+                          costUsd={log.costUsd}
+                          costMultiplier={log.costMultiplier}
+                          groupCostMultiplier={log.groupCostMultiplier}
+                          costBreakdown={log.costBreakdown}
+                          context1mApplied={log.context1mApplied}
+                          durationMs={log.durationMs}
+                          ttfbMs={log.ttfbMs}
+                          externalOpen={dialogState.logId === log.id ? true : undefined}
+                          onExternalOpenChange={(open) => {
+                            if (!open) setDialogState({ logId: null, scrollToRedirect: false });
+                          }}
+                          scrollToRedirect={
+                            dialogState.logId === log.id && dialogState.scrollToRedirect
+                          }
+                          initialTab={
+                            dialogState.logId === log.id ? dialogState.targetTab : undefined
+                          }
+                          initialExpandedChainIndex={
+                            dialogState.logId === log.id
+                              ? dialogState.expandedChainIndex
+                              : undefined
+                          }
+                        />
+                      )}
                     </div>
                   </div>
                 );
@@ -850,6 +1189,13 @@ export function VirtualizedLogsTable({
           {t("logs.table.scrollToTop")}
         </Button>
       ) : null}
+
+      <IpDetailsDialog
+        ip={ipDialogValue}
+        open={ipDialogOpen}
+        onOpenChange={setIpDialogOpen}
+        lookupMode={ipLookupMode}
+      />
     </div>
   );
 }

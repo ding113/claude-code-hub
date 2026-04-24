@@ -5,7 +5,6 @@ import { logger } from "@/lib/logger";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
-import type { LeaseWindowType } from "@/lib/rate-limit/lease";
 import { deleteLiveChain } from "@/lib/redis/live-chain-store";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -19,7 +18,10 @@ import {
   calculateRequestCost,
   calculateRequestCostBreakdown,
   matchLongContextPricing,
+  sanitizeMultiplier,
 } from "@/lib/utils/cost-calculation";
+import { COST_SCALE, Decimal } from "@/lib/utils/currency";
+import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 import {
@@ -27,15 +29,17 @@ import {
   inferUpstreamErrorStatusCodeFromText,
 } from "@/lib/utils/upstream-error-detection";
 import {
-  updateMessageRequestCost,
+  updateMessageRequestCostWithBreakdown,
   updateMessageRequestDetails,
   updateMessageRequestDuration,
 } from "@/repository/message";
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { Provider } from "@/types/provider";
 import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
+import { extractActualResponseModelForProvider } from "./actual-response-model";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
@@ -54,6 +58,44 @@ function releaseSessionAgent(session: ProxySession): void {
     }
     s.releaseAgent = undefined;
   }
+}
+
+function takeBeforeResponseBodySnapshotSource(session: ProxySession): Response | null {
+  const snapshotSession = session as ProxySession & {
+    detailSnapshotResponseBeforeSource?: Response | null;
+  };
+  const source = snapshotSession.detailSnapshotResponseBeforeSource;
+  snapshotSession.detailSnapshotResponseBeforeSource = null;
+  return source ?? null;
+}
+
+async function consumeBeforeResponseBodySnapshot(session: ProxySession): Promise<string | null> {
+  const source = takeBeforeResponseBodySnapshotSource(session);
+  if (!source) return null;
+
+  try {
+    return await source.text();
+  } catch (error) {
+    logger.warn("[ResponseHandler] Failed to read before-response snapshot body", {
+      sessionId: session.sessionId ?? null,
+      requestSequence: session.requestSequence ?? null,
+      error,
+    });
+    return null;
+  }
+}
+
+function discardBeforeResponseBodySnapshot(session: ProxySession): void {
+  const source = takeBeforeResponseBodySnapshotSource(session);
+  if (!source?.body) return;
+
+  void source.body.cancel().catch((error) => {
+    logger.warn("[ResponseHandler] Failed to discard before-response snapshot body", {
+      sessionId: session.sessionId ?? null,
+      requestSequence: session.requestSequence ?? null,
+      error,
+    });
+  });
 }
 
 export type UsageMetrics = {
@@ -352,14 +394,20 @@ function buildCostCalculationOptions(
   costMultiplier: number,
   context1mApplied: boolean,
   priorityServiceTierApplied: boolean,
-  longContextPricing: ResolvedLongContextPricing | null
+  longContextPricing: ResolvedLongContextPricing | null,
+  groupCostMultiplier: number = 1
 ): RequestCostCalculationOptions {
   return {
     multiplier: costMultiplier,
+    groupMultiplier: groupCostMultiplier,
     context1mApplied,
     priorityServiceTierApplied,
     longContextPricing,
   };
+}
+
+function isNonBillingUsageEndpoint(session: ProxySession): boolean {
+  return isNonBillingEndpoint(session.getEndpoint());
 }
 
 type FinalizeDeferredStreamingResult = {
@@ -687,7 +735,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
         meta.providerId,
         meta.providerPriority,
         meta.isFirstAttempt,
-        meta.isFailoverSuccess
+        meta.isFailoverSuccess,
+        session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
       );
 
       if (result.updated) {
@@ -750,6 +799,13 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
 export class ProxyResponseHandler {
   static async dispatch(session: ProxySession, response: Response): Promise<Response> {
+    const snapshotSession = session as ProxySession & {
+      detailSnapshotResponseBeforeSource?: Response | null;
+    };
+    if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+      snapshotSession.detailSnapshotResponseBeforeSource = response.clone();
+    }
+
     let fixedResponse = response;
     if (!session.getEndpointPolicy().bypassResponseRectifier) {
       try {
@@ -785,6 +841,7 @@ export class ProxyResponseHandler {
     const messageContext = session.messageContext;
     const provider = session.provider;
     if (!provider) {
+      discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
       return response;
     }
@@ -793,6 +850,29 @@ export class ProxyResponseHandler {
     const statusCode = response.status;
 
     let finalResponse = response;
+    const persistNonStreamAfterSnapshot = async (targetResponse: Response) => {
+      if (!session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
+        return;
+      }
+
+      const finalBody = await targetResponse.clone().text();
+      const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+        session.sessionId,
+        "after",
+        {
+          body: finalBody,
+          headers: targetResponse.headers,
+          meta: {
+            upstreamUrl: null,
+            statusCode: targetResponse.status,
+          },
+        },
+        session.requestSequence
+      );
+      responseAfterSnapshotTask?.catch((err) => {
+        logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+      });
+    };
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
@@ -830,12 +910,33 @@ export class ProxyResponseHandler {
 
             // 存储响应体到 Redis（5分钟过期）
             if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+              const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? responseText;
               void SessionManager.storeSessionResponse(
                 session.sessionId,
                 responseText,
                 session.requestSequence
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to store response:", err);
+              });
+
+              const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+                session.sessionId,
+                "before",
+                { body: beforeBody },
+                session.requestSequence
+              );
+              responseBeforeSnapshotTask?.catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+              });
+
+              const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+                session.sessionId,
+                "after",
+                { body: responseText },
+                session.requestSequence
+              );
+              responseAfterSnapshotTask?.catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
               });
             }
 
@@ -877,7 +978,9 @@ export class ProxyResponseHandler {
               responseText,
               statusCode,
               duration,
-              errorMessageForFinalize
+              errorMessageForFinalize,
+              undefined,
+              false // Gemini 非流式透传
             );
 
             emitLangfuseTrace(session, {
@@ -891,6 +994,9 @@ export class ProxyResponseHandler {
               errorMessage: errorMessageForFinalize,
             });
           } catch (error) {
+            if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+              await discardBeforeResponseBodySnapshot(session);
+            }
             if (!isClientAbortError(error as Error)) {
               logger.error(
                 "[ResponseHandler] Gemini non-stream passthrough stats task failed:",
@@ -905,11 +1011,32 @@ export class ProxyResponseHandler {
 
         AsyncTaskManager.register(taskId, statsPromise, "non-stream-passthrough-stats");
         statsPromise.catch((error) => {
+          if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+            void discardBeforeResponseBodySnapshot(session);
+          }
           logger.error(
             "[ResponseHandler] Gemini non-stream passthrough stats task uncaught error:",
             error
           );
         });
+
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          const responseAfterMetaTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "after",
+            {
+              headers: response.headers,
+              meta: {
+                upstreamUrl: null,
+                statusCode: response.status,
+              },
+            },
+            session.requestSequence
+          );
+          responseAfterMetaTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store non-stream response after meta:", err);
+          });
+        }
 
         return response;
       } else {
@@ -1024,7 +1151,9 @@ export class ProxyResponseHandler {
           session,
           actualServiceTier
         );
-        ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        if (!isNonBillingUsageEndpoint(session)) {
+          ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        }
         const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
 
         if (usageMetrics) {
@@ -1035,7 +1164,15 @@ export class ProxyResponseHandler {
           );
         }
 
-        maybeSetCodexContext1m(session, provider, usageMetrics?.input_tokens);
+        // 关键：必须在 normalizeUsageWithSwap 之后再快照 billable 视图，
+        // 否则 updateRequestCostFromUsage / trackCostToRedis 会用未归一化的旧值，
+        // 导致缓存 TTL swap、bucket 归一化等场景下的账单与限流统计错位。
+        const billableUsageMetrics =
+          usageMetrics && !isNonBillingUsageEndpoint(session) ? usageMetrics : null;
+
+        if (billableUsageMetrics) {
+          maybeSetCodexContext1m(session, provider, billableUsageMetrics.input_tokens);
+        }
 
         // Codex: Extract prompt_cache_key and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
@@ -1046,7 +1183,8 @@ export class ProxyResponseHandler {
               void SessionManager.updateSessionWithCodexCacheKey(
                 session.sessionId,
                 promptCacheKey,
-                provider.id
+                provider.id,
+                session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to update Codex session:", err);
               });
@@ -1058,6 +1196,7 @@ export class ProxyResponseHandler {
 
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? responseText;
           void SessionManager.storeSessionResponse(
             session.sessionId,
             responseText,
@@ -1065,17 +1204,28 @@ export class ProxyResponseHandler {
           ).catch((err) => {
             logger.error("[ResponseHandler] Failed to store response:", err);
           });
+
+          const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "before",
+            { body: beforeBody },
+            session.requestSequence
+          );
+          responseBeforeSnapshotTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+          });
         }
 
-        if (usageRecord && usageMetrics && messageContext) {
+        if (usageRecord && billableUsageMetrics && messageContext) {
           const costUpdateResult = await updateRequestCostFromUsage(
             messageContext.id,
             session,
-            usageMetrics,
+            billableUsageMetrics,
             provider,
             provider.costMultiplier,
             session.getContext1mApplied(),
-            priorityServiceTierApplied
+            priorityServiceTierApplied,
+            session.getGroupCostMultiplier()
           );
           if (costUpdateResult.longContextPricingApplied) {
             ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -1084,7 +1234,7 @@ export class ProxyResponseHandler {
           // 追踪消费到 Redis（用于限流）
           await trackCostToRedis(
             session,
-            usageMetrics,
+            billableUsageMetrics,
             priorityServiceTierApplied,
             costUpdateResult.resolvedPricing,
             costUpdateResult.longContextPricing
@@ -1095,31 +1245,33 @@ export class ProxyResponseHandler {
         let costUsdStr: string | undefined;
         let rawCostUsdStr: string | undefined;
         let costBreakdown: CostBreakdown | undefined;
-        if (usageMetrics) {
+        if (billableUsageMetrics) {
           try {
             if (session.request.model) {
               const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
               if (resolvedPricing) {
                 ensurePricingResolutionSpecialSetting(session, resolvedPricing);
                 const longContextPricing =
-                  matchLongContextPricing(usageMetrics, resolvedPricing.priceData)?.pricing ?? null;
+                  matchLongContextPricing(billableUsageMetrics, resolvedPricing.priceData)
+                    ?.pricing ?? null;
                 const cost = calculateRequestCost(
-                  usageMetrics,
+                  billableUsageMetrics,
                   resolvedPricing.priceData,
                   buildCostCalculationOptions(
                     provider.costMultiplier,
                     session.getContext1mApplied(),
                     priorityServiceTierApplied,
-                    longContextPricing
+                    longContextPricing,
+                    session.getGroupCostMultiplier()
                   )
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
                 }
                 // Raw cost without multiplier for Langfuse
-                if (provider.costMultiplier !== 1) {
+                if (provider.costMultiplier !== 1 || session.getGroupCostMultiplier() !== 1) {
                   const rawCost = calculateRequestCost(
-                    usageMetrics,
+                    billableUsageMetrics,
                     resolvedPricing.priceData,
                     buildCostCalculationOptions(
                       1.0,
@@ -1137,7 +1289,7 @@ export class ProxyResponseHandler {
                 // Cost breakdown for Langfuse (raw, no multiplier)
                 try {
                   costBreakdown = calculateRequestCostBreakdown(
-                    usageMetrics,
+                    billableUsageMetrics,
                     resolvedPricing.priceData,
                     {
                       context1mApplied: session.getContext1mApplied(),
@@ -1216,6 +1368,11 @@ export class ProxyResponseHandler {
             cacheTtlApplied: usageMetrics?.cache_ttl ?? null,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+            actualResponseModel: extractActualResponseModelForProvider(
+              provider.providerType,
+              false,
+              responseText
+            ),
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
             swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
@@ -1245,6 +1402,9 @@ export class ProxyResponseHandler {
           isStreaming: false,
         });
       } catch (error) {
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          await discardBeforeResponseBodySnapshot(session);
+        }
         // 检测 AbortError 的来源：响应超时 vs 客户端中断
         const err = error as Error;
         if (isClientAbortError(err)) {
@@ -1374,6 +1534,9 @@ export class ProxyResponseHandler {
       });
     }
 
+    void persistNonStreamAfterSnapshot(finalResponse).catch((error) => {
+      logger.error("[ResponseHandler] Failed to persist non-stream after snapshot", { error });
+    });
     return finalResponse;
   }
 
@@ -1382,6 +1545,7 @@ export class ProxyResponseHandler {
     const provider = session.provider;
 
     if (!messageContext || !provider || !response.body) {
+      discardBeforeResponseBodySnapshot(session);
       releaseSessionAgent(session);
       return response;
     }
@@ -1672,6 +1836,26 @@ export class ProxyResponseHandler {
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to store stream passthrough response:", err);
               });
+
+              const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+                session.sessionId,
+                "before",
+                { body: allContent },
+                session.requestSequence
+              );
+              responseBeforeSnapshotTask?.catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
+              });
+
+              const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+                session.sessionId,
+                "after",
+                { body: allContent },
+                session.requestSequence
+              );
+              responseAfterSnapshotTask?.catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+              });
             } else if (session.sessionId && wasTruncated) {
               logger.warn("[ResponseHandler] Skip storing passthrough response: body too large", {
                 taskId,
@@ -1697,7 +1881,8 @@ export class ProxyResponseHandler {
               finalized.effectiveStatusCode,
               duration,
               finalized.errorMessage ?? undefined,
-              finalized.providerIdForPersistence ?? undefined
+              finalized.providerIdForPersistence ?? undefined,
+              true // Gemini 流式透传(NDJSON 无 data:/event: 前缀,必须显式告知)
             );
 
             emitLangfuseTrace(session, {
@@ -1761,7 +1946,8 @@ export class ProxyResponseHandler {
                 finalized.effectiveStatusCode,
                 duration,
                 finalized.errorMessage ?? abortReason,
-                finalized.providerIdForPersistence ?? undefined
+                finalized.providerIdForPersistence ?? undefined,
+                true // 流式透传错误兜底也是流式上下文
               );
             } catch (finalizeError) {
               await persistRequestFailure({
@@ -1842,9 +2028,31 @@ export class ProxyResponseHandler {
 
         AsyncTaskManager.register(taskId, statsPromise, "stream-passthrough-stats");
         statsPromise.catch((error) => {
+          if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+            void discardBeforeResponseBodySnapshot(session);
+          }
           logger.error("[ResponseHandler] Gemini passthrough stats task uncaught error:", error);
         });
 
+        if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          const responseAfterMetaTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "after",
+            {
+              headers: response.headers,
+              meta: {
+                upstreamUrl: null,
+                statusCode: response.status,
+              },
+            },
+            session.requestSequence
+          );
+          responseAfterMetaTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store stream response after meta:", err);
+          });
+        }
+
+        discardBeforeResponseBodySnapshot(session);
         return response;
       } else {
         // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
@@ -2024,12 +2232,33 @@ export class ProxyResponseHandler {
 
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+          const beforeBody = (await consumeBeforeResponseBodySnapshot(session)) ?? allContent;
           void SessionManager.storeSessionResponse(
             session.sessionId,
             allContent,
             session.requestSequence
           ).catch((err) => {
             logger.error("[ResponseHandler] Failed to store response:", err);
+          });
+
+          const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "after",
+            { body: allContent },
+            session.requestSequence
+          );
+          responseAfterSnapshotTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store response after snapshot:", err);
+          });
+
+          const responseBeforeSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+            session.sessionId,
+            "before",
+            { body: beforeBody },
+            session.requestSequence
+          );
+          responseBeforeSnapshotTask?.catch((err) => {
+            logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
           });
         }
 
@@ -2047,7 +2276,9 @@ export class ProxyResponseHandler {
           session,
           actualServiceTier
         );
-        ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        if (!isNonBillingUsageEndpoint(session)) {
+          ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        }
         const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
 
         if (usageForCost) {
@@ -2073,7 +2304,8 @@ export class ProxyResponseHandler {
                   void SessionManager.updateSessionWithCodexCacheKey(
                     session.sessionId,
                     promptCacheKey,
-                    provider.id
+                    provider.id,
+                    session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
                   ).catch((err) => {
                     logger.error("[ResponseHandler] Failed to update Codex session (stream):", err);
                   });
@@ -2086,14 +2318,18 @@ export class ProxyResponseHandler {
           }
         }
 
+        const billableUsageForCost =
+          usageForCost && !isNonBillingUsageEndpoint(session) ? usageForCost : null;
+
         const costUpdateResult = await updateRequestCostFromUsage(
           messageContext.id,
           session,
-          usageForCost,
+          billableUsageForCost,
           provider,
           provider.costMultiplier,
           session.getContext1mApplied(),
-          priorityServiceTierApplied
+          priorityServiceTierApplied,
+          session.getGroupCostMultiplier()
         );
         if (costUpdateResult.longContextPricingApplied) {
           ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -2102,7 +2338,7 @@ export class ProxyResponseHandler {
         // 追踪消费到 Redis（用于限流）
         await trackCostToRedis(
           session,
-          usageForCost,
+          billableUsageForCost,
           priorityServiceTierApplied,
           costUpdateResult.resolvedPricing,
           costUpdateResult.longContextPricing
@@ -2112,31 +2348,33 @@ export class ProxyResponseHandler {
         let costUsdStr: string | undefined;
         let rawCostUsdStr: string | undefined;
         let costBreakdown: CostBreakdown | undefined;
-        if (usageForCost) {
+        if (billableUsageForCost) {
           try {
             if (session.request.model) {
               const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
               if (resolvedPricing) {
                 ensurePricingResolutionSpecialSetting(session, resolvedPricing);
                 const longContextPricing =
-                  matchLongContextPricing(usageForCost, resolvedPricing.priceData)?.pricing ?? null;
+                  matchLongContextPricing(billableUsageForCost, resolvedPricing.priceData)
+                    ?.pricing ?? null;
                 const cost = calculateRequestCost(
-                  usageForCost,
+                  billableUsageForCost,
                   resolvedPricing.priceData,
                   buildCostCalculationOptions(
                     provider.costMultiplier,
                     session.getContext1mApplied(),
                     priorityServiceTierApplied,
-                    longContextPricing
+                    longContextPricing,
+                    session.getGroupCostMultiplier()
                   )
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
                 }
                 // Raw cost without multiplier for Langfuse
-                if (provider.costMultiplier !== 1) {
+                if (provider.costMultiplier !== 1 || session.getGroupCostMultiplier() !== 1) {
                   const rawCost = calculateRequestCost(
-                    usageForCost,
+                    billableUsageForCost,
                     resolvedPricing.priceData,
                     buildCostCalculationOptions(
                       1.0,
@@ -2154,7 +2392,7 @@ export class ProxyResponseHandler {
                 // Cost breakdown for Langfuse (raw, no multiplier)
                 try {
                   costBreakdown = calculateRequestCostBreakdown(
-                    usageForCost,
+                    billableUsageForCost,
                     resolvedPricing.priceData,
                     {
                       context1mApplied: session.getContext1mApplied(),
@@ -2213,6 +2451,11 @@ export class ProxyResponseHandler {
           providerChain: session.getProviderChain(),
           ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
           model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+          actualResponseModel: extractActualResponseModelForProvider(
+            provider.providerType,
+            true,
+            allContent
+          ),
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
           swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
@@ -2578,10 +2821,29 @@ export class ProxyResponseHandler {
 
     // ⭐ 修复 Bun 运行时的 Transfer-Encoding 重复问题
     // 清理上游的传输 headers，让 Response API 自动管理
+    const finalStreamHeaders = cleanResponseHeaders(response.headers);
+    if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
+      const responseAfterMetaTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
+        session.sessionId,
+        "after",
+        {
+          headers: finalStreamHeaders,
+          meta: {
+            upstreamUrl: null,
+            statusCode: response.status,
+          },
+        },
+        session.requestSequence
+      );
+      responseAfterMetaTask?.catch((err) => {
+        logger.error("[ResponseHandler] Failed to store stream response after meta:", err);
+      });
+    }
+
     return new Response(clientStream, {
       status: response.status,
       statusText: response.statusText,
-      headers: cleanResponseHeaders(response.headers),
+      headers: finalStreamHeaders,
     });
   }
 }
@@ -3151,7 +3413,8 @@ async function updateRequestCostFromUsage(
   provider: Provider | null,
   costMultiplier: number = 1.0,
   context1mApplied: boolean = false,
-  priorityServiceTierApplied: boolean = false
+  priorityServiceTierApplied: boolean = false,
+  groupCostMultiplier: number = 1.0
 ): Promise<{
   costUsd: string | null;
   resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>> | null;
@@ -3162,6 +3425,15 @@ async function updateRequestCostFromUsage(
     logger.warn("[CostCalculation] No usage data, skipping cost update", {
       messageId,
     });
+    return {
+      costUsd: null,
+      resolvedPricing: null,
+      longContextPricing: null,
+      longContextPricingApplied: false,
+    };
+  }
+
+  if (isNonBillingUsageEndpoint(session)) {
     return {
       costUsd: null,
       resolvedPricing: null,
@@ -3211,9 +3483,41 @@ async function updateRequestCostFromUsage(
         costMultiplier,
         context1mApplied,
         priorityServiceTierApplied,
-        longContextPricing
+        longContextPricing,
+        groupCostMultiplier
       )
     );
+
+    // Calculate and store cost breakdown
+    let storedBreakdown: StoredCostBreakdown | undefined;
+    try {
+      const breakdown = calculateRequestCostBreakdown(usage, resolvedPricing.priceData, {
+        context1mApplied,
+        priorityServiceTierApplied,
+        longContextPricing,
+      });
+      const baseTotal = new Decimal(breakdown.input)
+        .plus(breakdown.output)
+        .plus(breakdown.cache_creation)
+        .plus(breakdown.cache_read);
+      // Use the same sanitization rules as calculateRequestCost so that
+      // total === base_total * provider_multiplier * group_multiplier
+      // holds even when the caller passes NaN / Infinity / negative values.
+      storedBreakdown = {
+        input: String(breakdown.input),
+        output: String(breakdown.output),
+        cache_creation: String(breakdown.cache_creation),
+        cache_creation_5m: String(breakdown.cache_creation_5m),
+        cache_creation_1h: String(breakdown.cache_creation_1h),
+        cache_read: String(breakdown.cache_read),
+        base_total: baseTotal.toDecimalPlaces(COST_SCALE).toString(),
+        provider_multiplier: sanitizeMultiplier(costMultiplier),
+        group_multiplier: sanitizeMultiplier(groupCostMultiplier),
+        total: cost.toString(),
+      };
+    } catch {
+      /* non-critical */
+    }
 
     logger.info("[CostCalculation] Cost calculated successfully", {
       messageId,
@@ -3222,11 +3526,12 @@ async function updateRequestCostFromUsage(
       pricingResolutionSource: resolvedPricing.source,
       costUsd: cost.toString(),
       costMultiplier,
+      groupCostMultiplier,
       usage,
     });
 
     if (cost.gt(0)) {
-      await updateMessageRequestCost(messageId, cost);
+      await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown);
       return {
         costUsd: cost.toString(),
         resolvedPricing,
@@ -3279,12 +3584,20 @@ export async function finalizeRequestStats(
   statusCode: number,
   duration: number,
   errorMessage?: string,
-  providerIdOverride?: number
+  providerIdOverride?: number,
+  /**
+   * 是否流式上下文。调用方已知时必须显式传入:
+   * - Gemini 透传 NDJSON 没有 `data:`/`event:` 头,isSSEText() 会判成非流式,
+   *   导致 extractActualResponseModelForProvider 走 non-stream JSON.parse 失败
+   * - 如果不传则回退为 isSSEText 嗅探(仅兼容保留)
+   */
+  isStreaming?: boolean
 ): Promise<UsageMetrics | null> {
   const { messageContext, provider } = session;
   if (!provider || !messageContext) {
     return null;
   }
+  const resolvedIsStream = isStreaming ?? isSSEText(responseText);
 
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
   const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
@@ -3293,7 +3606,9 @@ export async function finalizeRequestStats(
     session,
     actualServiceTier
   );
-  ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+  if (!isNonBillingUsageEndpoint(session)) {
+    ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+  }
   const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
   if (!usageMetrics) {
     await updateMessageRequestDetails(messageContext.id, {
@@ -3302,6 +3617,11 @@ export async function finalizeRequestStats(
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
+      actualResponseModel: extractActualResponseModelForProvider(
+        provider.providerType,
+        resolvedIsStream,
+        responseText
+      ),
       providerId: providerIdForPersistence,
       context1mApplied: session.getContext1mApplied(),
       swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
@@ -3318,8 +3638,13 @@ export async function finalizeRequestStats(
     session,
     provider.swapCacheTtlBilling
   );
+  const billableNormalizedUsage = !isNonBillingUsageEndpoint(session) ? normalizedUsage : null;
 
-  maybeSetCodexContext1m(session, provider, normalizedUsage.input_tokens);
+  // 非计费端点（count_tokens / compact）不得触发 Codex 1M 上下文开关，
+  // 否则会影响同 session 后续真实请求的账单口径。
+  if (billableNormalizedUsage) {
+    maybeSetCodexContext1m(session, provider, billableNormalizedUsage.input_tokens);
+  }
 
   const costUpdateResult = await updateRequestCostFromUsage(
     messageContext.id,
@@ -3328,7 +3653,8 @@ export async function finalizeRequestStats(
     provider,
     provider.costMultiplier,
     session.getContext1mApplied(),
-    priorityServiceTierApplied
+    priorityServiceTierApplied,
+    session.getGroupCostMultiplier()
   );
   if (costUpdateResult.longContextPricingApplied) {
     ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -3347,20 +3673,22 @@ export async function finalizeRequestStats(
   if (session.sessionId) {
     let costUsdStr: string | undefined;
     try {
-      if (session.request.model) {
+      if (billableNormalizedUsage && session.request.model) {
         const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
         if (resolvedPricing) {
           ensurePricingResolutionSpecialSetting(session, resolvedPricing);
           const longContextPricing =
-            matchLongContextPricing(normalizedUsage, resolvedPricing.priceData)?.pricing ?? null;
+            matchLongContextPricing(billableNormalizedUsage, resolvedPricing.priceData)?.pricing ??
+            null;
           const cost = calculateRequestCost(
-            normalizedUsage,
+            billableNormalizedUsage,
             resolvedPricing.priceData,
             buildCostCalculationOptions(
               provider.costMultiplier,
               session.getContext1mApplied(),
               priorityServiceTierApplied,
-              longContextPricing
+              longContextPricing,
+              session.getGroupCostMultiplier()
             )
           );
           if (cost.gt(0)) {
@@ -3404,6 +3732,11 @@ export async function finalizeRequestStats(
     providerChain: session.getProviderChain(),
     ...(errorMessage ? { errorMessage } : {}),
     model: session.getCurrentModel() ?? undefined,
+    actualResponseModel: extractActualResponseModelForProvider(
+      provider.providerType,
+      resolvedIsStream,
+      responseText
+    ),
     providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
     swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
@@ -3432,6 +3765,7 @@ async function trackCostToRedis(
   longContextPricingOverride?: ResolvedLongContextPricing | null
 ): Promise<void> {
   if (!usage || !session.sessionId) return;
+  if (isNonBillingUsageEndpoint(session)) return;
 
   try {
     const messageContext = session.messageContext;
@@ -3463,7 +3797,8 @@ async function trackCostToRedis(
         provider.costMultiplier,
         session.getContext1mApplied(),
         priorityServiceTierApplied,
-        longContextPricing
+        longContextPricing,
+        session.getGroupCostMultiplier()
       )
     );
     if (cost.lte(0)) return;
@@ -3477,10 +3812,14 @@ async function trackCostToRedis(
       session.sessionId, // 直接使用 session.sessionId
       costFloat,
       {
+        userId: user.id,
+        key5hResetMode: key.limit5hResetMode,
         keyResetTime: key.dailyResetTime,
         keyResetMode: key.dailyResetMode,
+        provider5hResetMode: provider.limit5hResetMode,
         providerResetTime: provider.dailyResetTime,
         providerResetMode: provider.dailyResetMode,
+        user5hResetMode: user.limit5hResetMode,
         requestId: messageContext.id,
         createdAtMs: messageContext.createdAt.getTime(),
       }
@@ -3499,13 +3838,31 @@ async function trackCostToRedis(
     );
 
     // Decrement lease budgets for all windows (fire-and-forget)
-    const windows: LeaseWindowType[] = ["5h", "daily", "weekly", "monthly"];
     void Promise.all([
-      ...windows.map((w) => RateLimitService.decrementLeaseBudget(key.id, "key", w, costFloat)),
-      ...windows.map((w) => RateLimitService.decrementLeaseBudget(user.id, "user", w, costFloat)),
-      ...windows.map((w) =>
-        RateLimitService.decrementLeaseBudget(provider.id, "provider", w, costFloat)
-      ),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "5h", costFloat, {
+        resetMode: key.limit5hResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "daily", costFloat, {
+        resetMode: key.dailyResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "weekly", costFloat),
+      RateLimitService.decrementLeaseBudget(key.id, "key", "monthly", costFloat),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "5h", costFloat, {
+        resetMode: user.limit5hResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "daily", costFloat, {
+        resetMode: user.dailyResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "weekly", costFloat),
+      RateLimitService.decrementLeaseBudget(user.id, "user", "monthly", costFloat),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "5h", costFloat, {
+        resetMode: provider.limit5hResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "daily", costFloat, {
+        resetMode: provider.dailyResetMode,
+      }),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "weekly", costFloat),
+      RateLimitService.decrementLeaseBudget(provider.id, "provider", "monthly", costFloat),
     ]).catch((error) => {
       logger.warn("[ResponseHandler] Failed to decrement lease budgets:", {
         error: error instanceof Error ? error.message : String(error),

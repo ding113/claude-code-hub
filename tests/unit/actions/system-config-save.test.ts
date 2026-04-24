@@ -7,6 +7,8 @@ const revalidatePathMock = vi.fn();
 const invalidateSystemSettingsCacheMock = vi.fn();
 const updateSystemSettingsMock = vi.fn();
 const getSystemSettingsMock = vi.fn();
+const publishCurrentPublicStatusConfigProjectionMock = vi.fn();
+const schedulePublicStatusRebuildMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: () => getSessionMock(),
@@ -40,6 +42,15 @@ vi.mock("@/repository/system-config", () => ({
   updateSystemSettings: (...args: unknown[]) => updateSystemSettingsMock(...args),
 }));
 
+vi.mock("@/lib/public-status/config-publisher", () => ({
+  publishCurrentPublicStatusConfigProjection: (...args: unknown[]) =>
+    publishCurrentPublicStatusConfigProjectionMock(...args),
+}));
+
+vi.mock("@/lib/public-status/rebuild-hints", () => ({
+  schedulePublicStatusRebuild: (...args: unknown[]) => schedulePublicStatusRebuildMock(...args),
+}));
+
 // Import the action after mocks are set up
 import { saveSystemSettings } from "@/actions/system-config";
 
@@ -63,6 +74,7 @@ describe("saveSystemSettings", () => {
       cleanupBatchSize: 1000,
       enableClientVersionCheck: false,
       verboseProviderError: false,
+      passThroughUpstreamErrorMessage: true,
       enableHttp2: false,
       enableHighConcurrencyMode: false,
       interceptAnthropicWarmupRequests: false,
@@ -86,8 +98,20 @@ describe("saveSystemSettings", () => {
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
       createdAt: new Date(),
       updatedAt: new Date(),
+    });
+    publishCurrentPublicStatusConfigProjectionMock.mockResolvedValue({
+      configVersion: "cfg-1",
+      key: "public-status:v1:config:cfg-1",
+      written: true,
+      groupCount: 0,
+    });
+    schedulePublicStatusRebuildMock.mockResolvedValue({
+      accepted: true,
+      rebuildState: "rebuilding",
     });
   });
 
@@ -115,6 +139,7 @@ describe("saveSystemSettings", () => {
     const result = await saveSystemSettings({
       siteTitle: "New Site Title",
       verboseProviderError: true,
+      passThroughUpstreamErrorMessage: false,
     });
 
     expect(result.ok).toBe(true);
@@ -122,6 +147,7 @@ describe("saveSystemSettings", () => {
       expect.objectContaining({
         siteTitle: "New Site Title",
         verboseProviderError: true,
+        passThroughUpstreamErrorMessage: false,
       })
     );
   });
@@ -130,6 +156,71 @@ describe("saveSystemSettings", () => {
     await saveSystemSettings({ siteTitle: "New Title" });
 
     expect(invalidateSystemSettingsCacheMock).toHaveBeenCalled();
+  });
+
+  it("should republish the public-status projection and queue a rebuild for relevant config changes", async () => {
+    await saveSystemSettings({
+      siteTitle: "New Title",
+      timezone: "UTC",
+    });
+
+    expect(publishCurrentPublicStatusConfigProjectionMock).toHaveBeenCalledWith({
+      reason: "save-system-settings",
+    });
+    expect(schedulePublicStatusRebuildMock).toHaveBeenCalledWith({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      reason: "system-settings-updated",
+    });
+  });
+
+  it("should skip public-status projection updates for unrelated system settings", async () => {
+    await saveSystemSettings({ verboseProviderError: true });
+
+    expect(publishCurrentPublicStatusConfigProjectionMock).not.toHaveBeenCalled();
+    expect(schedulePublicStatusRebuildMock).not.toHaveBeenCalled();
+  });
+
+  it("should preserve omission of passThroughUpstreamErrorMessage on partial updates", async () => {
+    await saveSystemSettings({ siteTitle: "No Toggle Change" });
+
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        passThroughUpstreamErrorMessage: false,
+      })
+    );
+  });
+
+  it("should surface a warning when the public-status projection publish fails", async () => {
+    publishCurrentPublicStatusConfigProjectionMock.mockResolvedValueOnce({
+      configVersion: "cfg-2",
+      key: "public-status:v1:config:cfg-2",
+      written: false,
+      groupCount: 0,
+    });
+
+    const result = await saveSystemSettings({ siteTitle: "New Title" });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        publicStatusProjectionWarningCode: "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED",
+      },
+    });
+    expect(schedulePublicStatusRebuildMock).not.toHaveBeenCalled();
+  });
+
+  it("should surface a warning when rebuild hint scheduling fails", async () => {
+    schedulePublicStatusRebuildMock.mockRejectedValueOnce(new Error("redis unavailable"));
+
+    const result = await saveSystemSettings({ siteTitle: "New Title" });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        publicStatusProjectionWarningCode: "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING",
+      },
+    });
   });
 
   describe("revalidatePath locale coverage", () => {
@@ -189,6 +280,7 @@ describe("saveSystemSettings", () => {
       cleanupBatchSize: 1000,
       enableClientVersionCheck: false,
       verboseProviderError: true,
+      passThroughUpstreamErrorMessage: false,
       enableHttp2: true,
       enableHighConcurrencyMode: true,
       interceptAnthropicWarmupRequests: false,
@@ -212,6 +304,8 @@ describe("saveSystemSettings", () => {
       quotaLeasePercentWeekly: 0.05,
       quotaLeasePercentMonthly: 0.05,
       quotaLeaseCapUsd: null,
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -224,12 +318,16 @@ describe("saveSystemSettings", () => {
       codexPriorityBillingSource: "actual",
       timezone: "America/New_York",
       verboseProviderError: true,
+      passThroughUpstreamErrorMessage: false,
       enableHttp2: true,
       enableHighConcurrencyMode: true,
     });
 
     expect(result.ok).toBe(true);
-    expect(result.data).toEqual(mockUpdated);
+    expect(result.data).toEqual({
+      ...mockUpdated,
+      publicStatusProjectionWarningCode: null,
+    });
   });
 
   it("should handle repository errors gracefully", async () => {

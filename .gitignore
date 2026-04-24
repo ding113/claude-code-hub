@@ -88,3 +88,6 @@ tmp/
 .sisyphus
 .ace-tool/
 .worktrees/
+.omx/
+.opencode/
+bunx-*/

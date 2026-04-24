@@ -31,6 +31,13 @@ export interface ResetInfo {
   period?: string; // 滚动窗口的周期描述
 }
 
+export function getResetAtFromTtlSeconds(ttlSeconds: number | null | undefined): Date | null {
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds == null || ttlSeconds <= 0) {
+    return null;
+  }
+  return new Date(Date.now() + ttlSeconds * 1000);
+}
+
 /**
  * 根据周期计算时间范围
  * - 5h: 滚动窗口（过去 5 小时）
@@ -93,6 +100,14 @@ export async function getTimeRangeForPeriodWithMode(
   resetTime = "00:00",
   mode: DailyResetMode = "fixed"
 ): Promise<TimeRange> {
+  if (period === "5h" && mode === "rolling") {
+    const now = new Date();
+    return {
+      startTime: new Date(now.getTime() - 5 * 60 * 60 * 1000),
+      endTime: now,
+    };
+  }
+
   if (period === "daily" && mode === "rolling") {
     // 滚动窗口：过去 24 小时
     const now = new Date();
@@ -160,6 +175,10 @@ export async function getTTLForPeriodWithMode(
   resetTime = "00:00",
   mode: DailyResetMode = "fixed"
 ): Promise<number> {
+  if (period === "5h" && mode === "fixed") {
+    return 5 * 3600;
+  }
+
   if (period === "daily" && mode === "rolling") {
     return 24 * 3600; // 24 小时
   }
@@ -222,8 +241,17 @@ export async function getResetInfo(period: TimePeriod, resetTime = "00:00"): Pro
 export async function getResetInfoWithMode(
   period: TimePeriod,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  ttlSeconds?: number | null
 ): Promise<ResetInfo> {
+  if (period === "5h" && mode === "fixed") {
+    const resetAt = getResetAtFromTtlSeconds(ttlSeconds);
+    return {
+      type: "custom",
+      ...(resetAt ? { resetAt } : {}),
+    };
+  }
+
   if (period === "daily" && mode === "rolling") {
     return {
       type: "rolling",

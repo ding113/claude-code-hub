@@ -32,8 +32,12 @@ describe("createInitialState - batch mode", () => {
 
   it("returns neutral rate limit defaults", () => {
     const state = createInitialState("batch");
+    const rateLimit = state.rateLimit as typeof state.rateLimit & {
+      limit5hResetMode?: "fixed" | "rolling";
+    };
 
     expect(state.rateLimit.limit5hUsd).toBeNull();
+    expect(rateLimit.limit5hResetMode).toBe("rolling");
     expect(state.rateLimit.limitDailyUsd).toBeNull();
     expect(state.rateLimit.dailyResetMode).toBe("fixed");
     expect(state.rateLimit.dailyResetTime).toBe("00:00");
@@ -89,6 +93,7 @@ describe("createInitialState - batch mode", () => {
       mcpPassthroughType: "none" as const,
       mcpPassthroughUrl: null,
       limit5hUsd: null,
+      limit5hResetMode: "fixed" as const,
       limitDailyUsd: null,
       dailyResetMode: "fixed" as const,
       dailyResetTime: "00:00",
@@ -186,5 +191,22 @@ describe("providerFormReducer - SET_BATCH_IS_ENABLED", () => {
     expect(next.network).toEqual(baseState.network);
     expect(next.mcp).toEqual(baseState.mcp);
     expect(next.ui).toEqual(baseState.ui);
+  });
+});
+
+describe("providerFormReducer - SET_LIMIT_5H_RESET_MODE", () => {
+  it("stores the selected 5h reset mode", () => {
+    const baseState = createInitialState("batch");
+
+    const next = providerFormReducer(baseState, {
+      type: "SET_LIMIT_5H_RESET_MODE",
+      payload: "fixed",
+    } as never);
+
+    const rateLimit = next.rateLimit as typeof next.rateLimit & {
+      limit5hResetMode?: "fixed" | "rolling";
+    };
+
+    expect(rateLimit.limit5hResetMode).toBe("fixed");
   });
 });

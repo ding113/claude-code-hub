@@ -43,4 +43,23 @@ describe("calculateRequestCost long-context", () => {
 
     expect(Number(cost.toString())).toBe(0.63);
   });
+
+  test("context1mApplied alone does not trigger legacy anthropic premium without explicit long-context price fields", () => {
+    const cost = calculateRequestCost(
+      {
+        input_tokens: 250001,
+        output_tokens: 100,
+      },
+      {
+        mode: "chat",
+        model_family: "claude-sonnet",
+        input_cost_per_token: 0.000003,
+        output_cost_per_token: 0.000015,
+      },
+      1,
+      true
+    );
+
+    expect(Number(cost.toString())).toBeCloseTo(0.751503, 9);
+  });
 });

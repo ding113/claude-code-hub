@@ -54,6 +54,7 @@ export interface DecrementLeaseBudgetParams {
   entityId: number;
   window: LeaseWindowType;
   cost: number;
+  resetMode?: DailyResetMode;
 }
 
 /**
@@ -73,6 +74,37 @@ export class LeaseService {
     return getRedisClient();
   }
 
+  private static getFixed5hCostKey(entityType: LeaseEntityTypeType, entityId: number): string {
+    return `${entityType}:${entityId}:cost_5h_fixed`;
+  }
+
+  private static async readFixed5hWindowState(
+    entityType: LeaseEntityTypeType,
+    entityId: number
+  ): Promise<{ currentUsage: number; windowResetAtMs: number | null }> {
+    const redis = LeaseService.redis;
+    if (!redis || redis.status !== "ready") {
+      throw new Error("Redis not ready for fixed 5h lease refresh");
+    }
+
+    const key = LeaseService.getFixed5hCostKey(entityType, entityId);
+    const [value, ttlSecondsRaw] = await Promise.all([redis.get(key), redis.ttl(key)]);
+
+    if (value === null) {
+      return { currentUsage: 0, windowResetAtMs: null };
+    }
+
+    const currentUsage = Number.parseFloat(value || "0");
+    const ttlSeconds = typeof ttlSecondsRaw === "number" ? ttlSecondsRaw : Number(ttlSecondsRaw);
+    const windowResetAtMs =
+      Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? Date.now() + ttlSeconds * 1000 : null;
+
+    return {
+      currentUsage: Number.isFinite(currentUsage) ? currentUsage : 0,
+      windowResetAtMs,
+    };
+  }
+
   /**
    * Get a cost lease for an entity/window combination
    *
@@ -87,7 +119,7 @@ export class LeaseService {
 
     try {
       const redis = LeaseService.redis;
-      const leaseKey = buildLeaseKey(entityType, entityId, window);
+      const leaseKey = buildLeaseKey(entityType, entityId, window, params.resetMode);
 
       // Try Redis cache first
       if (redis && redis.status === "ready") {
@@ -97,6 +129,19 @@ export class LeaseService {
           const lease = deserializeLease(cached);
 
           if (lease && !isLeaseExpired(lease)) {
+            if (
+              lease.window === "5h" &&
+              lease.resetMode === "fixed" &&
+              typeof lease.windowResetAtMs === "number" &&
+              lease.windowResetAtMs <= Date.now()
+            ) {
+              logger.debug("[LeaseService] Fixed 5h window already reset, force refresh", {
+                key: leaseKey,
+                windowResetAtMs: lease.windowResetAtMs,
+              });
+              return await LeaseService.refreshCostLeaseFromDb(params);
+            }
+
             // Check if limit changed - force refresh if so
             if (lease.limitAmount !== limitAmount) {
               logger.debug("[LeaseService] Limit changed, force refresh", {
@@ -175,22 +220,31 @@ export class LeaseService {
       };
       const percent = LeaseService.getLeasePercent(window, leasePercentConfig);
 
-      // Calculate time range for DB query
-      const { startTime, endTime } = await getLeaseTimeRange(window, resetTime, resetMode);
+      let currentUsage = 0;
+      let windowResetAtMs: number | null = null;
 
-      // Clip startTime forward if costResetAt is more recent (limits-only reset)
-      const effectiveStartTime =
-        params.costResetAt instanceof Date && params.costResetAt > startTime
-          ? params.costResetAt
-          : startTime;
+      if (window === "5h" && resetMode === "fixed") {
+        const fixedWindowState = await LeaseService.readFixed5hWindowState(entityType, entityId);
+        currentUsage = fixedWindowState.currentUsage;
+        windowResetAtMs = fixedWindowState.windowResetAtMs;
+      } else {
+        // Calculate time range for DB query
+        const { startTime, endTime } = await getLeaseTimeRange(window, resetTime, resetMode);
 
-      // Query DB for current usage
-      const currentUsage = await LeaseService.queryDbUsage(
-        entityType,
-        entityId,
-        effectiveStartTime,
-        endTime
-      );
+        // Clip startTime forward if costResetAt is more recent (limits-only reset)
+        const effectiveStartTime =
+          params.costResetAt instanceof Date && params.costResetAt > startTime
+            ? params.costResetAt
+            : startTime;
+
+        // Query DB for current usage
+        currentUsage = await LeaseService.queryDbUsage(
+          entityType,
+          entityId,
+          effectiveStartTime,
+          endTime
+        );
+      }
 
       // Calculate lease slice
       const remainingBudget = calculateLeaseSlice({
@@ -214,12 +268,13 @@ export class LeaseService {
         remainingBudget,
         ttlSeconds,
         costResetAtMs: params.costResetAt instanceof Date ? params.costResetAt.getTime() : null,
+        windowResetAtMs,
       });
 
       // Store in Redis
       const redis = LeaseService.redis;
       if (redis && redis.status === "ready") {
-        const leaseKey = buildLeaseKey(entityType, entityId, window);
+        const leaseKey = buildLeaseKey(entityType, entityId, window, resetMode);
         await redis.setex(leaseKey, ttlSeconds, serializeLease(lease));
 
         logger.debug("[LeaseService] Lease refreshed from DB", {
@@ -346,7 +401,7 @@ export class LeaseService {
   static async decrementLeaseBudget(
     params: DecrementLeaseBudgetParams
   ): Promise<DecrementLeaseBudgetResult> {
-    const { entityType, entityId, window, cost } = params;
+    const { entityType, entityId, window, cost, resetMode } = params;
 
     try {
       const redis = LeaseService.redis;
@@ -362,7 +417,7 @@ export class LeaseService {
         return { success: true, newRemaining: -1, failOpen: true };
       }
 
-      const leaseKey = buildLeaseKey(entityType, entityId, window);
+      const leaseKey = buildLeaseKey(entityType, entityId, window, resetMode);
 
       // Execute Lua script atomically using Redis EVAL command
       const result = (await redis.eval(LeaseService.DECREMENT_LUA_SCRIPT, 1, leaseKey, cost)) as [

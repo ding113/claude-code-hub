@@ -4,10 +4,23 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { getAllUserKeyGroups, getAllUserTags } from "@/actions/users";
+import { LeaderboardPrimaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-primary-tabs";
+import { LeaderboardSecondaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-secondary-tabs";
+import {
+  getPrimaryTabFromScope,
+  getScopeForPrimaryTab,
+  getScopeForSecondaryTab,
+  getSecondaryTabFromScope,
+  isProviderFamilyScope,
+  isUserFamilyScope,
+  type LeaderboardPrimaryTab,
+  type LeaderboardLeafScope as LeaderboardScope,
+  type LeaderboardSecondaryTab,
+  normalizeScopeFromUrl,
+} from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-tab-groups";
 import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_components/provider-type-filter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagInput } from "@/components/ui/tag-input";
 import { Link } from "@/i18n/routing";
 import { formatTokenAmount } from "@/lib/utils";
@@ -20,17 +33,18 @@ import type {
   ModelProviderStat,
   ProviderCacheHitRateLeaderboardEntry,
   ProviderLeaderboardEntry,
+  UserCacheHitModelStat,
+  UserCacheHitRateLeaderboardEntry,
   UserModelStat,
 } from "@/repository/leaderboard";
 import type { ProviderType } from "@/types/provider";
 import { DateRangePicker } from "./date-range-picker";
 import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
+import { getSuccessRateCellDisplay } from "./success-rate-display";
 
 interface LeaderboardViewProps {
   isAdmin: boolean;
 }
-
-type LeaderboardScope = "user" | "provider" | "providerCacheHitRate" | "model";
 type TotalCostFormattedFields = { totalCostFormatted?: string };
 type ProviderCostFormattedFields = {
   // API 额外返回的展示用字段（格式化后的字符串）
@@ -51,9 +65,35 @@ type ProviderEntry = Omit<ProviderLeaderboardEntry, "modelStats"> &
     modelStats?: ModelProviderStatClient[];
   };
 type ProviderTableRow = ProviderEntry | ModelProviderStatClient;
+type UserCacheHitModelStatClient = UserCacheHitModelStat;
+type UserCacheHitRateEntry = Omit<UserCacheHitRateLeaderboardEntry, "modelStats"> &
+  TotalCostFormattedFields & {
+    modelStats?: UserCacheHitModelStatClient[];
+  };
+type UserCacheHitRateTableRow = UserCacheHitRateEntry | UserCacheHitModelStatClient;
 type ProviderCacheHitRateEntry = ProviderCacheHitRateLeaderboardEntry;
 type ProviderCacheHitRateTableRow = ProviderCacheHitRateEntry | ModelCacheHitStat;
-type AnyEntry = UserEntry | ProviderEntry | ProviderCacheHitRateEntry | ModelEntry;
+type AnyEntry =
+  | UserEntry
+  | UserCacheHitRateEntry
+  | ProviderEntry
+  | ProviderCacheHitRateEntry
+  | ModelEntry;
+
+function renderSuccessRateCell(
+  row: { successRate: number | null; basisDisclosureRequired?: boolean },
+  t: ReturnType<typeof useTranslations>
+) {
+  const display = getSuccessRateCellDisplay(row, t);
+  return (
+    <span
+      className={typeof row.successRate === "number" ? undefined : "text-muted-foreground"}
+      title={display.title}
+    >
+      {display.label}
+    </span>
+  );
+}
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
 
@@ -61,12 +101,8 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
   const searchParams = useSearchParams();
 
-  const urlScope = searchParams.get("scope") as LeaderboardScope | null;
-  const initialScope: LeaderboardScope =
-    (urlScope === "provider" || urlScope === "providerCacheHitRate" || urlScope === "model") &&
-    isAdmin
-      ? urlScope
-      : "user";
+  const urlScope = searchParams.get("scope");
+  const initialScope = normalizeScopeFromUrl(urlScope, isAdmin);
   const urlPeriod = searchParams.get("period") as LeaderboardPeriod | null;
   const initialPeriod: LeaderboardPeriod =
     urlPeriod && VALID_PERIODS.includes(urlPeriod) ? urlPeriod : "daily";
@@ -101,14 +137,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   // 与 URL 查询参数保持同步，支持外部携带 scope/period 直达特定榜单
   // biome-ignore lint/correctness/useExhaustiveDependencies: period 和 scope 仅用于比较，不应触发 effect 重新执行
   useEffect(() => {
-    const urlScopeParam = searchParams.get("scope") as LeaderboardScope | null;
-    const normalizedScope: LeaderboardScope =
-      (urlScopeParam === "provider" ||
-        urlScopeParam === "providerCacheHitRate" ||
-        urlScopeParam === "model") &&
-      isAdmin
-        ? urlScopeParam
-        : "user";
+    const normalizedScope = normalizeScopeFromUrl(searchParams.get("scope"), isAdmin);
 
     if (normalizedScope !== scope) {
       setScope(normalizedScope);
@@ -133,19 +162,16 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         if (period === "custom" && dateRange) {
           url += `&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
         }
-        if (
-          (scope === "providerCacheHitRate" || scope === "provider") &&
-          providerTypeFilter !== "all"
-        ) {
+        if (isProviderFamilyScope(scope) && providerTypeFilter !== "all") {
           url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
         }
         if (scope === "provider") {
           url += "&includeModelStats=1";
         }
-        if (scope === "user" && isAdmin) {
+        if (isUserFamilyScope(scope) && isAdmin) {
           url += "&includeUserModelStats=1";
         }
-        if (scope === "user") {
+        if (isUserFamilyScope(scope)) {
           if (userTagFilters.length > 0) {
             url += `&userTags=${encodeURIComponent(userTagFilters.join(","))}`;
           }
@@ -187,16 +213,38 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     []
   );
 
+  // 一级/二级 tab 只是叶子 scope 的 UI 投影，状态真源始终只有 scope。
+  const activePrimaryTab = getPrimaryTabFromScope(scope);
+  const activeSecondaryTab = getSecondaryTabFromScope(scope);
+  const showSecondaryTabs = isAdmin && activePrimaryTab !== "model";
+  const isProviderFamily = isProviderFamilyScope(scope);
+  const isUserFamily = isUserFamilyScope(scope);
+
+  const handlePrimaryTabChange = (tab: LeaderboardPrimaryTab) => {
+    setScope(getScopeForPrimaryTab(tab));
+  };
+
+  const handleSecondaryTabChange = (tab: LeaderboardSecondaryTab) => {
+    const primaryTab = getPrimaryTabFromScope(scope);
+    if (primaryTab === "model") {
+      return;
+    }
+
+    setScope(getScopeForSecondaryTab(primaryTab, tab));
+  };
+
   const skeletonColumns =
     scope === "user"
       ? 5
-      : scope === "provider"
-        ? 10
-        : scope === "providerCacheHitRate"
-          ? 8
-          : scope === "model"
-            ? 6
-            : 5;
+      : scope === "userCacheHitRate"
+        ? 6
+        : scope === "provider"
+          ? 10
+          : scope === "providerCacheHitRate"
+            ? 8
+            : scope === "model"
+              ? 6
+              : 5;
   const skeletonGridStyle = { gridTemplateColumns: `repeat(${skeletonColumns}, minmax(0, 1fr))` };
 
   // 列定义（根据 scope 动态切换）
@@ -287,7 +335,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.successRate"),
       className: "text-right",
-      cell: (row) => `${(Number(row.successRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => renderSuccessRateCell(row, t),
       sortKey: "successRate",
       getValue: (row) => row.successRate,
     },
@@ -382,6 +430,80 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
   ];
 
+  const userCacheHitRateColumns: ColumnDef<UserCacheHitRateTableRow>[] = [
+    {
+      header: t("columns.user"),
+      cell: (row) => {
+        if ("userName" in row) {
+          return isAdmin ? (
+            <Link
+              href={`/dashboard/leaderboard/user/${row.userId}`}
+              className="hover:text-muted-foreground transition-colors"
+              data-testid={`leaderboard-user-cache-link-${row.userId}`}
+            >
+              {row.userName}
+            </Link>
+          ) : (
+            row.userName
+          );
+        }
+        return renderSubModelLabel(row.model ?? t("columns.unknownModel"));
+      },
+      sortKey: "userName",
+      getValue: (row) => ("userName" in row ? row.userName : (row.model ?? "")),
+    },
+    {
+      header: t("columns.cacheHitRequests"),
+      className: "text-right",
+      cell: (row) => row.totalRequests.toLocaleString(),
+      sortKey: "totalRequests",
+      getValue: (row) => row.totalRequests,
+    },
+    {
+      header: t("columns.cacheHitRate"),
+      className: "text-right",
+      cell: (row) => {
+        const rate = Number(row.cacheHitRate || 0) * 100;
+        const colorClass =
+          rate >= 85
+            ? "text-green-600 dark:text-green-400"
+            : rate >= 60
+              ? "text-yellow-600 dark:text-yellow-400"
+              : "text-orange-600 dark:text-orange-400";
+        return <span className={colorClass}>{rate.toFixed(1)}%</span>;
+      },
+      sortKey: "cacheHitRate",
+      getValue: (row) => row.cacheHitRate,
+    },
+    {
+      header: t("columns.cacheReadTokens"),
+      className: "text-right",
+      cell: (row) => formatTokenAmount(row.cacheReadTokens),
+      sortKey: "cacheReadTokens",
+      getValue: (row) => row.cacheReadTokens,
+    },
+    {
+      header: t("columns.totalTokens"),
+      className: "text-right",
+      cell: (row) => formatTokenAmount(row.totalInputTokens),
+      sortKey: "totalInputTokens",
+      getValue: (row) => row.totalInputTokens,
+    },
+    {
+      header: t("columns.consumedAmount"),
+      className: "text-right font-mono",
+      cell: (row) => {
+        if ("userName" in row) {
+          return row.totalCostFormatted ?? row.totalCost;
+        }
+        return <span className="text-muted-foreground">-</span>;
+      },
+      sortKey: "totalCost",
+      getValue: (row) => ("userName" in row ? row.totalCost : 0),
+      defaultBold: true,
+    },
+  ];
+
   const modelColumns: ColumnDef<ModelEntry>[] = [
     {
       header: t("columns.model"),
@@ -414,7 +536,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.successRate"),
       className: "text-right",
-      cell: (row) => `${(Number(row.successRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => renderSuccessRateCell(row, t),
       sortKey: "successRate",
       getValue: (row) => row.successRate,
     },
@@ -457,6 +579,21 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     />
   );
 
+  const renderUserCacheHitRateTable = () => (
+    <LeaderboardTable<UserCacheHitRateEntry, UserCacheHitModelStat>
+      data={data as UserCacheHitRateEntry[]}
+      period={period}
+      columns={userCacheHitRateColumns}
+      getRowKey={(row) => row.userId}
+      {...(isAdmin
+        ? {
+            getSubRows: (row) => row.modelStats,
+            getSubRowKey: (subRow) => subRow.model ?? "__null__",
+          }
+        : {})}
+    />
+  );
+
   const renderModelTable = () => (
     <LeaderboardTable<ModelEntry>
       data={data as ModelEntry[]}
@@ -468,6 +605,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
 
   const renderTable = () => {
     if (scope === "user") return renderUserTable();
+    if (scope === "userCacheHitRate") return renderUserCacheHitRateTable();
     if (scope === "provider") return renderProviderTable();
     if (scope === "providerCacheHitRate") return renderProviderCacheHitRateTable();
     return renderModelTable();
@@ -476,21 +614,32 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   return (
     <div className="w-full">
       {/* Scope toggle */}
-      <div className="flex flex-wrap gap-4 items-center mb-4">
-        <Tabs value={scope} onValueChange={(v) => setScope(v as LeaderboardScope)}>
-          <TabsList className={isAdmin ? "grid grid-cols-4" : ""}>
-            <TabsTrigger value="user">{t("tabs.userRanking")}</TabsTrigger>
-            {isAdmin && <TabsTrigger value="provider">{t("tabs.providerRanking")}</TabsTrigger>}
-            {isAdmin && (
-              <TabsTrigger value="providerCacheHitRate">
-                {t("tabs.providerCacheHitRateRanking")}
-              </TabsTrigger>
-            )}
-            {isAdmin && <TabsTrigger value="model">{t("tabs.modelRanking")}</TabsTrigger>}
-          </TabsList>
-        </Tabs>
+      <div className="mb-4 flex flex-wrap items-start gap-4">
+        <div className="flex min-w-[220px] flex-1 flex-col gap-2">
+          <LeaderboardPrimaryTabs
+            isAdmin={isAdmin}
+            activePrimaryTab={activePrimaryTab}
+            onPrimaryChange={handlePrimaryTabChange}
+            labels={{
+              user: t("tabs.primaryUser"),
+              provider: t("tabs.primaryProvider"),
+              model: t("tabs.primaryModel"),
+            }}
+          />
+          {showSecondaryTabs ? (
+            <LeaderboardSecondaryTabs
+              activePrimaryTab={activePrimaryTab}
+              activeSecondaryTab={activeSecondaryTab}
+              onSecondaryChange={handleSecondaryTabChange}
+              labels={{
+                cost: t("tabs.secondaryCost"),
+                cacheHit: t("tabs.secondaryCacheHit"),
+              }}
+            />
+          ) : null}
+        </div>
 
-        {scope === "provider" || scope === "providerCacheHitRate" ? (
+        {isProviderFamily ? (
           <ProviderTypeFilter
             value={providerTypeFilter}
             onChange={setProviderTypeFilter}
@@ -499,10 +648,11 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         ) : null}
       </div>
 
-      {scope === "user" && isAdmin && (
+      {isUserFamily && isAdmin && (
         <div className="flex flex-wrap gap-4 mb-4">
           <div className="flex-1 min-w-[200px] max-w-[300px]">
             <TagInput
+              data-testid="leaderboard-user-tag-filter"
               value={userTagFilters}
               onChange={setUserTagFilters}
               placeholder={t("filters.userTagsPlaceholder")}
@@ -516,6 +666,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           </div>
           <div className="flex-1 min-w-[200px] max-w-[300px]">
             <TagInput
+              data-testid="leaderboard-user-group-filter"
               value={userGroupFilters}
               onChange={setUserGroupFilters}
               placeholder={t("filters.userGroupsPlaceholder")}

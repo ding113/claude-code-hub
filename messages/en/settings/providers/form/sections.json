@@ -120,7 +120,8 @@
       }
     },
     "dailyResetTime": {
-      "label": "Daily Reset Time (HH:mm)"
+      "label": "Daily Reset Time (HH:mm)",
+      "placeholder": "HH:mm"
     },
     "desc": "Configure spending limits to control costs across different time windows",
     "limit5h": {
@@ -156,12 +157,24 @@
       "total": "Total: ${amount}",
       "weekly": "Week: ${amount}"
     },
-    "title": "Rate Limit"
+    "title": "Rate Limit",
+    "limit5hResetMode": {
+      "label": "5-Hour Reset Mode",
+      "options": {
+        "fixed": "Fixed Window (5h)",
+        "rolling": "Rolling Window (5h)"
+      },
+      "desc": {
+        "fixed": "Start a fixed 5-hour window from the first successful charge",
+        "rolling": "Use a rolling 5-hour window from the latest usage"
+      }
+    }
   },
   "limits": {
     "timeBased": "Time-based Limits",
     "dailyReset": "Daily Reset Settings",
-    "otherLimits": "Other Limits"
+    "otherLimits": "Other Limits",
+    "windowReset": "Window Reset Behavior"
   },
   "routing": {
     "cacheTtl": {
@@ -201,7 +214,7 @@
         }
       },
       "reasoningEffort": {
-        "help": "Controls how much reasoning effort the model uses before answering. \"inherit\" follows the client request; other values force override reasoning.effort. Note: \"none\" is only supported on GPT-5.1 models; \"xhigh\" is only supported on GPT-5.1-Codex-Max. Using an unsupported value will cause an upstream error.",
+        "help": "Controls how much reasoning effort the model uses before answering. \"inherit\" follows the client request; other values force override reasoning.effort. Note: \"none\" is only supported on GPT-5.4 mini models. Using an unsupported value will cause an upstream error.",
         "label": "Reasoning Effort Override",
         "options": {
           "high": "high",
@@ -209,8 +222,8 @@
           "low": "low",
           "medium": "medium (default)",
           "minimal": "minimal",
-          "none": "none (GPT-5.1 only)",
-          "xhigh": "xhigh (GPT-5.1-Codex-Max only)"
+          "none": "none (GPT-5.4 mini only)",
+          "xhigh": "xhigh"
         }
       },
       "reasoningSummary": {
@@ -262,7 +275,8 @@
           "options": {
             "low": "Low",
             "medium": "Medium",
-            "high": "High (Recommended)",
+            "high": "High",
+            "xhigh": "Xhigh (Recommended)",
             "max": "Max"
           }
         },
@@ -298,11 +312,11 @@
       "label": "Model Redirects",
       "optional": "(optional)"
     },
-  "modelWhitelist": {
-    "allowAll": "✓ Allow all models (recommended)",
-    "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
-    "legacyExactOnlyWarning": "This legacy form only shows exact-match allowlist rules. Saving here will discard prefix, suffix, keyword, or regex rules. Use the new provider form to edit advanced rules safely.",
-    "label": "Allowed Models",
+    "modelWhitelist": {
+      "allowAll": "✓ Allow all models (recommended)",
+      "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
+      "legacyExactOnlyWarning": "This legacy form only shows exact-match allowlist rules. Saving here will discard prefix, suffix, keyword, or regex rules. Use the new provider form to edit advanced rules safely.",
+      "label": "Allowed Models",
       "moreModels": "+{count} more",
       "optional": "(optional)",
       "selectedOnly": "Only models matching the configured {count} rules are allowed. Other models will not be routed to this provider.",

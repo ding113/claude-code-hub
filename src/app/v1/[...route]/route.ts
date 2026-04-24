@@ -19,10 +19,20 @@ SessionTracker.initialize().catch((err) => {
   logger.error("[App] SessionTracker initialization failed:", err);
 });
 
-// 初始化敏感词检测器（加载缓存）
-sensitiveWordDetector.reload().catch((err) => {
-  logger.error("[App] SensitiveWordDetector initialization failed:", err);
-});
+// 仅在测试或构建阶段允许跳过预热，避免生产环境静默关闭敏感词拦截。
+const hasDsn = Boolean(process.env.DSN?.trim());
+const canSkipDsnWarmup =
+  process.env.NODE_ENV === "test" || process.env.NEXT_PHASE === "phase-production-build";
+
+if (hasDsn) {
+  sensitiveWordDetector.reload().catch((err) => {
+    logger.error("[App] SensitiveWordDetector initialization failed:", err);
+  });
+} else if (canSkipDsnWarmup) {
+  logger.info("[App] SensitiveWordDetector warmup skipped: DSN not configured");
+} else {
+  throw new Error("[App] DSN is required for SensitiveWordDetector warmup");
+}
 
 const app = new Hono().basePath("/v1");
 
@@ -40,8 +50,13 @@ app.post("/chat/completions", handleProxyRequest);
 // Response API 路由（支持 Codex）
 app.post("/responses", handleProxyRequest);
 
+// 内部健康自检端点（不走 proxy，仅验证 Hono 中间件链可用）
+app.get("/_ping", (c) => c.json({ status: "pong" }));
+
 // Claude API 和其他所有请求（fallback）
 app.all("*", handleProxyRequest);
+
+export { app as v1App };
 
 export const GET = handle(app);
 export const POST = handle(app);

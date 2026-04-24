@@ -14,6 +14,9 @@ import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import type { ProviderChainItem } from "@/types/message";
 import type { ProxySession } from "./session";
 
+/** Marker message for the synthetic terminal error emitted when every provider fails. */
+export const ALL_PROVIDERS_UNAVAILABLE_MESSAGE = "所有供应商暂时不可用，请稍后重试";
+
 export class ProxyError extends Error {
   public readonly isLocalAbort: boolean;
 
@@ -56,6 +59,13 @@ export class ProxyError extends Error {
        * 命中的推断规则 id（仅用于内部调试/审计，不应用于用户展示文案）。
        */
       statusCodeInferenceMatcherId?: string;
+
+      /**
+       * 安全脱敏后的上游错误候选 message。
+       *
+       * 仅供标准客户端错误响应在系统开关允许时使用，不进入详细日志/规则匹配。
+       */
+      safeClientMessageCandidate?: string;
     },
     isLocalAbort: boolean = false
   ) {
@@ -1327,7 +1337,7 @@ export function buildRequestDetails(
   return {
     url: sanitizeUrl(session.requestUrl),
     method: session.method,
-    headers: sanitizeHeaders(session.headerLog),
+    headers: sanitizeHeaders(session.headers),
     body,
     bodyTruncated: truncated,
   };

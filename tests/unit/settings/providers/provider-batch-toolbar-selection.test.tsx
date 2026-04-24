@@ -243,4 +243,26 @@ describe("ProviderBatchToolbar - Selection enhancements", () => {
 
     unmount();
   });
+
+  it("does NOT render group dropdown when group selector is explicitly hidden", () => {
+    const providers = [
+      createProvider(1, "claude", "production"),
+      createProvider(2, "openai-compatible", "staging"),
+    ];
+
+    const { container, unmount } = render(
+      <ProviderBatchToolbar
+        {...defaultProps}
+        isMultiSelectMode={true}
+        providers={providers}
+        showSelectByGroup={false}
+      />
+    );
+
+    const buttons = container.querySelectorAll("button");
+    const groupButton = Array.from(buttons).find((b) => b.textContent?.includes("selectByGroup"));
+    expect(groupButton).toBeFalsy();
+
+    unmount();
+  });
 });

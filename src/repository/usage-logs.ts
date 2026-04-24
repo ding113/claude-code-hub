@@ -6,13 +6,20 @@ import { keys as keysTable, messageRequest, providers, usageLedger, users } from
 import { TTLMap } from "@/lib/cache/ttl-map";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { extractAnthropicEffortFromSpecialSettings } from "@/lib/utils/anthropic-effort";
+import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { escapeLike } from "./_shared/like";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
-import { buildUsageLogConditions, RETRY_COUNT_EXPR } from "./_shared/usage-log-filters";
+import {
+  buildDefaultHiddenUsageLogEndpointCondition,
+  buildUsageLogConditions,
+  buildUsageLogEndpointMatchCondition,
+  RETRY_COUNT_EXPR,
+} from "./_shared/usage-log-filters";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -45,6 +52,7 @@ export interface UsageLogRow {
   providerName: string | null; // 改为可选：被拦截的请求没有 provider
   model: string | null;
   originalModel: string | null; // 原始模型（重定向前）
+  actualResponseModel: string | null; // 上游响应实际返回的模型名(audit)
   endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
@@ -57,6 +65,8 @@ export interface UsageLogRow {
   totalTokens: number;
   costUsd: string | null;
   costMultiplier: string | null; // 供应商倍率
+  groupCostMultiplier: string | null; // 分组倍率
+  costBreakdown: StoredCostBreakdown | null; // 费用明细
   durationMs: number | null;
   ttfbMs: number | null;
   errorMessage: string | null;
@@ -64,6 +74,7 @@ export interface UsageLogRow {
   blockedBy: string | null; // 拦截类型（如 'sensitive_word'）
   blockedReason: string | null; // 拦截原因（JSON 字符串）
   userAgent: string | null; // User-Agent（客户端信息）
+  clientIp: string | null; // 客户端 IP（IPv4/IPv6）
   messagesCount: number | null; // Messages 数量
   context1mApplied: boolean | null; // 是否应用了1M上下文窗口
   swapCacheTtlApplied: boolean | null; // 是否启用了swap cache TTL billing
@@ -135,6 +146,7 @@ export async function findUsageLogsBatch(
   filters: UsageLogBatchFilters
 ): Promise<UsageLogsBatchResult> {
   const { userId, keyId, providerId, cursor, limit = 50 } = filters;
+  const safeLimit = Math.min(100, Math.max(1, limit));
 
   // Build query conditions
   const conditions = [isNull(messageRequest.deletedAt)];
@@ -162,7 +174,7 @@ export async function findUsageLogsBatch(
   }
 
   // Fetch limit + 1 to determine if there are more records
-  const fetchLimit = limit + 1;
+  const fetchLimit = safeLimit + 1;
 
   const results = await db
     .select({
@@ -176,6 +188,7 @@ export async function findUsageLogsBatch(
       providerName: providers.name,
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
+      actualResponseModel: messageRequest.actualResponseModel,
       endpoint: messageRequest.endpoint,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
@@ -187,6 +200,8 @@ export async function findUsageLogsBatch(
       cacheTtlApplied: messageRequest.cacheTtlApplied,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier,
+      groupCostMultiplier: messageRequest.groupCostMultiplier,
+      costBreakdown: messageRequest.costBreakdown,
       durationMs: messageRequest.durationMs,
       ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
@@ -194,6 +209,7 @@ export async function findUsageLogsBatch(
       blockedBy: messageRequest.blockedBy,
       blockedReason: messageRequest.blockedReason,
       userAgent: messageRequest.userAgent,
+      clientIp: messageRequest.clientIp,
       messagesCount: messageRequest.messagesCount,
       context1mApplied: messageRequest.context1mApplied,
       swapCacheTtlApplied: messageRequest.swapCacheTtlApplied,
@@ -208,8 +224,8 @@ export async function findUsageLogsBatch(
     .limit(fetchLimit);
 
   // Determine if there are more records
-  const hasMore = results.length > limit;
-  const logsToReturn = hasMore ? results.slice(0, limit) : results;
+  const hasMore = results.length > safeLimit;
+  const logsToReturn = hasMore ? results.slice(0, safeLimit) : results;
 
   // Calculate next cursor from the last record
   const lastLog = logsToReturn[logsToReturn.length - 1];
@@ -244,6 +260,8 @@ export async function findUsageLogsBatch(
       cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
       cacheTtlApplied: row.cacheTtlApplied,
       costUsd: row.costUsd?.toString() ?? null,
+      groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
+      costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
@@ -302,8 +320,22 @@ export async function findUsageLogsBatch(
     ledgerConditions.push(eq(usageLedger.model, filters.model));
   }
 
-  if (filters.endpoint) {
-    ledgerConditions.push(eq(usageLedger.endpoint, filters.endpoint));
+  const hiddenLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
+    usageLedger.endpoint,
+    filters.endpoint
+  );
+  if (hiddenLedgerEndpointCondition) {
+    ledgerConditions.push(hiddenLedgerEndpointCondition);
+  }
+
+  if (filters.endpoint?.trim()) {
+    const endpointMatchCondition = buildUsageLogEndpointMatchCondition(
+      usageLedger.endpoint,
+      filters.endpoint
+    );
+    if (endpointMatchCondition) {
+      ledgerConditions.push(endpointMatchCondition);
+    }
   }
 
   if (cursor) {
@@ -325,6 +357,7 @@ export async function findUsageLogsBatch(
       providerName: providers.name,
       model: usageLedger.model,
       originalModel: usageLedger.originalModel,
+      actualResponseModel: usageLedger.actualResponseModel,
       endpoint: usageLedger.endpoint,
       statusCode: usageLedger.statusCode,
       inputTokens: usageLedger.inputTokens,
@@ -336,8 +369,10 @@ export async function findUsageLogsBatch(
       cacheTtlApplied: usageLedger.cacheTtlApplied,
       costUsd: usageLedger.costUsd,
       costMultiplier: usageLedger.costMultiplier,
+      groupCostMultiplier: usageLedger.groupCostMultiplier,
       durationMs: usageLedger.durationMs,
       ttfbMs: usageLedger.ttfbMs,
+      clientIp: usageLedger.clientIp,
       context1mApplied: usageLedger.context1mApplied,
       swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
     })
@@ -375,6 +410,7 @@ export async function findUsageLogsBatch(
       providerName: row.providerName,
       model: row.model,
       originalModel: row.originalModel,
+      actualResponseModel: row.actualResponseModel,
       endpoint: row.endpoint,
       statusCode: row.statusCode,
       inputTokens: row.inputTokens,
@@ -387,6 +423,8 @@ export async function findUsageLogsBatch(
       totalTokens: totalRowTokens,
       costUsd: row.costUsd?.toString() ?? null,
       costMultiplier: row.costMultiplier?.toString() ?? null,
+      groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
+      costBreakdown: null,
       durationMs: row.durationMs,
       ttfbMs: row.ttfbMs,
       errorMessage: null,
@@ -394,6 +432,7 @@ export async function findUsageLogsBatch(
       blockedBy: null,
       blockedReason: null,
       userAgent: null,
+      clientIp: row.clientIp ?? null,
       messagesCount: null,
       context1mApplied: row.context1mApplied ?? null,
       swapCacheTtlApplied: row.swapCacheTtlApplied ?? null,
@@ -431,6 +470,7 @@ interface UsageLogSlimRow {
   createdAt: Date | null;
   model: string | null;
   originalModel: string | null;
+  actualResponseModel: string | null;
   endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
@@ -452,6 +492,7 @@ export interface UsageLogSlimBatchResult {
 }
 
 const usageLogSlimTotalCache = new TTLMap<string, number>({ ttlMs: 10_000, maxSize: 1000 });
+const MAX_LEGACY_USAGE_LOG_PAGES = 10;
 
 export async function findUsageLogsForKeySlim(
   filters: UsageLogSlimFilters & { page?: number; pageSize?: number }
@@ -459,12 +500,6 @@ export async function findUsageLogsForKeySlim(
   const { keyString, page = 1, pageSize = 50 } = filters;
   const safePage = page > 0 ? page : 1;
   const safePageSize = Math.min(100, Math.max(1, pageSize));
-
-  const conditions = [
-    isNull(messageRequest.deletedAt),
-    eq(messageRequest.key, keyString),
-    EXCLUDE_WARMUP_CONDITION,
-  ];
   const totalCacheKey = [
     keyString,
     filters.sessionId?.trim() ?? "",
@@ -476,160 +511,73 @@ export async function findUsageLogsForKeySlim(
     filters.endpoint ?? "",
     filters.minRetryCount ?? "",
   ].join("\u0001");
-
-  conditions.push(...buildUsageLogConditions(filters));
-
-  const offset = (safePage - 1) * safePageSize;
-  const results = await db
-    .select({
-      id: messageRequest.id,
-      createdAt: messageRequest.createdAt,
-      model: messageRequest.model,
-      originalModel: messageRequest.originalModel,
-      endpoint: messageRequest.endpoint,
-      statusCode: messageRequest.statusCode,
-      inputTokens: messageRequest.inputTokens,
-      outputTokens: messageRequest.outputTokens,
-      costUsd: messageRequest.costUsd,
-      durationMs: messageRequest.durationMs,
-      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
-      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
-      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
-      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
-      cacheTtlApplied: messageRequest.cacheTtlApplied,
-      specialSettings: messageRequest.specialSettings,
-    })
-    .from(messageRequest)
-    .where(and(...conditions))
-    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
-    .limit(safePageSize + 1)
-    .offset(offset);
-
-  const hasMore = results.length > safePageSize;
-  const pageRows = hasMore ? results.slice(0, safePageSize) : results;
-
-  if (pageRows.length === 0 && (await isLedgerOnlyMode())) {
-    if (filters.minRetryCount !== undefined && filters.minRetryCount > 0) {
-      return { logs: [], total: 0 };
-    }
-
-    const ledgerConditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.key, keyString)];
-    const trimmedSessionId = filters.sessionId?.trim();
-    if (trimmedSessionId) {
-      ledgerConditions.push(eq(usageLedger.sessionId, trimmedSessionId));
-    }
-    if (filters.startTime !== undefined) {
-      ledgerConditions.push(gte(usageLedger.createdAt, new Date(filters.startTime)));
-    }
-    if (filters.endTime !== undefined) {
-      ledgerConditions.push(lt(usageLedger.createdAt, new Date(filters.endTime)));
-    }
-    if (filters.statusCode !== undefined) {
-      ledgerConditions.push(eq(usageLedger.statusCode, filters.statusCode));
-    } else if (filters.excludeStatusCode200) {
-      ledgerConditions.push(
-        sql`(${usageLedger.statusCode} IS NULL OR ${usageLedger.statusCode} <> 200)`
-      );
-    }
-    if (filters.model) {
-      ledgerConditions.push(eq(usageLedger.model, filters.model));
-    }
-    if (filters.endpoint) {
-      ledgerConditions.push(eq(usageLedger.endpoint, filters.endpoint));
-    }
-
-    const ledgerResults = await db
-      .select({
-        id: usageLedger.requestId,
-        createdAt: usageLedger.createdAt,
-        model: usageLedger.model,
-        originalModel: usageLedger.originalModel,
-        endpoint: usageLedger.endpoint,
-        statusCode: usageLedger.statusCode,
-        inputTokens: usageLedger.inputTokens,
-        outputTokens: usageLedger.outputTokens,
-        costUsd: usageLedger.costUsd,
-        durationMs: usageLedger.durationMs,
-        cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
-        cacheReadInputTokens: usageLedger.cacheReadInputTokens,
-        cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
-        cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
-        cacheTtlApplied: usageLedger.cacheTtlApplied,
-      })
-      .from(usageLedger)
-      .where(and(...ledgerConditions))
-      .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
-      .limit(safePageSize + 1)
-      .offset(offset);
-
-    const ledgerHasMore = ledgerResults.length > safePageSize;
-    const ledgerPageRows = ledgerHasMore ? ledgerResults.slice(0, safePageSize) : ledgerResults;
-    let ledgerTotal = offset + ledgerPageRows.length;
-
-    const cachedTotal = usageLogSlimTotalCache.get(totalCacheKey);
-    if (cachedTotal !== undefined) {
-      ledgerTotal = Math.max(cachedTotal, ledgerTotal);
-      return {
-        logs: ledgerPageRows.map((row) => ({
-          ...row,
-          costUsd: row.costUsd?.toString() ?? null,
-          anthropicEffort: null,
-        })),
-        total: ledgerTotal,
-      };
-    }
-
-    if (ledgerPageRows.length === 0 && offset > 0) {
-      const countResults = await db
-        .select({ totalRows: sql<number>`count(*)::double precision` })
-        .from(usageLedger)
-        .where(and(...ledgerConditions));
-      ledgerTotal = countResults[0]?.totalRows ?? 0;
-    } else if (ledgerHasMore) {
-      const countResults = await db
-        .select({ totalRows: sql<number>`count(*)::double precision` })
-        .from(usageLedger)
-        .where(and(...ledgerConditions));
-      ledgerTotal = countResults[0]?.totalRows ?? 0;
-    }
-
-    const ledgerLogs: UsageLogSlimRow[] = ledgerPageRows.map((row) => ({
-      ...row,
-      costUsd: row.costUsd?.toString() ?? null,
-      anthropicEffort: null,
-    }));
-
-    usageLogSlimTotalCache.set(totalCacheKey, ledgerTotal);
-    return { logs: ledgerLogs, total: ledgerTotal };
-  }
-
-  let total = offset + pageRows.length;
   const cachedTotal = usageLogSlimTotalCache.get(totalCacheKey);
-  if (cachedTotal !== undefined) {
-    total = Math.max(cachedTotal, total);
+
+  const resolveTotal = async (): Promise<number> => {
+    if (cachedTotal !== undefined) {
+      return cachedTotal;
+    }
+
+    const [messageTotal, ledgerTotal] = await Promise.all([
+      countKeyScopedMessageRows(keyString, filters),
+      countKeyScopedLedgerRows(keyString, filters),
+    ]);
+    const total = messageTotal + ledgerTotal;
+    usageLogSlimTotalCache.set(totalCacheKey, total);
+    return total;
+  };
+
+  if (safePage === 1) {
+    const fetchLimit = safePageSize + 1;
+    const [messageRows, ledgerRows, total] = await Promise.all([
+      selectKeyScopedMessageSlimRows(keyString, filters, fetchLimit),
+      selectKeyScopedLedgerSlimRows(keyString, filters, fetchLimit),
+      resolveTotal(),
+    ]);
+
+    const mergedRows = mergeOrderedUsageLogs<KeyScopedSlimSourceRow>([
+      ...messageRows,
+      ...ledgerRows,
+    ]);
     return {
-      logs: pageRows.map((row) => mapUsageLogSlimRow(row)),
+      logs: mergedRows.slice(0, safePageSize),
       total,
     };
   }
 
-  if (pageRows.length === 0 && offset > 0) {
-    const countResults = await db
-      .select({ totalRows: sql<number>`count(*)::double precision` })
-      .from(messageRequest)
-      .where(and(...conditions));
-    total = countResults[0]?.totalRows ?? 0;
-  } else if (hasMore) {
-    const countResults = await db
-      .select({ totalRows: sql<number>`count(*)::double precision` })
-      .from(messageRequest)
-      .where(and(...conditions));
-    total = countResults[0]?.totalRows ?? 0;
+  if (safePage > MAX_LEGACY_USAGE_LOG_PAGES) {
+    return {
+      logs: [],
+      total: await resolveTotal(),
+    };
   }
 
-  const logs: UsageLogSlimRow[] = pageRows.map((row) => mapUsageLogSlimRow(row));
-  usageLogSlimTotalCache.set(totalCacheKey, total);
-  return { logs, total };
+  let cursor: KeyScopedCursor | undefined;
+  let currentPage = 1;
+  let pageResult: UsageLogSlimBatchResult = {
+    logs: [],
+    nextCursor: null,
+    hasMore: false,
+  };
+
+  while (currentPage <= safePage) {
+    pageResult = await findUsageLogsForKeyBatch({
+      ...filters,
+      cursor,
+      limit: safePageSize,
+      keyString,
+    });
+    if (currentPage === safePage || !pageResult.hasMore) {
+      break;
+    }
+    cursor = pageResult.nextCursor ?? undefined;
+    currentPage += 1;
+  }
+
+  return {
+    logs: currentPage === safePage ? pageResult.logs : [],
+    total: await resolveTotal(),
+  };
 }
 
 function buildNextCursorOrThrow(
@@ -654,6 +602,7 @@ function mapUsageLogSlimRow(row: {
   createdAt: Date | null;
   model: string | null;
   originalModel: string | null;
+  actualResponseModel: string | null;
   endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
@@ -685,12 +634,38 @@ function mapUsageLogSlimRow(row: {
   };
 }
 
-export async function findUsageLogsForKeyBatch(
-  filters: UsageLogSlimBatchFilters
-): Promise<UsageLogSlimBatchResult> {
-  const { keyString, cursor, limit = 20 } = filters;
-  const safeLimit = Math.min(100, Math.max(1, limit));
+type KeyScopedCursor = { createdAt: string; id: number };
 
+type KeyScopedSlimSourceRow = UsageLogSlimRow & {
+  createdAtRaw?: string | null;
+};
+
+function compareUsageLogOrder(
+  a: { createdAt: Date | null; id: number; createdAtRaw?: string | null },
+  b: { createdAt: Date | null; id: number; createdAtRaw?: string | null }
+): number {
+  const aRaw = a.createdAtRaw ?? (a.createdAt ? a.createdAt.toISOString() : null);
+  const bRaw = b.createdAtRaw ?? (b.createdAt ? b.createdAt.toISOString() : null);
+
+  if (aRaw !== bRaw) {
+    if (aRaw === null) return 1;
+    if (bRaw === null) return -1;
+    return bRaw.localeCompare(aRaw);
+  }
+
+  return b.id - a.id;
+}
+
+function mergeOrderedUsageLogs<
+  T extends { createdAt: Date | null; id: number; createdAtRaw?: string | null },
+>(rows: T[]): T[] {
+  return rows.sort(compareUsageLogOrder);
+}
+
+function buildKeyMessageConditions(
+  keyString: string,
+  filters: UsageLogSlimFilters & { cursor?: KeyScopedCursor }
+) {
   const conditions = [
     isNull(messageRequest.deletedAt),
     eq(messageRequest.key, keyString),
@@ -699,21 +674,99 @@ export async function findUsageLogsForKeyBatch(
 
   conditions.push(...buildUsageLogConditions(filters));
 
-  if (cursor) {
+  if (filters.cursor) {
     conditions.push(
-      sql`(${messageRequest.createdAt}, ${messageRequest.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id})`
+      sql`(${messageRequest.createdAt}, ${messageRequest.id}) < (${filters.cursor.createdAt}::timestamptz, ${filters.cursor.id})`
     );
   }
 
-  const fetchLimit = safeLimit + 1;
+  return conditions;
+}
 
-  const results = await db
+function buildKeyLedgerConditions(
+  keyString: string,
+  filters: UsageLogSlimFilters & { cursor?: KeyScopedCursor }
+) {
+  if (filters.minRetryCount !== undefined && filters.minRetryCount > 0) {
+    return null;
+  }
+
+  const conditions = [
+    LEDGER_BILLING_CONDITION,
+    eq(usageLedger.key, keyString),
+    sql`not exists (
+      select 1
+      from "message_request" as mr_active
+      where mr_active.id = ${usageLedger.requestId}
+        and mr_active.deleted_at is null
+        and mr_active.key = ${usageLedger.key}
+    )`,
+  ];
+
+  const trimmedSessionId = filters.sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(usageLedger.sessionId, trimmedSessionId));
+  }
+
+  if (filters.startTime) {
+    conditions.push(gte(usageLedger.createdAt, new Date(filters.startTime)));
+  }
+
+  if (filters.endTime) {
+    conditions.push(lt(usageLedger.createdAt, new Date(filters.endTime)));
+  }
+
+  if (filters.statusCode !== undefined) {
+    conditions.push(eq(usageLedger.statusCode, filters.statusCode));
+  } else if (filters.excludeStatusCode200) {
+    conditions.push(sql`(${usageLedger.statusCode} IS NULL OR ${usageLedger.statusCode} <> 200)`);
+  }
+
+  if (filters.model) {
+    conditions.push(eq(usageLedger.model, filters.model));
+  }
+
+  const hiddenKeyLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
+    usageLedger.endpoint,
+    filters.endpoint
+  );
+  if (hiddenKeyLedgerEndpointCondition) {
+    conditions.push(hiddenKeyLedgerEndpointCondition);
+  }
+
+  if (filters.endpoint?.trim()) {
+    const endpointMatchCondition = buildUsageLogEndpointMatchCondition(
+      usageLedger.endpoint,
+      filters.endpoint
+    );
+    if (endpointMatchCondition) {
+      conditions.push(endpointMatchCondition);
+    }
+  }
+
+  if (filters.cursor) {
+    conditions.push(
+      sql`(${usageLedger.createdAt}, ${usageLedger.requestId}) < (${filters.cursor.createdAt}::timestamptz, ${filters.cursor.id})`
+    );
+  }
+
+  return conditions;
+}
+
+async function selectKeyScopedMessageSlimRows(
+  keyString: string,
+  filters: UsageLogSlimFilters & { cursor?: KeyScopedCursor },
+  limit: number,
+  offset: number = 0
+): Promise<KeyScopedSlimSourceRow[]> {
+  const rows = await db
     .select({
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
       createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
+      actualResponseModel: messageRequest.actualResponseModel,
       endpoint: messageRequest.endpoint,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
@@ -728,75 +781,36 @@ export async function findUsageLogsForKeyBatch(
       specialSettings: messageRequest.specialSettings,
     })
     .from(messageRequest)
-    .where(and(...conditions))
+    .where(and(...buildKeyMessageConditions(keyString, filters)))
     .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
-    .limit(fetchLimit);
+    .limit(limit)
+    .offset(offset);
 
-  const hasMore = results.length > safeLimit;
-  const rowsToReturn = hasMore ? results.slice(0, safeLimit) : results;
-  const lastRow = rowsToReturn[rowsToReturn.length - 1];
-  const nextCursor = buildNextCursorOrThrow(hasMore, lastRow, "findUsageLogsForKeyBatch");
+  return rows.map((row) => ({
+    ...mapUsageLogSlimRow(row),
+    createdAtRaw: row.createdAtRaw,
+  }));
+}
 
-  if (rowsToReturn.length > 0) {
-    return {
-      logs: rowsToReturn.map((row) => mapUsageLogSlimRow(row)),
-      nextCursor,
-      hasMore,
-    };
+async function selectKeyScopedLedgerSlimRows(
+  keyString: string,
+  filters: UsageLogSlimFilters & { cursor?: KeyScopedCursor },
+  limit: number,
+  offset: number = 0
+): Promise<KeyScopedSlimSourceRow[]> {
+  const ledgerConditions = buildKeyLedgerConditions(keyString, filters);
+  if (!ledgerConditions) {
+    return [];
   }
 
-  if (!(await isLedgerOnlyMode())) {
-    return { logs: [], nextCursor, hasMore };
-  }
-
-  if (filters.minRetryCount !== undefined && filters.minRetryCount > 0) {
-    return { logs: [], nextCursor: null, hasMore: false };
-  }
-
-  const ledgerConditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.key, keyString)];
-
-  const trimmedSessionId = filters.sessionId?.trim();
-  if (trimmedSessionId) {
-    ledgerConditions.push(eq(usageLedger.sessionId, trimmedSessionId));
-  }
-
-  if (filters.startTime) {
-    ledgerConditions.push(gte(usageLedger.createdAt, new Date(filters.startTime)));
-  }
-
-  if (filters.endTime) {
-    ledgerConditions.push(lt(usageLedger.createdAt, new Date(filters.endTime)));
-  }
-
-  if (filters.statusCode !== undefined) {
-    ledgerConditions.push(eq(usageLedger.statusCode, filters.statusCode));
-  } else if (filters.excludeStatusCode200) {
-    ledgerConditions.push(
-      sql`(${usageLedger.statusCode} IS NULL OR ${usageLedger.statusCode} <> 200)`
-    );
-  }
-
-  if (filters.model) {
-    ledgerConditions.push(eq(usageLedger.model, filters.model));
-  }
-
-  if (filters.endpoint) {
-    ledgerConditions.push(eq(usageLedger.endpoint, filters.endpoint));
-  }
-
-  if (cursor) {
-    ledgerConditions.push(
-      sql`(${usageLedger.createdAt}, ${usageLedger.requestId}) < (${cursor.createdAt}::timestamptz, ${cursor.id})`
-    );
-  }
-
-  const ledgerResults = await db
+  const rows = await db
     .select({
       id: usageLedger.requestId,
       createdAt: usageLedger.createdAt,
       createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       model: usageLedger.model,
       originalModel: usageLedger.originalModel,
+      actualResponseModel: usageLedger.actualResponseModel,
       endpoint: usageLedger.endpoint,
       statusCode: usageLedger.statusCode,
       inputTokens: usageLedger.inputTokens,
@@ -812,25 +826,84 @@ export async function findUsageLogsForKeyBatch(
     .from(usageLedger)
     .where(and(...ledgerConditions))
     .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
-    .limit(fetchLimit);
+    .limit(limit)
+    .offset(offset);
 
-  const ledgerHasMore = ledgerResults.length > safeLimit;
-  const ledgerRowsToReturn = ledgerHasMore ? ledgerResults.slice(0, safeLimit) : ledgerResults;
-  const ledgerLastRow = ledgerRowsToReturn[ledgerRowsToReturn.length - 1];
-  const ledgerNextCursor = buildNextCursorOrThrow(
-    ledgerHasMore,
-    ledgerLastRow,
-    "findUsageLogsForKeyBatch ledger fallback"
+  return rows.map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt,
+    createdAtRaw: row.createdAtRaw,
+    model: row.model,
+    originalModel: row.originalModel,
+    actualResponseModel: row.actualResponseModel,
+    endpoint: row.endpoint,
+    statusCode: row.statusCode,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    costUsd: row.costUsd?.toString() ?? null,
+    durationMs: row.durationMs,
+    cacheCreationInputTokens: row.cacheCreationInputTokens,
+    cacheReadInputTokens: row.cacheReadInputTokens,
+    cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
+    cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
+    cacheTtlApplied: row.cacheTtlApplied,
+    anthropicEffort: null,
+  }));
+}
+
+async function countKeyScopedMessageRows(
+  keyString: string,
+  filters: UsageLogSlimFilters
+): Promise<number> {
+  const [row] = await db
+    .select({ totalRows: sql<number>`count(*)::int` })
+    .from(messageRequest)
+    .where(and(...buildKeyMessageConditions(keyString, filters)));
+
+  return row?.totalRows ?? 0;
+}
+
+async function countKeyScopedLedgerRows(
+  keyString: string,
+  filters: UsageLogSlimFilters
+): Promise<number> {
+  const ledgerConditions = buildKeyLedgerConditions(keyString, filters);
+  if (!ledgerConditions) {
+    return 0;
+  }
+
+  const [row] = await db
+    .select({ totalRows: sql<number>`count(*)::int` })
+    .from(usageLedger)
+    .where(and(...ledgerConditions));
+
+  return row?.totalRows ?? 0;
+}
+
+export async function findUsageLogsForKeyBatch(
+  filters: UsageLogSlimBatchFilters
+): Promise<UsageLogSlimBatchResult> {
+  const { keyString, limit = 20 } = filters;
+  const safeLimit = Math.min(100, Math.max(1, limit));
+  const fetchLimit = safeLimit + 1;
+  const [messageRows, ledgerRows] = await Promise.all([
+    selectKeyScopedMessageSlimRows(keyString, filters, fetchLimit, 0),
+    selectKeyScopedLedgerSlimRows(keyString, filters, fetchLimit, 0),
+  ]);
+
+  const mergedRows = mergeOrderedUsageLogs<KeyScopedSlimSourceRow>([...messageRows, ...ledgerRows]);
+  const rowsToReturn = mergedRows.slice(0, safeLimit);
+  const hasMore = mergedRows.length > safeLimit;
+  const nextCursor = buildNextCursorOrThrow(
+    hasMore,
+    rowsToReturn[rowsToReturn.length - 1],
+    "findUsageLogsForKeyBatch"
   );
 
   return {
-    logs: ledgerRowsToReturn.map((row) => ({
-      ...row,
-      costUsd: row.costUsd?.toString() ?? null,
-      anthropicEffort: null,
-    })),
-    nextCursor: ledgerNextCursor,
-    hasMore: ledgerHasMore,
+    logs: rowsToReturn,
+    nextCursor,
+    hasMore,
   };
 }
 
@@ -858,23 +931,306 @@ export async function getTotalUsageForKey(keyString: string): Promise<number> {
   return Number(row?.total ?? 0);
 }
 
+function mapUsageLogRowFromMessageResult(row: {
+  id: number;
+  createdAt: Date | null;
+  sessionId: string | null;
+  requestSequence: number | null;
+  userName: string;
+  keyName: string;
+  providerName: string | null;
+  model: string | null;
+  originalModel: string | null;
+  actualResponseModel: string | null;
+  endpoint: string | null;
+  statusCode: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
+  costUsd: string | null | { toString(): string };
+  costMultiplier: string | null | { toString(): string };
+  groupCostMultiplier: string | null | { toString(): string };
+  costBreakdown: StoredCostBreakdown | null;
+  durationMs: number | null;
+  ttfbMs: number | null;
+  errorMessage: string | null;
+  providerChain: ProviderChainItem[] | null;
+  blockedBy: string | null;
+  blockedReason: string | null;
+  userAgent: string | null;
+  clientIp: string | null;
+  messagesCount: number | null;
+  context1mApplied: boolean | null;
+  swapCacheTtlApplied: boolean | null;
+  specialSettings: SpecialSetting[] | null;
+}) {
+  const totalRowTokens =
+    (row.inputTokens ?? 0) +
+    (row.outputTokens ?? 0) +
+    (row.cacheCreationInputTokens ?? 0) +
+    (row.cacheReadInputTokens ?? 0);
+
+  const unifiedSpecialSettings = buildUnifiedSpecialSettings({
+    existing: Array.isArray(row.specialSettings) ? row.specialSettings : null,
+    blockedBy: row.blockedBy,
+    blockedReason: row.blockedReason,
+    statusCode: row.statusCode,
+    cacheTtlApplied: row.cacheTtlApplied,
+    context1mApplied: row.context1mApplied,
+  });
+  const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
+
+  return {
+    ...row,
+    requestSequence: row.requestSequence ?? null,
+    totalTokens: totalRowTokens,
+    costUsd: row.costUsd?.toString() ?? null,
+    costMultiplier: row.costMultiplier?.toString() ?? null,
+    groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
+    costBreakdown: row.costBreakdown ?? null,
+    providerChain: row.providerChain ?? null,
+    specialSettings: unifiedSpecialSettings,
+    anthropicEffort,
+  } satisfies UsageLogRow;
+}
+
+function mapUsageLogRowFromLedgerResult(row: {
+  id: number;
+  createdAt: Date | null;
+  sessionId: string | null;
+  userId: number;
+  userName: string | null;
+  key: string;
+  keyName: string | null;
+  providerName: string | null;
+  model: string | null;
+  originalModel: string | null;
+  actualResponseModel: string | null;
+  endpoint: string | null;
+  statusCode: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
+  costUsd: string | null | { toString(): string };
+  costMultiplier: string | null | { toString(): string };
+  groupCostMultiplier: string | null | { toString(): string };
+  durationMs: number | null;
+  ttfbMs: number | null;
+  clientIp: string | null;
+  context1mApplied: boolean | null;
+  swapCacheTtlApplied: boolean | null;
+}) {
+  const totalRowTokens =
+    (row.inputTokens ?? 0) +
+    (row.outputTokens ?? 0) +
+    (row.cacheCreationInputTokens ?? 0) +
+    (row.cacheReadInputTokens ?? 0);
+
+  return {
+    id: row.id,
+    createdAt: row.createdAt,
+    sessionId: row.sessionId,
+    requestSequence: null,
+    userName: row.userName ?? `User #${row.userId}`,
+    keyName: row.keyName ?? row.key,
+    providerName: row.providerName,
+    model: row.model,
+    originalModel: row.originalModel,
+    actualResponseModel: row.actualResponseModel,
+    endpoint: row.endpoint,
+    statusCode: row.statusCode,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    cacheCreationInputTokens: row.cacheCreationInputTokens,
+    cacheReadInputTokens: row.cacheReadInputTokens,
+    cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
+    cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
+    cacheTtlApplied: row.cacheTtlApplied,
+    totalTokens: totalRowTokens,
+    costUsd: row.costUsd?.toString() ?? null,
+    costMultiplier: row.costMultiplier?.toString() ?? null,
+    groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
+    costBreakdown: null,
+    durationMs: row.durationMs,
+    ttfbMs: row.ttfbMs,
+    errorMessage: null,
+    providerChain: null,
+    blockedBy: null,
+    blockedReason: null,
+    userAgent: null,
+    clientIp: row.clientIp ?? null,
+    messagesCount: null,
+    context1mApplied: row.context1mApplied ?? null,
+    swapCacheTtlApplied: row.swapCacheTtlApplied ?? null,
+    specialSettings: null,
+    anthropicEffort: null,
+  } satisfies UsageLogRow;
+}
+
+export async function findReadonlyUsageLogsBatchForKey(
+  filters: Omit<UsageLogBatchFilters, "userId" | "keyId" | "providerId"> & { keyString: string }
+): Promise<UsageLogsBatchResult> {
+  const { keyString, cursor, limit = 50 } = filters;
+  const safeLimit = Math.min(100, Math.max(1, limit));
+  const fetchLimit = safeLimit + 1;
+
+  const messageConditions = buildKeyMessageConditions(keyString, { ...filters, cursor });
+  const ledgerConditions = buildKeyLedgerConditions(keyString, { ...filters, cursor });
+
+  const [messageRows, ledgerRows] = await Promise.all([
+    db
+      .select({
+        id: messageRequest.id,
+        createdAt: messageRequest.createdAt,
+        createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+        sessionId: messageRequest.sessionId,
+        requestSequence: messageRequest.requestSequence,
+        userName: users.name,
+        keyName: keysTable.name,
+        providerName: providers.name,
+        model: messageRequest.model,
+        originalModel: messageRequest.originalModel,
+        actualResponseModel: messageRequest.actualResponseModel,
+        endpoint: messageRequest.endpoint,
+        statusCode: messageRequest.statusCode,
+        inputTokens: messageRequest.inputTokens,
+        outputTokens: messageRequest.outputTokens,
+        cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+        cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+        cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+        cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+        cacheTtlApplied: messageRequest.cacheTtlApplied,
+        costUsd: messageRequest.costUsd,
+        costMultiplier: messageRequest.costMultiplier,
+        groupCostMultiplier: messageRequest.groupCostMultiplier,
+        costBreakdown: messageRequest.costBreakdown,
+        durationMs: messageRequest.durationMs,
+        ttfbMs: messageRequest.ttfbMs,
+        errorMessage: messageRequest.errorMessage,
+        providerChain: messageRequest.providerChain,
+        blockedBy: messageRequest.blockedBy,
+        blockedReason: messageRequest.blockedReason,
+        userAgent: messageRequest.userAgent,
+        clientIp: messageRequest.clientIp,
+        messagesCount: messageRequest.messagesCount,
+        context1mApplied: messageRequest.context1mApplied,
+        swapCacheTtlApplied: messageRequest.swapCacheTtlApplied,
+        specialSettings: messageRequest.specialSettings,
+      })
+      .from(messageRequest)
+      .innerJoin(users, eq(messageRequest.userId, users.id))
+      .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      .leftJoin(providers, eq(messageRequest.providerId, providers.id))
+      .where(and(...messageConditions))
+      .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+      .limit(fetchLimit),
+    ledgerConditions
+      ? db
+          .select({
+            id: usageLedger.requestId,
+            createdAt: usageLedger.createdAt,
+            createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+            sessionId: usageLedger.sessionId,
+            userId: usageLedger.userId,
+            userName: users.name,
+            key: usageLedger.key,
+            keyName: keysTable.name,
+            providerName: providers.name,
+            model: usageLedger.model,
+            originalModel: usageLedger.originalModel,
+            actualResponseModel: usageLedger.actualResponseModel,
+            endpoint: usageLedger.endpoint,
+            statusCode: usageLedger.statusCode,
+            inputTokens: usageLedger.inputTokens,
+            outputTokens: usageLedger.outputTokens,
+            cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
+            cacheReadInputTokens: usageLedger.cacheReadInputTokens,
+            cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
+            cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
+            cacheTtlApplied: usageLedger.cacheTtlApplied,
+            costUsd: usageLedger.costUsd,
+            costMultiplier: usageLedger.costMultiplier,
+            groupCostMultiplier: usageLedger.groupCostMultiplier,
+            durationMs: usageLedger.durationMs,
+            ttfbMs: usageLedger.ttfbMs,
+            clientIp: usageLedger.clientIp,
+            context1mApplied: usageLedger.context1mApplied,
+            swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
+          })
+          .from(usageLedger)
+          .leftJoin(users, eq(usageLedger.userId, users.id))
+          .leftJoin(keysTable, eq(usageLedger.key, keysTable.key))
+          .leftJoin(providers, eq(usageLedger.finalProviderId, providers.id))
+          .where(and(...ledgerConditions))
+          .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
+          .limit(fetchLimit)
+      : Promise.resolve([]),
+  ]);
+
+  const mergedLogs = mergeOrderedUsageLogs<UsageLogRow & { createdAtRaw?: string | null }>([
+    ...messageRows.map((row) => ({
+      ...mapUsageLogRowFromMessageResult(row),
+      createdAtRaw: row.createdAtRaw,
+    })),
+    ...ledgerRows.map((row) => ({
+      ...mapUsageLogRowFromLedgerResult(row),
+      createdAtRaw: row.createdAtRaw,
+    })),
+  ]);
+
+  const pageRows = mergedLogs.slice(0, safeLimit);
+  const hasMore = mergedLogs.length > safeLimit;
+  const nextCursor = buildNextCursorOrThrow(
+    hasMore,
+    pageRows[pageRows.length - 1],
+    "findReadonlyUsageLogsBatchForKey"
+  );
+
+  return {
+    logs: pageRows.map(({ createdAtRaw: _createdAtRaw, ...log }) => log),
+    nextCursor,
+    hasMore,
+  };
+}
+
 export async function getDistinctModelsForKey(keyString: string): Promise<string[]> {
   const cached = distinctModelsByKeyCache.get(keyString);
   if (cached !== undefined) return cached;
 
-  const result = await db.execute(
-    sql`select distinct ${messageRequest.model} as model
-        from ${messageRequest}
-        where ${messageRequest.key} = ${keyString}
-          and ${messageRequest.deletedAt} is null
-          and (${EXCLUDE_WARMUP_CONDITION})
-          and ${messageRequest.model} is not null
-        order by model asc`
-  );
+  const ledgerConditions = buildKeyLedgerConditions(keyString, { keyString });
 
-  const models = Array.from(result)
-    .map((row) => (row as { model?: string }).model)
-    .filter((model): model is string => !!model && model.trim().length > 0);
+  const [messageModels, ledgerModels] = await Promise.all([
+    db.execute(
+      sql`select distinct ${messageRequest.model} as model
+          from ${messageRequest}
+          where ${messageRequest.key} = ${keyString}
+            and ${messageRequest.deletedAt} is null
+            and (${EXCLUDE_WARMUP_CONDITION})
+            and ${messageRequest.model} is not null`
+    ),
+    ledgerConditions
+      ? db
+          .selectDistinct({ model: usageLedger.model })
+          .from(usageLedger)
+          .where(and(...ledgerConditions, sql`${usageLedger.model} is not null`))
+      : Promise.resolve([]),
+  ]);
+
+  const models = Array.from(
+    new Set(
+      [...Array.from(messageModels), ...Array.from(ledgerModels)]
+        .map((row) => (row as { model?: string }).model)
+        .filter((model): model is string => !!model && model.trim().length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b));
 
   distinctModelsByKeyCache.set(keyString, models);
   return models;
@@ -884,19 +1240,32 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
   const cached = distinctEndpointsByKeyCache.get(keyString);
   if (cached !== undefined) return cached;
 
-  const result = await db.execute(
-    sql`select distinct ${messageRequest.endpoint} as endpoint
-        from ${messageRequest}
-        where ${messageRequest.key} = ${keyString}
-          and ${messageRequest.deletedAt} is null
-          and (${EXCLUDE_WARMUP_CONDITION})
-          and ${messageRequest.endpoint} is not null
-        order by endpoint asc`
-  );
+  const ledgerConditions = buildKeyLedgerConditions(keyString, { keyString });
 
-  const endpoints = Array.from(result)
-    .map((row) => (row as { endpoint?: string }).endpoint)
-    .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0);
+  const [messageEndpoints, ledgerEndpoints] = await Promise.all([
+    db.execute(
+      sql`select distinct ${messageRequest.endpoint} as endpoint
+          from ${messageRequest}
+          where ${messageRequest.key} = ${keyString}
+            and ${messageRequest.deletedAt} is null
+            and (${EXCLUDE_WARMUP_CONDITION})
+            and ${messageRequest.endpoint} is not null`
+    ),
+    ledgerConditions
+      ? db
+          .selectDistinct({ endpoint: usageLedger.endpoint })
+          .from(usageLedger)
+          .where(and(...ledgerConditions, sql`${usageLedger.endpoint} is not null`))
+      : Promise.resolve([]),
+  ]);
+
+  const endpoints = Array.from(
+    new Set(
+      [...Array.from(messageEndpoints), ...Array.from(ledgerEndpoints)]
+        .map((row) => (row as { endpoint?: string }).endpoint)
+        .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b));
 
   distinctEndpointsByKeyCache.set(keyString, endpoints);
   return endpoints;
@@ -979,6 +1348,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       providerName: providers.name, // 被拦截的请求为 null
       model: messageRequest.model,
       originalModel: messageRequest.originalModel, // 原始模型（重定向前）
+      actualResponseModel: messageRequest.actualResponseModel, // 实际响应模型（audit）
       endpoint: messageRequest.endpoint,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
@@ -990,6 +1360,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       cacheTtlApplied: messageRequest.cacheTtlApplied,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier, // 供应商倍率
+      groupCostMultiplier: messageRequest.groupCostMultiplier, // 分组倍率
+      costBreakdown: messageRequest.costBreakdown, // 费用明细
       durationMs: messageRequest.durationMs,
       ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
@@ -997,6 +1369,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       blockedBy: messageRequest.blockedBy, // 拦截类型
       blockedReason: messageRequest.blockedReason, // 拦截原因
       userAgent: messageRequest.userAgent, // User-Agent
+      clientIp: messageRequest.clientIp, // 客户端 IP
       messagesCount: messageRequest.messagesCount, // Messages 数量
       context1mApplied: messageRequest.context1mApplied, // 1M上下文窗口
       swapCacheTtlApplied: messageRequest.swapCacheTtlApplied, // swap cache TTL billing
@@ -1052,6 +1425,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
       cacheTtlApplied: row.cacheTtlApplied,
       costUsd: row.costUsd?.toString() ?? null,
+      groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
+      costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
@@ -1193,6 +1568,67 @@ export async function findUsageLogsStats(
     return EMPTY_USAGE_LOG_SUMMARY;
   }
 
+  if (!ledgerOnly && isNonBillingEndpoint(filters.endpoint)) {
+    const conditions = [isNull(messageRequest.deletedAt), EXCLUDE_WARMUP_CONDITION];
+
+    if (userId !== undefined) {
+      conditions.push(eq(messageRequest.userId, userId));
+    }
+
+    if (keyId !== undefined) {
+      conditions.push(eq(keysTable.id, keyId));
+    }
+
+    if (providerId !== undefined) {
+      conditions.push(eq(messageRequest.providerId, providerId));
+    }
+
+    conditions.push(...buildUsageLogConditions(filters));
+
+    const baseQuery = db
+      .select({
+        totalRequests: sql<number>`count(*)::double precision`,
+        totalCost: sql<string>`0`,
+        totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
+        totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
+        totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
+        totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
+        totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
+        totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
+      })
+      .from(messageRequest);
+
+    const query =
+      keyId !== undefined
+        ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+        : baseQuery;
+
+    const [summaryResult] = await query.where(and(...conditions));
+
+    const totalRequests = summaryResult?.totalRequests ?? 0;
+    const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
+    // totalCacheCreation5m/1hTokens 是 totalCacheCreationTokens 的细分项，
+    // 不得重复累加，否则 count_tokens / compact 端点的 totalTokens
+    // 会比其他端点多出一份缓存创建 token，造成前端口径错位。
+    const totalTokens =
+      (summaryResult?.totalInputTokens ?? 0) +
+      (summaryResult?.totalOutputTokens ?? 0) +
+      (summaryResult?.totalCacheCreationTokens ?? 0) +
+      (summaryResult?.totalCacheReadTokens ?? 0);
+
+    return {
+      totalRequests,
+      totalCost,
+      totalTokens,
+      totalInputTokens: summaryResult?.totalInputTokens ?? 0,
+      totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
+      totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
+      totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
+      totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
+      totalCacheCreation1hTokens: summaryResult?.totalCacheCreation1hTokens ?? 0,
+    };
+  }
+
   const conditions = [LEDGER_BILLING_CONDITION];
 
   if (userId !== undefined) {
@@ -1230,8 +1666,22 @@ export async function findUsageLogsStats(
     conditions.push(eq(usageLedger.model, filters.model));
   }
 
-  if (filters.endpoint) {
-    conditions.push(eq(usageLedger.endpoint, filters.endpoint));
+  const hiddenStatsLedgerEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
+    usageLedger.endpoint,
+    filters.endpoint
+  );
+  if (hiddenStatsLedgerEndpointCondition) {
+    conditions.push(hiddenStatsLedgerEndpointCondition);
+  }
+
+  if (filters.endpoint?.trim()) {
+    const endpointMatchCondition = buildUsageLogEndpointMatchCondition(
+      usageLedger.endpoint,
+      filters.endpoint
+    );
+    if (endpointMatchCondition) {
+      conditions.push(endpointMatchCondition);
+    }
   }
 
   if (minRetryCount > 0 && !ledgerOnly) {

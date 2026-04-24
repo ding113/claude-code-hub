@@ -42,6 +42,7 @@ interface EditKeyQuotaDialogProps {
   currentQuota: KeyQuota | null;
   currencyCode?: CurrencyCode;
   trigger?: React.ReactNode;
+  limit5hResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
   dailyResetMode?: "fixed" | "rolling";
 }
@@ -53,6 +54,7 @@ export function EditKeyQuotaDialog({
   currentQuota,
   currencyCode = "USD",
   trigger,
+  limit5hResetMode = "rolling",
   dailyResetTime = "00:00",
   dailyResetMode = "fixed",
 }: EditKeyQuotaDialogProps) {
@@ -68,6 +70,7 @@ export function EditKeyQuotaDialog({
   const [limitDaily, setLimitDaily] = useState<string>(
     currentQuota?.costDaily.limit?.toString() ?? ""
   );
+  const [resetMode5h, setResetMode5h] = useState<"fixed" | "rolling">(limit5hResetMode);
   const [resetMode, setResetMode] = useState<"fixed" | "rolling">(dailyResetMode);
   const [resetTime, setResetTime] = useState<string>(dailyResetTime);
   const [limitWeekly, setLimitWeekly] = useState<string>(
@@ -89,6 +92,7 @@ export function EditKeyQuotaDialog({
         const result = await editKey(keyId, {
           name: keyName, // 保持名称不变
           limit5hUsd: limit5h ? parseFloat(limit5h) : null,
+          limit5hResetMode: resetMode5h,
           limitDailyUsd: limitDaily ? parseFloat(limitDaily) : null,
           dailyResetMode: resetMode,
           dailyResetTime: resetTime,
@@ -117,6 +121,7 @@ export function EditKeyQuotaDialog({
         const result = await editKey(keyId, {
           name: keyName,
           limit5hUsd: null,
+          limit5hResetMode: resetMode5h,
           limitDailyUsd: null,
           dailyResetMode: resetMode,
           dailyResetTime: resetTime,
@@ -209,6 +214,31 @@ export function EditKeyQuotaDialog({
                     })}
                   </p>
                 )}
+              </div>
+
+              {/* 每日重置模式 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="dailyResetMode" className="text-xs">
+                  {t("limit5hResetMode.label")}
+                </Label>
+                <Select
+                  value={resetMode5h}
+                  onValueChange={(value: "fixed" | "rolling") => setResetMode5h(value)}
+                  disabled={isPending}
+                >
+                  <SelectTrigger id="limit5hResetMode" className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">{t("limit5hResetMode.options.fixed")}</SelectItem>
+                    <SelectItem value="rolling">{t("limit5hResetMode.options.rolling")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {resetMode5h === "fixed"
+                    ? t("limit5hResetMode.desc.fixed")
+                    : t("limit5hResetMode.desc.rolling")}
+                </p>
               </div>
 
               {/* 每日重置模式 */}

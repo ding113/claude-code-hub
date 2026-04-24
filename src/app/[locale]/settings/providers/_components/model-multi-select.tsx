@@ -11,7 +11,11 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import { type AvailableModelCatalogItem, getAvailableModelCatalog } from "@/actions/model-prices";
+import {
+  type AvailableModelCatalogItem,
+  type AvailableModelCatalogScope,
+  getAvailableModelCatalog,
+} from "@/actions/model-prices";
 import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,11 +53,13 @@ interface ModelMultiSelectProps {
   selectedModels: string[];
   onChange: (models: string[]) => void;
   disabled?: boolean;
+  emptyLabel?: string;
   providerUrl?: string;
   apiKey?: string;
   proxyUrl?: string | null;
   proxyFallbackToDirect?: boolean;
   providerId?: number;
+  catalogScope?: AvailableModelCatalogScope;
 }
 
 function normalizeModelName(model: string): string {
@@ -98,11 +104,13 @@ export function ModelMultiSelect({
   selectedModels,
   onChange,
   disabled = false,
+  emptyLabel,
   providerUrl,
   apiKey,
   proxyUrl,
   proxyFallbackToDirect,
   providerId,
+  catalogScope = "chat",
 }: ModelMultiSelectProps) {
   const t = useTranslations("settings.providers.form.modelSelect");
   const tPrices = useTranslations("settings.prices");
@@ -256,7 +264,7 @@ export function ModelMultiSelect({
         }
       }
 
-      const localCatalog = await getAvailableModelCatalog();
+      const localCatalog = await getAvailableModelCatalog({ scope: catalogScope });
       if (requestId !== requestIdRef.current) {
         return;
       }
@@ -268,7 +276,16 @@ export function ModelMultiSelect({
         setLoading(false);
       }
     }
-  }, [apiKey, providerId, providerType, providerUrl, proxyFallbackToDirect, proxyUrl, t]);
+  }, [
+    apiKey,
+    catalogScope,
+    providerId,
+    providerType,
+    providerUrl,
+    proxyFallbackToDirect,
+    proxyUrl,
+    t,
+  ]);
 
   const handleOpenLoad = useEffectEvent(() => {
     void loadModels();
@@ -341,7 +358,7 @@ export function ModelMultiSelect({
           >
             <span className="truncate text-left">
               {selectedModels.length === 0
-                ? t("emptyLabel", { type: getProviderTypeLabel(providerType, t) })
+                ? (emptyLabel ?? t("emptyLabel", { type: getProviderTypeLabel(providerType, t) }))
                 : t("selectedCount", { count: selectedModels.length })}
             </span>
             <div className="ml-3 flex items-center gap-2">

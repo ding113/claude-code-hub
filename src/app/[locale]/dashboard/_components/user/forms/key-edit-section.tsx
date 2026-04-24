@@ -36,6 +36,7 @@ export interface KeyEditSectionProps {
     cacheTtlPreference?: "inherit" | "5m" | "1h";
     // 所有限额字段
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
@@ -93,16 +94,6 @@ export interface KeyEditSectionProps {
   };
 }
 
-function getTranslation(translations: Record<string, unknown>, path: string, fallback: string) {
-  const value = path.split(".").reduce<unknown>((acc, key) => {
-    if (acc && typeof acc === "object" && key in (acc as Record<string, unknown>)) {
-      return (acc as Record<string, unknown>)[key];
-    }
-    return undefined;
-  }, translations);
-  return typeof value === "string" && value.trim() ? value : fallback;
-}
-
 function toEndOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(23, 59, 59, 999);
@@ -155,7 +146,11 @@ export function KeyEditSection({
     const rules: LimitRuleDisplayItem[] = [];
 
     if (typeof keyData.limit5hUsd === "number" && keyData.limit5hUsd > 0) {
-      rules.push({ type: "limit5h", value: keyData.limit5hUsd });
+      rules.push({
+        type: "limit5h",
+        value: keyData.limit5hUsd,
+        mode: keyData.limit5hResetMode ?? "rolling",
+      });
     }
 
     if (typeof keyData.limitDailyUsd === "number" && keyData.limitDailyUsd > 0) {
@@ -189,6 +184,7 @@ export function KeyEditSection({
     return rules;
   }, [
     keyData.limit5hUsd,
+    keyData.limit5hResetMode,
     keyData.limitDailyUsd,
     keyData.dailyResetMode,
     keyData.dailyResetTime,
@@ -203,7 +199,10 @@ export function KeyEditSection({
   const handleRemoveLimitRule = (type: string) => {
     switch (type) {
       case "limit5h":
-        onChange("limit5hUsd", null);
+        onChange({
+          limit5hUsd: null,
+          limit5hResetMode: "rolling",
+        });
         return;
       case "limitDaily":
         // Batch update to avoid race condition
@@ -243,7 +242,10 @@ export function KeyEditSection({
 
     switch (type) {
       case "limit5h":
-        onChange("limit5hUsd", value);
+        onChange({
+          limit5hUsd: value,
+          limit5hResetMode: mode ?? keyData.limit5hResetMode ?? "rolling",
+        });
         return;
       case "limitDaily": {
         const nextMode: DailyResetMode = mode ?? keyData.dailyResetMode ?? "fixed";
@@ -280,10 +282,7 @@ export function KeyEditSection({
   const cacheTtlPreference = keyData.cacheTtlPreference ?? "inherit";
   const cacheTtlOptions = translations.fields.cacheTtl.options || {};
 
-  const addRuleText = useMemo(
-    () => getTranslation(translations.limitRules || {}, "actions.add", "添加规则"),
-    [translations.limitRules]
-  );
+  const addRuleText = useMemo(() => translations.limitRules.actions.add, [translations.limitRules]);
 
   const normalizedUserProviderGroup = useMemo(
     () => normalizeGroupList(userProviderGroup),

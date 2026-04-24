@@ -28,6 +28,7 @@ export interface ProviderBatchToolbarProps {
   providers: ProviderDisplay[];
   onSelectByType: (type: ProviderType) => void;
   onSelectByGroup: (group: string) => void;
+  showSelectByGroup?: boolean;
 }
 
 export function ProviderBatchToolbar({
@@ -43,6 +44,7 @@ export function ProviderBatchToolbar({
   providers,
   onSelectByType,
   onSelectByGroup,
+  showSelectByGroup = true,
 }: ProviderBatchToolbarProps) {
   const t = useTranslations("settings.providers.batchEdit");
 
@@ -130,7 +132,7 @@ export function ProviderBatchToolbar({
         </DropdownMenu>
       )}
 
-      {uniqueGroups.length > 0 && (
+      {showSelectByGroup && uniqueGroups.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="ghost" size="sm">

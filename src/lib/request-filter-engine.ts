@@ -9,7 +9,7 @@ import type {
   RemoveOp,
   SetOp,
 } from "@/lib/request-filter-types";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type {
   RequestFilter,
   RequestFilterAction,
@@ -471,7 +471,7 @@ export class RequestFilterEngine {
     let providerTagsSet: Set<string> | null = null;
     if (this.hasGroupBasedFilters) {
       const providerGroupTag = session.provider.groupTag;
-      providerTagsSet = new Set(parseProviderGroups(providerGroupTag));
+      providerTagsSet = new Set(resolveProviderGroupsWithDefault(providerGroupTag));
     }
 
     for (const filter of this.providerGuardFilters) {
@@ -561,7 +561,7 @@ export class RequestFilterEngine {
       let providerTagsSet: Set<string> | null = null;
       if (this.hasGroupBasedFinalFilters) {
         const providerGroupTag = session.provider.groupTag;
-        providerTagsSet = new Set(parseProviderGroups(providerGroupTag));
+        providerTagsSet = new Set(resolveProviderGroupsWithDefault(providerGroupTag));
       }
 
       for (const filter of this.providerFinalFilters) {

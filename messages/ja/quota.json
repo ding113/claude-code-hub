@@ -224,7 +224,18 @@
       "clearSuccess": "クォータがクリアされました",
       "error": "設定に失敗しました",
       "clearError": "クリアに失敗しました",
-      "retryError": "設定に失敗しました。後でもう一度お試しください"
+      "retryError": "設定に失敗しました。後でもう一度お試しください",
+      "limit5hResetMode": {
+        "label": "5時間リセットモード",
+        "options": {
+          "fixed": "固定ウィンドウ",
+          "rolling": "ローリングウィンドウ（5時間）"
+        },
+        "desc": {
+          "fixed": "最初の成功課金から 5 時間の固定ウィンドウを開始します",
+          "rolling": "直近5時間のローリングウィンドウで集計します"
+        }
+      }
     },
     "editUserDialog": {
       "title": "ユーザークォータ設定",
@@ -337,7 +348,37 @@
         "error": "クォータのリセットに失敗しました",
         "success": "クォータが正常にリセットされました",
         "lastResetAt": "前回のリセット: {date}"
+      },
+      "limit5hResetMode": {
+        "label": "5時間リセットモード",
+        "options": {
+          "fixed": "固定ウィンドウ",
+          "rolling": "ローリングウィンドウ（5時間）"
+        },
+        "desc": {
+          "fixed": "最初の成功課金から 5 時間の固定ウィンドウを開始します",
+          "rolling": "直近5時間のローリングウィンドウで集計します"
+        }
       }
     }
+  },
+  "quickEdit": {
+    "title": "上限の調整",
+    "currentLabel": "現在",
+    "noLimit": "無制限",
+    "tabs": {
+      "set": "値を設定",
+      "add": "値を追加"
+    },
+    "setPlaceholder": "新しい上限を入力（空=無制限）",
+    "addPlaceholder": "追加する値を入力",
+    "preview": "新しい上限：{value}",
+    "previewNoLimit": "上限をクリア（無制限）",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "saveSuccess": "上限を更新しました",
+    "saveFailed": "更新に失敗しました",
+    "invalidNumber": "有効な数値を入力してください",
+    "negativeNotAllowed": "負の値は入力できません"
   }
 }

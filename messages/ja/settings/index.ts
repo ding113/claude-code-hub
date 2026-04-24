@@ -10,6 +10,7 @@ import notifications from "./notifications.json";
 import prices from "./prices.json";
 import requestFilters from "./requestFilters.json";
 import sensitiveWords from "./sensitiveWords.json";
+import statusPage from "./statusPage.json";
 import strings from "./strings.json";
 
 import providersAutoSort from "./providers/autoSort.json";
@@ -25,6 +26,7 @@ import providersSearch from "./providers/search.json";
 import providersSection from "./providers/section.json";
 import providersSort from "./providers/sort.json";
 import providersStrings from "./providers/strings.json";
+import providersProviderGroups from "./providers/providerGroups.json";
 import providersTypes from "./providers/types.json";
 
 import providersFormApiTest from "./providers/form/apiTest.json";
@@ -88,6 +90,7 @@ const providers = {
   guide: providersGuide,
   inlineEdit: providersInlineEdit,
   list: providersList,
+  providerGroups: providersProviderGroups,
   recluster: providersRecluster,
   schedulingDialog: providersSchedulingDialog,
   search: providersSearch,
@@ -101,6 +104,7 @@ export default {
   common,
   config,
   providers,
+  providerTypes: providersFormProviderTypes,
   prices,
   sensitiveWords,
   requestFilters,
@@ -108,6 +112,7 @@ export default {
   data,
   clientVersions,
   notifications,
+  statusPage,
   errors,
   errorRules,
   ...strings,

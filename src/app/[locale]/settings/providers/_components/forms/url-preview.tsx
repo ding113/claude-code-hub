@@ -3,7 +3,11 @@ import { AlertCircle, Check, CheckCircle2, Copy } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { previewProxyUrls } from "@/app/v1/_lib/url";
+import {
+  getPreviewEndpoints,
+  hasDuplicatedEndpointPath,
+  previewProxyUrls,
+} from "@/app/v1/_lib/url";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -33,34 +37,36 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   // 实时生成预览结果
-  const previews = useMemo(() => {
+  const previewItems = useMemo(() => {
     if (!baseUrl || baseUrl.trim() === "") {
       return null;
     }
 
     try {
-      const result = previewProxyUrls(baseUrl, providerType);
-      return Object.keys(result).length > 0 ? result : null;
+      const previewUrls = previewProxyUrls(baseUrl, providerType);
+      const items = getPreviewEndpoints(providerType, baseUrl)
+        .map(({ key, path }) => {
+          const url = previewUrls[key];
+          if (!url) {
+            return null;
+          }
+
+          return {
+            endpointKey: key,
+            hasDuplicate: hasDuplicatedEndpointPath(baseUrl, path),
+            url,
+          };
+        })
+        .filter(
+          (item): item is { endpointKey: string; hasDuplicate: boolean; url: string } =>
+            item !== null
+        );
+
+      return items.length > 0 ? items : null;
     } catch {
       return null;
     }
   }, [baseUrl, providerType]);
-
-  // 检测 URL 是否包含重复路径（基础启发式检测）
-  const detectDuplicatePath = (url: string): boolean => {
-    try {
-      const urlObj = new URL(url);
-      const path = urlObj.pathname;
-
-      // 检测重复的路径段（如 /responses/v1/responses）
-      const segments = path.split("/").filter(Boolean);
-      const duplicates = segments.filter((seg, idx) => segments.indexOf(seg) !== idx);
-
-      return duplicates.length > 0;
-    } catch {
-      return false;
-    }
-  };
 
   // 复制 URL 到剪贴板
   const copyToClipboard = async (url: string, name: string) => {
@@ -82,7 +88,7 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
   }
 
   // 如果 URL 解析失败
-  if (!previews) {
+  if (!previewItems) {
     return (
       <Card className="p-4 border-orange-200 bg-orange-50">
         <div className="flex items-start gap-3">
@@ -109,8 +115,7 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
 
         {/* 预览列表 */}
         <div className="space-y-2">
-          {Object.entries(previews).map(([endpointKey, url]) => {
-            const hasDuplicate = detectDuplicatePath(url);
+          {previewItems.map(({ endpointKey, hasDuplicate, url }) => {
             const isCopied = copiedUrl === url;
             const label = t(`endpoints.${endpointKey}`);
 

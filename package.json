@@ -1,6 +1,6 @@
 {
   "name": "claude-code-hub",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "dev": "tsgo -p tsconfig.json --noEmit && next dev --port 13500",
@@ -40,6 +40,9 @@
   "dependencies": {
     "@bull-board/api": "^6",
     "@bull-board/express": "^6",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@hono/swagger-ui": "^0.5",
     "@hono/zod-openapi": "^1",
     "@hookform/resolvers": "^5",
@@ -86,7 +89,8 @@
     "html2canvas": "^1",
     "ioredis": "^5",
     "jspdf": "^4",
-    "lucide-react": "^0.555",
+    "lucide-react": "^1.8.0",
+    "maplibre-gl": "^5.23.0",
     "next": "^16",
     "next-intl": "^4",
     "next-themes": "^0.4",
@@ -111,7 +115,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2",
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.2.0",
     "@types/ioredis": "^5",
     "@types/node": "^24",
     "@types/pg": "^8",

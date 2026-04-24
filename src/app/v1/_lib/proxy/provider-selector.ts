@@ -4,44 +4,19 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
-import { getSystemSettings } from "@/repository/system-config";
+import { getGroupCostMultiplier } from "@/repository/provider-groups";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
 import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
+import { getVerboseProviderErrorCached } from "./provider-selector-settings-cache";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
-
-// 系统设置缓存 - 避免每次请求失败都查询数据库
-const SETTINGS_CACHE_TTL_MS = 60_000; // 60 seconds
-let cachedVerboseProviderError: { value: boolean; expiresAt: number } | null = null;
-
-async function getVerboseProviderErrorCached(): Promise<boolean> {
-  const now = Date.now();
-  if (cachedVerboseProviderError && cachedVerboseProviderError.expiresAt > now) {
-    return cachedVerboseProviderError.value;
-  }
-
-  try {
-    const systemSettings = await getSystemSettings();
-    cachedVerboseProviderError = {
-      value: systemSettings.verboseProviderError,
-      expiresAt: now + SETTINGS_CACHE_TTL_MS,
-    };
-    return systemSettings.verboseProviderError;
-  } catch (e) {
-    logger.warn(
-      "ProviderSelector: Failed to get system settings, using default verboseError=false",
-      { error: e }
-    );
-    return false;
-  }
-}
 
 /**
  * 解析逗号分隔的分组字符串为数组
@@ -83,9 +58,7 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
     return true;
   }
 
-  const providerTags = providerGroupTag
-    ? parseProviderGroups(providerGroupTag)
-    : [PROVIDER_GROUP.DEFAULT];
+  const providerTags = resolveProviderGroupsWithDefault(providerGroupTag);
 
   return providerTags.some((tag) => groups.includes(tag));
 }
@@ -211,6 +184,26 @@ export class ProxyProviderResolver {
       );
       session.setProvider(provider);
       session.setLastSelectionContext(context); // 保存用于后续记录
+    }
+
+    // === Resolve group cost multiplier ===
+    // Fail soft: if the lookup throws (Redis/DB hiccup), fall back to 1.0 so
+    // request handling proceeds without billing disruption.
+    const effectiveGroup = getEffectiveProviderGroup(session);
+    if (effectiveGroup) {
+      try {
+        const multiplier = await getGroupCostMultiplier(effectiveGroup);
+        session.setGroupCostMultiplier(multiplier);
+      } catch (error) {
+        logger.warn(
+          "[ProviderResolver] Failed to resolve group cost multiplier, falling back to 1.0",
+          {
+            effectiveGroup,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+        session.setGroupCostMultiplier(1.0);
+      }
     }
 
     // === 故障转移循环 ===
@@ -469,7 +462,10 @@ export class ProxyProviderResolver {
     }
 
     // 从 Redis 读取该 session 绑定的 provider
-    const providerId = await SessionManager.getSessionProvider(session.sessionId);
+    const providerId = await SessionManager.getSessionProvider(
+      session.sessionId,
+      session.authState?.key?.id ?? null
+    );
     if (!providerId) {
       logger.debug("ProviderSelector: Session has no bound provider", {
         sessionId: session.sessionId,
@@ -479,11 +475,12 @@ export class ProxyProviderResolver {
 
     // 验证 provider 可用性
     const provider = await findProviderById(providerId);
-    if (!provider || !provider.isEnabled) {
+    if (!provider?.isEnabled) {
       logger.debug("ProviderSelector: Session provider unavailable", {
         sessionId: session.sessionId,
         providerId,
       });
+      await SessionManager.clearSessionProvider(session.sessionId);
       return null;
     }
 
@@ -537,9 +534,22 @@ export class ProxyProviderResolver {
       return null;
     }
 
+    if (
+      session.originalFormat &&
+      !checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType)
+    ) {
+      logger.debug("ProviderSelector: Session provider incompatible with request format", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        providerName: provider.name,
+        providerType: provider.providerType,
+        originalFormat: session.originalFormat,
+      });
+      await SessionManager.clearSessionProvider(session.sessionId);
+      return null;
+    }
+
     // 检查模型支持
-    // 注意：此处不检查格式兼容性（checkFormatProviderTypeCompatibility），
-    // 因为 session binding 仅由 pickRandomProvider 创建，该路径已保证格式兼容。
     const requestedModel = session.getOriginalModel();
     if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
       logger.debug("ProviderSelector: Session provider does not support requested model", {
@@ -657,6 +667,7 @@ export class ProxyProviderResolver {
     // 会话复用也必须遵守限额（否则会绕过"达到限额即禁用"的语义）
     const costCheck = await RateLimitService.checkCostLimitsWithLease(provider.id, "provider", {
       limit_5h_usd: provider.limit5hUsd,
+      limit_5h_reset_mode: provider.limit5hResetMode,
       limit_daily_usd: provider.limitDailyUsd,
       daily_reset_mode: provider.dailyResetMode,
       daily_reset_time: provider.dailyResetTime,
@@ -1057,6 +1068,7 @@ export class ProxyProviderResolver {
         // 1. 检查金额限制
         const costCheck = await RateLimitService.checkCostLimitsWithLease(p.id, "provider", {
           limit_5h_usd: p.limit5hUsd,
+          limit_5h_reset_mode: p.limit5hResetMode,
           limit_daily_usd: p.limitDailyUsd,
           daily_reset_mode: p.dailyResetMode,
           daily_reset_time: p.dailyResetTime,

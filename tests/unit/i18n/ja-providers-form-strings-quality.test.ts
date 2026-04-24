@@ -44,3 +44,27 @@ describe("messages/ja/settings/providers/form/strings.json", () => {
     expect(sameAsEn).toEqual(allowedSameAsEn);
   });
 });
+
+describe("messages/ja/settings/providers/form/url.json", () => {
+  test("does not contain placeholder markers and uses halfwidth parentheses", () => {
+    const ja = readJson("messages/ja/settings/providers/form/url.json");
+
+    for (const value of Object.values(ja)) {
+      expect(value).not.toContain("[JA]");
+      expect(value).not.toContain("（");
+      expect(value).not.toContain("）");
+      expect(value).not.toContain("（繁）");
+      expect(value).not.toContain("(TW)");
+      expect(value).not.toContain("（TW）");
+    }
+  });
+
+  test("does not keep raw English strings", () => {
+    const ja = readJson("messages/ja/settings/providers/form/url.json");
+    const en = readJson("messages/en/settings/providers/form/url.json");
+
+    for (const [key, value] of Object.entries(ja)) {
+      expect(value).not.toBe(en[key]);
+    }
+  });
+});

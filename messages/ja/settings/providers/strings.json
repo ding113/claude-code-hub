@@ -47,6 +47,7 @@
   "viewMode": "表示モード",
   "viewModeList": "リスト",
   "viewModeVendor": "ベンダー",
+  "viewModeGroups": "グループ",
   "endpoints": "エンドポイント",
   "manualProbe": "テスト",
   "addEndpoint": "エンドポイントを追加",

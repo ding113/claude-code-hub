@@ -56,6 +56,7 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "gemini_google_search_preference",
   // Rate Limit
   "limit_5h_usd",
+  "limit_5h_reset_mode",
   "limit_daily_usd",
   "daily_reset_mode",
   "daily_reset_time",
@@ -110,6 +111,7 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   gemini_google_search_preference: true,
   // Rate Limit
   limit_5h_usd: true,
+  limit_5h_reset_mode: false,
   limit_daily_usd: true,
   daily_reset_mode: false,
   daily_reset_time: false,
@@ -148,7 +150,7 @@ function isAdaptiveThinkingConfig(
     return false;
   }
 
-  const effortValues = new Set(["low", "medium", "high", "max"]);
+  const effortValues = new Set(["low", "medium", "high", "xhigh", "max"]);
   const modeValues = new Set(["specific", "all"]);
 
   if (typeof value.effort !== "string" || !effortValues.has(value.effort)) {
@@ -244,6 +246,7 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
       return value === "inherit" || value === "5m" || value === "1h";
     case "context_1m_preference":
       return value === "inherit" || value === "force_enable" || value === "disabled";
+    case "limit_5h_reset_mode":
     case "daily_reset_mode":
       return value === "fixed" || value === "rolling";
     case "codex_reasoning_effort_preference":
@@ -529,6 +532,12 @@ export function normalizeProviderBatchPatchDraft(
   const limit5hUsd = normalizePatchField("limit_5h_usd", typedDraft.limit_5h_usd);
   if (!limit5hUsd.ok) return limit5hUsd;
 
+  const limit5hResetMode = normalizePatchField(
+    "limit_5h_reset_mode",
+    typedDraft.limit_5h_reset_mode
+  );
+  if (!limit5hResetMode.ok) return limit5hResetMode;
+
   const limitDailyUsd = normalizePatchField("limit_daily_usd", typedDraft.limit_daily_usd);
   if (!limitDailyUsd.ok) return limitDailyUsd;
 
@@ -648,6 +657,7 @@ export function normalizeProviderBatchPatchDraft(
       gemini_google_search_preference: geminiGoogleSearch.data,
       // Rate Limit
       limit_5h_usd: limit5hUsd.data,
+      limit_5h_reset_mode: limit5hResetMode.data,
       limit_daily_usd: limitDailyUsd.data,
       daily_reset_mode: dailyResetMode.data,
       daily_reset_time: dailyResetTime.data,
@@ -783,6 +793,10 @@ function applyPatchField<T>(
       // Rate Limit
       case "limit_5h_usd":
         updates.limit_5h_usd = patch.value as ProviderBatchApplyUpdates["limit_5h_usd"];
+        return { ok: true, data: undefined };
+      case "limit_5h_reset_mode":
+        updates.limit_5h_reset_mode =
+          patch.value as ProviderBatchApplyUpdates["limit_5h_reset_mode"];
         return { ok: true, data: undefined };
       case "limit_daily_usd":
         updates.limit_daily_usd = patch.value as ProviderBatchApplyUpdates["limit_daily_usd"];
@@ -986,6 +1000,7 @@ export function buildProviderBatchApplyUpdates(
     ["gemini_google_search_preference", patch.gemini_google_search_preference],
     // Rate Limit
     ["limit_5h_usd", patch.limit_5h_usd],
+    ["limit_5h_reset_mode", patch.limit_5h_reset_mode],
     ["limit_daily_usd", patch.limit_daily_usd],
     ["daily_reset_mode", patch.daily_reset_mode],
     ["daily_reset_time", patch.daily_reset_time],
@@ -1053,6 +1068,7 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.gemini_google_search_preference.mode !== "no_change" ||
     // Rate Limit
     patch.limit_5h_usd.mode !== "no_change" ||
+    patch.limit_5h_reset_mode.mode !== "no_change" ||
     patch.limit_daily_usd.mode !== "no_change" ||
     patch.daily_reset_mode.mode !== "no_change" ||
     patch.daily_reset_time.mode !== "no_change" ||

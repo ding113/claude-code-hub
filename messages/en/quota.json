@@ -247,7 +247,18 @@
       "clearSuccess": "Quota cleared",
       "error": "Failed to set",
       "clearError": "Failed to clear",
-      "retryError": "Failed to set, please try again later"
+      "retryError": "Failed to set, please try again later",
+      "limit5hResetMode": {
+        "label": "5-Hour Reset Mode",
+        "options": {
+          "fixed": "Fixed window",
+          "rolling": "Rolling Window (5h)"
+        },
+        "desc": {
+          "fixed": "Start a fixed 5-hour window from the first successful charge",
+          "rolling": "Use a rolling 5-hour window from the latest usage"
+        }
+      }
     },
     "editUserDialog": {
       "title": "Set User Quota",
@@ -360,7 +371,37 @@
         "error": "Failed to reset quota",
         "success": "Quota has been reset successfully",
         "lastResetAt": "Last reset: {date}"
+      },
+      "limit5hResetMode": {
+        "label": "5-Hour Reset Mode",
+        "options": {
+          "fixed": "Fixed window",
+          "rolling": "Rolling Window (5h)"
+        },
+        "desc": {
+          "fixed": "Start a fixed 5-hour window from the first successful charge",
+          "rolling": "Use a rolling 5-hour window from the latest usage"
+        }
       }
     }
+  },
+  "quickEdit": {
+    "title": "Adjust Limit",
+    "currentLabel": "Current",
+    "noLimit": "Unlimited",
+    "tabs": {
+      "set": "Set value",
+      "add": "Add value"
+    },
+    "setPlaceholder": "Enter new limit (empty = unlimited)",
+    "addPlaceholder": "Enter increment",
+    "preview": "New limit: {value}",
+    "previewNoLimit": "Will clear limit (unlimited)",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saveSuccess": "Limit updated",
+    "saveFailed": "Update failed",
+    "invalidNumber": "Please enter a valid number",
+    "negativeNotAllowed": "Cannot be negative"
   }
 }

@@ -47,6 +47,7 @@
   "viewMode": "View Mode",
   "viewModeList": "List",
   "viewModeVendor": "Vendor",
+  "viewModeGroups": "Groups",
   "endpoints": "Endpoints",
   "manualProbe": "Probe",
   "addEndpoint": "Add Endpoint",

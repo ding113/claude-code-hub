@@ -3,6 +3,8 @@
 import { useTranslations } from "next-intl";
 import { type MouseEvent, useCallback, useState } from "react";
 import { toast } from "sonner";
+import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
+import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -22,7 +24,7 @@ import { formatCurrency } from "@/lib/utils/currency";
 import {
   calculateOutputRate,
   formatDuration,
-  NON_BILLING_ENDPOINT,
+  isNonBillingEndpoint,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import { shouldShowCostBadgeInCell } from "@/lib/utils/provider-chain-display";
@@ -74,6 +76,9 @@ export function UsageLogsTable({
     expandedChainIndex?: number;
   }>({ logId: null, scrollToRedirect: false });
 
+  const [ipDialogOpen, setIpDialogOpen] = useState(false);
+  const [ipDialogValue, setIpDialogValue] = useState<string | null>(null);
+
   const handleCopySessionIdClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       const sessionId = event.currentTarget.dataset.sessionId;
@@ -96,6 +101,7 @@ export function UsageLogsTable({
               <TableHead>{t("logs.columns.user")}</TableHead>
               <TableHead>{t("logs.columns.key")}</TableHead>
               <TableHead>{t("logs.columns.sessionId")}</TableHead>
+              <TableHead className="w-[140px] max-w-[140px]">{t("logs.columns.ip")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
               <TableHead>{t("logs.columns.model")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.tokens")}</TableHead>
@@ -108,13 +114,13 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center text-muted-foreground">
+                <TableCell colSpan={12} className="text-center text-muted-foreground">
                   {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
             ) : (
               logs.map((log) => {
-                const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+                const isNonBilling = isNonBillingEndpoint(log.endpoint);
                 const isWarmupSkipped = log.blockedBy === "warmup";
                 const isMutedRow = isNonBilling || isWarmupSkipped;
                 const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
@@ -181,6 +187,15 @@ export function UsageLogsTable({
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
+                    </TableCell>
+                    <TableCell className="w-[140px] max-w-[140px] overflow-hidden font-mono text-xs">
+                      <IpDisplayTrigger
+                        ip={log.clientIp}
+                        onClick={() => {
+                          setIpDialogValue(log.clientIp as string);
+                          setIpDialogOpen(true);
+                        }}
+                      />
                     </TableCell>
                     <TableCell className="text-left">
                       {isWarmupSkipped ? (
@@ -267,6 +282,7 @@ export function UsageLogsTable({
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
+                                actualResponseModel={log.actualResponseModel}
                                 billingModelSource={billingModelSource}
                                 onRedirectClick={() =>
                                   setDialogState({ logId: log.id, scrollToRedirect: true })
@@ -532,7 +548,9 @@ export function UsageLogsTable({
                         blockedReason={log.blockedReason}
                         originalModel={log.originalModel}
                         currentModel={log.model}
+                        actualResponseModel={log.actualResponseModel}
                         userAgent={log.userAgent}
+                        clientIp={log.clientIp}
                         messagesCount={log.messagesCount}
                         endpoint={log.endpoint}
                         billingModelSource={billingModelSource}
@@ -547,6 +565,8 @@ export function UsageLogsTable({
                         swapCacheTtlApplied={log.swapCacheTtlApplied}
                         costUsd={log.costUsd}
                         costMultiplier={log.costMultiplier}
+                        groupCostMultiplier={log.groupCostMultiplier}
+                        costBreakdown={log.costBreakdown}
                         context1mApplied={log.context1mApplied}
                         durationMs={log.durationMs}
                         ttfbMs={log.ttfbMs}
@@ -599,6 +619,8 @@ export function UsageLogsTable({
           </div>
         </div>
       )}
+
+      <IpDetailsDialog ip={ipDialogValue} open={ipDialogOpen} onOpenChange={setIpDialogOpen} />
     </div>
   );
 }

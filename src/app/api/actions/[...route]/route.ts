@@ -19,6 +19,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { handle } from "hono/vercel";
 import { z } from "zod";
 import * as activeSessionActions from "@/actions/active-sessions";
+import * as auditLogActions from "@/actions/audit-logs";
 import * as keyActions from "@/actions/keys";
 import * as modelPriceActions from "@/actions/model-prices";
 import * as myUsageActions from "@/actions/my-usage";
@@ -35,7 +36,9 @@ import * as userActions from "@/actions/users";
 import * as webhookTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
+import { logger } from "@/lib/logger";
 import { PROVIDER_MODEL_REDIRECT_RULE_SCHEMA } from "@/lib/provider-model-redirect-schema";
+import { appendPublicStatusOpenApi } from "@/lib/public-status/openapi";
 // 导入 validation schemas
 import {
   CreateProviderSchema,
@@ -87,6 +90,7 @@ const userKeyListItemSchema = z.object({
   createdAtFormatted: z.string().describe("格式化后的创建时间"),
   canLoginWebUi: z.boolean().describe("是否允许登录 Web UI"),
   limit5hUsd: z.number().nullable().describe("5 小时限额"),
+  limit5hResetMode: z.enum(["fixed", "rolling"]).describe("5小时重置模式"),
   limitDailyUsd: z.number().nullable().describe("每日限额"),
   dailyResetMode: z.enum(["fixed", "rolling"]).describe("每日重置模式"),
   dailyResetTime: z.string().describe("每日重置时间"),
@@ -110,6 +114,7 @@ const userListItemSchema = z.object({
   providerGroup: z.string().nullable().optional().describe("供应商分组"),
   tags: z.array(z.string()).optional().describe("用户标签"),
   limit5hUsd: z.number().nullable().optional().describe("5小时消费上限"),
+  limit5hResetMode: z.enum(["fixed", "rolling"]).optional().describe("5小时重置模式"),
   limitWeeklyUsd: z.number().nullable().optional().describe("周消费上限"),
   limitMonthlyUsd: z.number().nullable().optional().describe("月消费上限"),
   limitTotalUsd: z.number().nullable().optional().describe("总消费上限"),
@@ -255,6 +260,7 @@ const { route: addUserRoute, handler: addUserHandler } = createActionRoute(
         providerGroup: z.string().optional().describe("供应商分组"),
         tags: z.array(z.string()).describe("用户标签"),
         limit5hUsd: z.number().nullable().describe("5小时消费上限"),
+        limit5hResetMode: z.enum(["fixed", "rolling"]).describe("5小时重置模式"),
         limitWeeklyUsd: z.number().nullable().describe("周消费上限"),
         limitMonthlyUsd: z.number().nullable().describe("月消费上限"),
         limitTotalUsd: z.number().nullable().describe("总消费上限"),
@@ -400,6 +406,7 @@ const { route: addKeyRoute, handler: addKeyHandler } = createActionRoute(
       expiresAt: z.string().optional(),
       canLoginWebUi: z.boolean().optional(),
       limit5hUsd: z.number().nullable().optional(),
+      limit5hResetMode: z.enum(["fixed", "rolling"]).optional(),
       limitDailyUsd: z.number().nullable().optional(),
       limitWeeklyUsd: z.number().nullable().optional(),
       limitMonthlyUsd: z.number().nullable().optional(),
@@ -436,6 +443,7 @@ const { route: editKeyRoute, handler: editKeyHandler } = createActionRoute(
       expiresAt: z.string().optional(),
       canLoginWebUi: z.boolean().optional(),
       limit5hUsd: z.number().nullable().optional(),
+      limit5hResetMode: z.enum(["fixed", "rolling"]).optional(),
       limitDailyUsd: z.number().nullable().optional(),
       limitWeeklyUsd: z.number().nullable().optional(),
       limitMonthlyUsd: z.number().nullable().optional(),
@@ -1290,6 +1298,42 @@ const { route: getMyUsageLogsBatchRoute, handler: getMyUsageLogsBatchHandler } =
 );
 app.openapi(getMyUsageLogsBatchRoute, getMyUsageLogsBatchHandler);
 
+const { route: getMyUsageLogsBatchFullRoute, handler: getMyUsageLogsBatchFullHandler } =
+  createActionRoute("my-usage", "getMyUsageLogsBatchFull", myUsageActions.getMyUsageLogsBatchFull, {
+    requestSchema: z.object({
+      startDate: z.string().optional().describe("开始日期（YYYY-MM-DD，可为空）"),
+      endDate: z.string().optional().describe("结束日期（YYYY-MM-DD，可为空）"),
+      sessionId: z.string().optional(),
+      model: z.string().optional(),
+      endpoint: z.string().optional(),
+      statusCode: z.number().optional(),
+      excludeStatusCode200: z.boolean().optional(),
+      minRetryCount: z.number().int().nonnegative().optional(),
+      cursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number().int(),
+        })
+        .optional(),
+      limit: z.number().int().positive().max(100).default(20).optional(),
+    }),
+    responseSchema: z.object({
+      logs: z.array(z.object({}).passthrough()),
+      nextCursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number().int(),
+        })
+        .nullable(),
+      hasMore: z.boolean(),
+    }),
+    description: "获取当前 key 的完整使用日志批量数据（只读页面详情弹窗使用）",
+    summary: "批量获取我的完整使用日志",
+    tags: ["使用日志"],
+    allowReadOnlyAccess: true,
+  });
+app.openapi(getMyUsageLogsBatchFullRoute, getMyUsageLogsBatchFullHandler);
+
 const { route: getMyAvailableModelsRoute, handler: getMyAvailableModelsHandler } =
   createActionRoute("my-usage", "getMyAvailableModels", myUsageActions.getMyAvailableModels, {
     requestSchema: z.object({}).describe("无需请求参数"),
@@ -1311,6 +1355,30 @@ const { route: getMyAvailableEndpointsRoute, handler: getMyAvailableEndpointsHan
     allowReadOnlyAccess: true,
   });
 app.openapi(getMyAvailableEndpointsRoute, getMyAvailableEndpointsHandler);
+
+const { route: getMyIpGeoDetailsRoute, handler: getMyIpGeoDetailsHandler } = createActionRoute(
+  "my-usage",
+  "getMyIpGeoDetails",
+  myUsageActions.getMyIpGeoDetails,
+  {
+    requestSchema: z.object({
+      ip: z.string().min(1).describe("要查询的客户端 IP"),
+      lang: z.string().optional().describe("界面 locale，用于本地化地理名称"),
+    }),
+    responseSchema: z
+      .object({
+        status: z.enum(["ok", "private", "error"]),
+        data: z.unknown().optional(),
+        error: z.string().optional(),
+      })
+      .passthrough(),
+    description: "仅查询当前 key 使用日志中真实出现过的 IP 详情",
+    summary: "获取我的 IP 详情",
+    tags: ["使用日志"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyIpGeoDetailsRoute, getMyIpGeoDetailsHandler);
 
 const { route: getMyStatsSummaryRoute, handler: getMyStatsSummaryHandler } = createActionRoute(
   "my-usage",
@@ -1478,6 +1546,88 @@ const { route: getCacheStatsRoute, handler: getCacheStatsHandler } = createActio
   }
 );
 app.openapi(getCacheStatsRoute, getCacheStatsHandler);
+
+// ==================== 审计日志 ====================
+
+const auditLogCursorSchema = z
+  .object({
+    createdAt: z.string(),
+    id: z.number().int(),
+  })
+  .nullable()
+  .optional();
+
+const auditLogRowSchema = z.object({
+  id: z.number(),
+  actionCategory: z.string(),
+  actionType: z.string(),
+  targetType: z.string().nullable(),
+  targetId: z.string().nullable(),
+  targetName: z.string().nullable(),
+  beforeValue: z.any().nullable(),
+  afterValue: z.any().nullable(),
+  operatorUserId: z.number().nullable(),
+  operatorUserName: z.string().nullable(),
+  operatorKeyId: z.number().nullable(),
+  operatorKeyName: z.string().nullable(),
+  operatorIp: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  success: z.boolean(),
+  errorMessage: z.string().nullable(),
+  createdAt: z.union([z.date(), z.string()]),
+});
+
+const { route: getAuditLogsBatchRoute, handler: getAuditLogsBatchHandler } = createActionRoute(
+  "audit-logs",
+  "getAuditLogsBatch",
+  auditLogActions.getAuditLogsBatch,
+  {
+    requestSchema: z.object({
+      filter: z
+        .object({
+          category: z.string().optional(),
+          success: z.boolean().optional(),
+          from: z.string().optional(),
+          to: z.string().optional(),
+        })
+        .optional(),
+      cursor: auditLogCursorSchema,
+      pageSize: z.number().int().positive().optional(),
+    }),
+    responseSchema: z.object({
+      rows: z.array(auditLogRowSchema),
+      nextCursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number().int(),
+        })
+        .nullable(),
+    }),
+    description: "分页获取审计日志 (管理员)",
+    summary: "分页获取审计日志",
+    tags: ["审计日志"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(getAuditLogsBatchRoute, getAuditLogsBatchHandler);
+
+const { route: getAuditLogDetailRoute, handler: getAuditLogDetailHandler } = createActionRoute(
+  "audit-logs",
+  "getAuditLogDetail",
+  auditLogActions.getAuditLogDetail,
+  {
+    requestSchema: z.object({
+      id: z.number().int().positive(),
+    }),
+    responseSchema: auditLogRowSchema.nullable(),
+    description: "获取审计日志详情 (管理员)",
+    summary: "获取审计日志详情",
+    tags: ["审计日志"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body.id],
+  }
+);
+app.openapi(getAuditLogDetailRoute, getAuditLogDetailHandler);
 
 // ==================== 活跃 Session ====================
 
@@ -1931,7 +2081,7 @@ function getOpenAPIServers() {
 }
 
 // 生成 OpenAPI 3.1.0 规范文档
-app.doc("/openapi.json", {
+const openApiDocumentConfig = {
   openapi: "3.1.0",
   info: {
     title: "Claude Code Hub API",
@@ -1951,7 +2101,9 @@ Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能
 
 ## 认证方式
 
-所有 API 端点通过 **HTTP Cookie** 进行认证，Cookie 名称为 \`auth-token\`。
+管理类 API 端点通过 **HTTP Cookie** 进行认证，Cookie 名称为 \`auth-token\`。
+
+公开状态接口 \`GET /api/public-status\` 与 \`GET /api/public-site-meta\` 无需认证，仅返回公开安全字段。
 
 ### 如何获取认证 Token
 
@@ -2137,6 +2289,24 @@ HTTP 状态码:
     description: "GitHub 仓库 - 查看完整文档、功能介绍和部署指南",
     url: "https://github.com/ding113/claude-code-hub",
   },
+};
+
+app.get("/openapi.json", (c) => {
+  try {
+    const document = app.getOpenAPIDocument(openApiDocumentConfig);
+    return c.json(appendPublicStatusOpenApi(document));
+  } catch (error) {
+    logger.error("GET /api/actions/openapi.json failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json(
+      {
+        error: "OpenAPI generation failed",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      500
+    );
+  }
 });
 
 // Swagger UI (传统风格)
@@ -2157,14 +2327,28 @@ app.get(
   })
 );
 
-// 健康检查端点
-app.get("/health", (c) =>
-  c.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    version: "1.0.0",
-  })
-);
+// 健康检查端点 (保持旧格式兼容，详细探针请用 /api/health/ready)
+app.get("/health", async (c) => {
+  try {
+    const { checkReadiness, getAppVersion } = await import("@/lib/health/checker");
+    const health = await checkReadiness();
+    return c.json({
+      status: health.status === "unhealthy" ? "error" : "ok",
+      timestamp: health.timestamp,
+      version: getAppVersion(),
+      details: health,
+    });
+  } catch (error) {
+    logger.error("[api/actions] health route failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json({
+      status: "error",
+      timestamp: new Date().toISOString(),
+      version: "unknown",
+    });
+  }
+});
 
 // 导出处理器 (Vercel Edge Functions 格式)
 export const GET = handle(app);

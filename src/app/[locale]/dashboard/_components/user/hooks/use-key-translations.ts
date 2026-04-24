@@ -40,7 +40,53 @@ export interface KeyEditTranslations {
   };
   limitRules: {
     addRule: string;
+    title: string;
+    description: string;
+    cancel: string;
+    confirm: string;
+    fields: {
+      type: {
+        label: string;
+        placeholder: string;
+      };
+      value: {
+        label: string;
+        placeholder: string;
+      };
+    };
+    limit5h: {
+      mode: {
+        label: string;
+        fixed: string;
+        rolling: string;
+        helperFixed: string;
+        helperRolling: string;
+      };
+    };
+    daily: {
+      mode: {
+        label: string;
+        fixed: string;
+        rolling: string;
+        helperFixed: string;
+        helperRolling: string;
+      };
+      time: {
+        label: string;
+        placeholder: string;
+      };
+    };
+    limitTypes: {
+      limitRpm: string;
+      limit5h: string;
+      limitDaily: string;
+      limitWeekly: string;
+      limitMonthly: string;
+      limitTotal: string;
+      limitSessions: string;
+    };
     ruleTypes: {
+      limitRpm: string;
       limit5h: string;
       limitDaily: string;
       limitWeekly: string;
@@ -54,6 +100,16 @@ export interface KeyEditTranslations {
       "50": string;
       "100": string;
       "500": string;
+    };
+    errors: {
+      missingType: string;
+      invalidValue: string;
+      invalidTime: string;
+    };
+    overwriteHint: string;
+    actions: {
+      add: string;
+      remove: string;
     };
   };
   quickExpire: {
@@ -70,6 +126,8 @@ export interface KeyEditTranslations {
  */
 export function useKeyTranslations(): KeyEditTranslations {
   const t = useTranslations("dashboard.userManagement");
+  const tLimitRules = useTranslations("dashboard.limitRules");
+  const tCommon = useTranslations("common");
 
   return useMemo(() => {
     return {
@@ -108,21 +166,77 @@ export function useKeyTranslations(): KeyEditTranslations {
         },
       },
       limitRules: {
-        addRule: t("limitRules.addRule"),
+        addRule: tLimitRules("addRule"),
+        title: tLimitRules("title"),
+        description: tLimitRules("description"),
+        cancel: tLimitRules("cancel"),
+        confirm: tLimitRules("confirm"),
+        fields: {
+          type: {
+            label: tLimitRules("fields.type.label"),
+            placeholder: tLimitRules("fields.type.placeholder"),
+          },
+          value: {
+            label: tLimitRules("fields.value.label"),
+            placeholder: tLimitRules("fields.value.placeholder"),
+          },
+        },
+        limit5h: {
+          mode: {
+            label: tLimitRules("limit5h.mode.label"),
+            fixed: tLimitRules("limit5h.mode.fixed"),
+            rolling: tLimitRules("limit5h.mode.rolling"),
+            helperFixed: tLimitRules("limit5h.mode.helperFixed"),
+            helperRolling: tLimitRules("limit5h.mode.helperRolling"),
+          },
+        },
+        daily: {
+          mode: {
+            label: tLimitRules("daily.mode.label"),
+            fixed: tLimitRules("daily.mode.fixed"),
+            rolling: tLimitRules("daily.mode.rolling"),
+            helperFixed: tLimitRules("daily.mode.helperFixed"),
+            helperRolling: tLimitRules("daily.mode.helperRolling"),
+          },
+          time: {
+            label: tLimitRules("daily.time.label"),
+            placeholder: tLimitRules("daily.time.placeholder"),
+          },
+        },
+        limitTypes: {
+          limitRpm: tLimitRules("limitTypes.limitRpm"),
+          limit5h: tLimitRules("limitTypes.limit5h"),
+          limitDaily: tLimitRules("limitTypes.limitDaily"),
+          limitWeekly: tLimitRules("limitTypes.limitWeekly"),
+          limitMonthly: tLimitRules("limitTypes.limitMonthly"),
+          limitTotal: tLimitRules("limitTypes.limitTotal"),
+          limitSessions: tLimitRules("limitTypes.limitSessions"),
+        },
         ruleTypes: {
-          limit5h: t("limitRules.ruleTypes.limit5h"),
-          limitDaily: t("limitRules.ruleTypes.limitDaily"),
-          limitWeekly: t("limitRules.ruleTypes.limitWeekly"),
-          limitMonthly: t("limitRules.ruleTypes.limitMonthly"),
-          limitTotal: t("limitRules.ruleTypes.limitTotal"),
-          limitSessions: t("limitRules.ruleTypes.limitSessions"),
+          limitRpm: tLimitRules("ruleTypes.limitRpm"),
+          limit5h: tLimitRules("ruleTypes.limit5h"),
+          limitDaily: tLimitRules("ruleTypes.limitDaily"),
+          limitWeekly: tLimitRules("ruleTypes.limitWeekly"),
+          limitMonthly: tLimitRules("ruleTypes.limitMonthly"),
+          limitTotal: tLimitRules("ruleTypes.limitTotal"),
+          limitSessions: tLimitRules("ruleTypes.limitSessions"),
         },
         quickValues: {
-          unlimited: t("limitRules.quickValues.unlimited"),
-          "10": t("limitRules.quickValues.10"),
-          "50": t("limitRules.quickValues.50"),
-          "100": t("limitRules.quickValues.100"),
-          "500": t("limitRules.quickValues.500"),
+          unlimited: tLimitRules("quickValues.unlimited"),
+          "10": tLimitRules("quickValues.10"),
+          "50": tLimitRules("quickValues.50"),
+          "100": tLimitRules("quickValues.100"),
+          "500": tLimitRules("quickValues.500"),
+        },
+        errors: {
+          missingType: tLimitRules("errors.missingType"),
+          invalidValue: tLimitRules("errors.invalidValue"),
+          invalidTime: tLimitRules("errors.invalidTime"),
+        },
+        overwriteHint: tLimitRules("overwriteHint"),
+        actions: {
+          add: tLimitRules("confirmAdd"),
+          remove: tCommon("remove"),
         },
       },
       quickExpire: {
@@ -132,5 +246,5 @@ export function useKeyTranslations(): KeyEditTranslations {
         year: t("quickExpire.oneYear"),
       },
     };
-  }, [t]);
+  }, [t, tCommon, tLimitRules]);
 }

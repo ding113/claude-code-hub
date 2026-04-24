@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { LanguageSwitcher } from "@/components/ui/language-switcher";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { Link, useRouter } from "@/i18n/routing";
+import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
 import { resolveLoginRedirectTarget } from "./redirect-safety";
 
 export default function LoginPage() {
@@ -30,8 +31,6 @@ interface LoginVersionInfo {
   current: string;
   hasUpdate: boolean;
 }
-
-const DEFAULT_SITE_TITLE = "Claude Code Hub";
 
 function parseLoginType(value: unknown): LoginType | null {
   if (value === "admin" || value === "dashboard_user" || value === "readonly_user") {
@@ -143,7 +142,7 @@ function LoginPageContent() {
   useEffect(() => {
     let active = true;
 
-    void fetch("/api/system-settings")
+    void fetch("/api/public-site-meta")
       .then((response) => {
         if (!response.ok) {
           return null;

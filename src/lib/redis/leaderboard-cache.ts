@@ -7,37 +7,49 @@ import {
   findAllTimeModelLeaderboard,
   findAllTimeProviderCacheHitRateLeaderboard,
   findAllTimeProviderLeaderboard,
+  findAllTimeUserCacheHitRateLeaderboard,
   findCustomRangeLeaderboard,
   findCustomRangeModelLeaderboard,
   findCustomRangeProviderCacheHitRateLeaderboard,
   findCustomRangeProviderLeaderboard,
+  findCustomRangeUserCacheHitRateLeaderboard,
   findDailyLeaderboard,
   findDailyModelLeaderboard,
   findDailyProviderCacheHitRateLeaderboard,
   findDailyProviderLeaderboard,
+  findDailyUserCacheHitRateLeaderboard,
   findMonthlyLeaderboard,
   findMonthlyModelLeaderboard,
   findMonthlyProviderCacheHitRateLeaderboard,
   findMonthlyProviderLeaderboard,
+  findMonthlyUserCacheHitRateLeaderboard,
   findWeeklyLeaderboard,
   findWeeklyModelLeaderboard,
   findWeeklyProviderCacheHitRateLeaderboard,
   findWeeklyProviderLeaderboard,
+  findWeeklyUserCacheHitRateLeaderboard,
   type LeaderboardEntry,
   type LeaderboardPeriod,
   type ModelLeaderboardEntry,
   type ProviderCacheHitRateLeaderboardEntry,
   type ProviderLeaderboardEntry,
+  type UserCacheHitRateLeaderboardEntry,
   type UserLeaderboardFilters,
 } from "@/repository/leaderboard";
 import type { ProviderType } from "@/types/provider";
 import { getRedisClient } from "./client";
 
 export type { DateRangeParams, LeaderboardPeriod };
-export type LeaderboardScope = "user" | "provider" | "providerCacheHitRate" | "model";
+export type LeaderboardScope =
+  | "user"
+  | "userCacheHitRate"
+  | "provider"
+  | "providerCacheHitRate"
+  | "model";
 
 type LeaderboardData =
   | LeaderboardEntry[]
+  | UserCacheHitRateLeaderboardEntry[]
   | ProviderLeaderboardEntry[]
   | ProviderCacheHitRateLeaderboardEntry[]
   | ModelLeaderboardEntry[];
@@ -46,7 +58,7 @@ export interface LeaderboardFilters {
   providerType?: ProviderType;
   userTags?: string[];
   userGroups?: string[];
-  /** scope=provider 或 scope=user 时生效：是否包含按模型拆分的数据 */
+  /** scope=provider / user / userCacheHitRate 时生效：是否包含按模型拆分的数据 */
   includeModelStats?: boolean;
 }
 
@@ -65,12 +77,13 @@ function buildCacheKey(
   const now = new Date();
   const providerTypeSuffix = filters?.providerType ? `:providerType:${filters.providerType}` : "";
   const includeModelStatsSuffix =
-    (scope === "provider" || scope === "user") && filters?.includeModelStats
+    (scope === "provider" || scope === "user" || scope === "userCacheHitRate") &&
+    filters?.includeModelStats
       ? ":includeModelStats"
       : "";
 
   let userFilterSuffix = "";
-  if (scope === "user") {
+  if (scope === "user" || scope === "userCacheHitRate") {
     const tagsPart = filters?.userTags?.length
       ? `:tags:${[...filters.userTags].sort().join(",")}`
       : "";
@@ -111,7 +124,8 @@ async function queryDatabase(
   filters?: LeaderboardFilters
 ): Promise<LeaderboardData> {
   const userFilters: UserLeaderboardFilters | undefined =
-    scope === "user" && (filters?.userTags?.length || filters?.userGroups?.length)
+    (scope === "user" || scope === "userCacheHitRate") &&
+    (filters?.userTags?.length || filters?.userGroups?.length)
       ? { userTags: filters.userTags, userGroups: filters.userGroups }
       : undefined;
 
@@ -119,6 +133,13 @@ async function queryDatabase(
   if (period === "custom" && dateRange) {
     if (scope === "user") {
       return await findCustomRangeLeaderboard(dateRange, userFilters, filters?.includeModelStats);
+    }
+    if (scope === "userCacheHitRate") {
+      return await findCustomRangeUserCacheHitRateLeaderboard(
+        dateRange,
+        userFilters,
+        filters?.includeModelStats
+      );
     }
     if (scope === "provider") {
       return await findCustomRangeProviderLeaderboard(
@@ -145,6 +166,26 @@ async function queryDatabase(
         return await findAllTimeLeaderboard(userFilters, filters?.includeModelStats);
       default:
         return await findDailyLeaderboard(userFilters, filters?.includeModelStats);
+    }
+  }
+  if (scope === "userCacheHitRate") {
+    switch (period) {
+      case "daily":
+        return await findDailyUserCacheHitRateLeaderboard(userFilters, filters?.includeModelStats);
+      case "weekly":
+        return await findWeeklyUserCacheHitRateLeaderboard(userFilters, filters?.includeModelStats);
+      case "monthly":
+        return await findMonthlyUserCacheHitRateLeaderboard(
+          userFilters,
+          filters?.includeModelStats
+        );
+      case "allTime":
+        return await findAllTimeUserCacheHitRateLeaderboard(
+          userFilters,
+          filters?.includeModelStats
+        );
+      default:
+        return await findDailyUserCacheHitRateLeaderboard(userFilters, filters?.includeModelStats);
     }
   }
   if (scope === "provider") {

@@ -20,6 +20,15 @@ import { isCountTokensEndpointPath } from "./endpoint-paths";
 import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
+import {
+  buildOpenAIImageLogicalBody,
+  getOpenAIImageEndpoint,
+  getOpenAIImageMultipartSummary,
+  isOpenAIImageMultipartContentType,
+  isOpenAIImageMultipartRequest,
+  type OpenAIImageRequestMetadata,
+  parseOpenAIImageMultipartMetadata,
+} from "./openai-image-compat";
 
 export interface AuthState {
   user: User | null;
@@ -43,6 +52,7 @@ export interface ProxyRequestPayload {
   log: string;
   note?: string;
   model: string | null;
+  imageRequestMetadata?: OpenAIImageRequestMetadata | null;
 }
 
 interface RequestBodyResult {
@@ -52,6 +62,7 @@ interface RequestBodyResult {
   requestBodyBuffer?: ArrayBuffer;
   contentLength?: number | null;
   actualBodyBytes?: number;
+  imageRequestMetadata?: OpenAIImageRequestMetadata | null;
 }
 
 export class ProxySession {
@@ -82,6 +93,9 @@ export class ProxySession {
 
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
+
+  // 客户端 IP（由 ProxyAuthenticator 按系统设置的 ip_extraction_config 解析后写入）
+  clientIp: string | null = null;
 
   // Request Sequence（Session 内请求序号）
   requestSequence: number = 1;
@@ -117,6 +131,9 @@ export class ProxySession {
   // 1M Context Window applied (resolved)
   private context1mApplied: boolean = false;
 
+  // Group-level cost multiplier (applied on top of provider costMultiplier)
+  private groupCostMultiplier: number = 1;
+
   // 特殊设置（用于审计/展示，可扩展）
   private specialSettings: SpecialSetting[] = [];
 
@@ -132,6 +149,10 @@ export class ProxySession {
   // 高并发模式（per-request）
   // 开启后：跳过部分 Redis 调试快照与实时观测写入，降低高并发下的热点开销
   private highConcurrencyModeEnabled = false;
+
+  // raw non-chat endpoint 跨 provider fallback 的运行时开关（per-request）
+  // endpoint policy 表示能力，系统设置决定本次请求是否实际启用。
+  private rawCrossProviderFallbackEnabled: boolean | null = null;
 
   /**
    * Promise cache for billing-related system settings load (concurrency safe).
@@ -201,6 +222,7 @@ export class ProxySession {
 
     const modelFromBody =
       typeof bodyResult.requestMessage.model === "string" ? bodyResult.requestMessage.model : null;
+    const modelFromImageRequest = bodyResult.imageRequestMetadata?.model ?? null;
 
     // 针对官方 Gemini 路径（/v1beta/models/{model}:generateContent）
     // 请求体中通常没有 model 字段，需从 URL 路径提取用于调度器匹配
@@ -213,7 +235,10 @@ export class ProxySession {
       modelFromPath !== null;
 
     const resolvedModel =
-      modelFromBody ?? modelFromPath ?? (isLikelyGeminiRequest ? "gemini-2.5-flash" : null);
+      modelFromBody ??
+      modelFromImageRequest ??
+      modelFromPath ??
+      (isLikelyGeminiRequest ? "gemini-2.5-flash" : null);
 
     const isLargeRequestBody =
       (bodyResult.contentLength !== null &&
@@ -241,6 +266,7 @@ export class ProxySession {
       log: bodyResult.requestBodyLog,
       note: bodyResult.requestBodyLogNote,
       model: resolvedModel,
+      imageRequestMetadata: bodyResult.imageRequestMetadata,
     };
 
     return new ProxySession({
@@ -303,12 +329,39 @@ export class ProxySession {
     return this.context1mApplied;
   }
 
+  setGroupCostMultiplier(value: number): void {
+    // Guard against NaN, Infinity, negative values polluting cost calculations.
+    if (!Number.isFinite(value) || value < 0) {
+      this.groupCostMultiplier = 1;
+      return;
+    }
+    this.groupCostMultiplier = value;
+  }
+
+  getGroupCostMultiplier(): number {
+    return this.groupCostMultiplier;
+  }
+
   setHighConcurrencyModeEnabled(enabled: boolean): void {
     this.highConcurrencyModeEnabled = enabled;
   }
 
   isHighConcurrencyModeEnabled(): boolean {
     return this.highConcurrencyModeEnabled;
+  }
+
+  setRawCrossProviderFallbackEnabled(enabled: boolean): void {
+    this.rawCrossProviderFallbackEnabled = enabled;
+  }
+
+  isRawCrossProviderFallbackEnabled(): boolean {
+    const endpointPolicy =
+      this.endpointPolicy ??
+      resolveEndpointPolicy((this.requestUrl as URL | undefined)?.pathname ?? "/");
+    return (
+      endpointPolicy.allowRawCrossProviderFallback &&
+      (this.rawCrossProviderFallbackEnabled ?? false)
+    );
   }
 
   shouldPersistSessionDebugArtifacts(): boolean {
@@ -467,6 +520,10 @@ export class ProxySession {
    * 是否应该复用 provider（基于 messages 长度）
    */
   shouldReuseProvider(): boolean {
+    if (this.isRawCrossProviderFallbackEnabled()) {
+      return true;
+    }
+
     return this.getMessagesLength() > 1;
   }
 
@@ -517,6 +574,7 @@ export class ProxySession {
       strictBlockCause?: ProviderChainItem["strictBlockCause"]; // endpoint pool exhaustion cause
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
       modelRedirect?: ProviderChainItem["modelRedirect"];
+      rawCrossProviderFallbackEnabled?: boolean;
     }
   ): void {
     const item: ProviderChainItem = {
@@ -547,6 +605,7 @@ export class ProxySession {
       strictBlockCause: metadata?.strictBlockCause,
       endpointFilterStats: metadata?.endpointFilterStats,
       modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
+      rawCrossProviderFallbackEnabled: metadata?.rawCrossProviderFallbackEnabled,
     };
 
     // 避免重复添加同一个供应商
@@ -626,6 +685,14 @@ export class ProxySession {
    */
   getCurrentModel(): string | null {
     return this.request.model;
+  }
+
+  getOpenAIImageRequestMetadata(): OpenAIImageRequestMetadata | null {
+    return this.request.imageRequestMetadata ?? null;
+  }
+
+  isOpenAIImageMultipartRequest(): boolean {
+    return isOpenAIImageMultipartRequest(this.getOpenAIImageRequestMetadata());
   }
 
   getEndpointPolicy(): EndpointPolicy {
@@ -1045,6 +1112,8 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
   }
 
   const contentLength = parseContentLengthHeader(c.req.header("content-length"));
+  const contentType = c.req.header("content-type") ?? null;
+  const pathname = new URL(c.req.url).pathname;
   const requestBodyBuffer = await c.req.raw.clone().arrayBuffer();
   const actualBodyBytes = requestBodyBuffer.byteLength;
   const requestBodyText = new TextDecoder().decode(requestBodyBuffer);
@@ -1071,6 +1140,31 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
   let requestMessage: Record<string, unknown> = {};
   let requestBodyLog: string;
   let requestBodyLogNote: string | undefined;
+  let imageRequestMetadata: OpenAIImageRequestMetadata | null = null;
+
+  if (getOpenAIImageEndpoint(pathname) && isOpenAIImageMultipartContentType(contentType)) {
+    // 图片 multipart 请求保留 sidecar metadata，并为过滤/敏感词提供文本字段视图。
+    imageRequestMetadata = await parseOpenAIImageMultipartMetadata(
+      c.req.raw,
+      pathname,
+      contentType
+    );
+    requestMessage = buildOpenAIImageLogicalBody(imageRequestMetadata);
+    requestBodyLog = imageRequestMetadata
+      ? getOpenAIImageMultipartSummary(imageRequestMetadata)
+      : "(multipart image request)";
+    requestBodyLogNote = "图片 multipart 请求已记录结构化摘要。";
+
+    return {
+      requestMessage,
+      requestBodyLog,
+      requestBodyLogNote,
+      requestBodyBuffer,
+      contentLength,
+      actualBodyBytes,
+      imageRequestMetadata,
+    };
+  }
 
   try {
     const parsedMessage = JSON.parse(requestBodyText) as Record<string, unknown>;
@@ -1089,5 +1183,6 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
     requestBodyBuffer,
     contentLength,
     actualBodyBytes,
+    imageRequestMetadata,
   };
 }

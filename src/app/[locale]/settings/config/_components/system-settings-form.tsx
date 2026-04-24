@@ -3,10 +3,12 @@
 import {
   AlertTriangle,
   ChevronDown,
+  CircleHelp,
   Clock,
   Eye,
   FileCode,
   Globe,
+  MapPin,
   Network,
   Pencil,
   Terminal,
@@ -32,6 +34,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
@@ -41,6 +45,7 @@ import {
   shouldWarnQuotaLeaseCapZero,
   shouldWarnQuotaLeasePercentZero,
 } from "@/lib/utils/validation/quota-lease-warnings";
+import { DEFAULT_IP_EXTRACTION_CONFIG, type IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   BillingModelSource,
   CodexPriorityBillingSource,
@@ -57,6 +62,7 @@ interface SystemSettingsFormProps {
     | "codexPriorityBillingSource"
     | "timezone"
     | "verboseProviderError"
+    | "passThroughUpstreamErrorMessage"
     | "enableHttp2"
     | "enableHighConcurrencyMode"
     | "interceptAnthropicWarmupRequests"
@@ -64,6 +70,7 @@ interface SystemSettingsFormProps {
     | "enableBillingHeaderRectifier"
     | "enableResponseInputRectifier"
     | "enableThinkingBudgetRectifier"
+    | "allowNonConversationEndpointProviderFallback"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
@@ -74,6 +81,8 @@ interface SystemSettingsFormProps {
     | "quotaLeasePercentWeekly"
     | "quotaLeasePercentMonthly"
     | "quotaLeaseCapUsd"
+    | "ipGeoLookupEnabled"
+    | "ipExtractionConfig"
   >;
 }
 
@@ -84,10 +93,18 @@ function clampQuotaDbRefreshIntervalSeconds(raw: string): number {
   return Math.min(300, Math.max(1, rounded));
 }
 
+function formatIpExtractionConfig(config: IpExtractionConfig): string {
+  return JSON.stringify(config, null, 2);
+}
+
+const DEFAULT_IP_EXTRACTION_CONFIG_TEXT = formatIpExtractionConfig(DEFAULT_IP_EXTRACTION_CONFIG);
+
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
   const router = useRouter();
   const t = useTranslations("settings.config.form");
+  const tSettings = useTranslations("settings");
   const tCommon = useTranslations("settings.common");
+  const tIpLogging = useTranslations("settings.config.ipLogging");
   const [siteTitle, setSiteTitle] = useState(initialSettings.siteTitle);
   const [allowGlobalUsageView, setAllowGlobalUsageView] = useState(
     initialSettings.allowGlobalUsageView
@@ -103,6 +120,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
+  );
+  const [passThroughUpstreamErrorMessage, setPassThroughUpstreamErrorMessage] = useState(
+    initialSettings.passThroughUpstreamErrorMessage
   );
   const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
   const [enableHighConcurrencyMode, setEnableHighConcurrencyMode] = useState(
@@ -120,6 +140,10 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [enableResponseInputRectifier, setEnableResponseInputRectifier] = useState(
     initialSettings.enableResponseInputRectifier
   );
+  const [
+    allowNonConversationEndpointProviderFallback,
+    setAllowNonConversationEndpointProviderFallback,
+  ] = useState(initialSettings.allowNonConversationEndpointProviderFallback);
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
   );
@@ -159,6 +183,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [quotaLeaseCapUsd, setQuotaLeaseCapUsd] = useState<string>(
     initialSettings.quotaLeaseCapUsd != null ? String(initialSettings.quotaLeaseCapUsd) : ""
   );
+  const [ipGeoLookupEnabled, setIpGeoLookupEnabled] = useState(
+    initialSettings.ipGeoLookupEnabled ?? true
+  );
+  const [ipExtractionConfigText, setIpExtractionConfigText] = useState<string>(
+    formatIpExtractionConfig(initialSettings.ipExtractionConfig ?? DEFAULT_IP_EXTRACTION_CONFIG)
+  );
   const [isPending, startTransition] = useTransition();
   const [responseFixerOpen, setResponseFixerOpen] = useState(false);
   const [quotaLeaseOpen, setQuotaLeaseOpen] = useState(false);
@@ -175,6 +205,34 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       quotaDbRefreshIntervalSecondsStr
     );
 
+    // Parse the IP extraction config textarea. Empty -> null (server uses default).
+    // Invalid JSON or wrong shape: surface the error and abort the save so the
+    // user doesn't unintentionally revert to defaults.
+    let ipExtractionConfigToSave: IpExtractionConfig | null = null;
+    const trimmedIpExtractionConfig = ipExtractionConfigText.trim();
+    if (trimmedIpExtractionConfig) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmedIpExtractionConfig);
+      } catch (error) {
+        toast.error(
+          t("ipLoggingInvalidJson", {
+            message: error instanceof Error ? error.message : String(error),
+          })
+        );
+        return;
+      }
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        !Array.isArray((parsed as { headers?: unknown }).headers)
+      ) {
+        toast.error(t("ipLoggingInvalidShape"));
+        return;
+      }
+      ipExtractionConfigToSave = parsed as IpExtractionConfig;
+    }
+
     startTransition(async () => {
       const result = await saveSystemSettings({
         siteTitle,
@@ -184,12 +242,14 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         codexPriorityBillingSource,
         timezone,
         verboseProviderError,
+        passThroughUpstreamErrorMessage,
         enableHttp2,
         enableHighConcurrencyMode,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
         enableBillingHeaderRectifier,
         enableResponseInputRectifier,
+        allowNonConversationEndpointProviderFallback,
         enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion,
         enableClaudeMetadataUserIdInjection,
@@ -201,6 +261,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         quotaLeasePercentWeekly,
         quotaLeasePercentMonthly,
         quotaLeaseCapUsd: quotaLeaseCapUsd.trim() === "" ? null : parseFloat(quotaLeaseCapUsd),
+        ipGeoLookupEnabled,
+        ipExtractionConfig: ipExtractionConfigToSave,
       });
 
       if (!result.ok) {
@@ -216,12 +278,16 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
+        setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
         setEnableHttp2(result.data.enableHttp2);
         setEnableHighConcurrencyMode(result.data.enableHighConcurrencyMode);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableBillingHeaderRectifier(result.data.enableBillingHeaderRectifier);
         setEnableResponseInputRectifier(result.data.enableResponseInputRectifier);
+        setAllowNonConversationEndpointProviderFallback(
+          result.data.allowNonConversationEndpointProviderFallback
+        );
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
         setEnableClaudeMetadataUserIdInjection(result.data.enableClaudeMetadataUserIdInjection);
@@ -237,9 +303,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setQuotaLeaseCapUsd(
           result.data.quotaLeaseCapUsd != null ? String(result.data.quotaLeaseCapUsd) : ""
         );
+        setIpGeoLookupEnabled(result.data.ipGeoLookupEnabled ?? true);
+        setIpExtractionConfigText(
+          formatIpExtractionConfig(result.data.ipExtractionConfig ?? DEFAULT_IP_EXTRACTION_CONFIG)
+        );
       }
 
       toast.success(t("configUpdated"));
+      if (
+        result.data?.publicStatusProjectionWarningCode === "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED"
+      ) {
+        toast.warning(tSettings("config.form.publicStatusProjectionWarning"));
+      } else if (
+        result.data?.publicStatusProjectionWarningCode ===
+        "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING"
+      ) {
+        toast.warning(tSettings("config.form.publicStatusBackgroundRefreshPending"));
+      }
       router.refresh();
     });
   };
@@ -248,6 +328,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     "bg-muted/50 border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary";
   const selectTriggerClassName =
     "bg-muted/50 border border-border rounded-lg focus:border-primary focus:ring-1 focus:ring-primary";
+  const tooltipButtonClassName =
+    "inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -399,7 +481,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
               <AlertTriangle className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">{t("verboseProviderError")}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-foreground">{t("verboseProviderError")}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t("verboseProviderErrorTooltip")}
+                      className={tooltipButtonClassName}
+                    >
+                      <CircleHelp className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                    {t("verboseProviderErrorTooltip")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {t("verboseProviderErrorDesc")}
               </p>
@@ -409,6 +507,30 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="verbose-provider-error"
             checked={verboseProviderError}
             onCheckedChange={(checked) => setVerboseProviderError(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Pass Through Upstream Error Message */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("passThroughUpstreamErrorMessage")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("passThroughUpstreamErrorMessageDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="pass-through-upstream-error-message"
+            aria-label={t("passThroughUpstreamErrorMessage")}
+            checked={passThroughUpstreamErrorMessage}
+            onCheckedChange={(checked) => setPassThroughUpstreamErrorMessage(checked)}
             disabled={isPending}
           />
         </div>
@@ -569,6 +691,29 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           />
         </div>
 
+        {/* Allow Non-Conversation Endpoint Provider Fallback */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+              <Terminal className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("allowNonConversationEndpointProviderFallback")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("allowNonConversationEndpointProviderFallbackDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="allow-non-conversation-endpoint-provider-fallback"
+            checked={allowNonConversationEndpointProviderFallback}
+            onCheckedChange={(checked) => setAllowNonConversationEndpointProviderFallback(checked)}
+            disabled={isPending}
+          />
+        </div>
+
         {/* Enable Codex Session ID Completion */}
         <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
           <div className="flex items-start gap-3">
@@ -603,7 +748,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                 {t("enableClaudeMetadataUserIdInjection")}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {t("enableClaudeMetadataUserIdInjectionDesc")}
+                {t.raw("enableClaudeMetadataUserIdInjectionDesc")}
               </p>
             </div>
           </div>
@@ -934,6 +1079,77 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             </CollapsibleContent>
           </div>
         </Collapsible>
+
+        {/* IP Logging & Extraction Section */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+              <MapPin className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{tIpLogging("title")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tIpLogging("description")}</p>
+            </div>
+          </div>
+
+          {/* Geo lookup toggle */}
+          <div className="flex items-center justify-between pl-11">
+            <div>
+              <p className="text-sm font-medium text-foreground">{tIpLogging("geoLookup")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tIpLogging("geoLookupHint")}</p>
+            </div>
+            <Switch
+              id="ip-geo-lookup-enabled"
+              checked={ipGeoLookupEnabled}
+              onCheckedChange={(checked) => setIpGeoLookupEnabled(checked)}
+              disabled={isPending}
+            />
+          </div>
+
+          {/* Extraction config JSON */}
+          <div className="space-y-2 pl-11">
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="ip-extraction-config" className="text-sm font-medium text-foreground">
+                {tIpLogging("extractionConfigLabel")}
+              </Label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={tIpLogging("extractionConfigHelpLabel")}
+                    className={tooltipButtonClassName}
+                  >
+                    <CircleHelp className="size-3.5" aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                  {tIpLogging.raw("extractionConfigHint")}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <Textarea
+              id="ip-extraction-config"
+              value={ipExtractionConfigText}
+              onChange={(event) => setIpExtractionConfigText(event.target.value)}
+              placeholder={DEFAULT_IP_EXTRACTION_CONFIG_TEXT}
+              disabled={isPending}
+              rows={5}
+              spellCheck={false}
+              className={`${inputClassName} font-mono text-xs`}
+            />
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIpExtractionConfigText(DEFAULT_IP_EXTRACTION_CONFIG_TEXT)}
+                disabled={isPending}
+              >
+                {tIpLogging("resetToDefault")}
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-end pt-2">

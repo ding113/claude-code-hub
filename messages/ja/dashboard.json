@@ -124,6 +124,7 @@
       "user": "ユーザー",
       "key": "キー",
       "sessionId": "セッションID",
+      "ip": "IP",
       "provider": "プロバイダー",
       "model": "課金モデル",
       "endpoint": "エンドポイント",
@@ -246,9 +247,21 @@
         "billingOriginal": "課金: 元",
         "billingRedirected": "課金: 実際"
       },
+      "modelAudit": {
+        "unifiedLabel": "モデル",
+        "requestModelLabel": "リクエストモデル",
+        "responseModelLabel": "実際の応答モデル",
+        "mismatchTooltip": "上流プロバイダが返したモデルがリクエストされたモデルと異なります。課金は引き続きリクエストモデルを基準とします。",
+        "secondaryLineAriaLabel": "実際の応答モデル: {model}",
+        "arrowPrefix": "\u21b3"
+      },
       "errorMessage": "エラーメッセージ",
       "fake200ForwardedNotice": "注意：ストリーミング要求では、失敗判定がストリーム終了後になる場合があります。応答内容は既にクライアントへ転送されている可能性があります。",
       "fake200DetectedReason": "検出理由：{reason}",
+      "fake200RetryTooltipLabel": "なぜ今回はサーバー側で再試行できないのか？",
+      "fake200RetryTooltipTitle": "なぜ CCH はこの応答をサーバー側で再試行できないのか",
+      "fake200RetryTooltipServerRetry": "アップストリームはすでに HTTP 200 を返しており、CCH も SSE 応答本文の転送を開始しています。後続のストリームイベントでエラーを検出した時点では、この応答をサーバー側で穏当に再試行することはできません。",
+      "fake200RetryTooltipSessionFallback": "クライアント側での再試行は可能です。同じ Session の後続リクエストでは、直前に fake200 を返したプロバイダーを避けて自動 fallback が続行されます。",
       "fake200Reasons": {
         "emptyBody": "レスポンス本文が空です",
         "htmlBody": "HTML ドキュメントが返されました (エラーページの可能性)",
@@ -300,6 +313,14 @@
           "priority_fallback": "優先フォールバック価格",
           "single_provider_top_level": "トップレベル単一プロバイダー価格",
           "official_fallback": "公式価格"
+        },
+        "baseCost": "基本コスト",
+        "providerMultiplier": "プロバイダー倍率",
+        "groupMultiplier": "グループ倍率",
+        "baseTotal": "基本合計",
+        "unitPricePer1M": "@ {price} / 1M",
+        "unit": {
+          "tokens": "トークン"
         }
       },
       "performance": {
@@ -394,6 +415,7 @@
       "cacheTtlSwapped": "課金 TTL (スワップ済み)",
       "multiplier": "プロバイダー倍率",
       "totalCost": "合計費用",
+      "unitPricePer1M": "@ {price} / 1M",
       "fast": "fast",
       "fastPriority": "Priority service tier (fast モード)",
       "context1m": "1M コンテキスト",
@@ -407,6 +429,13 @@
         "priority_fallback": "優先フォールバック価格",
         "single_provider_top_level": "トップレベル単一プロバイダー価格",
         "official_fallback": "公式価格"
+      },
+      "baseCost": "基本コスト",
+      "providerMultiplier": "プロバイダー倍率",
+      "groupMultiplier": "グループ倍率",
+      "baseTotal": "基本合計",
+      "unit": {
+        "tokens": "トークン"
       }
     }
   },
@@ -425,9 +454,15 @@
       "users": "ユーザー ランキング",
       "keys": "キー ランキング",
       "userRanking": "ユーザーランキング",
+      "userCacheHitRateRanking": "ユーザーキャッシュ命中率",
       "providerRanking": "プロバイダーランキング",
       "providerCacheHitRateRanking": "プロバイダーキャッシュ命中率",
       "modelRanking": "モデルランキング",
+      "primaryUser": "ユーザー",
+      "primaryProvider": "プロバイダー",
+      "primaryModel": "モデル",
+      "secondaryCost": "コスト",
+      "secondaryCacheHit": "キャッシュ命中率",
       "dailyRanking": "本日",
       "weeklyRanking": "今週",
       "monthlyRanking": "今月",
@@ -465,7 +500,9 @@
       "avgTokensPerSecond": "平均トークン/秒",
       "avgCostPerRequest": "平均リクエスト単価",
       "avgCostPerMillionTokens": "100万トークンあたりコスト",
-      "unknownModel": "不明"
+      "unknownModel": "不明",
+      "successRateUnavailable": "利用不可",
+      "successRateBasisDisclosure": "redirected 課金モデルでは 1 行に複数の元モデルが混在しうるため、誤解を避けるためここでは成功率を表示しません。"
     },
     "expandModelStats": "モデル詳細を展開",
     "collapseModelStats": "モデル詳細を折りたたむ",
@@ -588,8 +625,18 @@
       "requestHeaders": "リクエストヘッダー",
       "requestBody": "リクエストボディ",
       "requestMessages": "リクエスト メッセージ",
+      "viewMode": "表示",
+      "before": "処理前",
+      "after": "処理後",
+      "viewModeTooltip": "処理前は、CCH が最終的な上流転送や最終レスポンス書き換えの前に記録したリクエスト/レスポンスのスナップショットを表示します。処理後は、CCH が最終的に上流へ送ったリクエストと、クライアントへ返した最終レスポンスを表示します。",
+      "viewModeTooltipLabel": "処理前/処理後ビューの説明",
+      "snapshotSourceClient": "クライアント",
+      "snapshotSourceUpstream": "上流",
       "specialSettings": "特殊設定",
+      "specialSettingsStaticNote": "特殊設定は監査用に導出された結果であり、処理前と処理後で切り替わりません。",
       "requestMessagesDescription": "クライアントが送信したメッセージ内容",
+      "afterRequestMessagesEmpty": "処理後のリクエストボディにルート階層の messages フィールドがありません。{requestBodyLabel} を確認してください。",
+      "specialSettingsEmpty": "このリクエストには特別な設定が記録されていません。",
       "responseHeaders": "レスポンスヘッダー",
       "responseBody": "レスポンスボディ",
       "responseBodyDescription": "サーバーからの完全なレスポンス (5 分間の TTL)",
@@ -733,6 +780,7 @@
     "quotasManagement": "クォータ管理",
     "userManagement": "ユーザー",
     "providers": "プロバイダー管理",
+    "auditLogs": "監査ログ",
     "documentation": "ドキュ",
     "systemSettings": "設定",
     "feedback": "フィードバック",
@@ -997,6 +1045,17 @@
       "userIdMissing": "ユーザーIDが存在しません",
       "createFailed": "作成に失敗しました。後でもう一度お試しください",
       "noKeyReturned": "作成に成功しましたが、キーが返されませんでした"
+    },
+    "limit5hResetMode": {
+      "label": "5時間リセットモード",
+      "options": {
+        "fixed": "固定ウィンドウ",
+        "rolling": "ローリングウィンドウ (5時間)"
+      },
+      "desc": {
+        "fixed": "最初の成功課金から 5 時間の固定ウィンドウを開始します",
+        "rolling": "直近5時間のローリングウィンドウで集計します"
+      }
     }
   },
   "userForm": {
@@ -1562,16 +1621,28 @@
         "title": "リセットオプション"
       },
       "resetLimits": {
-        "title": "制限のリセット",
-        "description": "全ての制限の累積コストカウンターをリセットします。リクエストログと統計データは保持されます。",
-        "button": "制限をリセット",
-        "confirmTitle": "制限のみリセットしますか？",
+        "title": "すべての制限をリセット",
+        "description": "全ての制限 (5時間、日次、週次、月次、合計) の累積コストカウンターをリセットします。リクエストログと統計データは保持されます。",
+        "button": "すべての制限をリセット",
+        "confirmTitle": "すべての制限をリセットしますか？",
         "confirmDescription": "全ての累積コストカウンター(5時間、日次、週次、月次、合計)がゼロにリセットされます。リクエストログと利用統計は保持されます。",
-        "confirm": "はい、リセットする",
+        "confirm": "はい、すべての制限をリセット",
         "loading": "リセット中...",
-        "error": "制限のリセットに失敗しました",
+        "error": "すべての制限のリセットに失敗しました",
         "success": "全ての制限がリセットされました",
-        "lastResetAt": "前回のリセット: {date}"
+        "lastResetAt": "前回の全体リセット: {date}"
+      },
+      "reset5h": {
+        "button": "5H 制限をリセット",
+        "confirm": "はい、5H 制限をリセット",
+        "confirmDescriptionFixed": "現在のユーザー集約 5 時間固定ウィンドウだけをクリアします。日次、週次、月次、合計、および子 Key には影響しません。",
+        "confirmDescriptionRolling": "現在のユーザー集約 5 時間ローリング使用量だけを今から再計算します。日次、週次、月次、合計、および子 Key には影響しません。",
+        "confirmTitle": "5H 制限をリセットしますか？",
+        "error": "5H 制限のリセットに失敗しました",
+        "loading": "リセット中...",
+        "successFixed": "ユーザーの固定 5H ウィンドウをリセットしました",
+        "successRolling": "ユーザーのローリング 5H 制限をリセットしました",
+        "unavailableReason": "ユーザーレベルの 5H 制限が設定されている場合のみ利用できます。"
       },
       "resetData": {
         "title": "統計リセット",
@@ -2001,5 +2072,77 @@
     "autoDetected": "自動検出",
     "selectPlatform": "プラットフォームを選択",
     "successStats": "{targets} 個のターゲット、{bindings} 個のバインディングを作成しました"
+  },
+  "limitRules": {
+    "addRule": "上限ルールを追加",
+    "title": "上限ルールを追加",
+    "description": "上限の種類を選び、値を設定します",
+    "cancel": "キャンセル",
+    "confirm": "保存",
+    "fields": {
+      "type": {
+        "label": "上限タイプ",
+        "placeholder": "選択してください"
+      },
+      "value": {
+        "label": "値",
+        "placeholder": "入力してください"
+      }
+    },
+    "limit5h": {
+      "mode": {
+        "label": "5時間リセットモード",
+        "fixed": "固定ウィンドウ",
+        "rolling": "ローリングウィンドウ (5時間)",
+        "helperFixed": "最初の成功課金から 5 時間の固定ウィンドウを開始します。",
+        "helperRolling": "直近5時間のローリングウィンドウで集計します。"
+      }
+    },
+    "daily": {
+      "mode": {
+        "label": "日次リセットモード",
+        "fixed": "固定時刻リセット",
+        "rolling": "ローリングウィンドウ (24時間)",
+        "helperFixed": "毎日指定した時刻にクォータをリセットします。",
+        "helperRolling": "最初のリクエストから24時間のローリングウィンドウで計算します。"
+      },
+      "time": {
+        "label": "リセット時刻",
+        "placeholder": "HH:mm"
+      }
+    },
+    "limitTypes": {
+      "limitRpm": "RPM 上限",
+      "limit5h": "5時間上限",
+      "limitDaily": "日次上限",
+      "limitWeekly": "週次上限",
+      "limitMonthly": "月次上限",
+      "limitTotal": "総上限",
+      "limitSessions": "同時セッション"
+    },
+    "ruleTypes": {
+      "limitRpm": "RPM 上限",
+      "limit5h": "5時間上限",
+      "limitDaily": "日次上限",
+      "limitWeekly": "週次上限",
+      "limitMonthly": "月次上限",
+      "limitTotal": "総上限",
+      "limitSessions": "同時セッション"
+    },
+    "errors": {
+      "missingType": "上限タイプを選択してください",
+      "invalidValue": "有効な値を入力してください",
+      "invalidTime": "有効な時刻を入力してください (HH:mm)"
+    },
+    "overwriteHint": "このタイプは既に存在します。保存すると既存の設定を上書きします",
+    "quickValues": {
+      "10": "$10",
+      "50": "$50",
+      "100": "$100",
+      "500": "$500",
+      "unlimited": "無制限"
+    },
+    "alreadySet": "設定済み",
+    "confirmAdd": "追加"
   }
 }

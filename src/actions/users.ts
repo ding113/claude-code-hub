@@ -6,10 +6,13 @@ import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger, users as usersTable } from "@/drizzle/schema";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
+import { clipStartByResetAt, resolveUser5hCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
+import { getRedisClient } from "@/lib/redis";
 import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
@@ -32,9 +35,9 @@ import {
   findUserListBatch,
   getAllUserProviderGroups as getAllUserProviderGroupsRepository,
   getAllUserTags as getAllUserTagsRepository,
-  resetUserCostResetAt,
   searchUsersForFilter as searchUsersForFilterRepository,
   updateUser,
+  updateUserCostResetMarkers,
 } from "@/repository/user";
 import type { User, UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
@@ -235,6 +238,7 @@ export interface BatchUpdateUsersParams {
     rpm?: number | null;
     dailyQuota?: number | null;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
   };
@@ -393,6 +397,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          limit5hResetMode: user.limit5hResetMode,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -437,6 +442,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
               canLoginWebUi: key.canLoginWebUi,
               // 限额配置
               limit5hUsd: key.limit5hUsd,
+              limit5hResetMode: key.limit5hResetMode,
               limitDailyUsd: key.limitDailyUsd,
               dailyResetMode: key.dailyResetMode,
               dailyResetTime: key.dailyResetTime,
@@ -461,6 +467,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          limit5hResetMode: user.limit5hResetMode,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -670,6 +677,7 @@ export async function getUsersBatch(
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          limit5hResetMode: user.limit5hResetMode,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -711,6 +719,7 @@ export async function getUsersBatch(
               modelStats: stats?.modelStats ?? [],
               canLoginWebUi: key.canLoginWebUi,
               limit5hUsd: key.limit5hUsd,
+              limit5hResetMode: key.limit5hResetMode,
               limitDailyUsd: key.limitDailyUsd,
               dailyResetMode: key.dailyResetMode,
               dailyResetTime: key.dailyResetTime,
@@ -735,6 +744,7 @@ export async function getUsersBatch(
           providerGroup: user.providerGroup || undefined,
           tags: user.tags || [],
           limit5hUsd: user.limit5hUsd ?? null,
+          limit5hResetMode: user.limit5hResetMode,
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
@@ -816,6 +826,7 @@ export async function getUsersBatchCore(
         providerGroup: user.providerGroup || undefined,
         tags: user.tags || [],
         limit5hUsd: user.limit5hUsd ?? null,
+        limit5hResetMode: user.limit5hResetMode,
         limitWeeklyUsd: user.limitWeeklyUsd ?? null,
         limitMonthlyUsd: user.limitMonthlyUsd ?? null,
         limitTotalUsd: user.limitTotalUsd ?? null,
@@ -853,6 +864,7 @@ export async function getUsersBatchCore(
           modelStats: [],
           canLoginWebUi: key.canLoginWebUi,
           limit5hUsd: key.limit5hUsd,
+          limit5hResetMode: key.limit5hResetMode,
           limitDailyUsd: key.limitDailyUsd,
           dailyResetMode: key.dailyResetMode,
           dailyResetTime: key.dailyResetTime,
@@ -1009,6 +1021,7 @@ export async function batchUpdateUsers(
       rpm: true,
       dailyQuota: true,
       limit5hUsd: true,
+      limit5hResetMode: true,
       limitWeeklyUsd: true,
       limitMonthlyUsd: true,
     });
@@ -1055,6 +1068,8 @@ export async function batchUpdateUsers(
           updates.dailyQuota === null ? null : updates.dailyQuota.toString();
       if (updates.limit5hUsd !== undefined)
         dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
+      if (updates.limit5hResetMode !== undefined)
+        dbUpdates.limit5hResetMode = updates.limit5hResetMode;
       if (updates.limitWeeklyUsd !== undefined)
         dbUpdates.limitWeeklyUsd =
           updates.limitWeeklyUsd === null ? null : updates.limitWeeklyUsd.toString();
@@ -1074,6 +1089,29 @@ export async function batchUpdateUsers(
         throw new BatchUpdateError("批量更新失败：更新行数不匹配", ERROR_CODES.UPDATE_FAILED);
       }
     });
+
+    if (updates.limit5hResetMode !== undefined && updatedIds.length > 0) {
+      try {
+        const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+        const keysMap = await findKeyListBatch(updatedIds);
+        await Promise.all(
+          updatedIds.map(async (userId) => {
+            const keys = keysMap.get(userId) ?? [];
+            await invalidateCachedUser(userId).catch(() => null);
+            await clearUserCostCache({
+              userId,
+              keyIds: keys.map((item) => item.id),
+              keyHashes: keys.map((item) => item.key),
+            }).catch(() => null);
+          })
+        );
+      } catch (error) {
+        logger.warn("[UserAction] Failed to clear user 5h reset-mode cache after batch update", {
+          updatedIds,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     revalidatePath("/dashboard");
 
@@ -1096,6 +1134,48 @@ export async function batchUpdateUsers(
   }
 }
 
+// Audit snapshot helper: never throws, logs and returns null on failure.
+async function safeFindUser(userId: number): Promise<Awaited<ReturnType<typeof findUserById>>> {
+  try {
+    return await findUserById(userId);
+  } catch (error) {
+    logger.warn("[Audit] failed to snapshot user for audit", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Shared `user.create` audit emit. Called from both `addUser` (which also
+ * issues a default key) and `createUserOnly` (unified edit-dialog create
+ * path) so every user-creation flow produces an audit row with the full
+ * post-creation snapshot.
+ */
+// The repository's createUser return type is wider than the action-side User type;
+// we pass it straight to the audit emitter which redacts & serializes unknown fields.
+type UserCreateAuditSnapshot = {
+  id: string | number;
+  name: string | null;
+};
+
+function emitUserCreateAudit(user: UserCreateAuditSnapshot): void {
+  emitActionAudit({
+    category: "user",
+    action: "user.create",
+    targetType: "user",
+    targetId: String(user.id),
+    targetName: user.name,
+    // Full user record — the redactor strips sensitive fields; everything
+    // else (id, name, role, isEnabled, expiresAt, providerGroup, tags,
+    // quota fields, allowed/blocked clients & models, …) is preserved so
+    // the audit captures the complete post-creation state.
+    after: user,
+    success: true,
+  });
+}
+
 // 添加用户
 export async function addUser(data: {
   name: string;
@@ -1105,6 +1185,7 @@ export async function addUser(data: {
   rpm?: number | null;
   dailyQuota?: number | null;
   limit5hUsd?: number | null;
+  limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -1130,6 +1211,7 @@ export async function addUser(data: {
       providerGroup?: string;
       tags: string[];
       limit5hUsd: number | null;
+      limit5hResetMode: "fixed" | "rolling";
       limitWeeklyUsd: number | null;
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
@@ -1166,6 +1248,7 @@ export async function addUser(data: {
       rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
       limit5hUsd: data.limit5hUsd,
+      limit5hResetMode: data.limit5hResetMode,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
@@ -1226,6 +1309,7 @@ export async function addUser(data: {
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
@@ -1251,6 +1335,7 @@ export async function addUser(data: {
     });
 
     revalidatePath("/dashboard");
+    emitUserCreateAudit(newUser);
     return {
       ok: true,
       data: {
@@ -1266,6 +1351,7 @@ export async function addUser(data: {
           providerGroup: newUser.providerGroup || undefined,
           tags: newUser.tags || [],
           limit5hUsd: newUser.limit5hUsd ?? null,
+          limit5hResetMode: newUser.limit5hResetMode,
           limitWeeklyUsd: newUser.limitWeeklyUsd ?? null,
           limitMonthlyUsd: newUser.limitMonthlyUsd ?? null,
           limitTotalUsd: newUser.limitTotalUsd ?? null,
@@ -1283,6 +1369,14 @@ export async function addUser(data: {
     logger.error("Failed to create user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.create",
+      targetType: "user",
+      targetName: data.name,
+      success: false,
+      errorMessage: "CREATE_FAILED",
+    });
     return {
       ok: false,
       error: message,
@@ -1300,6 +1394,7 @@ export async function createUserOnly(data: {
   rpm?: number | null;
   dailyQuota?: number | null;
   limit5hUsd?: number | null;
+  limit5hResetMode?: "fixed" | "rolling";
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -1325,6 +1420,7 @@ export async function createUserOnly(data: {
       providerGroup?: string;
       tags: string[];
       limit5hUsd: number | null;
+      limit5hResetMode: "fixed" | "rolling";
       limitWeeklyUsd: number | null;
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
@@ -1354,6 +1450,7 @@ export async function createUserOnly(data: {
       rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
       limit5hUsd: data.limit5hUsd,
+      limit5hResetMode: data.limit5hResetMode,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
@@ -1413,6 +1510,7 @@ export async function createUserOnly(data: {
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
@@ -1427,6 +1525,7 @@ export async function createUserOnly(data: {
     });
 
     revalidatePath("/dashboard");
+    emitUserCreateAudit(newUser);
     return {
       ok: true,
       data: {
@@ -1442,6 +1541,7 @@ export async function createUserOnly(data: {
           providerGroup: newUser.providerGroup || undefined,
           tags: newUser.tags || [],
           limit5hUsd: newUser.limit5hUsd ?? null,
+          limit5hResetMode: newUser.limit5hResetMode,
           limitWeeklyUsd: newUser.limitWeeklyUsd ?? null,
           limitMonthlyUsd: newUser.limitMonthlyUsd ?? null,
           limitTotalUsd: newUser.limitTotalUsd ?? null,
@@ -1453,6 +1553,14 @@ export async function createUserOnly(data: {
     logger.error("Failed to create user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.create",
+      targetType: "user",
+      targetName: data.name,
+      success: false,
+      errorMessage: "CREATE_FAILED",
+    });
     return {
       ok: false,
       error: message,
@@ -1472,6 +1580,7 @@ export async function editUser(
     rpm?: number | null;
     dailyQuota?: number | null;
     limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
@@ -1485,6 +1594,12 @@ export async function editUser(
     allowedModels?: string[];
   }
 ): Promise<ActionResult> {
+  // Snapshot operator-visible state BEFORE entering the try block so failure
+  // audit events also carry `before` context (target name / previous values).
+  // `safeFindUser` never throws — it catches internally and returns null —
+  // which is why we can hoist it above the try/catch boundary safely.
+  const beforeUser = await safeFindUser(userId);
+
   try {
     // Get translations for error messages
     const tError = await getTranslations("errors");
@@ -1573,6 +1688,7 @@ export async function editUser(
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
       limit5hUsd: validatedData.limit5hUsd,
+      limit5hResetMode: validatedData.limit5hResetMode,
       limitWeeklyUsd: validatedData.limitWeeklyUsd,
       limitMonthlyUsd: validatedData.limitMonthlyUsd,
       limitTotalUsd: validatedData.limitTotalUsd,
@@ -1586,14 +1702,55 @@ export async function editUser(
       allowedModels: validatedData.allowedModels,
     });
 
+    if (
+      validatedData.limit5hResetMode !== undefined &&
+      beforeUser &&
+      validatedData.limit5hResetMode !== beforeUser.limit5hResetMode
+    ) {
+      const { findKeyList } = await import("@/repository/key");
+      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      const keys = await findKeyList(userId);
+      await clearUserCostCache({
+        userId,
+        keyIds: keys.map((item) => item.id),
+        keyHashes: keys.map((item) => item.key),
+      }).catch(() => null);
+    }
+
     // 用户分组由 Key 分组自动计算，不再需要级联更新 Key 的 providerGroup
 
     revalidatePath("/dashboard");
+    const afterUser = await safeFindUser(userId);
+    emitActionAudit({
+      category: "user",
+      action: "user.update",
+      targetType: "user",
+      targetId: String(userId),
+      targetName: afterUser?.name ?? beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      after: afterUser ?? validatedData,
+      success: true,
+    });
     return { ok: true };
   } catch (error) {
     logger.error("Failed to update user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.update",
+      targetType: "user",
+      targetId: String(userId),
+      // Include before-snapshot (captured above the try block) so the audit
+      // row has context even when the update itself failed.
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      success: false,
+      // Stable code only — `error.message` from `updateUser` can carry raw pg
+      // errors (duplicate key values, constraint names) which we don't want
+      // to persist into an audit row that operators read.
+      errorMessage: "UPDATE_FAILED",
+    });
     return {
       ok: false,
       error: message,
@@ -1605,6 +1762,9 @@ export async function editUser(
 // 删除用户
 // Ledger rows intentionally survive user deletion (billing audit trail)
 export async function removeUser(userId: number): Promise<ActionResult> {
+  // Hoisted above try/catch so the failure emit also carries before-snapshot.
+  const beforeUser = await safeFindUser(userId);
+
   try {
     // Get translations for error messages
     const tError = await getTranslations("errors");
@@ -1620,11 +1780,30 @@ export async function removeUser(userId: number): Promise<ActionResult> {
 
     await deleteUser(userId);
     revalidatePath("/dashboard");
+    emitActionAudit({
+      category: "user",
+      action: "user.delete",
+      targetType: "user",
+      targetId: String(userId),
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      success: true,
+    });
     return { ok: true };
   } catch (error) {
     logger.error("Failed to delete user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("DELETE_USER_FAILED");
+    emitActionAudit({
+      category: "user",
+      action: "user.delete",
+      targetType: "user",
+      targetId: String(userId),
+      targetName: beforeUser?.name ?? null,
+      before: beforeUser ?? undefined,
+      success: false,
+      errorMessage: "DELETE_FAILED",
+    });
     return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }
@@ -1878,7 +2057,13 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const { getTimeRangeForPeriod, getTimeRangeForPeriodWithMode } = await import(
       "@/lib/rate-limit/time-utils"
     );
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
     const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
+    const limit5hResetMode = user.limit5hResetMode ?? "rolling";
+    const user5hCostResetAt = resolveUser5hCostResetAt(
+      user.costResetAt ?? null,
+      user.limit5hCostResetAt ?? null
+    );
 
     // 获取各时间范围
     const range5h = await getTimeRangeForPeriod("5h");
@@ -1891,13 +2076,15 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     // Clip time range start by costResetAt (for limits-only reset)
-    const clipStart = (start: Date): Date =>
-      user.costResetAt instanceof Date && user.costResetAt > start ? user.costResetAt : start;
+    const clipStart = (start: Date): Date => clipStartByResetAt(start, user.costResetAt ?? null);
+    const clip5hStart = (start: Date): Date => clipStartByResetAt(start, user5hCostResetAt);
 
     // 并行查询各时间范围的消费
     // Note: sumUserTotalCost uses ALL_TIME_MAX_AGE_DAYS for all-time semantics
     const [usage5h, usageDaily, usageWeekly, usageMonthly, usageTotal] = await Promise.all([
-      sumUserCostInTimeRange(userId, clipStart(range5h.startTime), range5h.endTime),
+      limit5hResetMode === "fixed"
+        ? RateLimitService.getCurrentCost(userId, "user", "5h", "00:00", limit5hResetMode)
+        : sumUserCostInTimeRange(userId, clip5hStart(range5h.startTime), range5h.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeDaily.startTime), rangeDaily.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
       sumUserCostInTimeRange(userId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
@@ -1951,10 +2138,29 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
     const keys = await findKeyList(userId);
     const keyIds = keys.map((k) => k.id);
     const keyHashes = keys.map((k) => k.key);
+    const requiresRedisForFixed5h =
+      ((user.limit5hUsd ?? 0) > 0 && (user.limit5hResetMode ?? "rolling") === "fixed") ||
+      keys.some(
+        (key) => (key.limit5hUsd ?? 0) > 0 && (key.limit5hResetMode ?? "rolling") === "fixed"
+      );
 
-    // Set costResetAt on user so all cost calculations start fresh
-    // Uses repo function which also sets updatedAt and invalidates auth cache
-    const updated = await resetUserCostResetAt(userId, new Date());
+    if (requiresRedisForFixed5h) {
+      const redis = getRedisClient();
+      if (!redis || redis.status !== "ready") {
+        return {
+          ok: false,
+          error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),
+          errorCode: ERROR_CODES.OPERATION_FAILED,
+        };
+      }
+    }
+
+    // 同时推进 full reset marker 和 5H-only marker，避免 later-of 仍读到旧边界。
+    const resetAt = new Date();
+    const updated = await updateUserCostResetMarkers(userId, {
+      costResetAt: resetAt,
+      limit5hCostResetAt: resetAt,
+    });
     if (!updated) {
       return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
@@ -1963,19 +2169,44 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
     try {
       const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
       const cacheResult = await clearUserCostCache({ userId, keyIds, keyHashes });
-      if (cacheResult) {
+      if (!cacheResult) {
+        logger.warn("Reset user limits only completed without Redis cleanup", {
+          userId,
+          requiresRedisForFixed5h,
+        });
+        if (requiresRedisForFixed5h) {
+          return {
+            ok: false,
+            error: tError("USER_LIMITS_RESET_PARTIAL_FAILURE"),
+            errorCode: ERROR_CODES.USER_LIMITS_RESET_PARTIAL_FAILURE,
+          };
+        }
+      } else {
         logger.info("Reset user limits only - Redis cost cache cleared", {
           userId,
           keyCount: keyIds.length,
           ...cacheResult,
         });
+        if (cacheResult.cleanupFailed && requiresRedisForFixed5h) {
+          return {
+            ok: false,
+            error: tError("USER_LIMITS_RESET_PARTIAL_FAILURE"),
+            errorCode: ERROR_CODES.USER_LIMITS_RESET_PARTIAL_FAILURE,
+          };
+        }
       }
     } catch (error) {
       logger.error("Failed to clear Redis cache during user limits reset", {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Continue execution - costResetAt already set in DB
+      if (requiresRedisForFixed5h) {
+        return {
+          ok: false,
+          error: tError("USER_LIMITS_RESET_PARTIAL_FAILURE"),
+          errorCode: ERROR_CODES.USER_LIMITS_RESET_PARTIAL_FAILURE,
+        };
+      }
     }
 
     logger.info("Reset user limits only (costResetAt set)", { userId, keyCount: keyIds.length });
@@ -2021,6 +2252,22 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     const keys = await findKeyList(userId);
     const keyIds = keys.map((k) => k.id);
     const keyHashes = keys.map((k) => k.key);
+    const requiresRedisForFixed5h =
+      ((user.limit5hUsd ?? 0) > 0 && (user.limit5hResetMode ?? "rolling") === "fixed") ||
+      keys.some(
+        (key) => (key.limit5hUsd ?? 0) > 0 && (key.limit5hResetMode ?? "rolling") === "fixed"
+      );
+
+    if (requiresRedisForFixed5h) {
+      const redis = getRedisClient();
+      if (!redis || redis.status !== "ready") {
+        return {
+          ok: false,
+          error: tError("USER_5H_FIXED_RESET_REQUIRES_REDIS"),
+          errorCode: ERROR_CODES.OPERATION_FAILED,
+        };
+      }
+    }
 
     // 1. Delete all messageRequest logs for this user
     // Atomic: delete logs + ledger + clear costResetAt in a single transaction
@@ -2029,7 +2276,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
       await tx.delete(usageLedger).where(eq(usageLedger.userId, userId));
       await tx
         .update(usersTable)
-        .set({ costResetAt: null, updatedAt: new Date() })
+        .set({ costResetAt: null, limit5hCostResetAt: null, updatedAt: new Date() })
         .where(and(eq(usersTable.id, userId), isNull(usersTable.deletedAt)));
     });
     // Invalidate auth cache outside transaction (Redis, not DB)
@@ -2044,19 +2291,40 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
         keyHashes,
         includeActiveSessions: true,
       });
-      if (cacheResult) {
-        logger.info("Reset user statistics - Redis cache cleared", {
+      if (!cacheResult) {
+        logger.error("Reset user statistics committed DB changes without Redis cleanup", {
           userId,
-          keyCount: keyIds.length,
-          ...cacheResult,
+          requiresRedisForFixed5h,
         });
+        return {
+          ok: false,
+          error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
+          errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
+        };
+      }
+
+      logger.info("Reset user statistics - Redis cache cleared", {
+        userId,
+        keyCount: keyIds.length,
+        ...cacheResult,
+      });
+      if (cacheResult.cleanupFailed) {
+        return {
+          ok: false,
+          error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
+          errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
+        };
       }
     } catch (error) {
       logger.error("Failed to clear Redis cache during user statistics reset", {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Continue execution - DB logs already deleted
+      return {
+        ok: false,
+        error: tError("USER_STATS_RESET_PARTIAL_FAILURE"),
+        errorCode: ERROR_CODES.USER_STATS_RESET_PARTIAL_FAILURE,
+      };
     }
 
     logger.info("Reset all user statistics", { userId, keyCount: keyIds.length });

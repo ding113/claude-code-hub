@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
     enableThinkingBudgetRectifier: true,
   })),
   storeSessionSpecialSettings: vi.fn(async () => {}),
+  storeSessionRequestPhaseSnapshot: vi.fn(async () => {}),
+  storeSessionResponsePhaseSnapshot: vi.fn(async () => {}),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -77,6 +79,8 @@ vi.mock("@/lib/session-manager", () => ({
     updateSessionProvider: mocks.updateSessionProvider,
     clearSessionProvider: mocks.clearSessionProvider,
     storeSessionSpecialSettings: mocks.storeSessionSpecialSettings,
+    storeSessionRequestPhaseSnapshot: mocks.storeSessionRequestPhaseSnapshot,
+    storeSessionResponsePhaseSnapshot: mocks.storeSessionResponsePhaseSnapshot,
   },
 }));
 
@@ -658,6 +662,154 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("shadow hedge winner 应把最终 request.after 与 response.before phase snapshot 写回原始 session", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const fireworks = createProvider({
+        id: 383,
+        name: "fireworks",
+        url: "https://fireworks.example.com",
+      });
+      const minimax = createProvider({
+        id: 206,
+        name: "minimax",
+        url: "https://minimax.example.com",
+      });
+      const session = createSession();
+      session.setProvider(fireworks);
+      session.addProviderToChain(fireworks, { reason: "initial_selection" });
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(minimax);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession &
+          AttemptRuntime & {
+            detailSnapshotRequestAfter?: {
+              body: string | null;
+              headers: Headers;
+              meta: { clientUrl: null; upstreamUrl: string; method: string };
+            };
+            detailSnapshotResponseBefore?: {
+              headers: Headers;
+              meta: { upstreamUrl: string; statusCode: number };
+            };
+          };
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.forwardedRequestBody = '{"provider":"fireworks"}';
+        runtime.detailSnapshotRequestAfter = {
+          body: '{"provider":"fireworks"}',
+          headers: new Headers({ "x-attempt": "loser" }),
+          meta: {
+            clientUrl: null,
+            upstreamUrl: "https://fireworks.example.com/v1/messages",
+            method: "POST",
+          },
+        };
+        runtime.detailSnapshotResponseBefore = {
+          headers: new Headers({ "x-upstream": "loser" }),
+          meta: {
+            upstreamUrl: "https://fireworks.example.com/v1/messages",
+            statusCode: 200,
+          },
+        };
+
+        return createStreamingResponse({
+          label: "fireworks",
+          firstChunkDelayMs: 220,
+          controller: controller1,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession &
+          AttemptRuntime & {
+            detailSnapshotRequestAfter?: {
+              body: string | null;
+              headers: Headers;
+              meta: { clientUrl: null; upstreamUrl: string; method: string };
+            };
+            detailSnapshotResponseBefore?: {
+              headers: Headers;
+              meta: { upstreamUrl: string; statusCode: number };
+            };
+          };
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.forwardedRequestBody = '{"provider":"minimax"}';
+        runtime.detailSnapshotRequestAfter = {
+          body: '{"provider":"minimax"}',
+          headers: new Headers({ "x-attempt": "winner" }),
+          meta: {
+            clientUrl: null,
+            upstreamUrl: "https://minimax.example.com/v1/messages",
+            method: "POST",
+          },
+        };
+        runtime.detailSnapshotResponseBefore = {
+          headers: new Headers({ "x-upstream": "winner" }),
+          meta: {
+            upstreamUrl: "https://minimax.example.com/v1/messages",
+            statusCode: 200,
+          },
+        };
+
+        return createStreamingResponse({
+          label: "minimax",
+          firstChunkDelayMs: 40,
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(50);
+      const response = await responsePromise;
+
+      expect(await response.text()).toContain('"provider":"minimax"');
+      expect(mocks.storeSessionRequestPhaseSnapshot).toHaveBeenCalledTimes(1);
+      expect(mocks.storeSessionResponsePhaseSnapshot).toHaveBeenCalledTimes(1);
+
+      const [requestSnapshotSessionId, requestSnapshotPhase, requestSnapshot, requestSequence] =
+        mocks.storeSessionRequestPhaseSnapshot.mock.calls[0];
+      expect(requestSnapshotSessionId).toBe("sess-hedge");
+      expect(requestSnapshotPhase).toBe("after");
+      expect(requestSequence).toBe(1);
+      expect(requestSnapshot.body).toBe('{"provider":"minimax"}');
+      expect(requestSnapshot.meta).toEqual({
+        clientUrl: null,
+        upstreamUrl: "https://minimax.example.com/v1/messages",
+        method: "POST",
+      });
+      expect(requestSnapshot.headers.get("x-attempt")).toBe("winner");
+
+      const [responseSnapshotSessionId, responseSnapshotPhase, responseSnapshotMeta, sequence] =
+        mocks.storeSessionResponsePhaseSnapshot.mock.calls[0];
+      expect(responseSnapshotSessionId).toBe("sess-hedge");
+      expect(responseSnapshotPhase).toBe("before");
+      expect(sequence).toBe(1);
+      expect(responseSnapshotMeta.meta).toEqual({
+        upstreamUrl: "https://minimax.example.com/v1/messages",
+        statusCode: 200,
+      });
+      expect(responseSnapshotMeta.headers.get("x-upstream")).toBe("winner");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("first provider exceeds first-byte threshold, second provider starts and wins by first chunk", async () => {
     vi.useFakeTimers();
 
@@ -714,7 +866,14 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(2);
-      expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith("sess-hedge", 2, 0, false, true);
+      expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith(
+        "sess-hedge",
+        2,
+        0,
+        false,
+        true,
+        null
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -1625,9 +1784,6 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(await response.text()).toContain('"provider":"p2"');
       expect(session.provider?.id).toBe(2);
 
-      // Key assertion: since only provider 2 actually launched (provider 1 failed at
-      // endpoint resolution before incrementing launchedProviderCount), the winner
-      // should be classified as "request_success" not "hedge_winner".
       const chain = session.getProviderChain();
       const winnerEntry = chain.find(
         (entry) => entry.reason === "request_success" || entry.reason === "hedge_winner"

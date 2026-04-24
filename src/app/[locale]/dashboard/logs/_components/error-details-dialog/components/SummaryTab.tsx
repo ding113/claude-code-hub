@@ -15,18 +15,24 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
+import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { extractAnthropicEffortInfo } from "@/lib/utils/anthropic-effort";
 import { formatCurrency } from "@/lib/utils/currency";
+import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
 import {
   getPricingResolutionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
 import { getFake200ReasonKey } from "../../fake200-reason";
+import { Fake200RetryTooltip } from "../../fake200-retry-tooltip";
 import {
   calculateOutputRate,
   isInProgressStatus,
@@ -40,6 +46,7 @@ export function SummaryTab({
   errorMessage,
   originalModel,
   currentModel,
+  actualResponseModel,
   billingModelSource = "original",
   inputTokens,
   outputTokens,
@@ -51,12 +58,15 @@ export function SummaryTab({
   swapCacheTtlApplied,
   costUsd,
   costMultiplier,
+  groupCostMultiplier,
+  costBreakdown,
   context1mApplied,
   durationMs,
   ttfbMs,
   sessionId,
   requestSequence,
   userAgent,
+  clientIp,
   endpoint,
   specialSettings,
   hasMessages,
@@ -64,6 +74,7 @@ export function SummaryTab({
   onViewLogicTrace,
 }: SummaryTabProps) {
   const t = useTranslations("dashboard.logs.details");
+  const [ipDialogOpen, setIpDialogOpen] = useState(false);
 
   const isSuccess = isSuccessStatus(statusCode);
   const isInProgress = isInProgressStatus(statusCode);
@@ -71,6 +82,14 @@ export function SummaryTab({
   const hideRate = shouldHideOutputRate(outputRate, durationMs, ttfbMs);
   const totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
   const hasRedirect = originalModel && currentModel && originalModel !== currentModel;
+  const modelAudit = resolveModelAuditDisplay({
+    originalModel: originalModel ?? null,
+    model: currentModel ?? null,
+    actualResponseModel: actualResponseModel ?? null,
+    billingModelSource,
+  });
+  const hasAnyModel =
+    Boolean(modelAudit.effectiveRequestModel) || Boolean(modelAudit.secondaryActualModel);
   const specialSettingsContent =
     specialSettings && specialSettings.length > 0 ? JSON.stringify(specialSettings, null, 2) : null;
   const pricingResolution = getPricingResolutionSpecialSetting(specialSettings);
@@ -87,6 +106,53 @@ export function SummaryTab({
     isFake200PostStreamFailure && fake200Code
       ? t(getFake200ReasonKey(fake200Code, "fake200Reasons"))
       : null;
+
+  // Resolve per-TTL cache creation costs for display. Strategy:
+  //  1. Prefer the split fields (cache_creation_5m / _1h) written since the
+  //     breakdown split landed.
+  //  2. Legacy rows predate the split and only carry the aggregated
+  //     cache_creation. For mixed-TTL legacy rows we split the aggregate
+  //     proportionally by token count so neither row gets double-counted
+  //     and neither attribute zero. Pure-5m / pure-1h legacy rows route the
+  //     aggregate to the matching row.
+  const resolveCacheCreationSplit = () => {
+    if (!costBreakdown) return { fiveM: null as string | null, oneH: null as string | null };
+
+    const has5m = costBreakdown.cache_creation_5m !== undefined;
+    const has1h = costBreakdown.cache_creation_1h !== undefined;
+    if (has5m || has1h) {
+      return {
+        fiveM: costBreakdown.cache_creation_5m ?? "0",
+        oneH: costBreakdown.cache_creation_1h ?? "0",
+      };
+    }
+
+    // Legacy: only aggregate cache_creation is available.
+    const aggregate = costBreakdown.cache_creation;
+    const aggregateNum = Number(aggregate);
+    if (!Number.isFinite(aggregateNum) || aggregateNum === 0) {
+      return { fiveM: "0", oneH: "0" };
+    }
+
+    const tokens5m = cacheCreation5mInputTokens ?? 0;
+    const tokens1h = cacheCreation1hInputTokens ?? 0;
+    if (cacheTtlApplied === "mixed" && tokens5m + tokens1h > 0) {
+      // Proportional split by token count (prices differ 1.25x vs 2x but for
+      // a post-hoc legacy display this approximation is close enough).
+      const total = tokens5m + tokens1h;
+      const share5m = (aggregateNum * tokens5m) / total;
+      const share1h = aggregateNum - share5m;
+      return { fiveM: share5m.toString(), oneH: share1h.toString() };
+    }
+
+    if (cacheTtlApplied === "1h") {
+      return { fiveM: "0", oneH: aggregate };
+    }
+    // Default / 5m case
+    return { fiveM: aggregate, oneH: "0" };
+  };
+
+  const cacheSplit = resolveCacheCreationSplit();
 
   return (
     <div className="space-y-6">
@@ -266,13 +332,24 @@ export function SummaryTab({
       )}
 
       {/* Client Info */}
-      {(userAgent || endpoint) && (
+      {(userAgent || endpoint || clientIp) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold flex items-center gap-2">
             <Monitor className="h-4 w-4 text-blue-600" />
             {t("metadata.clientInfo")}
           </h4>
           <div className="rounded-lg border bg-card divide-y">
+            {clientIp && (
+              <div className="p-3">
+                <p className="text-xs text-muted-foreground mb-1">IP</p>
+                <IpDisplayTrigger
+                  ip={clientIp}
+                  onClick={() => setIpDialogOpen(true)}
+                  buttonClassName="max-w-full"
+                  textClassName="text-xs underline-offset-2 hover:text-primary"
+                />
+              </div>
+            )}
             {userAgent && (
               <div className="p-3">
                 <p className="text-xs text-muted-foreground mb-1">User-Agent</p>
@@ -300,21 +377,38 @@ export function SummaryTab({
             {t("metadata.billingInfo")}
           </h4>
           <div className="rounded-lg border bg-card p-4 space-y-3">
-            {/* Token breakdown */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            {/* Token breakdown with optional per-component costs */}
+            <div className="space-y-2 text-sm">
+              {/* Input */}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("billingDetails.input")}:</span>
-                <span className="font-mono">{formatTokenAmount(inputTokens)} tokens</span>
+                <span className="font-mono">
+                  {formatTokenAmount(inputTokens)} {t("billingDetails.unit.tokens")}
+                  {costBreakdown ? (
+                    <span className="ml-3 text-muted-foreground">
+                      {formatCurrency(costBreakdown.input, "USD", 6)}
+                    </span>
+                  ) : null}
+                </span>
               </div>
+
+              {/* Output */}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("billingDetails.output")}:</span>
-                <span className="font-mono">{formatTokenAmount(outputTokens)} tokens</span>
+                <span className="font-mono">
+                  {formatTokenAmount(outputTokens)} {t("billingDetails.unit.tokens")}
+                  {costBreakdown ? (
+                    <span className="ml-3 text-muted-foreground">
+                      {formatCurrency(costBreakdown.output, "USD", 6)}
+                    </span>
+                  ) : null}
+                </span>
               </div>
 
               {/* Cache Write 5m */}
               {((cacheCreation5mInputTokens ?? 0) > 0 ||
                 ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied !== "1h")) && (
-                <div className="flex justify-between col-span-2">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheWrite5m")}:</span>
                   <span className="font-mono">
                     {formatTokenAmount(
@@ -322,7 +416,13 @@ export function SummaryTab({
                         ? cacheCreation5mInputTokens
                         : cacheCreationInputTokens
                     )}{" "}
-                    tokens <span className="text-orange-600">(1.25x)</span>
+                    {t("billingDetails.unit.tokens")}{" "}
+                    <span className="text-orange-600">(1.25x)</span>
+                    {costBreakdown && cacheSplit.fiveM !== null ? (
+                      <span className="ml-3 text-muted-foreground">
+                        {formatCurrency(cacheSplit.fiveM, "USD", 6)}
+                      </span>
+                    ) : null}
                   </span>
                 </div>
               )}
@@ -330,7 +430,7 @@ export function SummaryTab({
               {/* Cache Write 1h */}
               {((cacheCreation1hInputTokens ?? 0) > 0 ||
                 ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied === "1h")) && (
-                <div className="flex justify-between col-span-2">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheWrite1h")}:</span>
                   <span className="font-mono">
                     {formatTokenAmount(
@@ -338,25 +438,35 @@ export function SummaryTab({
                         ? cacheCreation1hInputTokens
                         : cacheCreationInputTokens
                     )}{" "}
-                    tokens <span className="text-orange-600">(2x)</span>
+                    {t("billingDetails.unit.tokens")} <span className="text-orange-600">(2x)</span>
+                    {costBreakdown && cacheSplit.oneH !== null ? (
+                      <span className="ml-3 text-muted-foreground">
+                        {formatCurrency(cacheSplit.oneH, "USD", 6)}
+                      </span>
+                    ) : null}
                   </span>
                 </div>
               )}
 
               {/* Cache Read */}
               {(cacheReadInputTokens ?? 0) > 0 && (
-                <div className="flex justify-between col-span-2">
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("billingDetails.cacheRead")}:</span>
                   <span className="font-mono">
-                    {formatTokenAmount(cacheReadInputTokens)} tokens{" "}
+                    {formatTokenAmount(cacheReadInputTokens)} {t("billingDetails.unit.tokens")}{" "}
                     <span className="text-emerald-600">(0.1x)</span>
+                    {costBreakdown ? (
+                      <span className="ml-3 text-muted-foreground">
+                        {formatCurrency(costBreakdown.cache_read, "USD", 6)}
+                      </span>
+                    ) : null}
                   </span>
                 </div>
               )}
 
               {/* Cache TTL */}
               {cacheTtlApplied && (
-                <div className="flex justify-between items-center col-span-2">
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">{t("billingDetails.cacheTtl")}:</span>
                   <Badge
                     variant="outline"
@@ -376,7 +486,7 @@ export function SummaryTab({
 
               {/* 1M Context */}
               {context1mApplied && (
-                <div className="flex justify-between items-center col-span-2">
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">{t("billingDetails.context1m")}:</span>
                   <div className="flex items-center gap-2">
                     <Badge
@@ -393,7 +503,7 @@ export function SummaryTab({
               )}
 
               {hasPriorityServiceTier ? (
-                <div className="flex justify-between items-center col-span-2">
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">{t("billingDetails.fast")}:</span>
                   <Badge
                     variant="outline"
@@ -406,7 +516,7 @@ export function SummaryTab({
 
               {pricingResolution && pricingSourceLabel ? (
                 <>
-                  <div className="flex justify-between col-span-2">
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">
                       {t("billingDetails.pricingProvider")}:
                     </span>
@@ -414,7 +524,7 @@ export function SummaryTab({
                       {pricingResolution.resolvedPricingProviderKey}
                     </span>
                   </div>
-                  <div className="flex justify-between col-span-2">
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">
                       {t("billingDetails.pricingSourceLabel")}:
                     </span>
@@ -423,15 +533,68 @@ export function SummaryTab({
                 </>
               ) : null}
 
-              {/* Cost Multiplier */}
+              {/* Base Total (only when breakdown is available) */}
+              {costBreakdown ? (
+                <div className="pt-2 border-t flex justify-between">
+                  <span className="text-muted-foreground font-medium">
+                    {t("billingDetails.baseTotal")}:
+                  </span>
+                  <span className="font-mono font-medium">
+                    {formatCurrency(costBreakdown.base_total, "USD", 6)}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Provider Multiplier */}
               {(() => {
+                if (costBreakdown) {
+                  const pm = costBreakdown.provider_multiplier;
+                  if (!Number.isFinite(pm) || pm === 1) return null;
+                  return (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("billingDetails.providerMultiplier")}:
+                      </span>
+                      <span className="font-mono">{pm.toFixed(2)}x</span>
+                    </div>
+                  );
+                }
                 if (costMultiplier === "" || costMultiplier == null) return null;
-                const multiplier = Number(costMultiplier);
-                if (!Number.isFinite(multiplier) || multiplier === 1) return null;
+                const pm = Number(costMultiplier);
+                if (!Number.isFinite(pm) || pm === 1) return null;
                 return (
-                  <div className="flex justify-between col-span-2">
-                    <span className="text-muted-foreground">{t("billingDetails.multiplier")}:</span>
-                    <span className="font-mono">{multiplier.toFixed(2)}x</span>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("billingDetails.providerMultiplier")}:
+                    </span>
+                    <span className="font-mono">{pm.toFixed(2)}x</span>
+                  </div>
+                );
+              })()}
+
+              {/* Group Multiplier */}
+              {(() => {
+                if (costBreakdown) {
+                  const gm = costBreakdown.group_multiplier;
+                  if (!Number.isFinite(gm) || gm === 1) return null;
+                  return (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("billingDetails.groupMultiplier")}:
+                      </span>
+                      <span className="font-mono">{gm.toFixed(2)}x</span>
+                    </div>
+                  );
+                }
+                if (groupCostMultiplier === "" || groupCostMultiplier == null) return null;
+                const gm = Number(groupCostMultiplier);
+                if (!Number.isFinite(gm) || gm === 1) return null;
+                return (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("billingDetails.groupMultiplier")}:
+                    </span>
+                    <span className="font-mono">{gm.toFixed(2)}x</span>
                   </div>
                 );
               })()}
@@ -441,7 +604,7 @@ export function SummaryTab({
             <div className="pt-3 border-t flex justify-between items-center">
               <span className="font-medium">{t("billingDetails.totalCost")}:</span>
               <span className="font-mono text-lg font-semibold text-emerald-600">
-                {formatCurrency(costUsd, "USD", 6)}
+                {formatCurrency(costBreakdown?.total ?? costUsd, "USD", 6)}
               </span>
             </div>
           </div>
@@ -459,6 +622,59 @@ export function SummaryTab({
             <pre className="text-xs whitespace-pre-wrap break-words font-mono">
               {specialSettingsContent}
             </pre>
+          </div>
+        </div>
+      )}
+
+      {/* Request / Actual Response Model (audit) */}
+      {hasAnyModel && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-slate-600" />
+            {t("modelAudit.unifiedLabel")}
+            {modelAudit.hasActualMismatch && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center cursor-help text-muted-foreground">
+                      <InfoIcon className="h-3.5 w-3.5" aria-hidden />
+                      <span className="sr-only">{t("modelAudit.mismatchTooltip")}</span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs max-w-xs">{t("modelAudit.mismatchTooltip")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </h4>
+          <div className="rounded-lg border bg-card p-3">
+            {modelAudit.dialogShowsSplitFields ? (
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground min-w-[6rem]">
+                    {t("modelAudit.requestModelLabel")}
+                  </span>
+                  <code className="px-1.5 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
+                    {modelAudit.effectiveRequestModel}
+                  </code>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground min-w-[6rem]">
+                    {t("modelAudit.responseModelLabel")}
+                  </span>
+                  <code className="px-1.5 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
+                    {modelAudit.secondaryActualModel}
+                  </code>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-2 text-sm">
+                <code className="px-1.5 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
+                  {modelAudit.effectiveRequestModel ?? "-"}
+                </code>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -523,7 +739,10 @@ export function SummaryTab({
             {isFake200PostStreamFailure && (
               <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
                 <InfoIcon className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />
-                <span>{t("fake200ForwardedNotice")}</span>
+                <div className="space-y-1">
+                  <div>{t("fake200ForwardedNotice")}</div>
+                  <Fake200RetryTooltip className="text-amber-800 dark:text-amber-200" />
+                </div>
               </div>
             )}
             {errorMessage.length > 200 && onViewLogicTrace && (
@@ -539,6 +758,8 @@ export function SummaryTab({
           </div>
         </div>
       )}
+
+      <IpDetailsDialog ip={clientIp ?? null} open={ipDialogOpen} onOpenChange={setIpDialogOpen} />
     </div>
   );
 }

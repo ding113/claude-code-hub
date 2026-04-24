@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { LiveSessionsPanel } from "@/app/[locale]/dashboard/_components/bento/live-sessions-panel";
 import type { ActiveSessionInfo } from "@/types/session";
 
-vi.mock("next/navigation", () => ({
+vi.mock("@/i18n/routing", () => ({
   useRouter: () => ({
     push: vi.fn(),
   }),

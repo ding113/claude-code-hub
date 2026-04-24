@@ -36,6 +36,8 @@
     "cleanupSchedulePlaceholder": "0 2 * * *",
     "cleanupScheduleRequired": "執行時間（Cron） *",
     "configUpdated": "系統設定已更新，頁面將重新整理以應用貨幣顯示變更。",
+    "publicStatusProjectionWarning": "系統設定已儲存，但 public status Redis 投影尚未刷新。",
+    "publicStatusBackgroundRefreshPending": "系統設定已儲存，但公開狀態頁可能會在背景刷新成功前暫時維持舊資料。",
     "currencies": {
       "CNY": "¥ 人民幣（CNY）",
       "EUR": "€ 歐元（EUR）",
@@ -66,6 +68,8 @@
     "enableBillingHeaderRectifierDesc": "主動移除 Claude Code 客戶端注入到 system 提示中的 x-anthropic-billing-header 文字區塊，防止 Amazon Bedrock 等非原生 Anthropic 上游回傳 400 錯誤（預設開啟）。",
     "enableResponseInputRectifier": "啟用 Response Input 整流器",
     "enableResponseInputRectifierDesc": "自動將 /v1/responses 請求中的非陣列 input（字串簡寫或帶 role/type 的單訊息物件）規範化為標準陣列格式後再處理（預設開啟）。",
+    "allowNonConversationEndpointProviderFallback": "允許非對話端點跨供應商 fallback",
+    "allowNonConversationEndpointProviderFallbackDesc": "控制 /v1/messages/count_tokens 與 /v1/responses/compact 在目前供應商失敗時，是否沿用既有決策鏈切換到相容供應商重試。預設開啟，並持續保持 raw passthrough 與非計費語義。",
     "enableCodexSessionIdCompletion": "啟用 Codex Session ID 補全",
     "enableCodexSessionIdCompletionDesc": "當 Codex 請求僅提供 session_id（請求頭）或 prompt_cache_key（請求體）之一時，自動補全另一個；若兩者皆缺失，則產生 UUID v7 會話 ID，並在同一對話內穩定複用。",
     "enableClaudeMetadataUserIdInjection": "啟用 Claude metadata.user_id 注入",
@@ -85,12 +89,19 @@
     "saveFailed": "儲存失敗",
     "saveSettings": "儲存設定",
     "saveSuccess": "儲存成功",
+    "publicStatusProjectionWarning": "系統設定已儲存，但 public status Redis 投影尚未刷新。",
+    "publicStatusBackgroundRefreshPending": "系統設定已儲存，但公開狀態頁可能會在背景刷新成功前暫時維持舊資料。",
     "siteTitle": "站台標題",
     "siteTitleDesc": "用於設定瀏覽器分頁標題以及系統預設顯示名稱。",
     "siteTitlePlaceholder": "例：Claude Code Hub",
     "siteTitleRequired": "站台標題不能為空",
+    "ipLoggingInvalidJson": "IP 擷取設定不是合法的 JSON：{message}",
+    "ipLoggingInvalidShape": "IP 擷取設定必須是包含 `headers` 陣列的物件。",
     "verboseProviderError": "詳細供應商錯誤資訊",
-    "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
+    "verboseProviderErrorDesc": "開啟後，CCH 會在某些上游失敗類型下於 `error.details` 返回較詳細的診斷資訊（例如供應商可用性診斷或脫敏後的上游片段）。",
+    "verboseProviderErrorTooltip": "此選項可能暴露供應商名稱、內部路由線索、上游失敗原因等診斷資訊。僅建議在客戶端可以查看底層排障上下文時開啟。",
+    "passThroughUpstreamErrorMessage": "透傳上游錯誤訊息",
+    "passThroughUpstreamErrorMessageDesc": "開啟後，CCH 會在能提取出安全脫敏後的上游錯誤訊息時替換 `error.message`；否則 `error.message` 回退到通用代理錯誤。它不會關閉「詳細供應商錯誤資訊」控制的 `error.details` 診斷。",
     "timezoneLabel": "系統時區",
     "timezoneDescription": "設定系統時區，用於統一後端時間邊界計算和前端日期/時間顯示。留空時使用環境變數 TZ 或預設 UTC。",
     "timezoneAuto": "自動 (使用環境變數 TZ)",
@@ -116,6 +127,16 @@
         "leaseCapZero": "租約上限為 0 可能導致單次租約預算為 0。"
       }
     }
+  },
+  "ipLogging": {
+    "title": "IP 記錄與提取",
+    "description": "設定用於判定客戶端 IP 的請求標頭鏈，以及是否啟用 IP 歸屬地查詢。",
+    "geoLookup": "啟用 IP 歸屬地查詢",
+    "geoLookupHint": "啟用後，儀表板會透過設定的 IP 歸屬地服務解析出國家/城市/ASN 等資訊。",
+    "extractionConfigLabel": "請求標頭提取鏈（JSON）",
+    "extractionConfigHint": "留空則使用安全的內建預設鏈：x-real-ip → x-forwarded-for（取最右）。若應用前方有 Cloudflare 等會剝除客戶端偽造標頭的 CDN，請顯式將其專用標頭加到鏈的最前面（範例：`{\"headers\":[{\"name\":\"cf-connecting-ip\"},{\"name\":\"x-real-ip\"},{\"name\":\"x-forwarded-for\",\"pick\":\"rightmost\"}]}`）。陣列每一項皆含 `name` 以及可選的 `pick`（\"leftmost\" | \"rightmost\" | {\"kind\":\"index\",\"index\":N}）。",
+    "extractionConfigHelpLabel": "顯示請求標頭提取 JSON 說明",
+    "resetToDefault": "恢復預設"
   },
   "section": {
     "autoCleanup": {

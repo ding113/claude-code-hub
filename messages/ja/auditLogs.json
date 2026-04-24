@@ -1,0 +1,97 @@
+{
+  "title": "監査ログ",
+  "description": "ログインや管理操作ごとに、操作者 IP・ユーザーエージェント・変更前後のスナップショットを記録します。",
+  "filters": {
+    "category": "カテゴリー",
+    "success": "ステータス",
+    "all": "すべて",
+    "succeeded": "成功",
+    "failed": "失敗",
+    "allCategories": "すべてのカテゴリー"
+  },
+  "categories": {
+    "auth": "認証",
+    "user": "ユーザー",
+    "provider": "プロバイダー",
+    "provider_group": "プロバイダーグループ",
+    "system_settings": "システム設定",
+    "key": "キー",
+    "notification": "通知",
+    "sensitive_word": "機密ワード",
+    "model_price": "モデル価格"
+  },
+  "columns": {
+    "time": "日時",
+    "category": "カテゴリー",
+    "action": "操作",
+    "operator": "操作者",
+    "ip": "IP",
+    "target": "対象",
+    "status": "ステータス"
+  },
+  "actions": {
+    "login": {
+      "success": "ログイン成功",
+      "failure": "ログイン失敗",
+      "rate_limited": "ログインのレート制限"
+    },
+    "user": {
+      "create": "ユーザー作成",
+      "update": "ユーザー更新",
+      "delete": "ユーザー削除",
+      "reset_5h_limit": "ユーザー 5H 制限のリセット",
+      "reset_5h_limit_only": "ユーザー専用 5H 制限のリセット"
+    },
+    "provider": {
+      "create": "プロバイダー作成",
+      "update": "プロバイダー更新",
+      "delete": "プロバイダー削除"
+    },
+    "provider_group": {
+      "create": "プロバイダーグループ作成",
+      "update": "プロバイダーグループ更新",
+      "delete": "プロバイダーグループ削除"
+    },
+    "system_settings": {
+      "update": "システム設定更新"
+    },
+    "key": {
+      "create": "キー作成",
+      "update": "キー更新",
+      "delete": "キー削除"
+    },
+    "notification": {
+      "update": "通知更新"
+    },
+    "sensitive_word": {
+      "create": "機密ワード作成",
+      "update": "機密ワード更新",
+      "delete": "機密ワード削除"
+    },
+    "model_price": {
+      "bulk_upload": "モデル価格の一括アップロード",
+      "sync_litellm": "LiteLLM モデル価格の同期",
+      "upsert": "モデル価格更新",
+      "delete": "モデル価格削除"
+    }
+  },
+  "detail": {
+    "title": "監査エントリー",
+    "before": "変更前",
+    "after": "変更後",
+    "errorMessage": "エラー",
+    "noChange": "スナップショットは記録されていません",
+    "userAgent": "User-Agent",
+    "keyLabel": "キー：{name}",
+    "userIdLabel": "ユーザー ID：{id}",
+    "targetIdLabel": "ID：{id}"
+  },
+  "adminTokenOperator": "Admin Token",
+  "loadError": "監査エントリーの読み込みに失敗しました。",
+  "errors": {
+    "unauthorized": "管理者権限が必要です。",
+    "listFailed": "監査ログ一覧の取得に失敗しました。",
+    "detailFailed": "監査ログ詳細の取得に失敗しました。"
+  },
+  "empty": "選択した条件に該当する監査ログはありません。"
+}

@@ -92,12 +92,15 @@ describe("ResponseFixer", () => {
     const session = createSession();
     const bomJson = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"a":1}')]);
     const response = new Response(bomJson, {
-      headers: { "content-type": "application/json; charset=utf-8" },
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "x-cch-response-fixer": "applied",
+      },
     });
 
     const fixed = await ResponseFixer.process(session, response);
     expect(await fixed.text()).toBe('{"a":1}');
-    expect(fixed.headers.get("x-cch-response-fixer")).toBe("applied");
+    expect(fixed.headers.get("x-cch-response-fixer")).toBeNull();
     expect(session.getSpecialSettings()).not.toBeNull();
     expect(mocks.storeSessionSpecialSettings).toHaveBeenCalledTimes(1);
     expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
@@ -122,12 +125,15 @@ describe("ResponseFixer", () => {
     session.shouldPersistSessionDebugArtifacts = () => false;
     const bomJson = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"a":1}')]);
     const response = new Response(bomJson, {
-      headers: { "content-type": "application/json; charset=utf-8" },
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "x-cch-response-fixer": "applied",
+      },
     });
 
     const fixed = await ResponseFixer.process(session, response);
     expect(await fixed.text()).toBe('{"a":1}');
-    expect(fixed.headers.get("x-cch-response-fixer")).toBe("applied");
+    expect(fixed.headers.get("x-cch-response-fixer")).toBeNull();
     expect(session.getSpecialSettings()).not.toBeNull();
     expect(mocks.storeSessionSpecialSettings).not.toHaveBeenCalled();
     expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
@@ -148,13 +154,16 @@ describe("ResponseFixer", () => {
     });
 
     const response = new Response(stream, {
-      headers: { "content-type": "text/event-stream" },
+      headers: {
+        "content-type": "text/event-stream",
+        "x-cch-response-fixer": "processed",
+      },
     });
 
     const fixed = await ResponseFixer.process(session, response);
     const text = await fixed.text();
 
-    expect(fixed.headers.get("x-cch-response-fixer")).toBe("processed");
+    expect(fixed.headers.get("x-cch-response-fixer")).toBeNull();
     expect(text).toBe('data: {"key":null}\n\n');
     expect(session.getSpecialSettings()).not.toBeNull();
   });

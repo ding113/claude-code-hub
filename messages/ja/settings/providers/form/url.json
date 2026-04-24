@@ -1,4 +1,6 @@
 {
   "label": "API アドレス",
-  "placeholder": "例: https://open.bigmodel.cn/api/anthropic"
+  "placeholder": "例: https://open.bigmodel.cn/api/anthropic",
+  "description": "通常はプロバイダーの基本アドレスを入力してください。リクエスト転送、プレビュー、provider testing では、バージョン付きのパスや完全なエンドポイントもそのまま使えます。",
+  "tooltip": "例: https://relay.example.com/openai、https://relay.example.com/openai/v1、https://relay.example.com/openai/v1/responses。Claude Code Hub は入力されたパスを再利用し、同じ endpoint を二重に付けません。"
 }

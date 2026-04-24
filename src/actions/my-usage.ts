@@ -2,29 +2,111 @@
 
 import { fromZonedTime } from "date-fns-tz";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { lookupIp } from "@/lib/ip-geo/client";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
-import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
+import {
+  clipStartByResetAt,
+  resolveKeyCostResetAt,
+  resolveUser5hCostResetAt,
+} from "@/lib/rate-limit/cost-reset-utils";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
+  findReadonlyUsageLogsBatchForKey,
   findUsageLogsForKeyBatch,
   findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
   type UsageLogSlimBatchResult,
   type UsageLogSummary,
+  type UsageLogsBatchResult,
 } from "@/repository/usage-logs";
+import type { IpGeoLookupResult, IpGeoPrivateMarker } from "@/types/ip-geo";
+import type { ProviderChainItem } from "@/types/message";
+import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
+
+async function getErrorTranslator() {
+  return getTranslations("errors");
+}
+
+function scrubProviderChainRequestForReadonly(
+  providerChain: ProviderChainItem[] | null
+): ProviderChainItem[] | null {
+  return (
+    providerChain?.map((item) => {
+      if (!item.errorDetails) {
+        return item;
+      }
+
+      const { request: _request, provider, ...restErrorDetails } = item.errorDetails;
+      const shouldStronglyScrubProviderError = item.rawCrossProviderFallbackEnabled === true;
+
+      return {
+        ...item,
+        errorDetails: {
+          ...restErrorDetails,
+          clientError: shouldStronglyScrubProviderError ? undefined : restErrorDetails.clientError,
+          provider: provider
+            ? shouldStronglyScrubProviderError
+              ? {
+                  ...provider,
+                  upstreamBody: undefined,
+                  upstreamParsed: undefined,
+                }
+              : {
+                  ...provider,
+                }
+            : undefined,
+        },
+      };
+    }) ?? null
+  );
+}
+
+function scrubSpecialSettingsForReadonly(
+  specialSettings: SpecialSetting[] | null | undefined
+): SpecialSetting[] | null {
+  return (
+    specialSettings?.map((setting) =>
+      setting.type === "guard_intercept" ? { ...setting, reason: null } : setting
+    ) ?? null
+  );
+}
+
+function scrubUsageLogsBatchForReadonly(result: UsageLogsBatchResult): UsageLogsBatchResult {
+  return {
+    ...result,
+    logs: result.logs.map((log) => ({
+      ...log,
+      userName: "",
+      keyName: "",
+      providerName: null,
+      errorMessage: null,
+      blockedReason: null,
+      userAgent: null,
+      messagesCount: null,
+      _liveChain: null,
+      providerChain: scrubProviderChainRequestForReadonly(log.providerChain),
+      costMultiplier: null,
+      groupCostMultiplier: null,
+      costBreakdown: null,
+      specialSettings: scrubSpecialSettingsForReadonly(log.specialSettings),
+    })),
+  };
+}
 
 /**
  * Parse date range strings to timestamps using server timezone (TZ config).
@@ -86,6 +168,7 @@ export interface MyUsageMetadata {
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
   currencyCode: CurrencyCode;
+  billingModelSource: BillingModelSource;
 }
 
 export interface MyUsageQuota {
@@ -181,6 +264,8 @@ export interface MyUsageLogsBatchResult {
 export interface MyUsageLogsFilters {
   startDate?: string;
   endDate?: string;
+  startTime?: number;
+  endTime?: number;
   sessionId?: string;
   model?: string;
   statusCode?: number;
@@ -224,6 +309,7 @@ export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata
       dailyResetMode: key.dailyResetMode ?? "fixed",
       dailyResetTime: key.dailyResetTime ?? "00:00",
       currencyCode: settings.currencyDisplay,
+      billingModelSource: settings.billingModelSource,
     };
 
     return { ok: true, data: metadata };
@@ -246,6 +332,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       "@/lib/rate-limit/time-utils"
     );
     const { sumKeyQuotaCostsById, sumUserQuotaCosts } = await import("@/repository/statistics");
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
 
     // 计算各周期的时间范围
     // Key 使用 Key 的 dailyResetTime/dailyResetMode 配置
@@ -267,16 +354,16 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
-    // Clip time range starts by costResetAt (for limits-only reset)
-    // Key uses MAX(key.costResetAt, user.costResetAt); User uses only user.costResetAt
+    // full reset 继续影响所有窗口；5H-only reset 只额外推进用户聚合 5H 的起点。
     const userCostResetAt = user.costResetAt ?? null;
+    const user5hCostResetAt = resolveUser5hCostResetAt(
+      user.costResetAt ?? null,
+      user.limit5hCostResetAt ?? null
+    );
     const keyCostResetAtResolved = resolveKeyCostResetAt(key.costResetAt ?? null, userCostResetAt);
-    const keyClipStart = (start: Date): Date =>
-      keyCostResetAtResolved instanceof Date && keyCostResetAtResolved > start
-        ? keyCostResetAtResolved
-        : start;
-    const userClipStart = (start: Date): Date =>
-      userCostResetAt instanceof Date && userCostResetAt > start ? userCostResetAt : start;
+    const keyClipStart = (start: Date): Date => clipStartByResetAt(start, keyCostResetAtResolved);
+    const userClipStart = (start: Date): Date => clipStartByResetAt(start, userCostResetAt);
+    const user5hClipStart = (start: Date): Date => clipStartByResetAt(start, user5hCostResetAt);
 
     const keyClippedRange5h = {
       startTime: keyClipStart(range5h.startTime),
@@ -296,7 +383,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     };
 
     const userClippedRange5h = {
-      startTime: userClipStart(range5h.startTime),
+      startTime: user5hClipStart(range5h.startTime),
       endTime: range5h.endTime,
     };
     const userClippedRangeWeekly = {
@@ -317,49 +404,77 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       user.limitConcurrentSessions ?? null
     );
 
-    const [keyCosts, keyConcurrent, userCosts, userKeyConcurrent] = await Promise.all([
-      // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
-      sumKeyQuotaCostsById(
-        key.id,
-        {
-          range5h: keyClippedRange5h,
-          rangeDaily: clippedKeyDaily,
-          rangeWeekly: keyClippedRangeWeekly,
-          rangeMonthly: keyClippedRangeMonthly,
-        },
-        ALL_TIME_MAX_AGE_DAYS,
-        keyCostResetAtResolved
-      ),
-      SessionTracker.getKeySessionCount(key.id),
-      // User 配额：直接查 DB
-      sumUserQuotaCosts(
-        user.id,
-        {
-          range5h: userClippedRange5h,
-          rangeDaily: clippedUserDaily,
-          rangeWeekly: userClippedRangeWeekly,
-          rangeMonthly: userClippedRangeMonthly,
-        },
-        ALL_TIME_MAX_AGE_DAYS,
-        userCostResetAt
-      ),
-      getUserConcurrentSessions(user.id),
-    ]);
+    const [keyCosts, keyFixed5hUsd, keyConcurrent, userCosts, userFixed5hUsd, userKeyConcurrent] =
+      await Promise.all([
+        // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
+        sumKeyQuotaCostsById(
+          key.id,
+          {
+            range5h: keyClippedRange5h,
+            rangeDaily: clippedKeyDaily,
+            rangeWeekly: keyClippedRangeWeekly,
+            rangeMonthly: keyClippedRangeMonthly,
+          },
+          ALL_TIME_MAX_AGE_DAYS,
+          keyCostResetAtResolved
+        ),
+        (key.limit5hResetMode ?? "rolling") === "fixed"
+          ? RateLimitService.getCurrentCost(
+              key.id,
+              "key",
+              "5h",
+              key.dailyResetTime ?? "00:00",
+              "fixed",
+              {
+                costResetAt: keyCostResetAtResolved,
+              }
+            )
+          : Promise.resolve(null),
+        SessionTracker.getKeySessionCount(key.id),
+        // User 配额：直接查 DB
+        sumUserQuotaCosts(
+          user.id,
+          {
+            range5h: userClippedRange5h,
+            rangeDaily: clippedUserDaily,
+            rangeWeekly: userClippedRangeWeekly,
+            rangeMonthly: userClippedRangeMonthly,
+          },
+          ALL_TIME_MAX_AGE_DAYS,
+          userCostResetAt
+        ),
+        (user.limit5hResetMode ?? "rolling") === "fixed"
+          ? RateLimitService.getCurrentCost(
+              user.id,
+              "user",
+              "5h",
+              user.dailyResetTime ?? "00:00",
+              "fixed",
+              {
+                costResetAt: userCostResetAt,
+                limit5hCostResetAt: user.limit5hCostResetAt ?? null,
+              }
+            )
+          : Promise.resolve(null),
+        getUserConcurrentSessions(user.id),
+      ]);
 
     const {
-      cost5h: keyCost5h,
+      cost5h: keyCurrent5hUsd,
       costDaily: keyCostDaily,
       costWeekly: keyCostWeekly,
       costMonthly: keyCostMonthly,
       costTotal: keyTotalCost,
     } = keyCosts;
     const {
-      cost5h: userCost5h,
+      cost5h: userCurrent5hUsd,
       costDaily: userCostDaily,
       costWeekly: userCostWeekly,
       costMonthly: userCostMonthly,
       costTotal: userTotalCost,
     } = userCosts;
+    const resolvedKeyCurrent5hUsd = keyFixed5hUsd ?? keyCurrent5hUsd;
+    const resolvedUserCurrent5hUsd = userFixed5hUsd ?? userCurrent5hUsd;
 
     const quota: MyUsageQuota = {
       keyLimit5hUsd: key.limit5hUsd ?? null,
@@ -368,7 +483,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyLimitMonthlyUsd: key.limitMonthlyUsd ?? null,
       keyLimitTotalUsd: key.limitTotalUsd ?? null,
       keyLimitConcurrentSessions: effectiveKeyConcurrentLimit,
-      keyCurrent5hUsd: keyCost5h,
+      keyCurrent5hUsd: resolvedKeyCurrent5hUsd,
       keyCurrentDailyUsd: keyCostDaily,
       keyCurrentWeeklyUsd: keyCostWeekly,
       keyCurrentMonthlyUsd: keyCostMonthly,
@@ -381,7 +496,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userLimitTotalUsd: user.limitTotalUsd ?? null,
       userLimitConcurrentSessions: user.limitConcurrentSessions ?? null,
       userRpmLimit: user.rpm ?? null,
-      userCurrent5hUsd: userCost5h,
+      userCurrent5hUsd: resolvedUserCurrent5hUsd,
       userCurrentDailyUsd: userCostDaily,
       userCurrentWeeklyUsd: userCostWeekly,
       userCurrentMonthlyUsd: userCostMonthly,
@@ -495,6 +610,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
 export interface MyUsageLogsBatchFilters {
   startDate?: string;
   endDate?: string;
+  startTime?: number;
+  endTime?: number;
   /** Session ID（精确匹配；空字符串/空白视为不筛选） */
   sessionId?: string;
   model?: string;
@@ -550,11 +667,10 @@ export async function getMyUsageLogs(
 
     const settings = await getSystemSettings();
     const timezone = await resolveSystemTimezone();
-    const { startTime, endTime } = parseDateRangeInServerTimezone(
-      filters.startDate,
-      filters.endDate,
-      timezone
-    );
+    const dateRange =
+      filters.startTime !== undefined || filters.endTime !== undefined
+        ? { startTime: filters.startTime, endTime: filters.endTime }
+        : parseDateRangeInServerTimezone(filters.startDate, filters.endDate, timezone);
     const parsedPageSize = Number(filters.pageSize);
     const pageSize =
       Number.isFinite(parsedPageSize) && parsedPageSize > 0
@@ -565,8 +681,8 @@ export async function getMyUsageLogs(
     const result = await findUsageLogsForKeySlim({
       keyString: session.key.key,
       sessionId: filters.sessionId,
-      startTime,
-      endTime,
+      startTime: dateRange.startTime,
+      endTime: dateRange.endTime,
       model: filters.model,
       statusCode: filters.statusCode,
       excludeStatusCode200: filters.excludeStatusCode200,
@@ -602,17 +718,16 @@ export async function getMyUsageLogsBatch(
 
     const settings = await getSystemSettings();
     const timezone = await resolveSystemTimezone();
-    const { startTime, endTime } = parseDateRangeInServerTimezone(
-      filters.startDate,
-      filters.endDate,
-      timezone
-    );
+    const dateRange =
+      filters.startTime !== undefined || filters.endTime !== undefined
+        ? { startTime: filters.startTime, endTime: filters.endTime }
+        : parseDateRangeInServerTimezone(filters.startDate, filters.endDate, timezone);
     const limit = filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 20;
     const result = await findUsageLogsForKeyBatch({
       keyString: session.key.key,
       sessionId: filters.sessionId,
-      startTime,
-      endTime,
+      startTime: dateRange.startTime,
+      endTime: dateRange.endTime,
       model: filters.model,
       statusCode: filters.statusCode,
       excludeStatusCode200: filters.excludeStatusCode200,
@@ -638,29 +753,182 @@ export async function getMyUsageLogsBatch(
   }
 }
 
-export async function getMyAvailableModels(): Promise<ActionResult<string[]>> {
+/**
+ * Full-format batch fetch for VirtualizedLogsTable on my-usage page.
+ * Scoped to the current key (not just user) and uses allowReadOnlyAccess.
+ * Returns UsageLogsBatchResult (same shape as admin getUsageLogsBatch).
+ */
+export async function getMyUsageLogsBatchFull(
+  params: MyUsageLogsBatchFilters = {}
+): Promise<ActionResult<UsageLogsBatchResult>> {
+  const tError = await getErrorTranslator();
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
-    if (!session) return { ok: false, error: "Unauthorized" };
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    const timezone = await resolveSystemTimezone();
+    const dateRange =
+      params.startTime !== undefined || params.endTime !== undefined
+        ? { startTime: params.startTime, endTime: params.endTime }
+        : parseDateRangeInServerTimezone(params.startDate, params.endDate, timezone);
+    const limit = params.limit && params.limit > 0 ? Math.min(params.limit, 100) : 20;
+    const result = await findReadonlyUsageLogsBatchForKey({
+      sessionId: params.sessionId,
+      model: params.model,
+      statusCode: params.statusCode,
+      excludeStatusCode200: params.excludeStatusCode200,
+      endpoint: params.endpoint,
+      minRetryCount: params.minRetryCount,
+      cursor: params.cursor,
+      startTime: dateRange.startTime,
+      endTime: dateRange.endTime,
+      limit,
+      keyString: session.key.key,
+    });
+
+    return { ok: true, data: scrubUsageLogsBatchForReadonly(result) };
+  } catch (error) {
+    logger.error("[my-usage] getMyUsageLogsBatchFull failed", error);
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
+  }
+}
+
+export async function getMyAvailableModels(): Promise<ActionResult<string[]>> {
+  const tError = await getErrorTranslator();
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
 
     const models = await getDistinctModelsForKey(session.key.key);
     return { ok: true, data: models };
   } catch (error) {
     logger.error("[my-usage] getMyAvailableModels failed", error);
-    return { ok: false, error: "Failed to get model list" };
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
 export async function getMyAvailableEndpoints(): Promise<ActionResult<string[]>> {
+  const tError = await getErrorTranslator();
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
-    if (!session) return { ok: false, error: "Unauthorized" };
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
 
     const endpoints = await getDistinctEndpointsForKey(session.key.key);
     return { ok: true, data: endpoints };
   } catch (error) {
     logger.error("[my-usage] getMyAvailableEndpoints failed", error);
-    return { ok: false, error: "Failed to get endpoint list" };
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
+  }
+}
+
+export async function getMyIpGeoDetails(params: { ip: string; lang?: string }): Promise<
+  ActionResult<{
+    status: "ok" | "private" | "error";
+    data?: IpGeoLookupResult | IpGeoPrivateMarker;
+    error?: string;
+  }>
+> {
+  const tError = await getErrorTranslator();
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    const ip = params.ip.trim();
+    if (!ip) {
+      return {
+        ok: false,
+        error: tError("REQUIRED_FIELD", { field: tError("IP_ADDRESS_FIELD") }),
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
+    }
+
+    const settings = await getSystemSettings();
+    if (!settings.ipGeoLookupEnabled) {
+      return { ok: false, error: tError("INVALID_STATE"), errorCode: ERROR_CODES.INVALID_STATE };
+    }
+
+    // 仅允许查询当前 key 在 my-usage 可见日志中真实出现过的 IP。
+    const [messageRequestMatch] = await db
+      .select({ id: messageRequest.id })
+      .from(messageRequest)
+      .where(
+        and(
+          isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
+          eq(messageRequest.key, session.key.key),
+          eq(messageRequest.clientIp, ip)
+        )
+      )
+      .limit(1);
+
+    let visibleLogId = messageRequestMatch?.id ?? null;
+
+    if (!visibleLogId) {
+      const [ledgerMatch] = await db
+        .select({ id: usageLedger.requestId })
+        .from(usageLedger)
+        .where(
+          and(
+            LEDGER_BILLING_CONDITION,
+            eq(usageLedger.key, session.key.key),
+            eq(usageLedger.clientIp, ip),
+            sql`not exists (
+              select 1
+              from "message_request" as mr_active
+              where mr_active.id = ${usageLedger.requestId}
+                and mr_active.deleted_at is null
+                and mr_active.key = ${usageLedger.key}
+            )`
+          )
+        )
+        .limit(1);
+
+      visibleLogId = ledgerMatch?.id ?? null;
+    }
+
+    if (!visibleLogId) {
+      return { ok: false, error: tError("NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    const result = await lookupIp(ip, { lang: params.lang });
+    if (result.status === "error") {
+      logger.warn("[my-usage] getMyIpGeoDetails lookup returned error", {
+        messageRequestId: visibleLogId,
+        lang: params.lang,
+        userId: session.user.id,
+        keyId: session.key.id,
+        error: result.error,
+      });
+    }
+
+    return { ok: true, data: result };
+  } catch (error) {
+    logger.error("[my-usage] getMyIpGeoDetails failed", { error });
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
@@ -727,38 +995,37 @@ export async function getMyStatsSummary(
     // Key 维度是 User 维度的子集：用一条聚合 SQL 扫描 userId 范围即可同时算出两套 breakdown。
     const modelBreakdown = await db
       .select({
-        model: messageRequest.model,
+        model: usageLedger.model,
         // User breakdown（跨所有 Key）
         userRequests: sql<number>`count(*)::int`,
-        userCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        userInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        userOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        userCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-        userCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
-        userCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}), 0)::double precision`,
-        userCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}), 0)::double precision`,
+        userCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
+        userInputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}), 0)::double precision`,
+        userOutputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}), 0)::double precision`,
+        userCacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}), 0)::double precision`,
+        userCacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}), 0)::double precision`,
+        userCacheCreation5mTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation5mInputTokens}), 0)::double precision`,
+        userCacheCreation1hTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation1hInputTokens}), 0)::double precision`,
         // Key breakdown（FILTER 聚合）
-        keyRequests: sql<number>`count(*) FILTER (WHERE ${messageRequest.key} = ${keyString})::int`,
-        keyCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)`,
-        keyInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
-        keyCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
+        keyRequests: sql<number>`count(*) FILTER (WHERE ${usageLedger.key} = ${keyString})::int`,
+        keyCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)`,
+        keyInputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyOutputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyCacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreation5mTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation5mInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreation1hTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation1hInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
       })
-      .from(messageRequest)
+      .from(usageLedger)
       .where(
         and(
-          eq(messageRequest.userId, userId),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          startDate ? gte(messageRequest.createdAt, startDate) : undefined,
-          endDate ? lt(messageRequest.createdAt, endDate) : undefined
+          eq(usageLedger.userId, userId),
+          LEDGER_BILLING_CONDITION,
+          startDate ? gte(usageLedger.createdAt, startDate) : undefined,
+          endDate ? lt(usageLedger.createdAt, endDate) : undefined
         )
       )
-      .groupBy(messageRequest.model)
-      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+      .groupBy(usageLedger.model)
+      .orderBy(sql`sum(${usageLedger.costUsd}) DESC`);
 
     const keyOnlyBreakdown = modelBreakdown.filter((row) => (row.keyRequests ?? 0) > 0);
 

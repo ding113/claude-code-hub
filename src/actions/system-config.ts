@@ -2,12 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { locales } from "@/i18n/config";
+import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { publishCurrentPublicStatusConfigProjection } from "@/lib/public-status/config-publisher";
+import { schedulePublicStatusRebuild } from "@/lib/public-status/rebuild-hints";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
+import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   CodexPriorityBillingSource,
   ResponseFixerConfig,
@@ -59,6 +63,7 @@ export async function saveSystemSettings(formData: {
   cleanupBatchSize?: number;
   enableClientVersionCheck?: boolean;
   verboseProviderError?: boolean;
+  passThroughUpstreamErrorMessage?: boolean;
   enableHttp2?: boolean;
   enableHighConcurrencyMode?: boolean;
   interceptAnthropicWarmupRequests?: boolean;
@@ -66,6 +71,7 @@ export async function saveSystemSettings(formData: {
   enableThinkingBudgetRectifier?: boolean;
   enableBillingHeaderRectifier?: boolean;
   enableResponseInputRectifier?: boolean;
+  allowNonConversationEndpointProviderFallback?: boolean;
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -77,13 +83,20 @@ export async function saveSystemSettings(formData: {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
-}): Promise<ActionResult<SystemSettings>> {
+  publicStatusWindowHours?: number;
+  publicStatusAggregationIntervalMinutes?: number;
+  // IP 提取 / 归属地查询
+  ipExtractionConfig?: IpExtractionConfig | null;
+  ipGeoLookupEnabled?: boolean;
+}): Promise<ActionResult<SystemSettings & { publicStatusProjectionWarningCode?: string | null }>> {
+  let before: SystemSettings | null = null;
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    before = await getSystemSettings();
     const validated = UpdateSystemSettingsSchema.parse(formData);
     const updated = await updateSystemSettings({
       siteTitle: validated.siteTitle?.trim(),
@@ -98,6 +111,7 @@ export async function saveSystemSettings(formData: {
       cleanupBatchSize: validated.cleanupBatchSize,
       enableClientVersionCheck: validated.enableClientVersionCheck,
       verboseProviderError: validated.verboseProviderError,
+      passThroughUpstreamErrorMessage: validated.passThroughUpstreamErrorMessage,
       enableHttp2: validated.enableHttp2,
       enableHighConcurrencyMode: validated.enableHighConcurrencyMode,
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
@@ -105,6 +119,8 @@ export async function saveSystemSettings(formData: {
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
+      allowNonConversationEndpointProviderFallback:
+        validated.allowNonConversationEndpointProviderFallback,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,
@@ -115,10 +131,62 @@ export async function saveSystemSettings(formData: {
       quotaLeasePercentWeekly: validated.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: validated.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: validated.quotaLeaseCapUsd,
+      publicStatusWindowHours: validated.publicStatusWindowHours,
+      publicStatusAggregationIntervalMinutes: validated.publicStatusAggregationIntervalMinutes,
+      ipExtractionConfig: validated.ipExtractionConfig,
+      ipGeoLookupEnabled: validated.ipGeoLookupEnabled,
     });
 
     // Invalidate the system settings cache so proxy requests get fresh settings
     invalidateSystemSettingsCache();
+    const { invalidateProviderSelectorSystemSettingsCache } = await import(
+      "@/app/v1/_lib/proxy/provider-selector-settings-cache"
+    );
+    invalidateProviderSelectorSystemSettingsCache();
+
+    const shouldRepublishPublicStatusProjection =
+      validated.siteTitle !== undefined ||
+      validated.timezone !== undefined ||
+      validated.publicStatusWindowHours !== undefined ||
+      validated.publicStatusAggregationIntervalMinutes !== undefined;
+
+    let publicStatusProjectionWarningCode: string | null = null;
+    if (shouldRepublishPublicStatusProjection) {
+      try {
+        const publishResult = await publishCurrentPublicStatusConfigProjection({
+          reason: "save-system-settings",
+        });
+
+        if (!publishResult.written) {
+          logger.warn(
+            "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection"
+          );
+          publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+        } else {
+          try {
+            await schedulePublicStatusRebuild({
+              intervalMinutes:
+                validated.publicStatusAggregationIntervalMinutes ??
+                updated.publicStatusAggregationIntervalMinutes,
+              rangeHours: validated.publicStatusWindowHours ?? updated.publicStatusWindowHours,
+              reason: "system-settings-updated",
+            });
+          } catch (error) {
+            logger.warn(
+              "[SystemSettings] Saved DB truth but failed to schedule public-status rebuild",
+              error
+            );
+            publicStatusProjectionWarningCode = "PUBLIC_STATUS_BACKGROUND_REFRESH_PENDING";
+          }
+        }
+      } catch (error) {
+        logger.warn(
+          "[SystemSettings] Saved DB truth but failed to publish public-status Redis projection",
+          error
+        );
+        publicStatusProjectionWarningCode = "PUBLIC_STATUS_PROJECTION_PUBLISH_FAILED";
+      }
+    }
 
     // Revalidate paths for all locales to ensure cache invalidation across i18n routes
     for (const locale of locales) {
@@ -127,10 +195,30 @@ export async function saveSystemSettings(formData: {
     }
     revalidatePath("/", "layout");
 
-    return { ok: true, data: updated };
+    emitActionAudit({
+      category: "system_settings",
+      action: "system_settings.update",
+      targetType: "system_settings",
+      targetId: String(updated.id),
+      targetName: "global",
+      before: before ?? undefined,
+      after: updated,
+      success: true,
+    });
+
+    return { ok: true, data: { ...updated, publicStatusProjectionWarningCode } };
   } catch (error) {
     logger.error("更新系统设置失败:", error);
     const message = error instanceof Error ? error.message : "更新系统设置失败";
+    emitActionAudit({
+      category: "system_settings",
+      action: "system_settings.update",
+      targetType: "system_settings",
+      targetName: "global",
+      before: before ?? undefined,
+      success: false,
+      errorMessage: "UPDATE_FAILED",
+    });
     return { ok: false, error: message };
   }
 }

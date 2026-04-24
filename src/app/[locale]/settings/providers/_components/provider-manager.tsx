@@ -1,9 +1,19 @@
 "use client";
-import { AlertTriangle, Filter, LayoutGrid, LayoutList, Loader2, Search } from "lucide-react";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import {
+  AlertTriangle,
+  Filter,
+  Layers,
+  LayoutGrid,
+  LayoutList,
+  Loader2,
+  Search,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { parseProviderGroups } from "@/lib/utils/provider-group";
+import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
 import {
@@ -26,6 +36,8 @@ import {
   ProviderBatchDialog,
   ProviderBatchToolbar,
 } from "./batch-edit";
+import { ProviderForm } from "./forms/provider-form";
+import { ProviderGroupTab } from "./provider-group-tab";
 import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
@@ -86,7 +98,7 @@ export function ProviderManager({
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "vendor">("list");
+  const [viewMode, setViewMode] = useState<"list" | "vendor" | "groups">("list");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   // Status and group filters
@@ -100,6 +112,7 @@ export function ProviderManager({
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<number>>(new Set());
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [batchActionMode, setBatchActionMode] = useState<BatchActionMode>(null);
+  const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
 
   // Helper: check if a provider has any circuit open (key-level or endpoint-level)
   const hasAnyCircuitOpen = useCallback(
@@ -145,18 +158,14 @@ export function ProviderManager({
     const groups = new Set<string>();
     let hasDefaultGroup = false;
     providers.forEach((p) => {
-      const tags = parseProviderGroups(p.groupTag);
-      if (!tags || tags.length === 0) {
-        hasDefaultGroup = true;
-      } else {
-        tags.forEach((g) => {
-          if (g === "default") {
-            hasDefaultGroup = true;
-          } else {
-            groups.add(g);
-          }
-        });
-      }
+      const tags = resolveProviderGroupsWithDefault(p.groupTag);
+      tags.forEach((g) => {
+        if (g === "default") {
+          hasDefaultGroup = true;
+        } else {
+          groups.add(g);
+        }
+      });
     });
 
     // Sort groups: "default" first, then alphabetically
@@ -204,13 +213,7 @@ export function ProviderManager({
     // Filter by groups
     if (groupFilter.length > 0) {
       result = result.filter((p) => {
-        const providerGroups = parseProviderGroups(p.groupTag);
-
-        // If provider has no groups and "default" is selected, include it
-        if (providerGroups.length === 0 && groupFilter.includes("default")) {
-          return true;
-        }
-
+        const providerGroups = resolveProviderGroupsWithDefault(p.groupTag);
         return groupFilter.some((g) => providerGroups.includes(g));
       });
     }
@@ -259,6 +262,11 @@ export function ProviderManager({
     circuitBrokenFilter,
     hasAnyCircuitOpen,
   ]);
+
+  const editingProvider = useMemo(() => {
+    if (editingProviderId == null) return null;
+    return providers.find((provider) => provider.id === editingProviderId) ?? null;
+  }, [editingProviderId, providers]);
 
   // Batch selection handlers
   const handleSelectAll = useCallback(
@@ -329,8 +337,8 @@ export function ProviderManager({
       setSelectedProviderIds((prev) => {
         const next = new Set(prev);
         for (const p of filteredProviders) {
-          const tags = parseProviderGroups(p.groupTag);
-          if (tags.includes(group) || (group === "default" && tags.length === 0)) {
+          const tags = resolveProviderGroupsWithDefault(p.groupTag);
+          if (tags.includes(group)) {
             next.add(p.id);
           }
         }
@@ -344,6 +352,19 @@ export function ProviderManager({
     setSelectedProviderIds(new Set());
     setIsMultiSelectMode(false);
   }, []);
+
+  const handleOpenProviderEditor = useCallback((provider: ProviderDisplay) => {
+    setEditingProviderId(provider.id);
+  }, []);
+
+  const handleRequestEditProvider = useCallback(
+    (providerId: number) => {
+      const provider = providers.find((item) => item.id === providerId);
+      if (!provider) return;
+      handleOpenProviderEditor(provider);
+    },
+    [handleOpenProviderEditor, providers]
+  );
 
   const allSelected =
     filteredProviders.length > 0 && selectedProviderIds.size === filteredProviders.length;
@@ -507,6 +528,16 @@ export function ProviderManager({
                 <LayoutGrid className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{tStrings("viewModeVendor")}</span>
               </Button>
+              <Button
+                variant={viewMode === "groups" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 gap-1.5 text-xs"
+                onClick={() => setViewMode("groups")}
+                title={tStrings("viewModeGroups")}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{tStrings("viewModeGroups")}</span>
+              </Button>
             </div>
 
             <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} disabled={loading} />
@@ -619,8 +650,14 @@ export function ProviderManager({
         </div>
       </div>
 
-      {/* 供应商列表 */}
-      {loading && providers.length === 0 ? (
+      {/* Provider list / vendor view / groups tab */}
+      {viewMode === "groups" ? (
+        <ProviderGroupTab
+          providers={providers}
+          isAdmin={isAdmin}
+          onRequestEditProvider={handleRequestEditProvider}
+        />
+      ) : loading && providers.length === 0 ? (
         <ProviderListSkeleton label={tCommon("loading")} />
       ) : (
         <div className="space-y-3">
@@ -640,6 +677,7 @@ export function ProviderManager({
               isMultiSelectMode={isMultiSelectMode}
               selectedProviderIds={selectedProviderIds}
               onSelectProvider={handleSelectProvider}
+              onEditProvider={handleOpenProviderEditor}
               allGroups={allGroups}
               userGroups={userGroups}
               isAdmin={isAdmin}
@@ -673,6 +711,27 @@ export function ProviderManager({
         providers={filteredProviders}
         onSuccess={handleBatchSuccess}
       />
+
+      <Dialog
+        open={editingProvider != null}
+        onOpenChange={(open) => !open && setEditingProviderId(null)}
+      >
+        <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
+          <VisuallyHidden>
+            <DialogTitle>{tStrings("editProvider")}</DialogTitle>
+          </VisuallyHidden>
+          {editingProvider ? (
+            <ProviderForm
+              mode="edit"
+              provider={editingProvider}
+              enableMultiProviderTypes={enableMultiProviderTypes}
+              onSuccess={() => {
+                setEditingProviderId(null);
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -10,8 +10,8 @@ describe("isSessionMessages type guard", () => {
     expect(isSessionMessages([{ role: "user" }, { role: "assistant" }])).toBe(true);
   });
 
-  test("rejects empty array", () => {
-    expect(isSessionMessages([])).toBe(false);
+  test("accepts empty array for snapshot payloads", () => {
+    expect(isSessionMessages([])).toBe(true);
   });
 
   test("rejects empty object", () => {

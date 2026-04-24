@@ -6,6 +6,7 @@ import { keys as keysTable, messageRequest, providers, usageLedger, users } from
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
@@ -29,9 +30,11 @@ export async function createMessageRequest(
     durationMs: data.duration_ms,
     costUsd: formattedCost ?? undefined,
     costMultiplier: data.cost_multiplier?.toString() ?? undefined, // 供应商倍率（转为字符串）
+    groupCostMultiplier: data.group_cost_multiplier?.toString() ?? undefined, // 分组倍率（转为字符串）
     sessionId: data.session_id, // Session ID
     requestSequence: data.request_sequence, // Request Sequence（Session 内请求序号）
     userAgent: data.user_agent, // User-Agent
+    clientIp: data.client_ip, // 客户端 IP（IPv4/IPv6）
     endpoint: data.endpoint, // 请求端点（可为空）
     messagesCount: data.messages_count, // Messages 数量
     specialSettings: data.special_settings ?? undefined, // 特殊设置（审计/展示）
@@ -55,6 +58,7 @@ export async function createMessageRequest(
     sessionId: messageRequest.sessionId, // 新增
     requestSequence: messageRequest.requestSequence, // Request Sequence
     userAgent: messageRequest.userAgent, // 新增
+    clientIp: messageRequest.clientIp, // 客户端 IP
     endpoint: messageRequest.endpoint, // 新增：返回端点
     messagesCount: messageRequest.messagesCount, // 新增
     cacheTtlApplied: messageRequest.cacheTtlApplied,
@@ -116,6 +120,37 @@ export async function updateMessageRequestCost(
 }
 
 /**
+ * Update cost with optional breakdown for billing detail display.
+ */
+export async function updateMessageRequestCostWithBreakdown(
+  id: number,
+  costUsd: CreateMessageRequestData["cost_usd"],
+  costBreakdown?: StoredCostBreakdown
+): Promise<void> {
+  const formattedCost = formatCostForStorage(costUsd);
+  if (!formattedCost) {
+    return;
+  }
+
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
+    enqueueMessageRequestUpdate(id, {
+      costUsd: formattedCost,
+      ...(costBreakdown ? { costBreakdown } : {}),
+    });
+    return;
+  }
+
+  await db
+    .update(messageRequest)
+    .set({
+      costUsd: formattedCost,
+      ...(costBreakdown ? { costBreakdown } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(messageRequest.id, id));
+}
+
+/**
  * 更新消息请求的扩展信息（status code, tokens, provider chain, error）
  */
 export async function updateMessageRequestDetails(
@@ -135,6 +170,7 @@ export async function updateMessageRequestDetails(
     errorStack?: string; // 完整堆栈信息
     errorCause?: string; // 嵌套错误原因（JSON 格式）
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
+    actualResponseModel?: string | null; // 上游响应实际返回的模型名(audit 用途，不影响计费)
     providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
     context1mApplied?: boolean; // 是否应用了1M上下文窗口
     swapCacheTtlApplied?: boolean; // Swap Cache TTL Billing active at request time
@@ -192,6 +228,9 @@ export async function updateMessageRequestDetails(
   if (details.model !== undefined) {
     updateData.model = details.model;
   }
+  if (details.actualResponseModel !== undefined) {
+    updateData.actualResponseModel = details.actualResponseModel;
+  }
   if (details.providerId !== undefined) {
     updateData.providerId = details.providerId;
   }
@@ -248,6 +287,7 @@ export async function findMessageRequestById(id: number): Promise<MessageRequest
       costMultiplier: messageRequest.costMultiplier,
       sessionId: messageRequest.sessionId,
       userAgent: messageRequest.userAgent,
+      clientIp: messageRequest.clientIp,
       endpoint: messageRequest.endpoint,
       messagesCount: messageRequest.messagesCount,
       statusCode: messageRequest.statusCode,
@@ -371,6 +411,7 @@ export async function findMessageRequestBySessionId(
       costMultiplier: messageRequest.costMultiplier,
       sessionId: messageRequest.sessionId,
       userAgent: messageRequest.userAgent,
+      clientIp: messageRequest.clientIp,
       messagesCount: messageRequest.messagesCount,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,

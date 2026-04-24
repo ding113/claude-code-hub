@@ -1,8 +1,26 @@
 import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { inArray } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, messageRequest, users } from "@/drizzle/schema";
-import { callActionsRoute } from "../test-utils";
+import { keys, messageRequest, usageLedger, users } from "@/drizzle/schema";
+
+let callActionsRouteImpl: typeof import("../test-utils")["callActionsRoute"] | undefined;
+const originalSessionTokenMode = process.env.SESSION_TOKEN_MODE;
+
+async function ensureLegacyApiRuntime() {
+  if (!callActionsRouteImpl) {
+    vi.resetModules();
+    process.env.SESSION_TOKEN_MODE = "legacy";
+    ({ callActionsRoute: callActionsRouteImpl } = await import("../test-utils"));
+  }
+}
+
+async function callActionsRoute(
+  ...args: Parameters<typeof import("../test-utils")["callActionsRoute"]>
+) {
+  await ensureLegacyApiRuntime();
+
+  return callActionsRouteImpl(...args);
+}
 
 /**
  * 说明：
@@ -44,19 +62,49 @@ vi.mock("next-intl/server", () => ({
 type TestKey = { id: number; userId: number; key: string; name: string };
 type TestUser = { id: number; name: string };
 
+let ledgerRequestCursor = 980_000_000 + (Math.floor(Date.now() / 1000) % 1_000_000) * 10;
+let ledgerProviderCursor = 990_000_000 + (Math.floor(Date.now() / 1000) % 1_000_000) * 10;
+
+function nextLedgerRequestId() {
+  ledgerRequestCursor += 1;
+  return ledgerRequestCursor;
+}
+
+function nextLedgerProviderId() {
+  ledgerProviderCursor += 1;
+  return ledgerProviderCursor;
+}
+
+function getStableRecentUtcTimestamp(): number {
+  const now = new Date();
+  return Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours(),
+    now.getUTCMinutes(),
+    0,
+    0
+  );
+}
+
 async function createTestUser(name: string): Promise<TestUser> {
-  const [row] = await db
-    .insert(users)
-    .values({
-      name,
-    })
-    .returning({ id: users.id, name: users.name });
+  await ensureLegacyApiRuntime();
+  const { createUser } = await import("@/repository/user");
+  const row = await createUser({
+    name,
+    description: "",
+    providerGroup: "default",
+    tags: [],
+    allowedClients: [],
+    blockedClients: [],
+    allowedModels: [],
+    dailyResetMode: "rolling",
+    dailyResetTime: "00:00",
+    isEnabled: true,
+  });
 
-  if (!row) {
-    throw new Error("创建测试用户失败：未返回插入结果");
-  }
-
-  return row;
+  return { id: row.id, name: row.name };
 }
 
 async function createTestKey(params: {
@@ -65,24 +113,21 @@ async function createTestKey(params: {
   name: string;
   canLoginWebUi: boolean;
 }): Promise<TestKey> {
-  const [row] = await db
-    .insert(keys)
-    .values({
-      userId: params.userId,
-      key: params.key,
-      name: params.name,
-      canLoginWebUi: params.canLoginWebUi,
-      // 为避免跨时区/临界点导致“今日”边界不稳定，这里固定使用 rolling
-      dailyResetMode: "rolling",
-      dailyResetTime: "00:00",
-    })
-    .returning({ id: keys.id, userId: keys.userId, key: keys.key, name: keys.name });
+  await ensureLegacyApiRuntime();
+  const { createKey } = await import("@/repository/key");
+  const row = await createKey({
+    user_id: params.userId,
+    name: params.name,
+    key: params.key,
+    is_enabled: true,
+    can_login_web_ui: params.canLoginWebUi,
+    daily_reset_mode: "rolling",
+    daily_reset_time: "00:00",
+    limit_5h_reset_mode: "rolling",
+    provider_group: "default",
+  });
 
-  if (!row) {
-    throw new Error("创建测试 Key 失败：未返回插入结果");
-  }
-
-  return row;
+  return { id: row.id, userId: row.userId, key: row.key, name: row.name };
 }
 
 async function createMessage(params: {
@@ -95,6 +140,7 @@ async function createMessage(params: {
   inputTokens?: number | null;
   outputTokens?: number | null;
   blockedBy?: string | null;
+  clientIp?: string | null;
   createdAt: Date;
 }): Promise<number> {
   const [row] = await db
@@ -110,6 +156,7 @@ async function createMessage(params: {
       inputTokens: params.inputTokens ?? 0,
       outputTokens: params.outputTokens ?? 0,
       blockedBy: params.blockedBy ?? null,
+      clientIp: params.clientIp ?? null,
       createdAt: params.createdAt,
       updatedAt: params.createdAt,
     })
@@ -122,14 +169,64 @@ async function createMessage(params: {
   return row.id;
 }
 
-describe("my-usage API：只读 Key 自助查询", () => {
+async function insertLedgerOnlyRow(params: {
+  userId: number;
+  key: string;
+  model: string;
+  endpoint: string;
+  costUsd: string;
+  inputTokens: number;
+  outputTokens: number;
+  createdAt: Date;
+  clientIp?: string | null;
+}) {
+  const requestId = nextLedgerRequestId();
+  const providerId = nextLedgerProviderId();
+
+  await db.insert(usageLedger).values({
+    requestId,
+    userId: params.userId,
+    key: params.key,
+    providerId,
+    finalProviderId: providerId,
+    model: params.model,
+    originalModel: params.model,
+    endpoint: params.endpoint,
+    apiType: "openai",
+    statusCode: 200,
+    isSuccess: true,
+    blockedBy: null,
+    costUsd: params.costUsd,
+    inputTokens: params.inputTokens,
+    outputTokens: params.outputTokens,
+    clientIp: params.clientIp ?? null,
+    createdAt: params.createdAt,
+  });
+
+  return requestId;
+}
+
+describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () => {
   const createdUserIds: number[] = [];
   const createdKeyIds: number[] = [];
   const createdMessageIds: number[] = [];
+  const createdLedgerRequestIds: number[] = [];
 
   afterAll(async () => {
+    if (originalSessionTokenMode === undefined) {
+      delete process.env.SESSION_TOKEN_MODE;
+    } else {
+      process.env.SESSION_TOKEN_MODE = originalSessionTokenMode;
+    }
+
     // 软删除更安全：避免潜在外键约束或其他测试依赖
     const now = new Date();
+    if (createdMessageIds.length + createdLedgerRequestIds.length > 0) {
+      await db
+        .delete(usageLedger)
+        .where(inArray(usageLedger.requestId, [...createdMessageIds, ...createdLedgerRequestIds]));
+    }
+
     if (createdMessageIds.length > 0) {
       await db
         .update(messageRequest)
@@ -290,6 +387,77 @@ describe("my-usage API：只读 Key 自助查询", () => {
     const usersData = (usersApi.json as { ok: boolean; data: Array<{ id: number }> }).data;
     expect(usersData.length).toBe(1);
     expect(usersData[0].id).toBe(user.id);
+  });
+
+  test("只读 Key：只能查询当前 key 日志里出现过的 IP 详情", async () => {
+    const unique = `my-usage-ip-geo-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const userA = await createTestUser(`Test ${unique}-A`);
+    createdUserIds.push(userA.id);
+    const keyA = await createTestKey({
+      userId: userA.id,
+      key: `test-ip-geo-key-A-${unique}`,
+      name: `ip-geo-A-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(keyA.id);
+
+    const userB = await createTestUser(`Test ${unique}-B`);
+    createdUserIds.push(userB.id);
+    const keyB = await createTestKey({
+      userId: userB.id,
+      key: `test-ip-geo-key-B-${unique}`,
+      name: `ip-geo-B-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(keyB.id);
+
+    const now = new Date();
+    const visibleIp = "203.0.113.9";
+    const hiddenIp = "198.51.100.88";
+
+    createdMessageIds.push(
+      await createMessage({
+        userId: userA.id,
+        key: keyA.key,
+        model: "gpt-4.1-mini",
+        clientIp: visibleIp,
+        createdAt: now,
+      })
+    );
+    createdMessageIds.push(
+      await createMessage({
+        userId: userB.id,
+        key: keyB.key,
+        model: "gpt-4.1-mini",
+        clientIp: hiddenIp,
+        createdAt: now,
+      })
+    );
+
+    currentAuthToken = keyA.key;
+
+    const visible = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyIpGeoDetails",
+      authToken: keyA.key,
+      body: { ip: visibleIp, lang: "en" },
+    });
+    expect(visible.json).not.toMatchObject({
+      ok: false,
+      error: "IP not found in current key usage logs",
+    });
+
+    const hidden = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyIpGeoDetails",
+      authToken: keyA.key,
+      body: { ip: hiddenIp, lang: "en" },
+    });
+    expect(hidden.response.status).toBe(400);
+    expect(hidden.json).toMatchObject({
+      ok: false,
+      error: "NOT_FOUND",
+    });
   });
 
   test("今日统计：应与 message_request 数据一致，并排除 warmup 与其他 Key 数据", async () => {
@@ -707,5 +875,199 @@ describe("my-usage API：只读 Key 自助查询", () => {
     const bothData = (bothDays.json as any).data;
     expect(bothData.totalRequests).toBe(2);
     expect(bothData.keyModelBreakdown.length).toBe(2);
+  });
+
+  test("imported ledger：full batch / filters / IP / summary / quota 在全局 message_request 非空时仍可用", async () => {
+    const unique = `imported-ledger-api-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const user = await createTestUser(`Imported ${unique}`);
+    createdUserIds.push(user.id);
+    const key = await createTestKey({
+      userId: user.id,
+      key: `test-imported-key-${unique}`,
+      name: `imported-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(key.id);
+
+    const otherUser = await createTestUser(`Other ${unique}`);
+    createdUserIds.push(otherUser.id);
+    const otherKey = await createTestKey({
+      userId: otherUser.id,
+      key: `test-imported-other-key-${unique}`,
+      name: `imported-other-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(otherKey.id);
+
+    const now = getStableRecentUtcTimestamp();
+    const today = new Date(now).toISOString().slice(0, 10);
+    const visibleIp = "203.0.113.29";
+
+    createdLedgerRequestIds.push(
+      await insertLedgerOnlyRow({
+        userId: user.id,
+        key: key.key,
+        model: "imported-model-a",
+        endpoint: "/v1/messages",
+        costUsd: "1.200000000000000",
+        inputTokens: 120,
+        outputTokens: 24,
+        createdAt: new Date(now),
+        clientIp: visibleIp,
+      })
+    );
+    createdLedgerRequestIds.push(
+      await insertLedgerOnlyRow({
+        userId: user.id,
+        key: key.key,
+        model: "imported-model-b",
+        endpoint: "/v1/chat/completions",
+        costUsd: "0.800000000000000",
+        inputTokens: 80,
+        outputTokens: 16,
+        createdAt: new Date(now),
+      })
+    );
+
+    createdMessageIds.push(
+      await createMessage({
+        userId: otherUser.id,
+        key: otherKey.key,
+        model: "other-live-model",
+        endpoint: "/v1/messages",
+        costUsd: "0.1000",
+        inputTokens: 10,
+        outputTokens: 5,
+        createdAt: new Date(now),
+      })
+    );
+
+    currentAuthToken = key.key;
+
+    const full = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyUsageLogsBatchFull",
+      authToken: key.key,
+      body: { limit: 20 },
+    });
+    expect(full.response.status).toBe(200);
+    expect((full.json as any).ok).toBe(true);
+    expect(((full.json as any).data.logs as Array<{ id: number }>).map((row) => row.id)).toEqual(
+      createdLedgerRequestIds.slice(-2).reverse()
+    );
+    expect((full.json as any).data.logs[0].providerChain).toBeNull();
+    expect((full.json as any).data.logs[0].userAgent).toBeNull();
+
+    const models = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyAvailableModels",
+      authToken: key.key,
+      body: {},
+    });
+    expect(models.response.status).toBe(200);
+    expect((models.json as any).data).toEqual(["imported-model-a", "imported-model-b"]);
+
+    const endpoints = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyAvailableEndpoints",
+      authToken: key.key,
+      body: {},
+    });
+    expect(endpoints.response.status).toBe(200);
+    expect((endpoints.json as any).data).toEqual(["/v1/chat/completions", "/v1/messages"]);
+
+    const ip = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyIpGeoDetails",
+      authToken: key.key,
+      body: { ip: visibleIp, lang: "en" },
+    });
+    expect(ip.response.status).toBe(200);
+    expect((ip.json as any).ok).toBe(true);
+
+    const summary = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyStatsSummary",
+      authToken: key.key,
+      body: { startDate: today, endDate: today },
+    });
+    expect(summary.response.status).toBe(200);
+    expect((summary.json as any).data.totalRequests).toBe(2);
+    expect((summary.json as any).data.totalCost).toBeCloseTo(2.0, 10);
+
+    const quota = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyQuota",
+      authToken: key.key,
+      body: {},
+    });
+    expect(quota.response.status).toBe(200);
+    expect((quota.json as any).data.keyCurrent5hUsd).toBeCloseTo(2.0, 10);
+  });
+
+  test("imported ledger：mixed old/new data 在 readonly full batch 与 summary 中不重复计数", async () => {
+    const unique = `imported-mixed-api-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const user = await createTestUser(`Mixed ${unique}`);
+    createdUserIds.push(user.id);
+    const key = await createTestKey({
+      userId: user.id,
+      key: `test-imported-mixed-key-${unique}`,
+      name: `imported-mixed-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(key.id);
+
+    const now = getStableRecentUtcTimestamp();
+    const today = new Date(now).toISOString().slice(0, 10);
+
+    const importedRequestId = await insertLedgerOnlyRow({
+      userId: user.id,
+      key: key.key,
+      model: "imported-only-model",
+      endpoint: "/v1/messages",
+      costUsd: "1.100000000000000",
+      inputTokens: 110,
+      outputTokens: 22,
+      createdAt: new Date(now),
+    });
+    createdLedgerRequestIds.push(importedRequestId);
+
+    const liveRequestId = await createMessage({
+      userId: user.id,
+      key: key.key,
+      model: "live-model",
+      endpoint: "/v1/responses",
+      costUsd: "0.900000000000000",
+      inputTokens: 90,
+      outputTokens: 18,
+      createdAt: new Date(now),
+    });
+    createdMessageIds.push(liveRequestId);
+
+    currentAuthToken = key.key;
+
+    const full = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyUsageLogsBatchFull",
+      authToken: key.key,
+      body: { limit: 20 },
+    });
+    expect(full.response.status).toBe(200);
+    expect(((full.json as any).data.logs as Array<{ id: number }>).map((row) => row.id)).toEqual([
+      importedRequestId,
+      liveRequestId,
+    ]);
+
+    const summary = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyStatsSummary",
+      authToken: key.key,
+      body: { startDate: today, endDate: today },
+    });
+    expect(summary.response.status).toBe(200);
+    expect((summary.json as any).data.totalRequests).toBe(2);
+    expect((summary.json as any).data.totalCost).toBeCloseTo(2.0, 10);
   });
 });
