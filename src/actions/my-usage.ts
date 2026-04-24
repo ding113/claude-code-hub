@@ -299,6 +299,13 @@ function resolveOverallRemaining(values: Array<number | null>): number | null {
   return Math.max(Math.min(...boundedValues), 0);
 }
 
+function resolveTotalLimitWithMonthlyFallback(params: {
+  totalLimit: number | null | undefined;
+  monthlyLimit: number | null | undefined;
+}): number | null {
+  return params.totalLimit ?? params.monthlyLimit ?? null;
+}
+
 export interface MyTodayStats {
   calls: number;
   inputTokens: number;
@@ -558,10 +565,18 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     } = userCosts;
     const resolvedKeyCurrent5hUsd = keyFixed5hUsd ?? keyCurrent5hUsd;
     const resolvedUserCurrent5hUsd = userFixed5hUsd ?? userCurrent5hUsd;
+    const keyLimitTotalUsd = resolveTotalLimitWithMonthlyFallback({
+      totalLimit: key.limitTotalUsd,
+      monthlyLimit: key.limitMonthlyUsd,
+    });
+    const userLimitTotalUsd = resolveTotalLimitWithMonthlyFallback({
+      totalLimit: user.limitTotalUsd,
+      monthlyLimit: user.limitMonthlyUsd,
+    });
 
     const effective5h = resolveEffectiveQuotaWindow([
-      { limit: key.limit5hUsd, used: keyCost5h },
-      { limit: user.limit5hUsd, used: userCost5h },
+      { limit: key.limit5hUsd, used: resolvedKeyCurrent5hUsd },
+      { limit: user.limit5hUsd, used: resolvedUserCurrent5hUsd },
     ]);
     const effectiveDaily = resolveEffectiveQuotaWindow([
       { limit: key.limitDailyUsd, used: keyCostDaily },
@@ -576,8 +591,8 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       { limit: user.limitMonthlyUsd, used: userCostMonthly },
     ]);
     const effectiveTotal = resolveEffectiveQuotaWindow([
-      { limit: key.limitTotalUsd, used: keyTotalCost },
-      { limit: user.limitTotalUsd, used: userTotalCost },
+      { limit: keyLimitTotalUsd, used: keyTotalCost },
+      { limit: userLimitTotalUsd, used: userTotalCost },
     ]);
     const overallRemaining = resolveOverallRemaining([
       effective5h.remaining,
@@ -595,7 +610,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyLimitDailyUsd: key.limitDailyUsd ?? null,
       keyLimitWeeklyUsd: key.limitWeeklyUsd ?? null,
       keyLimitMonthlyUsd: key.limitMonthlyUsd ?? null,
-      keyLimitTotalUsd: key.limitTotalUsd ?? null,
+      keyLimitTotalUsd,
       keyLimitConcurrentSessions: effectiveKeyConcurrentLimit,
       keyCurrent5hUsd: resolvedKeyCurrent5hUsd,
       keyCurrentDailyUsd: keyCostDaily,
@@ -607,7 +622,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userLimit5hUsd: user.limit5hUsd ?? null,
       userLimitWeeklyUsd: user.limitWeeklyUsd ?? null,
       userLimitMonthlyUsd: user.limitMonthlyUsd ?? null,
-      userLimitTotalUsd: user.limitTotalUsd ?? null,
+      userLimitTotalUsd,
       userLimitConcurrentSessions: user.limitConcurrentSessions ?? null,
       userRpmLimit: user.rpm ?? null,
       userCurrent5hUsd: resolvedUserCurrent5hUsd,
