@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Expand, Filter, Minimize2, RefreshCw } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { useFullscreen } from "@/hooks/use-fullscreen";
+import { useRouter } from "@/i18n/routing";
 import { getHiddenColumns, type LogsTableColumn } from "@/lib/column-visibility";
 import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -254,19 +255,34 @@ function UsageLogsViewContent({
     };
   }, []);
 
-  const statsFilters = {
-    userId: filters.userId,
-    keyId: filters.keyId,
-    providerId: filters.providerId,
-    sessionId: filters.sessionId,
-    startTime: filters.startTime,
-    endTime: filters.endTime,
-    statusCode: filters.statusCode,
-    excludeStatusCode200: filters.excludeStatusCode200,
-    model: filters.model,
-    endpoint: filters.endpoint,
-    minRetryCount: filters.minRetryCount,
-  };
+  const statsFilters = useMemo(
+    () => ({
+      userId: filters.userId,
+      keyId: filters.keyId,
+      providerId: filters.providerId,
+      sessionId: filters.sessionId,
+      startTime: filters.startTime,
+      endTime: filters.endTime,
+      statusCode: filters.statusCode,
+      excludeStatusCode200: filters.excludeStatusCode200,
+      model: filters.model,
+      endpoint: filters.endpoint,
+      minRetryCount: filters.minRetryCount,
+    }),
+    [
+      filters.userId,
+      filters.keyId,
+      filters.providerId,
+      filters.sessionId,
+      filters.startTime,
+      filters.endTime,
+      filters.statusCode,
+      filters.excludeStatusCode200,
+      filters.model,
+      filters.endpoint,
+      filters.minRetryCount,
+    ]
+  );
 
   const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
 

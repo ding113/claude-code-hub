@@ -18,8 +18,11 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
+}));
+
+vi.mock("@/i18n/routing", () => ({
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 const invalidateQueriesMock = vi.fn();
