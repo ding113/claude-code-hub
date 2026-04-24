@@ -29,6 +29,7 @@ interface AutoCleanupFormProps {
 
 export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
   const t = useTranslations("settings.config.form");
+  const tCommon = useTranslations("settings.common");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -190,7 +191,7 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {t("common.saving")}
+              {tCommon("saving")}
             </>
           ) : (
             t("saveConfig")

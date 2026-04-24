@@ -104,7 +104,10 @@ function proxyHandler(request: NextRequest) {
     // Preserve locale in redirect
     const locale = isLocaleInPath ? potentialLocale : routing.defaultLocale;
     url.pathname = `/${locale}/login`;
-    url.searchParams.set("from", pathWithoutLocale || "/dashboard");
+    url.searchParams.set(
+      "from",
+      !pathWithoutLocale || pathWithoutLocale === "/" ? "/dashboard" : pathWithoutLocale
+    );
     return NextResponse.redirect(url);
   }
 

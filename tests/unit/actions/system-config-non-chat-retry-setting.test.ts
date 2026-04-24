@@ -148,6 +148,7 @@ describe("non-chat fallback system setting", () => {
         select: vi.fn(() => {
           const query: any = {};
           query.from = vi.fn(() => query);
+          query.orderBy = vi.fn(() => query);
           query.limit = vi.fn(() => Promise.reject({ code: "42P01" }));
           return query;
         }),

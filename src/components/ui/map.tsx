@@ -24,6 +24,9 @@ const defaultStyles = {
   light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
 };
 
+const defaultMarkerOffset: NonNullable<MarkerOptions["offset"]> = [0, 0];
+const defaultProjection: MapLibreGL.ProjectionSpecification = { type: "mercator" };
+
 type Theme = "light" | "dark";
 
 // Check document class for theme (works with next-themes, etc.)
@@ -169,6 +172,14 @@ function getViewport(map: MapLibreGL.Map): MapViewport {
   };
 }
 
+function getProjectionKey(projection?: MapLibreGL.ProjectionSpecification) {
+  return projection ? JSON.stringify(projection) : "";
+}
+
+function getMarkerOffsetTuple(offset: NonNullable<MarkerOptions["offset"]>): [number, number] {
+  return Array.isArray(offset) ? [offset[0], offset[1]] : [offset.x, offset.y];
+}
+
 const Map = forwardRef<MapRef, MapProps>(function Map(
   {
     children,
@@ -204,6 +215,15 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     }),
     [styles]
   );
+  const projectionKey = useMemo(() => getProjectionKey(projection), [projection]);
+  const projectionRef = useRef(projection);
+  projectionRef.current = projection;
+  const syncProjection = useCallback((targetMap: MapLibreGL.Map, nextProjectionKey: string) => {
+    const nextProjection = projectionRef.current;
+    if (nextProjectionKey && !nextProjection) return;
+
+    targetMap.setProjection(nextProjection ?? defaultProjection);
+  }, []);
 
   // Expose the map instance to the parent component
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
@@ -225,15 +245,13 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       },
       ...props,
       ...viewport,
+      ...(projectionRef.current ? { projection: projectionRef.current } : {}),
     });
 
     const loadHandler = () => setIsLoaded(true);
     const syncStyleReady = () => {
       if (!map.isStyleLoaded()) return;
       setIsStyleLoaded(true);
-      if (projection) {
-        map.setProjection(projection);
-      }
     };
     const styleDataHandler = () => syncStyleReady();
     const idleHandler = () => syncStyleReady();
@@ -250,7 +268,12 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     map.on("move", handleMove);
     setMapInstance(map);
 
+    const resizeFrame = window.requestAnimationFrame(() => {
+      map.resize();
+    });
+
     return () => {
+      window.cancelAnimationFrame(resizeFrame);
       map.off("load", loadHandler);
       map.off("idle", idleHandler);
       map.off("styledata", styleDataHandler);
@@ -261,7 +284,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       setMapInstance(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedTheme, mapStyles.light, viewport, projection, props, mapStyles.dark]);
+  }, []);
 
   // Sync controlled viewport to map
   useEffect(() => {
@@ -304,6 +327,12 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
 
     mapInstance.setStyle(newStyle, { diff: true });
   }, [mapInstance, resolvedTheme, mapStyles]);
+
+  useEffect(() => {
+    if (!mapInstance || !isStyleLoaded) return;
+
+    syncProjection(mapInstance, projectionKey);
+  }, [mapInstance, projectionKey, isStyleLoaded, syncProjection]);
 
   const contextValue = useMemo(
     () => ({
@@ -392,43 +421,84 @@ function MapMarker({
     onDragEnd,
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: marker instance is intentionally stable
-  const marker = useMemo(() => {
-    const markerInstance = new MapLibreGL.Marker({
-      ...markerOptions,
+  const markerRef = useRef<MapLibreGL.Marker | null>(null);
+  const markerOptionsRef = useRef(markerOptions);
+  markerOptionsRef.current = markerOptions;
+  const markerStateRef = useRef({ longitude, latitude, draggable });
+  markerStateRef.current = { longitude, latitude, draggable };
+  const [marker, setMarker] = useState<MapLibreGL.Marker | null>(null);
+  const markerAnchor = markerOptions.anchor;
+  const markerClickTolerance = markerOptions.clickTolerance;
+  const markerColor = markerOptions.color;
+  const markerScale = markerOptions.scale;
+  const markerConstructorOptions = useMemo(
+    () => ({
+      anchor: markerAnchor,
+      clickTolerance: markerClickTolerance,
+      color: markerColor,
+      scale: markerScale,
+    }),
+    [markerAnchor, markerClickTolerance, markerColor, markerScale]
+  );
+  const markerOffset = markerOptions.offset ?? defaultMarkerOffset;
+  const [markerOffsetX, markerOffsetY] = getMarkerOffsetTuple(markerOffset);
+  const markerRotation = markerOptions.rotation ?? 0;
+  const markerRotationAlignment = markerOptions.rotationAlignment ?? "auto";
+  const markerPitchAlignment = markerOptions.pitchAlignment ?? "auto";
+
+  useEffect(() => {
+    const initialState = markerStateRef.current;
+    const nextMarker = new MapLibreGL.Marker({
+      ...markerOptionsRef.current,
+      ...markerConstructorOptions,
       element: document.createElement("div"),
-      draggable,
-    }).setLngLat([longitude, latitude]);
+      draggable: initialState.draggable,
+    }).setLngLat([initialState.longitude, initialState.latitude]);
+    markerRef.current = nextMarker;
 
-    const handleClick = (e: MouseEvent) => callbacksRef.current.onClick?.(e);
-    const handleMouseEnter = (e: MouseEvent) => callbacksRef.current.onMouseEnter?.(e);
-    const handleMouseLeave = (e: MouseEvent) => callbacksRef.current.onMouseLeave?.(e);
+    const handleClick = (event: MouseEvent) => callbacksRef.current.onClick?.(event);
+    const handleMouseEnter = (event: MouseEvent) => callbacksRef.current.onMouseEnter?.(event);
+    const handleMouseLeave = (event: MouseEvent) => callbacksRef.current.onMouseLeave?.(event);
 
-    markerInstance.getElement()?.addEventListener("click", handleClick);
-    markerInstance.getElement()?.addEventListener("mouseenter", handleMouseEnter);
-    markerInstance.getElement()?.addEventListener("mouseleave", handleMouseLeave);
+    const element = nextMarker.getElement();
+    element.addEventListener("click", handleClick);
+    element.addEventListener("mouseenter", handleMouseEnter);
+    element.addEventListener("mouseleave", handleMouseLeave);
 
     const handleDragStart = () => {
-      const lngLat = markerInstance.getLngLat();
+      const lngLat = nextMarker.getLngLat();
       callbacksRef.current.onDragStart?.({ lng: lngLat.lng, lat: lngLat.lat });
     };
     const handleDrag = () => {
-      const lngLat = markerInstance.getLngLat();
+      const lngLat = nextMarker.getLngLat();
       callbacksRef.current.onDrag?.({ lng: lngLat.lng, lat: lngLat.lat });
     };
     const handleDragEnd = () => {
-      const lngLat = markerInstance.getLngLat();
+      const lngLat = nextMarker.getLngLat();
       callbacksRef.current.onDragEnd?.({ lng: lngLat.lng, lat: lngLat.lat });
     };
 
-    markerInstance.on("dragstart", handleDragStart);
-    markerInstance.on("drag", handleDrag);
-    markerInstance.on("dragend", handleDragEnd);
+    nextMarker.on("dragstart", handleDragStart);
+    nextMarker.on("drag", handleDrag);
+    nextMarker.on("dragend", handleDragEnd);
+    setMarker(nextMarker);
 
-    return markerInstance;
-  }, [longitude, markerOptions, draggable, latitude]);
+    return () => {
+      element.removeEventListener("click", handleClick);
+      element.removeEventListener("mouseenter", handleMouseEnter);
+      element.removeEventListener("mouseleave", handleMouseLeave);
+      nextMarker.off("dragstart", handleDragStart);
+      nextMarker.off("drag", handleDrag);
+      nextMarker.off("dragend", handleDragEnd);
+      nextMarker.remove();
+      if (markerRef.current === nextMarker) {
+        markerRef.current = null;
+      }
+    };
+  }, [markerConstructorOptions]);
 
   useEffect(() => {
+    if (!marker) return;
     if (!map) return;
 
     marker.addTo(map);
@@ -436,35 +506,47 @@ function MapMarker({
     return () => {
       marker.remove();
     };
+  }, [map, marker]);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, marker.addTo, marker.remove]);
+  useEffect(() => {
+    if (!marker) return;
 
-  if (marker.getLngLat().lng !== longitude || marker.getLngLat().lat !== latitude) {
-    marker.setLngLat([longitude, latitude]);
-  }
-  if (marker.isDraggable() !== draggable) {
-    marker.setDraggable(draggable);
-  }
+    const currentLngLat = marker.getLngLat();
+    if (currentLngLat.lng !== longitude || currentLngLat.lat !== latitude) {
+      marker.setLngLat([longitude, latitude]);
+    }
 
-  const currentOffset = marker.getOffset();
-  const newOffset = markerOptions.offset ?? [0, 0];
-  const [newOffsetX, newOffsetY] = Array.isArray(newOffset)
-    ? newOffset
-    : [newOffset.x, newOffset.y];
-  if (currentOffset.x !== newOffsetX || currentOffset.y !== newOffsetY) {
-    marker.setOffset(newOffset);
-  }
+    if (marker.isDraggable() !== draggable) {
+      marker.setDraggable(draggable);
+    }
 
-  if (marker.getRotation() !== markerOptions.rotation) {
-    marker.setRotation(markerOptions.rotation ?? 0);
-  }
-  if (marker.getRotationAlignment() !== markerOptions.rotationAlignment) {
-    marker.setRotationAlignment(markerOptions.rotationAlignment ?? "auto");
-  }
-  if (marker.getPitchAlignment() !== markerOptions.pitchAlignment) {
-    marker.setPitchAlignment(markerOptions.pitchAlignment ?? "auto");
-  }
+    const currentOffset = marker.getOffset();
+    if (currentOffset.x !== markerOffsetX || currentOffset.y !== markerOffsetY) {
+      marker.setOffset([markerOffsetX, markerOffsetY]);
+    }
+
+    if (marker.getRotation() !== markerRotation) {
+      marker.setRotation(markerRotation);
+    }
+    if (marker.getRotationAlignment() !== markerRotationAlignment) {
+      marker.setRotationAlignment(markerRotationAlignment);
+    }
+    if (marker.getPitchAlignment() !== markerPitchAlignment) {
+      marker.setPitchAlignment(markerPitchAlignment);
+    }
+  }, [
+    marker,
+    longitude,
+    latitude,
+    draggable,
+    markerOffsetX,
+    markerOffsetY,
+    markerRotation,
+    markerRotationAlignment,
+    markerPitchAlignment,
+  ]);
+
+  if (!marker) return null;
 
   return <MarkerContext.Provider value={{ marker, map }}>{children}</MarkerContext.Provider>;
 }
@@ -523,18 +605,18 @@ function MarkerPopup({
   const container = useMemo(() => document.createElement("div"), []);
   const prevPopupOptions = useRef(popupOptions);
 
-  const popup = useMemo(() => {
-    const popupInstance = new MapLibreGL.Popup({
+  const popupRef = useRef<MapLibreGL.Popup | null>(null);
+  if (!popupRef.current) {
+    popupRef.current = new MapLibreGL.Popup({
       offset: 16,
       ...popupOptions,
       closeButton: false,
     })
       .setMaxWidth("none")
       .setDOMContent(container);
+  }
 
-    return popupInstance;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [container, popupOptions]);
+  const popup = popupRef.current;
 
   useEffect(() => {
     if (!map) return;
@@ -599,17 +681,17 @@ function MarkerTooltip({ children, className, ...popupOptions }: MarkerTooltipPr
   const container = useMemo(() => document.createElement("div"), []);
   const prevTooltipOptions = useRef(popupOptions);
 
-  const tooltip = useMemo(() => {
-    const tooltipInstance = new MapLibreGL.Popup({
+  const tooltipRef = useRef<MapLibreGL.Popup | null>(null);
+  if (!tooltipRef.current) {
+    tooltipRef.current = new MapLibreGL.Popup({
       offset: 16,
       ...popupOptions,
       closeOnClick: true,
       closeButton: false,
     }).setMaxWidth("none");
+  }
 
-    return tooltipInstance;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popupOptions]);
+  const tooltip = tooltipRef.current;
 
   useEffect(() => {
     if (!map) return;
@@ -944,23 +1026,25 @@ function MapPopup({
   ...popupOptions
 }: MapPopupProps) {
   const { map } = useMap();
-  const popupOptionsRef = useRef(popupOptions);
+  const popupOptionsRef = useRef({
+    offset: popupOptions.offset,
+    maxWidth: popupOptions.maxWidth,
+  });
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const container = useMemo(() => document.createElement("div"), []);
 
-  const popup = useMemo(() => {
-    const popupInstance = new MapLibreGL.Popup({
+  const popupRef = useRef<MapLibreGL.Popup | null>(null);
+  if (!popupRef.current) {
+    popupRef.current = new MapLibreGL.Popup({
       offset: 16,
       ...popupOptions,
       closeButton: false,
     })
       .setMaxWidth("none")
       .setLngLat([longitude, latitude]);
-
-    return popupInstance;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [longitude, latitude, popupOptions]);
+  }
+  const popup = popupRef.current;
 
   useEffect(() => {
     if (!map) return;
@@ -990,7 +1074,9 @@ function MapPopup({
     popup.addTo,
   ]);
 
-  if (popup.isOpen()) {
+  useEffect(() => {
+    if (!popup.isOpen()) return;
+
     const prev = popupOptionsRef.current;
 
     if (popup.getLngLat().lng !== longitude || popup.getLngLat().lat !== latitude) {
@@ -1003,8 +1089,11 @@ function MapPopup({
     if (prev.maxWidth !== popupOptions.maxWidth && popupOptions.maxWidth) {
       popup.setMaxWidth(popupOptions.maxWidth ?? "none");
     }
-    popupOptionsRef.current = popupOptions;
-  }
+    popupOptionsRef.current = {
+      offset: popupOptions.offset,
+      maxWidth: popupOptions.maxWidth,
+    };
+  }, [popup, longitude, latitude, popupOptions.offset, popupOptions.maxWidth]);
 
   const handleClose = () => {
     popup.remove();
@@ -1219,6 +1308,8 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     clusterThresholds,
     pointColor,
   });
+  const latestDataRef = useRef(data);
+  latestDataRef.current = data;
 
   // Add source and layers on mount
   useEffect(() => {
@@ -1227,7 +1318,7 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     // Add clustered GeoJSON source
     map.addSource(sourceId, {
       type: "geojson",
-      data,
+      data: latestDataRef.current,
       cluster: true,
       clusterMaxZoom,
       clusterRadius,
@@ -1314,7 +1405,6 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     clusterThresholds[1],
     clusterMaxZoom,
     clusterRadius,
-    data,
     pointColor,
     clusterLayerId,
     clusterCountLayerId,
