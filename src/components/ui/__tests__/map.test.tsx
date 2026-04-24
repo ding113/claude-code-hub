@@ -539,6 +539,31 @@ describe("Map UI", () => {
     unmount();
   });
 
+  test("projection updates sync without recreating the map", async () => {
+    const { rerender, unmount } = render(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }} projection={{ type: "mercator" }} />
+      </div>
+    );
+
+    await flushMicrotasks();
+    const map = maplibreMocks.maps.at(-1);
+    expect(maplibreMocks.maps.length).toBe(1);
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }} projection={{ type: "globe" }} />
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(maplibreMocks.maps.length).toBe(1);
+    expect(map?.setProjection).toHaveBeenLastCalledWith({ type: "globe" });
+
+    unmount();
+  });
+
   test("MapRoute clears rendered geometry when coordinates shrink below two points", async () => {
     const { rerender, unmount } = render(
       <div className="h-60 w-60">
@@ -613,6 +638,42 @@ describe("Map UI", () => {
     await flushMicrotasks();
 
     expect(source?.setData).toHaveBeenLastCalledWith("https://example.com/b.geojson");
+
+    unmount();
+  });
+
+  test("MapClusterLayer re-adds recreated sources with the latest data", async () => {
+    const { rerender, unmount } = render(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapClusterLayer data="https://example.com/a.geojson" clusterRadius={50} />
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapClusterLayer data="https://example.com/b.geojson" clusterRadius={50} />
+        </Map>
+      </div>
+    );
+    await flushMicrotasks();
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapClusterLayer data="https://example.com/b.geojson" clusterRadius={60} />
+        </Map>
+      </div>
+    );
+    await flushMicrotasks();
+
+    const map = maplibreMocks.maps.at(-1);
+    const source = Array.from(map?.sources.values() ?? [])[0];
+    expect(source?.data).toBe("https://example.com/b.geojson");
 
     unmount();
   });

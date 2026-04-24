@@ -310,6 +310,12 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     mapInstance.setStyle(newStyle, { diff: true });
   }, [mapInstance, resolvedTheme, mapStyles]);
 
+  useEffect(() => {
+    if (!mapInstance || !projection || !isStyleLoaded) return;
+
+    mapInstance.setProjection(projection);
+  }, [mapInstance, projection, isStyleLoaded]);
+
   const contextValue = useMemo(
     () => ({
       map: mapInstance,
@@ -1234,7 +1240,8 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     clusterThresholds,
     pointColor,
   });
-  const initialDataRef = useRef(data);
+  const latestDataRef = useRef(data);
+  latestDataRef.current = data;
 
   // Add source and layers on mount
   useEffect(() => {
@@ -1243,7 +1250,7 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     // Add clustered GeoJSON source
     map.addSource(sourceId, {
       type: "geojson",
-      data: initialDataRef.current,
+      data: latestDataRef.current,
       cluster: true,
       clusterMaxZoom,
       clusterRadius,
