@@ -25,7 +25,7 @@ const sonnerMocks = vi.hoisted(() => ({
 vi.mock("sonner", () => sonnerMocks);
 
 const navigationMocks = vi.hoisted(() => {
-  const push = vi.fn((href: string) => (href.startsWith("/") ? `/en${href}` : href));
+  const push = vi.fn();
   return {
     __push: push,
     useRouter: () => ({ push }),

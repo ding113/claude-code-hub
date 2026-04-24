@@ -160,8 +160,8 @@ function renderUsageLogsView() {
 }
 
 function clickButton(container: HTMLElement, text: string) {
-  const button = Array.from(container.querySelectorAll("button")).find((item) =>
-    item.textContent?.includes(text)
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (item) => item.textContent?.trim() === text
   );
   if (!button) {
     throw new Error(`Button not found: ${text}`);
