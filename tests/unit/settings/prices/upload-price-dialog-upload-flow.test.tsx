@@ -25,13 +25,13 @@ const sonnerMocks = vi.hoisted(() => ({
 vi.mock("sonner", () => sonnerMocks);
 
 const navigationMocks = vi.hoisted(() => {
-  const push = vi.fn();
+  const push = vi.fn((href: string) => (href.startsWith("/") ? `/en${href}` : href));
   return {
     __push: push,
     useRouter: () => ({ push }),
   };
 });
-vi.mock("next/navigation", () => ({
+vi.mock("@/i18n/routing", () => ({
   useRouter: navigationMocks.useRouter,
 }));
 
@@ -359,7 +359,7 @@ describe("UploadPriceDialog: 上传流程", () => {
     unmount();
   });
 
-  test("isRequired=true 且有更新时，点击底部按钮应跳转 /dashboard", async () => {
+  test("isRequired=true 且有更新时，点击底部按钮应通过本地化路由跳转 dashboard", async () => {
     const messages = loadMessages();
     const originalFetch = globalThis.fetch;
     const fetchMock = vi.fn().mockResolvedValue({
@@ -405,7 +405,7 @@ describe("UploadPriceDialog: 上传流程", () => {
       await flushPromises();
     });
 
-    expect(navigationMocks.__push).toHaveBeenCalledWith("/dashboard");
+    expect(navigationMocks.__push).toHaveReturnedWith("/en/dashboard");
 
     globalThis.fetch = originalFetch;
     unmount();

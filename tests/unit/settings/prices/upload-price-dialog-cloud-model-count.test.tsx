@@ -11,7 +11,7 @@ import { UploadPriceDialog } from "@/app/[locale]/settings/prices/_components/up
 import { loadMessages } from "./test-messages";
 
 // 测试环境不加载 next/navigation 的真实实现（避免 Next.js 运行时依赖）
-vi.mock("next/navigation", () => ({
+vi.mock("@/i18n/routing", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
