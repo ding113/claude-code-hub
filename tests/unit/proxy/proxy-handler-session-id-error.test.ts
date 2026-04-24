@@ -18,9 +18,14 @@ const h = vi.hoisted(() => ({
     getProviderChain: () => [],
     setOriginalFormat: () => {},
     setHighConcurrencyModeEnabled: () => {},
+    setRawCrossProviderFallbackEnabled(enabled: boolean) {
+      h.session.rawCrossProviderFallbackEnabled = enabled;
+    },
+    isRawCrossProviderFallbackEnabled: () => !!h.session.rawCrossProviderFallbackEnabled,
     recordForwardStart: () => {},
     messageContext: null,
     provider: null,
+    rawCrossProviderFallbackEnabled: false,
   } as any,
 
   fromContextError: null as unknown,

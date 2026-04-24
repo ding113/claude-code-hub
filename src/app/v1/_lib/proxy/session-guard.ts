@@ -75,6 +75,11 @@ export class ProxySessionGuard {
 
     try {
       const systemSettings = await getCachedSystemSettings();
+      const rawFallbackEnabled =
+        (systemSettings.allowNonConversationEndpointProviderFallback ?? true) &&
+        session.getEndpointPolicy().allowRawCrossProviderFallback;
+      session.setRawCrossProviderFallbackEnabled(rawFallbackEnabled);
+      const allowRawSessionContext = session.isRawCrossProviderFallbackEnabled();
       session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
       let requestMessageBeforeProxyMutations = session.request.message as Record<string, unknown>;
       if (session.request.message && typeof session.request.message === "object") {
@@ -95,7 +100,7 @@ export class ProxySessionGuard {
       const requestMessage = session.request.message as Record<string, unknown>;
       const isCodexRequest = Array.isArray(requestMessage.input);
 
-      if (codexCompletionEnabled && isCodexRequest) {
+      if (!allowRawSessionContext && codexCompletionEnabled && isCodexRequest) {
         const completion = await completeCodexSessionIdentifiers({
           keyId,
           headers: session.headers,
@@ -140,6 +145,7 @@ export class ProxySessionGuard {
       session.setSessionId(sessionId);
 
       if (
+        !allowRawSessionContext &&
         claudeMetadataCompletionEnabled &&
         !warmupMaybeIntercepted &&
         session.originalFormat === "claude" &&

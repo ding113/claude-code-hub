@@ -21,6 +21,7 @@ import {
   sanitizeMultiplier,
 } from "@/lib/utils/cost-calculation";
 import { COST_SCALE, Decimal } from "@/lib/utils/currency";
+import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 import {
@@ -405,6 +406,10 @@ function buildCostCalculationOptions(
   };
 }
 
+function isNonBillingUsageEndpoint(session: ProxySession): boolean {
+  return isNonBillingEndpoint(session.getEndpoint());
+}
+
 type FinalizeDeferredStreamingResult = {
   /**
    * “内部结算用”的状态码。
@@ -730,7 +735,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
         meta.providerId,
         meta.providerPriority,
         meta.isFirstAttempt,
-        meta.isFailoverSuccess
+        meta.isFailoverSuccess,
+        session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
       );
 
       if (result.updated) {
@@ -1145,7 +1151,9 @@ export class ProxyResponseHandler {
           session,
           actualServiceTier
         );
-        ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        if (!isNonBillingUsageEndpoint(session)) {
+          ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        }
         const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
 
         if (usageMetrics) {
@@ -1156,7 +1164,15 @@ export class ProxyResponseHandler {
           );
         }
 
-        maybeSetCodexContext1m(session, provider, usageMetrics?.input_tokens);
+        // 关键：必须在 normalizeUsageWithSwap 之后再快照 billable 视图，
+        // 否则 updateRequestCostFromUsage / trackCostToRedis 会用未归一化的旧值，
+        // 导致缓存 TTL swap、bucket 归一化等场景下的账单与限流统计错位。
+        const billableUsageMetrics =
+          usageMetrics && !isNonBillingUsageEndpoint(session) ? usageMetrics : null;
+
+        if (billableUsageMetrics) {
+          maybeSetCodexContext1m(session, provider, billableUsageMetrics.input_tokens);
+        }
 
         // Codex: Extract prompt_cache_key and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
@@ -1167,7 +1183,8 @@ export class ProxyResponseHandler {
               void SessionManager.updateSessionWithCodexCacheKey(
                 session.sessionId,
                 promptCacheKey,
-                provider.id
+                provider.id,
+                session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to update Codex session:", err);
               });
@@ -1199,11 +1216,11 @@ export class ProxyResponseHandler {
           });
         }
 
-        if (usageRecord && usageMetrics && messageContext) {
+        if (usageRecord && billableUsageMetrics && messageContext) {
           const costUpdateResult = await updateRequestCostFromUsage(
             messageContext.id,
             session,
-            usageMetrics,
+            billableUsageMetrics,
             provider,
             provider.costMultiplier,
             session.getContext1mApplied(),
@@ -1217,7 +1234,7 @@ export class ProxyResponseHandler {
           // 追踪消费到 Redis（用于限流）
           await trackCostToRedis(
             session,
-            usageMetrics,
+            billableUsageMetrics,
             priorityServiceTierApplied,
             costUpdateResult.resolvedPricing,
             costUpdateResult.longContextPricing
@@ -1228,16 +1245,17 @@ export class ProxyResponseHandler {
         let costUsdStr: string | undefined;
         let rawCostUsdStr: string | undefined;
         let costBreakdown: CostBreakdown | undefined;
-        if (usageMetrics) {
+        if (billableUsageMetrics) {
           try {
             if (session.request.model) {
               const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
               if (resolvedPricing) {
                 ensurePricingResolutionSpecialSetting(session, resolvedPricing);
                 const longContextPricing =
-                  matchLongContextPricing(usageMetrics, resolvedPricing.priceData)?.pricing ?? null;
+                  matchLongContextPricing(billableUsageMetrics, resolvedPricing.priceData)
+                    ?.pricing ?? null;
                 const cost = calculateRequestCost(
-                  usageMetrics,
+                  billableUsageMetrics,
                   resolvedPricing.priceData,
                   buildCostCalculationOptions(
                     provider.costMultiplier,
@@ -1253,7 +1271,7 @@ export class ProxyResponseHandler {
                 // Raw cost without multiplier for Langfuse
                 if (provider.costMultiplier !== 1 || session.getGroupCostMultiplier() !== 1) {
                   const rawCost = calculateRequestCost(
-                    usageMetrics,
+                    billableUsageMetrics,
                     resolvedPricing.priceData,
                     buildCostCalculationOptions(
                       1.0,
@@ -1271,7 +1289,7 @@ export class ProxyResponseHandler {
                 // Cost breakdown for Langfuse (raw, no multiplier)
                 try {
                   costBreakdown = calculateRequestCostBreakdown(
-                    usageMetrics,
+                    billableUsageMetrics,
                     resolvedPricing.priceData,
                     {
                       context1mApplied: session.getContext1mApplied(),
@@ -2258,7 +2276,9 @@ export class ProxyResponseHandler {
           session,
           actualServiceTier
         );
-        ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        if (!isNonBillingUsageEndpoint(session)) {
+          ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+        }
         const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
 
         if (usageForCost) {
@@ -2284,7 +2304,8 @@ export class ProxyResponseHandler {
                   void SessionManager.updateSessionWithCodexCacheKey(
                     session.sessionId,
                     promptCacheKey,
-                    provider.id
+                    provider.id,
+                    session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
                   ).catch((err) => {
                     logger.error("[ResponseHandler] Failed to update Codex session (stream):", err);
                   });
@@ -2297,10 +2318,13 @@ export class ProxyResponseHandler {
           }
         }
 
+        const billableUsageForCost =
+          usageForCost && !isNonBillingUsageEndpoint(session) ? usageForCost : null;
+
         const costUpdateResult = await updateRequestCostFromUsage(
           messageContext.id,
           session,
-          usageForCost,
+          billableUsageForCost,
           provider,
           provider.costMultiplier,
           session.getContext1mApplied(),
@@ -2314,7 +2338,7 @@ export class ProxyResponseHandler {
         // 追踪消费到 Redis（用于限流）
         await trackCostToRedis(
           session,
-          usageForCost,
+          billableUsageForCost,
           priorityServiceTierApplied,
           costUpdateResult.resolvedPricing,
           costUpdateResult.longContextPricing
@@ -2324,16 +2348,17 @@ export class ProxyResponseHandler {
         let costUsdStr: string | undefined;
         let rawCostUsdStr: string | undefined;
         let costBreakdown: CostBreakdown | undefined;
-        if (usageForCost) {
+        if (billableUsageForCost) {
           try {
             if (session.request.model) {
               const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
               if (resolvedPricing) {
                 ensurePricingResolutionSpecialSetting(session, resolvedPricing);
                 const longContextPricing =
-                  matchLongContextPricing(usageForCost, resolvedPricing.priceData)?.pricing ?? null;
+                  matchLongContextPricing(billableUsageForCost, resolvedPricing.priceData)
+                    ?.pricing ?? null;
                 const cost = calculateRequestCost(
-                  usageForCost,
+                  billableUsageForCost,
                   resolvedPricing.priceData,
                   buildCostCalculationOptions(
                     provider.costMultiplier,
@@ -2349,7 +2374,7 @@ export class ProxyResponseHandler {
                 // Raw cost without multiplier for Langfuse
                 if (provider.costMultiplier !== 1 || session.getGroupCostMultiplier() !== 1) {
                   const rawCost = calculateRequestCost(
-                    usageForCost,
+                    billableUsageForCost,
                     resolvedPricing.priceData,
                     buildCostCalculationOptions(
                       1.0,
@@ -2367,7 +2392,7 @@ export class ProxyResponseHandler {
                 // Cost breakdown for Langfuse (raw, no multiplier)
                 try {
                   costBreakdown = calculateRequestCostBreakdown(
-                    usageForCost,
+                    billableUsageForCost,
                     resolvedPricing.priceData,
                     {
                       context1mApplied: session.getContext1mApplied(),
@@ -3408,6 +3433,15 @@ async function updateRequestCostFromUsage(
     };
   }
 
+  if (isNonBillingUsageEndpoint(session)) {
+    return {
+      costUsd: null,
+      resolvedPricing: null,
+      longContextPricing: null,
+      longContextPricingApplied: false,
+    };
+  }
+
   const originalModel = session.getOriginalModel();
   const redirectedModel = session.getCurrentModel();
 
@@ -3572,7 +3606,9 @@ export async function finalizeRequestStats(
     session,
     actualServiceTier
   );
-  ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+  if (!isNonBillingUsageEndpoint(session)) {
+    ensureCodexServiceTierResultSpecialSetting(session, codexPriorityBillingDecision);
+  }
   const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
   if (!usageMetrics) {
     await updateMessageRequestDetails(messageContext.id, {
@@ -3602,8 +3638,13 @@ export async function finalizeRequestStats(
     session,
     provider.swapCacheTtlBilling
   );
+  const billableNormalizedUsage = !isNonBillingUsageEndpoint(session) ? normalizedUsage : null;
 
-  maybeSetCodexContext1m(session, provider, normalizedUsage.input_tokens);
+  // 非计费端点（count_tokens / compact）不得触发 Codex 1M 上下文开关，
+  // 否则会影响同 session 后续真实请求的账单口径。
+  if (billableNormalizedUsage) {
+    maybeSetCodexContext1m(session, provider, billableNormalizedUsage.input_tokens);
+  }
 
   const costUpdateResult = await updateRequestCostFromUsage(
     messageContext.id,
@@ -3632,14 +3673,15 @@ export async function finalizeRequestStats(
   if (session.sessionId) {
     let costUsdStr: string | undefined;
     try {
-      if (session.request.model) {
+      if (billableNormalizedUsage && session.request.model) {
         const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
         if (resolvedPricing) {
           ensurePricingResolutionSpecialSetting(session, resolvedPricing);
           const longContextPricing =
-            matchLongContextPricing(normalizedUsage, resolvedPricing.priceData)?.pricing ?? null;
+            matchLongContextPricing(billableNormalizedUsage, resolvedPricing.priceData)?.pricing ??
+            null;
           const cost = calculateRequestCost(
-            normalizedUsage,
+            billableNormalizedUsage,
             resolvedPricing.priceData,
             buildCostCalculationOptions(
               provider.costMultiplier,
@@ -3723,6 +3765,7 @@ async function trackCostToRedis(
   longContextPricingOverride?: ResolvedLongContextPricing | null
 ): Promise<void> {
   if (!usage || !session.sessionId) return;
+  if (isNonBillingUsageEndpoint(session)) return;
 
   try {
     const messageContext = session.messageContext;

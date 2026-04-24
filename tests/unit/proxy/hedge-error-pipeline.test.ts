@@ -19,7 +19,12 @@ const h = vi.hoisted(() => ({
     getProviderChain: () => [],
     setOriginalFormat: vi.fn(),
     setHighConcurrencyModeEnabled: vi.fn(),
+    setRawCrossProviderFallbackEnabled(enabled: boolean) {
+      h.session.rawCrossProviderFallbackEnabled = enabled;
+    },
+    isRawCrossProviderFallbackEnabled: () => !!h.session.rawCrossProviderFallbackEnabled,
     recordForwardStart: vi.fn(),
+    rawCrossProviderFallbackEnabled: false,
   } as any,
   forwarderError: null as unknown,
   override: undefined as unknown,

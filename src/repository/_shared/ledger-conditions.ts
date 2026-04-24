@@ -1,12 +1,23 @@
 import { sql } from "drizzle-orm";
 import { usageLedger } from "@/drizzle/schema";
+import { NON_BILLING_ENDPOINTS } from "@/lib/utils/performance-formatter";
+
+const NON_BILLING_LEDGER_ENDPOINT_CONDITION = sql`(
+  ${usageLedger.endpoint} IS NULL
+  OR LOWER(REGEXP_REPLACE(${usageLedger.endpoint}, '/+$', '')) NOT IN (
+    ${sql.join(
+      NON_BILLING_ENDPOINTS.map((endpoint) => sql`${endpoint}`),
+      sql`, `
+    )}
+  )
+)`;
 
 /**
  * 只统计未被阻断的请求。
  * Warmup 行在触发器层面已过滤，不会进入 usage_ledger，
- * 因此此处只需排除 blocked_by IS NOT NULL 的记录。
+ * 此外 count_tokens / compact 虽写 message_request，但不得进入 billable ledger。
  */
-export const LEDGER_BILLING_CONDITION = sql`(${usageLedger.blockedBy} IS NULL)`;
+export const LEDGER_BILLING_CONDITION = sql`(${usageLedger.blockedBy} IS NULL AND ${NON_BILLING_LEDGER_ENDPOINT_CONDITION})`;
 
 /**
  * 非计费查询中排除被阻断请求的别名条件（语义更清晰）。

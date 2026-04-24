@@ -972,6 +972,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableBillingHeaderRectifier: z.boolean().optional(),
   // Response API input 整流器（可选）
   enableResponseInputRectifier: z.boolean().optional(),
+  // 非对话端点跨供应商 fallback（可选）
+  allowNonConversationEndpointProviderFallback: z.boolean().optional(),
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion: z.boolean().optional(),
   // Claude metadata.user_id 注入（可选）

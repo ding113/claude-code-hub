@@ -70,6 +70,7 @@ interface SystemSettingsFormProps {
     | "enableBillingHeaderRectifier"
     | "enableResponseInputRectifier"
     | "enableThinkingBudgetRectifier"
+    | "allowNonConversationEndpointProviderFallback"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
@@ -139,6 +140,10 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [enableResponseInputRectifier, setEnableResponseInputRectifier] = useState(
     initialSettings.enableResponseInputRectifier
   );
+  const [
+    allowNonConversationEndpointProviderFallback,
+    setAllowNonConversationEndpointProviderFallback,
+  ] = useState(initialSettings.allowNonConversationEndpointProviderFallback);
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
   );
@@ -244,6 +249,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableThinkingSignatureRectifier,
         enableBillingHeaderRectifier,
         enableResponseInputRectifier,
+        allowNonConversationEndpointProviderFallback,
         enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion,
         enableClaudeMetadataUserIdInjection,
@@ -279,6 +285,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableBillingHeaderRectifier(result.data.enableBillingHeaderRectifier);
         setEnableResponseInputRectifier(result.data.enableResponseInputRectifier);
+        setAllowNonConversationEndpointProviderFallback(
+          result.data.allowNonConversationEndpointProviderFallback
+        );
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
         setEnableClaudeMetadataUserIdInjection(result.data.enableClaudeMetadataUserIdInjection);
@@ -678,6 +687,29 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-response-input-rectifier"
             checked={enableResponseInputRectifier}
             onCheckedChange={(checked) => setEnableResponseInputRectifier(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Allow Non-Conversation Endpoint Provider Fallback */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+              <Terminal className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("allowNonConversationEndpointProviderFallback")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("allowNonConversationEndpointProviderFallbackDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="allow-non-conversation-endpoint-provider-fallback"
+            checked={allowNonConversationEndpointProviderFallback}
+            onCheckedChange={(checked) => setAllowNonConversationEndpointProviderFallback(checked)}
             disabled={isPending}
           />
         </div>

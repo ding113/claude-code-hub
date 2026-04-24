@@ -9,7 +9,7 @@
  * - 1-minute TTL for fresh settings
  * - Lazy loading on first access
  * - Manual invalidation when settings are saved
- * - Fail-open: returns default settings on error
+ * - DB 读取失败时优先复用旧缓存，否则回退到保守默认值
  */
 
 import { logger } from "@/lib/logger";
@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS: Pick<
   | "enableThinkingBudgetRectifier"
   | "enableBillingHeaderRectifier"
   | "enableResponseInputRectifier"
+  | "allowNonConversationEndpointProviderFallback"
   | "enableCodexSessionIdCompletion"
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
@@ -58,6 +59,8 @@ const DEFAULT_SETTINGS: Pick<
   enableThinkingBudgetRectifier: true,
   enableBillingHeaderRectifier: true,
   enableResponseInputRectifier: true,
+  // 安全敏感开关：冷缓存 / DB 读取失败时 fail-closed，避免意外重新开启跨供应商 raw fallback。
+  allowNonConversationEndpointProviderFallback: false,
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
@@ -104,7 +107,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 
     return settings;
   } catch (error) {
-    // Fail-open: return previous cached value or defaults
+    // 优先返回旧缓存；若没有缓存，则回退到保守默认值。
     logger.warn("[SystemSettingsCache] Failed to fetch settings, using fallback", {
       hasCachedValue: !!cachedSettings,
       error,
@@ -138,6 +141,8 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: DEFAULT_SETTINGS.enableBillingHeaderRectifier,
       enableResponseInputRectifier: DEFAULT_SETTINGS.enableResponseInputRectifier,
+      allowNonConversationEndpointProviderFallback:
+        DEFAULT_SETTINGS.allowNonConversationEndpointProviderFallback,
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: DEFAULT_SETTINGS.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,

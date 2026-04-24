@@ -866,7 +866,14 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(2);
-      expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith("sess-hedge", 2, 0, false, true);
+      expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith(
+        "sess-hedge",
+        2,
+        0,
+        false,
+        true,
+        null
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -1777,9 +1784,6 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(await response.text()).toContain('"provider":"p2"');
       expect(session.provider?.id).toBe(2);
 
-      // Key assertion: since only provider 2 actually launched (provider 1 failed at
-      // endpoint resolution before incrementing launchedProviderCount), the winner
-      // should be classified as "request_success" not "hedge_winner".
       const chain = session.getProviderChain();
       const winnerEntry = chain.find(
         (entry) => entry.reason === "request_success" || entry.reason === "hedge_winner"

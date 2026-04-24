@@ -115,8 +115,12 @@ vi.mock("@/drizzle/schema", () => ({
   },
   usageLedger: {
     blockedBy: "usageLedger.blockedBy",
+    endpoint: "usageLedger.endpoint",
   },
 }));
+
+const sqlMock = (...args: unknown[]) => args;
+sqlMock.join = (...args: unknown[]) => args;
 
 vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => args,
@@ -129,7 +133,7 @@ vi.mock("drizzle-orm", () => ({
   gte: (...args: unknown[]) => args,
   inArray: (...args: unknown[]) => args,
   lt: (...args: unknown[]) => args,
-  sql: (...args: unknown[]) => args,
+  sql: sqlMock,
   sum: (...args: unknown[]) => args,
 }));
 

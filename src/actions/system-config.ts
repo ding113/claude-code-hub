@@ -71,6 +71,7 @@ export async function saveSystemSettings(formData: {
   enableThinkingBudgetRectifier?: boolean;
   enableBillingHeaderRectifier?: boolean;
   enableResponseInputRectifier?: boolean;
+  allowNonConversationEndpointProviderFallback?: boolean;
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -118,6 +119,8 @@ export async function saveSystemSettings(formData: {
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
+      allowNonConversationEndpointProviderFallback:
+        validated.allowNonConversationEndpointProviderFallback,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,

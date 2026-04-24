@@ -171,6 +171,12 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  IF LOWER(REGEXP_REPLACE(COALESCE(NEW.endpoint, ''), '/+$', ''))
+    IN ('/v1/messages/count_tokens', '/v1/responses/compact') THEN
+    DELETE FROM usage_ledger WHERE request_id = NEW.id;
+    RETURN NEW;
+  END IF;
+
   IF NEW.provider_chain IS NOT NULL
      AND jsonb_typeof(NEW.provider_chain) = 'array'
      AND jsonb_array_length(NEW.provider_chain) > 0
@@ -182,7 +188,8 @@ BEGIN
     v_final_provider_id := NEW.provider_id;
   END IF;
 
-  v_is_success := (NEW.error_message IS NULL OR NEW.error_message = '');
+  v_is_success := (NEW.error_message IS NULL OR NEW.error_message = '')
+                  AND (NEW.status_code IS NULL OR NEW.status_code < 400);
 
   INSERT INTO usage_ledger (
     request_id, user_id, key, provider_id, final_provider_id,

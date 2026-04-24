@@ -225,6 +225,8 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
     enableBillingHeaderRectifier: dbSettings?.enableBillingHeaderRectifier ?? true,
     enableResponseInputRectifier: dbSettings?.enableResponseInputRectifier ?? true,
+    allowNonConversationEndpointProviderFallback:
+      dbSettings?.allowNonConversationEndpointProviderFallback ?? true,
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
     enableClaudeMetadataUserIdInjection: dbSettings?.enableClaudeMetadataUserIdInjection ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,

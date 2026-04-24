@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 
 const getCachedSystemSettingsMock = vi.fn();
@@ -74,9 +75,16 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     method: "POST",
     originalFormat: "claude",
     highConcurrencyModeEnabled: false,
+    rawCrossProviderFallbackEnabled: false,
     addSpecialSetting: vi.fn(),
     setHighConcurrencyModeEnabled(enabled: boolean) {
       this.highConcurrencyModeEnabled = enabled;
+    },
+    setRawCrossProviderFallbackEnabled(enabled: boolean) {
+      this.rawCrossProviderFallbackEnabled = enabled;
+    },
+    isRawCrossProviderFallbackEnabled() {
+      return this.rawCrossProviderFallbackEnabled;
     },
     shouldPersistSessionDebugArtifacts() {
       return !this.highConcurrencyModeEnabled;
@@ -100,6 +108,9 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     },
     getMessagesLength() {
       return 1;
+    },
+    getEndpointPolicy() {
+      return resolveEndpointPolicy("/v1/messages");
     },
     isWarmupRequest() {
       return true;

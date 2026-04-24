@@ -11,6 +11,7 @@ export default createTestRunnerConfig({
     "tests/integration/provider-endpoint-sync-race.test.ts",
     "tests/integration/provider-endpoint-regression-742.test.ts",
     "tests/integration/user-5h-reset-flow.test.ts",
+    "tests/integration/non-chat-endpoint-fallback-observability.test.ts",
     "tests/integration/usage-ledger.test.ts",
     "tests/api/users-actions.test.ts",
     "tests/api/providers-actions.test.ts",

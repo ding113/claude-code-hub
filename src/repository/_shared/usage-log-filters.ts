@@ -1,6 +1,7 @@
-import type { SQL } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
 import { eq, gte, lt, sql } from "drizzle-orm";
 import { messageRequest } from "@/drizzle/schema";
+import { NON_BILLING_ENDPOINTS } from "@/lib/utils/performance-formatter";
 
 export interface UsageLogFilterParams {
   sessionId?: string;
@@ -11,6 +12,55 @@ export interface UsageLogFilterParams {
   model?: string;
   endpoint?: string;
   minRetryCount?: number;
+}
+
+export const DEFAULT_HIDDEN_USAGE_LOG_ENDPOINTS = [...NON_BILLING_ENDPOINTS];
+
+function normalizeUsageLogEndpoint(endpoint: string): string {
+  const trimmed = endpoint.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed === "/" ? trimmed : trimmed.replace(/\/+$/, "");
+}
+
+function buildNormalizedEndpointSql(column: SQLWrapper): SQL {
+  return sql`LOWER(REGEXP_REPLACE(${column}, '/+$', ''))`;
+}
+
+export function shouldHideUsageLogEndpointsByDefault(endpoint: string | null | undefined): boolean {
+  return !endpoint?.trim();
+}
+
+export function buildUsageLogEndpointMatchCondition(
+  column: SQLWrapper,
+  explicitEndpoint: string | null | undefined
+): SQL | null {
+  if (!explicitEndpoint?.trim()) {
+    return null;
+  }
+
+  return sql`${buildNormalizedEndpointSql(column)} = ${normalizeUsageLogEndpoint(explicitEndpoint)}`;
+}
+
+export function buildDefaultHiddenUsageLogEndpointCondition(
+  column: SQLWrapper,
+  explicitEndpoint: string | null | undefined
+): SQL | null {
+  if (!shouldHideUsageLogEndpointsByDefault(explicitEndpoint)) {
+    return null;
+  }
+
+  return sql`(
+    ${column} IS NULL
+    OR ${buildNormalizedEndpointSql(column)} NOT IN (
+      ${sql.join(
+        DEFAULT_HIDDEN_USAGE_LOG_ENDPOINTS.map((endpoint) => sql`${endpoint}`),
+        sql`, `
+      )}
+    )
+  )`;
 }
 
 // 重试次数计算：
@@ -95,8 +145,24 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
     conditions.push(eq(messageRequest.model, filters.model));
   }
 
-  if (filters.endpoint) {
-    conditions.push(eq(messageRequest.endpoint, filters.endpoint));
+  const hiddenEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(
+    messageRequest.endpoint,
+    filters.endpoint
+  );
+  if (hiddenEndpointCondition) {
+    conditions.push(hiddenEndpointCondition);
+  }
+
+  if (filters.endpoint?.trim()) {
+    // 与 buildUsageLogEndpointMatchCondition 的 trim 语义保持一致，
+    // 避免纯空白输入把 null 推入 conditions，污染 and(...) 生成的 SQL。
+    const matchCondition = buildUsageLogEndpointMatchCondition(
+      messageRequest.endpoint,
+      filters.endpoint
+    );
+    if (matchCondition) {
+      conditions.push(matchCondition);
+    }
   }
 
   const minRetryCount = filters.minRetryCount ?? 0;

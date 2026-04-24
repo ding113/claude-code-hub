@@ -150,6 +150,10 @@ export class ProxySession {
   // 开启后：跳过部分 Redis 调试快照与实时观测写入，降低高并发下的热点开销
   private highConcurrencyModeEnabled = false;
 
+  // raw non-chat endpoint 跨 provider fallback 的运行时开关（per-request）
+  // endpoint policy 表示能力，系统设置决定本次请求是否实际启用。
+  private rawCrossProviderFallbackEnabled: boolean | null = null;
+
   /**
    * Promise cache for billing-related system settings load (concurrency safe).
    * Ensures the relevant system settings are loaded at most once per request/session.
@@ -346,6 +350,20 @@ export class ProxySession {
     return this.highConcurrencyModeEnabled;
   }
 
+  setRawCrossProviderFallbackEnabled(enabled: boolean): void {
+    this.rawCrossProviderFallbackEnabled = enabled;
+  }
+
+  isRawCrossProviderFallbackEnabled(): boolean {
+    const endpointPolicy =
+      this.endpointPolicy ??
+      resolveEndpointPolicy((this.requestUrl as URL | undefined)?.pathname ?? "/");
+    return (
+      endpointPolicy.allowRawCrossProviderFallback &&
+      (this.rawCrossProviderFallbackEnabled ?? false)
+    );
+  }
+
   shouldPersistSessionDebugArtifacts(): boolean {
     return !this.highConcurrencyModeEnabled;
   }
@@ -502,6 +520,10 @@ export class ProxySession {
    * 是否应该复用 provider（基于 messages 长度）
    */
   shouldReuseProvider(): boolean {
+    if (this.isRawCrossProviderFallbackEnabled()) {
+      return true;
+    }
+
     return this.getMessagesLength() > 1;
   }
 
@@ -552,6 +574,7 @@ export class ProxySession {
       strictBlockCause?: ProviderChainItem["strictBlockCause"]; // endpoint pool exhaustion cause
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
       modelRedirect?: ProviderChainItem["modelRedirect"];
+      rawCrossProviderFallbackEnabled?: boolean;
     }
   ): void {
     const item: ProviderChainItem = {
@@ -582,6 +605,7 @@ export class ProxySession {
       strictBlockCause: metadata?.strictBlockCause,
       endpointFilterStats: metadata?.endpointFilterStats,
       modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
+      rawCrossProviderFallbackEnabled: metadata?.rawCrossProviderFallbackEnabled,
     };
 
     // 避免重复添加同一个供应商

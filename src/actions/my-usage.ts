@@ -47,15 +47,30 @@ function scrubProviderChainRequestForReadonly(
 ): ProviderChainItem[] | null {
   return (
     providerChain?.map((item) => {
-      if (!item.errorDetails?.request) {
+      if (!item.errorDetails) {
         return item;
       }
 
-      const { request: _request, ...errorDetailsWithoutRequest } = item.errorDetails;
+      const { request: _request, provider, ...restErrorDetails } = item.errorDetails;
+      const shouldStronglyScrubProviderError = item.rawCrossProviderFallbackEnabled === true;
 
       return {
         ...item,
-        errorDetails: errorDetailsWithoutRequest,
+        errorDetails: {
+          ...restErrorDetails,
+          clientError: shouldStronglyScrubProviderError ? undefined : restErrorDetails.clientError,
+          provider: provider
+            ? shouldStronglyScrubProviderError
+              ? {
+                  ...provider,
+                  upstreamBody: undefined,
+                  upstreamParsed: undefined,
+                }
+              : {
+                  ...provider,
+                }
+            : undefined,
+        },
       };
     }) ?? null
   );

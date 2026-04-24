@@ -4,6 +4,16 @@ import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 
 const mocks = vi.hoisted(() => {
   return {
+    getCachedSystemSettings: vi.fn(async () => ({
+      allowNonConversationEndpointProviderFallback: true,
+      enableClaudeMetadataUserIdInjection: false,
+      enableBillingHeaderRectifier: false,
+      enableResponseFixer: false,
+      enableResponseInputRectifier: true,
+      enableThinkingSignatureRectifier: true,
+      enableThinkingBudgetRectifier: true,
+    })),
+    isHttp2Enabled: vi.fn(async () => false),
     getPreferredProviderEndpoints: vi.fn(),
     recordEndpointSuccess: vi.fn(async () => {}),
     recordEndpointFailure: vi.fn(async () => {}),
@@ -31,6 +41,15 @@ vi.mock("@/lib/logger", () => ({
     fatal: vi.fn(),
   },
 }));
+
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return {
+    ...actual,
+    getCachedSystemSettings: mocks.getCachedSystemSettings,
+    isHttp2Enabled: mocks.isHttp2Enabled,
+  };
+});
 
 vi.mock("@/lib/provider-endpoints/endpoint-selector", () => ({
   getPreferredProviderEndpoints: mocks.getPreferredProviderEndpoints,
@@ -204,13 +223,20 @@ function createSession(requestUrl: URL = new URL("https://example.com/v1/message
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
     providersSnapshot: [],
+    getEndpointPolicy() {
+      return this.endpointPolicy;
+    },
     isHeaderModified: () => false,
   });
+
+  session.setRawCrossProviderFallbackEnabled(
+    session.getEndpointPolicy().allowRawCrossProviderFallback
+  );
 
   return session as ProxySession;
 }
 
-describe("ProxyForwarder - raw passthrough policy parity (T5 RED)", () => {
+describe("ProxyForwarder - raw passthrough fallback parity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
@@ -219,7 +245,7 @@ describe("ProxyForwarder - raw passthrough policy parity (T5 RED)", () => {
   test.each([
     V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
     V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
-  ])("RED: %s 失败时都应统一为 no-retry/no-switch/no-circuit（Wave2 未实现前应失败）", async (pathname) => {
+  ])("%s 失败时应允许跨 provider fallback，但仍保持 no-circuit", async (pathname) => {
     vi.useFakeTimers();
 
     try {
@@ -268,7 +294,7 @@ describe("ProxyForwarder - raw passthrough policy parity (T5 RED)", () => {
 
       expect(caughtError).toBeInstanceOf(ProxyError);
       expect(doForward).toHaveBeenCalledTimes(1);
-      expect(selectAlternative).not.toHaveBeenCalled();
+      expect(selectAlternative).toHaveBeenCalledTimes(1);
       expect(mocks.recordFailure).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
