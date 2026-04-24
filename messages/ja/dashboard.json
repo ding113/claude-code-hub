@@ -1619,6 +1619,12 @@
       "deleteFailed": "ユーザーの削除に失敗しました",
       "userDeleted": "ユーザーが削除されました",
       "saving": "保存しています...",
+      "syncKeys": {
+        "button": "Key に同期",
+        "loading": "同期中...",
+        "success": "{count} 個の Key に同期しました",
+        "error": "Key の同期に失敗しました"
+      },
       "resetSection": {
         "title": "リセットオプション"
       },

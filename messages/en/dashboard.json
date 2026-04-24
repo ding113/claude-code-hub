@@ -1703,6 +1703,12 @@
       "deleteFailed": "Failed to delete user",
       "userDeleted": "User has been deleted",
       "saving": "Saving...",
+      "syncKeys": {
+        "button": "Sync to Keys",
+        "loading": "Syncing...",
+        "success": "Synced to {count} keys",
+        "error": "Failed to sync keys"
+      },
       "resetSection": {
         "title": "Reset Options"
       },

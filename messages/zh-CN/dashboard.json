@@ -1704,6 +1704,12 @@
       "deleteFailed": "删除用户失败",
       "userDeleted": "用户已删除",
       "saving": "保存中...",
+      "syncKeys": {
+        "button": "同步到 Key",
+        "loading": "同步中...",
+        "success": "已同步到 {count} 把 Key",
+        "error": "同步 Key 失败"
+      },
       "resetSection": {
         "title": "重置选项"
       },
