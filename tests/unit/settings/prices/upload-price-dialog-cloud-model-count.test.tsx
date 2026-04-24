@@ -10,8 +10,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { UploadPriceDialog } from "@/app/[locale]/settings/prices/_components/upload-price-dialog";
 import { loadMessages } from "./test-messages";
 
-// 测试环境不加载 next/navigation 的真实实现（避免 Next.js 运行时依赖）
-vi.mock("next/navigation", () => ({
+// 测试环境不加载 `@/i18n/routing` 的真实实现（避免 next-intl / Next.js 运行时依赖）
+vi.mock("@/i18n/routing", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 

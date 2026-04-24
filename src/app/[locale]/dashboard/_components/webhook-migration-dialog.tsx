@@ -1,8 +1,7 @@
 "use client";
 
 import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Settings, Webhook } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { getNotificationSettingsAction } from "@/actions/notifications";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRouter } from "@/i18n/routing";
 import { logger } from "@/lib/logger";
 import { setOnboardingCompleted, shouldShowOnboarding } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,6 @@ const MIGRATION_STEPS: MigrationStep[] = ["intro", "platform-select", "migrating
 
 export function WebhookMigrationDialog() {
   const t = useTranslations("dashboard.webhookMigration");
-  const locale = useLocale();
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
@@ -217,8 +216,8 @@ export function WebhookMigrationDialog() {
 
   const handleGoToSettings = useCallback(() => {
     setOpen(false);
-    router.push(`/${locale}/settings/notifications`);
-  }, [router, locale]);
+    router.push("/settings/notifications");
+  }, [router]);
 
   // Render step indicator
   const renderStepIndicator = () => {

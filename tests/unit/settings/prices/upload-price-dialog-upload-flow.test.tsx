@@ -31,7 +31,7 @@ const navigationMocks = vi.hoisted(() => {
     useRouter: () => ({ push }),
   };
 });
-vi.mock("next/navigation", () => ({
+vi.mock("@/i18n/routing", () => ({
   useRouter: navigationMocks.useRouter,
 }));
 
@@ -359,7 +359,7 @@ describe("UploadPriceDialog: 上传流程", () => {
     unmount();
   });
 
-  test("isRequired=true 且有更新时，点击底部按钮应跳转 /dashboard", async () => {
+  test("isRequired=true 且有更新时，点击底部按钮应通过本地化路由跳转 dashboard", async () => {
     const messages = loadMessages();
     const originalFetch = globalThis.fetch;
     const fetchMock = vi.fn().mockResolvedValue({
