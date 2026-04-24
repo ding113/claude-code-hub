@@ -295,6 +295,13 @@ export interface SyncUserConfigToKeysResult {
   summary: UserKeySyncSummary;
 }
 
+export interface BatchSyncUserConfigToKeysResult {
+  requestedCount: number;
+  updatedUserCount: number;
+  updatedKeyCount: number;
+  users: SyncUserConfigToKeysResult[];
+}
+
 function buildUserDbUpdates(
   validatedData: EditableUserData,
   options: { forceUpdatedAt?: boolean } = {}
@@ -1266,6 +1273,199 @@ function emitUserCreateAudit(user: UserCreateAuditSnapshot): void {
     after: user,
     success: true,
   });
+}
+
+export async function batchSyncUserConfigToKeys(params: {
+  userIds: number[];
+  updates?: BatchUpdateUsersParams["updates"];
+}): Promise<ActionResult<BatchSyncUserConfigToKeysResult>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const MAX_BATCH_SIZE = 500;
+    const requestedIds = Array.from(new Set(params.userIds)).filter((id) => Number.isInteger(id));
+    if (requestedIds.length === 0) {
+      return { ok: false, error: tError("REQUIRED_FIELD"), errorCode: ERROR_CODES.REQUIRED_FIELD };
+    }
+    if (requestedIds.length > MAX_BATCH_SIZE) {
+      return {
+        ok: false,
+        error: tError("BATCH_SIZE_EXCEEDED", { max: MAX_BATCH_SIZE }),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const updatesSchema = UpdateUserSchema.pick({
+      note: true,
+      tags: true,
+      rpm: true,
+      dailyQuota: true,
+      limit5hUsd: true,
+      limitWeeklyUsd: true,
+      limitMonthlyUsd: true,
+    });
+    const validationResult = updatesSchema.safeParse(params.updates ?? {});
+    if (!validationResult.success) {
+      return {
+        ok: false,
+        error: formatZodError(validationResult.error),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const updates = validationResult.data;
+    const hasAnyUpdate = Object.values(updates).some((value) => value !== undefined);
+    let result: BatchSyncUserConfigToKeysResult | null = null;
+    let keyStringsForCache: string[] = [];
+
+    await db.transaction(async (tx) => {
+      if (hasAnyUpdate) {
+        await tx
+          .update(usersTable)
+          .set(buildUserDbUpdates(updates, { forceUpdatedAt: true }))
+          .where(and(inArray(usersTable.id, requestedIds), isNull(usersTable.deletedAt)));
+      }
+
+      const userRows = await tx
+        .select({
+          id: usersTable.id,
+          dailyQuota: usersTable.dailyLimitUsd,
+          providerGroup: usersTable.providerGroup,
+          limit5hUsd: usersTable.limit5hUsd,
+          limitWeeklyUsd: usersTable.limitWeeklyUsd,
+          limitMonthlyUsd: usersTable.limitMonthlyUsd,
+          limitTotalUsd: usersTable.limitTotalUsd,
+          limitConcurrentSessions: usersTable.limitConcurrentSessions,
+          dailyResetMode: usersTable.dailyResetMode,
+          dailyResetTime: usersTable.dailyResetTime,
+        })
+        .from(usersTable)
+        .where(and(inArray(usersTable.id, requestedIds), isNull(usersTable.deletedAt)))
+        .orderBy(asc(usersTable.id));
+
+      const existingSet = new Set(userRows.map((row) => row.id));
+      const missingIds = requestedIds.filter((id) => !existingSet.has(id));
+      if (missingIds.length > 0) {
+        throw new BatchUpdateError(
+          `部分用户不存在: ${missingIds.join(", ")}`,
+          ERROR_CODES.NOT_FOUND
+        );
+      }
+
+      const keyRows = await tx
+        .select({
+          id: keysTable.id,
+          key: keysTable.key,
+          userId: keysTable.userId,
+        })
+        .from(keysTable)
+        .where(and(inArray(keysTable.userId, requestedIds), isNull(keysTable.deletedAt)))
+        .orderBy(asc(keysTable.userId), asc(keysTable.createdAt), asc(keysTable.id));
+
+      const keysByUserId = new Map<number, typeof keyRows>();
+      for (const keyRow of keyRows) {
+        const rows = keysByUserId.get(keyRow.userId) ?? [];
+        rows.push(keyRow);
+        keysByUserId.set(keyRow.userId, rows);
+      }
+
+      const userResults: SyncUserConfigToKeysResult[] = [];
+
+      for (const userRow of userRows) {
+        const userKeys = keysByUserId.get(userRow.id) ?? [];
+        const { configs, summary } = buildSyncedKeyConfigs(
+          {
+            dailyQuota: userRow.dailyQuota,
+            limit5hUsd: userRow.limit5hUsd,
+            limitWeeklyUsd: userRow.limitWeeklyUsd,
+            limitMonthlyUsd: userRow.limitMonthlyUsd,
+            limitTotalUsd: userRow.limitTotalUsd,
+            limitConcurrentSessions: userRow.limitConcurrentSessions,
+            providerGroup: userRow.providerGroup,
+            dailyResetMode: userRow.dailyResetMode,
+            dailyResetTime: userRow.dailyResetTime,
+          },
+          userKeys.length
+        );
+
+        for (const [index, keyRow] of userKeys.entries()) {
+          const config = configs[index];
+          await tx
+            .update(keysTable)
+            .set({
+              updatedAt: new Date(),
+              limit5hUsd: config.limit5hUsd === null ? null : config.limit5hUsd.toString(),
+              limitDailyUsd: config.limitDailyUsd === null ? null : config.limitDailyUsd.toString(),
+              dailyResetMode: config.dailyResetMode,
+              dailyResetTime: config.dailyResetTime,
+              limitWeeklyUsd:
+                config.limitWeeklyUsd === null ? null : config.limitWeeklyUsd.toString(),
+              limitMonthlyUsd:
+                config.limitMonthlyUsd === null ? null : config.limitMonthlyUsd.toString(),
+              limitTotalUsd: config.limitTotalUsd === null ? null : config.limitTotalUsd.toString(),
+              limitConcurrentSessions: config.limitConcurrentSessions,
+              providerGroup: config.providerGroup,
+            })
+            .where(and(eq(keysTable.id, keyRow.id), isNull(keysTable.deletedAt)));
+        }
+
+        userResults.push({
+          updatedUserId: userRow.id,
+          updatedKeyIds: userKeys.map((keyRow) => keyRow.id),
+          keyCount: userKeys.length,
+          summary,
+        });
+      }
+
+      keyStringsForCache = keyRows.map((keyRow) => keyRow.key);
+      result = {
+        requestedCount: requestedIds.length,
+        updatedUserCount: userRows.length,
+        updatedKeyCount: keyRows.length,
+        users: userResults,
+      };
+    });
+
+    await Promise.all([
+      ...requestedIds.map((userId) => invalidateCachedUser(userId).catch(() => {})),
+      ...keyStringsForCache.map((key) => invalidateCachedKey(key).catch(() => {})),
+    ]);
+
+    revalidatePath("/dashboard");
+    return {
+      ok: true,
+      data: result ?? {
+        requestedCount: requestedIds.length,
+        updatedUserCount: 0,
+        updatedKeyCount: 0,
+        users: [],
+      },
+    };
+  } catch (error) {
+    if (error instanceof BatchUpdateError) {
+      return { ok: false, error: error.message, errorCode: error.errorCode };
+    }
+
+    logger.error("批量同步用户配置到 Key 失败:", error);
+    const message = error instanceof Error ? error.message : "批量同步用户配置到 Key 失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
+  }
 }
 
 // 添加用户

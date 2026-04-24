@@ -1767,6 +1767,8 @@
         "title": "Confirm Batch Update",
         "description": "This will update {users} users and {keys} keys. This action cannot be undone.",
         "userFields": "User Fields",
+        "syncKeys": "Sync to Keys",
+        "syncKeysDescription": "This will overwrite all undeleted keys for these {users} users from their current user settings.",
         "keyFields": "Key Fields",
         "goBack": "Go Back",
         "update": "Confirm Update",
@@ -1775,8 +1777,10 @@
       "toast": {
         "usersUpdated": "Updated {count} users",
         "keysUpdated": "Updated {count} keys",
+        "keysSynced": "Synced {keys} keys for {users} users",
         "usersFailed": "User update failed: {error}",
         "keysFailed": "Key update failed: {error}",
+        "syncFailed": "Sync to keys failed: {error}",
         "batchFailed": "Batch update failed"
       },
       "validation": {
@@ -1798,12 +1802,14 @@
           "limit5h": "5h Limit (USD)",
           "limitDaily": "Daily Limit (USD)",
           "limitWeekly": "Weekly Limit (USD)",
-          "limitMonthly": "Monthly Limit (USD)"
+          "limitMonthly": "Monthly Limit (USD)",
+          "syncKeys": "Sync to Keys"
         },
         "placeholders": {
           "emptyToClear": "Leave empty to clear",
           "tagsPlaceholder": "Press enter to add, comma-separated",
-          "emptyNoLimit": "Leave empty for no limit"
+          "emptyNoLimit": "Leave empty for no limit",
+          "syncKeysDescription": "When enabled, user fields from this batch edit are saved first, then all undeleted keys for each user are overwritten from that user's settings."
         }
       },
       "key": {

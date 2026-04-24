@@ -13,6 +13,10 @@
       "redirected": "После перенаправления (фактическая модель)"
     },
     "billingModelSourcePlaceholder": "Выберите источник модели для тарификации",
+    "billingCorrection": {
+      "title": "Billing and Rate Correction",
+      "description": "Configure billing model source, Codex Priority billing rate source, and the Claude billing header rectifier in one place."
+    },
     "codexPriorityBillingSource": "Источник тарификации Codex Priority",
     "codexPriorityBillingSourceDesc": "Определяет, какой service_tier использовать для отдельной тарификации Codex Priority (Fast Mode). По умолчанию используется Requested Service Tier; если выбран Actual Service Tier, сначала берется значение из ответа, а при его отсутствии используется значение из запроса.",
     "codexPriorityBillingSourceOptions": {

@@ -47,13 +47,16 @@ vi.mock("@/lib/security/api-key-auth-cache", () => ({
 }));
 
 const userReturningMock = vi.fn();
+const batchUserRowsOrderByMock = vi.fn();
 const keyRowsOrderByMock = vi.fn();
+const userUpdatePayloads: Array<Record<string, unknown>> = [];
 const keyUpdatePayloads: Array<Record<string, unknown>> = [];
 const dbTransactionMock = vi.fn(async (fn: (tx: any) => Promise<void>) => {
   const tx = {
     update: vi.fn((table) => ({
       set: vi.fn((payload) => {
         if (table === usersTable) {
+          userUpdatePayloads.push(payload);
           return {
             where: vi.fn(() => ({
               returning: userReturningMock,
@@ -69,6 +72,14 @@ const dbTransactionMock = vi.fn(async (fn: (tx: any) => Promise<void>) => {
     })),
     select: vi.fn(() => ({
       from: vi.fn((table) => {
+        if (table === usersTable) {
+          return {
+            where: vi.fn(() => ({
+              orderBy: batchUserRowsOrderByMock,
+            })),
+          };
+        }
+
         expect(table).toBe(keysTable);
         return {
           where: vi.fn(() => ({
@@ -98,6 +109,7 @@ vi.mock("@/lib/logger", () => ({
 describe("users key sync actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    userUpdatePayloads.length = 0;
     keyUpdatePayloads.length = 0;
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     invalidateCachedKeyMock.mockResolvedValue(undefined);
@@ -207,6 +219,83 @@ describe("users key sync actions", () => {
     expect(keyUpdatePayloads.some((payload) => "cacheTtlPreference" in payload)).toBe(false);
     expect(invalidateCachedUserMock).toHaveBeenCalledWith(10);
     expect(invalidateCachedKeyMock).toHaveBeenCalledTimes(3);
+  });
+
+  test("batchSyncUserConfigToKeys saves batch user fields and syncs keys per user", async () => {
+    batchUserRowsOrderByMock.mockResolvedValue([
+      {
+        id: 10,
+        dailyQuota: "100.00",
+        providerGroup: "fast",
+        limit5hUsd: "0.02",
+        limitWeeklyUsd: null,
+        limitMonthlyUsd: null,
+        limitTotalUsd: null,
+        limitConcurrentSessions: 2,
+        dailyResetMode: "rolling",
+        dailyResetTime: "18:30",
+      },
+      {
+        id: 11,
+        dailyQuota: null,
+        providerGroup: "slow",
+        limit5hUsd: null,
+        limitWeeklyUsd: "9.00",
+        limitMonthlyUsd: null,
+        limitTotalUsd: null,
+        limitConcurrentSessions: 0,
+        dailyResetMode: "fixed",
+        dailyResetTime: "00:00",
+      },
+    ]);
+    keyRowsOrderByMock.mockResolvedValue([
+      { id: 1, key: "sk-1", userId: 10 },
+      { id: 2, key: "sk-2", userId: 10 },
+      { id: 3, key: "sk-3", userId: 10 },
+      { id: 4, key: "sk-4", userId: 11 },
+    ]);
+
+    const { batchSyncUserConfigToKeys } = await import("@/actions/users");
+    const result = await batchSyncUserConfigToKeys({
+      userIds: [10, 11],
+      updates: {
+        note: "batch-note",
+        dailyQuota: 100,
+        limit5hUsd: 0.02,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(userUpdatePayloads[0]).toMatchObject({
+      description: "batch-note",
+      dailyLimitUsd: "100",
+      limit5hUsd: "0.02",
+    });
+    expect(keyUpdatePayloads).toHaveLength(4);
+    expect(keyUpdatePayloads.slice(0, 3).map((payload) => payload.limitDailyUsd)).toEqual([
+      "33.33",
+      "33.33",
+      "33.33",
+    ]);
+    expect(keyUpdatePayloads.slice(0, 3).map((payload) => payload.limit5hUsd)).toEqual([
+      "0.01",
+      "0.01",
+      null,
+    ]);
+    expect(keyUpdatePayloads.slice(0, 3).map((payload) => payload.limitConcurrentSessions)).toEqual(
+      [1, 1, 0]
+    );
+    expect(keyUpdatePayloads[3]).toMatchObject({
+      limitDailyUsd: null,
+      limitWeeklyUsd: "9",
+      limitConcurrentSessions: 0,
+      providerGroup: "slow",
+      dailyResetMode: "fixed",
+      dailyResetTime: "00:00",
+    });
+    expect(invalidateCachedUserMock).toHaveBeenCalledWith(10);
+    expect(invalidateCachedUserMock).toHaveBeenCalledWith(11);
+    expect(invalidateCachedKeyMock).toHaveBeenCalledTimes(4);
   });
 
   test("syncUserConfigToKeys rejects non-admin users", async () => {

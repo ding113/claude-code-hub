@@ -1768,6 +1768,8 @@
         "title": "确认批量更新",
         "description": "此操作将更新 {users} 个用户和 {keys} 个密钥，操作不可撤销。",
         "userFields": "用户字段",
+        "syncKeys": "同步到 Key",
+        "syncKeysDescription": "会按当前用户配置覆盖这 {users} 个用户的全部未删除 Key。",
         "keyFields": "密钥字段",
         "goBack": "返回修改",
         "update": "确认更新",
@@ -1776,8 +1778,10 @@
       "toast": {
         "usersUpdated": "已更新 {count} 个用户",
         "keysUpdated": "已更新 {count} 个密钥",
+        "keysSynced": "已同步 {users} 个用户的 {keys} 把 Key",
         "usersFailed": "用户更新失败：{error}",
         "keysFailed": "密钥更新失败：{error}",
+        "syncFailed": "同步到 Key 失败：{error}",
         "batchFailed": "批量更新失败"
       },
       "validation": {
@@ -1799,12 +1803,14 @@
           "limit5h": "5h 限额 (USD)",
           "limitDaily": "每日限额 (USD)",
           "limitWeekly": "周限额 (USD)",
-          "limitMonthly": "月限额 (USD)"
+          "limitMonthly": "月限额 (USD)",
+          "syncKeys": "同步到 Key"
         },
         "placeholders": {
           "emptyToClear": "留空表示清空",
           "tagsPlaceholder": "输入后回车添加，支持逗号分隔",
-          "emptyNoLimit": "留空表示不限额"
+          "emptyNoLimit": "留空表示不限额",
+          "syncKeysDescription": "启用后，会先保存本批量编辑里的用户字段，再按用户配置同步该用户全部未删除 Key。"
         }
       },
       "key": {

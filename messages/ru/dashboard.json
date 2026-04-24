@@ -1734,6 +1734,8 @@
         "title": "Подтвердить массовое обновление",
         "description": "Будут обновлены {users} пользователей и {keys} ключей. Это действие нельзя отменить.",
         "userFields": "Поля пользователя",
+        "syncKeys": "Sync to Keys",
+        "syncKeysDescription": "This will overwrite all undeleted keys for these {users} users from their current user settings.",
         "keyFields": "Поля ключа",
         "goBack": "Вернуться и изменить",
         "update": "Подтвердить обновление",
@@ -1742,8 +1744,10 @@
       "toast": {
         "usersUpdated": "Обновлено {count} пользователей",
         "keysUpdated": "Обновлено {count} ключей",
+        "keysSynced": "Synced {keys} keys for {users} users",
         "usersFailed": "Не удалось обновить пользователей: {error}",
         "keysFailed": "Не удалось обновить ключи: {error}",
+        "syncFailed": "Sync to keys failed: {error}",
         "batchFailed": "Массовое обновление не удалось"
       },
       "validation": {
@@ -1765,12 +1769,14 @@
           "limit5h": "Лимит за 5 часов (USD)",
           "limitDaily": "Дневной лимит (USD)",
           "limitWeekly": "Недельный лимит (USD)",
-          "limitMonthly": "Месячный лимит (USD)"
+          "limitMonthly": "Месячный лимит (USD)",
+          "syncKeys": "Sync to Keys"
         },
         "placeholders": {
           "emptyToClear": "Оставьте пустым, чтобы очистить",
           "tagsPlaceholder": "Нажмите Enter, чтобы добавить, можно разделять запятыми",
-          "emptyNoLimit": "Оставьте пустым для безлимита"
+          "emptyNoLimit": "Оставьте пустым для безлимита",
+          "syncKeysDescription": "When enabled, user fields from this batch edit are saved first, then all undeleted keys for each user are overwritten from that user's settings."
         }
       },
       "key": {
