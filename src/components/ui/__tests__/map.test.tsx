@@ -549,6 +549,18 @@ describe("Map UI", () => {
     await flushMicrotasks();
     const map = maplibreMocks.maps.at(-1);
     expect(maplibreMocks.maps.length).toBe(1);
+    expect(map?.setProjection).toHaveBeenLastCalledWith({ type: "mercator" });
+    const initialProjectionCalls = map?.setProjection.mock.calls.length ?? 0;
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }} projection={{ type: "mercator" }} />
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(map?.setProjection).toHaveBeenCalledTimes(initialProjectionCalls);
 
     rerender(
       <div className="h-60 w-60">

@@ -9,6 +9,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useId,
   useImperativeHandle,
   useMemo,
@@ -23,6 +24,8 @@ const defaultStyles = {
   dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
   light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
 };
+
+const defaultMarkerOffset: NonNullable<MarkerOptions["offset"]> = [0, 0];
 
 type Theme = "light" | "dark";
 
@@ -169,6 +172,14 @@ function getViewport(map: MapLibreGL.Map): MapViewport {
   };
 }
 
+function getProjectionKey(projection?: MapLibreGL.ProjectionSpecification) {
+  return projection ? JSON.stringify(projection) : "";
+}
+
+function getMarkerOffsetTuple(offset: NonNullable<MarkerOptions["offset"]>): [number, number] {
+  return Array.isArray(offset) ? [offset[0], offset[1]] : [offset.x, offset.y];
+}
+
 const Map = forwardRef<MapRef, MapProps>(function Map(
   {
     children,
@@ -204,6 +215,15 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     }),
     [styles]
   );
+  const projectionKey = useMemo(() => getProjectionKey(projection), [projection]);
+  const projectionRef = useRef(projection);
+  projectionRef.current = projection;
+  const syncProjection = useEffectEvent((targetMap: MapLibreGL.Map) => {
+    const nextProjection = projectionRef.current;
+    if (!nextProjection) return;
+
+    targetMap.setProjection(nextProjection);
+  });
 
   // Expose the map instance to the parent component
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
@@ -231,9 +251,6 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     const syncStyleReady = () => {
       if (!map.isStyleLoaded()) return;
       setIsStyleLoaded(true);
-      if (projection) {
-        map.setProjection(projection);
-      }
     };
     const styleDataHandler = () => syncStyleReady();
     const idleHandler = () => syncStyleReady();
@@ -311,10 +328,10 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   }, [mapInstance, resolvedTheme, mapStyles]);
 
   useEffect(() => {
-    if (!mapInstance || !projection || !isStyleLoaded) return;
+    if (!mapInstance || !projectionKey || !isStyleLoaded) return;
 
-    mapInstance.setProjection(projection);
-  }, [mapInstance, projection, isStyleLoaded]);
+    syncProjection(mapInstance);
+  }, [mapInstance, projectionKey, isStyleLoaded]);
 
   const contextValue = useMemo(
     () => ({
@@ -441,6 +458,11 @@ function MapMarker({
   }
 
   const marker = markerRef.current;
+  const markerOffset = markerOptions.offset ?? defaultMarkerOffset;
+  const [markerOffsetX, markerOffsetY] = getMarkerOffsetTuple(markerOffset);
+  const markerRotation = markerOptions.rotation ?? 0;
+  const markerRotationAlignment = markerOptions.rotationAlignment ?? "auto";
+  const markerPitchAlignment = markerOptions.pitchAlignment ?? "auto";
 
   useEffect(() => {
     if (!map) return;
@@ -450,35 +472,43 @@ function MapMarker({
     return () => {
       marker.remove();
     };
+  }, [map, marker]);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, marker.addTo, marker.remove]);
+  useEffect(() => {
+    const currentLngLat = marker.getLngLat();
+    if (currentLngLat.lng !== longitude || currentLngLat.lat !== latitude) {
+      marker.setLngLat([longitude, latitude]);
+    }
 
-  if (marker.getLngLat().lng !== longitude || marker.getLngLat().lat !== latitude) {
-    marker.setLngLat([longitude, latitude]);
-  }
-  if (marker.isDraggable() !== draggable) {
-    marker.setDraggable(draggable);
-  }
+    if (marker.isDraggable() !== draggable) {
+      marker.setDraggable(draggable);
+    }
 
-  const currentOffset = marker.getOffset();
-  const newOffset = markerOptions.offset ?? [0, 0];
-  const [newOffsetX, newOffsetY] = Array.isArray(newOffset)
-    ? newOffset
-    : [newOffset.x, newOffset.y];
-  if (currentOffset.x !== newOffsetX || currentOffset.y !== newOffsetY) {
-    marker.setOffset(newOffset);
-  }
+    const currentOffset = marker.getOffset();
+    if (currentOffset.x !== markerOffsetX || currentOffset.y !== markerOffsetY) {
+      marker.setOffset([markerOffsetX, markerOffsetY]);
+    }
 
-  if (marker.getRotation() !== markerOptions.rotation) {
-    marker.setRotation(markerOptions.rotation ?? 0);
-  }
-  if (marker.getRotationAlignment() !== markerOptions.rotationAlignment) {
-    marker.setRotationAlignment(markerOptions.rotationAlignment ?? "auto");
-  }
-  if (marker.getPitchAlignment() !== markerOptions.pitchAlignment) {
-    marker.setPitchAlignment(markerOptions.pitchAlignment ?? "auto");
-  }
+    if (marker.getRotation() !== markerRotation) {
+      marker.setRotation(markerRotation);
+    }
+    if (marker.getRotationAlignment() !== markerRotationAlignment) {
+      marker.setRotationAlignment(markerRotationAlignment);
+    }
+    if (marker.getPitchAlignment() !== markerPitchAlignment) {
+      marker.setPitchAlignment(markerPitchAlignment);
+    }
+  }, [
+    marker,
+    longitude,
+    latitude,
+    draggable,
+    markerOffsetX,
+    markerOffsetY,
+    markerRotation,
+    markerRotationAlignment,
+    markerPitchAlignment,
+  ]);
 
   return <MarkerContext.Provider value={{ marker, map }}>{children}</MarkerContext.Provider>;
 }
