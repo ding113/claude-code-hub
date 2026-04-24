@@ -9,6 +9,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useId,
   useImperativeHandle,
   useMemo,
@@ -504,7 +505,9 @@ function MapMarker({
     marker.addTo(map);
 
     return () => {
-      marker.remove();
+      if (markerRef.current === marker) {
+        marker.remove();
+      }
     };
   }, [map, marker]);
 
@@ -603,20 +606,41 @@ function MarkerPopup({
 }: MarkerPopupProps) {
   const { marker, map } = useMarkerContext();
   const container = useMemo(() => document.createElement("div"), []);
-  const prevPopupOptions = useRef(popupOptions);
-
-  const popupRef = useRef<MapLibreGL.Popup | null>(null);
-  if (!popupRef.current) {
-    popupRef.current = new MapLibreGL.Popup({
-      offset: 16,
-      ...popupOptions,
-      closeButton: false,
-    })
-      .setMaxWidth("none")
-      .setDOMContent(container);
-  }
-
-  const popup = popupRef.current;
+  const popupConstructionOptions = useMemo(
+    () => ({
+      anchor: popupOptions.anchor,
+      closeOnClick: popupOptions.closeOnClick,
+      closeOnMove: popupOptions.closeOnMove,
+      focusAfterOpen: popupOptions.focusAfterOpen,
+      subpixelPositioning: popupOptions.subpixelPositioning,
+      locationOccludedOpacity: popupOptions.locationOccludedOpacity,
+      padding: popupOptions.padding,
+    }),
+    [
+      popupOptions.anchor,
+      popupOptions.closeOnClick,
+      popupOptions.closeOnMove,
+      popupOptions.focusAfterOpen,
+      popupOptions.subpixelPositioning,
+      popupOptions.locationOccludedOpacity,
+      popupOptions.padding,
+    ]
+  );
+  const popup = useMemo(
+    () =>
+      new MapLibreGL.Popup({
+        offset: 16,
+        ...popupConstructionOptions,
+        closeButton: false,
+      })
+        .setMaxWidth("none")
+        .setDOMContent(container),
+    [container, popupConstructionOptions]
+  );
+  const updatePopupOptions = useEffectEvent(() => {
+    popup.setOffset(popupOptions.offset ?? 16);
+    popup.setMaxWidth(popupOptions.maxWidth ?? "none");
+  });
 
   useEffect(() => {
     if (!map) return;
@@ -626,22 +650,15 @@ function MarkerPopup({
 
     return () => {
       marker.setPopup(null);
+      if (popup.isOpen()) {
+        popup.remove();
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, popup.setDOMContent, marker.setPopup, container, popup]);
+  }, [map, marker, popup, container]);
 
-  if (popup.isOpen()) {
-    const prev = prevPopupOptions.current;
-
-    if (prev.offset !== popupOptions.offset) {
-      popup.setOffset(popupOptions.offset ?? 16);
-    }
-    if (prev.maxWidth !== popupOptions.maxWidth && popupOptions.maxWidth) {
-      popup.setMaxWidth(popupOptions.maxWidth ?? "none");
-    }
-
-    prevPopupOptions.current = popupOptions;
-  }
+  useEffect(() => {
+    updatePopupOptions();
+  });
 
   const handleClose = () => popup.remove();
 
@@ -679,61 +696,65 @@ type MarkerTooltipProps = {
 function MarkerTooltip({ children, className, ...popupOptions }: MarkerTooltipProps) {
   const { marker, map } = useMarkerContext();
   const container = useMemo(() => document.createElement("div"), []);
-  const prevTooltipOptions = useRef(popupOptions);
+  const tooltipConstructionOptions = useMemo(
+    () => ({
+      anchor: popupOptions.anchor,
+      closeOnMove: popupOptions.closeOnMove,
+      focusAfterOpen: popupOptions.focusAfterOpen,
+      subpixelPositioning: popupOptions.subpixelPositioning,
+      locationOccludedOpacity: popupOptions.locationOccludedOpacity,
+      padding: popupOptions.padding,
+    }),
+    [
+      popupOptions.anchor,
+      popupOptions.closeOnMove,
+      popupOptions.focusAfterOpen,
+      popupOptions.subpixelPositioning,
+      popupOptions.locationOccludedOpacity,
+      popupOptions.padding,
+    ]
+  );
+  const tooltip = useMemo(
+    () =>
+      new MapLibreGL.Popup({
+        offset: 16,
+        ...tooltipConstructionOptions,
+        closeOnClick: true,
+        closeButton: false,
+      }).setMaxWidth("none"),
+    [tooltipConstructionOptions]
+  );
+  const updateTooltipOptions = useEffectEvent(() => {
+    if (!tooltip.isOpen()) return;
 
-  const tooltipRef = useRef<MapLibreGL.Popup | null>(null);
-  if (!tooltipRef.current) {
-    tooltipRef.current = new MapLibreGL.Popup({
-      offset: 16,
-      ...popupOptions,
-      closeOnClick: true,
-      closeButton: false,
-    }).setMaxWidth("none");
-  }
-
-  const tooltip = tooltipRef.current;
+    tooltip.setOffset(popupOptions.offset ?? 16);
+    tooltip.setMaxWidth(popupOptions.maxWidth ?? "none");
+  });
 
   useEffect(() => {
     if (!map) return;
 
     tooltip.setDOMContent(container);
 
+    const markerElement = marker.getElement();
     const handleMouseEnter = () => {
       tooltip.setLngLat(marker.getLngLat()).addTo(map);
     };
     const handleMouseLeave = () => tooltip.remove();
 
-    marker.getElement()?.addEventListener("mouseenter", handleMouseEnter);
-    marker.getElement()?.addEventListener("mouseleave", handleMouseLeave);
+    markerElement.addEventListener("mouseenter", handleMouseEnter);
+    markerElement.addEventListener("mouseleave", handleMouseLeave);
 
     return () => {
-      marker.getElement()?.removeEventListener("mouseenter", handleMouseEnter);
-      marker.getElement()?.removeEventListener("mouseleave", handleMouseLeave);
+      markerElement.removeEventListener("mouseenter", handleMouseEnter);
+      markerElement.removeEventListener("mouseleave", handleMouseLeave);
       tooltip.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    map,
-    container,
-    tooltip.remove,
-    marker.getElement,
-    tooltip.setLngLat,
-    tooltip.setDOMContent,
-    marker.getLngLat,
-  ]);
+  }, [map, marker, tooltip, container]);
 
-  if (tooltip.isOpen()) {
-    const prev = prevTooltipOptions.current;
-
-    if (prev.offset !== popupOptions.offset) {
-      tooltip.setOffset(popupOptions.offset ?? 16);
-    }
-    if (prev.maxWidth !== popupOptions.maxWidth && popupOptions.maxWidth) {
-      tooltip.setMaxWidth(popupOptions.maxWidth ?? "none");
-    }
-
-    prevTooltipOptions.current = popupOptions;
-  }
+  useEffect(() => {
+    updateTooltipOptions();
+  });
 
   return createPortal(
     <div
@@ -1026,25 +1047,45 @@ function MapPopup({
   ...popupOptions
 }: MapPopupProps) {
   const { map } = useMap();
-  const popupOptionsRef = useRef({
-    offset: popupOptions.offset,
-    maxWidth: popupOptions.maxWidth,
-  });
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const initialPositionRef = useRef<[number, number]>([longitude, latitude]);
   const container = useMemo(() => document.createElement("div"), []);
-
-  const popupRef = useRef<MapLibreGL.Popup | null>(null);
-  if (!popupRef.current) {
-    popupRef.current = new MapLibreGL.Popup({
-      offset: 16,
-      ...popupOptions,
-      closeButton: false,
-    })
-      .setMaxWidth("none")
-      .setLngLat([longitude, latitude]);
-  }
-  const popup = popupRef.current;
+  const popupConstructionOptions = useMemo(
+    () => ({
+      anchor: popupOptions.anchor,
+      closeOnClick: popupOptions.closeOnClick,
+      closeOnMove: popupOptions.closeOnMove,
+      focusAfterOpen: popupOptions.focusAfterOpen,
+      subpixelPositioning: popupOptions.subpixelPositioning,
+      locationOccludedOpacity: popupOptions.locationOccludedOpacity,
+      padding: popupOptions.padding,
+    }),
+    [
+      popupOptions.anchor,
+      popupOptions.closeOnClick,
+      popupOptions.closeOnMove,
+      popupOptions.focusAfterOpen,
+      popupOptions.subpixelPositioning,
+      popupOptions.locationOccludedOpacity,
+      popupOptions.padding,
+    ]
+  );
+  const popup = useMemo(
+    () =>
+      new MapLibreGL.Popup({
+        offset: 16,
+        ...popupConstructionOptions,
+        closeButton: false,
+      })
+        .setMaxWidth("none")
+        .setLngLat(initialPositionRef.current),
+    [popupConstructionOptions]
+  );
+  const updatePopupOptions = useEffectEvent(() => {
+    popup.setOffset(popupOptions.offset ?? 16);
+    popup.setMaxWidth(popupOptions.maxWidth ?? "none");
+  });
 
   useEffect(() => {
     if (!map) return;
@@ -1052,7 +1093,6 @@ function MapPopup({
     const onCloseProp = () => onCloseRef.current?.();
 
     popup.on("close", onCloseProp);
-
     popup.setDOMContent(container);
     popup.addTo(map);
 
@@ -1062,38 +1102,23 @@ function MapPopup({
         popup.remove();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    map,
-    popup.setDOMContent,
-    popup.remove,
-    popup.on,
-    container,
-    popup.off,
-    popup.isOpen,
-    popup.addTo,
-  ]);
+  }, [map, popup, container]);
 
   useEffect(() => {
-    if (!popup.isOpen()) return;
-
-    const prev = popupOptionsRef.current;
+    if (!map) return;
 
     if (popup.getLngLat().lng !== longitude || popup.getLngLat().lat !== latitude) {
       popup.setLngLat([longitude, latitude]);
     }
+    if (!popup.isOpen()) {
+      popup.setDOMContent(container);
+      popup.addTo(map);
+    }
+  }, [map, popup, longitude, latitude, container]);
 
-    if (prev.offset !== popupOptions.offset) {
-      popup.setOffset(popupOptions.offset ?? 16);
-    }
-    if (prev.maxWidth !== popupOptions.maxWidth && popupOptions.maxWidth) {
-      popup.setMaxWidth(popupOptions.maxWidth ?? "none");
-    }
-    popupOptionsRef.current = {
-      offset: popupOptions.offset,
-      maxWidth: popupOptions.maxWidth,
-    };
-  }, [popup, longitude, latitude, popupOptions.offset, popupOptions.maxWidth]);
+  useEffect(() => {
+    updatePopupOptions();
+  });
 
   const handleClose = () => {
     popup.remove();

@@ -31,45 +31,47 @@ const maplibreMocks = vi.hoisted(() => {
     constructor(options: Record<string, unknown>) {
       this.options = options;
       this.offset = options.offset ?? 16;
+      popups.push(this);
     }
 
-    setMaxWidth(value: string) {
+    setMaxWidth = vi.fn((value: string) => {
       this.maxWidth = value;
       return this;
-    }
+    });
 
-    setDOMContent(node: HTMLElement) {
+    setDOMContent = vi.fn((node: HTMLElement) => {
       this.container = node;
       if (!node.isConnected) {
         document.body.appendChild(node);
       }
       return this;
-    }
+    });
 
-    setLngLat([lng, lat]: [number, number]) {
+    setLngLat = vi.fn((next: [number, number] | { lng: number; lat: number }) => {
+      const [lng, lat] = Array.isArray(next) ? next : [next.lng, next.lat];
       this.lngLat = { lng, lat };
       return this;
-    }
+    });
 
-    getLngLat() {
-      return this.lngLat;
-    }
-
-    setOffset(value: unknown) {
-      this.offset = value;
-      return this;
-    }
-
-    addTo() {
+    addTo = vi.fn(() => {
       this.isOpenFlag = true;
       return this;
-    }
+    });
 
-    remove() {
+    remove = vi.fn(() => {
       this.isOpenFlag = false;
       this.events.get("close")?.forEach((handler) => handler());
       this.container?.remove();
       return this;
+    });
+
+    setOffset = vi.fn((value: unknown) => {
+      this.offset = value;
+      return this;
+    });
+
+    getLngLat() {
+      return this.lngLat;
     }
 
     isOpen() {
@@ -117,9 +119,7 @@ const maplibreMocks = vi.hoisted(() => {
       return this;
     }
 
-    remove() {
-      return this;
-    }
+    remove = vi.fn(() => this);
 
     getElement() {
       return this.element;
@@ -187,6 +187,7 @@ const maplibreMocks = vi.hoisted(() => {
 
   const maps: FakeMap[] = [];
   const markers: FakeMarker[] = [];
+  const popups: FakePopup[] = [];
 
   class FakeMap {
     container: HTMLElement;
@@ -361,6 +362,7 @@ const maplibreMocks = vi.hoisted(() => {
     FakePopup,
     maps,
     markers,
+    popups,
   };
 });
 
@@ -381,6 +383,7 @@ import {
   MapPopup,
   MapRoute,
   MarkerContent,
+  MarkerTooltip,
 } from "@/components/ui/map";
 
 function render(node: ReactNode) {
@@ -427,6 +430,7 @@ describe("Map UI", () => {
   beforeEach(() => {
     maplibreMocks.maps.length = 0;
     maplibreMocks.markers.length = 0;
+    maplibreMocks.popups.length = 0;
     document.body.innerHTML = "";
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
@@ -729,6 +733,155 @@ describe("Map UI", () => {
     const map = maplibreMocks.maps.at(-1);
     const source = Array.from(map?.sources.values() ?? [])[0];
     expect(source?.data).toBe("https://example.com/b.geojson");
+
+    unmount();
+  });
+
+  test("MapPopup reopens when coordinates change after manual close", async () => {
+    const { rerender, unmount } = render(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [10, 20], zoom: 4 }}>
+          <MapPopup longitude={10} latitude={20} closeButton closeLabel="关闭地图弹窗">
+            <div>first popup</div>
+          </MapPopup>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    const popup = maplibreMocks.popups[0];
+    const button = document.querySelector('[aria-label="关闭地图弹窗"]') as HTMLButtonElement;
+    click(button);
+
+    expect(popup?.isOpen()).toBe(false);
+    expect(document.body.textContent ?? "").not.toContain("first popup");
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [10, 20], zoom: 4 }}>
+          <MapPopup longitude={30} latitude={40} closeButton closeLabel="关闭地图弹窗">
+            <div>second popup</div>
+          </MapPopup>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(popup?.setLngLat).toHaveBeenLastCalledWith([30, 40]);
+    expect(popup?.addTo).toHaveBeenCalledTimes(2);
+    expect(document.body.textContent ?? "").toContain("second popup");
+
+    unmount();
+  });
+
+  test("MapPopup recreates construction-only options when they change", async () => {
+    const { rerender, unmount } = render(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapPopup longitude={1} latitude={2} anchor="bottom">
+            <div>popup</div>
+          </MapPopup>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(maplibreMocks.popups).toHaveLength(1);
+    expect(maplibreMocks.popups[0]?.options.anchor).toBe("bottom");
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapPopup longitude={1} latitude={2} anchor="top">
+            <div>popup</div>
+          </MapPopup>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(maplibreMocks.popups).toHaveLength(2);
+    expect(maplibreMocks.popups[1]?.options.anchor).toBe("top");
+
+    unmount();
+  });
+
+  test("MarkerTooltip syncs open tooltip options after render", async () => {
+    const { rerender, unmount } = render(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapMarker longitude={1} latitude={2}>
+            <MarkerTooltip offset={8} maxWidth="120px">
+              tooltip
+            </MarkerTooltip>
+          </MapMarker>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    const marker = maplibreMocks.markers[0];
+    const tooltip = maplibreMocks.popups[0];
+
+    act(() => {
+      marker?.getElement().dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+    });
+
+    expect(tooltip?.isOpen()).toBe(true);
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapMarker longitude={1} latitude={2}>
+            <MarkerTooltip offset={24} maxWidth="240px">
+              tooltip
+            </MarkerTooltip>
+          </MapMarker>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(tooltip?.setOffset).toHaveBeenLastCalledWith(24);
+    expect(tooltip?.setMaxWidth).toHaveBeenLastCalledWith("240px");
+
+    unmount();
+  });
+
+  test("MapMarker removes recreated markers once", async () => {
+    const { rerender, unmount } = render(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapMarker longitude={1} latitude={2} anchor="bottom">
+            <MarkerContent>marker</MarkerContent>
+          </MapMarker>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    const initialMarker = maplibreMocks.markers[0];
+
+    rerender(
+      <div className="h-60 w-60">
+        <Map viewport={{ center: [1, 2], zoom: 3 }}>
+          <MapMarker longitude={1} latitude={2} anchor="top">
+            <MarkerContent>marker</MarkerContent>
+          </MapMarker>
+        </Map>
+      </div>
+    );
+
+    await flushMicrotasks();
+
+    expect(initialMarker?.remove).toHaveBeenCalledTimes(1);
 
     unmount();
   });
