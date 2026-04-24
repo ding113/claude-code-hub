@@ -206,6 +206,7 @@ const maplibreMocks = vi.hoisted(() => {
     );
     setProjection = vi.fn();
     setPaintProperty = vi.fn();
+    resize = vi.fn();
 
     constructor(options: Record<string, unknown>) {
       this.container = options.container as HTMLElement;

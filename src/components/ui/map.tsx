@@ -250,7 +250,12 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     map.on("move", handleMove);
     setMapInstance(map);
 
+    const resizeFrame = window.requestAnimationFrame(() => {
+      map.resize();
+    });
+
     return () => {
+      window.cancelAnimationFrame(resizeFrame);
       map.off("load", loadHandler);
       map.off("idle", idleHandler);
       map.off("styledata", styleDataHandler);
@@ -261,7 +266,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       setMapInstance(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedTheme, mapStyles.light, viewport, projection, props, mapStyles.dark]);
+  }, []);
 
   // Sync controlled viewport to map
   useEffect(() => {
@@ -392,41 +397,44 @@ function MapMarker({
     onDragEnd,
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: marker instance is intentionally stable
-  const marker = useMemo(() => {
-    const markerInstance = new MapLibreGL.Marker({
+  const markerRef = useRef<MapLibreGL.Marker | null>(null);
+  if (!markerRef.current) {
+    markerRef.current = new MapLibreGL.Marker({
       ...markerOptions,
       element: document.createElement("div"),
       draggable,
     }).setLngLat([longitude, latitude]);
 
-    const handleClick = (e: MouseEvent) => callbacksRef.current.onClick?.(e);
-    const handleMouseEnter = (e: MouseEvent) => callbacksRef.current.onMouseEnter?.(e);
-    const handleMouseLeave = (e: MouseEvent) => callbacksRef.current.onMouseLeave?.(e);
+    const handleClick = (event: MouseEvent) => callbacksRef.current.onClick?.(event);
+    const handleMouseEnter = (event: MouseEvent) => callbacksRef.current.onMouseEnter?.(event);
+    const handleMouseLeave = (event: MouseEvent) => callbacksRef.current.onMouseLeave?.(event);
 
-    markerInstance.getElement()?.addEventListener("click", handleClick);
-    markerInstance.getElement()?.addEventListener("mouseenter", handleMouseEnter);
-    markerInstance.getElement()?.addEventListener("mouseleave", handleMouseLeave);
+    markerRef.current.getElement()?.addEventListener("click", handleClick);
+    markerRef.current.getElement()?.addEventListener("mouseenter", handleMouseEnter);
+    markerRef.current.getElement()?.addEventListener("mouseleave", handleMouseLeave);
 
     const handleDragStart = () => {
-      const lngLat = markerInstance.getLngLat();
+      const lngLat = markerRef.current?.getLngLat();
+      if (!lngLat) return;
       callbacksRef.current.onDragStart?.({ lng: lngLat.lng, lat: lngLat.lat });
     };
     const handleDrag = () => {
-      const lngLat = markerInstance.getLngLat();
+      const lngLat = markerRef.current?.getLngLat();
+      if (!lngLat) return;
       callbacksRef.current.onDrag?.({ lng: lngLat.lng, lat: lngLat.lat });
     };
     const handleDragEnd = () => {
-      const lngLat = markerInstance.getLngLat();
+      const lngLat = markerRef.current?.getLngLat();
+      if (!lngLat) return;
       callbacksRef.current.onDragEnd?.({ lng: lngLat.lng, lat: lngLat.lat });
     };
 
-    markerInstance.on("dragstart", handleDragStart);
-    markerInstance.on("drag", handleDrag);
-    markerInstance.on("dragend", handleDragEnd);
+    markerRef.current.on("dragstart", handleDragStart);
+    markerRef.current.on("drag", handleDrag);
+    markerRef.current.on("dragend", handleDragEnd);
+  }
 
-    return markerInstance;
-  }, [longitude, markerOptions, draggable, latitude]);
+  const marker = markerRef.current;
 
   useEffect(() => {
     if (!map) return;
@@ -523,18 +531,18 @@ function MarkerPopup({
   const container = useMemo(() => document.createElement("div"), []);
   const prevPopupOptions = useRef(popupOptions);
 
-  const popup = useMemo(() => {
-    const popupInstance = new MapLibreGL.Popup({
+  const popupRef = useRef<MapLibreGL.Popup | null>(null);
+  if (!popupRef.current) {
+    popupRef.current = new MapLibreGL.Popup({
       offset: 16,
       ...popupOptions,
       closeButton: false,
     })
       .setMaxWidth("none")
       .setDOMContent(container);
+  }
 
-    return popupInstance;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [container, popupOptions]);
+  const popup = popupRef.current;
 
   useEffect(() => {
     if (!map) return;
@@ -599,17 +607,17 @@ function MarkerTooltip({ children, className, ...popupOptions }: MarkerTooltipPr
   const container = useMemo(() => document.createElement("div"), []);
   const prevTooltipOptions = useRef(popupOptions);
 
-  const tooltip = useMemo(() => {
-    const tooltipInstance = new MapLibreGL.Popup({
+  const tooltipRef = useRef<MapLibreGL.Popup | null>(null);
+  if (!tooltipRef.current) {
+    tooltipRef.current = new MapLibreGL.Popup({
       offset: 16,
       ...popupOptions,
       closeOnClick: true,
       closeButton: false,
     }).setMaxWidth("none");
+  }
 
-    return tooltipInstance;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popupOptions]);
+  const tooltip = tooltipRef.current;
 
   useEffect(() => {
     if (!map) return;
@@ -944,23 +952,25 @@ function MapPopup({
   ...popupOptions
 }: MapPopupProps) {
   const { map } = useMap();
-  const popupOptionsRef = useRef(popupOptions);
+  const popupOptionsRef = useRef({
+    offset: popupOptions.offset,
+    maxWidth: popupOptions.maxWidth,
+  });
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const container = useMemo(() => document.createElement("div"), []);
 
-  const popup = useMemo(() => {
-    const popupInstance = new MapLibreGL.Popup({
+  const popupRef = useRef<MapLibreGL.Popup | null>(null);
+  if (!popupRef.current) {
+    popupRef.current = new MapLibreGL.Popup({
       offset: 16,
       ...popupOptions,
       closeButton: false,
     })
       .setMaxWidth("none")
       .setLngLat([longitude, latitude]);
-
-    return popupInstance;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [longitude, latitude, popupOptions]);
+  }
+  const popup = popupRef.current;
 
   useEffect(() => {
     if (!map) return;
@@ -990,7 +1000,9 @@ function MapPopup({
     popup.addTo,
   ]);
 
-  if (popup.isOpen()) {
+  useEffect(() => {
+    if (!popup.isOpen()) return;
+
     const prev = popupOptionsRef.current;
 
     if (popup.getLngLat().lng !== longitude || popup.getLngLat().lat !== latitude) {
@@ -1003,8 +1015,11 @@ function MapPopup({
     if (prev.maxWidth !== popupOptions.maxWidth && popupOptions.maxWidth) {
       popup.setMaxWidth(popupOptions.maxWidth ?? "none");
     }
-    popupOptionsRef.current = popupOptions;
-  }
+    popupOptionsRef.current = {
+      offset: popupOptions.offset,
+      maxWidth: popupOptions.maxWidth,
+    };
+  }, [popup, longitude, latitude, popupOptions.offset, popupOptions.maxWidth]);
 
   const handleClose = () => {
     popup.remove();
@@ -1219,6 +1234,7 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     clusterThresholds,
     pointColor,
   });
+  const initialDataRef = useRef(data);
 
   // Add source and layers on mount
   useEffect(() => {
@@ -1227,7 +1243,7 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     // Add clustered GeoJSON source
     map.addSource(sourceId, {
       type: "geojson",
-      data,
+      data: initialDataRef.current,
       cluster: true,
       clusterMaxZoom,
       clusterRadius,
@@ -1314,7 +1330,6 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     clusterThresholds[1],
     clusterMaxZoom,
     clusterRadius,
-    data,
     pointColor,
     clusterLayerId,
     clusterCountLayerId,
