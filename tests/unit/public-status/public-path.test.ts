@@ -47,6 +47,24 @@ describe("public status proxy path", () => {
     expect(response.headers.get("location")).toContain("/en/login");
   });
 
+  it("redirects bare root to locale login with a dashboard fallback", async () => {
+    const { default: proxyHandler } = await import("@/proxy");
+    const response = proxyHandler(new NextRequest("http://localhost/"));
+    const location = response.headers.get("location");
+
+    expect(location).toContain("/zh-CN/login");
+    expect(location).toContain("from=%2Fdashboard");
+  });
+
+  it("redirects locale root to login with a dashboard fallback", async () => {
+    const { default: proxyHandler } = await import("@/proxy");
+    const response = proxyHandler(new NextRequest("http://localhost/en"));
+    const location = response.headers.get("location");
+
+    expect(location).toContain("/en/login");
+    expect(location).toContain("from=%2Fdashboard");
+  });
+
   it("strips spoofed x-cch-public-status on non-status requests", async () => {
     const { default: proxyHandler } = await import("@/proxy");
     const response = proxyHandler(

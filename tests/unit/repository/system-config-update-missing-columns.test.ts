@@ -4,6 +4,7 @@ function createThenableQuery<T>(result: T) {
   const query: any = Promise.resolve(result);
 
   query.from = vi.fn(() => query);
+  query.orderBy = vi.fn(() => query);
   query.limit = vi.fn(() => query);
 
   query.set = vi.fn(() => query);
@@ -20,6 +21,7 @@ function createRejectedThenableQuery(error: unknown) {
   const query: any = {};
 
   query.from = vi.fn(() => query);
+  query.orderBy = vi.fn(() => query);
   query.limit = vi.fn(() => Promise.reject(error));
 
   query.set = vi.fn(() => query);
@@ -33,6 +35,88 @@ function createRejectedThenableQuery(error: unknown) {
 }
 
 describe("SystemSettings：数据库缺列时的保存兜底", () => {
+  test("getSystemSettings 应稳定按最早记录读取，避免无序 LIMIT 1 丢失 IP 提取配置", async () => {
+    vi.resetModules();
+
+    const now = new Date("2026-04-24T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const selectQuery = createThenableQuery([
+      {
+        id: 1,
+        siteTitle: "AutoBits Claude Code Hub",
+        allowGlobalUsageView: false,
+        currencyDisplay: "USD",
+        billingModelSource: "original",
+        codexPriorityBillingSource: "requested",
+        timezone: null,
+        enableAutoCleanup: false,
+        cleanupRetentionDays: 30,
+        cleanupSchedule: "0 2 * * *",
+        cleanupBatchSize: 10000,
+        enableClientVersionCheck: false,
+        verboseProviderError: false,
+        passThroughUpstreamErrorMessage: true,
+        enableHttp2: false,
+        enableHighConcurrencyMode: false,
+        interceptAnthropicWarmupRequests: false,
+        enableThinkingSignatureRectifier: true,
+        enableThinkingBudgetRectifier: true,
+        enableBillingHeaderRectifier: true,
+        enableResponseInputRectifier: true,
+        allowNonConversationEndpointProviderFallback: true,
+        enableCodexSessionIdCompletion: true,
+        enableClaudeMetadataUserIdInjection: true,
+        enableResponseFixer: true,
+        responseFixerConfig: {
+          fixTruncatedJson: true,
+          fixSseFormat: true,
+          fixEncoding: true,
+          maxJsonDepth: 200,
+          maxFixSize: 1024 * 1024,
+        },
+        quotaDbRefreshIntervalSeconds: 10,
+        quotaLeasePercent5h: "0.05",
+        quotaLeasePercentDaily: "0.05",
+        quotaLeasePercentWeekly: "0.05",
+        quotaLeasePercentMonthly: "0.05",
+        quotaLeaseCapUsd: null,
+        publicStatusWindowHours: 24,
+        publicStatusAggregationIntervalMinutes: 5,
+        ipExtractionConfig: {
+          headers: [
+            { name: "cf-connecting-ip" },
+            { name: "x-real-ip" },
+            { name: "x-forwarded-for", pick: "rightmost" },
+          ],
+        },
+        ipGeoLookupEnabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    const selectMock = vi.fn(() => selectQuery);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        update: vi.fn(() => createThenableQuery([])),
+        insert: vi.fn(() => createThenableQuery([])),
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { getSystemSettings } = await import("@/repository/system-config");
+
+    const result = await getSystemSettings();
+
+    expect(selectQuery.orderBy).toHaveBeenCalledTimes(1);
+    expect(result.ipExtractionConfig?.headers[0]?.name).toBe("cf-connecting-ip");
+
+    vi.useRealTimers();
+  });
+
   test("updateSystemSettings 遇到 42703（列缺失）应返回可行动的错误信息", async () => {
     vi.resetModules();
 
