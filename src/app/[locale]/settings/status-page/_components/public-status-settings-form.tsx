@@ -3,7 +3,7 @@
 import { ChevronDown, ChevronRight, ExternalLink, Info, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   type SavePublicStatusSettingsInput,
@@ -31,8 +31,9 @@ import {
   getProviderTypeTranslationKey,
   getUserFacingProviderTypes,
 } from "@/lib/provider-type-utils";
-import type { PublicStatusModelConfig } from "@/lib/public-status/config";
+import { type PublicStatusModelConfig, slugifyPublicGroup } from "@/lib/public-status/config";
 import { PUBLIC_STATUS_INTERVAL_OPTIONS } from "@/lib/public-status/constants";
+import { cn } from "@/lib/utils";
 import type { ProviderType } from "@/types/provider";
 import {
   normalizePublicStatusModels,
@@ -59,14 +60,38 @@ function getPublishableGroupCount(groups: PublicStatusSettingsFormGroup[]): numb
   return groups.filter((group) => group.enabled && group.publicModels.length > 0).length;
 }
 
-function slugifyGroupName(input: string): string {
-  const trimmed = (input || "").trim().toLowerCase();
-  if (!trimmed) return "";
-  return trimmed
-    .replace(/[^a-z0-9\s-]+/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
+interface DuplicateSlugErrorState {
+  slug: string;
+  groupNames: string[];
+}
+
+function findDuplicateSlugError(
+  groups: PublicStatusSettingsFormGroup[]
+): DuplicateSlugErrorState | null {
+  const seenGroupNameBySlug = new Map<string, string>();
+
+  for (const group of groups) {
+    if (!group.enabled || normalizePublicStatusModels(group.publicModels).length === 0) {
+      continue;
+    }
+
+    const normalizedSlug = slugifyPublicGroup(group.publicGroupSlug.trim() || group.groupName);
+    if (!normalizedSlug) {
+      continue;
+    }
+
+    const existingGroupName = seenGroupNameBySlug.get(normalizedSlug);
+    if (existingGroupName) {
+      return {
+        slug: normalizedSlug,
+        groupNames: [existingGroupName, group.groupName],
+      };
+    }
+
+    seenGroupNameBySlug.set(normalizedSlug, group.groupName);
+  }
+
+  return null;
 }
 
 function InfoTip({ text }: { text: string }) {
@@ -111,7 +136,11 @@ export function PublicStatusSettingsForm({
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(initialGroups.map((group) => [group.groupName, !group.enabled]))
   );
+  const [duplicateSlugError, setDuplicateSlugError] = useState<DuplicateSlugErrorState | null>(
+    null
+  );
   const [isPending, startTransition] = useTransition();
+  const slugInputRefs = useRef(new Map<string, HTMLInputElement>());
 
   const enabledGroupCount = useMemo(() => getPublishableGroupCount(groups), [groups]);
   const previewHref = "/status";
@@ -137,6 +166,27 @@ export function PublicStatusSettingsForm({
   };
 
   const handleSave = () => {
+    const nextDuplicateSlugError = findDuplicateSlugError(groups);
+    if (nextDuplicateSlugError) {
+      setDuplicateSlugError(nextDuplicateSlugError);
+      setCollapsedGroups((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          nextDuplicateSlugError.groupNames.map((groupName) => [groupName, false])
+        ),
+      }));
+      toast.error(t("statusPage.form.duplicateSlug", { slug: nextDuplicateSlugError.slug }));
+
+      window.requestAnimationFrame(() => {
+        const firstInput = slugInputRefs.current.get(nextDuplicateSlugError.groupNames[0]);
+        firstInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+        firstInput?.focus();
+      });
+      return;
+    }
+
+    setDuplicateSlugError(null);
+
     const payload: SavePublicStatusSettingsInput = {
       publicStatusWindowHours: Number(windowHours),
       publicStatusAggregationIntervalMinutes: Number(aggregationIntervalMinutes),
@@ -249,9 +299,17 @@ export function PublicStatusSettingsForm({
           {groups.map((group, index) => {
             const isCollapsed = collapsedGroups[group.groupName] ?? false;
             const selectedModelKeys = group.publicModels.map((model) => model.modelKey);
+            const isSlugConflict =
+              duplicateSlugError?.groupNames.includes(group.groupName) ?? false;
 
             return (
-              <Card key={group.groupName} className="overflow-hidden">
+              <Card
+                key={group.groupName}
+                className={cn(
+                  "overflow-hidden",
+                  isSlugConflict && "border-destructive/50 bg-destructive/5"
+                )}
+              >
                 <CardHeader className="gap-3 space-y-0 border-b border-border/60 pb-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <button
@@ -318,15 +376,35 @@ export function PublicStatusSettingsForm({
                         <InfoTip text={t("statusPage.form.slugTooltip")} />
                       </div>
                       <Input
+                        ref={(element) => {
+                          if (element) {
+                            slugInputRefs.current.set(group.groupName, element);
+                          } else {
+                            slugInputRefs.current.delete(group.groupName);
+                          }
+                        }}
                         value={group.publicGroupSlug}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          setDuplicateSlugError(null);
                           updateGroup(index, {
                             publicGroupSlug: event.target.value,
-                          })
-                        }
-                        placeholder={slugifyGroupName(group.displayName || group.groupName)}
+                          });
+                        }}
+                        placeholder={slugifyPublicGroup(group.displayName || group.groupName)}
                         disabled={isPending}
+                        aria-invalid={isSlugConflict || undefined}
+                        className={cn(
+                          isSlugConflict &&
+                            "border-destructive bg-destructive/5 focus-visible:border-destructive focus-visible:ring-destructive/30"
+                        )}
                       />
+                      {isSlugConflict ? (
+                        <p className="text-sm text-destructive">
+                          {t("statusPage.form.duplicateSlug", {
+                            slug: duplicateSlugError?.slug ?? "",
+                          })}
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="space-y-2 md:col-span-2">

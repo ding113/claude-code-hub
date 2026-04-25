@@ -7,6 +7,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PublicStatusSettingsForm } from "@/app/[locale]/settings/status-page/_components/public-status-settings-form";
+import { toast } from "sonner";
 
 const mockRefresh = vi.hoisted(() => vi.fn());
 const mockSavePublicStatusSettings = vi.hoisted(() => vi.fn());
@@ -373,5 +374,160 @@ describe("public-status settings form", () => {
     });
 
     unmount();
+  });
+
+  it("blocks submit and highlights slug inputs when enabled groups share the same slug", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const requestAnimationFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 0;
+      });
+
+    const { container, unmount } = render(
+      <PublicStatusSettingsForm
+        initialWindowHours={24}
+        initialAggregationIntervalMinutes={5}
+        initialGroups={
+          [
+            {
+              groupName: "openai-primary",
+              enabled: true,
+              displayName: "OpenAI Primary",
+              publicGroupSlug: "Open AI",
+              explanatoryCopy: "Primary public models",
+              sortOrder: 0,
+              publicModels: [{ modelKey: "gpt-4.1" }],
+            },
+            {
+              groupName: "openai-fallback",
+              enabled: true,
+              displayName: "OpenAI Fallback",
+              publicGroupSlug: "open-ai",
+              explanatoryCopy: "Fallback public models",
+              sortOrder: 1,
+              publicModels: [{ modelKey: "gpt-4.1" }],
+            },
+          ] as never
+        }
+      />
+    );
+
+    const submitButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("statusPage.form.save")
+    );
+    expect(submitButton).toBeTruthy();
+
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mockSavePublicStatusSettings).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith("statusPage.form.duplicateSlug");
+    const invalidSlugInputs = container.querySelectorAll('[aria-invalid="true"]');
+    expect(invalidSlugInputs).toHaveLength(2);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+    expect(document.activeElement).toBe(invalidSlugInputs[0]);
+
+    unmount();
+    requestAnimationFrame.mockRestore();
+  });
+
+  it("expands collapsed conflicting groups before focusing the first duplicate slug input", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    let frameCallback: FrameRequestCallback | undefined;
+    const requestAnimationFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        frameCallback = callback;
+        return 1;
+      });
+
+    const { container, unmount } = render(
+      <PublicStatusSettingsForm
+        initialWindowHours={24}
+        initialAggregationIntervalMinutes={5}
+        initialGroups={
+          [
+            {
+              groupName: "openai-primary",
+              enabled: true,
+              displayName: "OpenAI Primary",
+              publicGroupSlug: "Open AI",
+              explanatoryCopy: "Primary public models",
+              sortOrder: 0,
+              publicModels: [{ modelKey: "gpt-4.1" }],
+            },
+            {
+              groupName: "openai-fallback",
+              enabled: true,
+              displayName: "OpenAI Fallback",
+              publicGroupSlug: "open-ai",
+              explanatoryCopy: "Fallback public models",
+              sortOrder: 1,
+              publicModels: [{ modelKey: "gpt-4.1" }],
+            },
+          ] as never
+        }
+      />
+    );
+
+    const getInputByValue = (value: string) =>
+      Array.from(container.querySelectorAll("input")).find((input) => input.value === value);
+    const getGroupToggleButton = (groupName: string) =>
+      Array.from(container.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes(groupName)
+      );
+
+    await act(async () => {
+      getGroupToggleButton("openai-primary")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true })
+      );
+      getGroupToggleButton("openai-fallback")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true })
+      );
+    });
+
+    expect(getInputByValue("Open AI")).toBeUndefined();
+    expect(getInputByValue("open-ai")).toBeUndefined();
+
+    const submitButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("statusPage.form.save")
+    );
+    expect(submitButton).toBeTruthy();
+
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mockSavePublicStatusSettings).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith("statusPage.form.duplicateSlug");
+
+    const invalidSlugInputs = Array.from(
+      container.querySelectorAll<HTMLInputElement>('[aria-invalid="true"]')
+    );
+    expect(invalidSlugInputs).toHaveLength(2);
+    expect(invalidSlugInputs.map((input) => input.value)).toEqual(["Open AI", "open-ai"]);
+
+    await act(async () => {
+      frameCallback?.(0);
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+    expect(document.activeElement).toBe(invalidSlugInputs[0]);
+
+    unmount();
+    requestAnimationFrame.mockRestore();
   });
 });
