@@ -13,6 +13,7 @@ const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const STRATEGY = "node-custom-server-upgrade-hook" as const;
 const RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES = 1024 * 1024;
 const RESPONSES_WEBSOCKET_MAX_READ_BUFFER_BYTES = RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES + 14;
+const WEBSOCKET_CLOSE_PROTOCOL_ERROR = 1002;
 const WEBSOCKET_CLOSE_MESSAGE_TOO_BIG = 1009;
 
 type ResponsesWebSocketRuntimeSupport = {
@@ -37,6 +38,7 @@ export type ResponsesWebSocketRuntimeOptions = {
 };
 
 type DecodedWebSocketFrame = {
+  fin: boolean;
   opcode: number;
   payload: Buffer;
 };
@@ -45,6 +47,7 @@ type ClientWebSocketFrameDecodeResult = {
   frames: DecodedWebSocketFrame[];
   remaining: Buffer;
   exceededLimit: boolean;
+  protocolError: boolean;
 };
 
 let connectionSequence = 0;
@@ -191,6 +194,8 @@ function startResponsesWebSocketFrameLoop(
     },
   });
   let readBuffer: Buffer = head.length > 0 ? Buffer.from(head) : Buffer.alloc(0);
+  let fragmentedTextPayloads: Buffer[] | null = null;
+  let fragmentedTextByteLength = 0;
   let processing = Promise.resolve();
   let closing = false;
 
@@ -209,6 +214,11 @@ function startResponsesWebSocketFrameLoop(
   const dispatchFrame = async (frame: DecodedWebSocketFrame) => {
     if (closing) return;
 
+    if ((frame.opcode === 0x8 || frame.opcode === 0x9 || frame.opcode === 0xa) && !frame.fin) {
+      closeSocket(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+      return;
+    }
+
     if (frame.opcode === 0x8) {
       closeSocket();
       return;
@@ -220,6 +230,49 @@ function startResponsesWebSocketFrameLoop(
     }
 
     if (frame.opcode === 0xa) return;
+
+    if (frame.opcode === 0x0) {
+      if (!fragmentedTextPayloads) {
+        closeSocket(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+        return;
+      }
+
+      fragmentedTextPayloads.push(frame.payload);
+      fragmentedTextByteLength += frame.payload.length;
+      if (fragmentedTextByteLength > RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES) {
+        closeSocket(WEBSOCKET_CLOSE_MESSAGE_TOO_BIG);
+        return;
+      }
+
+      if (!frame.fin) return;
+
+      const textPayload = Buffer.concat(fragmentedTextPayloads, fragmentedTextByteLength).toString(
+        "utf8"
+      );
+      fragmentedTextPayloads = null;
+      fragmentedTextByteLength = 0;
+      const events = await handler.handleFrame(textPayload);
+      for (const event of events) {
+        socket.write(encodeWebSocketTextFrame(JSON.stringify(event)));
+      }
+      return;
+    }
+
+    if (fragmentedTextPayloads) {
+      closeSocket(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+      return;
+    }
+
+    if (frame.opcode === 0x1 && !frame.fin) {
+      fragmentedTextPayloads = [frame.payload];
+      fragmentedTextByteLength = frame.payload.length;
+      return;
+    }
+
+    if (frame.opcode === 0x2 && !frame.fin) {
+      closeSocket(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+      return;
+    }
 
     const payload =
       frame.opcode === 0x1 ? frame.payload.toString("utf8") : new Uint8Array(frame.payload);
@@ -238,6 +291,10 @@ function startResponsesWebSocketFrameLoop(
     const decoded = decodeClientWebSocketFrames(readBuffer);
     if (decoded.exceededLimit) {
       closeSocket(WEBSOCKET_CLOSE_MESSAGE_TOO_BIG);
+      return;
+    }
+    if (decoded.protocolError) {
+      closeSocket(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
       return;
     }
 
@@ -289,6 +346,7 @@ function decodeClientWebSocketFrames(buffer: Buffer): ClientWebSocketFrameDecode
   while (offset + 2 <= buffer.length) {
     const firstByte = buffer[offset]!;
     const secondByte = buffer[offset + 1]!;
+    const fin = (firstByte & 0x80) !== 0;
     const opcode = firstByte & 0x0f;
     const masked = (secondByte & 0x80) !== 0;
     let payloadLength = secondByte & 0x7f;
@@ -302,20 +360,42 @@ function decodeClientWebSocketFrames(buffer: Buffer): ClientWebSocketFrameDecode
       if (offset + 10 > buffer.length) break;
       const length64 = buffer.readBigUInt64BE(offset + 2);
       if (length64 > BigInt(RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES)) {
-        return { frames, remaining: buffer.subarray(offset), exceededLimit: true };
+        return {
+          frames,
+          remaining: buffer.subarray(offset),
+          exceededLimit: true,
+          protocolError: false,
+        };
       }
       if (length64 > BigInt(Number.MAX_SAFE_INTEGER)) {
-        return { frames, remaining: buffer.subarray(offset), exceededLimit: true };
+        return {
+          frames,
+          remaining: buffer.subarray(offset),
+          exceededLimit: true,
+          protocolError: false,
+        };
       }
       payloadLength = Number(length64);
       headerLength = 10;
     }
 
     if (payloadLength > RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES) {
-      return { frames, remaining: buffer.subarray(offset), exceededLimit: true };
+      return {
+        frames,
+        remaining: buffer.subarray(offset),
+        exceededLimit: true,
+        protocolError: false,
+      };
     }
 
-    if (!masked) break;
+    if (!masked || (isControlOpcode(opcode) && (!fin || payloadLength > 125))) {
+      return {
+        frames,
+        remaining: buffer.subarray(offset),
+        exceededLimit: false,
+        protocolError: true,
+      };
+    }
 
     const maskOffset = offset + headerLength;
     const payloadOffset = maskOffset + 4;
@@ -328,11 +408,20 @@ function decodeClientWebSocketFrames(buffer: Buffer): ClientWebSocketFrameDecode
       payload[index] = buffer[payloadOffset + index]! ^ mask[index % 4]!;
     }
 
-    frames.push({ opcode, payload });
+    frames.push({ fin, opcode, payload });
     offset = frameEnd;
   }
 
-  return { frames, remaining: buffer.subarray(offset), exceededLimit: false };
+  return {
+    frames,
+    remaining: buffer.subarray(offset),
+    exceededLimit: false,
+    protocolError: false,
+  };
+}
+
+function isControlOpcode(opcode: number): boolean {
+  return opcode === 0x8 || opcode === 0x9 || opcode === 0xa;
 }
 
 function encodeWebSocketTextFrame(text: string): Buffer {

@@ -13,6 +13,7 @@ import {
 const servers: Array<ReturnType<typeof createServer>> = [];
 const OVERSIZED_CLIENT_PAYLOAD_BYTES = 1024 * 1024 + 1;
 const OVERSIZED_CLIENT_READ_BUFFER_BYTES = OVERSIZED_CLIENT_PAYLOAD_BYTES + 14;
+const WEBSOCKET_CLOSE_PROTOCOL_ERROR = 1002;
 const WEBSOCKET_CLOSE_MESSAGE_TOO_BIG = 1009;
 
 function randomWebSocketKey(): string {
@@ -112,6 +113,15 @@ function encodeMaskedClientBinaryFrame(payload: Uint8Array): Buffer {
   return encodeMaskedClientFrame(0x2, Buffer.from(payload));
 }
 
+function encodeMaskedClientFrameFragment(opcode: number, payload: string, fin: boolean): Buffer {
+  return encodeMaskedClientFrame(opcode, Buffer.from(payload), { fin });
+}
+
+function encodeUnmaskedClientTextFrame(payload: string): Buffer {
+  const body = Buffer.from(payload);
+  return Buffer.concat([Buffer.from([0x80 | 0x1, body.length]), body]);
+}
+
 function encodeMaskedClientPingFrame(payload: string): Buffer {
   return encodeMaskedClientFrame(0x9, Buffer.from(payload));
 }
@@ -120,11 +130,15 @@ function encodeClientCloseFrame(): Buffer {
   return encodeMaskedClientFrame(0x8, Buffer.alloc(0));
 }
 
-function encodeMaskedClientFrame(opcode: number, payload: Buffer): Buffer {
+function encodeMaskedClientFrame(
+  opcode: number,
+  payload: Buffer,
+  options: { fin?: boolean } = {}
+): Buffer {
   const mask = Buffer.from([0x12, 0x34, 0x56, 0x78]);
   const headerLength = payload.length < 126 ? 2 : payload.length <= 0xffff ? 4 : 10;
   const header = Buffer.alloc(headerLength);
-  header[0] = 0x80 | opcode;
+  header[0] = ((options.fin ?? true) ? 0x80 : 0) | opcode;
 
   if (payload.length < 126) {
     header[1] = 0x80 | payload.length;
@@ -452,6 +466,89 @@ describe("responses WebSocket runtime support", () => {
     });
   });
 
+  test("reassembles fragmented masked client text frames before dispatching", async () => {
+    const executorInputs: ResponsesWebSocketExecutorInput[] = [];
+    const executor = vi.fn(async (input: ResponsesWebSocketExecutorInput) => {
+      executorInputs.push(input);
+      return {
+        type: "response.completed",
+        response: { id: "resp_fragmented_runtime", status: "completed" },
+      };
+    });
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    const payload = JSON.stringify({
+      type: "response.create",
+      body: { input: createInput("fragmented text"), stream: true },
+    });
+    const splitAt = 19;
+    const [textFrame] = await readWebSocketTextFrames(
+      port,
+      [
+        encodeMaskedClientFrameFragment(0x1, payload.slice(0, splitAt), false),
+        encodeMaskedClientFrameFragment(0x0, payload.slice(splitAt), true),
+      ],
+      1
+    );
+
+    expect(JSON.parse(textFrame!)).toEqual({
+      type: "response.completed",
+      response: { id: "resp_fragmented_runtime", status: "completed" },
+    });
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(executorInputs[0]?.upstreamBody.input).toEqual(createInput("fragmented text"));
+  });
+
+  test("closes with protocol error when a continuation frame has no active text message", async () => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_unreachable", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    const closePayload = await readWebSocketCloseFrame(port, [
+      encodeMaskedClientFrameFragment(0x0, "orphan-continuation", true),
+    ]);
+
+    expect(closePayload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+    expect(executor).not.toHaveBeenCalled();
+  });
+
+  test("closes unmasked client frames with protocol error without buffering them", async () => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_unreachable", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    const closePayload = await readWebSocketCloseFrame(port, [
+      encodeUnmaskedClientTextFrame(
+        JSON.stringify({ type: "response.create", body: { input: createInput() } })
+      ),
+    ]);
+
+    expect(closePayload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+    expect(executor).not.toHaveBeenCalled();
+  });
+
   test("returns protocol error events over the socket and keeps the connection usable", async () => {
     const executor = vi.fn(async () => ({
       type: "response.completed",
@@ -584,7 +681,10 @@ describe("responses WebSocket runtime support", () => {
     const port = await listen(server);
 
     const closePayload = await readWebSocketCloseFrame(port, [
-      Buffer.concat([Buffer.from([0x81, 0x00]), Buffer.alloc(OVERSIZED_CLIENT_READ_BUFFER_BYTES)]),
+      Buffer.concat([
+        encodeMaskedClientFrameHeader(0x1, OVERSIZED_CLIENT_PAYLOAD_BYTES - 1),
+        Buffer.alloc(OVERSIZED_CLIENT_PAYLOAD_BYTES),
+      ]),
     ]);
 
     expect(closePayload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_MESSAGE_TOO_BIG);
