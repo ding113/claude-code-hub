@@ -10,6 +10,7 @@
     "intervalOption": "{minutes} 分钟",
     "slug": "Slug",
     "slugTooltip": "用于分组独立状态页的 URL 标识。留空将基于对外显示名自动生成。只能包含小写字母、数字和连字符。",
+    "duplicateSlug": "Slug {slug} 被多个公开分组使用。请先修改为互不重复的 slug 再保存。",
     "copy": "说明文案",
     "sortOrder": "排序",
     "sortOrderTooltip": "控制公开状态页中分组的显示顺序。数值越小越靠前（与供应商优先级一致）。相同数值按分组名排序。",

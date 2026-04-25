@@ -69,7 +69,8 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
     providerGroups.map((group) => ({
       groupName: group.name,
       ...parsePublicStatusDescription(group.description),
-    }))
+    })),
+    { duplicateSlugStrategy: "suffix" }
   );
   const latestPrices = await findLatestPricesByModels(
     enabledGroups.flatMap((group) => getPublicStatusModelKeys(group.publicModels))
