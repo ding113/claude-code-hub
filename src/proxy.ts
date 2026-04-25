@@ -2,19 +2,12 @@ import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
 import type { Locale } from "@/i18n/config";
 import { routing } from "@/i18n/routing";
+import { getDefaultPublicPathPatterns, isPublicPath } from "@/lib/auth/public-path-policy";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
-// Public paths that don't require authentication
-// Note: These paths will be automatically prefixed with locale by next-intl middleware
-const PUBLIC_PATH_PATTERNS = [
-  "/login",
-  "/usage-doc",
-  "/status",
-  "/api/auth/login",
-  "/api/auth/logout",
-];
+const PUBLIC_PATH_PATTERNS = getDefaultPublicPathPatterns();
 
 const API_PROXY_PATH = "/v1";
 
@@ -83,11 +76,10 @@ function proxyHandler(request: NextRequest) {
     : pathname;
 
   // Check if current path (without locale) is a public path
-  const isPublicPath = PUBLIC_PATH_PATTERNS.some((pattern) =>
-    matchesPublicPath(pathWithoutLocale, pattern)
-  );
+  const publicPath = isPublicPath(pathWithoutLocale, PUBLIC_PATH_PATTERNS);
+
   // Public paths don't require authentication
-  if (isPublicPath) {
+  if (publicPath) {
     return localeResponse;
   }
 
@@ -128,7 +120,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - examples (public extractor examples)
      */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|examples).*)",
   ],
 };

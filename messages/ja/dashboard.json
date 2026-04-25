@@ -776,6 +776,7 @@
     "usageLogs": "使用ログ",
     "leaderboard": "ランキング",
     "availability": "可用性監視",
+    "systemStatus": "システム状態",
     "myQuota": "自分のクォータ",
     "quotasManagement": "クォータ管理",
     "userManagement": "ユーザー",
@@ -1521,7 +1522,8 @@
         "disabled": "無効"
       },
       "actions": {
-        "addKey": "キーを追加"
+        "addKey": "キーを追加",
+        "addTemporaryKey": "一時キー"
       }
     },
     "keyFullDisplay": {
@@ -1617,6 +1619,12 @@
       "deleteFailed": "ユーザーの削除に失敗しました",
       "userDeleted": "ユーザーが削除されました",
       "saving": "保存しています...",
+      "syncKeys": {
+        "button": "Key に同期",
+        "loading": "同期中...",
+        "success": "{count} 個の Key に同期しました",
+        "error": "Key の同期に失敗しました"
+      },
       "resetSection": {
         "title": "リセットオプション"
       },
@@ -1656,6 +1664,52 @@
         "success": "すべての統計がリセットされました"
       }
     },
+    "temporaryKeys": {
+      "createDialog": {
+        "title": "一時キーを一括生成",
+        "description": "ベースキーを選択し、専用グループに一時 API キーをまとめて生成します。",
+        "baseKeyLabel": "ベースキー",
+        "baseKeyPlaceholder": "ベースキーを選択",
+        "baseKeyRequired": "ベースキーを選択してください",
+        "groupNameLabel": "グループ名",
+        "groupNamePlaceholder": "例：campaign-april",
+        "quantityLabel": "生成数",
+        "quantityDescription": "5 / 10 / 20 / 50 / 100 の即時生成、または任意の数を指定できます。",
+        "customLimitLabel": "各キーの総上限 (USD)",
+        "customLimitPlaceholder": "空欄でベースキーの総上限を使用",
+        "customLimitDescription": "総上限のみ上書きします。その他の設定はベースキーに従います。",
+        "baseKeyRequiredHint": "生成前にベースキーを選択してください。",
+        "baseKeyRequiredShort": "ベースキーを選択してください",
+        "submit": "生成",
+        "submitting": "生成中...",
+        "noKeys": "利用可能なベースキーがありません",
+        "invalidCount": "有効な生成数を入力してください",
+        "invalidLimit": "有効な総上限を入力してください",
+        "genericError": "一時キーの生成に失敗しました"
+      },
+      "success": {
+        "title": "一時キーを生成しました",
+        "description": "グループ {group} に {count} 件の一時キーを生成しました。完全なキーはすぐにダウンロードして安全に保管してください。",
+        "groupName": "グループ名",
+        "sourceKey": "ベースキー",
+        "previewTitle": "プレビュー（先頭 5 件）",
+        "download": "CSV をダウンロード"
+      },
+      "groups": {
+        "title": "一時キーグループ",
+        "groupBadge": "Temp",
+        "count": "{count} keys",
+        "download": "ダウンロード",
+        "delete": "グループ削除"
+      },
+      "toasts": {
+        "createSuccess": "{count} 件の一時キーを生成しました",
+        "createFailed": "一時キーの生成に失敗しました: {error}",
+        "deleteSuccess": "グループ {group} を削除しました（{count} keys）",
+        "deleteFailed": "一時キーグループの削除に失敗しました: {error}",
+        "downloadFailed": "一時キーのダウンロードに失敗しました: {error}"
+      }
+    },
     "batchEdit": {
       "enterMode": "一括編集",
       "exitMode": "終了",
@@ -1675,6 +1729,8 @@
         "title": "一括更新を確認",
         "description": "{users} ユーザーと {keys} キーを更新します。この操作は元に戻せません。",
         "userFields": "ユーザーフィールド",
+        "syncKeys": "Sync to Keys",
+        "syncKeysDescription": "This will overwrite all undeleted keys for these {users} users from their current user settings.",
         "keyFields": "キーフィールド",
         "goBack": "戻って修正",
         "update": "更新を確定",
@@ -1683,8 +1739,10 @@
       "toast": {
         "usersUpdated": "{count} ユーザーを更新しました",
         "keysUpdated": "{count} キーを更新しました",
+        "keysSynced": "Synced {keys} keys for {users} users",
         "usersFailed": "ユーザーの更新に失敗しました: {error}",
         "keysFailed": "キーの更新に失敗しました: {error}",
+        "syncFailed": "Sync to keys failed: {error}",
         "batchFailed": "一括更新に失敗しました"
       },
       "validation": {
@@ -1706,12 +1764,14 @@
           "limit5h": "5時間上限 (USD)",
           "limitDaily": "日次上限 (USD)",
           "limitWeekly": "週次上限 (USD)",
-          "limitMonthly": "月次上限 (USD)"
+          "limitMonthly": "月次上限 (USD)",
+          "syncKeys": "Sync to Keys"
         },
         "placeholders": {
           "emptyToClear": "空欄でクリア",
           "tagsPlaceholder": "Enterで追加、カンマ区切り対応",
-          "emptyNoLimit": "空欄で制限なし"
+          "emptyNoLimit": "空欄で制限なし",
+          "syncKeysDescription": "When enabled, user fields from this batch edit are saved first, then all undeleted keys for each user are overwritten from that user's settings."
         }
       },
       "key": {

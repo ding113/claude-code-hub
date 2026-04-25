@@ -13,6 +13,10 @@
       "redirected": "重新導向後（實際模型）"
     },
     "billingModelSourcePlaceholder": "選擇計費模型來源",
+    "billingCorrection": {
+      "title": "計費與費率矯正",
+      "description": "集中設定模型計費來源、Codex Priority 費率口徑，以及 Claude 計費標頭整流開關。"
+    },
     "codexPriorityBillingSource": "Codex Priority 計費來源",
     "codexPriorityBillingSourceDesc": "控制 Codex Priority（Fast Mode）單獨計費使用哪個 service_tier。預設按 Requested Service Tier 計費；若選擇 Actual Service Tier，則優先使用回應返回值，回應未返回時回退到請求值。",
     "codexPriorityBillingSourceOptions": {
@@ -20,6 +24,8 @@
       "actual": "Actual Service Tier（缺失時回退 Requested）"
     },
     "codexPriorityBillingSourcePlaceholder": "選擇 Codex Priority 計費來源",
+    "costMultiplierCorrection": "全域成本倍率修正",
+    "costMultiplierCorrectionDesc": "執行時加到所有 provider 成本倍率上的數值。預設 0 表示不修改；填寫 0.1 表示所有 provider 的實際倍率都加 0.1。",
     "cleanupBatchSize": "批次大小",
     "cleanupBatchSizeDesc": "每批刪除的記錄數（範圍：1000-100000，建議 10000）",
     "cleanupBatchSizePlaceholder": "10000",

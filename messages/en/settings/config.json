@@ -13,6 +13,10 @@
       "redirected": "After Redirection (Actual Model)"
     },
     "billingModelSourcePlaceholder": "Select billing model source",
+    "billingCorrection": {
+      "title": "Billing and Rate Correction",
+      "description": "Configure billing model source, Codex Priority billing rate source, and the Claude billing header rectifier in one place."
+    },
     "codexPriorityBillingSource": "Codex Priority Billing Source",
     "codexPriorityBillingSourceDesc": "Controls which service_tier is used for Codex Priority (Fast Mode) surcharge billing. The default is Requested Service Tier; if Actual Service Tier is selected, the response value is used first and falls back to the request value when the response omits it.",
     "codexPriorityBillingSourceOptions": {
@@ -20,6 +24,8 @@
       "actual": "Actual Service Tier (Fallback to Requested)"
     },
     "codexPriorityBillingSourcePlaceholder": "Select Codex Priority billing source",
+    "costMultiplierCorrection": "Global Cost Multiplier Correction",
+    "costMultiplierCorrectionDesc": "Value added to every provider cost multiplier at runtime. Default 0 means no change; 0.1 makes every effective provider multiplier 0.1 higher.",
     "cleanupBatchSize": "Batch Size",
     "cleanupBatchSizeDesc": "Number of records to delete per batch (range: 1000-100000, recommended 10000)",
     "cleanupBatchSizePlaceholder": "10000",

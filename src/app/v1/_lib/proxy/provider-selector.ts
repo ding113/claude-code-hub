@@ -1,5 +1,7 @@
 import { matchesAllowedModelRules } from "@/lib/allowed-model-rules";
+import { applyCostMultiplierCorrectionToProvider } from "@/lib/billing/cost-multiplier";
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { getCachedSystemSettings } from "@/lib/config";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
@@ -17,6 +19,27 @@ import type { ClientFormat } from "./format-mapper";
 import { getVerboseProviderErrorCached } from "./provider-selector-settings-cache";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
+
+async function getCostMultiplierCorrectionCached(): Promise<number> {
+  try {
+    const settings = await getCachedSystemSettings();
+    return settings.costMultiplierCorrection;
+  } catch (error) {
+    logger.warn("ProviderSelector: Failed to get cost multiplier correction, using 0", {
+      error,
+    });
+    return 0;
+  }
+}
+
+async function applyGlobalCostMultiplierCorrection(providers: Provider[]): Promise<Provider[]> {
+  const correction = await getCostMultiplierCorrectionCached();
+  if (correction === 0) {
+    return providers;
+  }
+
+  return providers.map((provider) => applyCostMultiplierCorrectionToProvider(provider, correction));
+}
 
 /**
  * 解析逗号分隔的分组字符串为数组
@@ -706,7 +729,8 @@ export class ProxyProviderResolver {
       providerId: provider.id,
       sessionId: session.sessionId,
     });
-    return provider;
+    const [adjustedProvider] = await applyGlobalCostMultiplierCorrection([provider]);
+    return adjustedProvider;
   }
 
   private static async pickRandomProvider(
@@ -718,7 +742,9 @@ export class ProxyProviderResolver {
   }> {
     // 使用 Session 快照保证故障迁移期间数据一致性
     // 如果没有 session，回退到 findAllProviders（内部已使用缓存）
-    const allProviders = session ? await session.getProvidersSnapshot() : await findAllProviders();
+    const allProviders = await applyGlobalCostMultiplierCorrection(
+      session ? await session.getProvidersSnapshot() : await findAllProviders()
+    );
     const requestedModel = session?.getOriginalModel() || "";
 
     // === Step 1: 分组预过滤（静默，用户只能看到自己分组内的供应商）===
@@ -1208,7 +1234,7 @@ export class ProxyProviderResolver {
     provider: Provider | null;
     context: NonNullable<ProviderChainItem["decisionContext"]>;
   }> {
-    const allProviders = await findAllProviders();
+    const allProviders = await applyGlobalCostMultiplierCorrection(await findAllProviders());
 
     // 分组预过滤
     const effectiveGroupPick =

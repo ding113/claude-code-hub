@@ -67,6 +67,10 @@ describe("OpenAPI 端点完整性检查", () => {
       "/api/actions/users/editUser",
       "/api/actions/users/removeUser",
       "/api/actions/users/getUserLimitUsage",
+      "/api/actions/users/syncUserConfigToKeys",
+      "/api/actions/users/batchSyncUserConfigToKeys",
+      "/api/actions/users/resetUserLimitsOnly",
+      "/api/actions/users/resetUserAllStatistics",
     ];
 
     for (const path of expectedPaths) {
@@ -82,6 +86,9 @@ describe("OpenAPI 端点完整性检查", () => {
       "/api/actions/keys/editKey",
       "/api/actions/keys/removeKey",
       "/api/actions/keys/getKeyLimitUsage",
+      "/api/actions/keys/createTemporaryKeysBatch",
+      "/api/actions/keys/removeTemporaryKeyGroup",
+      "/api/actions/keys/downloadTemporaryKeyGroup",
     ];
 
     for (const path of expectedPaths) {

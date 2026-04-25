@@ -57,6 +57,7 @@ interface CoverageConfigOptions {
   };
   coverageExclude?: string[];
   coverageReporters?: string[];
+  testTimeout?: number;
   /** Override the default test exclude list (e.g. my-usage omits tests/integration/**) */
   testExclude?: string[];
 }
@@ -67,6 +68,7 @@ export function createCoverageConfig(opts: CoverageConfigOptions) {
       globals: true,
       environment: opts.environment,
       setupFiles,
+      testTimeout: opts.testTimeout,
       include: opts.testFiles,
       exclude: opts.testExclude ?? defaultTestExclude,
       coverage: {

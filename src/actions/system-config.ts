@@ -56,6 +56,7 @@ export async function saveSystemSettings(formData: {
   currencyDisplay?: string;
   billingModelSource?: string;
   codexPriorityBillingSource?: CodexPriorityBillingSource;
+  costMultiplierCorrection?: number;
   timezone?: string | null;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -104,6 +105,7 @@ export async function saveSystemSettings(formData: {
       currencyDisplay: validated.currencyDisplay,
       billingModelSource: validated.billingModelSource,
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
+      costMultiplierCorrection: validated.costMultiplierCorrection,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,

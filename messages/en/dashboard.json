@@ -778,6 +778,7 @@
     "usageLogs": "Usage Logs",
     "leaderboard": "Leaderboard",
     "availability": "Availability",
+    "systemStatus": "System Status",
     "myQuota": "My Quota",
     "quotasManagement": "Quotas",
     "userManagement": "Users",
@@ -1539,7 +1540,8 @@
         "disabled": "Disabled"
       },
       "actions": {
-        "addKey": "Add Key"
+        "addKey": "Add Key",
+        "addTemporaryKey": "Create Temp Keys"
       }
     },
     "keyFullDisplay": {
@@ -1622,6 +1624,68 @@
       "createKeyTitle": "Create Key",
       "editKeyTitle": "Edit Key"
     },
+    "temporaryKeys": {
+      "createDialog": {
+        "title": "Generate Temporary Keys",
+        "description": "Select a base key and generate temporary API keys under the current user group.",
+        "baseKeyLabel": "Base Key",
+        "baseKeyPlaceholder": "Select a base key",
+        "baseKeyRequired": "Please select a base key",
+        "groupNameLabel": "User Group",
+        "groupNamePlaceholder": "For example: campaign-april",
+        "quantityLabel": "Quantity",
+        "quantityDescription": "Quick generate 5 / 10 / 20 / 50 / 100 keys, or enter a custom amount.",
+        "customLimitLabel": "Per-key Total Limit (USD)",
+        "customLimitPlaceholder": "Leave blank to keep the base key total limit",
+        "customLimitDescription": "Only the total limit is overridden. All other settings follow the base key.",
+        "baseKeyRequiredHint": "Select a base key before generating.",
+        "baseKeyRequiredShort": "Select a base key",
+        "submit": "Generate",
+        "submitting": "Generating...",
+        "noKeys": "This user has no available base key",
+        "invalidCount": "Please enter a valid quantity",
+        "invalidLimit": "Please enter a valid total limit",
+        "genericError": "Failed to generate temporary keys"
+      },
+      "success": {
+        "title": "Temporary Keys Ready",
+        "description": "Group {group} now contains {count} temporary keys. Download the full keys now and store them safely.",
+        "groupName": "User Group",
+        "sourceKey": "Base Key",
+        "previewTitle": "Preview (first 5)",
+        "download": "Download Keys"
+      },
+      "listActions": {
+        "showMore": "Show remaining {count}",
+        "showLess": "Collapse"
+      },
+      "sections": {
+        "standard": {
+          "title": "Standard Keys",
+          "description": "Primary business keys with the existing behavior unchanged.",
+          "empty": "No standard keys yet"
+        },
+        "temporary": {
+          "title": "Temporary Keys",
+          "description": "Extra temporary CDKey groups for batch create, download, and delete under the current user group.",
+          "empty": "No temporary key groups yet"
+        }
+      },
+      "groups": {
+        "title": "Temporary Key Groups",
+        "groupBadge": "Temp",
+        "count": "{count} keys",
+        "download": "Download Keys",
+        "delete": "Delete Group"
+      },
+      "toasts": {
+        "createSuccess": "Generated {count} temporary keys",
+        "createFailed": "Failed to generate temporary keys: {error}",
+        "deleteSuccess": "Deleted group {group} ({count} keys)",
+        "deleteFailed": "Failed to delete temporary key group: {error}",
+        "downloadFailed": "Failed to download temporary keys: {error}"
+      }
+    },
     "editDialog": {
       "title": "Edit user",
       "description": "Edit user information",
@@ -1639,6 +1703,12 @@
       "deleteFailed": "Failed to delete user",
       "userDeleted": "User has been deleted",
       "saving": "Saving...",
+      "syncKeys": {
+        "button": "Sync to Keys",
+        "loading": "Syncing...",
+        "success": "Synced to {count} keys",
+        "error": "Failed to sync keys"
+      },
       "resetSection": {
         "title": "Reset Options"
       },
@@ -1697,6 +1767,8 @@
         "title": "Confirm Batch Update",
         "description": "This will update {users} users and {keys} keys. This action cannot be undone.",
         "userFields": "User Fields",
+        "syncKeys": "Sync to Keys",
+        "syncKeysDescription": "This will overwrite all undeleted keys for these {users} users from their current user settings.",
         "keyFields": "Key Fields",
         "goBack": "Go Back",
         "update": "Confirm Update",
@@ -1705,8 +1777,10 @@
       "toast": {
         "usersUpdated": "Updated {count} users",
         "keysUpdated": "Updated {count} keys",
+        "keysSynced": "Synced {keys} keys for {users} users",
         "usersFailed": "User update failed: {error}",
         "keysFailed": "Key update failed: {error}",
+        "syncFailed": "Sync to keys failed: {error}",
         "batchFailed": "Batch update failed"
       },
       "validation": {
@@ -1728,12 +1802,14 @@
           "limit5h": "5h Limit (USD)",
           "limitDaily": "Daily Limit (USD)",
           "limitWeekly": "Weekly Limit (USD)",
-          "limitMonthly": "Monthly Limit (USD)"
+          "limitMonthly": "Monthly Limit (USD)",
+          "syncKeys": "Sync to Keys"
         },
         "placeholders": {
           "emptyToClear": "Leave empty to clear",
           "tagsPlaceholder": "Press enter to add, comma-separated",
-          "emptyNoLimit": "Leave empty for no limit"
+          "emptyNoLimit": "Leave empty for no limit",
+          "syncKeysDescription": "When enabled, user fields from this batch edit are saved first, then all undeleted keys for each user are overwritten from that user's settings."
         }
       },
       "key": {
