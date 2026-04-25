@@ -2433,6 +2433,7 @@ export class SessionManager {
 
       if (providerId) {
         pipeline.zrem(`provider:${providerId}:active_sessions`, sessionId);
+        pipeline.hdel(`provider:${providerId}:active_session_refs`, sessionId);
       }
 
       if (keyId) {

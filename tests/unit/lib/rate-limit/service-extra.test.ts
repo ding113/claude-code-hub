@@ -145,7 +145,7 @@ describe("RateLimitService - other quota paths", () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     const result = await RateLimitService.checkAndTrackProviderSession(9, "sess", 0);
-    expect(result).toEqual({ allowed: true, count: 0, tracked: false });
+    expect(result).toEqual({ allowed: true, count: 0, tracked: false, referenced: false });
   });
 
   it("checkAndTrackProviderSession：Redis 非 ready 时应 Fail Open", async () => {
@@ -153,13 +153,13 @@ describe("RateLimitService - other quota paths", () => {
 
     redisClientRef.status = "end";
     const result = await RateLimitService.checkAndTrackProviderSession(9, "sess", 2);
-    expect(result).toEqual({ allowed: true, count: 0, tracked: false });
+    expect(result).toEqual({ allowed: true, count: 0, tracked: false, referenced: false });
   });
 
   it("checkAndTrackProviderSession：达到上限时应返回 not allowed", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
-    redisClientRef.eval.mockResolvedValueOnce([0, 2, 0]);
+    redisClientRef.eval.mockResolvedValueOnce([0, 2, 0, 0]);
     const result = await RateLimitService.checkAndTrackProviderSession(9, "sess", 2);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("供应商并发 Session 上限已达到（2/2）");
@@ -168,27 +168,37 @@ describe("RateLimitService - other quota paths", () => {
   it("checkAndTrackProviderSession：未达到上限时应返回 allowed 且可标记 tracked", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
-    redisClientRef.eval.mockResolvedValueOnce([1, 1, 1]);
+    redisClientRef.eval.mockResolvedValueOnce([1, 1, 1, 1]);
     const result = await RateLimitService.checkAndTrackProviderSession(9, "sess", 2);
-    expect(result).toEqual({ allowed: true, count: 1, tracked: true });
+    expect(result).toEqual({ allowed: true, count: 1, tracked: true, referenced: true });
+  });
+
+  it("checkAndTrackProviderSession：旧 membership 无引用计数时不应返回 release 引用", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.eval.mockResolvedValueOnce([1, 1, 0, 0]);
+    const result = await RateLimitService.checkAndTrackProviderSession(9, "sess", 2);
+    expect(result).toEqual({ allowed: true, count: 1, tracked: false, referenced: false });
   });
 
   it("checkAndTrackProviderSession: should pass SESSION_TTL_MS as ARGV[4] to Lua script", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
-    redisClientRef.eval.mockResolvedValueOnce([1, 1, 1]);
+    redisClientRef.eval.mockResolvedValueOnce([1, 1, 1, 1]);
     await RateLimitService.checkAndTrackProviderSession(9, "sess", 2);
 
     // Verify eval was called with the correct args including ARGV[4] = SESSION_TTL_MS
     expect(redisClientRef.eval).toHaveBeenCalledTimes(1);
 
     const evalCall = redisClientRef.eval.mock.calls[0];
-    // evalCall: [script, numkeys, key, sessionId, limit, now, ttlMs]
-    // Indices:   0        1        2    3          4      5     6
-    expect(evalCall.length).toBe(7); // script + 1 key + 5 ARGV
+    // evalCall: [script, numkeys, activeKey, refKey, sessionId, limit, now, ttlMs]
+    // Indices:   0        1        2          3       4          5      6     7
+    expect(evalCall.length).toBe(8); // script + 2 keys + 4 ARGV
+    expect(evalCall[2]).toBe("provider:9:active_sessions");
+    expect(evalCall[3]).toBe("provider:9:active_session_refs");
 
-    // ARGV[4] (index 6) should be SESSION_TTL_MS derived from env (default 300s = 300000ms)
-    const ttlMsArg = evalCall[6];
+    // ARGV[4] (index 7) should be SESSION_TTL_MS derived from env (default 300s = 300000ms)
+    const ttlMsArg = evalCall[7];
     expect(ttlMsArg).toBe("300000");
   });
 
