@@ -23,15 +23,34 @@ describe("ProxyForwarder provider failure session release", () => {
         session: ProxySession,
         failedProviderIds: number[],
         providerId: number
-      ) => Promise<void>;
+      ) => void;
     };
     const session = { sessionId: "sess_failed" } as unknown as ProxySession;
     const failedProviderIds: number[] = [];
 
-    await forwarderInternals.markProviderFailed(session, failedProviderIds, 42);
+    forwarderInternals.markProviderFailed(session, failedProviderIds, 42);
 
     expect(failedProviderIds).toEqual([42]);
     expect(mocks.releaseProviderSession).toHaveBeenCalledWith(42, "sess_failed");
+  });
+
+  it("重复标记同一供应商时只释放一次，避免 hedge 路径重复 ZREM", async () => {
+    const { ProxyForwarder } = await import("@/app/v1/_lib/proxy/forwarder");
+    const forwarderInternals = ProxyForwarder as unknown as {
+      markProviderFailed: (
+        session: ProxySession,
+        failedProviderIds: number[],
+        providerId: number
+      ) => void;
+    };
+    const session = { sessionId: "sess_failed" } as unknown as ProxySession;
+    const failedProviderIds: number[] = [];
+
+    forwarderInternals.markProviderFailed(session, failedProviderIds, 42);
+    forwarderInternals.markProviderFailed(session, failedProviderIds, 42);
+
+    expect(failedProviderIds).toEqual([42]);
+    expect(mocks.releaseProviderSession).toHaveBeenCalledTimes(1);
   });
 
   it("没有 sessionId 时只记录失败供应商，不触发 Redis 释放", async () => {
@@ -41,12 +60,12 @@ describe("ProxyForwarder provider failure session release", () => {
         session: ProxySession,
         failedProviderIds: number[],
         providerId: number
-      ) => Promise<void>;
+      ) => void;
     };
     const session = { sessionId: null } as unknown as ProxySession;
     const failedProviderIds: number[] = [];
 
-    await forwarderInternals.markProviderFailed(session, failedProviderIds, 42);
+    forwarderInternals.markProviderFailed(session, failedProviderIds, 42);
 
     expect(failedProviderIds).toEqual([42]);
     expect(mocks.releaseProviderSession).not.toHaveBeenCalled();

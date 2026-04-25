@@ -1078,7 +1078,7 @@ export class ProxyForwarder {
             });
           }
 
-          await ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
+          ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
           attemptCount = maxAttemptsPerProvider;
         } else {
           endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
@@ -1141,7 +1141,7 @@ export class ProxyForwarder {
           vendorId: currentProvider.providerVendorId,
           providerType: currentProvider.providerType,
         });
-        await ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
+        ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
         attemptCount = maxAttemptsPerProvider;
       }
 
@@ -1709,7 +1709,7 @@ export class ProxyForwarder {
             const env = getEnvConfig();
 
             // 无论是否计入熔断器，都要加入 failedProviderIds（避免重复选择同一供应商）
-            await ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
+            ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
 
             if (env.ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS) {
               logger.warn(
@@ -1807,7 +1807,7 @@ export class ProxyForwarder {
             }
 
             // 重试耗尽：加入失败列表并切换供应商
-            await ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
+            ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
@@ -1879,11 +1879,7 @@ export class ProxyForwarder {
                 }
               }
 
-              await ProxyForwarder.markProviderFailed(
-                session,
-                failedProviderIds,
-                currentProvider.id
-              );
+              ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
               break; // 跳出内层循环，进入供应商切换逻辑
             }
 
@@ -1932,11 +1928,7 @@ export class ProxyForwarder {
                 currentProvider.providerVendorId,
                 currentProvider.providerType
               );
-              await ProxyForwarder.markProviderFailed(
-                session,
-                failedProviderIds,
-                currentProvider.id
-              );
+              ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
               break;
             }
 
@@ -2032,7 +2024,7 @@ export class ProxyForwarder {
             }
 
             // 加入失败列表并切换供应商
-            await ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
+            ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
             break; // 跳出内层循环，进入供应商切换逻辑
           }
         }
@@ -3406,6 +3398,7 @@ export class ProxyForwarder {
     let lastError: Error | null = null;
     let lastErrorCategory: ErrorCategory | null = null;
     const attempts = new Set<StreamingHedgeAttempt>();
+    const failedProviderIds: number[] = [];
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -3453,6 +3446,7 @@ export class ProxyForwarder {
           attemptNumber: attempt.sequence,
           modelRedirect: getAttemptModelRedirect(attempt),
         });
+        ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
       }
       try {
         attempt.responseController?.abort(new Error(reason));
@@ -3776,6 +3770,7 @@ export class ProxyForwarder {
         attempt.thresholdTimer = null;
       }
       attempts.delete(attempt);
+      ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
       if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
         await recordFailure(attempt.provider.id, error);
@@ -3940,6 +3935,7 @@ export class ProxyForwarder {
       } catch (endpointError) {
         lastError = endpointError as Error;
         lastErrorCategory = null;
+        ProxyForwarder.markProviderFailed(session, failedProviderIds, provider.id);
         await launchAlternative();
         await finishIfExhausted();
         return;
@@ -4259,18 +4255,22 @@ export class ProxyForwarder {
     await SessionManager.clearSessionProvider(session.sessionId);
   }
 
-  private static async markProviderFailed(
+  private static markProviderFailed(
     session: ProxySession,
     failedProviderIds: number[],
     providerId: number
-  ): Promise<void> {
+  ): void {
+    if (failedProviderIds.includes(providerId)) {
+      return;
+    }
+
     failedProviderIds.push(providerId);
 
     if (!session.sessionId) {
       return;
     }
 
-    await RateLimitService.releaseProviderSession(providerId, session.sessionId);
+    void RateLimitService.releaseProviderSession(providerId, session.sessionId);
   }
 
   private static buildAllProvidersUnavailableError(finalError?: Error | null): ProxyError {

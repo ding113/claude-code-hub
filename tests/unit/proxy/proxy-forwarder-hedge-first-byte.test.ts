@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   recordEndpointFailure: vi.fn(async () => {}),
   isVendorTypeCircuitOpen: vi.fn(async () => false),
   recordVendorTypeAllEndpointsTimeout: vi.fn(async () => {}),
+  releaseProviderSession: vi.fn(async (_providerId: number, _sessionId: string) => {}),
   categorizeErrorAsync: vi.fn(async () => 0),
   getErrorDetectionResultAsync: vi.fn(async () => ({ matched: false })),
   getCachedSystemSettings: vi.fn(async () => ({
@@ -71,6 +72,12 @@ vi.mock("@/lib/circuit-breaker", () => ({
 vi.mock("@/lib/vendor-type-circuit-breaker", () => ({
   isVendorTypeCircuitOpen: mocks.isVendorTypeCircuitOpen,
   recordVendorTypeAllEndpointsTimeout: mocks.recordVendorTypeAllEndpointsTimeout,
+}));
+
+vi.mock("@/lib/rate-limit/service", () => ({
+  RateLimitService: {
+    releaseProviderSession: mocks.releaseProviderSession,
+  },
 }));
 
 vi.mock("@/lib/session-manager", () => ({
@@ -575,6 +582,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         redirectedModel: fireworksRedirect,
         billingModel: requestedModel,
       });
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(fireworks.id, "sess-hedge");
     } finally {
       vi.useRealTimers();
     }
@@ -874,6 +882,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         true,
         null
       );
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");
     } finally {
       vi.useRealTimers();
     }
@@ -1071,6 +1080,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(1);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(2, "sess-hedge");
     } finally {
       vi.useRealTimers();
     }
@@ -1148,6 +1158,9 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(3);
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(2, "sess-hedge");
+      expect(mocks.releaseProviderSession).not.toHaveBeenCalledWith(3, "sess-hedge");
     } finally {
       vi.useRealTimers();
     }
@@ -1790,6 +1803,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       );
       expect(winnerEntry).toBeDefined();
       expect(winnerEntry!.reason).toBe("request_success");
+      expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");
     } finally {
       vi.useRealTimers();
     }
