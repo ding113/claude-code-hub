@@ -136,4 +136,39 @@ describe("status-page loader", () => {
     ]);
     expect(new Set(result.initialGroups.map((group) => group.publicGroupSlug)).size).toBe(2);
   });
+
+  it("does not generate a default slug that collides with a later custom slug", async () => {
+    mockGetSystemSettings.mockResolvedValue({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+    });
+    mockBootstrapProviderGroupsFromProviders.mockResolvedValue({
+      groups: [
+        {
+          id: 5,
+          name: "alpha",
+          description: null,
+        },
+        {
+          id: 6,
+          name: "custom-alpha",
+          description: JSON.stringify({
+            version: 2,
+            publicStatus: {
+              publicGroupSlug: "alpha",
+            },
+          }),
+        },
+      ],
+      groupCounts: new Map(),
+    });
+
+    const mod = await import("@/app/[locale]/settings/status-page/loader");
+    const result = await mod.loadStatusPageSettings();
+
+    expect(result.initialGroups.map((group) => group.publicGroupSlug)).toEqual([
+      expect.stringMatching(/^alpha-[a-z0-9]{6}$/),
+      "alpha",
+    ]);
+  });
 });

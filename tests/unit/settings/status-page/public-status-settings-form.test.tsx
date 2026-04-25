@@ -6,7 +6,10 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PublicStatusSettingsForm } from "@/app/[locale]/settings/status-page/_components/public-status-settings-form";
+import {
+  PublicStatusSettingsForm,
+  type PublicStatusSettingsFormGroup,
+} from "@/app/[locale]/settings/status-page/_components/public-status-settings-form";
 import { toast } from "sonner";
 
 const mockRefresh = vi.hoisted(() => vi.fn());
@@ -524,6 +527,81 @@ describe("public-status settings form", () => {
       frameCallback?.(0);
     });
 
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+    expect(document.activeElement).toBe(invalidSlugInputs[0]);
+
+    unmount();
+    requestAnimationFrame.mockRestore();
+  });
+
+  it("uses backend slug fallback semantics and highlights every conflicting group", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const requestAnimationFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 0;
+      });
+
+    const conflictingGroups: PublicStatusSettingsFormGroup[] = [
+      {
+        groupName: "Open AI",
+        enabled: true,
+        displayName: "Open AI",
+        publicGroupSlug: "!!!",
+        explanatoryCopy: "Primary public models",
+        sortOrder: 0,
+        publicModels: [{ modelKey: "gpt-4.1" }],
+      },
+      {
+        groupName: "open-ai",
+        enabled: true,
+        displayName: "open-ai",
+        publicGroupSlug: "???",
+        explanatoryCopy: "Fallback public models",
+        sortOrder: 1,
+        publicModels: [{ modelKey: "gpt-4.1" }],
+      },
+      {
+        groupName: "open ai",
+        enabled: true,
+        displayName: "open ai",
+        publicGroupSlug: "...",
+        explanatoryCopy: "Tertiary public models",
+        sortOrder: 2,
+        publicModels: [{ modelKey: "gpt-4.1" }],
+      },
+    ];
+
+    const { container, unmount } = render(
+      <PublicStatusSettingsForm
+        initialWindowHours={24}
+        initialAggregationIntervalMinutes={5}
+        initialGroups={conflictingGroups}
+      />
+    );
+
+    const submitButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("statusPage.form.save")
+    );
+    expect(submitButton).toBeTruthy();
+
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mockSavePublicStatusSettings).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith("statusPage.form.duplicateSlug");
+    const invalidSlugInputs = Array.from(
+      container.querySelectorAll<HTMLInputElement>('[aria-invalid="true"]')
+    );
+    expect(invalidSlugInputs).toHaveLength(3);
+    expect(invalidSlugInputs.map((input) => input.value)).toEqual(["!!!", "???", "..."]);
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
     expect(document.activeElement).toBe(invalidSlugInputs[0]);
 

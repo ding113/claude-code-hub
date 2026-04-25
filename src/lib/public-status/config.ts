@@ -197,34 +197,12 @@ export function slugifyPublicGroup(input: string): string {
   return appendStablePublicGroupSlugSuffix(asciiSlug, suffix);
 }
 
-function normalizePublicGroupSlug(groupName: string, publicGroupSlug?: string): string {
+export function normalizePublicGroupSlug(groupName: string, publicGroupSlug?: string): string {
   const normalized = slugifyPublicGroup(publicGroupSlug?.trim() || groupName);
   return normalized || slugifyPublicGroup(groupName);
 }
 
-export function createUniquePublicGroupSlug(groupName: string, usedSlugs: Set<string>): string {
-  const baseSlug = normalizePublicGroupSlug(groupName);
-  if (!usedSlugs.has(baseSlug)) {
-    usedSlugs.add(baseSlug);
-    return baseSlug;
-  }
-
-  let counter = 1;
-  let candidate = baseSlug;
-  while (usedSlugs.has(candidate)) {
-    const suffixSource = counter === 1 ? groupName : `${groupName}-${counter}`;
-    candidate = appendStablePublicGroupSlugSuffix(
-      baseSlug || PUBLIC_STATUS_SLUG_FALLBACK_PREFIX,
-      createStablePublicGroupSlugSuffix(suffixSource)
-    );
-    counter += 1;
-  }
-
-  usedSlugs.add(candidate);
-  return candidate;
-}
-
-function createCollisionPublicGroupSlug(
+function createAvailablePublicGroupSlug(
   baseSlug: string,
   groupName: string,
   usedSlugs: Set<string>
@@ -241,6 +219,21 @@ function createCollisionPublicGroupSlug(
   }
 
   return candidate;
+}
+
+export function createUniquePublicGroupSlug(groupName: string, usedSlugs: Set<string>): string {
+  const baseSlug = normalizePublicGroupSlug(groupName);
+  const uniqueSlug = createAvailablePublicGroupSlug(baseSlug, groupName, usedSlugs);
+  usedSlugs.add(uniqueSlug);
+  return uniqueSlug;
+}
+
+function createCollisionPublicGroupSlug(
+  baseSlug: string,
+  groupName: string,
+  usedSlugs: Set<string>
+): string {
+  return createAvailablePublicGroupSlug(baseSlug, groupName, usedSlugs);
 }
 
 export function parsePublicStatusDescription(

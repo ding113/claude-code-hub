@@ -31,7 +31,11 @@ import {
   getProviderTypeTranslationKey,
   getUserFacingProviderTypes,
 } from "@/lib/provider-type-utils";
-import { type PublicStatusModelConfig, slugifyPublicGroup } from "@/lib/public-status/config";
+import {
+  normalizePublicGroupSlug,
+  type PublicStatusModelConfig,
+  slugifyPublicGroup,
+} from "@/lib/public-status/config";
 import { PUBLIC_STATUS_INTERVAL_OPTIONS } from "@/lib/public-status/constants";
 import { cn } from "@/lib/utils";
 import type { ProviderType } from "@/types/provider";
@@ -68,27 +72,26 @@ interface DuplicateSlugErrorState {
 function findDuplicateSlugError(
   groups: PublicStatusSettingsFormGroup[]
 ): DuplicateSlugErrorState | null {
-  const seenGroupNameBySlug = new Map<string, string>();
+  const groupNamesBySlug = new Map<string, string[]>();
 
   for (const group of groups) {
     if (!group.enabled || normalizePublicStatusModels(group.publicModels).length === 0) {
       continue;
     }
 
-    const normalizedSlug = slugifyPublicGroup(group.publicGroupSlug.trim() || group.groupName);
-    if (!normalizedSlug) {
-      continue;
+    const normalizedSlug = normalizePublicGroupSlug(group.groupName, group.publicGroupSlug);
+    const groupNames = groupNamesBySlug.get(normalizedSlug);
+    if (groupNames) {
+      groupNames.push(group.groupName);
+    } else {
+      groupNamesBySlug.set(normalizedSlug, [group.groupName]);
     }
+  }
 
-    const existingGroupName = seenGroupNameBySlug.get(normalizedSlug);
-    if (existingGroupName) {
-      return {
-        slug: normalizedSlug,
-        groupNames: [existingGroupName, group.groupName],
-      };
+  for (const [slug, groupNames] of groupNamesBySlug) {
+    if (groupNames.length > 1) {
+      return { slug, groupNames };
     }
-
-    seenGroupNameBySlug.set(normalizedSlug, group.groupName);
   }
 
   return null;
