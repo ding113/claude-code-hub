@@ -6,7 +6,7 @@ WORKDIR /app
 
 FROM build-base AS deps
 COPY package.json ./
-RUN bun install
+RUN bun ci
 
 FROM deps AS build
 COPY . .
