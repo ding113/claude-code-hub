@@ -110,6 +110,8 @@ describe("syncDefaultErrorRules numeric boundaries", () => {
     const regexRules = (await loadDefaultRules()).filter((rule) => rule.matchType === "regex");
     const samples = ["request id: 202604250550399959", "需要预扣费额度：¥0.352942"];
 
+    expect(regexRules.length).toBeGreaterThan(0);
+
     const accidentalMatches = regexRules.flatMap((rule) => {
       const pattern = new RegExp(rule.pattern, "i");
       return samples
