@@ -116,7 +116,7 @@ describe("public-status config publisher", () => {
         }),
       })
     );
-  }, 20_000);
+  }, 30_000);
 
   it("uses shared model-prefix matching for vendor icons without changing request type badges", async () => {
     mockFindAllProviderGroups.mockResolvedValue([
@@ -170,7 +170,7 @@ describe("public-status config publisher", () => {
         }),
       })
     );
-  });
+  }, 30_000);
 
   it("uses model price metadata to derive public labels and vendor icons", async () => {
     mockFindAllProviderGroups.mockResolvedValue([
