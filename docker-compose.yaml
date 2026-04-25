@@ -56,6 +56,7 @@ services:
       - ./.env
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=1536}
       HOST: 0.0.0.0
       HOSTNAME: 0.0.0.0
       # 容器内使用 Dockerfile 默认端口 3000，对外通过 APP_PORT 暴露（默认 23000）
