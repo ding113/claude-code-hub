@@ -10,6 +10,7 @@
     "intervalOption": "{minutes} min",
     "slug": "Slug",
     "slugTooltip": "URL identifier for this group's dedicated status page. Leave empty to auto-generate from the public display name. Lowercase letters, digits, and hyphens only.",
+    "duplicateSlug": "Slug {slug} is used by multiple public groups. Please make each group slug unique before saving.",
     "copy": "Copy",
     "sortOrder": "Sort Order",
     "sortOrderTooltip": "Display order on the public status page. Lower values appear first (same convention as provider priority). Equal values fall back to group name.",
