@@ -31,13 +31,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        timeout-minutes: 5
-        run: bun ci
+        timeout-minutes: 8
+        run: bun install
 
       - name: Run linting
         run: bun run lint
@@ -67,13 +67,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        timeout-minutes: 5
-        run: bun ci
+        timeout-minutes: 8
+        run: bun install
 
       - name: Run unit tests
         run: bun run test -- tests/unit/ --passWithNoTests
@@ -132,13 +132,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        timeout-minutes: 5
-        run: bun ci
+        timeout-minutes: 8
+        run: bun install
 
       - name: Run database migrations
         run: bun run db:migrate
@@ -206,13 +206,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        timeout-minutes: 5
-        run: bun ci
+        timeout-minutes: 8
+        run: bun install
 
       - name: Run database migrations
         run: bun run db:migrate
@@ -221,9 +221,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('bun.lock') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx', 'next.config.*') }}
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('package.json', '.bun-version') }}-${{ hashFiles('src/**/*.js', 'src/**/*.jsx', 'src/**/*.ts', 'src/**/*.tsx', 'next.config.*', 'tsconfig.json', 'postcss.config.*') }}
           restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('bun.lock') }}-
+            ${{ runner.os }}-nextjs-${{ hashFiles('package.json', '.bun-version') }}-
 
       - name: Build application
         timeout-minutes: 15

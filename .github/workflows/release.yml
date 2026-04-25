@@ -206,7 +206,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
@@ -214,7 +214,7 @@ jobs:
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         timeout-minutes: 15
         run: |
-          bun ci
+          bun install
           bun run typecheck
           bun run format
 

@@ -37,13 +37,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: 📦 Install dependencies
-        timeout-minutes: 5
-        run: bun ci
+        timeout-minutes: 8
+        run: bun install
 
       - name: 🔍 Type check
         run: bun run typecheck

@@ -69,14 +69,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies, type check, and format code
         timeout-minutes: 15
         run: |
-          bun ci
+          bun install
           bun run typecheck
           bun run format
           bun run lint
