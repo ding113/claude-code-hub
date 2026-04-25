@@ -23,13 +23,20 @@
       return typeof value === "boolean" ? value : fallback;
     };
 
+    const quotaWindows = data.quotaWindows && typeof data.quotaWindows === "object"
+      ? data.quotaWindows
+      : {};
+    const daily = quotaWindows.daily || {};
+
     return {
       ok: response && response.ok === true,
       isValid: toBoolean(data.keyIsEnabled, true) && toBoolean(data.userIsEnabled, true),
       planName: "Daily Quota",
-      remaining: toNumber(data.remainingDailyUsd, null),
-      total: toNumber(data.limitDailyUsd, null),
-      used: toNumber(data.usedDailyUsd, 0),
+      remaining: toNumber(daily.remainingUsd, toNumber(data.remainingDailyUsd, null)),
+      total: toNumber(daily.limitUsd, toNumber(data.limitDailyUsd, null)),
+      used: toNumber(daily.usedUsd, toNumber(data.usedDailyUsd, 0)),
+      usedPercent: toNumber(daily.usedPercent, data.todayUsedPercent),
+      remainingPercent: toNumber(daily.remainingPercent, data.todayRemainingPercent),
       unit: typeof data.unit === "string" ? data.unit : "USD",
       keyName: typeof data.keyName === "string" ? data.keyName : null,
       userName: typeof data.userName === "string" ? data.userName : null,

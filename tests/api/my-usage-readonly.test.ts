@@ -372,6 +372,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       .where(eq(keys.id, readonlyKey.id));
 
     const now = new Date();
+    const usedAt = new Date(now.getTime() - 60 * 1000);
     const msgId = await createMessage({
       userId: user.id,
       key: readonlyKey.key,
@@ -380,7 +381,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       costUsd: "0.0100",
       inputTokens: 10,
       outputTokens: 20,
-      createdAt: new Date(now.getTime() - 60 * 1000),
+      createdAt: usedAt,
     });
     createdMessageIds.push(msgId);
 
@@ -426,6 +427,54 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
     expect(quotaData.limitDailyUsd).toBe(15);
     expect(quotaData.limitWeeklyUsd).toBe(25);
     expect(quotaData.limitMonthlyUsd).toBe(35);
+    expect(quotaData.limitTotalUsd).toBe(35);
+    expect(quotaData.todayUsedUsd).toBeCloseTo(0.01, 6);
+    expect(quotaData.todayRemainingUsd).toBeCloseTo(14.99, 6);
+    expect(quotaData.todayUsedPercent).toBeCloseTo(0.07, 6);
+    expect(quotaData.todayRemainingPercent).toBeCloseTo(99.93, 6);
+    expect(quotaData.remainingPercent).toBeCloseTo(99.9, 6);
+    expect(quotaData.quotaWindows).toMatchObject({
+      fiveHour: {
+        period: "5h",
+        limitUsd: 10,
+        usedUsd: 0.01,
+        remainingUsd: 9.99,
+        usedPercent: 0.1,
+        remainingPercent: 99.9,
+        isUnlimited: false,
+        isExhausted: false,
+      },
+      daily: {
+        period: "daily",
+        limitUsd: 15,
+        usedUsd: 0.01,
+        remainingUsd: 14.99,
+        usedPercent: 0.07,
+        remainingPercent: 99.93,
+        isUnlimited: false,
+        isExhausted: false,
+      },
+      weekly: {
+        period: "weekly",
+        limitUsd: 25,
+        usedUsd: 0.01,
+        remainingUsd: 24.99,
+      },
+      monthly: {
+        period: "monthly",
+        limitUsd: 35,
+        usedUsd: 0.01,
+        remainingUsd: 34.99,
+      },
+      total: {
+        period: "total",
+        limitUsd: 35,
+        usedUsd: 0.01,
+        remainingUsd: 34.99,
+      },
+    });
+    expect(quotaData.userAllowedModels).toEqual([]);
+    expect(quotaData.userAllowedClients).toEqual([]);
 
     // Issue #687 fix: getUsers 现在也支持 allowReadOnlyAccess
     const usersApi = await callActionsRoute({
@@ -511,6 +560,85 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       ok: false,
       error: "NOT_FOUND",
     });
+  });
+
+  test("总额度缺失时应回退 monthly，且只读日志隐藏 endpoint", async () => {
+    const unique = `my-usage-total-fallback-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const user = await createTestUser(`Test ${unique}`);
+    createdUserIds.push(user.id);
+
+    const readonlyKey = await createTestKey({
+      userId: user.id,
+      key: `test-readonly-key-${unique}`,
+      name: `readonly-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(readonlyKey.id);
+
+    await db
+      .update(users)
+      .set({
+        limitMonthlyUsd: 9,
+        limitTotalUsd: null,
+        allowedModels: ["gpt-4.1", "claude-3-7-sonnet"],
+        allowedClients: ["claude-code", "codex"],
+      })
+      .where(eq(users.id, user.id));
+
+    await db
+      .update(keys)
+      .set({
+        limitMonthlyUsd: 7,
+        limitTotalUsd: null,
+      })
+      .where(eq(keys.id, readonlyKey.id));
+
+    const now = new Date();
+    const msgId = await createMessage({
+      userId: user.id,
+      key: readonlyKey.key,
+      model: "gpt-4.1-mini",
+      endpoint: "/v1/chat/completions",
+      costUsd: "1.5000",
+      inputTokens: 12,
+      outputTokens: 34,
+      createdAt: new Date(now.getTime() - 30 * 1000),
+    });
+    createdMessageIds.push(msgId);
+
+    currentAuthorization = `Bearer ${readonlyKey.key}`;
+
+    const quota = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyQuota",
+      headers: { Authorization: currentAuthorization },
+      body: {},
+    });
+    expect(quota.response.status).toBe(200);
+    const quotaData = (quota.json as { ok: boolean; data: Record<string, unknown> }).data;
+    expect(quotaData.keyLimitTotalUsd).toBe(7);
+    expect(quotaData.userLimitTotalUsd).toBe(9);
+    expect(quotaData.limitTotalUsd).toBe(7);
+    expect(quotaData.remainingTotalUsd).toBeTypeOf("number");
+    expect(quotaData.userAllowedModels).toEqual([]);
+    expect(quotaData.userAllowedClients).toEqual([]);
+
+    const logs = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyUsageLogs",
+      headers: { Authorization: currentAuthorization },
+      body: {},
+    });
+    expect(logs.response.status).toBe(200);
+    const logData = (
+      logs.json as {
+        ok: boolean;
+        data: { logs: Array<{ endpoint: string | null; model: string | null }> };
+      }
+    ).data.logs;
+    expect(logData.length).toBeGreaterThan(0);
+    expect(logData[0].model).toBe("gpt-4.1-mini");
+    expect(logData[0].endpoint).toBeNull();
   });
 
   test("今日统计：应与 message_request 数据一致，并排除 warmup 与其他 Key 数据", async () => {

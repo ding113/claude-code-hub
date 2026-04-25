@@ -8,6 +8,7 @@ import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { lookupIp } from "@/lib/ip-geo/client";
 import { logger } from "@/lib/logger";
+import { redactReadonlyLogs, redactReadonlyQuota } from "@/lib/my-usage/readonly-redaction";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import {
   clipStartByResetAt,
@@ -171,6 +172,17 @@ export interface MyUsageMetadata {
   billingModelSource: BillingModelSource;
 }
 
+export interface MyUsageQuotaWindow {
+  period: "5h" | "daily" | "weekly" | "monthly" | "total";
+  limitUsd: number | null;
+  usedUsd: number;
+  remainingUsd: number | null;
+  usedPercent: number | null;
+  remainingPercent: number | null;
+  isUnlimited: boolean;
+  isExhausted: boolean;
+}
+
 export interface MyUsageQuota {
   keyLimit5hUsd: number | null;
   keyLimitDailyUsd: number | null;
@@ -229,6 +241,19 @@ export interface MyUsageQuota {
   limitTotalUsd: number | null;
   usedTotalUsd: number;
   remainingTotalUsd: number | null;
+
+  quotaWindows: {
+    fiveHour: MyUsageQuotaWindow;
+    daily: MyUsageQuotaWindow;
+    weekly: MyUsageQuotaWindow;
+    monthly: MyUsageQuotaWindow;
+    total: MyUsageQuotaWindow;
+  };
+  todayUsedUsd: number;
+  todayRemainingUsd: number | null;
+  todayUsedPercent: number | null;
+  todayRemainingPercent: number | null;
+  remainingPercent: number | null;
 
   rpmLimit: number | null;
   concurrentSessions: number;
@@ -297,6 +322,44 @@ function resolveOverallRemaining(values: Array<number | null>): number | null {
   }
 
   return Math.max(Math.min(...boundedValues), 0);
+}
+
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function buildQuotaWindow(
+  period: MyUsageQuotaWindow["period"],
+  window: EffectiveQuotaWindow
+): MyUsageQuotaWindow {
+  const limitUsd = window.limit == null ? null : round2(window.limit);
+  const usedUsd = round2(window.used);
+  const remainingUsd = window.remaining == null ? null : round2(window.remaining);
+  const hasPositiveLimit = limitUsd != null && limitUsd > 0;
+
+  return {
+    period,
+    limitUsd,
+    usedUsd,
+    remainingUsd,
+    usedPercent: hasPositiveLimit ? round2((window.used / limitUsd) * 100) : null,
+    remainingPercent:
+      hasPositiveLimit && remainingUsd != null ? round2((remainingUsd / limitUsd) * 100) : null,
+    isUnlimited: limitUsd == null,
+    isExhausted: remainingUsd != null && remainingUsd <= 0,
+  };
+}
+
+function resolveOverallRemainingPercent(windows: MyUsageQuotaWindow[]): number | null {
+  const values = windows
+    .map((window) => window.remainingPercent)
+    .filter((value): value is number => value != null);
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return Math.max(Math.min(...values), 0);
 }
 
 function resolveTotalLimitWithMonthlyFallback(params: {
@@ -601,6 +664,13 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       effectiveMonthly.remaining,
       effectiveTotal.remaining,
     ]);
+    const quotaWindows = {
+      fiveHour: buildQuotaWindow("5h", effective5h),
+      daily: buildQuotaWindow("daily", effectiveDaily),
+      weekly: buildQuotaWindow("weekly", effectiveWeekly),
+      monthly: buildQuotaWindow("monthly", effectiveMonthly),
+      total: buildQuotaWindow("total", effectiveTotal),
+    };
     const concurrentSessions = Math.max(keyConcurrent, userKeyConcurrent);
     const concurrentSessionsLimit =
       effectiveKeyConcurrentLimit > 0 ? effectiveKeyConcurrentLimit : null;
@@ -664,6 +734,13 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       usedTotalUsd: effectiveTotal.used,
       remainingTotalUsd: effectiveTotal.remaining,
 
+      quotaWindows,
+      todayUsedUsd: quotaWindows.daily.usedUsd,
+      todayRemainingUsd: quotaWindows.daily.remainingUsd,
+      todayUsedPercent: quotaWindows.daily.usedPercent,
+      todayRemainingPercent: quotaWindows.daily.remainingPercent,
+      remainingPercent: resolveOverallRemainingPercent(Object.values(quotaWindows)),
+
       rpmLimit: user.rpm ?? null,
       concurrentSessions,
       concurrentSessionsLimit,
@@ -680,7 +757,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       unit: "USD",
     };
 
-    return { ok: true, data: quota };
+    return { ok: true, data: redactReadonlyQuota(quota, key) };
   } catch (error) {
     logger.error("[my-usage] getMyQuota failed", error);
     return { ok: false, error: "Failed to get quota information" };
@@ -854,7 +931,10 @@ export async function getMyUsageLogs(
     return {
       ok: true,
       data: {
-        logs: mapMyUsageLogEntries(result, settings.billingModelSource),
+        logs: redactReadonlyLogs(
+          mapMyUsageLogEntries(result, settings.billingModelSource),
+          session.key
+        ),
         total: result.total,
         page,
         pageSize,
@@ -899,7 +979,10 @@ export async function getMyUsageLogsBatch(
     return {
       ok: true,
       data: {
-        logs: mapMyUsageLogEntries(result, settings.billingModelSource),
+        logs: redactReadonlyLogs(
+          mapMyUsageLogEntries(result, settings.billingModelSource),
+          session.key
+        ),
         nextCursor: result.nextCursor,
         hasMore: result.hasMore,
         currencyCode: settings.currencyDisplay,

@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers";
 import type { NextResponse } from "next/server";
+import { canUseReadonlyAccess } from "@/lib/auth/readonly-access";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
@@ -227,7 +228,7 @@ export async function validateKey(
   }
 
   // 检查 Web UI 登录权限
-  if (!allowReadOnlyAccess && !key.canLoginWebUi) {
+  if (!canUseReadonlyAccess(key, { allowReadOnlyAccess })) {
     return null;
   }
 
@@ -320,7 +321,11 @@ export async function getSession(options?: {
     // 关键：scoped 会话必须遵循其"创建时语义"，仅允许内部显式降权（不允许提权）
     const effectiveAllowReadOnlyAccess =
       scoped.allowReadOnlyAccess && (options?.allowReadOnlyAccess ?? true);
-    if (!effectiveAllowReadOnlyAccess && !scoped.session.key.canLoginWebUi) {
+    if (
+      !canUseReadonlyAccess(scoped.session.key, {
+        allowReadOnlyAccess: effectiveAllowReadOnlyAccess,
+      })
+    ) {
       return null;
     }
     return scoped.session;

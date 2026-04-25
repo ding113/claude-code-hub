@@ -121,6 +121,7 @@ describe("ProxyAuthenticator", () => {
       expect.objectContaining({
         success: true,
         apiKey: "sk-valid",
+        readonlyAccess: false,
       })
     );
   });
@@ -157,5 +158,37 @@ describe("ProxyAuthenticator", () => {
         code: "rate_limit_error",
       },
     });
+  });
+
+  it("marks readonly bearer auth state when key cannot login web ui", async () => {
+    validateApiKeyAndGetUser.mockResolvedValue({
+      user: {
+        id: 2,
+        name: "Readonly User",
+        isEnabled: true,
+        expiresAt: null,
+      },
+      key: {
+        name: "readonly-key",
+        canLoginWebUi: false,
+      },
+    });
+
+    const { ProxyAuthenticator } = await importSubject();
+    const session = createSession({
+      ip: "203.0.113.12",
+      authorization: "Bearer sk-readonly",
+    });
+
+    const response = await ProxyAuthenticator.ensure(session);
+
+    expect(response).toBeNull();
+    expect(session.setAuthState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        apiKey: "sk-readonly",
+        readonlyAccess: true,
+      })
+    );
   });
 });

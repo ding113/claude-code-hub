@@ -23,28 +23,14 @@
       return typeof value === "boolean" ? value : fallback;
     };
 
-    const round2 = function(value) {
-      return Math.round(value * 100) / 100;
-    };
-
-    const percent = function(used, total) {
-      return total > 0 ? ((used / total) * 100).toFixed(0) : "0";
-    };
-
-    const limitMonthlyUsd = toNumber(data.limitMonthlyUsd, null);
-    const limitTotalUsd = toNumber(data.limitTotalUsd, limitMonthlyUsd);
-    const totalComesFromMonthly =
-      limitTotalUsd !== null &&
-      limitMonthlyUsd !== null &&
-      limitTotalUsd === limitMonthlyUsd;
-    const usedUsd = totalComesFromMonthly
-      ? toNumber(data.usedMonthlyUsd, 0)
-      : toNumber(data.usedTotalUsd, toNumber(data.usedMonthlyUsd, 0));
-    const remaining = limitTotalUsd === null ? null : Math.max(limitTotalUsd - usedUsd, 0);
-
-    const used5hUsd = toNumber(data.used5hUsd, 0);
-    const limit5hUsd = toNumber(data.limit5hUsd, 0);
-    const monthlyPercentBase = limitMonthlyUsd !== null ? limitMonthlyUsd : limitTotalUsd;
+    const quotaWindows = data.quotaWindows && typeof data.quotaWindows === "object"
+      ? data.quotaWindows
+      : {};
+    const fiveHour = quotaWindows.fiveHour || {};
+    const daily = quotaWindows.daily || {};
+    const weekly = quotaWindows.weekly || {};
+    const monthly = quotaWindows.monthly || {};
+    const total = quotaWindows.total || {};
 
     const isValid =
       response &&
@@ -55,13 +41,23 @@
     return {
       isValid: !!isValid,
       invalidMessage: isValid ? undefined : "套餐不可用",
-      remaining: remaining === null ? null : round2(Math.max(remaining, 0)),
+      remaining: toNumber(total.remainingUsd, toNumber(data.remainingTotalUsd, null)),
       unit: typeof data.unit === "string" ? data.unit : "USD",
       planName: "Total Quota",
-      total: limitTotalUsd === null ? null : round2(limitTotalUsd),
-      used: round2(usedUsd),
-      extra: "5H:" + percent(used5hUsd, limit5hUsd) + "%/?:"
-        + percent(usedUsd, monthlyPercentBase) + "%"
+      total: toNumber(total.limitUsd, toNumber(data.limitTotalUsd, null)),
+      used: toNumber(total.usedUsd, toNumber(data.usedTotalUsd, 0)),
+      todayUsed: toNumber(data.todayUsedUsd, toNumber(daily.usedUsd, 0)),
+      todayRemaining: toNumber(data.todayRemainingUsd, toNumber(daily.remainingUsd, null)),
+      remainingWeekly: toNumber(weekly.remainingUsd, toNumber(data.remainingWeeklyUsd, null)),
+      remainingMonthly: toNumber(monthly.remainingUsd, toNumber(data.remainingMonthlyUsd, null)),
+      remainingTotal: toNumber(total.remainingUsd, toNumber(data.remainingTotalUsd, null)),
+      remaining5h: toNumber(fiveHour.remainingUsd, toNumber(data.remaining5hUsd, null)),
+      remainingDaily: toNumber(daily.remainingUsd, toNumber(data.remainingDailyUsd, null)),
+      extra: "5H剩余:" + toNumber(fiveHour.remainingPercent, data.todayRemainingPercent) + "%"
+        + "/日剩余:" + toNumber(daily.remainingPercent, data.todayRemainingPercent) + "%"
+        + "/周剩余:" + toNumber(weekly.remainingPercent, null) + "%"
+        + "/月剩余:" + toNumber(monthly.remainingPercent, null) + "%"
+        + "/总剩余:" + toNumber(total.remainingPercent, data.remainingPercent) + "%"
     };
   }
 })
