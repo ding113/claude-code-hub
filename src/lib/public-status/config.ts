@@ -53,6 +53,13 @@ interface LegacyPublicStatusGroupConfigInput {
 }
 
 const CONFIG_CACHE_TTL_MS = 60 * 1000;
+const PUBLIC_STATUS_SLUG_MAX_LENGTH = 64;
+const PUBLIC_STATUS_SLUG_SUFFIX_LENGTH = 6;
+const PUBLIC_STATUS_SLUG_FALLBACK_PREFIX = "group";
+
+interface CollectEnabledPublicStatusGroupsOptions {
+  duplicateSlugStrategy?: "throw" | "suffix";
+}
 
 let cachedConfiguredGroups: EnabledPublicStatusGroup[] | null = null;
 let cachedConfiguredGroupsAt = 0;
@@ -139,18 +146,101 @@ export function getPublicStatusModelKeys(publicModels: PublicStatusModelConfig[]
   return publicModels.map((model) => model.modelKey);
 }
 
-export function slugifyPublicGroup(input: string): string {
+function createStablePublicGroupSlugSuffix(input: string): string {
+  let hash = 0x811c9dc5;
+  for (const character of input) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+
+  return hash
+    .toString(36)
+    .padStart(PUBLIC_STATUS_SLUG_SUFFIX_LENGTH, "0")
+    .slice(0, PUBLIC_STATUS_SLUG_SUFFIX_LENGTH);
+}
+
+function appendStablePublicGroupSlugSuffix(base: string, suffix: string): string {
+  const prefixLength = Math.max(1, PUBLIC_STATUS_SLUG_MAX_LENGTH - suffix.length - 1);
+  const prefix =
+    base.slice(0, prefixLength).replace(/-+$/g, "") || PUBLIC_STATUS_SLUG_FALLBACK_PREFIX;
+  return `${prefix}-${suffix}`;
+}
+
+function slugifyPublicGroupAscii(input: string): string {
   return input
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
+    .slice(0, PUBLIC_STATUS_SLUG_MAX_LENGTH);
+}
+
+export function slugifyPublicGroup(input: string): string {
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+
+  const asciiSlug = slugifyPublicGroupAscii(trimmed);
+  const hasNonAsciiCharacters = Array.from(trimmed).some(
+    (character) => (character.codePointAt(0) ?? 0) > 0x7f
+  );
+  if (!hasNonAsciiCharacters) {
+    return asciiSlug;
+  }
+
+  const suffix = createStablePublicGroupSlugSuffix(trimmed);
+  if (!asciiSlug) {
+    return `${PUBLIC_STATUS_SLUG_FALLBACK_PREFIX}-${suffix}`;
+  }
+
+  return appendStablePublicGroupSlugSuffix(asciiSlug, suffix);
 }
 
 function normalizePublicGroupSlug(groupName: string, publicGroupSlug?: string): string {
   const normalized = slugifyPublicGroup(publicGroupSlug?.trim() || groupName);
   return normalized || slugifyPublicGroup(groupName);
+}
+
+export function createUniquePublicGroupSlug(groupName: string, usedSlugs: Set<string>): string {
+  const baseSlug = normalizePublicGroupSlug(groupName);
+  if (!usedSlugs.has(baseSlug)) {
+    usedSlugs.add(baseSlug);
+    return baseSlug;
+  }
+
+  let counter = 1;
+  let candidate = baseSlug;
+  while (usedSlugs.has(candidate)) {
+    const suffixSource = counter === 1 ? groupName : `${groupName}-${counter}`;
+    candidate = appendStablePublicGroupSlugSuffix(
+      baseSlug || PUBLIC_STATUS_SLUG_FALLBACK_PREFIX,
+      createStablePublicGroupSlugSuffix(suffixSource)
+    );
+    counter += 1;
+  }
+
+  usedSlugs.add(candidate);
+  return candidate;
+}
+
+function createCollisionPublicGroupSlug(
+  baseSlug: string,
+  groupName: string,
+  usedSlugs: Set<string>
+): string {
+  let counter = 1;
+  let candidate = baseSlug;
+  while (usedSlugs.has(candidate)) {
+    const suffixSource = counter === 1 ? groupName : `${groupName}-${counter}`;
+    candidate = appendStablePublicGroupSlugSuffix(
+      baseSlug || PUBLIC_STATUS_SLUG_FALLBACK_PREFIX,
+      createStablePublicGroupSlugSuffix(suffixSource)
+    );
+    counter += 1;
+  }
+
+  return candidate;
 }
 
 export function parsePublicStatusDescription(
@@ -267,38 +357,54 @@ export function serializePublicStatusDescription(
 }
 
 export function collectEnabledPublicStatusGroups(
-  groups: PublicStatusConfiguredGroupInput[]
+  groups: PublicStatusConfiguredGroupInput[],
+  options: CollectEnabledPublicStatusGroupsOptions = {}
 ): EnabledPublicStatusGroup[] {
   const seenGroupNamesBySlug = new Map<string, string>();
+  const usedSlugs = new Set<string>();
 
   return groups
-    .map((group) => {
+    .flatMap((group) => {
       const publicModels = sanitizePublicModels(group.publicStatus?.publicModels);
-      const publicGroupSlug = normalizePublicGroupSlug(
+      if (publicModels.length === 0) {
+        return [];
+      }
+
+      const normalizedPublicGroupSlug = normalizePublicGroupSlug(
         group.groupName,
         group.publicStatus?.publicGroupSlug
       );
+      let publicGroupSlug = normalizedPublicGroupSlug;
 
       const existingGroupName = seenGroupNamesBySlug.get(publicGroupSlug);
       if (existingGroupName) {
-        throw new DuplicatePublicStatusGroupSlugError(publicGroupSlug, [
-          existingGroupName,
+        if (options.duplicateSlugStrategy !== "suffix") {
+          throw new DuplicatePublicStatusGroupSlugError(publicGroupSlug, [
+            existingGroupName,
+            group.groupName,
+          ]);
+        }
+        publicGroupSlug = createCollisionPublicGroupSlug(
+          normalizedPublicGroupSlug,
           group.groupName,
-        ]);
+          usedSlugs
+        );
       }
 
       seenGroupNamesBySlug.set(publicGroupSlug, group.groupName);
+      usedSlugs.add(publicGroupSlug);
 
-      return {
-        groupName: group.groupName,
-        displayName: group.publicStatus?.displayName?.trim() || group.groupName,
-        publicGroupSlug,
-        explanatoryCopy: group.publicStatus?.explanatoryCopy?.trim() || null,
-        sortOrder: group.publicStatus?.sortOrder ?? 0,
-        publicModels,
-      };
+      return [
+        {
+          groupName: group.groupName,
+          displayName: group.publicStatus?.displayName?.trim() || group.groupName,
+          publicGroupSlug,
+          explanatoryCopy: group.publicStatus?.explanatoryCopy?.trim() || null,
+          sortOrder: group.publicStatus?.sortOrder ?? 0,
+          publicModels,
+        },
+      ];
     })
-    .filter((group) => group.publicModels.length > 0)
     .sort(
       (left, right) =>
         left.sortOrder - right.sortOrder || left.displayName.localeCompare(right.displayName)

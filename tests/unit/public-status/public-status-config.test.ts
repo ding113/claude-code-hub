@@ -17,6 +17,7 @@ interface PublicStatusConfigModule {
   };
   serializePublicStatusDescription(input: unknown): string | null;
   collectEnabledPublicStatusGroups(input: unknown): unknown[];
+  slugifyPublicGroup(input: string): string;
 }
 
 describe("public-status config", () => {
@@ -141,5 +142,66 @@ describe("public-status config", () => {
         publicModels: [{ modelKey: "gpt-4.1", providerTypeOverride: "codex" }],
       },
     });
+  });
+
+  it("keeps non-English group names from collapsing into duplicate empty or ASCII-only slugs", async () => {
+    const mod = await importPublicStatusModule<PublicStatusConfigModule>(
+      "@/lib/public-status/config"
+    );
+
+    expect(mod.slugifyPublicGroup("中文分组")).toMatch(/^group-[a-z0-9]{6}$/);
+
+    const groups = mod.collectEnabledPublicStatusGroups([
+      {
+        groupName: "cc特价",
+        note: null,
+        publicStatus: {
+          publicModels: [{ modelKey: "gpt-4.1" }],
+        },
+      },
+      {
+        groupName: "cc逆向",
+        note: null,
+        publicStatus: {
+          publicModels: [{ modelKey: "gpt-4.1" }],
+        },
+      },
+    ]) as Array<{ publicGroupSlug: string }>;
+
+    expect(groups).toHaveLength(2);
+    expect(groups.map((group) => group.publicGroupSlug)).toEqual([
+      expect.stringMatching(/^cc-[a-z0-9]{6}$/),
+      expect.stringMatching(/^cc-[a-z0-9]{6}$/),
+    ]);
+    expect(new Set(groups.map((group) => group.publicGroupSlug)).size).toBe(2);
+  });
+
+  it("throws by default when enabled groups share the same normalized custom slug", async () => {
+    const mod = await importPublicStatusModule<PublicStatusConfigModule>(
+      "@/lib/public-status/config"
+    );
+
+    expect(() =>
+      mod.collectEnabledPublicStatusGroups([
+        {
+          groupName: "openai-primary",
+          note: null,
+          publicStatus: {
+            publicGroupSlug: "Open AI",
+            publicModels: [{ modelKey: "gpt-4.1" }],
+          },
+        },
+        {
+          groupName: "openai-fallback",
+          note: null,
+          publicStatus: {
+            publicGroupSlug: "open-ai",
+            publicModels: [{ modelKey: "gpt-4.1" }],
+          },
+        },
+      ])
+    ).toThrowError(
+      'Duplicate normalized publicGroupSlug "open-ai" for groups: openai-primary, openai-fallback'
+    );
   });
 });
