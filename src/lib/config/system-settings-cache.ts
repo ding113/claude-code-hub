@@ -35,6 +35,7 @@ export function getCachedSystemSettingsOnlyCache(): SystemSettings | null {
 const DEFAULT_SETTINGS: Pick<
   SystemSettings,
   | "enableHttp2"
+  | "enableOpenAIResponsesWebSocket"
   | "enableHighConcurrencyMode"
   | "interceptAnthropicWarmupRequests"
   | "codexPriorityBillingSource"
@@ -52,6 +53,7 @@ const DEFAULT_SETTINGS: Pick<
   | "publicStatusAggregationIntervalMinutes"
 > = {
   enableHttp2: false,
+  enableOpenAIResponsesWebSocket: true,
   enableHighConcurrencyMode: false,
   interceptAnthropicWarmupRequests: false,
   codexPriorityBillingSource: "requested",
@@ -102,6 +104,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 
     logger.debug("[SystemSettingsCache] Settings cached", {
       enableHttp2: settings.enableHttp2,
+      enableOpenAIResponsesWebSocket: settings.enableOpenAIResponsesWebSocket,
       ttl: CACHE_TTL_MS,
     });
 
@@ -135,6 +138,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       cleanupBatchSize: 10000,
       enableClientVersionCheck: false,
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
+      enableOpenAIResponsesWebSocket: DEFAULT_SETTINGS.enableOpenAIResponsesWebSocket,
       enableHighConcurrencyMode: DEFAULT_SETTINGS.enableHighConcurrencyMode,
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
@@ -172,6 +176,16 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 export async function isHttp2Enabled(): Promise<boolean> {
   const settings = await getCachedSystemSettings();
   return settings.enableHttp2;
+}
+
+/**
+ * Get only the OpenAI Responses WebSocket enabled setting (optimized for proxy path)
+ *
+ * @returns Whether /v1/responses client WebSocket entry is enabled
+ */
+export async function isOpenAIResponsesWebSocketEnabled(): Promise<boolean> {
+  const settings = await getCachedSystemSettings();
+  return settings.enableOpenAIResponsesWebSocket;
 }
 
 /**

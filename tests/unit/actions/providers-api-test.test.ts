@@ -7,6 +7,8 @@ const validateProviderUrlForConnectivityMock = vi.fn();
 const createProxyAgentForProviderMock = vi.fn();
 const getAccessTokenMock = vi.fn();
 const isJsonMock = vi.fn();
+const isOpenAIResponsesWebSocketEnabledMock = vi.fn();
+const createDefaultResponsesWebSocketProbeMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -64,7 +66,12 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("@/lib/provider-testing", () => ({
+  createDefaultResponsesWebSocketProbe: createDefaultResponsesWebSocketProbeMock,
   executeProviderTest: executeProviderTestMock,
+}));
+
+vi.mock("@/lib/config", () => ({
+  isOpenAIResponsesWebSocketEnabled: isOpenAIResponsesWebSocketEnabledMock,
 }));
 
 vi.mock("@/lib/provider-testing/presets", () => ({
@@ -101,6 +108,7 @@ describe("providers api test actions", () => {
     getAccessTokenMock.mockImplementation(async (apiKey: string) => apiKey);
     isJsonMock.mockReturnValue(false);
     getPresetsForProviderMock.mockReturnValue([]);
+    isOpenAIResponsesWebSocketEnabledMock.mockResolvedValue(false);
     global.fetch = fetchMock as typeof fetch;
   });
 
@@ -148,6 +156,93 @@ describe("providers api test actions", () => {
     expect(forwarded?.rawResponse).toBe('{"error":"Invalid URL (POST /v1/v1/responses)"}');
   });
 
+  test("testProviderUnified wires the default Responses WebSocket probe for enabled Codex providers", async () => {
+    const defaultProbe = vi.fn();
+    isOpenAIResponsesWebSocketEnabledMock.mockResolvedValue(true);
+    createDefaultResponsesWebSocketProbeMock.mockReturnValue(defaultProbe);
+    executeProviderTestMock.mockResolvedValue(
+      createUnifiedProviderTestResult({
+        compatibility: {
+          responsesWebSocket: {
+            status: "supported",
+            supported: true,
+            degraded: false,
+          },
+        },
+      })
+    );
+
+    const { testProviderUnified } = await import("@/actions/providers");
+    const result = await testProviderUnified({
+      providerUrl: "https://codex.example.com/v1",
+      apiKey: "sk-test",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.success).toBe(true);
+    expect(result.data?.status).toBe("green");
+    expect(result.data?.subStatus).toBe("success");
+    expect(result.data?.httpStatusCode).toBe(200);
+    expect(result.data?.compatibility?.responsesWebSocket).toEqual({
+      status: "supported",
+      supported: true,
+      degraded: false,
+    });
+    expect(createDefaultResponsesWebSocketProbeMock).toHaveBeenCalledTimes(1);
+    expect(executeProviderTestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: "codex",
+        responsesWebSocketProbe: defaultProbe,
+      })
+    );
+  });
+
+  test("testProviderUnified does not wire a Responses WebSocket probe when the setting is disabled", async () => {
+    isOpenAIResponsesWebSocketEnabledMock.mockResolvedValue(false);
+    executeProviderTestMock.mockResolvedValue(createUnifiedProviderTestResult());
+
+    const { testProviderUnified } = await import("@/actions/providers");
+    const result = await testProviderUnified({
+      providerUrl: "https://codex.example.com/v1",
+      apiKey: "sk-test",
+      providerType: "codex",
+      model: "gpt-5.3-codex",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createDefaultResponsesWebSocketProbeMock).not.toHaveBeenCalled();
+    expect(executeProviderTestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: "codex",
+        responsesWebSocketProbe: undefined,
+      })
+    );
+  });
+
+  test("testProviderUnified never wires a Responses WebSocket probe for non-Codex providers", async () => {
+    isOpenAIResponsesWebSocketEnabledMock.mockResolvedValue(true);
+    executeProviderTestMock.mockResolvedValue(createUnifiedProviderTestResult());
+
+    const { testProviderUnified } = await import("@/actions/providers");
+    const result = await testProviderUnified({
+      providerUrl: "https://openai-compatible.example.com/v1",
+      apiKey: "sk-test",
+      providerType: "openai-compatible",
+      model: "gpt-4.1-mini",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createDefaultResponsesWebSocketProbeMock).not.toHaveBeenCalled();
+    expect(executeProviderTestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: "openai-compatible",
+        responsesWebSocketProbe: undefined,
+      })
+    );
+  });
+
   test("testProviderGemini 成功时也应该返回完整响应体，保证前端能展示原始 body", async () => {
     const responseBody = JSON.stringify({
       candidates: [
@@ -187,3 +282,29 @@ describe("providers api test actions", () => {
     expect((details as { rawResponse?: string } | undefined)?.rawResponse).toBe(responseBody);
   });
 });
+
+function createUnifiedProviderTestResult(overrides: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    status: "green",
+    subStatus: "success",
+    latencyMs: 123,
+    firstByteMs: 45,
+    httpStatusCode: 200,
+    httpStatusText: "OK",
+    model: "gpt-5.3-codex",
+    content: "pong",
+    requestUrl: "https://codex.example.com/v1/responses",
+    rawResponse: '{"output":[{"content":[{"text":"pong"}]}]}',
+    testedAt: new Date("2026-04-08T00:00:00.000Z"),
+    validationDetails: {
+      httpPassed: true,
+      httpStatusCode: 200,
+      latencyPassed: true,
+      latencyMs: 123,
+      contentPassed: true,
+      contentTarget: "pong",
+    },
+    ...overrides,
+  };
+}

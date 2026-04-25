@@ -575,6 +575,15 @@ export class ProxySession {
       endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
       modelRedirect?: ProviderChainItem["modelRedirect"];
       rawCrossProviderFallbackEnabled?: boolean;
+      clientTransport?: ProviderChainItem["clientTransport"];
+      upstreamWsAttempted?: ProviderChainItem["upstreamWsAttempted"];
+      upstreamWsConnected?: ProviderChainItem["upstreamWsConnected"];
+      downgradedToHttp?: ProviderChainItem["downgradedToHttp"];
+      downgradeReason?: ProviderChainItem["downgradeReason"];
+      queueWaitMs?: ProviderChainItem["queueWaitMs"];
+      storeFalseCacheHit?: ProviderChainItem["storeFalseCacheHit"];
+      storeFalseCacheRefusalReason?: ProviderChainItem["storeFalseCacheRefusalReason"];
+      upstreamWsUnsupportedCacheHit?: ProviderChainItem["upstreamWsUnsupportedCacheHit"];
     }
   ): void {
     const item: ProviderChainItem = {
@@ -606,12 +615,23 @@ export class ProxySession {
       endpointFilterStats: metadata?.endpointFilterStats,
       modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
       rawCrossProviderFallbackEnabled: metadata?.rawCrossProviderFallbackEnabled,
+      clientTransport: metadata?.clientTransport,
+      upstreamWsAttempted: metadata?.upstreamWsAttempted,
+      upstreamWsConnected: metadata?.upstreamWsConnected,
+      downgradedToHttp: metadata?.downgradedToHttp,
+      downgradeReason: metadata?.downgradeReason,
+      queueWaitMs: metadata?.queueWaitMs,
+      storeFalseCacheHit: metadata?.storeFalseCacheHit,
+      storeFalseCacheRefusalReason: metadata?.storeFalseCacheRefusalReason,
+      upstreamWsUnsupportedCacheHit: metadata?.upstreamWsUnsupportedCacheHit,
     };
 
     // 避免重复添加同一个供应商
     // 检查最后一条记录是否与当前记录完全相同（id + reason + attemptNumber）
     const lastItem = this.providerChain[this.providerChain.length - 1];
+    const isWebSocketDecision = metadata?.clientTransport === "websocket";
     const shouldAdd =
+      isWebSocketDecision ||
       this.providerChain.length === 0 ||
       lastItem.id !== provider.id ||
       lastItem.reason !== metadata?.reason ||

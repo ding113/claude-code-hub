@@ -219,6 +219,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
     passThroughUpstreamErrorMessage: dbSettings?.passThroughUpstreamErrorMessage ?? true,
     enableHttp2: dbSettings?.enableHttp2 ?? false,
+    enableOpenAIResponsesWebSocket: dbSettings?.enableOpenAIResponsesWebSocket ?? true,
     enableHighConcurrencyMode: dbSettings?.enableHighConcurrencyMode ?? false,
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,

@@ -64,6 +64,7 @@ interface SystemSettingsFormProps {
     | "verboseProviderError"
     | "passThroughUpstreamErrorMessage"
     | "enableHttp2"
+    | "enableOpenAIResponsesWebSocket"
     | "enableHighConcurrencyMode"
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
@@ -125,6 +126,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.passThroughUpstreamErrorMessage
   );
   const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
+  const [enableOpenAIResponsesWebSocket, setEnableOpenAIResponsesWebSocket] = useState(
+    initialSettings.enableOpenAIResponsesWebSocket
+  );
   const [enableHighConcurrencyMode, setEnableHighConcurrencyMode] = useState(
     initialSettings.enableHighConcurrencyMode
   );
@@ -244,6 +248,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         verboseProviderError,
         passThroughUpstreamErrorMessage,
         enableHttp2,
+        enableOpenAIResponsesWebSocket,
         enableHighConcurrencyMode,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
@@ -280,6 +285,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setVerboseProviderError(result.data.verboseProviderError);
         setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
         setEnableHttp2(result.data.enableHttp2);
+        setEnableOpenAIResponsesWebSocket(result.data.enableOpenAIResponsesWebSocket);
         setEnableHighConcurrencyMode(result.data.enableHighConcurrencyMode);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
@@ -550,6 +556,28 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-http2"
             checked={enableHttp2}
             onCheckedChange={(checked) => setEnableHttp2(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 shrink-0">
+              <Network className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("enableOpenAIResponsesWebSocket")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableOpenAIResponsesWebSocketDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-openai-responses-websocket"
+            checked={enableOpenAIResponsesWebSocket}
+            onCheckedChange={(checked) => setEnableOpenAIResponsesWebSocket(checked)}
             disabled={isPending}
           />
         </div>

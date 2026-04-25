@@ -9,4 +9,5 @@ export {
   getCachedSystemSettingsOnlyCache,
   invalidateSystemSettingsCache,
   isHttp2Enabled,
+  isOpenAIResponsesWebSocketEnabled,
 } from "./system-settings-cache";

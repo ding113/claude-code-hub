@@ -50,6 +50,9 @@ export interface SystemSettings {
   // 启用 HTTP/2 连接供应商
   enableHttp2: boolean;
 
+  // 启用 /v1/responses 客户端 WebSocket 入口
+  enableOpenAIResponsesWebSocket: boolean;
+
   // 高并发模式（默认关闭）
   // 目标：关闭部分 Redis 调试快照与实时观测写入，降低高并发下的 CPU 与 IO 开销
   enableHighConcurrencyMode: boolean;
@@ -145,6 +148,9 @@ export interface UpdateSystemSettingsInput {
 
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2?: boolean;
+
+  // 启用 /v1/responses 客户端 WebSocket 入口（可选）
+  enableOpenAIResponsesWebSocket?: boolean;
 
   // 高并发模式（可选）
   enableHighConcurrencyMode?: boolean;

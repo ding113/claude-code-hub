@@ -48,6 +48,8 @@
     "passThroughUpstreamErrorMessageDesc": "开启后，CCH 会在能提取出安全脱敏后的上游错误消息时替换 `error.message`；否则 `error.message` 回退到通用代理错误。它不会关闭“详细供应商错误信息”控制的 `error.details` 诊断。",
     "enableHttp2": "启用 HTTP/2",
     "enableHttp2Desc": "启用后，代理请求将优先使用 HTTP/2 协议。如果 HTTP/2 失败，将自动降级到 HTTP/1.1。",
+    "enableOpenAIResponsesWebSocket": "启用 OpenAI Responses WebSocket",
+    "enableOpenAIResponsesWebSocketDesc": "开启后，客户端可通过 WebSocket 连接 /v1/responses 使用 OpenAI Responses 流式通道。关闭后将强制走现有 HTTP/SSE 路径。",
     "enableHighConcurrencyMode": "启用高并发模式",
     "enableHighConcurrencyModeDesc": "开启后，将关闭部分 Redis 调试快照与实时会话观测写入，以降低高并发下的 CPU 与 IO 开销。不会影响转发、整流、fake 200 检测、计费与限额，但 Sessions 调试详情会减少或延后。",
     "interceptAnthropicWarmupRequests": "拦截 Warmup 请求（Anthropic）",

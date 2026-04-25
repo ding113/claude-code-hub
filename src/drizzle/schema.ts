@@ -757,6 +757,11 @@ export const systemSettings = pgTable('system_settings', {
   // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
   enableHttp2: boolean('enable_http2').notNull().default(false),
 
+  // 启用 /v1/responses 客户端 WebSocket 入口（默认开启）
+  enableOpenAIResponsesWebSocket: boolean('enable_openai_responses_websocket')
+    .notNull()
+    .default(true),
+
   // 高并发模式（默认关闭）
   // 开启后：关闭部分 Redis 调试快照与实时观测写入，降低高并发下的 CPU 与 IO 开销
   enableHighConcurrencyMode: boolean('enable_high_concurrency_mode').notNull().default(false),

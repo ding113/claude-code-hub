@@ -15,6 +15,7 @@ export {
   parseOpenAIResponse,
   parseResponse,
 } from "./parsers";
+export { createDefaultResponsesWebSocketProbe } from "./responses-websocket-probe";
 // Main test service
 export { executeProviderTest, getStatusWeight } from "./test-service";
 // Types
@@ -24,8 +25,12 @@ export type {
   GeminiTestBody,
   OpenAITestBody,
   ParsedResponse,
+  ProviderTestCompatibility,
   ProviderTestConfig,
   ProviderTestResult,
+  ResponsesWebSocketProbe,
+  ResponsesWebSocketProbeInput,
+  ResponsesWebSocketProbeMetadata,
   StatusValue,
   TestStatus,
   TestSubStatus,

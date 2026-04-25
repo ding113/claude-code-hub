@@ -261,7 +261,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       setMapInstance(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedTheme, mapStyles.light, viewport, projection, props, mapStyles.dark]);
+  }, []);
 
   // Sync controlled viewport to map
   useEffect(() => {
@@ -960,7 +960,7 @@ function MapPopup({
 
     return popupInstance;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [longitude, latitude, popupOptions]);
+  }, []);
 
   useEffect(() => {
     if (!map) return;
@@ -1314,7 +1314,6 @@ function MapClusterLayer<P extends GeoJSON.GeoJsonProperties = GeoJSON.GeoJsonPr
     clusterThresholds[1],
     clusterMaxZoom,
     clusterRadius,
-    data,
     pointColor,
     clusterLayerId,
     clusterCountLayerId,

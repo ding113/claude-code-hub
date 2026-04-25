@@ -20,6 +20,7 @@ import {
   publishCircuitBreakerConfigInvalidation,
   resetCircuit,
 } from "@/lib/circuit-breaker";
+import { isOpenAIResponsesWebSocketEnabled } from "@/lib/config";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA } from "@/lib/provider-allowed-model-schema";
@@ -33,7 +34,9 @@ import {
   PROVIDER_PATCH_ERROR_CODES,
 } from "@/lib/provider-patch-contract";
 import {
+  createDefaultResponsesWebSocketProbe,
   executeProviderTest,
+  type ProviderTestCompatibility,
   type ProviderTestConfig,
   type TestStatus,
   type TestSubStatus,
@@ -4533,6 +4536,7 @@ export type UnifiedTestResult = ActionResult<{
     contentPassed: boolean;
     contentTarget?: string;
   };
+  compatibility?: ProviderTestCompatibility;
 }>;
 
 /**
@@ -4562,6 +4566,20 @@ async function isUrlSafeForApiTest(
     return { safe: true };
   }
   return { safe: false, reason: validation.error.message };
+}
+
+async function resolveProviderTestResponsesWebSocketProbe(
+  providerType: ProviderType
+): Promise<ProviderTestConfig["responsesWebSocketProbe"] | undefined> {
+  if (providerType !== "codex") {
+    return undefined;
+  }
+
+  if (!(await isOpenAIResponsesWebSocketEnabled())) {
+    return undefined;
+  }
+
+  return createDefaultResponsesWebSocketProbe();
 }
 
 /**
@@ -4611,6 +4629,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
       preset: data.preset,
       customPayload: data.customPayload,
       customHeaders: data.customHeaders,
+      responsesWebSocketProbe: await resolveProviderTestResponsesWebSocketProbe(data.providerType),
     };
 
     // Execute test
@@ -4643,6 +4662,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
         errorType: result.errorType,
         testedAt: result.testedAt.toISOString(),
         validationDetails: result.validationDetails,
+        compatibility: result.compatibility,
       },
     };
   } catch (error) {

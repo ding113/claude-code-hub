@@ -70,6 +70,43 @@ export const TEST_DEFAULTS = {
 } as const;
 
 /**
+ * Optional Responses WebSocket probe input for Codex compatibility diagnostics.
+ */
+export interface ResponsesWebSocketProbeInput {
+  providerUrl: string;
+  apiKey: string;
+  model: string | undefined;
+  requestUrl: string;
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+  /** Remaining provider test budget in milliseconds for diagnostics-only probing. */
+  timeoutMs?: number;
+}
+
+/**
+ * Scalar-only compatibility metadata surfaced to provider diagnostics.
+ */
+export interface ResponsesWebSocketProbeMetadata {
+  status: "supported" | "degraded";
+  supported: boolean;
+  degraded: boolean;
+  reason?: string;
+  errorType?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Best-effort probe hook. Failures must not affect HTTP provider health.
+ */
+export type ResponsesWebSocketProbe = (
+  input: ResponsesWebSocketProbeInput
+) => Promise<Partial<ResponsesWebSocketProbeMetadata> | undefined>;
+
+export interface ProviderTestCompatibility {
+  responsesWebSocket?: ResponsesWebSocketProbeMetadata;
+}
+
+/**
  * Configuration for provider test execution
  */
 export interface ProviderTestConfig {
@@ -102,6 +139,8 @@ export interface ProviderTestConfig {
   customPayload?: string;
   /** Custom headers to merge with default headers */
   customHeaders?: Record<string, string>;
+  /** Optional Responses WebSocket compatibility probe for diagnostics only */
+  responsesWebSocketProbe?: ResponsesWebSocketProbe;
 }
 
 // ============================================================================
@@ -183,6 +222,8 @@ export interface ProviderTestResult {
   validationDetails: ValidationDetails;
   /** Whether proxy was used */
   usedProxy?: boolean;
+  /** Optional protocol compatibility metadata; never changes HTTP test status */
+  compatibility?: ProviderTestCompatibility;
 }
 
 // ============================================================================

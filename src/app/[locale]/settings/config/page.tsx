@@ -49,6 +49,7 @@ async function SettingsConfigContent() {
             verboseProviderError: settings.verboseProviderError,
             passThroughUpstreamErrorMessage: settings.passThroughUpstreamErrorMessage,
             enableHttp2: settings.enableHttp2,
+            enableOpenAIResponsesWebSocket: settings.enableOpenAIResponsesWebSocket,
             enableHighConcurrencyMode: settings.enableHighConcurrencyMode,
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
             enableThinkingSignatureRectifier: settings.enableThinkingSignatureRectifier,

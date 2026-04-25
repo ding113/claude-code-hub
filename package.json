@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsgo -p tsconfig.json --noEmit && next dev --port 13500",
     "build": "tsgo -p tsconfig.json --noEmit && next build && (node scripts/copy-version-to-standalone.cjs || bun scripts/copy-version-to-standalone.cjs)",
-    "start": "next start",
+    "start": "node .next/standalone/server.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsgo -p tsconfig.json --noEmit",

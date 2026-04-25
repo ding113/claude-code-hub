@@ -56,6 +56,8 @@
     "enableAutoCleanupDesc": "Автоматически очищать исторические логи по расписанию",
     "enableHttp2": "Включить HTTP/2",
     "enableHttp2Desc": "При включении прокси-запросы будут отдавать приоритет HTTP/2. Если HTTP/2 не удастся, произойдёт автоматическое понижение до HTTP/1.1.",
+    "enableOpenAIResponsesWebSocket": "Включить OpenAI Responses WebSocket",
+    "enableOpenAIResponsesWebSocketDesc": "Если включено, клиенты могут подключаться к /v1/responses через WebSocket для потокового канала OpenAI Responses. Отключите, чтобы принудительно использовать существующий HTTP/SSE путь.",
     "enableHighConcurrencyMode": "Включить режим высокой нагрузки",
     "enableHighConcurrencyModeDesc": "Если включено, CCH отключит часть Redis-снимков для отладки и записи real-time Session-наблюдения, чтобы снизить нагрузку на CPU и IO при высоком RPM. Пересылка, rectifier-логика, обнаружение fake 200, биллинг и лимиты сохраняются, но детализация отладки в Sessions может уменьшиться или запаздывать.",
     "enableResponseFixer": "Включить исправление ответов",

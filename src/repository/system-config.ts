@@ -152,6 +152,7 @@ function createFallbackSettings(): SystemSettings {
     verboseProviderError: false,
     passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
+    enableOpenAIResponsesWebSocket: true,
     enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
@@ -270,6 +271,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     };
     const fullSelection = {
       passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+      enableOpenAIResponsesWebSocket: systemSettings.enableOpenAIResponsesWebSocket,
       ...selectionWithoutPassThrough,
     };
 
@@ -283,12 +285,35 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
-        // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
+        // 第一层降级：仅移除本次新增的 enableOpenAIResponsesWebSocket 列，
         // 其它已迁移的现代字段保留，避免只缺该列时其它设置被连带默认化。
+        const {
+          enableOpenAIResponsesWebSocket: _omitOpenAIResponsesWebSocket,
+          ...selectionWithoutOpenAIResponsesWebSocket
+        } = fullSelection;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutOpenAIResponsesWebSocket)
+            .from(systemSettings)
+            .limit(1);
+          return row ?? null;
+        } catch (openAIResponsesWebSocketFallbackError) {
+          if (!isUndefinedColumnError(openAIResponsesWebSocketFallbackError)) {
+            throw openAIResponsesWebSocketFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 OpenAI Responses WebSocket 新列外仍有列缺失，继续降级读取。",
+            { error: openAIResponsesWebSocketFallbackError }
+          );
+        }
+
+        // 第二层降级：移除 allowNonConversationEndpointProviderFallback 列。
         const {
           allowNonConversationEndpointProviderFallback: _omitNonConversationFallback,
           ...selectionWithoutNonConversationFallback
-        } = fullSelection;
+        } = selectionWithoutOpenAIResponsesWebSocket;
 
         try {
           const [row] = await db
@@ -391,6 +416,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           billingModelSource: "original",
           codexPriorityBillingSource: "requested",
           passThroughUpstreamErrorMessage: true,
+          enableOpenAIResponsesWebSocket: true,
           allowNonConversationEndpointProviderFallback: true,
           enableHighConcurrencyMode: false,
           publicStatusWindowHours: 24,
@@ -518,6 +544,7 @@ export async function updateSystemSettings(
   };
   const fullReturning = {
     passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+    enableOpenAIResponsesWebSocket: systemSettings.enableOpenAIResponsesWebSocket,
     ...returningWithoutPassThrough,
   };
 
@@ -587,6 +614,11 @@ export async function updateSystemSettings(
     // HTTP/2 配置字段（如果提供）
     if (payload.enableHttp2 !== undefined) {
       updates.enableHttp2 = payload.enableHttp2;
+    }
+
+    // /v1/responses 客户端 WebSocket 入口开关（如果提供）
+    if (payload.enableOpenAIResponsesWebSocket !== undefined) {
+      updates.enableOpenAIResponsesWebSocket = payload.enableOpenAIResponsesWebSocket;
     }
 
     // 高并发模式开关（如果提供）
@@ -699,87 +731,113 @@ export async function updateSystemSettings(
         error,
       });
 
-      // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
-      // 其它字段继续原值更新 / 返回，避免只缺该列时连带丢失 codex/highConcurrency 等更新。
+      // 第一层降级：仅移除本次新增的 enableOpenAIResponsesWebSocket 列，
+      // 其它字段继续原值更新 / 返回，避免只缺该列时连带丢失其它设置。
       const {
-        allowNonConversationEndpointProviderFallback: _omitUpdate,
-        ...updatesWithoutNonConversationFallback
+        enableOpenAIResponsesWebSocket: _omitOpenAIResponsesWebSocketUpdate,
+        ...updatesWithoutOpenAIResponsesWebSocket
       } = updates;
       const {
-        allowNonConversationEndpointProviderFallback: _omitReturning,
-        ...returningWithoutNonConversationFallback
+        enableOpenAIResponsesWebSocket: _omitOpenAIResponsesWebSocketReturning,
+        ...returningWithoutOpenAIResponsesWebSocket
       } = fullReturning;
 
       try {
         [updated] = await executor
           .update(systemSettings)
-          .set(updatesWithoutNonConversationFallback)
+          .set(updatesWithoutOpenAIResponsesWebSocket)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutNonConversationFallback);
-      } catch (nonConversationFallbackError) {
-        if (!isUndefinedColumnError(nonConversationFallbackError)) {
-          throw nonConversationFallbackError;
+          .returning(returningWithoutOpenAIResponsesWebSocket);
+      } catch (openAIResponsesWebSocketFallbackError) {
+        if (!isUndefinedColumnError(openAIResponsesWebSocketFallbackError)) {
+          throw openAIResponsesWebSocketFallbackError;
         }
 
         logger.warn(
-          "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
-          { error: nonConversationFallbackError }
+          "system_settings 表除 OpenAI Responses WebSocket 新列外仍有列缺失，继续降级更新。",
+          { error: openAIResponsesWebSocketFallbackError }
         );
 
+        // 第二层降级：移除 allowNonConversationEndpointProviderFallback 列。
+        const {
+          allowNonConversationEndpointProviderFallback: _omitUpdate,
+          ...updatesWithoutNonConversationFallback
+        } = updatesWithoutOpenAIResponsesWebSocket;
+        const {
+          allowNonConversationEndpointProviderFallback: _omitReturning,
+          ...returningWithoutNonConversationFallback
+        } = returningWithoutOpenAIResponsesWebSocket;
+
         try {
-          const withoutPassThroughUpdates = { ...updates };
-          delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
           [updated] = await executor
             .update(systemSettings)
-            .set(withoutPassThroughUpdates)
+            .set(updatesWithoutNonConversationFallback)
             .where(eq(systemSettings.id, current.id))
-            .returning(returningWithoutPassThrough);
-        } catch (passThroughFallbackError) {
-          if (!isUndefinedColumnError(passThroughFallbackError)) {
-            throw passThroughFallbackError;
+            .returning(returningWithoutNonConversationFallback);
+        } catch (nonConversationFallbackError) {
+          if (!isUndefinedColumnError(nonConversationFallbackError)) {
+            throw nonConversationFallbackError;
           }
 
-          const downgradedUpdates = { ...updates };
-          delete downgradedUpdates.passThroughUpstreamErrorMessage;
-          delete downgradedUpdates.enableHighConcurrencyMode;
-          delete downgradedUpdates.publicStatusWindowHours;
-          delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
-          delete downgradedUpdates.ipExtractionConfig;
-          delete downgradedUpdates.ipGeoLookupEnabled;
-
-          const legacyUpdates = { ...downgradedUpdates };
-          delete legacyUpdates.codexPriorityBillingSource;
-          delete legacyUpdates.allowNonConversationEndpointProviderFallback;
+          logger.warn(
+            "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
+            { error: nonConversationFallbackError }
+          );
 
           try {
+            const withoutPassThroughUpdates = { ...updatesWithoutNonConversationFallback };
+            delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
             [updated] = await executor
               .update(systemSettings)
-              .set(downgradedUpdates)
+              .set(withoutPassThroughUpdates)
               .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutHighConcurrencyMode);
-          } catch (downgradedFallbackError) {
-            if (!isUndefinedColumnError(downgradedFallbackError)) {
-              throw downgradedFallbackError;
+              .returning(returningWithoutPassThrough);
+          } catch (passThroughFallbackError) {
+            if (!isUndefinedColumnError(passThroughFallbackError)) {
+              throw passThroughFallbackError;
             }
 
-            logger.warn(
-              "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
-              { error: downgradedFallbackError }
-            );
+            const downgradedUpdates = { ...updatesWithoutNonConversationFallback };
+            delete downgradedUpdates.passThroughUpstreamErrorMessage;
+            delete downgradedUpdates.enableHighConcurrencyMode;
+            delete downgradedUpdates.publicStatusWindowHours;
+            delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
+            delete downgradedUpdates.ipExtractionConfig;
+            delete downgradedUpdates.ipGeoLookupEnabled;
 
-            [updated] = await executor
-              .update(systemSettings)
-              .set(legacyUpdates)
-              .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutCodexAndHighConcurrency);
-          }
+            const legacyUpdates = { ...downgradedUpdates };
+            delete legacyUpdates.codexPriorityBillingSource;
 
-          if (!updated) {
-            [updated] = await executor
-              .update(systemSettings)
-              .set(legacyUpdates)
-              .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutCodexAndHighConcurrency);
+            try {
+              [updated] = await executor
+                .update(systemSettings)
+                .set(downgradedUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutHighConcurrencyMode);
+            } catch (downgradedFallbackError) {
+              if (!isUndefinedColumnError(downgradedFallbackError)) {
+                throw downgradedFallbackError;
+              }
+
+              logger.warn(
+                "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
+                { error: downgradedFallbackError }
+              );
+
+              [updated] = await executor
+                .update(systemSettings)
+                .set(legacyUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutCodexAndHighConcurrency);
+            }
+
+            if (!updated) {
+              [updated] = await executor
+                .update(systemSettings)
+                .set(legacyUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutCodexAndHighConcurrency);
+            }
           }
         }
       }

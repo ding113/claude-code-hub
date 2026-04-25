@@ -14,6 +14,17 @@ export interface ProviderChainItem {
   // 仅用于只读日志脱敏：标记该链路是否走了 raw 跨供应商 fallback。
   rawCrossProviderFallbackEnabled?: boolean;
 
+  // Responses WebSocket 观测元数据（仅保存布尔/原因/耗时，不保存内容）。
+  clientTransport?: "websocket";
+  upstreamWsAttempted?: boolean;
+  upstreamWsConnected?: boolean;
+  downgradedToHttp?: boolean;
+  downgradeReason?: string;
+  queueWaitMs?: number;
+  storeFalseCacheHit?: boolean;
+  storeFalseCacheRefusalReason?: string | null;
+  upstreamWsUnsupportedCacheHit?: boolean;
+
   // 供应商维度（便于日志审计，无需额外 join）
   vendorId?: number;
   providerType?: ProviderType;
@@ -220,6 +231,17 @@ export interface ProviderChainItem {
     // --- 重试特有 ---
     excludedProviderIds?: number[]; // 已排除的供应商 ID 列表
     retryReason?: string; // 重试原因
+
+    // --- Responses WebSocket 特有 ---
+    clientTransport?: "websocket";
+    upstreamWsAttempted?: boolean;
+    upstreamWsConnected?: boolean;
+    downgradedToHttp?: boolean;
+    downgradeReason?: string;
+    queueWaitMs?: number;
+    storeFalseCacheHit?: boolean;
+    storeFalseCacheRefusalReason?: string | null;
+    upstreamWsUnsupportedCacheHit?: boolean;
   };
 }
 

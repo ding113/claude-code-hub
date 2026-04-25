@@ -47,7 +47,7 @@ app.get("/chat/models", handleOpenAICompatibleModels); // 简写路径
 // OpenAI Compatible API 路由
 app.post("/chat/completions", handleProxyRequest);
 
-// Response API 路由（支持 Codex）
+// Response API HTTP 路由（支持 Codex）。WebSocket upgrade 需走 Node server upgrade hook。
 app.post("/responses", handleProxyRequest);
 
 // 内部健康自检端点（不走 proxy，仅验证 Hono 中间件链可用）

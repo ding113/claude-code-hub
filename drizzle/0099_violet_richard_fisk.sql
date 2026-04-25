@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_openai_responses_websocket" boolean DEFAULT true NOT NULL;

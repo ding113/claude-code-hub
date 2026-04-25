@@ -16,6 +16,8 @@ import type {
   ParsedResponse,
   ProviderTestConfig,
   ProviderTestResult,
+  ResponsesWebSocketProbe,
+  ResponsesWebSocketProbeMetadata,
   TestStatus,
   TestSubStatus,
   ValidationDetails,
@@ -358,16 +360,113 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
       fallbackState
     );
     if (result.success || !shouldRetryWithNextTemplate(result)) {
-      return result;
+      return attachResponsesWebSocketProbeMetadata(config, plan, result, deadline);
     }
     fallbackResult = result;
   }
 
   if (fallbackResult) {
-    return fallbackResult;
+    return attachResponsesWebSocketProbeMetadata(
+      config,
+      plans[plans.length - 1]!,
+      fallbackResult,
+      deadline
+    );
   }
 
   throw new Error("No provider testing plan could be constructed");
+}
+
+async function attachResponsesWebSocketProbeMetadata(
+  config: ProviderTestConfig,
+  plan: AttemptPlan,
+  result: ProviderTestResult,
+  deadline: number
+): Promise<ProviderTestResult> {
+  if (config.providerType !== "codex") {
+    return result;
+  }
+
+  const probe = config.responsesWebSocketProbe;
+  if (!probe) {
+    return result;
+  }
+
+  const responsesWebSocket = await runResponsesWebSocketProbe(
+    probe,
+    config,
+    plan,
+    result,
+    deadline
+  );
+  const enrichedResult: ProviderTestResult = {
+    ...result,
+    compatibility: {
+      ...result.compatibility,
+      responsesWebSocket,
+    },
+  };
+
+  return enrichedResult;
+}
+
+async function runResponsesWebSocketProbe(
+  probe: ResponsesWebSocketProbe,
+  config: ProviderTestConfig,
+  plan: AttemptPlan,
+  result: ProviderTestResult,
+  deadline: number
+): Promise<ResponsesWebSocketProbeMetadata> {
+  try {
+    const metadata = await probe({
+      providerUrl: config.providerUrl,
+      apiKey: config.apiKey,
+      model: plan.model ?? config.model,
+      requestUrl: result.requestUrl ?? plan.url,
+      headers: plan.headers,
+      body: plan.body,
+      timeoutMs: Math.max(1, deadline - Date.now()),
+    });
+
+    return normalizeResponsesWebSocketProbeMetadata(metadata);
+  } catch (error) {
+    return classifyResponsesWebSocketProbeFailure(error);
+  }
+}
+
+function normalizeResponsesWebSocketProbeMetadata(
+  metadata: Partial<ResponsesWebSocketProbeMetadata> | undefined
+): ResponsesWebSocketProbeMetadata {
+  const supported = metadata?.supported ?? metadata?.status !== "degraded";
+  const status = metadata?.status ?? (supported ? "supported" : "degraded");
+  const degraded = metadata?.degraded ?? (status === "degraded" || !supported);
+
+  return {
+    status,
+    supported,
+    degraded,
+    ...(metadata?.reason ? { reason: metadata.reason } : {}),
+    ...(metadata?.errorType ? { errorType: metadata.errorType } : {}),
+    ...(metadata?.errorMessage ? { errorMessage: metadata.errorMessage } : {}),
+  };
+}
+
+function classifyResponsesWebSocketProbeFailure(error: unknown): ResponsesWebSocketProbeMetadata {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const code = isRecord(error) && typeof error.code === "string" ? error.code : undefined;
+
+  return {
+    status: "degraded",
+    supported: false,
+    degraded: true,
+    reason: "ws_unsupported",
+    errorType: code ?? "websocket_probe_error",
+    errorMessage,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function classifyError(error: unknown): {

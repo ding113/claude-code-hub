@@ -56,6 +56,8 @@
     "enableAutoCleanupDesc": "定時自動清理歷史日誌資料",
     "enableHttp2": "啟用 HTTP/2",
     "enableHttp2Desc": "啟用後，代理請求將優先使用 HTTP/2 協定；若 HTTP/2 失敗，將自動降級為 HTTP/1.1。",
+    "enableOpenAIResponsesWebSocket": "啟用 OpenAI Responses WebSocket",
+    "enableOpenAIResponsesWebSocketDesc": "開啟後，客戶端可透過 WebSocket 連線 /v1/responses 使用 OpenAI Responses 串流通道。關閉後將強制走既有 HTTP/SSE 路徑。",
     "enableHighConcurrencyMode": "啟用高並發模式",
     "enableHighConcurrencyModeDesc": "開啟後，將關閉部分 Redis 除錯快照與即時 Session 觀測寫入，以降低高並發下的 CPU 與 IO 開銷。轉發、整流、fake 200 偵測、計費與限額不受影響，但 Sessions 除錯詳情會減少或延後。",
     "enableResponseFixer": "啟用回應整流",

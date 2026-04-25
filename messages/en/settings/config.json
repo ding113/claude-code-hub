@@ -56,6 +56,8 @@
     "enableAutoCleanupDesc": "Automatically clean up historical log data on schedule",
     "enableHttp2": "Enable HTTP/2",
     "enableHttp2Desc": "When enabled, proxy requests will prefer HTTP/2 protocol. Automatically falls back to HTTP/1.1 on failure.",
+    "enableOpenAIResponsesWebSocket": "Enable OpenAI Responses WebSocket",
+    "enableOpenAIResponsesWebSocketDesc": "When enabled, clients can connect to /v1/responses with WebSocket for OpenAI Responses streaming. Disable to force the existing HTTP/SSE path.",
     "enableHighConcurrencyMode": "Enable High-Concurrency Mode",
     "enableHighConcurrencyModeDesc": "When enabled, CCH disables part of the Redis debug snapshots and real-time session observability writes to reduce CPU and IO pressure under high RPM. Forwarding, rectifiers, fake-200 detection, billing, and quota enforcement remain unchanged, but Sessions debugging details may be reduced or delayed.",
     "enableResponseFixer": "Enable Response Fixer",
