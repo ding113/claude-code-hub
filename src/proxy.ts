@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
-import type { Locale } from "@/i18n/config";
+import { type Locale, localeCookieName } from "@/i18n/config";
+import { getLocaleFromValue, normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
@@ -17,6 +18,30 @@ const PUBLIC_PATH_PATTERNS = [
 ];
 
 const API_PROXY_PATH = "/v1";
+
+function getCookieValueFromHeader(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) return null;
+
+  for (const segment of cookieHeader.split(";")) {
+    const [rawKey, ...rawValueParts] = segment.split("=");
+    const key = rawKey?.trim();
+
+    if (key !== name) {
+      continue;
+    }
+
+    const value = rawValueParts.join("=").trim();
+    if (!value) return null;
+
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
 
 function matchesPublicPath(pathname: string, pattern: string) {
   return pathname === pattern || pathname.startsWith(`${pattern}/`);
@@ -102,12 +127,12 @@ function proxyHandler(request: NextRequest) {
     // Not authenticated, redirect to login page
     const url = request.nextUrl.clone();
     // Preserve locale in redirect
-    const locale = isLocaleInPath ? potentialLocale : routing.defaultLocale;
+    const localeFromCookie =
+      getLocaleFromValue(sanitizedRequest.cookies.get(localeCookieName)?.value) ||
+      getLocaleFromValue(getCookieValueFromHeader(requestHeaders.get("cookie"), localeCookieName));
+    const locale = isLocaleInPath ? potentialLocale : localeFromCookie || routing.defaultLocale;
     url.pathname = `/${locale}/login`;
-    url.searchParams.set(
-      "from",
-      !pathWithoutLocale || pathWithoutLocale === "/" ? "/dashboard" : pathWithoutLocale
-    );
+    url.searchParams.set("from", normalizePathnameForLocaleNavigation(pathWithoutLocale));
     return NextResponse.redirect(url);
   }
 

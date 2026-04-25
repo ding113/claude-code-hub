@@ -5,7 +5,7 @@
 
 import { createNavigation } from "next-intl/navigation";
 import { defineRouting } from "next-intl/routing";
-import { defaultLocale, locales } from "./config";
+import { defaultLocale, localeCookieName, locales } from "./config";
 
 // Define routing configuration for next-intl
 export const routing = defineRouting({
@@ -23,7 +23,7 @@ export const routing = defineRouting({
 
   // Locale cookie configuration
   localeCookie: {
-    name: "NEXT_LOCALE",
+    name: localeCookieName,
     // Cookie expires in 1 year
     maxAge: 365 * 24 * 60 * 60,
     // Available across the entire site
