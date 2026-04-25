@@ -33,10 +33,19 @@ export interface ResponsesWsEligibility {
 }
 
 export function isWebsocketClientRequest(headers: Headers | Record<string, string>): boolean {
-  const value =
-    headers instanceof Headers
-      ? headers.get(CLIENT_TRANSPORT_HEADER)
-      : (headers[CLIENT_TRANSPORT_HEADER] as string | undefined);
+  let value: string | null | undefined;
+  if (headers instanceof Headers) {
+    value = headers.get(CLIENT_TRANSPORT_HEADER);
+  } else {
+    // Plain record: header keys may be in any case (e.g. `X-Cch-Client-Transport`).
+    // Normalize to lowercase before comparing to avoid silent misses.
+    for (const [k, v] of Object.entries(headers)) {
+      if (k.toLowerCase() === CLIENT_TRANSPORT_HEADER) {
+        value = v;
+        break;
+      }
+    }
+  }
   return typeof value === "string" && value.toLowerCase() === "websocket";
 }
 

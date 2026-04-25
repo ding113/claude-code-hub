@@ -28,9 +28,21 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || (dev ? "13500" : "3000"), 10);
 
+// Loopback target for the in-process WS->HTTP tunnel. When the public bind
+// hostname is a wildcard (0.0.0.0 / ::), tunnel via 127.0.0.1; otherwise use
+// the configured hostname so we still hit the local listener even when bound
+// to a specific interface.
+const INTERNAL_TUNNEL_HOST =
+  hostname === "0.0.0.0" || hostname === "::" || hostname === "*" ? "127.0.0.1" : hostname;
+
 const WS_PATH = "/v1/responses";
 const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
 const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
+
+// Per-WebSocket-connection guardrails: cap the queue depth and total queued
+// bytes to make a misbehaving / malicious client a bounded-memory event.
+const MAX_PENDING_FRAMES = 64;
+const MAX_PENDING_BYTES = 4 * 1024 * 1024; // 4 MiB across all queued frames
 
 const TERMINAL_EVENT_TYPES = new Set([
   "response.completed",
@@ -38,6 +50,10 @@ const TERMINAL_EVENT_TYPES = new Set([
   "response.incomplete",
   "error",
 ]);
+
+// Query-string keys we explicitly never want to log on the connection event.
+// Anything outside this list is masked to "***".
+const ALLOWED_LOGGED_QUERY_KEYS = new Set(["model"]);
 
 function log(level, msg, extra) {
   const line = { ts: new Date().toISOString(), level, msg, ...(extra || {}) };
@@ -67,18 +83,56 @@ function emitErrorEvent(ws, code, message) {
   });
 }
 
+function sanitizedRequestPath(rawUrl) {
+  if (typeof rawUrl !== "string" || rawUrl.length === 0) {
+    return "/";
+  }
+  try {
+    const parsed = new URL(rawUrl, "http://localhost");
+    const masked = new URLSearchParams();
+    parsed.searchParams.forEach((value, key) => {
+      masked.append(key, ALLOWED_LOGGED_QUERY_KEYS.has(key.toLowerCase()) ? value : "***");
+    });
+    const qs = masked.toString();
+    return qs.length > 0 ? `${parsed.pathname}?${qs}` : parsed.pathname;
+  } catch {
+    return "/";
+  }
+}
+
 async function handleWebSocketConnection(ws, req) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const queryModel = url.searchParams.get("model");
   let inFlight = false;
   const pending = [];
+  let pendingBytes = 0;
   let closed = false;
+  // Track the in-flight internal HTTP ClientRequest so we can abort it when
+  // the client WebSocket disconnects mid-stream — otherwise the SSE consumer
+  // (and provider concurrency / breaker counters) keep running for minutes.
+  let currentInternalReq = null;
 
   const finalize = () => {
     closed = true;
+    if (currentInternalReq) {
+      try {
+        currentInternalReq.destroy();
+      } catch {
+        // ignore
+      }
+      currentInternalReq = null;
+    }
+    pending.length = 0;
+    pendingBytes = 0;
   };
+
   ws.on("close", finalize);
-  ws.on("error", finalize);
+  ws.on("error", (err) => {
+    log("warn", "ws_client_error", {
+      error: String(err && err.message ? err.message : err),
+    });
+    finalize();
+  });
 
   const processFrame = async (raw) => {
     if (closed) return;
@@ -97,7 +151,11 @@ async function handleWebSocketConnection(ws, req) {
     try {
       frame = JSON.parse(raw);
     } catch (err) {
-      emitErrorEvent(ws, "invalid_json", `Invalid JSON frame: ${err && err.message ? err.message : "parse error"}`);
+      emitErrorEvent(
+        ws,
+        "invalid_json",
+        `Invalid JSON frame: ${err && err.message ? err.message : "parse error"}`
+      );
       return;
     }
 
@@ -107,11 +165,15 @@ async function handleWebSocketConnection(ws, req) {
     }
 
     if (frame.type !== "response.create") {
-      emitErrorEvent(ws, "unsupported_event_type", `Only type=response.create is supported; received: ${frame.type ?? "(missing)"}`);
+      emitErrorEvent(
+        ws,
+        "unsupported_event_type",
+        `Only type=response.create is supported; received: ${frame.type ?? "(missing)"}`
+      );
       return;
     }
 
-    const { type, ...rawBody } = frame;
+    const { type: _type, ...rawBody } = frame;
     const body = { ...rawBody };
     // body.model wins over query; only fill from query when body lacks a model
     // (LiteLLM/other compat). Drop transport-only fields.
@@ -119,20 +181,37 @@ async function handleWebSocketConnection(ws, req) {
       body.model = queryModel;
     }
 
-    await forwardToInternalHttp(ws, req, body);
+    await forwardToInternalHttp(ws, req, body, (clientReq) => {
+      currentInternalReq = clientReq;
+    });
+    if (!closed) {
+      currentInternalReq = null;
+    }
   };
 
   const drain = async () => {
     if (inFlight) return;
     const next = pending.shift();
-    if (!next) return;
+    if (next === undefined) return;
+    pendingBytes -= Buffer.byteLength(next, "utf8");
+    if (pendingBytes < 0) pendingBytes = 0;
     inFlight = true;
     try {
       await processFrame(next);
     } finally {
       inFlight = false;
       if (pending.length > 0 && !closed) {
-        void drain();
+        void drain().catch((err) => {
+          log("error", "ws_drain_failed", {
+            error: String(err && err.message ? err.message : err),
+          });
+          emitErrorEvent(ws, "internal_error", "Failed to process queued request");
+          try {
+            ws.close(1011, "internal_error");
+          } catch {
+            // ignore
+          }
+        });
       }
     }
   };
@@ -148,12 +227,39 @@ async function handleWebSocketConnection(ws, req) {
       }
       return;
     }
-    pending.push(data.toString("utf8"));
-    void drain();
+    const text = data.toString("utf8");
+    const size = Buffer.byteLength(text, "utf8");
+    if (pending.length >= MAX_PENDING_FRAMES || pendingBytes + size > MAX_PENDING_BYTES) {
+      log("warn", "ws_pending_overflow", {
+        pendingFrames: pending.length,
+        pendingBytes,
+        attemptedFrameSize: size,
+      });
+      emitErrorEvent(ws, "too_many_requests", "Pending frame limit exceeded");
+      try {
+        ws.close(1008, "too_many_requests");
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    pending.push(text);
+    pendingBytes += size;
+    void drain().catch((err) => {
+      log("error", "ws_drain_failed", {
+        error: String(err && err.message ? err.message : err),
+      });
+      emitErrorEvent(ws, "internal_error", "Failed to process request");
+      try {
+        ws.close(1011, "internal_error");
+      } catch {
+        // ignore
+      }
+    });
   });
 }
 
-async function forwardToInternalHttp(ws, originalReq, body) {
+async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq) {
   const internalHeaders = {};
   for (const [k, v] of Object.entries(originalReq.headers)) {
     // Skip hop-by-hop / WS-specific headers; keep app-level auth/session etc.
@@ -195,7 +301,7 @@ async function forwardToInternalHttp(ws, originalReq, body) {
     const req = http.request(
       {
         method: "POST",
-        hostname: "127.0.0.1",
+        hostname: INTERNAL_TUNNEL_HOST,
         port,
         path: "/v1/responses",
         headers: internalHeaders,
@@ -220,9 +326,10 @@ async function forwardToInternalHttp(ws, originalReq, body) {
             if (res.statusCode && res.statusCode >= 400) {
               safeSend(ws, {
                 type: "error",
-                error: typeof parsed === "object" && parsed && parsed.error
-                  ? parsed.error
-                  : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
+                error:
+                  typeof parsed === "object" && parsed && parsed.error
+                    ? parsed.error
+                    : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
               });
             } else {
               safeSend(ws, {
@@ -233,31 +340,40 @@ async function forwardToInternalHttp(ws, originalReq, body) {
             resolve();
           });
           res.on("error", (err) => {
-            emitErrorEvent(ws, "internal_response_error", String(err && err.message ? err.message : err));
+            emitErrorEvent(
+              ws,
+              "internal_response_error",
+              String(err && err.message ? err.message : err)
+            );
             resolve();
           });
           return;
         }
 
         // SSE path: decode `data:` events and emit each as a WS JSON frame.
+        // Accept both LF (`\n\n`) and CRLF (`\r\n\r\n`) event separators since
+        // upstreams in the wild emit either form.
         let buffer = "";
         let sawTerminal = false;
+        const EVENT_DELIMITER = /\r?\n\r?\n/;
 
         const flushEvents = () => {
-          let idx;
-          while ((idx = buffer.indexOf("\n\n")) !== -1) {
-            const chunk = buffer.slice(0, idx);
-            buffer = buffer.slice(idx + 2);
+          const parts = buffer.split(EVENT_DELIMITER);
+          // Last part may be a partial event still arriving — keep it buffered.
+          buffer = parts.pop() ?? "";
+          for (const chunk of parts) {
             const lines = chunk.split(/\r?\n/);
             const dataLines = [];
             for (const line of lines) {
               if (line.startsWith("data:")) {
-                dataLines.push(line.slice(5).trimStart());
+                // Trim CR / leading whitespace so trailing \r from CRLF lines
+                // doesn't end up inside the payload.
+                dataLines.push(line.slice(5).trim());
               }
             }
             if (dataLines.length === 0) continue;
             const dataText = dataLines.join("\n");
-            if (dataText === "[DONE]") {
+            if (dataText.trim() === "[DONE]") {
               if (!sawTerminal) {
                 // Some upstreams close SSE with [DONE] without a preceding
                 // response.completed. Synthesize one so the client sees a
@@ -303,17 +419,34 @@ async function forwardToInternalHttp(ws, originalReq, body) {
           resolve();
         });
         res.on("error", (err) => {
-          emitErrorEvent(ws, "internal_response_error", String(err && err.message ? err.message : err));
+          emitErrorEvent(
+            ws,
+            "internal_response_error",
+            String(err && err.message ? err.message : err)
+          );
           resolve();
         });
       }
     );
 
     req.on("error", (err) => {
-      emitErrorEvent(ws, "internal_request_error", String(err && err.message ? err.message : err));
+      // ECONNRESET when we destroy() the request on client disconnect is
+      // expected; downgrade to debug to avoid noisy logs in normal traffic.
+      const errCode = err && (err.code || err.name);
+      const isAbort = errCode === "ECONNRESET" || errCode === "ERR_STREAM_PREMATURE_CLOSE";
+      if (!isAbort) {
+        emitErrorEvent(
+          ws,
+          "internal_request_error",
+          String(err && err.message ? err.message : err)
+        );
+      }
       resolve();
     });
 
+    if (typeof registerInternalReq === "function") {
+      registerInternalReq(req);
+    }
     req.write(payload);
     req.end();
   });
@@ -334,7 +467,9 @@ async function main() {
     // eslint-disable-next-line global-require
     nextModule = require("next");
   } catch (err) {
-    log("error", "next_import_failed", { error: String(err && err.message ? err.message : err) });
+    log("error", "next_import_failed", {
+      error: String(err && err.message ? err.message : err),
+    });
     process.exit(1);
     return;
   }
@@ -360,7 +495,9 @@ async function main() {
       const parsedUrl = parse(req.url, true);
       await handler(req, res, parsedUrl);
     } catch (err) {
-      log("error", "http_handler_error", { error: String(err && err.message ? err.message : err) });
+      log("error", "http_handler_error", {
+        error: String(err && err.message ? err.message : err),
+      });
       if (!res.headersSent) {
         res.statusCode = 500;
         res.end("Internal Server Error");
@@ -377,9 +514,11 @@ async function main() {
         return;
       }
       wss.handleUpgrade(req, socket, head, (ws) => {
-        log("info", "ws_client_connected", { path: req.url });
+        log("info", "ws_client_connected", { path: sanitizedRequestPath(req.url) });
         handleWebSocketConnection(ws, req).catch((err) => {
-          log("error", "ws_handler_error", { error: String(err && err.message ? err.message : err) });
+          log("error", "ws_handler_error", {
+            error: String(err && err.message ? err.message : err),
+          });
           try {
             ws.close(1011, "internal_error");
           } catch {
@@ -395,11 +534,23 @@ async function main() {
   }
 
   server.listen(port, hostname, () => {
-    log("info", "server_listening", { hostname, port, wsEnabled: !!WebSocketServer });
+    log("info", "server_listening", {
+      hostname,
+      port,
+      internalTunnelHost: INTERNAL_TUNNEL_HOST,
+      wsEnabled: !!WebSocketServer,
+    });
   });
 }
 
-main().catch((err) => {
-  log("error", "server_bootstrap_failed", { error: String(err && err.stack ? err.stack : err) });
-  process.exit(1);
-});
+// Exposed for tests; not part of the long-lived server entrypoint.
+module.exports = { sanitizedRequestPath };
+
+if (require.main === module) {
+  main().catch((err) => {
+    log("error", "server_bootstrap_failed", {
+      error: String(err && err.stack ? err.stack : err),
+    });
+    process.exit(1);
+  });
+}

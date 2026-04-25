@@ -194,4 +194,78 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect((receivedFrame as Record<string, unknown>).background).toBeUndefined();
     expect((receivedFrame as Record<string, unknown>).store).toBe(false);
   });
+
+  it("filters hop-by-hop and shape headers regardless of input shape", async () => {
+    let receivedHeaders: Record<string, string | string[] | undefined> = {};
+    server = await startMockServer((socket, req) => {
+      receivedHeaders = req.headers as Record<string, string | string[] | undefined>;
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "x" } }));
+      });
+    });
+
+    const plainHeaders: Record<string, string> = {
+      authorization: "Bearer sk-mock",
+      // These must be filtered out regardless of the input shape:
+      connection: "keep-alive",
+      host: "evil.example.com",
+      "content-length": "999",
+      "transfer-encoding": "chunked",
+      accept: "application/json",
+      "content-type": "application/json",
+      // Custom header should pass through:
+      "x-cch-tenant": "tenant-a",
+    };
+
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: plainHeaders,
+      body: { model: "gpt-5", input: "hi" },
+    });
+
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+    await collectSseBody(result.response);
+
+    expect(receivedHeaders.authorization).toBe("Bearer sk-mock");
+    expect(receivedHeaders["x-cch-tenant"]).toBe("tenant-a");
+    // The host the upstream observed must come from the actual TCP target,
+    // never the value we passed in the plain Record (which we filter):
+    expect(receivedHeaders.host).not.toBe("evil.example.com");
+    // ws-package-managed headers must be set by ws, not echoed from input:
+    expect(receivedHeaders["content-length"]).not.toBe("999");
+  });
+
+  it("emits an error frame when upstream WS fails mid-stream after the first event", async () => {
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_1" } }));
+        // Simulate an abrupt protocol-level failure; no terminal event is sent.
+        setTimeout(() => {
+          try {
+            socket.terminate();
+          } catch {
+            // ignore
+          }
+        }, 5);
+      });
+    });
+
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      body: { model: "gpt-5", input: "hi" },
+    });
+
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+    const body = await collectSseBody(result.response);
+    expect(body).toContain('"type":"response.created"');
+    // The mid-stream failure must surface as an error event so the downstream
+    // pipeline does not mistake the truncated stream for a clean success.
+    expect(body).toContain('"type":"error"');
+    expect(body).toContain("upstream_ws_mid_stream_error");
+  });
 });

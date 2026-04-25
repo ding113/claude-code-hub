@@ -64,6 +64,15 @@ describe("isWebsocketClientRequest", () => {
       isWebsocketClientRequest({ [CLIENT_TRANSPORT_HEADER]: "http" } as Record<string, string>)
     ).toBe(false);
   });
+
+  it("handles record keys regardless of case (HTTP header semantics)", () => {
+    expect(
+      isWebsocketClientRequest({ "X-Cch-Client-Transport": "websocket" } as Record<string, string>)
+    ).toBe(true);
+    expect(
+      isWebsocketClientRequest({ "X-CCH-Client-TRANSPORT": "WEBSOCKET" } as Record<string, string>)
+    ).toBe(true);
+  });
 });
 
 describe("evaluateResponsesWsEligibility", () => {

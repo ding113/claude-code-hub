@@ -93,6 +93,37 @@ import {
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
 
+/**
+ * Best-effort decode of the *final* outgoing request body into a JSON object.
+ *
+ * The Responses WebSocket adapter needs the same payload that would have been
+ * sent over HTTP — including all filterPrivateParameters() / request-filter
+ * rewrites. The forwarder represents that body as a `BodyInit` (Buffer,
+ * string, FormData, ReadableStream, etc.). We only support the byte/string
+ * shapes here; multipart and stream shapes return null so the caller falls
+ * back to the HTTP path.
+ */
+function decodeRequestBodyAsJson(body: BodyInit | undefined): Record<string, unknown> | null {
+  if (body == null) return null;
+  let text: string | null = null;
+  if (typeof body === "string") {
+    text = body;
+  } else if (Buffer.isBuffer(body)) {
+    text = body.toString("utf8");
+  } else if (body instanceof Uint8Array) {
+    text = Buffer.from(body).toString("utf8");
+  }
+  if (text == null) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
 
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
@@ -2820,22 +2851,24 @@ export class ProxyForwarder {
 
       (init as Record<string, unknown>).verbose = true;
 
-      // ⭐ OpenAI Responses WebSocket 上游尝试（仅 Codex 供应商 + 开关开启 + 客户端以 WS 接入）
+      // OpenAI Responses WebSocket 上游尝试（仅 Codex 供应商 + 开关开启 + 客户端以 WS 接入）
       // 若握手失败或首帧前关闭，降级到下面的 HTTP 路径；不计入熔断器。
       let responsesWsResponse: Response | null = null;
+      const responsesWsEndpointId = endpointAudit?.endpointId ?? null;
       try {
         const wsEligibility = await evaluateResponsesWsEligibility({
           headers: processedHeaders,
           provider,
-          endpointId: null,
+          endpointId: responsesWsEndpointId,
         });
 
         if (wsEligibility.eligible) {
-          const requestMessage = session.request.message;
-          const requestBodyJson =
-            requestMessage && typeof requestMessage === "object"
-              ? (requestMessage as Record<string, unknown>)
-              : null;
+          // Use the *final* outgoing body so the WS frame matches the HTTP
+          // path: it has been through filterPrivateParameters() and any
+          // request-filter transformations. Falling back to
+          // session.request.message would skip those rewrites and could leak
+          // private fields or cause the upstream to reject the request.
+          const requestBodyJson = decodeRequestBodyAsJson(requestBody);
 
           if (requestBodyJson) {
             const wsResult = await tryResponsesWebsocketUpstream({
@@ -2851,25 +2884,31 @@ export class ProxyForwarder {
               logger.info("ProxyForwarder: Upstream Responses WebSocket connected", {
                 providerId: provider.id,
                 providerName: provider.name,
+                endpointId: responsesWsEndpointId,
                 connected: wsResult.connected,
               });
               session.addProviderToChain(provider, {
                 reason: "responses_ws_attempted",
+                endpointId: responsesWsEndpointId,
+                endpointUrl: endpointAudit?.endpointUrl,
                 attemptNumber: undefined,
               });
             } else {
-              markResponsesWsUnsupported(provider.id, null, wsResult.reason);
+              markResponsesWsUnsupported(provider.id, responsesWsEndpointId, wsResult.reason);
               logger.info(
                 "ProxyForwarder: Upstream Responses WebSocket unavailable, falling back to HTTP",
                 {
                   providerId: provider.id,
                   providerName: provider.name,
+                  endpointId: responsesWsEndpointId,
                   reason: wsResult.reason,
                   message: wsResult.message,
                 }
               );
               session.addProviderToChain(provider, {
                 reason: "responses_ws_fallback",
+                endpointId: responsesWsEndpointId,
+                endpointUrl: endpointAudit?.endpointUrl,
                 errorMessage: wsResult.message,
                 attemptNumber: undefined,
               });
@@ -2878,6 +2917,8 @@ export class ProxyForwarder {
         } else if (wsEligibility.isWebsocketClient && wsEligibility.downgradeReason) {
           session.addProviderToChain(provider, {
             reason: "responses_ws_fallback",
+            endpointId: responsesWsEndpointId,
+            endpointUrl: endpointAudit?.endpointUrl,
             errorMessage: wsEligibility.downgradeReason,
             attemptNumber: undefined,
           });

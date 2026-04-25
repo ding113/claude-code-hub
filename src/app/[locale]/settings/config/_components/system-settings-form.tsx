@@ -578,6 +578,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           </div>
           <Switch
             id="enable-openai-responses-websocket"
+            aria-label={t("enableOpenaiResponsesWebsocket")}
             checked={enableOpenaiResponsesWebsocket}
             onCheckedChange={(checked) => setEnableOpenaiResponsesWebsocket(checked)}
             disabled={isPending}
