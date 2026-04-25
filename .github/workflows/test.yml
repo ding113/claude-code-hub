@@ -31,12 +31,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
+          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
           key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
         timeout-minutes: 8
+        # No lockfile is committed in this repository, so use a non-frozen install.
         run: bun install
 
       - name: Run linting
@@ -67,12 +69,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
+          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
           key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
         timeout-minutes: 8
+        # No lockfile is committed in this repository, so use a non-frozen install.
         run: bun install
 
       - name: Run unit tests
@@ -132,12 +136,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
+          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
           key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
         timeout-minutes: 8
+        # No lockfile is committed in this repository, so use a non-frozen install.
         run: bun install
 
       - name: Run database migrations
@@ -147,8 +153,6 @@ jobs:
         run: >
           bun x vitest run
           --config tests/configs/integration.config.ts
-          tests/integration/usage-ledger.test.ts
-          tests/integration/my-usage-imported-ledger.test.ts
           --passWithNoTests
 
   # ==================== API 测试（需要运行服务）====================
@@ -206,12 +210,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
+          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
           key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
         timeout-minutes: 8
+        # No lockfile is committed in this repository, so use a non-frozen install.
         run: bun install
 
       - name: Run database migrations

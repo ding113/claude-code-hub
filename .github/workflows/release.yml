@@ -206,6 +206,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
+          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
           key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
@@ -214,6 +215,7 @@ jobs:
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         timeout-minutes: 15
         run: |
+          # No lockfile is committed in this repository, so use a non-frozen install.
           bun install
           bun run typecheck
           bun run format

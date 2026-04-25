@@ -37,12 +37,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
+          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
           key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: 📦 Install dependencies
         timeout-minutes: 8
+        # No lockfile is committed in this repository, so use a non-frozen install.
         run: bun install
 
       - name: 🔍 Type check
