@@ -105,17 +105,24 @@ async function loadDefaultRules(): Promise<CapturedDefaultRule[]> {
   return [...capturedInsertedRules];
 }
 
+function matchesRule(rule: CapturedDefaultRule, sample: string): boolean {
+  if (rule.matchType === "exact") return sample === rule.pattern;
+  if (rule.matchType === "contains")
+    return sample.toLowerCase().includes(rule.pattern.toLowerCase());
+
+  return new RegExp(rule.pattern, "i").test(sample);
+}
+
 describe("syncDefaultErrorRules numeric boundaries", () => {
-  test("default regex rules do not match numeric substrings in request ids or prices", async () => {
-    const regexRules = (await loadDefaultRules()).filter((rule) => rule.matchType === "regex");
+  test("default rules do not match numeric substrings in request ids or prices", async () => {
+    const defaultRules = await loadDefaultRules();
     const samples = ["request id: 202604250550399959", "需要预扣费额度：¥0.352942"];
 
-    expect(regexRules.length).toBeGreaterThan(0);
+    expect(defaultRules.length).toBeGreaterThan(0);
 
-    const accidentalMatches = regexRules.flatMap((rule) => {
-      const pattern = new RegExp(rule.pattern, "i");
+    const accidentalMatches = defaultRules.flatMap((rule) => {
       return samples
-        .filter((sample) => pattern.test(sample))
+        .filter((sample) => matchesRule(rule, sample))
         .map((sample) => ({ category: rule.category, pattern: rule.pattern, sample }));
     });
 
