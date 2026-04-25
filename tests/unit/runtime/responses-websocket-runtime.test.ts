@@ -16,6 +16,7 @@ const servers: Array<ReturnType<typeof createServer>> = [];
 const OVERSIZED_CLIENT_PAYLOAD_BYTES = 1024 * 1024 + 1;
 const OVERSIZED_CLIENT_READ_BUFFER_BYTES = OVERSIZED_CLIENT_PAYLOAD_BYTES + 14;
 const WEBSOCKET_CLOSE_PROTOCOL_ERROR = 1002;
+const WEBSOCKET_CLOSE_INVALID_PAYLOAD_DATA = 1007;
 const WEBSOCKET_CLOSE_MESSAGE_TOO_BIG = 1009;
 const WEBSOCKET_CLOSE_INTERNAL_ERROR = 1011;
 
@@ -127,6 +128,13 @@ function encodeMaskedClientBinaryFrame(payload: Uint8Array): Buffer {
   return encodeMaskedClientFrame(0x2, Buffer.from(payload));
 }
 
+function encodeMaskedClientTextBufferFrame(
+  payload: Buffer,
+  options: { fin?: boolean } = {}
+): Buffer {
+  return encodeMaskedClientFrame(0x1, payload, options);
+}
+
 function encodeMaskedClientFrameFragment(opcode: number, payload: string, fin: boolean): Buffer {
   return encodeMaskedClientFrame(opcode, Buffer.from(payload), { fin });
 }
@@ -227,6 +235,80 @@ async function readWebSocketPongFrame(
   return readWebSocketServerFrame(port, frames, 0xa, path);
 }
 
+async function readFirstWebSocketServerFrame(
+  port: number,
+  frames: readonly Buffer[],
+  path = `${RESPONSES_WEBSOCKET_PATH}?model=query-model`
+): Promise<{ opcode: number; payload: Buffer }> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port }, () => {
+      socket.write(
+        [
+          `GET ${path} HTTP/1.1`,
+          `Host: 127.0.0.1:${port}`,
+          "Upgrade: websocket",
+          "Connection: Upgrade",
+          `Sec-WebSocket-Key: ${randomWebSocketKey()}`,
+          "Sec-WebSocket-Version: 13",
+          "",
+          "",
+        ].join("\r\n")
+      );
+    });
+    let buffer = Buffer.alloc(0);
+    let handshakeComplete = false;
+    let settled = false;
+    const timeout = setTimeout(
+      () => finish(undefined, new Error("Timed out waiting for WebSocket server frame")),
+      3000
+    );
+
+    const finish = (frame?: { opcode: number; payload: Buffer }, error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      socket.removeAllListeners();
+      socket.destroy();
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(frame ?? { opcode: -1, payload: Buffer.alloc(0) });
+    };
+
+    socket.on("data", (chunk) => {
+      try {
+        buffer = Buffer.concat([buffer, chunk]);
+
+        if (!handshakeComplete) {
+          const headerEnd = buffer.indexOf("\r\n\r\n");
+          if (headerEnd === -1) return;
+
+          const headers = buffer.subarray(0, headerEnd).toString("utf8");
+          expect(headers).toContain("HTTP/1.1 101 Switching Protocols");
+          buffer = buffer.subarray(headerEnd + 4);
+          handshakeComplete = true;
+          for (const frame of frames) socket.write(frame);
+        }
+
+        const parsed = parseServerFrames(buffer);
+        const firstFrame = parsed.frames[0];
+        if (firstFrame?.opcode === 0x8) {
+          finish(firstFrame);
+          return;
+        }
+        if (firstFrame) socket.write(encodeClientCloseFrame(), () => finish(firstFrame));
+      } catch (error) {
+        finish(undefined, error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+    socket.on("error", (error) => finish(undefined, error));
+    socket.on("close", () => {
+      if (!settled) finish(undefined, new Error("Socket closed before WebSocket server frame"));
+    });
+  });
+}
+
 async function readWebSocketServerFrame(
   port: number,
   frames: readonly Buffer[],
@@ -306,6 +388,16 @@ async function readWebSocketServerFrame(
       if (!settled) finish(undefined, new Error("Socket closed before WebSocket close frame"));
     });
   });
+}
+
+function invalidUtf8ResponseCreatePayload(): Buffer {
+  return Buffer.concat([
+    Buffer.from(
+      '{"type":"response.create","body":{"input":[{"role":"user","content":[{"type":"input_text","text":"'
+    ),
+    Buffer.from([0xc3, 0x28]),
+    Buffer.from('"}]}]}}'),
+  ]);
 }
 
 function parseServerFrames(buffer: Buffer): {
@@ -585,6 +677,52 @@ describe("responses WebSocket runtime support", () => {
     expect(executor).toHaveBeenCalledTimes(1);
   });
 
+  test("closes invalid UTF-8 single-frame text payloads without executing", async () => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_unreachable", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    const serverFrame = await readFirstWebSocketServerFrame(port, [
+      encodeMaskedClientTextBufferFrame(invalidUtf8ResponseCreatePayload()),
+    ]);
+
+    expect(serverFrame.opcode).toBe(0x8);
+    expect(serverFrame.payload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_INVALID_PAYLOAD_DATA);
+    expect(executor).not.toHaveBeenCalled();
+  });
+
+  test("closes invalid UTF-8 fragmented text payloads without executing", async () => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_unreachable", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+    const payload = invalidUtf8ResponseCreatePayload();
+
+    const serverFrame = await readFirstWebSocketServerFrame(port, [
+      encodeMaskedClientTextBufferFrame(payload.subarray(0, 96), { fin: false }),
+      encodeMaskedClientFrame(0x0, payload.subarray(96)),
+    ]);
+
+    expect(serverFrame.opcode).toBe(0x8);
+    expect(serverFrame.payload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_INVALID_PAYLOAD_DATA);
+    expect(executor).not.toHaveBeenCalled();
+  });
+
   test("reassembles fragmented masked client text frames before dispatching", async () => {
     const executorInputs: ResponsesWebSocketExecutorInput[] = [];
     const executor = vi.fn(async (input: ResponsesWebSocketExecutorInput) => {
@@ -828,6 +966,43 @@ describe("responses WebSocket runtime support", () => {
       },
     });
     expect(executor).toHaveBeenCalledTimes(1);
+  });
+
+  test("responds to ping without waiting for a long-running data frame", async () => {
+    let releaseExecutor: (event: {
+      type: string;
+      response: { id: string; status: string };
+    }) => void;
+    const executorResult = new Promise<{ type: string; response: { id: string; status: string } }>(
+      (resolve) => {
+        releaseExecutor = resolve;
+      }
+    );
+    const executor = vi.fn(async () => executorResult);
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    try {
+      const pongPayload = await readWebSocketPongFrame(port, [
+        encodeMaskedClientTextFrame(
+          JSON.stringify({ type: "response.create", body: { input: createInput() } })
+        ),
+        encodeMaskedClientPingFrame("runtime-ping"),
+      ]);
+
+      expect(pongPayload.toString("utf8")).toBe("runtime-ping");
+      expect(executor).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseExecutor!({
+        type: "response.completed",
+        response: { id: "resp_released", status: "completed" },
+      });
+    }
   });
 
   test("responds to client ping frames with pong without invoking the executor", async () => {
