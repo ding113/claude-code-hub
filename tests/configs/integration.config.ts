@@ -4,6 +4,7 @@ export default createTestRunnerConfig({
   environment: "node",
   testTimeout: 20000,
   hookTimeout: 20000,
+  fileParallelism: false,
   testFiles: [
     "tests/integration/webhook-targets-crud.test.ts",
     "tests/integration/notification-bindings.test.ts",
@@ -13,6 +14,7 @@ export default createTestRunnerConfig({
     "tests/integration/user-5h-reset-flow.test.ts",
     "tests/integration/non-chat-endpoint-fallback-observability.test.ts",
     "tests/integration/usage-ledger.test.ts",
+    "tests/integration/my-usage-imported-ledger.test.ts",
     "tests/api/users-actions.test.ts",
     "tests/api/providers-actions.test.ts",
     "tests/api/keys-actions.test.ts",

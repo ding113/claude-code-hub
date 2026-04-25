@@ -30,6 +30,23 @@ const resolveSnapshotPath = (testPath: string, snapExtension: string) => {
   return testPath.replace(/\.test\.([tj]sx?)$/, `${snapExtension}.$1`);
 };
 
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseWorkerLimit(value: string | undefined, fallback: number | string): number | string {
+  if (!value) return fallback;
+  if (/^\d+%$/.test(value)) return value;
+  return parsePositiveInt(value, typeof fallback === "number" ? fallback : 2);
+}
+
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback;
+  return !["0", "false", "no", "off"].includes(value.toLowerCase());
+}
+
 const defaultTestExclude = [
   "node_modules",
   ".next",
@@ -103,6 +120,10 @@ interface TestRunnerConfigOptions {
   testFiles: string[];
   testTimeout?: number;
   hookTimeout?: number;
+  maxWorkers?: number | string;
+  maxConcurrency?: number;
+  fileParallelism?: boolean;
+  pool?: "threads" | "forks" | "vmThreads" | "vmForks";
   extraExclude?: string[];
   api?: {
     host?: string;
@@ -113,6 +134,8 @@ interface TestRunnerConfigOptions {
 
 export function createTestRunnerConfig(opts: TestRunnerConfigOptions) {
   const baseExclude = ["node_modules", ".next", "dist", "build", "coverage", "**/*.d.ts"];
+  const maxWorkers =
+    opts.maxWorkers ?? parseWorkerLimit(process.env.VITEST_STATEFUL_MAX_WORKERS, 2);
 
   return defineConfig({
     test: {
@@ -122,8 +145,14 @@ export function createTestRunnerConfig(opts: TestRunnerConfigOptions) {
       ...(opts.api ? { api: opts.api, open: false } : {}),
       testTimeout: opts.testTimeout ?? 10000,
       hookTimeout: opts.hookTimeout ?? 10000,
-      maxConcurrency: 5,
-      pool: "threads",
+      teardownTimeout: parsePositiveInt(process.env.VITEST_TEARDOWN_TIMEOUT_MS, 15000),
+      slowTestThreshold: parsePositiveInt(process.env.VITEST_SLOW_TEST_THRESHOLD_MS, 1000),
+      maxConcurrency:
+        opts.maxConcurrency ?? parsePositiveInt(process.env.VITEST_STATEFUL_MAX_CONCURRENCY, 3),
+      pool: opts.pool ?? "threads",
+      maxWorkers,
+      fileParallelism:
+        opts.fileParallelism ?? parseBoolean(process.env.VITEST_FILE_PARALLELISM, true),
       include: opts.testFiles,
       exclude: [...baseExclude, ...(opts.extraExclude ?? [])],
       reporters: ["verbose"],
