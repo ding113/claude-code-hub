@@ -13,6 +13,7 @@ permissions:
 jobs:
   dev-build-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     # 跳过由GitHub Actions创建的提交，避免死循环
     if: github.event.pusher.name != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]')
     steps:
@@ -61,9 +62,22 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Cache Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies, type check, and format code
+        timeout-minutes: 15
         run: |
+          # No lockfile is committed in this repository, so use a non-frozen install.
           bun install
           bun run typecheck
           bun run format

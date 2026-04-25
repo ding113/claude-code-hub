@@ -4,6 +4,8 @@ export default createTestRunnerConfig({
   environment: "node",
   testTimeout: 20000,
   hookTimeout: 20000,
+  maxWorkers: 2,
+  fileParallelism: false,
   testFiles: [
     "tests/integration/public-status/route-redis-only.test.ts",
     "tests/integration/public-status/config-publish.test.ts",

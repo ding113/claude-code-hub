@@ -17,6 +17,7 @@ jobs:
   code-quality:
     runs-on: ubuntu-latest
     name: Code Quality Check
+    timeout-minutes: 15
 
     steps:
       - name: 📥 Checkout repository
@@ -24,13 +25,26 @@ jobs:
 
       - name: 📦 Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      - name: Cache Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
+          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: 📦 Install dependencies
+        timeout-minutes: 8
+        # No lockfile is committed in this repository, so use a non-frozen install.
         run: bun install
 
       - name: 🔍 Type check
@@ -53,6 +67,7 @@ jobs:
   build-check:
     runs-on: ubuntu-latest
     name: Docker Build Test
+    timeout-minutes: 45
 
     steps:
       - name: 📥 Checkout repository

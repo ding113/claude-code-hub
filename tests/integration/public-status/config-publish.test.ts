@@ -11,6 +11,7 @@ const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn())
 const mockSchedulePublicStatusRebuild = vi.hoisted(() => vi.fn());
 const mockInvalidateSystemSettingsCache = vi.hoisted(() => vi.fn());
 const mockRevalidatePath = vi.hoisted(() => vi.fn());
+const mockLoggerInfo = vi.hoisted(() => vi.fn());
 const mockLoggerError = vi.hoisted(() => vi.fn());
 const mockLoggerWarn = vi.hoisted(() => vi.fn());
 const mockDbTransaction = vi.hoisted(() =>
@@ -64,6 +65,7 @@ vi.mock("next-intl/server", () => ({
 
 vi.mock("@/lib/logger", () => ({
   logger: {
+    info: mockLoggerInfo,
     error: mockLoggerError,
     warn: mockLoggerWarn,
   },
