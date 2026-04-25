@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { defineConfig } from "vitest/config";
 import { sharedResolve } from "./tests/vitest.base";
 
@@ -9,6 +10,17 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseWorkerLimit(value: string | undefined, fallback: number | string): number | string {
+  if (!value) return fallback;
+  if (/^\d+%$/.test(value)) return value;
+  return parsePositiveInt(value, typeof fallback === "number" ? fallback : 8);
+}
+
+function defaultMaxWorkers(): number {
+  const workerBudget = Math.floor(availableParallelism() * 0.75);
+  return Math.min(8, Math.max(2, workerBudget));
 }
 
 export default defineConfig({
@@ -92,13 +104,15 @@ export default defineConfig({
     // ==================== 超时配置 ====================
     testTimeout: 10000, // 单个测试超时 10 秒
     hookTimeout: 10000, // 钩子函数超时 10 秒
+    teardownTimeout: parsePositiveInt(process.env.VITEST_TEARDOWN_TIMEOUT_MS, 15000),
+    slowTestThreshold: parsePositiveInt(process.env.VITEST_SLOW_TEST_THRESHOLD_MS, 1000),
 
     // ==================== 并发配置 ====================
     maxConcurrency: 5, // 最大并发测试数
     pool: "threads", // 使用线程池（推荐）
-    // 高核机器/Windows 下 threads worker 过多可能触发 EMFILE / 资源争用导致用例超时。
-    // 允许通过环境变量覆盖：VITEST_MAX_WORKERS=...
-    maxWorkers: parsePositiveInt(process.env.VITEST_MAX_WORKERS, 8),
+    // 依据可用 CPU 自动调节，但上限保持 8，避免高核机器过度并行拖垮长尾测试。
+    // 允许通过环境变量覆盖：VITEST_MAX_WORKERS=8 或 VITEST_MAX_WORKERS=75%。
+    maxWorkers: parseWorkerLimit(process.env.VITEST_MAX_WORKERS, defaultMaxWorkers()),
 
     // ==================== 文件匹配 ====================
     include: [
