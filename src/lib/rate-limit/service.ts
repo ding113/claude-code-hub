@@ -857,6 +857,36 @@ export class RateLimitService {
   }
 
   /**
+   * Release a provider-level active session when a selected provider is abandoned.
+   *
+   * Provider concurrency is tracked before forwarding so fallback decisions can be atomic.
+   * If the provider later fails, the session must be removed immediately instead of waiting
+   * for TTL cleanup; otherwise outage storms inflate provider active_sessions ZSETs.
+   */
+  static async releaseProviderSession(providerId: number, sessionId: string): Promise<void> {
+    if (!Number.isInteger(providerId) || providerId <= 0 || sessionId.trim().length === 0) {
+      return;
+    }
+
+    const redis = RateLimitService.redis;
+    if (!redis || redis.status !== "ready") {
+      return;
+    }
+
+    const key = `provider:${providerId}:active_sessions`;
+    try {
+      await redis.zrem(key, sessionId);
+      logger.debug("[RateLimit] Released provider session", { providerId, sessionId });
+    } catch (error) {
+      logger.error("[RateLimit] Failed to release provider session", {
+        providerId,
+        sessionId,
+        error,
+      });
+    }
+  }
+
+  /**
    * 累加消费（请求结束后调用）
    * 5h 使用滚动窗口（ZSET），daily 根据模式选择滚动/固定窗口，周/月使用固定窗口（STRING）
    */
