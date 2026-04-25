@@ -25,8 +25,16 @@ const makePipeline = () => {
       pipelineCalls.push(["zremrangebyscore", ...args]);
       return pipeline;
     }),
+    zrangebyscore: vi.fn((...args: unknown[]) => {
+      pipelineCalls.push(["zrangebyscore", ...args]);
+      return pipeline;
+    }),
     zrange: vi.fn((...args: unknown[]) => {
       pipelineCalls.push(["zrange", ...args]);
+      return pipeline;
+    }),
+    hdel: vi.fn((...args: unknown[]) => {
+      pipelineCalls.push(["hdel", ...args]);
       return pipeline;
     }),
     exists: vi.fn((...args: unknown[]) => {
@@ -72,6 +80,8 @@ describe("SessionTracker - TTL and cleanup", () => {
       exists: vi.fn(async () => 1),
       type: vi.fn(async () => "zset"),
       del: vi.fn(async () => 1),
+      hdel: vi.fn(async () => 0),
+      zrangebyscore: vi.fn(async () => []),
       zremrangebyscore: vi.fn(async () => 0),
       zrange: vi.fn(async () => []),
       pipeline: vi.fn(() => makePipeline()),

@@ -6,6 +6,13 @@ import {
 } from "@/lib/redis/active-session-keys";
 import { getRedisClient } from "./redis";
 
+const PROVIDER_ACTIVE_SESSIONS_PATTERN = /^provider:(\d+):active_sessions$/;
+
+function getProviderActiveSessionRefsKey(activeSessionsKey: string): string | null {
+  const match = PROVIDER_ACTIVE_SESSIONS_PATTERN.exec(activeSessionsKey);
+  return match ? `provider:${match[1]}:active_session_refs` : null;
+}
+
 /**
  * Session 追踪器 - 统一管理活跃 Session 集合
  *
@@ -141,8 +148,11 @@ export class SessionTracker {
       pipeline.zadd(globalKey, now, sessionId);
 
       // 添加到 provider 级集合（ZSET）
-      pipeline.zadd(`provider:${providerId}:active_sessions`, now, sessionId);
-      pipeline.expire(`provider:${providerId}:active_sessions`, 3600);
+      const providerZSetKey = `provider:${providerId}:active_sessions`;
+      const providerRefKey = `provider:${providerId}:active_session_refs`;
+      pipeline.zadd(providerZSetKey, now, sessionId);
+      pipeline.expire(providerZSetKey, 3600);
+      pipeline.expire(providerRefKey, 3600);
 
       const results = await pipeline.exec();
 
@@ -190,25 +200,42 @@ export class SessionTracker {
       const pipeline = redis.pipeline();
       const ttlSeconds = SessionTracker.SESSION_TTL_SECONDS;
       const providerZSetKey = `provider:${providerId}:active_sessions`;
+      const providerRefKey = `provider:${providerId}:active_session_refs`;
       const globalKey = getGlobalActiveSessionsKey();
       const keyZSetKey = getKeyActiveSessionsKey(keyId);
+      let commandIndex = 0;
+      let cleanupExpiredSessionsResultIndex: number | null = null;
 
       pipeline.zadd(globalKey, now, sessionId);
+      commandIndex++;
       pipeline.zadd(keyZSetKey, now, sessionId);
+      commandIndex++;
       pipeline.zadd(providerZSetKey, now, sessionId);
+      commandIndex++;
       // Use dynamic TTL based on session TTL (at least 1h to cover active sessions)
       pipeline.expire(providerZSetKey, Math.max(3600, ttlSeconds));
+      commandIndex++;
+      pipeline.expire(providerRefKey, Math.max(3600, ttlSeconds));
+      commandIndex++;
       if (userId !== undefined) {
         pipeline.zadd(getUserActiveSessionsKey(userId), now, sessionId);
+        commandIndex++;
       }
 
       pipeline.expire(`session:${sessionId}:provider`, ttlSeconds);
+      commandIndex++;
       pipeline.expire(`session:${sessionId}:key`, ttlSeconds);
+      commandIndex++;
       pipeline.setex(`session:${sessionId}:last_seen`, ttlSeconds, now.toString());
+      commandIndex++;
 
       if (Math.random() < SessionTracker.CLEANUP_PROBABILITY) {
         const cutoffMs = now - SessionTracker.SESSION_TTL_MS;
+        cleanupExpiredSessionsResultIndex = commandIndex;
+        pipeline.zrangebyscore(providerZSetKey, "-inf", cutoffMs);
+        commandIndex++;
         pipeline.zremrangebyscore(providerZSetKey, "-inf", cutoffMs);
+        commandIndex++;
       }
 
       const results = await pipeline.exec();
@@ -223,6 +250,18 @@ export class SessionTracker {
               await SessionTracker.initialize();
               return;
             }
+          }
+        }
+      }
+
+      if (cleanupExpiredSessionsResultIndex !== null && results) {
+        const expiredResult = results[cleanupExpiredSessionsResultIndex];
+        if (!expiredResult?.[0] && Array.isArray(expiredResult?.[1])) {
+          const expiredSessionIds = expiredResult[1].filter(
+            (value): value is string => typeof value === "string" && value.length > 0
+          );
+          if (expiredSessionIds.length > 0) {
+            await redis.hdel(providerRefKey, ...expiredSessionIds);
           }
         }
       }
@@ -397,6 +436,7 @@ export class SessionTracker {
       for (const providerId of providerIds) {
         const key = `provider:${providerId}:active_sessions`;
         // 清理过期 session
+        cleanupPipeline.zrangebyscore(key, "-inf", cutoffMs);
         cleanupPipeline.zremrangebyscore(key, "-inf", cutoffMs);
         // 获取剩余 session IDs
         cleanupPipeline.zrange(key, 0, -1);
@@ -410,11 +450,22 @@ export class SessionTracker {
       // 收集需要验证的 session IDs
       const providerSessionMap = new Map<number, string[]>();
       const allSessionIds: string[] = [];
+      const expiredProviderSessions = new Map<number, string[]>();
 
       for (let i = 0; i < providerIds.length; i++) {
         const providerId = providerIds[i];
-        // 每个 provider 有 2 个命令（zremrangebyscore + zrange）
-        const zrangeResult = cleanupResults[i * 2 + 1];
+        // 每个 provider 有 3 个命令（zrangebyscore + zremrangebyscore + zrange）
+        const expiredResult = cleanupResults[i * 3];
+        const zrangeResult = cleanupResults[i * 3 + 2];
+
+        if (expiredResult && expiredResult[0] === null && Array.isArray(expiredResult[1])) {
+          expiredProviderSessions.set(
+            providerId,
+            expiredResult[1].filter(
+              (value): value is string => typeof value === "string" && value.length > 0
+            )
+          );
+        }
 
         if (zrangeResult && zrangeResult[0] === null) {
           const sessionIds = zrangeResult[1] as string[];
@@ -423,6 +474,21 @@ export class SessionTracker {
         } else {
           providerSessionMap.set(providerId, []);
         }
+      }
+
+      const refCleanupPipeline = redis.pipeline();
+      let hasRefCleanup = false;
+      for (const [providerId, expiredSessionIds] of expiredProviderSessions) {
+        if (expiredSessionIds.length > 0) {
+          refCleanupPipeline.hdel(
+            `provider:${providerId}:active_session_refs`,
+            ...expiredSessionIds
+          );
+          hasRefCleanup = true;
+        }
+      }
+      if (hasRefCleanup) {
+        await refCleanupPipeline.exec();
       }
 
       // 如果没有 session，直接返回
@@ -533,7 +599,14 @@ export class SessionTracker {
       const cutoffMs = now - SessionTracker.SESSION_TTL_MS;
 
       // 1. 清理过期 session（5 分钟前）
+      const providerRefKey = getProviderActiveSessionRefsKey(key);
+      const expiredSessionIds = providerRefKey
+        ? await redis.zrangebyscore(key, "-inf", cutoffMs)
+        : [];
       await redis.zremrangebyscore(key, "-inf", cutoffMs);
+      if (providerRefKey && expiredSessionIds.length > 0) {
+        await redis.hdel(providerRefKey, ...expiredSessionIds);
+      }
 
       // 2. 获取剩余的 session ID
       const sessionIds = await redis.zrange(key, 0, -1);

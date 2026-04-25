@@ -295,6 +295,10 @@ export class ProxyProviderResolver {
         }
 
         // === 成功 ===
+        if (checkResult.referenced) {
+          session.recordProviderSessionRef(session.provider.id);
+        }
+
         logger.debug("ProviderSelector: Session tracked atomically", {
           sessionId: session.sessionId,
           providerName: session.provider.name,

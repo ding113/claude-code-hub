@@ -3514,21 +3514,24 @@ export class ProxyForwarder {
       }
 
       launchingAlternative = (async () => {
-        const alternativeProvider = await ProxyForwarder.selectAlternative(
-          session,
-          Array.from(launchedProviderIds)
-        );
-        if (!alternativeProvider) {
-          noMoreProviders = true;
-          // No alternative providers available — let in-flight attempt(s) continue.
-          // If all attempts already completed, settle with last error.
-          if (attempts.size === 0) {
-            await finishIfExhausted();
+        while (!settled && !winnerCommitted && !noMoreProviders) {
+          const alternativeProvider = await ProxyForwarder.selectAlternative(
+            session,
+            Array.from(launchedProviderIds)
+          );
+          if (!alternativeProvider) {
+            noMoreProviders = true;
+            // No alternative providers available — let in-flight attempt(s) continue.
+            // If all attempts already completed, settle with last error.
+            if (attempts.size === 0) {
+              await finishIfExhausted();
+            }
+            return;
           }
-          return;
-        }
 
-        await startAttempt(alternativeProvider, false);
+          const launched = await startAttempt(alternativeProvider, false);
+          if (launched) return;
+        }
       })()
         .catch(async (error) => {
           const normalizedError = error instanceof Error ? error : new Error(String(error));
@@ -3920,10 +3923,37 @@ export class ProxyForwarder {
       settleSuccess(response);
     };
 
-    const startAttempt = async (provider: Provider, useOriginalSession: boolean) => {
-      if (settled || winnerCommitted || launchedProviderIds.has(provider.id)) return;
+    const startAttempt = async (
+      provider: Provider,
+      useOriginalSession: boolean
+    ): Promise<boolean> => {
+      if (settled || winnerCommitted || launchedProviderIds.has(provider.id)) return false;
 
       launchedProviderIds.add(provider.id);
+
+      if (!useOriginalSession && session.sessionId) {
+        const limit = provider.limitConcurrentSessions || 0;
+        const checkResult = await RateLimitService.checkAndTrackProviderSession(
+          provider.id,
+          session.sessionId,
+          limit
+        );
+
+        if (!checkResult.allowed) {
+          ProxyForwarder.markProviderFailed(session, failedProviderIds, provider.id);
+          session.addProviderToChain(provider, {
+            reason: "concurrent_limit_failed",
+            circuitState: getCircuitState(provider.id),
+            attemptNumber: launchedProviderCount + 1,
+            errorMessage: checkResult.reason || "并发限制已达到",
+          });
+          return false;
+        }
+
+        if (checkResult.referenced) {
+          session.recordProviderSessionRef(provider.id);
+        }
+      }
 
       let endpointSelection: {
         endpointId: number | null;
@@ -3936,9 +3966,8 @@ export class ProxyForwarder {
         lastError = endpointError as Error;
         lastErrorCategory = null;
         ProxyForwarder.markProviderFailed(session, failedProviderIds, provider.id);
-        await launchAlternative();
         await finishIfExhausted();
-        return;
+        return false;
       }
 
       launchedProviderCount += 1;
@@ -3989,6 +4018,7 @@ export class ProxyForwarder {
       armAttemptThreshold(attempt);
 
       runAttempt(attempt);
+      return true;
     };
 
     if (session.clientAbortSignal) {
@@ -4017,7 +4047,10 @@ export class ProxyForwarder {
       );
     }
 
-    await startAttempt(initialProvider, true);
+    const initialLaunched = await startAttempt(initialProvider, true);
+    if (!initialLaunched) {
+      await launchAlternative();
+    }
     await finishIfExhausted();
     const result = await resultPromise;
     if (result.error) {
@@ -4267,6 +4300,14 @@ export class ProxyForwarder {
     failedProviderIds.push(providerId);
 
     if (!session.sessionId) {
+      return;
+    }
+
+    const providerSessionRefConsumer = (
+      session as { consumeProviderSessionRef?: (providerId: number) => boolean }
+    ).consumeProviderSessionRef;
+
+    if (!providerSessionRefConsumer?.call(session, providerId)) {
       return;
     }
 

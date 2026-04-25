@@ -77,6 +77,7 @@ import {
   CHECK_AND_TRACK_SESSION,
   GET_COST_5H_ROLLING_WINDOW,
   GET_COST_DAILY_ROLLING_WINDOW,
+  RELEASE_PROVIDER_SESSION,
   TRACK_COST_5H_ROLLING_WINDOW,
   TRACK_COST_DAILY_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
@@ -804,43 +805,52 @@ export class RateLimitService {
    * @param providerId - Provider ID
    * @param sessionId - Session ID
    * @param limit - 并发限制
-   * @returns { allowed, count, tracked } - 是否允许、当前并发数、是否已追踪
+   * @returns { allowed, count, tracked, referenced } - 是否允许、当前并发数、是否新追踪、是否获得释放引用
    */
   static async checkAndTrackProviderSession(
     providerId: number,
     sessionId: string,
     limit: number
-  ): Promise<{ allowed: boolean; count: number; tracked: boolean; reason?: string }> {
+  ): Promise<{
+    allowed: boolean;
+    count: number;
+    tracked: boolean;
+    referenced: boolean;
+    reason?: string;
+  }> {
     if (limit <= 0) {
-      return { allowed: true, count: 0, tracked: false };
+      return { allowed: true, count: 0, tracked: false, referenced: false };
     }
 
     if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") {
       logger.warn("[RateLimit] Redis not ready, Fail Open");
-      return { allowed: true, count: 0, tracked: false };
+      return { allowed: true, count: 0, tracked: false, referenced: false };
     }
 
     try {
       const key = `provider:${providerId}:active_sessions`;
+      const refKey = `provider:${providerId}:active_session_refs`;
       const now = Date.now();
 
       const result = (await RateLimitService.redis.eval(
         CHECK_AND_TRACK_SESSION,
-        1, // KEYS count
+        2, // KEYS count
         key, // KEYS[1]
+        refKey, // KEYS[2]
         sessionId, // ARGV[1]
         limit.toString(), // ARGV[2]
         now.toString(), // ARGV[3]
         SESSION_TTL_MS.toString() // ARGV[4]
-      )) as [number, number, number];
+      )) as [number, number, number, number];
 
-      const [allowed, count, tracked] = result;
+      const [allowed, count, tracked, referenced] = result;
 
       if (allowed === 0) {
         return {
           allowed: false,
           count,
           tracked: false,
+          referenced: false,
           reason: `供应商并发 Session 上限已达到（${count}/${limit}）`,
         };
       }
@@ -849,10 +859,11 @@ export class RateLimitService {
         allowed: true,
         count,
         tracked: tracked === 1, // Lua 返回 1 表示新追踪，0 表示已存在
+        referenced: referenced === 1,
       };
     } catch (error) {
       logger.error("[RateLimit] Atomic check-and-track failed:", error);
-      return { allowed: true, count: 0, tracked: false }; // Fail Open
+      return { allowed: true, count: 0, tracked: false, referenced: false }; // Fail Open
     }
   }
 
@@ -874,9 +885,21 @@ export class RateLimitService {
     }
 
     const key = `provider:${providerId}:active_sessions`;
+    const refKey = `provider:${providerId}:active_session_refs`;
     try {
-      await redis.zrem(key, sessionId);
-      logger.debug("[RateLimit] Released provider session", { providerId, sessionId });
+      const [removed, remainingRefs] = (await redis.eval(
+        RELEASE_PROVIDER_SESSION,
+        2,
+        key,
+        refKey,
+        sessionId
+      )) as [number, number];
+      logger.debug("[RateLimit] Released provider session", {
+        providerId,
+        sessionId,
+        removed,
+        remainingRefs,
+      });
     } catch (error) {
       logger.error("[RateLimit] Failed to release provider session", {
         providerId,

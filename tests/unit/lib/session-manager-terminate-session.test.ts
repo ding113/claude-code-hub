@@ -27,6 +27,7 @@ describe("SessionManager.terminateSession", () => {
     pipelineRef = {
       del: vi.fn(() => pipelineRef),
       zrem: vi.fn(() => pipelineRef),
+      hdel: vi.fn(() => pipelineRef),
       exec: vi.fn(async () => [[null, 1]]),
     };
 

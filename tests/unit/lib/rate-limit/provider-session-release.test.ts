@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type RedisClientMock = {
   status: string;
-  zrem: (key: string, member: string) => Promise<number>;
+  eval: (...args: unknown[]) => Promise<[number, number]>;
 };
 
 let redisClientRef: RedisClientMock | null;
-let zremMock: ReturnType<typeof vi.fn<(key: string, member: string) => Promise<number>>>;
+let evalMock: ReturnType<typeof vi.fn<(...args: unknown[]) => Promise<[number, number]>>>;
 
 vi.mock("server-only", () => ({}));
 
@@ -25,20 +25,35 @@ vi.mock("@/lib/logger", () => ({
 describe("RateLimitService.releaseProviderSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    zremMock = vi.fn(async () => 1);
+    evalMock = vi.fn(async () => [1, 0]);
     redisClientRef = {
       status: "ready",
-      zrem: zremMock,
+      eval: evalMock,
     };
   });
 
-  it("应从供应商 active_sessions ZSET 中释放失败请求的 sessionId", async () => {
+  it("应通过引用计数脚本释放失败请求的 provider session", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit/service");
 
     await RateLimitService.releaseProviderSession(42, "sess_failed");
 
-    expect(zremMock).toHaveBeenCalledTimes(1);
-    expect(zremMock).toHaveBeenCalledWith("provider:42:active_sessions", "sess_failed");
+    expect(evalMock).toHaveBeenCalledTimes(1);
+    expect(evalMock).toHaveBeenCalledWith(
+      expect.any(String),
+      2,
+      "provider:42:active_sessions",
+      "provider:42:active_session_refs",
+      "sess_failed"
+    );
+  });
+
+  it("仍有并发引用时不应直接 ZREM active session", async () => {
+    evalMock.mockResolvedValueOnce([0, 1]);
+    const { RateLimitService } = await import("@/lib/rate-limit/service");
+
+    await RateLimitService.releaseProviderSession(42, "sess_failed");
+
+    expect(evalMock).toHaveBeenCalledTimes(1);
   });
 
   it("Redis 不可用或未 ready 时应静默跳过", async () => {
@@ -47,10 +62,10 @@ describe("RateLimitService.releaseProviderSession", () => {
     redisClientRef = null;
     await RateLimitService.releaseProviderSession(42, "sess_failed");
 
-    redisClientRef = { status: "connecting", zrem: zremMock };
+    redisClientRef = { status: "connecting", eval: evalMock };
     await RateLimitService.releaseProviderSession(42, "sess_failed");
 
-    expect(zremMock).not.toHaveBeenCalled();
+    expect(evalMock).not.toHaveBeenCalled();
   });
 
   it("非法 providerId 或空 sessionId 不应触发 Redis 命令", async () => {
@@ -60,12 +75,12 @@ describe("RateLimitService.releaseProviderSession", () => {
     await RateLimitService.releaseProviderSession(-1, "sess_failed");
     await RateLimitService.releaseProviderSession(42, "   ");
 
-    expect(zremMock).not.toHaveBeenCalled();
+    expect(evalMock).not.toHaveBeenCalled();
   });
 
   it("释放失败时应记录日志但不向请求链路抛错", async () => {
     const error = new Error("redis down");
-    zremMock.mockRejectedValueOnce(error);
+    evalMock.mockRejectedValueOnce(error);
     const { RateLimitService } = await import("@/lib/rate-limit/service");
     const { logger } = await import("@/lib/logger");
 
