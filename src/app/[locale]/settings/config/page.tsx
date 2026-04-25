@@ -1,5 +1,5 @@
-import { getTranslations } from "next-intl/server";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ async function SettingsConfigContent() {
             currencyDisplay: settings.currencyDisplay,
             billingModelSource: settings.billingModelSource,
             codexPriorityBillingSource: settings.codexPriorityBillingSource,
+            costMultiplierCorrection: settings.costMultiplierCorrection,
             timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
             passThroughUpstreamErrorMessage: settings.passThroughUpstreamErrorMessage,

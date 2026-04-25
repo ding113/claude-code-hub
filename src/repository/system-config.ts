@@ -143,6 +143,7 @@ function createFallbackSettings(): SystemSettings {
     currencyDisplay: "USD",
     billingModelSource: "original",
     codexPriorityBillingSource: "requested",
+    costMultiplierCorrection: 0,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -270,6 +271,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     };
     const fullSelection = {
       passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+      costMultiplierCorrection: systemSettings.costMultiplierCorrection,
       ...selectionWithoutPassThrough,
     };
 
@@ -407,6 +409,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           codexPriorityBillingSource: "requested",
           passThroughUpstreamErrorMessage: true,
           allowNonConversationEndpointProviderFallback: true,
+          costMultiplierCorrection: "0",
           enableHighConcurrencyMode: false,
           publicStatusWindowHours: 24,
           publicStatusAggregationIntervalMinutes: 5,
@@ -533,6 +536,7 @@ export async function updateSystemSettings(
   };
   const fullReturning = {
     passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+    costMultiplierCorrection: systemSettings.costMultiplierCorrection,
     ...returningWithoutPassThrough,
   };
 
@@ -563,6 +567,9 @@ export async function updateSystemSettings(
     }
     if (payload.codexPriorityBillingSource !== undefined) {
       updates.codexPriorityBillingSource = payload.codexPriorityBillingSource;
+    }
+    if (payload.costMultiplierCorrection !== undefined) {
+      updates.costMultiplierCorrection = String(payload.costMultiplierCorrection);
     }
 
     // 系统时区配置字段（如果提供）
@@ -757,6 +764,7 @@ export async function updateSystemSettings(
           const downgradedUpdates = { ...updates };
           delete downgradedUpdates.passThroughUpstreamErrorMessage;
           delete downgradedUpdates.enableHighConcurrencyMode;
+          delete downgradedUpdates.costMultiplierCorrection;
           delete downgradedUpdates.publicStatusWindowHours;
           delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
           delete downgradedUpdates.ipExtractionConfig;

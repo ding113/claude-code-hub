@@ -24,6 +24,8 @@
       "actual": "Actual Service Tier (с откатом к Requested)"
     },
     "codexPriorityBillingSourcePlaceholder": "Выберите источник тарификации Codex Priority",
+    "costMultiplierCorrection": "Глобальная поправка множителя стоимости",
+    "costMultiplierCorrectionDesc": "Значение добавляется к множителю стоимости каждого provider во время выполнения. 0 не меняет значение; 0.1 увеличивает эффективный множитель каждого provider на 0.1.",
     "cleanupBatchSize": "Размер пакета",
     "cleanupBatchSizeDesc": "Количество записей для удаления за раз (диапазон: 1000-100000, рекомендуется 10000)",
     "cleanupBatchSizePlaceholder": "10000",

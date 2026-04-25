@@ -694,6 +694,13 @@
       "when": 1776965161943,
       "tag": "0098_equal_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1777120600565,
+      "tag": "0089_silly_jack_power",
+      "breakpoints": true
     }
   ]
 }

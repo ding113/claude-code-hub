@@ -211,6 +211,11 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       dbSettings?.codexPriorityBillingSource === "actual"
         ? dbSettings.codexPriorityBillingSource
         : "requested",
+    costMultiplierCorrection:
+      dbSettings?.costMultiplierCorrection !== null &&
+      dbSettings?.costMultiplierCorrection !== undefined
+        ? parseFloat(dbSettings.costMultiplierCorrection)
+        : 0,
     timezone: dbSettings?.timezone ?? null,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,

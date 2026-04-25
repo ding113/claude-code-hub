@@ -24,6 +24,8 @@
       "actual": "Actual Service Tier（無い場合は Requested へフォールバック）"
     },
     "codexPriorityBillingSourcePlaceholder": "Codex Priority の課金参照元を選択",
+    "costMultiplierCorrection": "グローバルコスト倍率補正",
+    "costMultiplierCorrectionDesc": "実行時にすべての provider のコスト倍率へ加算する値です。既定値 0 は変更なし、0.1 は全 provider の実効倍率を 0.1 上げます。",
     "cleanupBatchSize": "バッチサイズ",
     "cleanupBatchSizeDesc": "バッチごとに削除するレコード数（範囲：1000-100000、推奨10000）",
     "cleanupBatchSizePlaceholder": "10000",

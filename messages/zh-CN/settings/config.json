@@ -43,6 +43,8 @@
       "requested": "Requested Service Tier（默认）",
       "actual": "Actual Service Tier（缺失时回退 Requested）"
     },
+    "costMultiplierCorrection": "全局成本倍率修正",
+    "costMultiplierCorrectionDesc": "运行时加到所有 provider 成本倍率上的数值。默认 0 表示不修改；填写 0.1 表示所有 provider 的实际倍率都加 0.1。",
     "allowGlobalView": "允许查看全站使用量",
     "allowGlobalViewDesc": "关闭后，普通用户在仪表盘仅能查看自己密钥的使用统计。",
     "verboseProviderError": "详细供应商错误信息",

@@ -79,6 +79,8 @@ export interface ProviderAvailabilitySummary {
   providerId: number;
   /** Provider name */
   providerName: string;
+  /** Provider website URL */
+  websiteUrl: string | null;
   /** Provider weight, higher values rank first */
   weight?: number;
   /** Provider type */

@@ -738,6 +738,11 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default('requested'),
 
+  // 全局成本倍率修正值：运行时加到 provider.cost_multiplier 上，0 表示不改
+  costMultiplierCorrection: numeric('cost_multiplier_correction', { precision: 10, scale: 4 })
+    .notNull()
+    .default('0'),
+
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
   // null 表示使用环境变量 TZ 或默认 UTC

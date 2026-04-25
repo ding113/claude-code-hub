@@ -62,6 +62,7 @@ export async function POST(req: Request) {
       currencyDisplay: validated.currencyDisplay,
       billingModelSource: validated.billingModelSource,
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
+      costMultiplierCorrection: validated.costMultiplierCorrection,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,

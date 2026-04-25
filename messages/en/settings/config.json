@@ -24,6 +24,8 @@
       "actual": "Actual Service Tier (Fallback to Requested)"
     },
     "codexPriorityBillingSourcePlaceholder": "Select Codex Priority billing source",
+    "costMultiplierCorrection": "Global Cost Multiplier Correction",
+    "costMultiplierCorrectionDesc": "Value added to every provider cost multiplier at runtime. Default 0 means no change; 0.1 makes every effective provider multiplier 0.1 higher.",
     "cleanupBatchSize": "Batch Size",
     "cleanupBatchSizeDesc": "Number of records to delete per batch (range: 1000-100000, recommended 10000)",
     "cleanupBatchSizePlaceholder": "10000",
