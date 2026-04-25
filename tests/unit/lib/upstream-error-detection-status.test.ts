@@ -54,6 +54,18 @@ describe("inferUpstreamErrorStatusCodeFromText numeric boundaries", () => {
     expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}12`)).toBeNull();
   });
 
+  it.each(
+    httpStatusCases
+  )("does not treat HTTP $statusCode followed by a letter as a status token", ({ statusCode }) => {
+    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}abc`)).toBeNull();
+  });
+
+  it.each(httpStatusCases)("does not treat HTTP $statusCode followed by a dot as a status token", ({
+    statusCode,
+  }) => {
+    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}.`)).toBeNull();
+  });
+
   it.each(cloudflareErrorCases)("keeps matching a standalone Cloudflare Error $code token", ({
     code,
     statusCode,
@@ -81,13 +93,25 @@ describe("inferUpstreamErrorStatusCodeFromText numeric boundaries", () => {
     expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}7`)).toBeNull();
   });
 
+  it.each(
+    cloudflareErrorCases
+  )("does not treat Cloudflare Error $code followed by a letter as a code token", ({ code }) => {
+    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}x`)).toBeNull();
+  });
+
+  it.each(
+    cloudflareErrorCases
+  )("does not treat Cloudflare Error $code followed by a dot as a code token", ({ code }) => {
+    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}.`)).toBeNull();
+  });
+
   it("does not infer service_unavailable from an AWS request id containing 503", () => {
     const text = "request id: 202604250550399959";
 
     expect(inferUpstreamErrorStatusCodeFromText(text)).toBeNull();
   });
 
-  it("does not infer overloaded status from a decimal price containing 529", () => {
+  it("does not infer any status from a decimal price sample", () => {
     const text = "需要预扣费额度：¥0.352942";
 
     expect(inferUpstreamErrorStatusCodeFromText(text)).toBeNull();
