@@ -37,6 +37,10 @@ import * as webhookTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
+import {
+  TEMPORARY_GROUP_NAME_MAX_LENGTH,
+  TEMPORARY_KEY_BATCH_MAX_COUNT,
+} from "@/lib/keys/temporary-key-groups";
 import { PROVIDER_MODEL_REDIRECT_RULE_SCHEMA } from "@/lib/provider-model-redirect-schema";
 import { appendPublicStatusOpenApi } from "@/lib/public-status/openapi";
 // 导入 validation schemas
@@ -100,6 +104,22 @@ const userKeyListItemSchema = z.object({
   limitConcurrentSessions: z.number().describe("并发 Session 上限"),
   costResetAt: z.string().nullable().optional().describe("限额重置时间"),
   providerGroup: z.string().nullable().optional().describe("密钥供应商分组"),
+  temporaryGroupName: z.string().nullable().optional().describe("临时 Key 分组"),
+});
+
+const temporaryKeyBatchItemSchema = z.object({
+  name: z.string().describe("临时 Key 名称"),
+  key: z.string().describe("完整 Key"),
+  createdAt: z.string().describe("创建时间"),
+  expiresAt: z.string().nullable().describe("过期时间"),
+  limitTotalUsd: z.number().nullable().describe("总限额"),
+});
+
+const temporaryKeyBatchResultSchema = z.object({
+  groupName: z.string().describe("临时 Key 分组名"),
+  createdCount: z.number().int().describe("创建数量"),
+  sourceKeyName: z.string().describe("来源 Key 名称"),
+  keys: z.array(temporaryKeyBatchItemSchema).describe("本次创建的临时 Key"),
 });
 
 const userListItemSchema = z.object({
@@ -163,6 +183,52 @@ const getUsersBatchResponseSchema = z.object({
   users: z.array(userListItemSchema),
   nextCursor: z.string().nullable(),
   hasMore: z.boolean(),
+});
+
+const userKeySyncFieldSummarySchema = z.object({
+  values: z.array(z.number().nullable()),
+  discarded: z.number().optional(),
+});
+
+const userKeySyncSummarySchema = z.object({
+  limit5hUsd: userKeySyncFieldSummarySchema,
+  limitDailyUsd: userKeySyncFieldSummarySchema,
+  limitWeeklyUsd: userKeySyncFieldSummarySchema,
+  limitMonthlyUsd: userKeySyncFieldSummarySchema,
+  limitTotalUsd: userKeySyncFieldSummarySchema,
+  limitConcurrentSessions: userKeySyncFieldSummarySchema,
+  providerGroup: z.string(),
+  dailyResetMode: z.enum(["fixed", "rolling"]),
+  dailyResetTime: z.string(),
+});
+
+const syncUserConfigToKeysResponseSchema = z.object({
+  updatedUserId: z.number(),
+  updatedKeyIds: z.array(z.number()),
+  keyCount: z.number(),
+  summary: userKeySyncSummarySchema,
+});
+
+const batchSyncUserConfigToKeysResponseSchema = z.object({
+  requestedCount: z.number(),
+  updatedUserCount: z.number(),
+  updatedKeyCount: z.number(),
+  users: z.array(syncUserConfigToKeysResponseSchema),
+});
+
+const syncUserConfigUpdatesSchema = UpdateUserSchema.pick({
+  note: true,
+  tags: true,
+  rpm: true,
+  dailyQuota: true,
+  providerGroup: true,
+  limit5hUsd: true,
+  limitWeeklyUsd: true,
+  limitMonthlyUsd: true,
+  limitTotalUsd: true,
+  limitConcurrentSessions: true,
+  dailyResetMode: true,
+  dailyResetTime: true,
 });
 
 const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
@@ -378,6 +444,63 @@ const { route: getUserLimitUsageRoute, handler: getUserLimitUsageHandler } = cre
 );
 app.openapi(getUserLimitUsageRoute, getUserLimitUsageHandler);
 
+const { route: syncUserConfigToKeysRoute, handler: syncUserConfigToKeysHandler } =
+  createActionRoute("users", "syncUserConfigToKeys", userActions.syncUserConfigToKeys, {
+    requestSchema: z.object({
+      userId: z.number().int().positive(),
+      ...UpdateUserSchema.shape,
+    }),
+    responseSchema: syncUserConfigToKeysResponseSchema,
+    description: "保存用户配置并按当前 Key 数量分配同步到该用户所有 Key",
+    summary: "同步用户配置到 Key",
+    tags: ["用户管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => {
+      const { userId, ...data } = body;
+      return [userId, data];
+    },
+  });
+app.openapi(syncUserConfigToKeysRoute, syncUserConfigToKeysHandler);
+
+const { route: batchSyncUserConfigToKeysRoute, handler: batchSyncUserConfigToKeysHandler } =
+  createActionRoute("users", "batchSyncUserConfigToKeys", userActions.batchSyncUserConfigToKeys, {
+    requestSchema: z.object({
+      userIds: z.array(z.number().int().positive()).min(1).max(500),
+      updates: syncUserConfigUpdatesSchema.optional(),
+    }),
+    responseSchema: batchSyncUserConfigToKeysResponseSchema,
+    description: "批量保存用户配置并按用户各自 Key 数量分配同步",
+    summary: "批量同步用户配置到 Key",
+    tags: ["用户管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body],
+  });
+app.openapi(batchSyncUserConfigToKeysRoute, batchSyncUserConfigToKeysHandler);
+
+const { route: resetUserLimitsOnlyRoute, handler: resetUserLimitsOnlyHandler } =
+  createActionRoute("users", "resetUserLimitsOnly", userActions.resetUserLimitsOnly, {
+    requestSchema: z.object({
+      userId: z.number().int().positive(),
+    }),
+    description: "仅重置用户消费限额累计，不删除日志",
+    summary: "重置用户限额累计",
+    tags: ["用户管理"],
+    requiredRole: "admin",
+  });
+app.openapi(resetUserLimitsOnlyRoute, resetUserLimitsOnlyHandler);
+
+const { route: resetUserAllStatisticsRoute, handler: resetUserAllStatisticsHandler } =
+  createActionRoute("users", "resetUserAllStatistics", userActions.resetUserAllStatistics, {
+    requestSchema: z.object({
+      userId: z.number().int().positive(),
+    }),
+    description: "删除用户统计日志并清理相关缓存",
+    summary: "重置用户全部统计",
+    tags: ["用户管理"],
+    requiredRole: "admin",
+  });
+app.openapi(resetUserAllStatisticsRoute, resetUserAllStatisticsHandler);
+
 // ==================== 密钥管理 ====================
 
 const { route: getKeysRoute, handler: getKeysHandler } = createActionRoute(
@@ -518,6 +641,56 @@ const { route: resetKeyLimitsOnlyRoute, handler: resetKeyLimitsOnlyHandler } = c
   }
 );
 app.openapi(resetKeyLimitsOnlyRoute, resetKeyLimitsOnlyHandler);
+
+const { route: createTemporaryKeysBatchRoute, handler: createTemporaryKeysBatchHandler } =
+  createActionRoute("keys", "createTemporaryKeysBatch", keyActions.createTemporaryKeysBatch, {
+    requestSchema: z.object({
+      userId: z.number().int().positive(),
+      baseKeyId: z.number().int().positive(),
+      count: z.number().int().min(1).max(TEMPORARY_KEY_BATCH_MAX_COUNT),
+      customLimitTotalUsd: z.number().nonnegative().optional(),
+    }),
+    responseSchema: temporaryKeyBatchResultSchema,
+    description: "基于指定 Key 批量创建临时 Key 分组",
+    summary: "创建临时 Key 分组",
+    tags: ["密钥管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body],
+  });
+app.openapi(createTemporaryKeysBatchRoute, createTemporaryKeysBatchHandler);
+
+const { route: removeTemporaryKeyGroupRoute, handler: removeTemporaryKeyGroupHandler } =
+  createActionRoute("keys", "removeTemporaryKeyGroup", keyActions.removeTemporaryKeyGroup, {
+    requestSchema: z.object({
+      userId: z.number().int().positive(),
+      groupName: z.string().trim().min(1).max(TEMPORARY_GROUP_NAME_MAX_LENGTH),
+    }),
+    responseSchema: z.object({
+      deletedCount: z.number().int(),
+      groupName: z.string(),
+    }),
+    description: "批量删除指定临时 Key 分组",
+    summary: "删除临时 Key 分组",
+    tags: ["密钥管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body],
+  });
+app.openapi(removeTemporaryKeyGroupRoute, removeTemporaryKeyGroupHandler);
+
+const { route: downloadTemporaryKeyGroupRoute, handler: downloadTemporaryKeyGroupHandler } =
+  createActionRoute("keys", "downloadTemporaryKeyGroup", keyActions.downloadTemporaryKeyGroup, {
+    requestSchema: z.object({
+      userId: z.number().int().positive(),
+      groupName: z.string().trim().min(1).max(TEMPORARY_GROUP_NAME_MAX_LENGTH),
+    }),
+    responseSchema: z.string(),
+    description: "下载指定临时 Key 分组的纯文本 Key 列表",
+    summary: "下载临时 Key 分组",
+    tags: ["密钥管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body],
+  });
+app.openapi(downloadTemporaryKeyGroupRoute, downloadTemporaryKeyGroupHandler);
 
 // ==================== 供应商管理 ====================
 

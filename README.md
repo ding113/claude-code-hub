@@ -211,6 +211,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 - **API 文档（Swagger UI）**：`http://localhost:23000/api/actions/docs`
 - **公开状态 API**：[docs/public-status-api.md](docs/public-status-api.md)
 - **API 认证指南**：[docs/api-authentication-guide.md](docs/api-authentication-guide.md)
+- **临时 Key 分组 API 示例**：[docs/examples/temporary-key-groups.md](docs/examples/temporary-key-groups.md)
 
 > 💡 **提示**：
 > - 如需修改端口，请编辑 `docker-compose.yml` 中的 `ports` 配置。

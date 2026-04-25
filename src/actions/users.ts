@@ -247,10 +247,15 @@ export interface BatchUpdateUsersParams {
     tags?: string[];
     rpm?: number | null;
     dailyQuota?: number | null;
+    providerGroup?: string | null;
     limit5hUsd?: number | null;
     limit5hResetMode?: "fixed" | "rolling";
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
+    limitTotalUsd?: number | null;
+    limitConcurrentSessions?: number | null;
+    dailyResetMode?: "fixed" | "rolling";
+    dailyResetTime?: string;
   };
 }
 
@@ -1119,10 +1124,15 @@ export async function batchUpdateUsers(
       tags: true,
       rpm: true,
       dailyQuota: true,
+      providerGroup: true,
       limit5hUsd: true,
       limit5hResetMode: true,
       limitWeeklyUsd: true,
       limitMonthlyUsd: true,
+      limitTotalUsd: true,
+      limitConcurrentSessions: true,
+      dailyResetMode: true,
+      dailyResetTime: true,
     });
 
     const validationResult = updatesSchema.safeParse(params.updates ?? {});
@@ -1316,9 +1326,14 @@ export async function batchSyncUserConfigToKeys(params: {
       tags: true,
       rpm: true,
       dailyQuota: true,
+      providerGroup: true,
       limit5hUsd: true,
       limitWeeklyUsd: true,
       limitMonthlyUsd: true,
+      limitTotalUsd: true,
+      limitConcurrentSessions: true,
+      dailyResetMode: true,
+      dailyResetTime: true,
     });
     const validationResult = updatesSchema.safeParse(params.updates ?? {});
     if (!validationResult.success) {
@@ -1447,15 +1462,24 @@ export async function batchSyncUserConfigToKeys(params: {
       ...keyStringsForCache.map((key) => invalidateCachedKey(key).catch(() => {})),
     ]);
 
+    const finalResult = result ?? {
+      requestedCount: requestedIds.length,
+      updatedUserCount: 0,
+      updatedKeyCount: 0,
+      users: [],
+    };
+
+    logger.info("Batch synced user config to keys", {
+      actorUserId: session.user.id,
+      requestedCount: requestedIds.length,
+      updatedUserCount: finalResult.updatedUserCount,
+      updatedKeyCount: finalResult.updatedKeyCount,
+    });
+
     revalidatePath("/dashboard");
     return {
       ok: true,
-      data: result ?? {
-        requestedCount: requestedIds.length,
-        updatedUserCount: 0,
-        updatedKeyCount: 0,
-        users: [],
-      },
+      data: finalResult,
     };
   } catch (error) {
     if (error instanceof BatchUpdateError) {
@@ -2224,15 +2248,23 @@ export async function syncUserConfigToKeys(
       ...keyStringsForCache.map((key) => invalidateCachedKey(key).catch(() => {})),
     ]);
 
+    const finalResult = result ?? {
+      updatedUserId: userId,
+      updatedKeyIds: [],
+      keyCount: 0,
+      summary: buildSyncedKeyConfigs({}, 0).summary,
+    };
+
+    logger.info("Synced user config to keys", {
+      actorUserId: session.user.id,
+      userId,
+      keyCount: finalResult.keyCount,
+    });
+
     revalidatePath("/dashboard");
     return {
       ok: true,
-      data: result ?? {
-        updatedUserId: userId,
-        updatedKeyIds: [],
-        keyCount: 0,
-        summary: buildSyncedKeyConfigs({}, 0).summary,
-      },
+      data: finalResult,
     };
   } catch (error) {
     if (error instanceof BatchUpdateError) {

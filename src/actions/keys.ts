@@ -10,6 +10,15 @@ import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import {
+  buildTemporaryKeyCreatePayloads,
+  buildTemporaryKeyGroupText,
+  normalizeTemporaryGroupName,
+  resolveTemporaryGroupName,
+  TEMPORARY_GROUP_NAME_MAX_LENGTH,
+  TEMPORARY_KEY_BATCH_MAX_COUNT,
+  validateTemporaryKeyLimitsAgainstUser,
+} from "@/lib/keys/temporary-key-groups";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { invalidateCachedKey } from "@/lib/security/api-key-auth-cache";
@@ -64,142 +73,6 @@ function validateNonAdminProviderGroup(
   }
 
   return requestedProviderGroup;
-}
-
-type TemporaryKeyLimitValidationInput = {
-  limit5hUsd?: number | null;
-  limitDailyUsd?: number | null;
-  limitWeeklyUsd?: number | null;
-  limitMonthlyUsd?: number | null;
-  limitTotalUsd?: number | null;
-  limitConcurrentSessions?: number | null;
-};
-
-function validateTemporaryKeyLimitsAgainstUser(
-  user: {
-    limit5hUsd?: number | null;
-    dailyQuota?: number | null;
-    limitWeeklyUsd?: number | null;
-    limitMonthlyUsd?: number | null;
-    limitTotalUsd?: number | null;
-    limitConcurrentSessions?: number | null;
-  },
-  limits: TemporaryKeyLimitValidationInput,
-  tError: TranslationFunction
-): string | null {
-  if (
-    limits.limit5hUsd != null &&
-    limits.limit5hUsd > 0 &&
-    user.limit5hUsd != null &&
-    user.limit5hUsd > 0 &&
-    limits.limit5hUsd > user.limit5hUsd
-  ) {
-    return tError("KEY_LIMIT_5H_EXCEEDS_USER_LIMIT", {
-      keyLimit: String(limits.limit5hUsd),
-      userLimit: String(user.limit5hUsd),
-    });
-  }
-
-  if (
-    limits.limitDailyUsd != null &&
-    limits.limitDailyUsd > 0 &&
-    user.dailyQuota != null &&
-    user.dailyQuota > 0 &&
-    limits.limitDailyUsd > user.dailyQuota
-  ) {
-    return tError("KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT", {
-      keyLimit: String(limits.limitDailyUsd),
-      userLimit: String(user.dailyQuota),
-    });
-  }
-
-  if (
-    limits.limitWeeklyUsd != null &&
-    limits.limitWeeklyUsd > 0 &&
-    user.limitWeeklyUsd != null &&
-    user.limitWeeklyUsd > 0 &&
-    limits.limitWeeklyUsd > user.limitWeeklyUsd
-  ) {
-    return tError("KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT", {
-      keyLimit: String(limits.limitWeeklyUsd),
-      userLimit: String(user.limitWeeklyUsd),
-    });
-  }
-
-  if (
-    limits.limitMonthlyUsd != null &&
-    limits.limitMonthlyUsd > 0 &&
-    user.limitMonthlyUsd != null &&
-    user.limitMonthlyUsd > 0 &&
-    limits.limitMonthlyUsd > user.limitMonthlyUsd
-  ) {
-    return tError("KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT", {
-      keyLimit: String(limits.limitMonthlyUsd),
-      userLimit: String(user.limitMonthlyUsd),
-    });
-  }
-
-  if (
-    limits.limitTotalUsd != null &&
-    limits.limitTotalUsd > 0 &&
-    user.limitTotalUsd != null &&
-    user.limitTotalUsd > 0 &&
-    limits.limitTotalUsd > user.limitTotalUsd
-  ) {
-    return tError("KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT", {
-      keyLimit: String(limits.limitTotalUsd),
-      userLimit: String(user.limitTotalUsd),
-    });
-  }
-
-  if (
-    limits.limitConcurrentSessions != null &&
-    limits.limitConcurrentSessions > 0 &&
-    user.limitConcurrentSessions != null &&
-    user.limitConcurrentSessions > 0 &&
-    limits.limitConcurrentSessions > user.limitConcurrentSessions
-  ) {
-    return tError("KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT", {
-      keyLimit: String(limits.limitConcurrentSessions),
-      userLimit: String(user.limitConcurrentSessions),
-    });
-  }
-
-  return null;
-}
-
-function normalizeTemporaryGroupName(value: string): string {
-  return value.trim();
-}
-
-function extractTemporaryKeySequence(name: string): number | null {
-  const match = name.trim().match(/(\d+)$/);
-  if (!match) return null;
-  const value = Number(match[1]);
-  if (!Number.isInteger(value) || value < 0) return null;
-  return value;
-}
-
-function resolveNextTemporaryKeySequence(existingKeys: Key[], normalizedGroupName: string): number {
-  let maxSequence = 0;
-
-  for (const key of existingKeys) {
-    if (key.temporaryGroupName?.trim() !== normalizedGroupName) continue;
-    const sequence = extractTemporaryKeySequence(key.name);
-    if (sequence != null && sequence > maxSequence) {
-      maxSequence = sequence;
-    }
-  }
-
-  return maxSequence + 1;
-}
-
-function buildTemporaryKeyName(sequence: number): string {
-  return String(sequence).padStart(3, "0");
-}
-
-function buildTemporaryKeyGroupText(keys: Array<{ key: string }>): string {
-  return keys.map((key) => key.key).join("\n");
 }
 
 export interface BatchUpdateKeysParams {
@@ -1004,10 +877,10 @@ export async function createTemporaryKeysBatch(
     }
 
     const count = Number.isFinite(params.count) ? Math.trunc(params.count) : 0;
-    if (count < 1 || count > 100) {
+    if (count < 1 || count > TEMPORARY_KEY_BATCH_MAX_COUNT) {
       return {
         ok: false,
-        error: "单次最多生成 100 个临时 Key",
+        error: `单次最多生成 ${TEMPORARY_KEY_BATCH_MAX_COUNT} 个临时 Key`,
         errorCode: ERROR_CODES.INVALID_FORMAT,
       };
     }
@@ -1022,13 +895,11 @@ export async function createTemporaryKeysBatch(
       };
     }
 
-    const normalizedGroupName = normalizeProviderGroup(
-      user.providerGroup || PROVIDER_GROUP.DEFAULT
-    );
-    if (normalizedGroupName.length > 120) {
+    const normalizedGroupName = resolveTemporaryGroupName(user.providerGroup);
+    if (normalizedGroupName.length > TEMPORARY_GROUP_NAME_MAX_LENGTH) {
       return {
         ok: false,
-        error: "临时分组名称不能超过 120 个字符",
+        error: `临时分组名称不能超过 ${TEMPORARY_GROUP_NAME_MAX_LENGTH} 个字符`,
         errorCode: ERROR_CODES.INVALID_FORMAT,
       };
     }
@@ -1041,10 +912,6 @@ export async function createTemporaryKeysBatch(
         errorCode: ERROR_CODES.NOT_FOUND,
       };
     }
-
-    const normalizedBaseKeyProviderGroup = normalizeProviderGroup(
-      baseKey.providerGroup || PROVIDER_GROUP.DEFAULT
-    );
 
     const limitValidationError = validateTemporaryKeyLimitsAgainstUser(
       user,
@@ -1065,35 +932,18 @@ export async function createTemporaryKeysBatch(
       return { ok: false, error: limitValidationError };
     }
 
-    const expiresAt = baseKey.expiresAt instanceof Date ? baseKey.expiresAt : null;
     const existingKeys = await findKeyList(params.userId);
-    const nextSequence = resolveNextTemporaryKeySequence(existingKeys, normalizedGroupName);
+    const createPayloads = buildTemporaryKeyCreatePayloads({
+      userId: params.userId,
+      baseKey,
+      existingKeys,
+      groupName: normalizedGroupName,
+      count,
+      customLimitTotalUsd: params.customLimitTotalUsd,
+      createKeyString: () => `sk-${randomBytes(16).toString("hex")}`,
+    });
 
-    const createdKeys = await createKeysBatch(
-      Array.from({ length: count }, (_, index) => ({
-        user_id: params.userId,
-        name: buildTemporaryKeyName(nextSequence + index),
-        key: `sk-${randomBytes(16).toString("hex")}`,
-        is_enabled: baseKey.isEnabled,
-        expires_at: expiresAt,
-        can_login_web_ui: baseKey.canLoginWebUi,
-        limit_5h_usd: baseKey.limit5hUsd,
-        limit_daily_usd: baseKey.limitDailyUsd,
-        daily_reset_mode: baseKey.dailyResetMode,
-        daily_reset_time: baseKey.dailyResetTime,
-        limit_weekly_usd: baseKey.limitWeeklyUsd,
-        limit_monthly_usd: baseKey.limitMonthlyUsd,
-        limit_total_usd:
-          params.customLimitTotalUsd !== undefined
-            ? params.customLimitTotalUsd
-            : (baseKey.limitTotalUsd ?? null),
-        limit_concurrent_sessions: baseKey.limitConcurrentSessions,
-        // 临时 Key 只追加批量管理能力，不改变原始 Key 的 provider 路由逻辑。
-        provider_group: normalizedBaseKeyProviderGroup,
-        cache_ttl_preference: baseKey.cacheTtlPreference ?? undefined,
-        temporary_group_name: normalizedGroupName,
-      }))
-    );
+    const createdKeys = await createKeysBatch(createPayloads);
 
     revalidatePath("/dashboard");
 
