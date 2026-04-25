@@ -16,6 +16,7 @@ jobs:
   quality:
     name: 📋 Code Quality
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -24,10 +25,19 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
+
+      - name: Cache Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        timeout-minutes: 5
+        run: bun ci
 
       - name: Run linting
         run: bun run lint
@@ -42,6 +52,7 @@ jobs:
   unit-tests:
     name: ⚡ Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -49,9 +60,20 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Cache Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        timeout-minutes: 5
+        run: bun ci
 
       - name: Run unit tests
         run: bun run test -- tests/unit/ --passWithNoTests
@@ -60,6 +82,7 @@ jobs:
   integration-tests:
     name: 🔗 Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -93,6 +116,8 @@ jobs:
       AUTO_MIGRATE: true
       ENABLE_RATE_LIMIT: true
       SESSION_TTL: 300
+      VITEST_STATEFUL_MAX_WORKERS: 2
+      VITEST_STATEFUL_MAX_CONCURRENCY: 3
 
     steps:
       - name: Checkout code
@@ -100,16 +125,28 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Cache Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        timeout-minutes: 5
+        run: bun ci
 
       - name: Run database migrations
         run: bun run db:migrate
 
       - name: Run integration tests
         run: >
-          bunx vitest run
+          bun x vitest run
+          --config tests/configs/integration.config.ts
           tests/integration/usage-ledger.test.ts
           tests/integration/my-usage-imported-ledger.test.ts
           --passWithNoTests
@@ -118,6 +155,7 @@ jobs:
   api-tests:
     name: 🌐 API Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -152,6 +190,8 @@ jobs:
       PORT: 13500
       ENABLE_RATE_LIMIT: true
       SESSION_TTL: 300
+      VITEST_STATEFUL_MAX_WORKERS: 1
+      VITEST_STATEFUL_MAX_CONCURRENCY: 3
 
     steps:
       - name: Checkout code
@@ -159,14 +199,34 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Cache Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        timeout-minutes: 5
+        run: bun ci
 
       - name: Run database migrations
         run: bun run db:migrate
 
+      - name: Cache Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('bun.lock') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx', 'next.config.*') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('bun.lock') }}-
+
       - name: Build application
+        timeout-minutes: 15
         run: bun run build
 
       - name: Start server (background)

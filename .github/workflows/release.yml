@@ -30,6 +30,7 @@ permissions:
 jobs:
   release-pipeline:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     # 跳过由GitHub Actions创建的提交,避免死循环 (仅对push事件生效)
     if: |
       github.event_name == 'workflow_dispatch' ||
@@ -197,11 +198,23 @@ jobs:
       - name: Setup Bun
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Cache Bun package cache
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies, type check, and format code
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
+        timeout-minutes: 15
         run: |
-          bun install
+          bun ci
           bun run typecheck
           bun run format
 

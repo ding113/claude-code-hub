@@ -17,6 +17,7 @@ jobs:
   code-quality:
     runs-on: ubuntu-latest
     name: Code Quality Check
+    timeout-minutes: 15
 
     steps:
       - name: 📥 Checkout repository
@@ -24,14 +25,25 @@ jobs:
 
       - name: 📦 Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      - name: Cache Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: 📦 Install dependencies
-        run: bun install
+        timeout-minutes: 5
+        run: bun ci
 
       - name: 🔍 Type check
         run: bun run typecheck
@@ -53,6 +65,7 @@ jobs:
   build-check:
     runs-on: ubuntu-latest
     name: Docker Build Test
+    timeout-minutes: 45
 
     steps:
       - name: 📥 Checkout repository
