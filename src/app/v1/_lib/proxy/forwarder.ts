@@ -2894,7 +2894,14 @@ export class ProxyForwarder {
                 attemptNumber: undefined,
               });
             } else {
-              markResponsesWsUnsupported(provider.id, responsesWsEndpointId, wsResult.reason);
+              // Only cache when the failure proves the endpoint does not
+              // speak the WS protocol (HTTP 4xx / 501 on the upgrade). Any
+              // transient failure (network, auth, silent upstream) should
+              // re-probe on the next request rather than skipping WS for
+              // the full TTL.
+              if (wsResult.cacheableAsUnsupported) {
+                markResponsesWsUnsupported(provider.id, responsesWsEndpointId, wsResult.reason);
+              }
               logger.info(
                 "ProxyForwarder: Upstream Responses WebSocket unavailable, falling back to HTTP",
                 {
@@ -2902,6 +2909,7 @@ export class ProxyForwarder {
                   providerName: provider.name,
                   endpointId: responsesWsEndpointId,
                   reason: wsResult.reason,
+                  cacheable: wsResult.cacheableAsUnsupported,
                   message: wsResult.message,
                 }
               );

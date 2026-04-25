@@ -36,6 +36,15 @@ export interface UpstreamWsFailure {
   failed: true;
   reason: UpstreamWsFallbackReason;
   message?: string;
+  /**
+   * True only for failures that prove the endpoint does not speak the
+   * Responses WebSocket protocol (e.g. HTTP 4xx / 501 on the upgrade).
+   * Used by the caller to decide whether to cache the endpoint as
+   * WS-unsupported. Network-level failures (ECONNREFUSED, ETIMEDOUT,
+   * silent upstream, mid-handshake aborts) are NOT cacheable — they may
+   * recover on the next request.
+   */
+  cacheableAsUnsupported: boolean;
 }
 
 export type UpstreamWsResult = UpstreamWsOutcome | UpstreamWsFailure;
@@ -53,6 +62,18 @@ const HANDSHAKE_TIMEOUT_MS = 10_000;
 // connection, half-open socket). Without a separate first-event timer the
 // `await openPromise` below would hang forever and tie up the request slot.
 const FIRST_EVENT_TIMEOUT_MS = 20_000;
+
+// Hard limit on bytes we will buffer between the upstream WebSocket and the
+// downstream SSE consumer. If the consumer stalls (or upstream sends faster
+// than the SSE reader drains) we cap memory growth and abort the WS rather
+// than spilling into the heap unboundedly.
+const MAX_BUFFERED_QUEUE_BYTES = 8 * 1024 * 1024; // 8 MiB
+
+// HTTP statuses on the upgrade handshake that we treat as a definitive
+// "this endpoint does not speak WebSocket" signal and cache as unsupported.
+// 401 / 403 are NOT in this list because they reflect auth state, not
+// protocol support.
+const PROTOCOL_UNSUPPORTED_HTTP_STATUSES = new Set([400, 404, 405, 426, 501]);
 
 // Hop-by-hop and request-shape headers that must NOT be forwarded into the
 // outbound WebSocket upgrade. The `ws` package handles Connection /
@@ -122,7 +143,7 @@ export async function tryResponsesWebsocketUpstream(options: {
     | (typeof WebSocketType & { new (url: string, opts?: unknown): WebSocketType })
     | null;
   if (!WsCtor) {
-    return { failed: true, reason: "ws_module_unavailable" };
+    return { failed: true, reason: "ws_module_unavailable", cacheableAsUnsupported: false };
   }
 
   const wssUrl = toWsUrl(options.upstreamUrl);
@@ -144,23 +165,29 @@ export async function tryResponsesWebsocketUpstream(options: {
       failed: true,
       reason: "ws_upgrade_rejected",
       message: String(err && (err as Error).message ? (err as Error).message : err),
+      // Constructor throws are typically URL parsing / TLS configuration —
+      // not a server-side protocol negative signal — so don't cache.
+      cacheableAsUnsupported: false,
     };
   }
 
+  type OpenResult =
+    | { ok: true }
+    | {
+        ok: false;
+        reason: UpstreamWsFallbackReason;
+        message?: string;
+        cacheableAsUnsupported: boolean;
+      };
+
   let firstEventSeen = false;
   let openResolved = false;
-  let openPromiseResolve: (
-    v: { ok: true } | { ok: false; reason: UpstreamWsFallbackReason; message?: string }
-  ) => void;
-  const openPromise = new Promise<
-    { ok: true } | { ok: false; reason: UpstreamWsFallbackReason; message?: string }
-  >((resolve) => {
+  let openPromiseResolve: (v: OpenResult) => void;
+  const openPromise = new Promise<OpenResult>((resolve) => {
     openPromiseResolve = resolve;
   });
 
-  const finishOpen = (
-    result: { ok: true } | { ok: false; reason: UpstreamWsFallbackReason; message?: string }
-  ) => {
+  const finishOpen = (result: OpenResult) => {
     if (openResolved) return;
     openResolved = true;
     openPromiseResolve(result);
@@ -174,6 +201,8 @@ export async function tryResponsesWebsocketUpstream(options: {
         ok: false,
         reason: "ws_error_pre_first_event",
         message: String(err && (err as Error).message ? (err as Error).message : err),
+        // Local send failure (closed underlying socket, etc.) is transient.
+        cacheableAsUnsupported: false,
       });
       try {
         ws.close(1011);
@@ -186,10 +215,16 @@ export async function tryResponsesWebsocketUpstream(options: {
   ws.on(
     "unexpected-response",
     (_req: unknown, res: { statusCode?: number; statusMessage?: string }) => {
+      const status = typeof res.statusCode === "number" ? res.statusCode : undefined;
+      const cacheable =
+        typeof status === "number" && PROTOCOL_UNSUPPORTED_HTTP_STATUSES.has(status);
       finishOpen({
         ok: false,
         reason: "ws_upgrade_rejected",
-        message: `HTTP ${res.statusCode ?? "?"} ${res.statusMessage ?? ""}`.trim(),
+        message: `HTTP ${status ?? "?"} ${res.statusMessage ?? ""}`.trim(),
+        // Only definitive protocol negatives (4xx/501 on the upgrade path)
+        // are cacheable. 401/403/5xx/etc. are auth or transient state.
+        cacheableAsUnsupported: cacheable,
       });
       try {
         ws.close(1011);
@@ -202,6 +237,7 @@ export async function tryResponsesWebsocketUpstream(options: {
   const messageQueue: string[] = [];
   let queueResolver: ((value: string | null) => void) | null = null;
   let closed = false;
+  let queuedBytes = 0;
   // Marks an upstream failure observed AFTER the first event was emitted.
   // The downstream pipeline must see this as an error rather than a clean
   // end-of-stream so it doesn't treat a half-streamed response as success.
@@ -210,6 +246,7 @@ export async function tryResponsesWebsocketUpstream(options: {
 
   ws.on("message", (data: Buffer | string) => {
     const text = typeof data === "string" ? data : data.toString("utf8");
+    const size = Buffer.byteLength(text, "utf8");
     if (!firstEventSeen) {
       firstEventSeen = true;
       if (firstEventTimer) {
@@ -222,9 +259,29 @@ export async function tryResponsesWebsocketUpstream(options: {
       const resolve = queueResolver;
       queueResolver = null;
       resolve(text);
-    } else {
-      messageQueue.push(text);
+      return;
     }
+    // Hard cap on buffered bytes so a stalled SSE consumer cannot let us
+    // accumulate unbounded heap growth.
+    if (queuedBytes + size > MAX_BUFFERED_QUEUE_BYTES) {
+      logger.warn("[ResponsesWsAdapter] upstream queue overflow, terminating WS", {
+        queuedBytes,
+        attemptedSize: size,
+      });
+      midStreamError = {
+        code: "upstream_ws_queue_overflow",
+        message: `buffered upstream payload exceeded ${MAX_BUFFERED_QUEUE_BYTES} bytes`,
+      };
+      closed = true;
+      try {
+        ws.close(1011);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    messageQueue.push(text);
+    queuedBytes += size;
   });
 
   ws.on("error", (err: Error) => {
@@ -237,6 +294,9 @@ export async function tryResponsesWebsocketUpstream(options: {
         ok: false,
         reason: "ws_error_pre_first_event",
         message: String(err?.message ? err.message : err),
+        // Network errors (ECONNREFUSED, ETIMEDOUT, ECONNRESET, TLS) are
+        // transient — never cache them as endpoint-unsupported.
+        cacheableAsUnsupported: false,
       });
     } else {
       midStreamError = {
@@ -258,6 +318,11 @@ export async function tryResponsesWebsocketUpstream(options: {
       finishOpen({
         ok: false,
         reason: "ws_closed_before_first_event",
+        // Endpoint upgraded successfully but closed without a frame. That
+        // could be transient (server restart, reload) or it could be a
+        // half-broken WS implementation. Conservative default: don't cache,
+        // re-probe on the next request.
+        cacheableAsUnsupported: false,
       });
     }
     if (queueResolver) {
@@ -290,6 +355,9 @@ export async function tryResponsesWebsocketUpstream(options: {
       ok: false,
       reason: "ws_error_pre_first_event",
       message: "timeout_waiting_for_first_event",
+      // A silent upstream is most likely transient (load, latency); the
+      // next request should re-probe rather than skip the WS path.
+      cacheableAsUnsupported: false,
     });
     try {
       ws.close(1011);
@@ -309,7 +377,12 @@ export async function tryResponsesWebsocketUpstream(options: {
     } catch {
       // ignore
     }
-    return { failed: true, reason: openResult.reason, message: openResult.message };
+    return {
+      failed: true,
+      reason: openResult.reason,
+      message: openResult.message,
+      cacheableAsUnsupported: openResult.cacheableAsUnsupported,
+    };
   }
 
   // Upstream WS is open and at least one event was received. Build an SSE
@@ -338,9 +411,18 @@ export async function tryResponsesWebsocketUpstream(options: {
         return false;
       };
 
+      const popMessage = (): string | undefined => {
+        const msg = messageQueue.shift();
+        if (msg !== undefined) {
+          queuedBytes -= Buffer.byteLength(msg, "utf8");
+          if (queuedBytes < 0) queuedBytes = 0;
+        }
+        return msg;
+      };
+
       // Drain queued first-event(s)
       while (messageQueue.length > 0) {
-        const msg = messageQueue.shift();
+        const msg = popMessage();
         if (msg === undefined) break;
         if (processText(msg)) {
           controller.close();
@@ -356,7 +438,7 @@ export async function tryResponsesWebsocketUpstream(options: {
       while (!closed) {
         const next = await new Promise<string | null>((resolve) => {
           if (messageQueue.length > 0) {
-            resolve(messageQueue.shift() ?? null);
+            resolve(popMessage() ?? null);
             return;
           }
           queueResolver = resolve;
@@ -376,7 +458,7 @@ export async function tryResponsesWebsocketUpstream(options: {
       // Drain any messages enqueued after the loop's last `await` resolved
       // with `null` (race between shift() and `closed` becoming true).
       while (messageQueue.length > 0) {
-        const msg = messageQueue.shift();
+        const msg = popMessage();
         if (msg === undefined) break;
         if (processText(msg)) {
           controller.close();

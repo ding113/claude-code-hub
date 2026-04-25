@@ -237,6 +237,138 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(receivedHeaders["content-length"]).not.toBe("999");
   });
 
+  it("preserves store=false and previous_response_id across continuous WS turns", async () => {
+    const receivedFrames: Array<Record<string, unknown>> = [];
+    server = await startMockServer((socket) => {
+      let turn = 0;
+      socket.on("message", (data) => {
+        try {
+          receivedFrames.push(JSON.parse(data.toString("utf8")) as Record<string, unknown>);
+        } catch {
+          // ignore
+        }
+        const responseId = `resp_${++turn}`;
+        socket.send(
+          JSON.stringify({
+            type: "response.created",
+            response: { id: responseId },
+          })
+        );
+        socket.send(
+          JSON.stringify({
+            type: "response.completed",
+            response: { id: responseId, prompt_cache_key: "tenantA:s1" },
+          })
+        );
+      });
+    });
+
+    // Turn 1: full input, store=false, no previous_response_id yet.
+    const turn1 = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      body: {
+        model: "gpt-5",
+        store: false,
+        prompt_cache_key: "tenantA:s1",
+        input: [{ role: "user", content: "hello" }],
+      },
+    });
+    expect("response" in turn1).toBe(true);
+    if (!("response" in turn1)) return;
+    await collectSseBody(turn1.response);
+
+    // Turn 2: send only the new input + previous_response_id, with store=false
+    // preserved. The adapter must forward both fields untouched so the
+    // upstream can re-use its in-connection state.
+    const turn2 = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      body: {
+        model: "gpt-5",
+        store: false,
+        prompt_cache_key: "tenantA:s1",
+        previous_response_id: "resp_1",
+        input: [
+          {
+            type: "function_call_output",
+            call_id: "call_1",
+            output: '{"ok":true}',
+          },
+        ],
+      },
+    });
+    expect("response" in turn2).toBe(true);
+    if (!("response" in turn2)) return;
+    await collectSseBody(turn2.response);
+
+    expect(receivedFrames).toHaveLength(2);
+    const [first, second] = receivedFrames;
+    expect(first.type).toBe("response.create");
+    expect(first.store).toBe(false);
+    expect(first.prompt_cache_key).toBe("tenantA:s1");
+    expect(first.previous_response_id).toBeUndefined();
+
+    expect(second.type).toBe("response.create");
+    expect(second.store).toBe(false);
+    expect(second.previous_response_id).toBe("resp_1");
+    expect(second.prompt_cache_key).toBe("tenantA:s1");
+    // input was passed through untouched
+    expect(Array.isArray(second.input)).toBe(true);
+  });
+
+  it("classifies HTTP 426 / 404 / 501 upgrade failures as cacheable-unsupported", async () => {
+    const http = await import("node:http");
+    for (const status of [426, 404, 501]) {
+      const httpServer = http.createServer((_req, res) => {
+        res.statusCode = status;
+        res.end(`status ${status}`);
+      });
+      await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+      const addr = httpServer.address() as AddressInfo;
+      try {
+        const result = await tryResponsesWebsocketUpstream({
+          provider: codexProvider(),
+          upstreamUrl: `http://127.0.0.1:${addr.port}/v1/responses`,
+          upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+          body: { model: "gpt-5", input: "hi" },
+        });
+        expect("failed" in result).toBe(true);
+        if (!("failed" in result)) continue;
+        expect(result.cacheableAsUnsupported).toBe(true);
+      } finally {
+        await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+      }
+    }
+  });
+
+  it("classifies 401 / 5xx / network errors as NOT cacheable-unsupported", async () => {
+    const http = await import("node:http");
+    for (const status of [401, 503]) {
+      const httpServer = http.createServer((_req, res) => {
+        res.statusCode = status;
+        res.end(`status ${status}`);
+      });
+      await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+      const addr = httpServer.address() as AddressInfo;
+      try {
+        const result = await tryResponsesWebsocketUpstream({
+          provider: codexProvider(),
+          upstreamUrl: `http://127.0.0.1:${addr.port}/v1/responses`,
+          upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+          body: { model: "gpt-5", input: "hi" },
+        });
+        expect("failed" in result).toBe(true);
+        if (!("failed" in result)) continue;
+        expect(result.cacheableAsUnsupported).toBe(false);
+      } finally {
+        await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+      }
+    }
+  });
+
   it("emits an error frame when upstream WS fails mid-stream after the first event", async () => {
     server = await startMockServer((socket) => {
       socket.on("message", () => {

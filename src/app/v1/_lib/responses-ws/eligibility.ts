@@ -15,6 +15,7 @@
 
 import { isOpenaiResponsesWebsocketEnabled } from "@/lib/config/system-settings-cache";
 import type { Provider } from "@/types/provider";
+import { verifyInternalRequest } from "./internal-secret";
 import { isResponsesWsUnsupported } from "./unsupported-cache";
 
 export const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
@@ -32,6 +33,18 @@ export interface ResponsesWsEligibility {
   endpointId?: number | null;
 }
 
+/**
+ * Treat the request as a WebSocket-tunneled request only when:
+ *   1. it carries `x-cch-client-transport: websocket`, AND
+ *   2. it carries a valid per-process internal loopback secret AND the
+ *      forward flag (see internal-secret.ts).
+ *
+ * Condition (2) is what defends against an external client crafting an HTTP
+ * request with the public marker header to trick the forwarder into
+ * attempting an upstream WebSocket dial. server.js sets the secret on every
+ * internal tunnel request and strips inbound `x-cch-*` headers from clients,
+ * so external requests cannot pass this check.
+ */
 export function isWebsocketClientRequest(headers: Headers | Record<string, string>): boolean {
   let value: string | null | undefined;
   if (headers instanceof Headers) {
@@ -46,7 +59,8 @@ export function isWebsocketClientRequest(headers: Headers | Record<string, strin
       }
     }
   }
-  return typeof value === "string" && value.toLowerCase() === "websocket";
+  if (typeof value !== "string" || value.toLowerCase() !== "websocket") return false;
+  return verifyInternalRequest(headers);
 }
 
 export async function evaluateResponsesWsEligibility(options: {

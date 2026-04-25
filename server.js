@@ -22,6 +22,7 @@
 "use strict";
 
 const http = require("node:http");
+const { randomUUID } = require("node:crypto");
 const { parse } = require("node:url");
 
 const dev = process.env.NODE_ENV !== "production";
@@ -38,11 +39,24 @@ const INTERNAL_TUNNEL_HOST =
 const WS_PATH = "/v1/responses";
 const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
 const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
+const INTERNAL_SECRET_HEADER = "x-cch-internal-secret";
+const INTERNAL_SECRET_ENV = "CCH_RESPONSES_WS_INTERNAL_SECRET";
+
+// Header names a client must NEVER be allowed to set on inbound traffic.
+// Anything starting with "x-cch-" is reserved for internal markers; the WS
+// edge strips the entire prefix from inbound requests so an attacker cannot
+// pre-set the WS-tunnel marker headers when they connect.
+const RESERVED_INTERNAL_HEADER_PREFIX = "x-cch-";
 
 // Per-WebSocket-connection guardrails: cap the queue depth and total queued
 // bytes to make a misbehaving / malicious client a bounded-memory event.
 const MAX_PENDING_FRAMES = 64;
 const MAX_PENDING_BYTES = 4 * 1024 * 1024; // 4 MiB across all queued frames
+
+// Maximum payload size for any single inbound WS frame. The default `ws`
+// limit is 100 MiB, far larger than a Responses create body needs to be and
+// dangerous for a public endpoint.
+const WS_MAX_PAYLOAD_BYTES = 1 * 1024 * 1024; // 1 MiB per frame
 
 const TERMINAL_EVENT_TYPES = new Set([
   "response.completed",
@@ -262,8 +276,8 @@ async function handleWebSocketConnection(ws, req) {
 async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq) {
   const internalHeaders = {};
   for (const [k, v] of Object.entries(originalReq.headers)) {
-    // Skip hop-by-hop / WS-specific headers; keep app-level auth/session etc.
     const lower = k.toLowerCase();
+    // Strip hop-by-hop / WS-specific transport headers.
     if (
       lower === "host" ||
       lower === "connection" ||
@@ -277,6 +291,13 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
     ) {
       continue;
     }
+    // Strip any `x-cch-*` header the client may have set: those names are
+    // reserved for internal markers that we'll attach below. Without this an
+    // external attacker could try to forge `x-cch-internal-secret` /
+    // `x-cch-responses-ws-forward` and bypass the loopback-only check.
+    if (lower.startsWith(RESERVED_INTERNAL_HEADER_PREFIX)) {
+      continue;
+    }
     if (Array.isArray(v)) {
       internalHeaders[k] = v.join(", ");
     } else if (typeof v === "string") {
@@ -287,6 +308,14 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
   internalHeaders["content-type"] = "application/json";
   internalHeaders[CLIENT_TRANSPORT_HEADER] = "websocket";
   internalHeaders[WS_FORWARD_FLAG_HEADER] = "1";
+  // Per-process loopback secret. Read from process.env so it can be picked
+  // up by any code path that needs to verify (the TS forwarder reads the
+  // same env var via `internal-secret.ts`). The secret is generated at
+  // startup if no operator value is preset.
+  const internalSecret = process.env[INTERNAL_SECRET_ENV];
+  if (internalSecret) {
+    internalHeaders[INTERNAL_SECRET_HEADER] = internalSecret;
+  }
 
   // Force streaming so we can translate SSE events to WS frames incrementally.
   // The upstream pipeline will strip transport-only fields (stream, background)
@@ -486,6 +515,14 @@ async function main() {
     WebSocketServer = null;
   }
 
+  // Initialize the per-process internal secret BEFORE next.prepare() so that
+  // any module loaded by Next can read the same value from process.env.
+  // Operators may pre-seed the env var; otherwise we generate one. Either
+  // way the secret never leaves this process.
+  if (!process.env[INTERNAL_SECRET_ENV]) {
+    process.env[INTERNAL_SECRET_ENV] = randomUUID();
+  }
+
   const app = nextFactory({ dev, hostname, port });
   const handler = app.getRequestHandler();
   await app.prepare();
@@ -506,7 +543,7 @@ async function main() {
   });
 
   if (WebSocketServer) {
-    const wss = new WebSocketServer({ noServer: true });
+    const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES });
 
     server.on("upgrade", (req, socket, head) => {
       if (!isResponsesWsUpgrade(req)) {
