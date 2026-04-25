@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { localeCookieName } from "@/i18n/config";
 
 const APP_BASE_URL = process.env.APP_BASE_URL || "http://localhost:13500";
 
@@ -11,7 +12,7 @@ async function fetchRedirect(path: string, cookie?: string) {
 
 describe("i18n routing e2e", () => {
   test("unprefixed protected routes use NEXT_LOCALE for the login redirect", async () => {
-    const response = await fetchRedirect("/dashboard", "NEXT_LOCALE=en");
+    const response = await fetchRedirect("/dashboard", `${localeCookieName}=en`);
 
     expect(response.status).toBeGreaterThanOrEqual(300);
     expect(response.status).toBeLessThan(400);

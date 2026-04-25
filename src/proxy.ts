@@ -19,30 +19,6 @@ const PUBLIC_PATH_PATTERNS = [
 
 const API_PROXY_PATH = "/v1";
 
-function getCookieValueFromHeader(cookieHeader: string | null, name: string): string | null {
-  if (!cookieHeader) return null;
-
-  for (const segment of cookieHeader.split(";")) {
-    const [rawKey, ...rawValueParts] = segment.split("=");
-    const key = rawKey?.trim();
-
-    if (key !== name) {
-      continue;
-    }
-
-    const value = rawValueParts.join("=").trim();
-    if (!value) return null;
-
-    try {
-      return decodeURIComponent(value);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
-
 function matchesPublicPath(pathname: string, pattern: string) {
   return pathname === pattern || pathname.startsWith(`${pattern}/`);
 }
@@ -127,9 +103,9 @@ function proxyHandler(request: NextRequest) {
     // Not authenticated, redirect to login page
     const url = request.nextUrl.clone();
     // Preserve locale in redirect
-    const localeFromCookie =
-      getLocaleFromValue(sanitizedRequest.cookies.get(localeCookieName)?.value) ||
-      getLocaleFromValue(getCookieValueFromHeader(requestHeaders.get("cookie"), localeCookieName));
+    const localeFromCookie = getLocaleFromValue(
+      sanitizedRequest.cookies.get(localeCookieName)?.value
+    );
     const locale = isLocaleInPath ? potentialLocale : localeFromCookie || routing.defaultLocale;
     url.pathname = `/${locale}/login`;
     url.searchParams.set("from", normalizePathnameForLocaleNavigation(pathWithoutLocale));

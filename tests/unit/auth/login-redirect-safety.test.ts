@@ -38,6 +38,10 @@ describe("sanitizeRedirectPath", () => {
     expect(sanitizeRedirectPath("/en/en/dashboard?tab=logs")).toBe("/dashboard?tab=logs");
   });
 
+  it("preserves hash fragments when stripping leading locales", () => {
+    expect(sanitizeRedirectPath("/en/dashboard#section")).toBe("/dashboard#section");
+  });
+
   it("uses dashboard fallback when a localized redirect points to the locale root", () => {
     expect(sanitizeRedirectPath("/zh-CN")).toBe("/dashboard");
   });
