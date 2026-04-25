@@ -276,4 +276,54 @@ describe("public-status config publisher", () => {
       })
     );
   }, 20_000);
+
+  it("publishes a Redis config projection when stored legacy group slugs collide", async () => {
+    mockFindAllProviderGroups.mockResolvedValue([
+      {
+        id: 10,
+        name: "cc特价",
+        description: JSON.stringify({
+          version: 2,
+          publicStatus: {
+            displayName: "CC Special",
+            publicGroupSlug: "cc",
+            publicModels: [{ modelKey: "gpt-4.1" }],
+          },
+        }),
+      },
+      {
+        id: 11,
+        name: "cc逆向",
+        description: JSON.stringify({
+          version: 2,
+          publicStatus: {
+            displayName: "CC Reverse",
+            publicGroupSlug: "cc",
+            publicModels: [{ modelKey: "gpt-4.1" }],
+          },
+        }),
+      },
+    ]);
+
+    const mod = await import("@/lib/public-status/config-publisher");
+    const result = await mod.publishCurrentPublicStatusConfigProjection({
+      reason: "test",
+      configVersion: "cfg-test",
+    });
+
+    expect(result.written).toBe(true);
+    expect(mockPublishPublicStatusConfigSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          groups: expect.arrayContaining([
+            expect.objectContaining({ slug: "cc", displayName: "CC Special" }),
+            expect.objectContaining({
+              slug: expect.stringMatching(/^cc-[a-z0-9]{6}$/),
+              displayName: "CC Reverse",
+            }),
+          ]),
+        }),
+      })
+    );
+  });
 });
