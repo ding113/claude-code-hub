@@ -13,5 +13,5 @@ export function getDefaultPublicPathPatterns(): readonly string[] {
 }
 
 export function isPublicPath(pathname: string, patterns: readonly string[] = DEFAULT_PUBLIC_PATH_PATTERNS) {
-  return patterns.some((pattern) => pathname === pattern || pathname.startsWith(pattern));
+  return patterns.some((pattern) => pathname === pattern || pathname.startsWith(`${pattern}/`));
 }

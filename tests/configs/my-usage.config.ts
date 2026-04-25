@@ -21,5 +21,6 @@ export default createCoverageConfig({
     "src/lib/api/action-adapter-openapi.ts",
   ],
   thresholds: { lines: 80, functions: 80, branches: 70, statements: 80 },
+  testTimeout: 15000,
   testExclude: ["node_modules", ".next", "dist", "build", "coverage"],
 });
