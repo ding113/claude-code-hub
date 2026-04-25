@@ -30,21 +30,26 @@ const resolveSnapshotPath = (testPath: string, snapExtension: string) => {
   return testPath.replace(/\.test\.([tj]sx?)$/, `${snapExtension}.$1`);
 };
 
-function parsePositiveInt(value: string | undefined, fallback: number): number {
+export function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
+  const parsed = Number.parseInt(value.trim(), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function parseWorkerLimit(value: string | undefined, fallback: number | string): number | string {
+export function parseWorkerLimit(
+  value: string | undefined,
+  fallback: number | string
+): number | string {
   if (!value) return fallback;
-  if (/^\d+%$/.test(value)) return value;
-  return parsePositiveInt(value, typeof fallback === "number" ? fallback : 2);
+  const trimmed = value.trim();
+  if (/^\d+%$/.test(trimmed)) return trimmed;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+export function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (!value) return fallback;
-  return !["0", "false", "no", "off"].includes(value.toLowerCase());
+  return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
 }
 
 const defaultTestExclude = [

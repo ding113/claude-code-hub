@@ -1,22 +1,10 @@
 import { availableParallelism } from "node:os";
 import { defineConfig } from "vitest/config";
-import { sharedResolve } from "./tests/vitest.base";
+import { parsePositiveInt, parseWorkerLimit, sharedResolve } from "./tests/vitest.base";
 
 const isIntegrationFileFilterRequested = process.argv.some((arg) =>
   /tests[\\/]+integration(?:[\\/].+\.(test|spec)\.[cm]?[jt]sx?|[\\/]?$)/.test(arg)
 );
-
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function parseWorkerLimit(value: string | undefined, fallback: number | string): number | string {
-  if (!value) return fallback;
-  if (/^\d+%$/.test(value)) return value;
-  return parsePositiveInt(value, typeof fallback === "number" ? fallback : 8);
-}
 
 function defaultMaxWorkers(): number {
   const workerBudget = Math.floor(availableParallelism() * 0.75);
