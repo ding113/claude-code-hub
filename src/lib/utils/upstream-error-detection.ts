@@ -95,77 +95,77 @@ const ERROR_STATUS_MATCHERS: Array<{ statusCode: number; matcherId: string; re: 
   {
     statusCode: 429,
     matcherId: "rate_limit",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+429\b|\b429\s+too\s+many\s+requests\b|\btoo\s+many\s+requests\b|\brate\s*limit(?:ed|ing)?\b|\bthrottl(?:e|ed|ing)\b|\bretry-after\b|\bRESOURCE_EXHAUSTED\b|\bRequestLimitExceeded\b|\bThrottling(?:Exception)?\b|\bError\s*1015\b|超出频率|请求过于频繁|限流|稍后重试)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+429(?![\p{L}\p{N}_]|\.\d)|(?<![\p{L}\p{N}_.])429(?![\p{L}\p{N}_]|\.\d)\s+too\s+many\s+requests\b|\btoo\s+many\s+requests\b|\brate\s*limit(?:ed|ing)?\b|\bthrottl(?:e|ed|ing)\b|\bretry-after\b|\bRESOURCE_EXHAUSTED\b|\bRequestLimitExceeded\b|\bThrottling(?:Exception)?\b|\bError\s*1015(?![\p{L}\p{N}_]|\.\d)|超出频率|请求过于频繁|限流|稍后重试)/iu,
   },
   {
     statusCode: 402,
     matcherId: "payment_required",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+402\b|\bpayment\s+required\b|\binsufficient\s+(?:balance|funds|credits)\b|\b(?:out\s+of|no)\s+credits\b|\binsufficient_balance\b|\bbilling_hard_limit_reached\b|\bcard\s+(?:declined|expired)\b|\bpayment\s+(?:method|failed)\b|余额不足|欠费|请充值|支付(?:失败|方式))/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+402(?![\p{L}\p{N}_]|\.\d)|\bpayment\s+required\b|\binsufficient\s+(?:balance|funds|credits)\b|\b(?:out\s+of|no)\s+credits\b|\binsufficient_balance\b|\bbilling_hard_limit_reached\b|\bcard\s+(?:declined|expired)\b|\bpayment\s+(?:method|failed)\b|余额不足|欠费|请充值|支付(?:失败|方式))/iu,
   },
   {
     statusCode: 401,
     matcherId: "unauthorized",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+401\b|\bunauthori(?:sed|zed)\b|\bunauthenticated\b|\bauthentication\s+failed\b|\b(?:invalid|incorrect|missing)\s+api[-_ ]?key\b|\binvalid\s+token\b|\bexpired\s+token\b|\bsignature\s+(?:invalid|mismatch)\b|\bUNAUTHENTICATED\b|未授权|鉴权失败|密钥无效|token\s*过期)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+401(?![\p{L}\p{N}_]|\.\d)|\bunauthori(?:sed|zed)\b|\bunauthenticated\b|\bauthentication\s+failed\b|\b(?:invalid|incorrect|missing)\s+api[-_ ]?key\b|\binvalid\s+token\b|\bexpired\s+token\b|\bsignature\s+(?:invalid|mismatch)\b|\bUNAUTHENTICATED\b|未授权|鉴权失败|密钥无效|token\s*过期)/iu,
   },
   {
     statusCode: 403,
     matcherId: "forbidden",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+403\b|\bforbidden\b|\bpermission\s+denied\b|\baccess\s+denied\b|\bnot\s+allowed\b|\baccount\s+(?:disabled|suspended|banned)\b|\bnot\s+whitelisted\b|\bPERMISSION_DENIED\b|\bAccessDenied(?:Exception)?\b|\bError\s*1020\b|\b(?:region|country)\b[\s\S]{0,40}\b(?:not\s+supported|blocked)\b|地区不支持|禁止访问|无权限|权限不足|账号被封|地区(?:限制|屏蔽))/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+403(?![\p{L}\p{N}_]|\.\d)|\bforbidden\b|\bpermission\s+denied\b|\baccess\s+denied\b|\bnot\s+allowed\b|\baccount\s+(?:disabled|suspended|banned)\b|\bnot\s+whitelisted\b|\bPERMISSION_DENIED\b|\bAccessDenied(?:Exception)?\b|\bError\s*1020(?![\p{L}\p{N}_]|\.\d)|\b(?:region|country)\b[\s\S]{0,40}\b(?:not\s+supported|blocked)\b|地区不支持|禁止访问|无权限|权限不足|账号被封|地区(?:限制|屏蔽))/iu,
   },
   {
     statusCode: 404,
     matcherId: "not_found",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+404\b|\b(?:model|deployment|endpoint|resource|route|path|api|service|url)\s+not\s+found\b|\bunknown\s+model\b|\bdoes\s+not\s+exist\b|\bNOT_FOUND\b|\bResourceNotFoundException\b|未找到|不存在|模型不存在)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+404(?![\p{L}\p{N}_]|\.\d)|\b(?:model|deployment|endpoint|resource|route|path|api|service|url)\s+not\s+found\b|\bunknown\s+model\b|\bdoes\s+not\s+exist\b|\bNOT_FOUND\b|\bResourceNotFoundException\b|未找到|不存在|模型不存在)/iu,
   },
   {
     statusCode: 413,
     matcherId: "payload_too_large",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+413\b|\bpayload\s+too\s+large\b|\brequest\s+entity\s+too\s+large\b|\bbody\s+too\s+large\b|\bContent-Length\b[\s\S]{0,40}\btoo\s+large\b|\bexceed(?:s|ed)?\b[\s\S]{0,40}\b(?:max(?:imum)?|limit)\b[\s\S]{0,40}\b(?:size|length)\b|请求体过大|内容过大|超过最大)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+413(?![\p{L}\p{N}_]|\.\d)|\bpayload\s+too\s+large\b|\brequest\s+entity\s+too\s+large\b|\bbody\s+too\s+large\b|\bContent-Length\b[\s\S]{0,40}\btoo\s+large\b|\bexceed(?:s|ed)?\b[\s\S]{0,40}\b(?:max(?:imum)?|limit)\b[\s\S]{0,40}\b(?:size|length)\b|请求体过大|内容过大|超过最大)/iu,
   },
   {
     statusCode: 415,
     matcherId: "unsupported_media_type",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+415\b|\bunsupported\s+media\s+type\b|\binvalid\s+content-type\b|\bContent-Type\b[\s\S]{0,40}\b(?:must\s+be|required)\b|不支持的媒体类型|Content-Type\s*错误)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+415(?![\p{L}\p{N}_]|\.\d)|\bunsupported\s+media\s+type\b|\binvalid\s+content-type\b|\bContent-Type\b[\s\S]{0,40}\b(?:must\s+be|required)\b|不支持的媒体类型|Content-Type\s*错误)/iu,
   },
   {
     statusCode: 409,
     matcherId: "conflict",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+409\b|\bconflict\b|\bidempotency(?:-key)?\b|\bABORTED\b|冲突|幂等)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+409(?![\p{L}\p{N}_]|\.\d)|\bconflict\b|\bidempotency(?:-key)?\b|\bABORTED\b|冲突|幂等)/iu,
   },
   {
     statusCode: 422,
     matcherId: "unprocessable_entity",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+422\b|\bunprocessable\s+entity\b|\bINVALID_ARGUMENT\b[\s\S]{0,40}\bvalidation\b|\bschema\s+validation\b|实体无法处理)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+422(?![\p{L}\p{N}_]|\.\d)|\bunprocessable\s+entity\b|\bINVALID_ARGUMENT\b[\s\S]{0,40}\bvalidation\b|\bschema\s+validation\b|实体无法处理)/iu,
   },
   {
     statusCode: 408,
     matcherId: "request_timeout",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+408\b|\brequest\s+timeout\b|请求\s*超时)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+408(?![\p{L}\p{N}_]|\.\d)|\brequest\s+timeout\b|请求\s*超时)/iu,
   },
   {
     statusCode: 451,
     matcherId: "legal_restriction",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+451\b|\bunavailable\s+for\s+legal\s+reasons\b|\bexport\s+control\b|\bsanctions?\b|法律原因不可用|合规限制|出口管制)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+451(?![\p{L}\p{N}_]|\.\d)|\bunavailable\s+for\s+legal\s+reasons\b|\bexport\s+control\b|\bsanctions?\b|法律原因不可用|合规限制|出口管制)/iu,
   },
   {
     statusCode: 503,
     matcherId: "service_unavailable",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+503\b|\bservice\s+unavailable\b|\boverloaded\b|\bserver\s+is\s+busy\b|\btry\s+again\s+later\b|\btemporarily\s+unavailable\b|\bmaintenance\b|\bUNAVAILABLE\b|\bServiceUnavailableException\b|\bError\s*521\b|服务不可用|过载|系统繁忙|维护中)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+503(?![\p{L}\p{N}_]|\.\d)|\bservice\s+unavailable\b|\boverloaded\b|\bserver\s+is\s+busy\b|\btry\s+again\s+later\b|\btemporarily\s+unavailable\b|\bmaintenance\b|\bUNAVAILABLE\b|\bServiceUnavailableException\b|\bError\s*521(?![\p{L}\p{N}_]|\.\d)|服务不可用|过载|系统繁忙|维护中)/iu,
   },
   {
     statusCode: 504,
     matcherId: "gateway_timeout",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+504\b|\bgateway\s+timeout\b|\bupstream\b[\s\S]{0,40}\btim(?:e|ed)\s*out\b|\bDEADLINE_EXCEEDED\b|\bError\s*522\b|\bError\s*524\b|网关超时|上游超时)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+504(?![\p{L}\p{N}_]|\.\d)|\bgateway\s+timeout\b|\bupstream\b[\s\S]{0,40}\btim(?:e|ed)\s*out\b|\bDEADLINE_EXCEEDED\b|\bError\s*522(?![\p{L}\p{N}_]|\.\d)|\bError\s*524(?![\p{L}\p{N}_]|\.\d)|网关超时|上游超时)/iu,
   },
   {
     statusCode: 500,
     matcherId: "internal_server_error",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+500\b|\binternal\s+server\s+error\b|\bInternalServerException\b|\bINTERNAL\b|内部错误|服务器错误)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+500(?![\p{L}\p{N}_]|\.\d)|\binternal\s+server\s+error\b|\bInternalServerException\b|\bINTERNAL\b|内部错误|服务器错误)/iu,
   },
   {
     statusCode: 400,
     matcherId: "bad_request",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+400\b|\bbad\s+request\b|\bINVALID_ARGUMENT\b|\bjson\s+parse\b|\binvalid\s+json\b|\bunexpected\s+token\b|无效请求|格式错误|JSON\s*解析失败)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+400(?![\p{L}\p{N}_]|\.\d)|\bbad\s+request\b|\bINVALID_ARGUMENT\b|\bjson\s+parse\b|\binvalid\s+json\b|\bunexpected\s+token\b|无效请求|格式错误|JSON\s*解析失败)/iu,
   },
 ];
 
