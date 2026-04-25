@@ -287,6 +287,7 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.verboseProviderError).toBe(false);
       expect(result.passThroughUpstreamErrorMessage).toBe(true);
       expect(result.enableHttp2).toBe(false);
+      expect(result.enableOpenaiResponsesWebsocket).toBe(true);
       expect(result.interceptAnthropicWarmupRequests).toBe(false);
       expect(result.createdAt).toEqual(now);
       expect(result.updatedAt).toEqual(now);

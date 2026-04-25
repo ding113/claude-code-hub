@@ -27,7 +27,14 @@ const nextConfig: NextConfig = {
   // Next.js 依赖追踪无法正确追踪动态导入和类型导入的传递依赖
   // 参考: https://nextjs.org/docs/app/api-reference/config/next-config-js/output
   outputFileTracingIncludes: {
-    "/**": ["./node_modules/undici/**/*", "./node_modules/fetch-socks/**/*"],
+    "/**": [
+      "./node_modules/undici/**/*",
+      "./node_modules/fetch-socks/**/*",
+      // 自定义 Node 服务器使用 next 的 programmatic API 与 ws 处理 WebSocket 升级，
+      // 需要强制追踪这两个包到 standalone 输出。
+      "./node_modules/next/**/*",
+      "./node_modules/ws/**/*",
+    ],
   },
 
   // 文件上传大小限制（用于数据库备份导入）

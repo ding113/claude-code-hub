@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "tsgo -p tsconfig.json --noEmit && next dev --port 13500",
-    "build": "tsgo -p tsconfig.json --noEmit && next build && (node scripts/copy-version-to-standalone.cjs || bun scripts/copy-version-to-standalone.cjs)",
-    "start": "next start",
+    "dev:server": "NODE_ENV=development node server.js",
+    "build": "tsgo -p tsconfig.json --noEmit && next build && (node scripts/copy-version-to-standalone.cjs || bun scripts/copy-version-to-standalone.cjs) && (node scripts/copy-custom-server-to-standalone.cjs || bun scripts/copy-custom-server-to-standalone.cjs)",
+    "start": "node server.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsgo -p tsconfig.json --noEmit",
@@ -111,6 +112,7 @@
     "tw-animate-css": "^1",
     "undici": "^7",
     "vaul": "^1",
+    "ws": "^8",
     "zod": "^4"
   },
   "devDependencies": {
@@ -122,6 +124,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15",
+    "@types/ws": "^8",
     "@typescript/native-preview": "7.0.0-dev.20260321.1",
     "@vitest/coverage-v8": "^4",
     "@vitest/ui": "^4",

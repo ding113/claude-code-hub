@@ -11,6 +11,7 @@ import {
   MapPin,
   Network,
   Pencil,
+  Radio,
   Terminal,
   Thermometer,
   Wrench,
@@ -64,6 +65,7 @@ interface SystemSettingsFormProps {
     | "verboseProviderError"
     | "passThroughUpstreamErrorMessage"
     | "enableHttp2"
+    | "enableOpenaiResponsesWebsocket"
     | "enableHighConcurrencyMode"
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
@@ -125,6 +127,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.passThroughUpstreamErrorMessage
   );
   const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
+  const [enableOpenaiResponsesWebsocket, setEnableOpenaiResponsesWebsocket] = useState(
+    initialSettings.enableOpenaiResponsesWebsocket
+  );
   const [enableHighConcurrencyMode, setEnableHighConcurrencyMode] = useState(
     initialSettings.enableHighConcurrencyMode
   );
@@ -244,6 +249,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         verboseProviderError,
         passThroughUpstreamErrorMessage,
         enableHttp2,
+        enableOpenaiResponsesWebsocket,
         enableHighConcurrencyMode,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
@@ -280,6 +286,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setVerboseProviderError(result.data.verboseProviderError);
         setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
         setEnableHttp2(result.data.enableHttp2);
+        setEnableOpenaiResponsesWebsocket(result.data.enableOpenaiResponsesWebsocket);
         setEnableHighConcurrencyMode(result.data.enableHighConcurrencyMode);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
@@ -550,6 +557,29 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-http2"
             checked={enableHttp2}
             onCheckedChange={(checked) => setEnableHttp2(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Enable OpenAI Responses WebSocket (Codex only) */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
+              <Radio className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("enableOpenaiResponsesWebsocket")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableOpenaiResponsesWebsocketDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-openai-responses-websocket"
+            checked={enableOpenaiResponsesWebsocket}
+            onCheckedChange={(checked) => setEnableOpenaiResponsesWebsocket(checked)}
             disabled={isPending}
           />
         </div>

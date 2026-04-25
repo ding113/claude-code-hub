@@ -47,6 +47,9 @@ import type {
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
+import { evaluateResponsesWsEligibility } from "../responses-ws/eligibility";
+import { markResponsesWsUnsupported } from "../responses-ws/unsupported-cache";
+import { tryResponsesWebsocketUpstream } from "../responses-ws/upstream-adapter";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
@@ -2817,19 +2820,96 @@ export class ProxyForwarder {
 
       (init as Record<string, unknown>).verbose = true;
 
+      // ⭐ OpenAI Responses WebSocket 上游尝试（仅 Codex 供应商 + 开关开启 + 客户端以 WS 接入）
+      // 若握手失败或首帧前关闭，降级到下面的 HTTP 路径；不计入熔断器。
+      let responsesWsResponse: Response | null = null;
+      try {
+        const wsEligibility = await evaluateResponsesWsEligibility({
+          headers: processedHeaders,
+          provider,
+          endpointId: null,
+        });
+
+        if (wsEligibility.eligible) {
+          const requestMessage = session.request.message;
+          const requestBodyJson =
+            requestMessage && typeof requestMessage === "object"
+              ? (requestMessage as Record<string, unknown>)
+              : null;
+
+          if (requestBodyJson) {
+            const wsResult = await tryResponsesWebsocketUpstream({
+              provider,
+              upstreamUrl: proxyUrl,
+              upstreamHeaders: processedHeaders,
+              body: requestBodyJson,
+              abortSignal: combinedSignal,
+            });
+
+            if ("response" in wsResult) {
+              responsesWsResponse = wsResult.response;
+              logger.info("ProxyForwarder: Upstream Responses WebSocket connected", {
+                providerId: provider.id,
+                providerName: provider.name,
+                connected: wsResult.connected,
+              });
+              session.addProviderToChain(provider, {
+                reason: "responses_ws_attempted",
+                attemptNumber: undefined,
+              });
+            } else {
+              markResponsesWsUnsupported(provider.id, null, wsResult.reason);
+              logger.info(
+                "ProxyForwarder: Upstream Responses WebSocket unavailable, falling back to HTTP",
+                {
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  reason: wsResult.reason,
+                  message: wsResult.message,
+                }
+              );
+              session.addProviderToChain(provider, {
+                reason: "responses_ws_fallback",
+                errorMessage: wsResult.message,
+                attemptNumber: undefined,
+              });
+            }
+          }
+        } else if (wsEligibility.isWebsocketClient && wsEligibility.downgradeReason) {
+          session.addProviderToChain(provider, {
+            reason: "responses_ws_fallback",
+            errorMessage: wsEligibility.downgradeReason,
+            attemptNumber: undefined,
+          });
+        }
+      } catch (wsError) {
+        logger.warn(
+          "ProxyForwarder: Upstream Responses WebSocket attempt threw, falling back to HTTP",
+          {
+            providerId: provider.id,
+            providerName: provider.name,
+            error: String(
+              wsError && (wsError as Error).message ? (wsError as Error).message : wsError
+            ),
+          }
+        );
+      }
+
       // ⭐ 所有供应商使用 undici.request 绕过 fetch 的自动解压
       // 原因：undici fetch 无法关闭自动解压，上游可能无视 accept-encoding: identity 返回 gzip
       // 当 gzip 流被提前终止时（如连接关闭），undici Gunzip 会抛出 "TypeError: terminated"
-      response = useErrorTolerantFetch
-        ? await ProxyForwarder.fetchWithoutAutoDecode(
-            proxyUrl,
-            init,
-            provider.id,
-            provider.name,
-            session,
-            deferDetailSnapshotPersistence
-          )
-        : await fetch(proxyUrl, init);
+      response = responsesWsResponse
+        ? responsesWsResponse
+        : useErrorTolerantFetch
+          ? await ProxyForwarder.fetchWithoutAutoDecode(
+              proxyUrl,
+              init,
+              provider.id,
+              provider.name,
+              session,
+              deferDetailSnapshotPersistence
+            )
+          : await fetch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
       // 注意：undici 的 fetch 在收到 HTTP 响应头后就 resolve，但实际数据（SSE 首字节 / 完整 JSON）
       // 还没到达。responseTimeoutId 需要延续到 response-handler 中才能真正控制"首字节"或"总耗时"
