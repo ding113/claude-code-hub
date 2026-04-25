@@ -960,6 +960,8 @@ export const UpdateSystemSettingsSchema = z.object({
   passThroughUpstreamErrorMessage: z.boolean().optional(),
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2: z.boolean().optional(),
+  // 启用 OpenAI Responses WebSocket 支持（可选，仅 Codex 类型供应商生效）
+  enableOpenaiResponsesWebsocket: z.boolean().optional(),
   // 高并发模式（可选）
   enableHighConcurrencyMode: z.boolean().optional(),
   // 可选拦截 Anthropic Warmup 请求（可选）

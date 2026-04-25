@@ -152,6 +152,7 @@ function createFallbackSettings(): SystemSettings {
     verboseProviderError: false,
     passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
+    enableOpenaiResponsesWebsocket: true,
     enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
@@ -268,9 +269,13 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
-    const fullSelection = {
+    const selectionWithoutOpenaiResponsesWebsocket = {
       passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
       ...selectionWithoutPassThrough,
+    };
+    const fullSelection = {
+      ...selectionWithoutOpenaiResponsesWebsocket,
+      enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
     };
 
     try {
@@ -287,12 +292,32 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
+        // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列，
+        // 其它已迁移的现代字段保留。
+        try {
+          const [row] = await db
+            .select(selectionWithoutOpenaiResponsesWebsocket)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (openaiResponsesWebsocketFallbackError) {
+          if (!isUndefinedColumnError(openaiResponsesWebsocketFallbackError)) {
+            throw openaiResponsesWebsocketFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续回退。",
+            { error: openaiResponsesWebsocketFallbackError }
+          );
+        }
+
         // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
         // 其它已迁移的现代字段保留，避免只缺该列时其它设置被连带默认化。
         const {
           allowNonConversationEndpointProviderFallback: _omitNonConversationFallback,
           ...selectionWithoutNonConversationFallback
-        } = fullSelection;
+        } = selectionWithoutOpenaiResponsesWebsocket;
 
         try {
           const [row] = await db
@@ -531,9 +556,13 @@ export async function updateSystemSettings(
     createdAt: systemSettings.createdAt,
     updatedAt: systemSettings.updatedAt,
   };
-  const fullReturning = {
+  const returningWithoutOpenaiResponsesWebsocket = {
     passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
     ...returningWithoutPassThrough,
+  };
+  const fullReturning = {
+    ...returningWithoutOpenaiResponsesWebsocket,
+    enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
   };
 
   try {
@@ -602,6 +631,11 @@ export async function updateSystemSettings(
     // HTTP/2 配置字段（如果提供）
     if (payload.enableHttp2 !== undefined) {
       updates.enableHttp2 = payload.enableHttp2;
+    }
+
+    // OpenAI Responses WebSocket 支持开关（如果提供，仅 Codex 类型供应商生效）
+    if (payload.enableOpenaiResponsesWebsocket !== undefined) {
+      updates.enableOpenaiResponsesWebsocket = payload.enableOpenaiResponsesWebsocket;
     }
 
     // 高并发模式开关（如果提供）
@@ -714,16 +748,44 @@ export async function updateSystemSettings(
         error,
       });
 
+      // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列，
+      // 其它字段继续原值更新/返回。
+      const {
+        enableOpenaiResponsesWebsocket: _omitUpdateOpenaiResponsesWebsocket,
+        ...updatesWithoutOpenaiResponsesWebsocket
+      } = updates;
+
+      try {
+        [updated] = await executor
+          .update(systemSettings)
+          .set(updatesWithoutOpenaiResponsesWebsocket)
+          .where(eq(systemSettings.id, current.id))
+          .returning(returningWithoutOpenaiResponsesWebsocket);
+      } catch (openaiResponsesWebsocketFallbackError) {
+        if (!isUndefinedColumnError(openaiResponsesWebsocketFallbackError)) {
+          throw openaiResponsesWebsocketFallbackError;
+        }
+
+        logger.warn(
+          "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续降级更新。",
+          { error: openaiResponsesWebsocketFallbackError }
+        );
+      }
+
+      if (updated) {
+        return toSystemSettings(updated);
+      }
+
       // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
       // 其它字段继续原值更新 / 返回，避免只缺该列时连带丢失 codex/highConcurrency 等更新。
       const {
         allowNonConversationEndpointProviderFallback: _omitUpdate,
         ...updatesWithoutNonConversationFallback
-      } = updates;
+      } = updatesWithoutOpenaiResponsesWebsocket;
       const {
         allowNonConversationEndpointProviderFallback: _omitReturning,
         ...returningWithoutNonConversationFallback
-      } = fullReturning;
+      } = returningWithoutOpenaiResponsesWebsocket;
 
       try {
         [updated] = await executor
@@ -744,6 +806,7 @@ export async function updateSystemSettings(
         try {
           const withoutPassThroughUpdates = { ...updates };
           delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
+          delete withoutPassThroughUpdates.enableOpenaiResponsesWebsocket;
           [updated] = await executor
             .update(systemSettings)
             .set(withoutPassThroughUpdates)
@@ -761,6 +824,7 @@ export async function updateSystemSettings(
           delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
           delete downgradedUpdates.ipExtractionConfig;
           delete downgradedUpdates.ipGeoLookupEnabled;
+          delete downgradedUpdates.enableOpenaiResponsesWebsocket;
 
           const legacyUpdates = { ...downgradedUpdates };
           delete legacyUpdates.codexPriorityBillingSource;
