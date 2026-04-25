@@ -1,3 +1,5 @@
+import { normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
+
 const DEFAULT_REDIRECT_PATH = "/dashboard";
 const PROTOCOL_LIKE_PATTERN = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 
@@ -25,7 +27,7 @@ export function sanitizeRedirectPath(from: string): string {
     return DEFAULT_REDIRECT_PATH;
   }
 
-  return candidate;
+  return normalizePathnameForLocaleNavigation(candidate, DEFAULT_REDIRECT_PATH);
 }
 
 export function resolveLoginRedirectTarget(redirectTo: unknown, from: string): string {

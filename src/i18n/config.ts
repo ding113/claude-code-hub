@@ -12,6 +12,9 @@ export type Locale = (typeof locales)[number];
 // Default locale (Chinese Simplified)
 export const defaultLocale: Locale = "zh-CN";
 
+// Locale cookie shared by next-intl middleware and app-level routing helpers
+export const localeCookieName = "NEXT_LOCALE";
+
 // Locale labels for language switcher UI
 export const localeLabels: Record<Locale, string> = {
   "zh-CN": "简体中文",
