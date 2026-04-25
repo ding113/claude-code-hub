@@ -2,7 +2,7 @@
 FROM oven/bun:debian AS deps
 WORKDIR /app
 COPY package.json ./
-RUN bun ci
+RUN bun install
 
 FROM oven/bun:debian AS builder
 WORKDIR /app
