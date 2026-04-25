@@ -15,6 +15,10 @@ const RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES = 1024 * 1024;
 const RESPONSES_WEBSOCKET_MAX_READ_BUFFER_BYTES = RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES + 14;
 const WEBSOCKET_CLOSE_PROTOCOL_ERROR = 1002;
 const WEBSOCKET_CLOSE_MESSAGE_TOO_BIG = 1009;
+const WEBSOCKET_CLOSE_INTERNAL_ERROR = 1011;
+const RESPONSES_WEBSOCKET_UPGRADE_INTERCEPTOR_INSTALLED = Symbol(
+  "responses-websocket-upgrade-interceptor-installed"
+);
 
 type ResponsesWebSocketRuntimeSupport = {
   runtime: string;
@@ -29,6 +33,10 @@ type UpgradeSocket = Duplex & {
   destroy(error?: Error): void;
 };
 
+type InterceptableResponsesWebSocketServer = Server & {
+  [RESPONSES_WEBSOCKET_UPGRADE_INTERCEPTOR_INSTALLED]?: true;
+};
+
 export type ResponsesWebSocketRuntimeOptions = {
   executor?: ResponsesWebSocketRequestExecutor;
   createConnectionId?: () => string;
@@ -41,6 +49,12 @@ type DecodedWebSocketFrame = {
   fin: boolean;
   opcode: number;
   payload: Buffer;
+};
+
+type FragmentedClientMessage = {
+  opcode: 0x1 | 0x2;
+  payloads: Buffer[];
+  byteLength: number;
 };
 
 type ClientWebSocketFrameDecodeResult = {
@@ -106,6 +120,10 @@ function installResponsesWebSocketUpgradeInterceptor(
   server: Server,
   options: ResponsesWebSocketRuntimeOptions
 ): void {
+  const interceptableServer = server as InterceptableResponsesWebSocketServer;
+  if (interceptableServer[RESPONSES_WEBSOCKET_UPGRADE_INTERCEPTOR_INSTALLED]) return;
+
+  interceptableServer[RESPONSES_WEBSOCKET_UPGRADE_INTERCEPTOR_INSTALLED] = true;
   const originalEmit = server.emit.bind(server);
 
   server.emit = ((eventName: string, ...args: unknown[]) => {
@@ -165,7 +183,7 @@ export function handleResponsesWebSocketUpgrade(
 
   const executor = options.executor;
   if (!executor) {
-    socket.end(encodeWebSocketCloseFrame());
+    socket.end(encodeWebSocketCloseFrame(WEBSOCKET_CLOSE_INTERNAL_ERROR, "runtime no executor"));
     return true;
   }
 
@@ -193,8 +211,7 @@ function startResponsesWebSocketFrameLoop(
     },
   });
   let readBuffer: Buffer = head.length > 0 ? Buffer.from(head) : Buffer.alloc(0);
-  let fragmentedTextPayloads: Buffer[] | null = null;
-  let fragmentedTextByteLength = 0;
+  let fragmentedMessage: FragmentedClientMessage | null = null;
   let processing = Promise.resolve();
   let closing = false;
 
@@ -203,11 +220,23 @@ function startResponsesWebSocketFrameLoop(
     handler.dispose();
   };
 
-  const closeSocket = (code?: number) => {
+  const closeSocket = (code?: number, reason?: string) => {
     if (closing) return;
     closing = true;
     disposeConnection();
-    socket.end(encodeWebSocketCloseFrame(code));
+    socket.end(encodeWebSocketCloseFrame(code, reason));
+  };
+
+  const writeSocketFrame = async (frame: Buffer) => {
+    if (socket.write(frame)) return;
+    await waitForSocketDrain(socket);
+  };
+
+  const writeJsonEvents = async (events: readonly ResponsesWebSocketJsonEvent[]) => {
+    for (const event of events) {
+      if (closing) return;
+      await writeSocketFrame(encodeWebSocketTextFrame(JSON.stringify(event)));
+    }
   };
 
   const dispatchFrame = async (frame: DecodedWebSocketFrame) => {
@@ -224,61 +253,60 @@ function startResponsesWebSocketFrameLoop(
     }
 
     if (frame.opcode === 0x9) {
-      socket.write(encodeWebSocketPongFrame(frame.payload));
+      await writeSocketFrame(encodeWebSocketPongFrame(frame.payload));
       return;
     }
 
     if (frame.opcode === 0xa) return;
 
     if (frame.opcode === 0x0) {
-      if (!fragmentedTextPayloads) {
+      if (!fragmentedMessage) {
         closeSocket(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
         return;
       }
 
-      fragmentedTextPayloads.push(frame.payload);
-      fragmentedTextByteLength += frame.payload.length;
-      if (fragmentedTextByteLength > RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES) {
+      fragmentedMessage.payloads.push(frame.payload);
+      fragmentedMessage.byteLength += frame.payload.length;
+      if (fragmentedMessage.byteLength > RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES) {
         closeSocket(WEBSOCKET_CLOSE_MESSAGE_TOO_BIG);
         return;
       }
 
       if (!frame.fin) return;
 
-      const textPayload = Buffer.concat(fragmentedTextPayloads, fragmentedTextByteLength).toString(
-        "utf8"
+      const completedMessage = fragmentedMessage;
+      fragmentedMessage = null;
+      const completedPayload = Buffer.concat(
+        completedMessage.payloads,
+        completedMessage.byteLength
       );
-      fragmentedTextPayloads = null;
-      fragmentedTextByteLength = 0;
-      const events = await handler.handleFrame(textPayload);
-      for (const event of events) {
-        socket.write(encodeWebSocketTextFrame(JSON.stringify(event)));
-      }
+      const payload =
+        completedMessage.opcode === 0x1
+          ? completedPayload.toString("utf8")
+          : new Uint8Array(completedPayload);
+      const events = await handler.handleFrame(payload);
+      await writeJsonEvents(events);
       return;
     }
 
-    if (fragmentedTextPayloads) {
+    if (fragmentedMessage) {
       closeSocket(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
       return;
     }
 
-    if (frame.opcode === 0x1 && !frame.fin) {
-      fragmentedTextPayloads = [frame.payload];
-      fragmentedTextByteLength = frame.payload.length;
-      return;
-    }
-
-    if (frame.opcode === 0x2 && !frame.fin) {
-      closeSocket(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+    if ((frame.opcode === 0x1 || frame.opcode === 0x2) && !frame.fin) {
+      fragmentedMessage = {
+        opcode: frame.opcode,
+        payloads: [frame.payload],
+        byteLength: frame.payload.length,
+      };
       return;
     }
 
     const payload =
       frame.opcode === 0x1 ? frame.payload.toString("utf8") : new Uint8Array(frame.payload);
     const events = await handler.handleFrame(payload);
-    for (const event of events) {
-      socket.write(encodeWebSocketTextFrame(JSON.stringify(event)));
-    }
+    await writeJsonEvents(events);
   };
 
   const drainFrames = () => {
@@ -321,10 +349,27 @@ function startResponsesWebSocketFrameLoop(
 
   if (readBuffer.length > 0) drainFrames();
 
-  function writeRuntimeErrorEvent(error: unknown): void {
+  async function writeRuntimeErrorEvent(error: unknown): Promise<void> {
     if (closing) return;
-    socket.write(encodeWebSocketTextFrame(JSON.stringify(runtimeErrorToWebSocketEvent(error))));
+    await writeSocketFrame(
+      encodeWebSocketTextFrame(JSON.stringify(runtimeErrorToWebSocketEvent(error)))
+    );
   }
+}
+
+function waitForSocketDrain(socket: UpgradeSocket): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = () => {
+      socket.removeListener("drain", finish);
+      socket.removeListener("close", finish);
+      socket.removeListener("error", finish);
+      resolve();
+    };
+
+    socket.once("drain", finish);
+    socket.once("close", finish);
+    socket.once("error", finish);
+  });
 }
 
 function runtimeErrorToWebSocketEvent(error: unknown): ResponsesWebSocketJsonEvent {
@@ -437,11 +482,13 @@ function encodeWebSocketPongFrame(payload: Buffer): Buffer {
   return encodeServerWebSocketFrame(0xa, payload);
 }
 
-function encodeWebSocketCloseFrame(code?: number): Buffer {
+function encodeWebSocketCloseFrame(code?: number, reason = ""): Buffer {
   if (code === undefined) return encodeServerWebSocketFrame(0x8, Buffer.alloc(0));
 
-  const payload = Buffer.alloc(2);
+  const reasonPayload = Buffer.from(reason, "utf8");
+  const payload = Buffer.alloc(2 + reasonPayload.length);
   payload.writeUInt16BE(code, 0);
+  reasonPayload.copy(payload, 2);
   return encodeServerWebSocketFrame(0x8, payload);
 }
 

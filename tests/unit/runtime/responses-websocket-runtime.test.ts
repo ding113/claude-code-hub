@@ -17,6 +17,7 @@ const OVERSIZED_CLIENT_PAYLOAD_BYTES = 1024 * 1024 + 1;
 const OVERSIZED_CLIENT_READ_BUFFER_BYTES = OVERSIZED_CLIENT_PAYLOAD_BYTES + 14;
 const WEBSOCKET_CLOSE_PROTOCOL_ERROR = 1002;
 const WEBSOCKET_CLOSE_MESSAGE_TOO_BIG = 1009;
+const WEBSOCKET_CLOSE_INTERNAL_ERROR = 1011;
 
 function randomWebSocketKey(): string {
   return randomBytes(16).toString("base64");
@@ -26,6 +27,17 @@ async function listen(server: ReturnType<typeof createServer>): Promise<number> 
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   return (server.address() as AddressInfo).port;
+}
+
+async function waitUntil(assertion: () => boolean, message: string): Promise<void> {
+  const deadline = Date.now() + 1000;
+
+  while (Date.now() < deadline) {
+    if (assertion()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error(message);
 }
 
 async function readRawUpgrade(port: number, path = RESPONSES_WEBSOCKET_PATH): Promise<string> {
@@ -468,6 +480,21 @@ describe("responses WebSocket runtime support", () => {
     expect(destroy).not.toHaveBeenCalled();
   });
 
+  test("closes accepted upgrades without an executor using an internal error reason", async () => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server);
+    const port = await listen(server);
+
+    const closePayload = await readWebSocketCloseFrame(port, []);
+
+    expect(closePayload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_INTERNAL_ERROR);
+    expect(closePayload.subarray(2).toString("utf8")).toBe("runtime no executor");
+  });
+
   test("dispatches masked client text frames through the inbound handler and returns JSON text frames", async () => {
     const executorInputs: ResponsesWebSocketExecutorInput[] = [];
     const executor = vi.fn(async (input: ResponsesWebSocketExecutorInput) => {
@@ -508,6 +535,54 @@ describe("responses WebSocket runtime support", () => {
       modelSource: "query",
       executionContext: { connectionId: "runtime-connection-1" },
     });
+  });
+
+  test("waits for drain before writing additional outbound event frames under backpressure", async () => {
+    const executor = vi.fn(async () => [
+      { type: "response.output_text.delta", delta: "first" },
+      { type: "response.completed", response: { id: "resp_backpressure", status: "completed" } },
+    ]);
+    const request = new IncomingMessage(new net.Socket());
+    request.method = "GET";
+    request.url = `${RESPONSES_WEBSOCKET_PATH}?model=query-model`;
+    request.headers = {
+      connection: "Upgrade",
+      upgrade: "websocket",
+      "sec-websocket-key": randomWebSocketKey(),
+      "sec-websocket-version": "13",
+    };
+    const socket = new PassThrough();
+    let outboundTextFrames = 0;
+    const write = vi.spyOn(socket, "write").mockImplementation((chunk: string | Uint8Array) => {
+      if (Buffer.isBuffer(chunk) && (chunk[0]! & 0x0f) === 0x1) {
+        outboundTextFrames += 1;
+        return outboundTextFrames !== 1;
+      }
+
+      return true;
+    });
+
+    const handled = handleResponsesWebSocketUpgrade(request, socket, Buffer.alloc(0), { executor });
+
+    expect(handled).toBe(true);
+    socket.emit(
+      "data",
+      encodeMaskedClientTextFrame(
+        JSON.stringify({ type: "response.create", body: { input: createInput(), stream: true } })
+      )
+    );
+
+    await waitUntil(() => outboundTextFrames >= 1, "Expected first outbound event frame");
+    expect(outboundTextFrames).toBe(1);
+
+    socket.emit("drain");
+
+    await waitUntil(
+      () => outboundTextFrames === 2,
+      "Expected second outbound event frame after drain"
+    );
+    expect(write).toHaveBeenCalled();
+    expect(executor).toHaveBeenCalledTimes(1);
   });
 
   test("reassembles fragmented masked client text frames before dispatching", async () => {
@@ -688,6 +763,40 @@ describe("responses WebSocket runtime support", () => {
     expect(executor).toHaveBeenCalledTimes(1);
   });
 
+  test("reports fragmented binary messages as unsupported events and keeps the connection usable", async () => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_after_fragmented_binary", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    const textFrames = await readWebSocketTextFrames(
+      port,
+      [
+        encodeMaskedClientFrameFragment(0x2, "bin", false),
+        encodeMaskedClientFrameFragment(0x0, "ary", true),
+        encodeMaskedClientTextFrame(
+          JSON.stringify({ type: "response.create", body: { input: createInput("after binary") } })
+        ),
+      ],
+      2
+    );
+    const events = textFrames.map((frame) => JSON.parse(frame));
+
+    expect(events[0].error.code).toBe("binary_frame_not_supported");
+    expect(events[1]).toEqual({
+      type: "response.completed",
+      response: { id: "resp_after_fragmented_binary", status: "completed" },
+    });
+    expect(executor).toHaveBeenCalledTimes(1);
+  });
+
   test("returns a server error event when the request executor rejects", async () => {
     const executor = vi.fn(async () => {
       throw new Error("executor failed before event");
@@ -842,6 +951,23 @@ describe("responses WebSocket runtime support", () => {
       response: { id: "resp_intercepted_runtime", status: "completed" },
     });
     expect(executor).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not wrap server emit more than once when upgrade interception is attached repeatedly", () => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_intercepted_runtime", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor, interceptUpgradeEmit: true });
+    const wrappedEmit = server.emit;
+    attachResponsesWebSocketRuntime(server, { executor, interceptUpgradeEmit: true });
+
+    expect(server.emit).toBe(wrappedEmit);
   });
 
   test("accepts a WebSocket upgrade at /v1/responses and leaves HTTP POST handling untouched", async () => {
