@@ -60,10 +60,14 @@ describe("inferUpstreamErrorStatusCodeFromText numeric boundaries", () => {
     expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}abc`)).toBeNull();
   });
 
-  it.each(httpStatusCases)("does not treat HTTP $statusCode followed by a dot as a status token", ({
+  it.each(httpStatusCases)("keeps matching HTTP $statusCode followed by sentence punctuation", ({
     statusCode,
+    matcherId,
   }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}.`)).toBeNull();
+    expect(inferUpstreamErrorStatusCodeFromText(`HTTP/1.1 ${statusCode}.`)).toEqual({
+      statusCode,
+      matcherId,
+    });
   });
 
   it.each(cloudflareErrorCases)("keeps matching a standalone Cloudflare Error $code token", ({
@@ -101,8 +105,15 @@ describe("inferUpstreamErrorStatusCodeFromText numeric boundaries", () => {
 
   it.each(
     cloudflareErrorCases
-  )("does not treat Cloudflare Error $code followed by a dot as a code token", ({ code }) => {
-    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}.`)).toBeNull();
+  )("keeps matching Cloudflare Error $code followed by sentence punctuation", ({
+    code,
+    statusCode,
+    matcherId,
+  }) => {
+    expect(inferUpstreamErrorStatusCodeFromText(`Error ${code}.`)).toEqual({
+      statusCode,
+      matcherId,
+    });
   });
 
   it("does not infer service_unavailable from an AWS request id containing 503", () => {
