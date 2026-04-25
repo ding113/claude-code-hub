@@ -105,4 +105,35 @@ describe("status-page loader", () => {
       ],
     });
   });
+
+  it("hydrates unique default slugs for non-English provider groups", async () => {
+    mockGetSystemSettings.mockResolvedValue({
+      publicStatusWindowHours: 24,
+      publicStatusAggregationIntervalMinutes: 5,
+    });
+    mockBootstrapProviderGroupsFromProviders.mockResolvedValue({
+      groups: [
+        {
+          id: 3,
+          name: "cc特价",
+          description: null,
+        },
+        {
+          id: 4,
+          name: "cc逆向",
+          description: null,
+        },
+      ],
+      groupCounts: new Map(),
+    });
+
+    const mod = await import("@/app/[locale]/settings/status-page/loader");
+    const result = await mod.loadStatusPageSettings();
+
+    expect(result.initialGroups.map((group) => group.publicGroupSlug)).toEqual([
+      expect.stringMatching(/^cc-[a-z0-9]{6}$/),
+      expect.stringMatching(/^cc-[a-z0-9]{6}$/),
+    ]);
+    expect(new Set(result.initialGroups.map((group) => group.publicGroupSlug)).size).toBe(2);
+  });
 });
