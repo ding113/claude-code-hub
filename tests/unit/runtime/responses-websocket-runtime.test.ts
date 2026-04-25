@@ -495,9 +495,13 @@ async function readWebSocketTextFrames(
         for (const frame of frames) socket.write(frame);
       }
 
-      const parsed = parseServerTextFrames(buffer);
+      const parsed = parseServerFrames(buffer);
       buffer = parsed.remaining;
-      textFrames.push(...parsed.textFrames);
+      textFrames.push(
+        ...parsed.frames
+          .filter((frame) => frame.opcode === 0x1)
+          .map((frame) => frame.payload.toString("utf8"))
+      );
 
       if (textFrames.length >= expectedTextFrameCount) {
         socket.write(encodeClientCloseFrame());
@@ -509,33 +513,6 @@ async function readWebSocketTextFrames(
       if (!settled) finish(new Error("Socket closed before expected WebSocket frames"));
     });
   });
-}
-
-function parseServerTextFrames(buffer: Buffer): { textFrames: string[]; remaining: Buffer } {
-  const textFrames: string[] = [];
-  let offset = 0;
-
-  while (offset + 2 <= buffer.length) {
-    const opcode = buffer[offset]! & 0x0f;
-    const masked = (buffer[offset + 1]! & 0x80) !== 0;
-    let payloadLength = buffer[offset + 1]! & 0x7f;
-    let headerLength = 2;
-
-    if (payloadLength === 126) {
-      if (offset + 4 > buffer.length) break;
-      payloadLength = buffer.readUInt16BE(offset + 2);
-      headerLength = 4;
-    }
-
-    if (masked) throw new Error("Server frames must not be masked");
-    if (offset + headerLength + payloadLength > buffer.length) break;
-
-    const payload = buffer.subarray(offset + headerLength, offset + headerLength + payloadLength);
-    if (opcode === 0x1) textFrames.push(payload.toString("utf8"));
-    offset += headerLength + payloadLength;
-  }
-
-  return { textFrames, remaining: buffer.subarray(offset) };
 }
 
 afterEach(async () => {
