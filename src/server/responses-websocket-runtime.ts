@@ -147,8 +147,7 @@ export function handleResponsesWebSocketUpgrade(
     !headerContains(request.headers.upgrade, "websocket") ||
     !headerContains(request.headers.connection, "upgrade")
   ) {
-    socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-    socket.destroy();
+    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
     return true;
   }
 
@@ -347,10 +346,20 @@ function decodeClientWebSocketFrames(buffer: Buffer): ClientWebSocketFrameDecode
     const firstByte = buffer[offset]!;
     const secondByte = buffer[offset + 1]!;
     const fin = (firstByte & 0x80) !== 0;
+    const hasReservedBits = (firstByte & 0x70) !== 0;
     const opcode = firstByte & 0x0f;
     const masked = (secondByte & 0x80) !== 0;
     let payloadLength = secondByte & 0x7f;
     let headerLength = 2;
+
+    if (hasReservedBits || isReservedOpcode(opcode)) {
+      return {
+        frames,
+        remaining: buffer.subarray(offset),
+        exceededLimit: false,
+        protocolError: true,
+      };
+    }
 
     if (payloadLength === 126) {
       if (offset + 4 > buffer.length) break;
@@ -360,14 +369,6 @@ function decodeClientWebSocketFrames(buffer: Buffer): ClientWebSocketFrameDecode
       if (offset + 10 > buffer.length) break;
       const length64 = buffer.readBigUInt64BE(offset + 2);
       if (length64 > BigInt(RESPONSES_WEBSOCKET_MAX_CLIENT_PAYLOAD_BYTES)) {
-        return {
-          frames,
-          remaining: buffer.subarray(offset),
-          exceededLimit: true,
-          protocolError: false,
-        };
-      }
-      if (length64 > BigInt(Number.MAX_SAFE_INTEGER)) {
         return {
           frames,
           remaining: buffer.subarray(offset),
@@ -422,6 +423,10 @@ function decodeClientWebSocketFrames(buffer: Buffer): ClientWebSocketFrameDecode
 
 function isControlOpcode(opcode: number): boolean {
   return opcode === 0x8 || opcode === 0x9 || opcode === 0xa;
+}
+
+function isReservedOpcode(opcode: number): boolean {
+  return (opcode >= 0x3 && opcode <= 0x7) || (opcode >= 0xb && opcode <= 0xf);
 }
 
 function encodeWebSocketTextFrame(text: string): Buffer {

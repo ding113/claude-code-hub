@@ -1,13 +1,15 @@
 import { randomBytes } from "node:crypto";
-import { createServer, request as httpRequest } from "node:http";
+import { createServer, IncomingMessage, request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
 import net from "node:net";
+import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ResponsesWebSocketExecutorInput } from "@/server/responses-websocket-protocol";
 import {
   RESPONSES_WEBSOCKET_PATH,
   attachResponsesWebSocketRuntime,
   getResponsesWebSocketRuntimeSupport,
+  handleResponsesWebSocketUpgrade,
 } from "@/server/responses-websocket-runtime";
 
 const servers: Array<ReturnType<typeof createServer>> = [];
@@ -117,6 +119,14 @@ function encodeMaskedClientFrameFragment(opcode: number, payload: string, fin: b
   return encodeMaskedClientFrame(opcode, Buffer.from(payload), { fin });
 }
 
+function encodeMaskedClientFrameWithFirstByte(firstByte: number, payload: string): Buffer {
+  const frame = encodeMaskedClientFrame(firstByte & 0x0f, Buffer.from(payload), {
+    fin: (firstByte & 0x80) !== 0,
+  });
+  frame[0] = firstByte;
+  return frame;
+}
+
 function encodeUnmaskedClientTextFrame(payload: string): Buffer {
   const body = Buffer.from(payload);
   return Buffer.concat([Buffer.from([0x80 | 0x1, body.length]), body]);
@@ -174,6 +184,18 @@ function encodeMaskedClientFrameHeader(opcode: number, payloadLength: number): B
     header.writeBigUInt64BE(BigInt(payloadLength), 2);
   }
 
+  return Buffer.concat([header, mask]);
+}
+
+function encodeMaskedClientFrameHeaderWith64BitLength(
+  opcode: number,
+  payloadLength: bigint
+): Buffer {
+  const mask = Buffer.from([0x12, 0x34, 0x56, 0x78]);
+  const header = Buffer.alloc(10);
+  header[0] = 0x80 | opcode;
+  header[1] = 0x80 | 127;
+  header.writeBigUInt64BE(payloadLength, 2);
   return Buffer.concat([header, mask]);
 }
 
@@ -424,6 +446,28 @@ afterEach(async () => {
 });
 
 describe("responses WebSocket runtime support", () => {
+  test("flushes invalid WebSocket handshakes with HTTP 400 before closing", () => {
+    const request = new IncomingMessage(new net.Socket());
+    request.method = "GET";
+    request.url = RESPONSES_WEBSOCKET_PATH;
+    request.headers = {
+      connection: "Upgrade",
+      upgrade: "websocket",
+      "sec-websocket-version": "13",
+    };
+    const socket = new PassThrough();
+    const end = vi.spyOn(socket, "end");
+    const destroy = vi.spyOn(socket, "destroy");
+
+    const handled = handleResponsesWebSocketUpgrade(request, socket, Buffer.alloc(0));
+
+    expect(handled).toBe(true);
+    expect(end).toHaveBeenCalledWith(
+      "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+    );
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
   test("dispatches masked client text frames through the inbound handler and returns JSON text frames", async () => {
     const executorInputs: ResponsesWebSocketExecutorInput[] = [];
     const executor = vi.fn(async (input: ResponsesWebSocketExecutorInput) => {
@@ -549,6 +593,58 @@ describe("responses WebSocket runtime support", () => {
     expect(executor).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ["RSV1", 0xc1],
+    ["RSV2", 0xa1],
+    ["RSV3", 0x91],
+  ])("closes %s client frames with protocol error without executing", async (_name, firstByte) => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_unreachable", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    const closePayload = await readWebSocketCloseFrame(port, [
+      encodeMaskedClientFrameWithFirstByte(
+        firstByte,
+        JSON.stringify({ type: "response.create", body: { input: createInput() } })
+      ),
+    ]);
+
+    expect(closePayload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+    expect(executor).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["non-control reserved opcode", 0x83],
+    ["control reserved opcode", 0x8b],
+  ])("closes %s client frames with protocol error without executing", async (_name, firstByte) => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_unreachable", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    const closePayload = await readWebSocketCloseFrame(port, [
+      encodeMaskedClientFrameWithFirstByte(firstByte, "reserved-opcode"),
+    ]);
+
+    expect(closePayload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_PROTOCOL_ERROR);
+    expect(executor).not.toHaveBeenCalled();
+  });
+
   test("returns protocol error events over the socket and keeps the connection usable", async () => {
     const executor = vi.fn(async () => ({
       type: "response.completed",
@@ -661,6 +757,27 @@ describe("responses WebSocket runtime support", () => {
 
     const closePayload = await readWebSocketCloseFrame(port, [
       encodeMaskedClientFrameHeader(0x1, OVERSIZED_CLIENT_PAYLOAD_BYTES),
+    ]);
+
+    expect(closePayload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_MESSAGE_TOO_BIG);
+    expect(executor).not.toHaveBeenCalled();
+  });
+
+  test("closes 64-bit payload lengths above the payload cap as message too big", async () => {
+    const executor = vi.fn(async () => ({
+      type: "response.completed",
+      response: { id: "resp_unreachable", status: "completed" },
+    }));
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("http-ok");
+    });
+
+    attachResponsesWebSocketRuntime(server, { executor });
+    const port = await listen(server);
+
+    const closePayload = await readWebSocketCloseFrame(port, [
+      encodeMaskedClientFrameHeaderWith64BitLength(0x1, BigInt(Number.MAX_SAFE_INTEGER) + 1n),
     ]);
 
     expect(closePayload.readUInt16BE(0)).toBe(WEBSOCKET_CLOSE_MESSAGE_TOO_BIG);
