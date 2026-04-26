@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
-import type { Locale } from "@/i18n/config";
+import { type Locale, localeCookieName } from "@/i18n/config";
+import { getLocaleFromValue, normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
@@ -102,12 +103,12 @@ function proxyHandler(request: NextRequest) {
     // Not authenticated, redirect to login page
     const url = request.nextUrl.clone();
     // Preserve locale in redirect
-    const locale = isLocaleInPath ? potentialLocale : routing.defaultLocale;
-    url.pathname = `/${locale}/login`;
-    url.searchParams.set(
-      "from",
-      !pathWithoutLocale || pathWithoutLocale === "/" ? "/dashboard" : pathWithoutLocale
+    const localeFromCookie = getLocaleFromValue(
+      sanitizedRequest.cookies.get(localeCookieName)?.value
     );
+    const locale = isLocaleInPath ? potentialLocale : localeFromCookie || routing.defaultLocale;
+    url.pathname = `/${locale}/login`;
+    url.searchParams.set("from", normalizePathnameForLocaleNavigation(pathWithoutLocale));
     return NextResponse.redirect(url);
   }
 

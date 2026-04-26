@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
+import { localeCookieName } from "@/i18n/config";
 
 const mockIntlMiddleware = vi.hoisted(() =>
   vi.fn((request: NextRequest) => {
@@ -54,6 +55,41 @@ describe("public status proxy path", () => {
 
     expect(location).toContain("/zh-CN/login");
     expect(location).toContain("from=%2Fdashboard");
+  });
+
+  it("prefers NEXT_LOCALE when redirecting an unprefixed protected route", async () => {
+    const { default: proxyHandler } = await import("@/proxy");
+    const request = new NextRequest("http://localhost/dashboard");
+    request.cookies.set(localeCookieName, "en");
+    const response = proxyHandler(request);
+    const location = response.headers.get("location");
+
+    expect(location).toContain("/en/login");
+    expect(location).toContain("from=%2Fdashboard");
+  });
+
+  it("falls back safely when NEXT_LOCALE cookie is malformed", async () => {
+    const { default: proxyHandler } = await import("@/proxy");
+    const request = new NextRequest("http://localhost/dashboard");
+    request.headers.set("cookie", `${localeCookieName}=%E0%A4%A`);
+
+    expect(() => proxyHandler(request)).not.toThrow();
+
+    const response = proxyHandler(request);
+    const location = response.headers.get("location");
+
+    expect(location).toContain("/zh-CN/login");
+    expect(location).toContain("from=%2Fdashboard");
+  });
+
+  it("normalizes repeated locale prefixes in the login from parameter", async () => {
+    const { default: proxyHandler } = await import("@/proxy");
+    const response = proxyHandler(new NextRequest("http://localhost/en/en/dashboard"));
+    const location = response.headers.get("location");
+
+    expect(location).toContain("/en/login");
+    expect(location).toContain("from=%2Fdashboard");
+    expect(location).not.toContain("from=%2Fen%2Fdashboard");
   });
 
   it("redirects locale root to login with a dashboard fallback", async () => {

@@ -38,6 +38,7 @@ import {
 import useSWR from "swr";
 import { getDashboardRealtimeData } from "@/actions/dashboard-realtime";
 import { type Locale, localeLabels, locales } from "@/i18n/config";
+import { normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
 import { usePathname, useRouter } from "@/i18n/routing";
 import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
 
@@ -726,7 +727,7 @@ export default function BigScreenPage() {
     const nextIndex = (currentIndex + 1) % locales.length;
     const nextLocale = locales[nextIndex];
 
-    router.push(pathname || "/dashboard", { locale: nextLocale });
+    router.push(normalizePathnameForLocaleNavigation(pathname), { locale: nextLocale });
   };
 
   const theme = THEMES[themeMode as keyof typeof THEMES];

@@ -10,6 +10,7 @@
     "intervalOption": "{minutes} 分鐘",
     "slug": "Slug",
     "slugTooltip": "用於分組獨立狀態頁的 URL 識別碼。留空將根據對外顯示名自動產生。只能包含小寫字母、數字與連字號。",
+    "duplicateSlug": "Slug {slug} 被多個公開分組使用。請先修改為互不重複的 slug 再儲存。",
     "copy": "說明文案",
     "sortOrder": "排序",
     "sortOrderTooltip": "控制公開狀態頁中分組的顯示順序。數值越小越靠前（與供應商優先級一致）。相同數值按分組名排序。",

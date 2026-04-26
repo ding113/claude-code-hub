@@ -3,7 +3,7 @@ import "../globals.css";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
-import { getMessages } from "next-intl/server";
+import { getMessages, setRequestLocale } from "next-intl/server";
 import { Footer } from "@/components/customs/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { type Locale, locales } from "@/i18n/config";
@@ -82,6 +82,9 @@ export default async function RootLayout({
     notFound();
   }
 
+  // 将路由段 locale 固定到 next-intl 请求上下文，避免后续导航回落到默认语言。
+  setRequestLocale(locale);
+
   // Load translation messages
   const messages = await getMessages({ locale });
   const timeZone = isPublicStatusRequest
@@ -93,7 +96,7 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <body className="antialiased">
-        <NextIntlClientProvider messages={messages} timeZone={timeZone} now={now}>
+        <NextIntlClientProvider locale={locale} messages={messages} timeZone={timeZone} now={now}>
           <AppProviders>
             <div className="flex min-h-[var(--cch-viewport-height,100vh)] flex-col bg-background text-foreground">
               <div className="flex-1">{children}</div>

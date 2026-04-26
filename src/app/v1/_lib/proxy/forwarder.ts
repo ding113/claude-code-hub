@@ -26,6 +26,7 @@ import {
   getPreferredProviderEndpoints,
 } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
+import { RateLimitService } from "@/lib/rate-limit/service";
 import { SessionManager } from "@/lib/session-manager";
 import {
   detectUpstreamErrorFromSseOrJsonText,
@@ -49,6 +50,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
+import { bindClientAbortListener } from "./client-abort-listener";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
@@ -1077,7 +1079,7 @@ export class ProxyForwarder {
             });
           }
 
-          failedProviderIds.push(currentProvider.id);
+          ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
           attemptCount = maxAttemptsPerProvider;
         } else {
           endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
@@ -1140,7 +1142,7 @@ export class ProxyForwarder {
           vendorId: currentProvider.providerVendorId,
           providerType: currentProvider.providerType,
         });
-        failedProviderIds.push(currentProvider.id);
+        ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
         attemptCount = maxAttemptsPerProvider;
       }
 
@@ -1708,7 +1710,7 @@ export class ProxyForwarder {
             const env = getEnvConfig();
 
             // 无论是否计入熔断器，都要加入 failedProviderIds（避免重复选择同一供应商）
-            failedProviderIds.push(currentProvider.id);
+            ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
 
             if (env.ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS) {
               logger.warn(
@@ -1806,7 +1808,7 @@ export class ProxyForwarder {
             }
 
             // 重试耗尽：加入失败列表并切换供应商
-            failedProviderIds.push(currentProvider.id);
+            ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
@@ -1878,7 +1880,7 @@ export class ProxyForwarder {
                 }
               }
 
-              failedProviderIds.push(currentProvider.id);
+              ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
               break; // 跳出内层循环，进入供应商切换逻辑
             }
 
@@ -1927,7 +1929,7 @@ export class ProxyForwarder {
                 currentProvider.providerVendorId,
                 currentProvider.providerType
               );
-              failedProviderIds.push(currentProvider.id);
+              ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
               break;
             }
 
@@ -2023,7 +2025,7 @@ export class ProxyForwarder {
             }
 
             // 加入失败列表并切换供应商
-            failedProviderIds.push(currentProvider.id);
+            ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
             break; // 跳出内层循环，进入供应商切换逻辑
           }
         }
@@ -3397,6 +3399,7 @@ export class ProxyForwarder {
     let lastError: Error | null = null;
     let lastErrorCategory: ErrorCategory | null = null;
     const attempts = new Set<StreamingHedgeAttempt>();
+    const failedProviderIds: number[] = [];
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
     const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
@@ -3444,6 +3447,7 @@ export class ProxyForwarder {
           attemptNumber: attempt.sequence,
           modelRedirect: getAttemptModelRedirect(attempt),
         });
+        ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
       }
       try {
         attempt.responseController?.abort(new Error(reason));
@@ -3511,21 +3515,24 @@ export class ProxyForwarder {
       }
 
       launchingAlternative = (async () => {
-        const alternativeProvider = await ProxyForwarder.selectAlternative(
-          session,
-          Array.from(launchedProviderIds)
-        );
-        if (!alternativeProvider) {
-          noMoreProviders = true;
-          // No alternative providers available — let in-flight attempt(s) continue.
-          // If all attempts already completed, settle with last error.
-          if (attempts.size === 0) {
-            await finishIfExhausted();
+        while (!settled && !winnerCommitted && !noMoreProviders) {
+          const alternativeProvider = await ProxyForwarder.selectAlternative(
+            session,
+            Array.from(launchedProviderIds)
+          );
+          if (!alternativeProvider) {
+            noMoreProviders = true;
+            // No alternative providers available — let in-flight attempt(s) continue.
+            // If all attempts already completed, settle with last error.
+            if (attempts.size === 0) {
+              await finishIfExhausted();
+            }
+            return;
           }
-          return;
-        }
 
-        await startAttempt(alternativeProvider, false);
+          const launched = await startAttempt(alternativeProvider, false);
+          if (launched) return;
+        }
       })()
         .catch(async (error) => {
           const normalizedError = error instanceof Error ? error : new Error(String(error));
@@ -3767,6 +3774,7 @@ export class ProxyForwarder {
         attempt.thresholdTimer = null;
       }
       attempts.delete(attempt);
+      ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
       if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
         await recordFailure(attempt.provider.id, error);
@@ -3916,10 +3924,39 @@ export class ProxyForwarder {
       settleSuccess(response);
     };
 
-    const startAttempt = async (provider: Provider, useOriginalSession: boolean) => {
-      if (settled || winnerCommitted || launchedProviderIds.has(provider.id)) return;
+    const startAttempt = async (
+      provider: Provider,
+      useOriginalSession: boolean
+    ): Promise<boolean> => {
+      if (settled || winnerCommitted || noMoreProviders || launchedProviderIds.has(provider.id)) {
+        return false;
+      }
 
       launchedProviderIds.add(provider.id);
+
+      if (!useOriginalSession && session.sessionId) {
+        const limit = provider.limitConcurrentSessions || 0;
+        const checkResult = await RateLimitService.checkAndTrackProviderSession(
+          provider.id,
+          session.sessionId,
+          limit
+        );
+
+        if (!checkResult.allowed) {
+          ProxyForwarder.markProviderFailed(session, failedProviderIds, provider.id);
+          session.addProviderToChain(provider, {
+            reason: "concurrent_limit_failed",
+            circuitState: getCircuitState(provider.id),
+            attemptNumber: launchedProviderCount + 1,
+            errorMessage: checkResult.reason || "并发限制已达到",
+          });
+          return false;
+        }
+
+        if (checkResult.referenced) {
+          session.recordProviderSessionRef(provider.id);
+        }
+      }
 
       let endpointSelection: {
         endpointId: number | null;
@@ -3931,9 +3968,9 @@ export class ProxyForwarder {
       } catch (endpointError) {
         lastError = endpointError as Error;
         lastErrorCategory = null;
-        await launchAlternative();
+        ProxyForwarder.markProviderFailed(session, failedProviderIds, provider.id);
         await finishIfExhausted();
-        return;
+        return false;
       }
 
       launchedProviderCount += 1;
@@ -3984,41 +4021,43 @@ export class ProxyForwarder {
       armAttemptThreshold(attempt);
 
       runAttempt(attempt);
+      return true;
     };
 
-    if (session.clientAbortSignal) {
-      session.clientAbortSignal.addEventListener(
-        "abort",
-        () => {
-          if (settled || winnerCommitted) return;
-          noMoreProviders = true;
-          lastError = new ProxyError("Request aborted by client", 499, undefined, true);
-          lastErrorCategory = ErrorCategory.CLIENT_ABORT;
-          for (const attempt of Array.from(attempts)) {
-            if (!attempt.settled) {
-              session.addProviderToChain(attempt.provider, {
-                ...attempt.endpointAudit,
-                reason: "client_abort",
-                attemptNumber: attempt.sequence,
-                errorMessage: "Client aborted request",
-                modelRedirect: getAttemptModelRedirect(attempt),
-              });
-            }
-          }
-          abortAllAttempts(undefined, "client_abort");
-          void finishIfExhausted();
-        },
-        { once: true }
-      );
-    }
+    const cleanupClientAbortListener = bindClientAbortListener(session.clientAbortSignal, () => {
+      if (settled || winnerCommitted) return;
+      noMoreProviders = true;
+      lastError = new ProxyError("Request aborted by client", 499, undefined, true);
+      lastErrorCategory = ErrorCategory.CLIENT_ABORT;
+      for (const attempt of Array.from(attempts)) {
+        if (!attempt.settled) {
+          session.addProviderToChain(attempt.provider, {
+            ...attempt.endpointAudit,
+            reason: "client_abort",
+            attemptNumber: attempt.sequence,
+            errorMessage: "Client aborted request",
+            modelRedirect: getAttemptModelRedirect(attempt),
+          });
+        }
+      }
+      abortAllAttempts(undefined, "client_abort");
+      void finishIfExhausted();
+    });
 
-    await startAttempt(initialProvider, true);
-    await finishIfExhausted();
-    const result = await resultPromise;
-    if (result.error) {
-      throw result.error;
+    try {
+      const initialLaunched = await startAttempt(initialProvider, true);
+      if (!initialLaunched) {
+        await launchAlternative();
+      }
+      await finishIfExhausted();
+      const result = await resultPromise;
+      if (result.error) {
+        throw result.error;
+      }
+      return result.response as Response;
+    } finally {
+      cleanupClientAbortListener();
     }
-    return result.response as Response;
   }
 
   private static async resolveStreamingHedgeEndpoint(
@@ -4248,6 +4287,32 @@ export class ProxyForwarder {
   private static async clearSessionProviderBinding(session: ProxySession): Promise<void> {
     if (!session.sessionId) return;
     await SessionManager.clearSessionProvider(session.sessionId);
+  }
+
+  private static markProviderFailed(
+    session: ProxySession,
+    failedProviderIds: number[],
+    providerId: number
+  ): void {
+    if (failedProviderIds.includes(providerId)) {
+      return;
+    }
+
+    failedProviderIds.push(providerId);
+
+    if (!session.sessionId) {
+      return;
+    }
+
+    const providerSessionRefConsumer = (
+      session as { consumeProviderSessionRef?: (providerId: number) => boolean }
+    ).consumeProviderSessionRef;
+
+    if (!providerSessionRefConsumer?.call(session, providerId)) {
+      return;
+    }
+
+    void RateLimitService.releaseProviderSession(providerId, session.sessionId);
   }
 
   private static buildAllProvidersUnavailableError(finalError?: Error | null): ProxyError {

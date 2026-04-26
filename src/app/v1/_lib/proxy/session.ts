@@ -176,6 +176,10 @@ export class ProxySession {
    */
   private providersSnapshot: Provider[] | null = null;
 
+  // 本请求已通过 Provider 并发检查获得的引用。
+  // 失败切换 provider 时只能释放这里记录过的引用，避免 hedge/fallback 释放未 acquire 的 Redis 计数。
+  private providerSessionRefs = new Set<number>();
+
   private constructor(init: {
     startTime: number;
     method: string;
@@ -311,6 +315,25 @@ export class ProxySession {
     if (provider) {
       this.providerType = provider.providerType as ProviderType;
     }
+  }
+
+  recordProviderSessionRef(providerId: number): void {
+    if (!this.providerSessionRefs) {
+      this.providerSessionRefs = new Set<number>();
+    }
+
+    if (Number.isInteger(providerId) && providerId > 0) {
+      this.providerSessionRefs.add(providerId);
+    }
+  }
+
+  consumeProviderSessionRef(providerId: number): boolean {
+    if (!this.providerSessionRefs?.has(providerId)) {
+      return false;
+    }
+
+    this.providerSessionRefs.delete(providerId);
+    return true;
   }
 
   setCacheTtlResolved(ttl: CacheTtlResolved | null): void {

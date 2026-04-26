@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { type Locale, localeLabels, locales } from "@/i18n/config";
+import { normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
 import { usePathname, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils/index";
 
@@ -40,7 +41,7 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
       setIsTransitioning(true);
 
       try {
-        router.push(pathname || "/dashboard", { locale: newLocale });
+        router.push(normalizePathnameForLocaleNavigation(pathname), { locale: newLocale });
       } catch (error) {
         console.error("Failed to switch locale:", error);
         setIsTransitioning(false);
