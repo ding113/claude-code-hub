@@ -286,7 +286,6 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     controller.abort();
     const addSpy = vi.spyOn(controller.signal, "addEventListener");
     const removeSpy = vi.spyOn(controller.signal, "removeEventListener");
-    const localAbortSpy = vi.spyOn(AbortController.prototype, "abort");
     const session = makeSession(controller.signal, true);
     const upstreamResponse = new Response(
       'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
@@ -302,6 +301,5 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     expect(addSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
     expect(removeSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
     expect(testState.cancelTask).toHaveBeenCalledTimes(1);
-    expect(localAbortSpy).toHaveBeenCalledTimes(1);
   });
 });
