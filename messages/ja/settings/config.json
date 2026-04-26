@@ -13,6 +13,10 @@
       "redirected": "リダイレクト後（実際のモデル）"
     },
     "billingModelSourcePlaceholder": "課金モデルソースを選択",
+    "billingCorrection": {
+      "title": "課金とレート補正",
+      "description": "課金モデルソース、Codex Priority の課金参照元、Claude 課金ヘッダー整流をまとめて設定します。"
+    },
     "codexPriorityBillingSource": "Codex Priority 課金参照元",
     "codexPriorityBillingSourceDesc": "Codex Priority（Fast Mode）の追加課金に使う service_tier を制御します。デフォルトは Requested Service Tier です。Actual Service Tier を選ぶとレスポンス値を優先し、レスポンスに無い場合はリクエスト値へフォールバックします。",
     "codexPriorityBillingSourceOptions": {

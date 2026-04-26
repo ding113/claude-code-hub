@@ -32,6 +32,10 @@
       "original": "重定向前（原始模型）",
       "redirected": "重定向后（实际模型）"
     },
+    "billingCorrection": {
+      "title": "计费与费率矫正",
+      "description": "集中配置模型计费来源、Codex Priority 费率口径，以及 Claude 计费标头整流开关。"
+    },
     "codexPriorityBillingSource": "Codex Priority 计费来源",
     "codexPriorityBillingSourcePlaceholder": "选择 Codex Priority 计费来源",
     "codexPriorityBillingSourceDesc": "控制 Codex Priority（Fast Mode）单独计费使用哪个 service_tier。默认按 Requested Service Tier 计费；若选择 Actual Service Tier，则优先使用响应返回值，响应未返回时回退到请求值。",

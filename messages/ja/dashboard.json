@@ -1617,6 +1617,12 @@
       "deleteFailed": "ユーザーの削除に失敗しました",
       "userDeleted": "ユーザーが削除されました",
       "saving": "保存しています...",
+      "syncKeys": {
+        "button": "Key に同期",
+        "loading": "同期中...",
+        "success": "{count} 個の Key に同期しました",
+        "error": "Key の同期に失敗しました"
+      },
       "resetSection": {
         "title": "リセットオプション"
       },
@@ -1675,6 +1681,8 @@
         "title": "一括更新を確認",
         "description": "{users} ユーザーと {keys} キーを更新します。この操作は元に戻せません。",
         "userFields": "ユーザーフィールド",
+        "syncKeys": "キーへ同期",
+        "syncKeysDescription": "現在のユーザー設定を使って、選択した {users} ユーザーの削除されていないすべてのキーを上書きします。",
         "keyFields": "キーフィールド",
         "goBack": "戻って修正",
         "update": "更新を確定",
@@ -1683,8 +1691,10 @@
       "toast": {
         "usersUpdated": "{count} ユーザーを更新しました",
         "keysUpdated": "{count} キーを更新しました",
+        "keysSynced": "{users} ユーザーの {keys} キーを同期しました",
         "usersFailed": "ユーザーの更新に失敗しました: {error}",
         "keysFailed": "キーの更新に失敗しました: {error}",
+        "syncFailed": "キーへの同期に失敗しました: {error}",
         "batchFailed": "一括更新に失敗しました"
       },
       "validation": {
@@ -1706,12 +1716,14 @@
           "limit5h": "5時間上限 (USD)",
           "limitDaily": "日次上限 (USD)",
           "limitWeekly": "週次上限 (USD)",
-          "limitMonthly": "月次上限 (USD)"
+          "limitMonthly": "月次上限 (USD)",
+          "syncKeys": "Sync to Keys"
         },
         "placeholders": {
           "emptyToClear": "空欄でクリア",
           "tagsPlaceholder": "Enterで追加、カンマ区切り対応",
-          "emptyNoLimit": "空欄で制限なし"
+          "emptyNoLimit": "空欄で制限なし",
+          "syncKeysDescription": "When enabled, user fields from this batch edit are saved first, then all undeleted keys for each user are overwritten from that user's settings."
         }
       },
       "key": {

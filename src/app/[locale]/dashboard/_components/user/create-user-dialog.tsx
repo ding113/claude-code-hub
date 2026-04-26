@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
+import { buildFirstSyncedKeyConfig } from "@/lib/users/user-key-sync";
 import { KeyFormSchema, UpdateUserSchema } from "@/lib/validation/schemas";
 import { KeyEditSection } from "./forms/key-edit-section";
 import { UserEditSection } from "./forms/user-edit-section";
@@ -171,6 +172,19 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
           }
 
           const newUserId = userRes.data.user.id;
+          const savedUser = userRes.data.user;
+          const firstKeyConfig = buildFirstSyncedKeyConfig({
+            dailyQuota: savedUser.dailyQuota ?? null,
+            limit5hUsd: savedUser.limit5hUsd ?? null,
+            limit5hResetMode: savedUser.limit5hResetMode,
+            limitWeeklyUsd: savedUser.limitWeeklyUsd ?? null,
+            limitMonthlyUsd: savedUser.limitMonthlyUsd ?? null,
+            limitTotalUsd: savedUser.limitTotalUsd ?? null,
+            limitConcurrentSessions: savedUser.limitConcurrentSessions ?? null,
+            providerGroup: savedUser.providerGroup ?? PROVIDER_GROUP.DEFAULT,
+            dailyResetMode: savedUser.dailyResetMode,
+            dailyResetTime: savedUser.dailyResetTime,
+          });
 
           // Create the first key
           const keyRes = await addKey({
@@ -179,17 +193,17 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
             // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
             expiresAt: data.key.expiresAt ?? "",
             canLoginWebUi: data.key.canLoginWebUi,
-            providerGroup: normalizeProviderGroup(data.key.providerGroup),
+            providerGroup: firstKeyConfig.providerGroup,
             cacheTtlPreference: data.key.cacheTtlPreference,
-            limit5hUsd: data.key.limit5hUsd,
-            limit5hResetMode: data.key.limit5hResetMode,
-            limitDailyUsd: data.key.limitDailyUsd,
-            dailyResetMode: data.key.dailyResetMode,
-            dailyResetTime: data.key.dailyResetTime,
-            limitWeeklyUsd: data.key.limitWeeklyUsd,
-            limitMonthlyUsd: data.key.limitMonthlyUsd,
-            limitTotalUsd: data.key.limitTotalUsd,
-            limitConcurrentSessions: data.key.limitConcurrentSessions,
+            limit5hUsd: firstKeyConfig.limit5hUsd,
+            limit5hResetMode: firstKeyConfig.limit5hResetMode,
+            limitDailyUsd: firstKeyConfig.limitDailyUsd,
+            dailyResetMode: firstKeyConfig.dailyResetMode,
+            dailyResetTime: firstKeyConfig.dailyResetTime,
+            limitWeeklyUsd: firstKeyConfig.limitWeeklyUsd,
+            limitMonthlyUsd: firstKeyConfig.limitMonthlyUsd,
+            limitTotalUsd: firstKeyConfig.limitTotalUsd,
+            limitConcurrentSessions: firstKeyConfig.limitConcurrentSessions,
           });
 
           if (!keyRes.ok) {
@@ -410,7 +424,9 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
             }}
             isAdmin={true}
             showLimitRules={false}
-            showExpireTime={false}
+            showExpireTime={true}
+            showProviderGroup={false}
+            showEnableStatus={false}
             onChange={handleKeyChange}
             translations={keyEditTranslations}
           />

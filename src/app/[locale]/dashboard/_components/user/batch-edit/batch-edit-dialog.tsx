@@ -6,7 +6,11 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type BatchUpdateKeysParams, batchUpdateKeys } from "@/actions/keys";
-import { type BatchUpdateUsersParams, batchUpdateUsers } from "@/actions/users";
+import {
+  type BatchUpdateUsersParams,
+  batchSyncUserConfigToKeys,
+  batchUpdateUsers,
+} from "@/actions/users";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +55,7 @@ type UserFieldLabels = {
   limitDaily: string;
   limitWeekly: string;
   limitMonthly: string;
+  syncKeys: string;
 };
 
 type KeyFieldLabels = {
@@ -78,6 +83,7 @@ const INITIAL_USER_STATE: BatchUserSectionState = {
   limitWeeklyUsd: "",
   limitMonthlyUsdEnabled: false,
   limitMonthlyUsd: "",
+  syncKeysEnabled: false,
 };
 
 const INITIAL_KEY_STATE: BatchKeySectionState = {
@@ -203,6 +209,7 @@ type PendingBatchUpdate = {
   keyUpdates?: BatchUpdateKeysParams["updates"];
   enabledUserFields: string[];
   enabledKeyFields: string[];
+  syncUsersToKeys: boolean;
 };
 
 function BatchEditDialogInner({
@@ -242,6 +249,7 @@ function BatchEditDialogInner({
       limitDaily: t("user.fields.limitDaily"),
       limitWeekly: t("user.fields.limitWeekly"),
       limitMonthly: t("user.fields.limitMonthly"),
+      syncKeys: t("user.fields.syncKeys"),
     }),
     [t]
   );
@@ -291,8 +299,9 @@ function BatchEditDialogInner({
 
       const willUpdateUsers = selectedUsersCount > 0 && enabledUserFields.length > 0;
       const willUpdateKeys = selectedKeysCount > 0 && enabledKeyFields.length > 0;
+      const willSyncUsersToKeys = selectedUsersCount > 0 && userState.syncKeysEnabled;
 
-      if (!willUpdateUsers && !willUpdateKeys) {
+      if (!willUpdateUsers && !willUpdateKeys && !willSyncUsersToKeys) {
         toast.error(t("dialog.noFieldEnabled"));
         return;
       }
@@ -304,6 +313,7 @@ function BatchEditDialogInner({
         keyUpdates: willUpdateKeys ? keyUpdates : undefined,
         enabledUserFields,
         enabledKeyFields,
+        syncUsersToKeys: willSyncUsersToKeys,
       });
       setConfirmOpen(true);
     } catch (error) {
@@ -317,47 +327,73 @@ function BatchEditDialogInner({
 
     setIsSubmitting(true);
     try {
-      const tasks: Array<Promise<{ kind: "users" | "keys"; result: any }>> = [];
+      const results: Array<{ kind: "users" | "keys" | "sync"; result: any }> = [];
 
-      if (pendingUpdate.userUpdates && pendingUpdate.userIds.length > 0) {
-        tasks.push(
-          batchUpdateUsers({ userIds: pendingUpdate.userIds, updates: pendingUpdate.userUpdates })
-            .then((result) => ({ kind: "users" as const, result }))
-            .catch((error) => ({ kind: "users" as const, result: { ok: false, error } }))
-        );
+      if (pendingUpdate.syncUsersToKeys && pendingUpdate.userIds.length > 0) {
+        try {
+          const result = await batchSyncUserConfigToKeys({
+            userIds: pendingUpdate.userIds,
+            updates: pendingUpdate.userUpdates,
+          });
+          results.push({ kind: "sync", result });
+        } catch (error) {
+          results.push({ kind: "sync", result: { ok: false, error } });
+        }
+      } else if (pendingUpdate.userUpdates && pendingUpdate.userIds.length > 0) {
+        try {
+          const result = await batchUpdateUsers({
+            userIds: pendingUpdate.userIds,
+            updates: pendingUpdate.userUpdates,
+          });
+          results.push({ kind: "users", result });
+        } catch (error) {
+          results.push({ kind: "users", result: { ok: false, error } });
+        }
       }
 
       if (pendingUpdate.keyUpdates && pendingUpdate.keyIds.length > 0) {
-        tasks.push(
-          batchUpdateKeys({ keyIds: pendingUpdate.keyIds, updates: pendingUpdate.keyUpdates })
-            .then((result) => ({ kind: "keys" as const, result }))
-            .catch((error) => ({ kind: "keys" as const, result: { ok: false, error } }))
-        );
+        try {
+          const result = await batchUpdateKeys({
+            keyIds: pendingUpdate.keyIds,
+            updates: pendingUpdate.keyUpdates,
+          });
+          results.push({ kind: "keys", result });
+        } catch (error) {
+          results.push({ kind: "keys", result: { ok: false, error } });
+        }
       }
 
-      if (tasks.length === 0) {
+      if (results.length === 0) {
         toast.error(t("dialog.noUpdate"));
         return;
       }
 
-      const results = await Promise.all(tasks);
       let anySuccess = false;
       let anyFailed = false;
 
       for (const { kind, result } of results) {
         if (result?.ok) {
           anySuccess = true;
-          const updatedCount =
-            typeof result.data?.updatedCount === "number"
-              ? result.data.updatedCount
-              : kind === "users"
-                ? pendingUpdate.userIds.length
-                : pendingUpdate.keyIds.length;
-          toast.success(
-            kind === "users"
-              ? t("toast.usersUpdated", { count: updatedCount })
-              : t("toast.keysUpdated", { count: updatedCount })
-          );
+          if (kind === "sync") {
+            toast.success(
+              t("toast.keysSynced", {
+                users: result.data?.updatedUserCount ?? pendingUpdate.userIds.length,
+                keys: result.data?.updatedKeyCount ?? 0,
+              })
+            );
+          } else {
+            const updatedCount =
+              typeof result.data?.updatedCount === "number"
+                ? result.data.updatedCount
+                : kind === "users"
+                  ? pendingUpdate.userIds.length
+                  : pendingUpdate.keyIds.length;
+            toast.success(
+              kind === "users"
+                ? t("toast.usersUpdated", { count: updatedCount })
+                : t("toast.keysUpdated", { count: updatedCount })
+            );
+          }
         } else {
           anyFailed = true;
           const errorMessage =
@@ -366,11 +402,15 @@ function BatchEditDialogInner({
               : result?.error instanceof Error
                 ? result.error.message
                 : t("toast.batchFailed");
-          toast.error(
-            kind === "users"
-              ? t("toast.usersFailed", { error: errorMessage })
-              : t("toast.keysFailed", { error: errorMessage })
-          );
+          if (kind === "sync") {
+            toast.error(t("toast.syncFailed", { error: errorMessage }));
+          } else {
+            toast.error(
+              kind === "users"
+                ? t("toast.usersFailed", { error: errorMessage })
+                : t("toast.keysFailed", { error: errorMessage })
+            );
+          }
         }
       }
 
@@ -398,7 +438,8 @@ function BatchEditDialogInner({
     if (!pendingUpdate) return null;
     const willUpdateUsers = Boolean(pendingUpdate.userUpdates && pendingUpdate.userIds.length > 0);
     const willUpdateKeys = Boolean(pendingUpdate.keyUpdates && pendingUpdate.keyIds.length > 0);
-    const usersCount = willUpdateUsers ? pendingUpdate.userIds.length : 0;
+    const willSyncUsersToKeys = pendingUpdate.syncUsersToKeys;
+    const usersCount = willUpdateUsers || willSyncUsersToKeys ? pendingUpdate.userIds.length : 0;
     const keysCount = willUpdateKeys ? pendingUpdate.keyIds.length : 0;
 
     return (
@@ -411,6 +452,14 @@ function BatchEditDialogInner({
             <div className="font-medium">{t("confirm.userFields")}</div>
             <div className="text-muted-foreground">
               {pendingUpdate.enabledUserFields.join(", ")}
+            </div>
+          </div>
+        ) : null}
+        {willSyncUsersToKeys ? (
+          <div className="text-sm">
+            <div className="font-medium">{t("confirm.syncKeys")}</div>
+            <div className="text-muted-foreground">
+              {t("confirm.syncKeysDescription", { users: pendingUpdate.userIds.length })}
             </div>
           </div>
         ) : null}
@@ -458,6 +507,7 @@ function BatchEditDialogInner({
                   emptyToClear: t("user.placeholders.emptyToClear"),
                   tagsPlaceholder: t("user.placeholders.tagsPlaceholder"),
                   emptyNoLimit: t("user.placeholders.emptyNoLimit"),
+                  syncKeysDescription: t("user.placeholders.syncKeysDescription"),
                 },
               }}
             />
