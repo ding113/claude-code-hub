@@ -1954,4 +1954,24 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     expect(abortAddCalls).toHaveLength(1);
     expect(removeSpy).toHaveBeenCalledWith("abort", abortAddCalls[0][1]);
   });
+
+  test("pre-aborted client signal should settle hedge without launching upstream attempt", async () => {
+    const clientAbortController = new AbortController();
+    clientAbortController.abort(new Error("client_cancelled"));
+    const addSpy = vi.spyOn(clientAbortController.signal, "addEventListener");
+    const provider = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+    const session = createSession(clientAbortController.signal);
+    setProviderWithSessionRef(session, provider);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+
+    await expect(ProxyForwarder.send(session)).rejects.toMatchObject({ statusCode: 499 });
+    expect(doForward).not.toHaveBeenCalled();
+    expect(addSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
+  });
 });

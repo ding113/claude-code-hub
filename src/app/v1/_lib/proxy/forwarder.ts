@@ -3927,7 +3927,9 @@ export class ProxyForwarder {
       provider: Provider,
       useOriginalSession: boolean
     ): Promise<boolean> => {
-      if (settled || winnerCommitted || launchedProviderIds.has(provider.id)) return false;
+      if (settled || winnerCommitted || noMoreProviders || launchedProviderIds.has(provider.id)) {
+        return false;
+      }
 
       launchedProviderIds.add(provider.id);
 
@@ -4022,7 +4024,8 @@ export class ProxyForwarder {
     };
 
     let cleanupClientAbortListener = () => {};
-    if (session.clientAbortSignal) {
+    const clientAbortSignal = session.clientAbortSignal;
+    if (clientAbortSignal) {
       const handleClientAbort = () => {
         if (settled || winnerCommitted) return;
         noMoreProviders = true;
@@ -4042,10 +4045,14 @@ export class ProxyForwarder {
         abortAllAttempts(undefined, "client_abort");
         void finishIfExhausted();
       };
-      session.clientAbortSignal.addEventListener("abort", handleClientAbort, { once: true });
-      cleanupClientAbortListener = () => {
-        session.clientAbortSignal?.removeEventListener("abort", handleClientAbort);
-      };
+      if (clientAbortSignal.aborted) {
+        handleClientAbort();
+      } else {
+        clientAbortSignal.addEventListener("abort", handleClientAbort, { once: true });
+        cleanupClientAbortListener = () => {
+          clientAbortSignal.removeEventListener("abort", handleClientAbort);
+        };
+      }
     }
 
     try {

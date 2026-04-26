@@ -99,9 +99,11 @@ vi.mock("@/repository/message", () => ({
 }));
 
 async function drainAsyncTasks(): Promise<void> {
-  const tasks = testState.asyncTasks.splice(0);
-  await Promise.allSettled(tasks);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  while (testState.asyncTasks.length > 0) {
+    const tasks = testState.asyncTasks.splice(0);
+    await Promise.allSettled(tasks);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 }
 
 function makeProvider(overrides: Partial<Provider> = {}): Provider {
