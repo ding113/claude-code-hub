@@ -735,7 +735,9 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       dailyResetTime: key.dailyResetTime ?? "00:00",
       resetMode: key.dailyResetMode ?? "fixed",
       resetTime: key.dailyResetTime ?? "00:00",
-      remaining: resolveOverallRemaining(Object.values(quotaWindows).map((window) => window.remainingUsd)),
+      remaining: resolveOverallRemaining(
+        Object.values(quotaWindows).map((window) => window.remainingUsd)
+      ),
       unit: "USD",
     };
 
