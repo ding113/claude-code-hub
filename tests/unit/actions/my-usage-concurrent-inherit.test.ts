@@ -67,6 +67,10 @@ vi.mock("@/lib/logger", () => ({
 function createSession(params: {
   keyLimitConcurrentSessions: number | null;
   userLimitConcurrentSessions: number | null;
+  keyLimitMonthlyUsd?: number | null;
+  keyLimitTotalUsd?: number | null;
+  userLimitMonthlyUsd?: number | null;
+  userLimitTotalUsd?: number | null;
 }) {
   return {
     key: {
@@ -78,8 +82,8 @@ function createSession(params: {
       limit5hUsd: null,
       limitDailyUsd: null,
       limitWeeklyUsd: null,
-      limitMonthlyUsd: null,
-      limitTotalUsd: null,
+      limitMonthlyUsd: params.keyLimitMonthlyUsd ?? null,
+      limitTotalUsd: params.keyLimitTotalUsd ?? null,
       limitConcurrentSessions: params.keyLimitConcurrentSessions,
       providerGroup: null,
       isEnabled: true,
@@ -93,8 +97,8 @@ function createSession(params: {
       limit5hUsd: null,
       dailyQuota: null,
       limitWeeklyUsd: null,
-      limitMonthlyUsd: null,
-      limitTotalUsd: null,
+      limitMonthlyUsd: params.userLimitMonthlyUsd ?? null,
+      limitTotalUsd: params.userLimitTotalUsd ?? null,
       limitConcurrentSessions: params.userLimitConcurrentSessions,
       rpm: null,
       providerGroup: null,
@@ -150,6 +154,71 @@ describe("getMyQuota - concurrent limit inheritance", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.keyLimitConcurrentSessions).toBe(0);
+    }
+  });
+
+  it("总额度为空时 lifetime window 不应回退到月额度", async () => {
+    getSessionMock.mockResolvedValue(
+      createSession({
+        keyLimitConcurrentSessions: 0,
+        userLimitConcurrentSessions: 0,
+        keyLimitMonthlyUsd: 30,
+        keyLimitTotalUsd: null,
+        userLimitMonthlyUsd: 100,
+        userLimitTotalUsd: null,
+      })
+    );
+    statisticsMock.sumKeyQuotaCostsById.mockResolvedValue({
+      cost5h: 0,
+      costDaily: 0,
+      costWeekly: 0,
+      costMonthly: 5,
+      costTotal: 12,
+    });
+    statisticsMock.sumUserQuotaCosts.mockResolvedValue({
+      cost5h: 0,
+      costDaily: 0,
+      costWeekly: 0,
+      costMonthly: 10,
+      costTotal: 40,
+    });
+
+    const { getMyQuota } = await import("@/actions/my-usage");
+    const result = await getMyQuota();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.keyLimitTotalUsd).toBeNull();
+      expect(result.data.userLimitTotalUsd).toBeNull();
+      expect(result.data.limitTotalUsd).toBeNull();
+      expect(result.data.usedTotalUsd).toBe(40);
+      expect(result.data.remainingTotalUsd).toBeNull();
+      expect(result.data.quotaWindows.monthly.limitUsd).toBe(30);
+      expect(result.data.quotaWindows.monthly.remainingUsd).toBe(25);
+      expect(result.data.quotaWindows.total.isUnlimited).toBe(true);
+    }
+  });
+
+  it("存在总额度时 usage API 应优先返回总额度", async () => {
+    getSessionMock.mockResolvedValue(
+      createSession({
+        keyLimitConcurrentSessions: 0,
+        userLimitConcurrentSessions: 0,
+        keyLimitMonthlyUsd: 30,
+        keyLimitTotalUsd: 80,
+        userLimitMonthlyUsd: 100,
+        userLimitTotalUsd: 200,
+      })
+    );
+
+    const { getMyQuota } = await import("@/actions/my-usage");
+    const result = await getMyQuota();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.keyLimitTotalUsd).toBe(80);
+      expect(result.data.userLimitTotalUsd).toBe(200);
+      expect(result.data.limitTotalUsd).toBe(80);
     }
   });
 });
