@@ -125,13 +125,13 @@ function makeProvider(overrides: Partial<Provider> = {}): Provider {
   } as Provider;
 }
 
-function makeSession(clientAbortSignal: AbortSignal, stream: boolean): ProxySession {
+function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): ProxySession {
   const endpointPolicy = resolveEndpointPolicy("/v1/chat/completions");
   const provider = makeProvider();
   const session = {
     request: {
       model: "gpt-5.4",
-      log: "x".repeat(256 * 1024),
+      log: "",
       message: {
         model: "gpt-5.4",
         stream,
@@ -146,7 +146,7 @@ function makeSession(clientAbortSignal: AbortSignal, stream: boolean): ProxySess
     userAgent: null,
     context: {},
     clientAbortSignal,
-    forwardedRequestBody: "y".repeat(512 * 1024),
+    forwardedRequestBody: "",
     userName: "test-user",
     authState: {
       success: true,
@@ -247,5 +247,37 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     const abortAddCalls = addSpy.mock.calls.filter(([type]) => type === "abort");
     expect(abortAddCalls).toHaveLength(1);
     expect(removeSpy).toHaveBeenCalledWith("abort", abortAddCalls[0][1]);
+  });
+
+  it("uses no-op cleanup when client abort signal is null", async () => {
+    const session = makeSession(null, false);
+    const upstreamResponse = new Response(JSON.stringify({ choices: [] }), {
+      headers: { "content-type": "application/json" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await response.text();
+    await drainAsyncTasks();
+
+    expect(testState.cancelTask).not.toHaveBeenCalled();
+  });
+
+  it("invokes cancel synchronously when client signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const addSpy = vi.spyOn(controller.signal, "addEventListener");
+    const removeSpy = vi.spyOn(controller.signal, "removeEventListener");
+    const session = makeSession(controller.signal, false);
+    const upstreamResponse = new Response(JSON.stringify({ choices: [] }), {
+      headers: { "content-type": "application/json" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await response.text();
+    await drainAsyncTasks();
+
+    expect(addSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
+    expect(removeSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
+    expect(testState.cancelTask).toHaveBeenCalled();
   });
 });
