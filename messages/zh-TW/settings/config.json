@@ -13,6 +13,10 @@
       "redirected": "重新導向後（實際模型）"
     },
     "billingModelSourcePlaceholder": "選擇計費模型來源",
+    "billingCorrection": {
+      "title": "計費與費率矯正",
+      "description": "集中設定模型計費來源、Codex Priority 費率口徑，以及 Claude 計費標頭整流開關。"
+    },
     "codexPriorityBillingSource": "Codex Priority 計費來源",
     "codexPriorityBillingSourceDesc": "控制 Codex Priority（Fast Mode）單獨計費使用哪個 service_tier。預設按 Requested Service Tier 計費；若選擇 Actual Service Tier，則優先使用回應返回值，回應未返回時回退到請求值。",
     "codexPriorityBillingSourceOptions": {

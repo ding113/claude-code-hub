@@ -377,52 +377,89 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         <p className="text-xs text-muted-foreground">{t("currencyDisplayDesc")}</p>
       </div>
 
-      {/* Billing Model Source Select */}
-      <div className="space-y-2">
-        <Label htmlFor="billing-model-source" className="text-sm font-medium text-foreground">
-          {t("billingModelSource")}
-        </Label>
-        <Select
-          value={billingModelSource}
-          onValueChange={(value) => setBillingModelSource(value as BillingModelSource)}
-          disabled={isPending}
-        >
-          <SelectTrigger id="billing-model-source" className={selectTriggerClassName}>
-            <SelectValue placeholder={t("billingModelSourcePlaceholder")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="original">{t("billingModelSourceOptions.original")}</SelectItem>
-            <SelectItem value="redirected">{t("billingModelSourceOptions.redirected")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">{t("billingModelSourceDesc")}</p>
-      </div>
+      <div
+        id="billing-correction"
+        className="scroll-mt-24 rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-4"
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+            <FileCode className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">{t("billingCorrection.title")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t("billingCorrection.description")}
+            </p>
+          </div>
+        </div>
 
-      <div className="space-y-2">
-        <Label
-          htmlFor="codex-priority-billing-source"
-          className="text-sm font-medium text-foreground"
-        >
-          {t("codexPriorityBillingSource")}
-        </Label>
-        <Select
-          value={codexPriorityBillingSource}
-          onValueChange={(value) =>
-            setCodexPriorityBillingSource(value as CodexPriorityBillingSource)
-          }
-          disabled={isPending}
-        >
-          <SelectTrigger id="codex-priority-billing-source" className={selectTriggerClassName}>
-            <SelectValue placeholder={t("codexPriorityBillingSourcePlaceholder")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="requested">
-              {t("codexPriorityBillingSourceOptions.requested")}
-            </SelectItem>
-            <SelectItem value="actual">{t("codexPriorityBillingSourceOptions.actual")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">{t("codexPriorityBillingSourceDesc")}</p>
+        <div className="space-y-2">
+          <Label htmlFor="billing-model-source" className="text-sm font-medium text-foreground">
+            {t("billingModelSource")}
+          </Label>
+          <Select
+            value={billingModelSource}
+            onValueChange={(value) => setBillingModelSource(value as BillingModelSource)}
+            disabled={isPending}
+          >
+            <SelectTrigger id="billing-model-source" className={selectTriggerClassName}>
+              <SelectValue placeholder={t("billingModelSourcePlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="original">{t("billingModelSourceOptions.original")}</SelectItem>
+              <SelectItem value="redirected">
+                {t("billingModelSourceOptions.redirected")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("billingModelSourceDesc")}</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label
+            htmlFor="codex-priority-billing-source"
+            className="text-sm font-medium text-foreground"
+          >
+            {t("codexPriorityBillingSource")}
+          </Label>
+          <Select
+            value={codexPriorityBillingSource}
+            onValueChange={(value) =>
+              setCodexPriorityBillingSource(value as CodexPriorityBillingSource)
+            }
+            disabled={isPending}
+          >
+            <SelectTrigger id="codex-priority-billing-source" className={selectTriggerClassName}>
+              <SelectValue placeholder={t("codexPriorityBillingSourcePlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="requested">
+                {t("codexPriorityBillingSourceOptions.requested")}
+              </SelectItem>
+              <SelectItem value="actual">
+                {t("codexPriorityBillingSourceOptions.actual")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("codexPriorityBillingSourceDesc")}</p>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-white/5 bg-background/30 p-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {t("enableBillingHeaderRectifier")}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t("enableBillingHeaderRectifierDesc")}
+            </p>
+          </div>
+          <Switch
+            id="enable-billing-header-rectifier"
+            checked={enableBillingHeaderRectifier}
+            onCheckedChange={(checked) => setEnableBillingHeaderRectifier(checked)}
+            disabled={isPending}
+          />
+        </div>
       </div>
 
       {/* Timezone Select */}
@@ -641,29 +678,6 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-thinking-budget-rectifier"
             checked={enableThinkingBudgetRectifier}
             onCheckedChange={(checked) => setEnableThinkingBudgetRectifier(checked)}
-            disabled={isPending}
-          />
-        </div>
-
-        {/* Enable Billing Header Rectifier */}
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
-              <FileCode className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                {t("enableBillingHeaderRectifier")}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t("enableBillingHeaderRectifierDesc")}
-              </p>
-            </div>
-          </div>
-          <Switch
-            id="enable-billing-header-rectifier"
-            checked={enableBillingHeaderRectifier}
-            onCheckedChange={(checked) => setEnableBillingHeaderRectifier(checked)}
             disabled={isPending}
           />
         </div>
