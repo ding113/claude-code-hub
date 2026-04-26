@@ -4021,42 +4021,47 @@ export class ProxyForwarder {
       return true;
     };
 
+    let cleanupClientAbortListener = () => {};
     if (session.clientAbortSignal) {
-      session.clientAbortSignal.addEventListener(
-        "abort",
-        () => {
-          if (settled || winnerCommitted) return;
-          noMoreProviders = true;
-          lastError = new ProxyError("Request aborted by client", 499, undefined, true);
-          lastErrorCategory = ErrorCategory.CLIENT_ABORT;
-          for (const attempt of Array.from(attempts)) {
-            if (!attempt.settled) {
-              session.addProviderToChain(attempt.provider, {
-                ...attempt.endpointAudit,
-                reason: "client_abort",
-                attemptNumber: attempt.sequence,
-                errorMessage: "Client aborted request",
-                modelRedirect: getAttemptModelRedirect(attempt),
-              });
-            }
+      const handleClientAbort = () => {
+        if (settled || winnerCommitted) return;
+        noMoreProviders = true;
+        lastError = new ProxyError("Request aborted by client", 499, undefined, true);
+        lastErrorCategory = ErrorCategory.CLIENT_ABORT;
+        for (const attempt of Array.from(attempts)) {
+          if (!attempt.settled) {
+            session.addProviderToChain(attempt.provider, {
+              ...attempt.endpointAudit,
+              reason: "client_abort",
+              attemptNumber: attempt.sequence,
+              errorMessage: "Client aborted request",
+              modelRedirect: getAttemptModelRedirect(attempt),
+            });
           }
-          abortAllAttempts(undefined, "client_abort");
-          void finishIfExhausted();
-        },
-        { once: true }
-      );
+        }
+        abortAllAttempts(undefined, "client_abort");
+        void finishIfExhausted();
+      };
+      session.clientAbortSignal.addEventListener("abort", handleClientAbort, { once: true });
+      cleanupClientAbortListener = () => {
+        session.clientAbortSignal?.removeEventListener("abort", handleClientAbort);
+      };
     }
 
-    const initialLaunched = await startAttempt(initialProvider, true);
-    if (!initialLaunched) {
-      await launchAlternative();
+    try {
+      const initialLaunched = await startAttempt(initialProvider, true);
+      if (!initialLaunched) {
+        await launchAlternative();
+      }
+      await finishIfExhausted();
+      const result = await resultPromise;
+      if (result.error) {
+        throw result.error;
+      }
+      return result.response as Response;
+    } finally {
+      cleanupClientAbortListener();
     }
-    await finishIfExhausted();
-    const result = await resultPromise;
-    if (result.error) {
-      throw result.error;
-    }
-    return result.response as Response;
   }
 
   private static async resolveStreamingHedgeEndpoint(

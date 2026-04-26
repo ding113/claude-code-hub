@@ -1919,4 +1919,39 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       vi.useRealTimers();
     }
   });
+
+  test("removes streaming hedge client abort listener after winner response is returned", async () => {
+    const clientAbortController = new AbortController();
+    const addSpy = vi.spyOn(clientAbortController.signal, "addEventListener");
+    const removeSpy = vi.spyOn(clientAbortController.signal, "removeEventListener");
+    const provider = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+    const session = createSession(clientAbortController.signal);
+    setProviderWithSessionRef(session, provider);
+    session.forwardedRequestBody = "x".repeat(512 * 1024);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as {
+        doForward: (...args: unknown[]) => Promise<Response>;
+      },
+      "doForward"
+    );
+    const upstreamController = new AbortController();
+    doForward.mockImplementationOnce(async (attemptSession) => {
+      const runtime = attemptSession as ProxySession & AttemptRuntime;
+      runtime.responseController = upstreamController;
+      runtime.clearResponseTimeout = vi.fn();
+      return createStreamingResponse({
+        label: "p1",
+        firstChunkDelayMs: 0,
+        controller: upstreamController,
+      });
+    });
+
+    const response = await ProxyForwarder.send(session);
+    expect(await response.text()).toContain('"provider":"p1"');
+
+    const abortAddCalls = addSpy.mock.calls.filter(([type]) => type === "abort");
+    expect(abortAddCalls).toHaveLength(1);
+    expect(removeSpy).toHaveBeenCalledWith("abort", abortAddCalls[0][1]);
+  });
 });
