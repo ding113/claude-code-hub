@@ -110,7 +110,7 @@ function makeProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     id: 99,
     name: "test-provider",
-    providerType: "openai",
+    providerType: "openai-compatible",
     baseUrl: "https://api.test.invalid",
     priority: 1,
     weight: 1,
@@ -166,7 +166,7 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
     sessionId: null,
     requestSequence: 1,
     originalFormat: "openai",
-    providerType: "openai",
+    providerType: "openai-compatible",
     originalModelName: "gpt-5.4",
     originalUrlPathname: "/v1/chat/completions",
     providerChain: [],
@@ -279,5 +279,27 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     expect(addSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
     expect(removeSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
     expect(testState.cancelTask).toHaveBeenCalled();
+  });
+
+  it("invokes stream cancel once when client signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const addSpy = vi.spyOn(controller.signal, "addEventListener");
+    const removeSpy = vi.spyOn(controller.signal, "removeEventListener");
+    const session = makeSession(controller.signal, true);
+    const upstreamResponse = new Response(
+      'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
+      {
+        headers: { "content-type": "text/event-stream" },
+      }
+    );
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await response.text();
+    await drainAsyncTasks();
+
+    expect(addSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
+    expect(removeSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
+    expect(testState.cancelTask).toHaveBeenCalledTimes(1);
   });
 });
