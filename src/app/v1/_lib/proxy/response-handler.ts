@@ -40,6 +40,7 @@ import type { LongContextPricingSpecialSetting } from "@/types/special-settings"
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { extractActualResponseModelForProvider } from "./actual-response-model";
+import { bindClientAbortListener } from "./client-abort-listener";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
@@ -1073,6 +1074,10 @@ export class ProxyResponseHandler {
     // 使用 AsyncTaskManager 管理后台处理任务
     const taskId = `non-stream-${messageContext?.id || `unknown-${Date.now()}`}`;
     const abortController = new AbortController();
+    const cleanupClientAbortListener = bindClientAbortListener(session.clientAbortSignal, () => {
+      AsyncTaskManager.cancel(taskId);
+      abortController.abort();
+    });
 
     const processingPromise = (async () => {
       const finalizeNonStreamAbort = async (): Promise<void> => {
@@ -1502,6 +1507,7 @@ export class ProxyResponseHandler {
           });
         }
       } finally {
+        cleanupClientAbortListener();
         releaseSessionAgent(session);
         AsyncTaskManager.cleanup(taskId);
       }
@@ -1525,14 +1531,6 @@ export class ProxyResponseHandler {
         phase: "non-stream",
       });
     });
-
-    // 客户端断开时取消任务
-    if (session.clientAbortSignal) {
-      session.clientAbortSignal.addEventListener("abort", () => {
-        AsyncTaskManager.cancel(taskId);
-        abortController.abort();
-      });
-    }
 
     void persistNonStreamAfterSnapshot(finalResponse).catch((error) => {
       logger.error("[ResponseHandler] Failed to persist non-stream after snapshot", { error });
@@ -2128,6 +2126,26 @@ export class ProxyResponseHandler {
 
     // ⭐ 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;
+    const cleanupClientAbortListener = bindClientAbortListener(session.clientAbortSignal, () => {
+      logger.debug("ResponseHandler: Client disconnected, cleaning up", {
+        taskId,
+        providerId: provider.id,
+        messageId: messageContext.id,
+      });
+
+      // 客户端断开时清除 idle timeout，避免任务已取消后仍误触发。
+      if (idleTimeoutId) {
+        clearTimeout(idleTimeoutId);
+        idleTimeoutId = null;
+        logger.debug("ResponseHandler: Idle timeout cleared due to client disconnect", {
+          taskId,
+          providerId: provider.id,
+        });
+      }
+
+      AsyncTaskManager.cancel(taskId);
+      abortController.abort();
+    });
 
     const processingPromise = (async () => {
       const reader = internalStream.getReader();
@@ -2757,6 +2775,7 @@ export class ProxyResponseHandler {
         }
       } finally {
         // 确保资源释放
+        cleanupClientAbortListener();
         clearIdleTimer(); // ⭐ 清除静默期计时器（防止泄漏）
         try {
           reader.releaseLock();
@@ -2790,34 +2809,6 @@ export class ProxyResponseHandler {
         phase: "stream",
       });
     });
-
-    // 客户端断开时取消任务并清除 idle timer
-    if (session.clientAbortSignal) {
-      session.clientAbortSignal.addEventListener("abort", () => {
-        logger.debug("ResponseHandler: Client disconnected, cleaning up", {
-          taskId,
-          providerId: provider.id,
-          messageId: messageContext.id,
-        });
-
-        // ⭐ 1. 清除 idle timeout（避免误触发）
-        if (idleTimeoutId) {
-          clearTimeout(idleTimeoutId);
-          idleTimeoutId = null;
-          logger.debug("ResponseHandler: Idle timeout cleared due to client disconnect", {
-            taskId,
-            providerId: provider.id,
-          });
-        }
-
-        // 2. 取消后台任务
-        AsyncTaskManager.cancel(taskId);
-        abortController.abort();
-
-        // 注意：不需要 streamController.error()（客户端已断开）
-        // 注意：不需要 responseController.abort()（上游会自然结束）
-      });
-    }
 
     // ⭐ 修复 Bun 运行时的 Transfer-Encoding 重复问题
     // 清理上游的传输 headers，让 Response API 自动管理

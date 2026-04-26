@@ -50,6 +50,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
+import { bindClientAbortListener } from "./client-abort-listener";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
@@ -3927,7 +3928,9 @@ export class ProxyForwarder {
       provider: Provider,
       useOriginalSession: boolean
     ): Promise<boolean> => {
-      if (settled || winnerCommitted || launchedProviderIds.has(provider.id)) return false;
+      if (settled || winnerCommitted || noMoreProviders || launchedProviderIds.has(provider.id)) {
+        return false;
+      }
 
       launchedProviderIds.add(provider.id);
 
@@ -4021,42 +4024,40 @@ export class ProxyForwarder {
       return true;
     };
 
-    if (session.clientAbortSignal) {
-      session.clientAbortSignal.addEventListener(
-        "abort",
-        () => {
-          if (settled || winnerCommitted) return;
-          noMoreProviders = true;
-          lastError = new ProxyError("Request aborted by client", 499, undefined, true);
-          lastErrorCategory = ErrorCategory.CLIENT_ABORT;
-          for (const attempt of Array.from(attempts)) {
-            if (!attempt.settled) {
-              session.addProviderToChain(attempt.provider, {
-                ...attempt.endpointAudit,
-                reason: "client_abort",
-                attemptNumber: attempt.sequence,
-                errorMessage: "Client aborted request",
-                modelRedirect: getAttemptModelRedirect(attempt),
-              });
-            }
-          }
-          abortAllAttempts(undefined, "client_abort");
-          void finishIfExhausted();
-        },
-        { once: true }
-      );
-    }
+    const cleanupClientAbortListener = bindClientAbortListener(session.clientAbortSignal, () => {
+      if (settled || winnerCommitted) return;
+      noMoreProviders = true;
+      lastError = new ProxyError("Request aborted by client", 499, undefined, true);
+      lastErrorCategory = ErrorCategory.CLIENT_ABORT;
+      for (const attempt of Array.from(attempts)) {
+        if (!attempt.settled) {
+          session.addProviderToChain(attempt.provider, {
+            ...attempt.endpointAudit,
+            reason: "client_abort",
+            attemptNumber: attempt.sequence,
+            errorMessage: "Client aborted request",
+            modelRedirect: getAttemptModelRedirect(attempt),
+          });
+        }
+      }
+      abortAllAttempts(undefined, "client_abort");
+      void finishIfExhausted();
+    });
 
-    const initialLaunched = await startAttempt(initialProvider, true);
-    if (!initialLaunched) {
-      await launchAlternative();
+    try {
+      const initialLaunched = await startAttempt(initialProvider, true);
+      if (!initialLaunched) {
+        await launchAlternative();
+      }
+      await finishIfExhausted();
+      const result = await resultPromise;
+      if (result.error) {
+        throw result.error;
+      }
+      return result.response as Response;
+    } finally {
+      cleanupClientAbortListener();
     }
-    await finishIfExhausted();
-    const result = await resultPromise;
-    if (result.error) {
-      throw result.error;
-    }
-    return result.response as Response;
   }
 
   private static async resolveStreamingHedgeEndpoint(
