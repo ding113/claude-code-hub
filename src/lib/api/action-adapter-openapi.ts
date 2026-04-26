@@ -314,7 +314,10 @@ export function createActionRoute(
           return c.json({ ok: false, error: "未认证" }, 401);
         }
 
-        const session = await validateAuthToken(authToken, { allowReadOnlyAccess });
+        const session = await validateAuthToken(authToken, {
+          allowReadOnlyAccess,
+          allowLegacyReadOnlyBearer: module === "my-usage",
+        });
         if (!session) {
           logger.warn(`[ActionAPI] ${fullPath} 认证失败: 无效的 ${AUTH_COOKIE_NAME}`);
           return c.json({ ok: false, error: "认证无效或已过期" }, 401);

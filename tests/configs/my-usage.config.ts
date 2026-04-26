@@ -8,6 +8,12 @@ export default createCoverageConfig({
     "tests/api/api-actions-integrity.test.ts",
     "tests/integration/auth.test.ts",
     "tests/api/action-adapter-openapi.unit.test.ts",
+    "tests/unit/auth/admin-token-opaque-fallback.test.ts",
+    "tests/unit/auth/opaque-admin-session.test.ts",
+    "tests/unit/auth/auth-scoped-session-branches.test.ts",
+    "tests/security/session-contract.test.ts",
+    "tests/security/auth-dual-read.test.ts",
+    "tests/unit/proxy/proxy-auth-cookie-passthrough.test.ts",
   ],
   sourceFiles: [
     "src/actions/my-usage.ts",
