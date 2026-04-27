@@ -513,6 +513,75 @@ describe("traceProxyRequest", () => {
     });
   });
 
+  test("should mark missing non-stream output for error traces", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 502,
+      isStreaming: false,
+      errorMessage: "fetch failed",
+    });
+
+    const expectedOutput = {
+      statusCode: 502,
+      errorMessage: "fetch failed",
+      responseMissing: true,
+    };
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].output).toEqual(expectedOutput);
+
+    const llmCall = mockRootSpan.startObservation.mock.calls.find(
+      (c: unknown[]) => c[0] === "llm-call"
+    );
+    expect(llmCall[1].output).toEqual(expectedOutput);
+    expect(mockRootSpan.updateTrace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: expectedOutput,
+      })
+    );
+  });
+
+  test("should mark missing non-stream output when request input exists", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession({
+        request: {
+          message: {
+            model: "claude-sonnet-4-20250514",
+            messages: [{ role: "user", content: "Hello" }],
+            stream: false,
+          },
+          model: "claude-sonnet-4-20250514",
+        },
+      }),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 204,
+      isStreaming: false,
+    });
+
+    const expectedOutput = {
+      statusCode: 204,
+      responseMissing: true,
+    };
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].output).toEqual(expectedOutput);
+
+    const llmCall = mockRootSpan.startObservation.mock.calls.find(
+      (c: unknown[]) => c[0] === "llm-call"
+    );
+    expect(llmCall[1].output).toEqual(expectedOutput);
+    expect(mockRootSpan.updateTrace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: expectedOutput,
+      })
+    );
+  });
+
   test("should include costUsd in root span metadata", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
 
