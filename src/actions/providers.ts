@@ -2737,15 +2737,21 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
-      limit5hResetMode === "fixed"
-        ? RateLimitService.getCurrentCost(providerId, "provider", "5h", undefined, limit5hResetMode)
-        : sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
-      sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
-      sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
-      sumProviderCostInTimeRange(providerId, rangeMonthly.startTime, rangeMonthly.endTime),
-      sumProviderTotalCost(providerId),
-      SessionTracker.getProviderSessionCount(providerId),
-    ]);
+        limit5hResetMode === "fixed"
+          ? RateLimitService.getCurrentCost(
+              providerId,
+              "provider",
+              "5h",
+              undefined,
+              limit5hResetMode
+            )
+          : sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
+        sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
+        sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
+        sumProviderCostInTimeRange(providerId, rangeMonthly.startTime, rangeMonthly.endTime),
+        sumProviderTotalCost(providerId),
+        SessionTracker.getProviderSessionCount(providerId),
+      ]);
 
     // 获取重置时间信息
     const resetDaily = await getResetInfoWithMode(
@@ -2884,8 +2890,7 @@ export async function getProviderLimitUsageBatch(
       );
 
       // 并行查询该供应商的各周期消费（直接查询数据库）
-      const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly, totalCost] =
-        await Promise.all([
+      const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly, totalCost] = await Promise.all([
         limit5hResetMode === "fixed"
           ? RateLimitService.getCurrentCost(
               provider.id,

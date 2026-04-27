@@ -74,9 +74,7 @@ function calculateMaxUsage(provider: ProviderWithQuota): number {
     );
   }
   if (provider.quota.limitTotalUsd.limit && provider.quota.limitTotalUsd.limit > 0) {
-    usages.push(
-      (provider.quota.limitTotalUsd.current / provider.quota.limitTotalUsd.limit) * 100
-    );
+    usages.push((provider.quota.limitTotalUsd.current / provider.quota.limitTotalUsd.limit) * 100);
   }
 
   return usages.length > 0 ? Math.max(...usages) : 0;
