@@ -130,6 +130,40 @@ describe("LanguageSwitcher", () => {
     expect(window.sessionStorage.getItem("cch.pendingLocaleRefresh")).toBeNull();
   });
 
+  test("keeps the pending refresh after remount when sessionStorage is blocked", () => {
+    const setItemSpy = vi.spyOn(window.sessionStorage, "setItem").mockImplementation(() => {
+      throw new Error("blocked storage");
+    });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    view = render(<LanguageSwitcher />);
+
+    const englishOption = Array.from(view.container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("English")
+    );
+
+    expect(englishOption).toBeTruthy();
+    click(englishOption!);
+
+    expect(testState.router.push).toHaveBeenCalledWith("/settings/config", { locale: "en" });
+    expect(testState.router.refresh).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Failed to persist pending locale refresh target:",
+      expect.any(Error)
+    );
+
+    view.unmount();
+    view = null;
+    setItemSpy.mockRestore();
+
+    testState.currentLocale = "en";
+    view = render(<LanguageSwitcher />);
+
+    expect(testState.router.refresh).toHaveBeenCalledTimes(1);
+
+    consoleErrorSpy.mockRestore();
+  });
+
   test("does not refresh from a stale stored locale marker on mount", () => {
     window.sessionStorage.setItem("cch.pendingLocaleRefresh", "en");
     testState.currentLocale = "en";

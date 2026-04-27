@@ -31,7 +31,8 @@ function getPendingLocaleRefreshTarget(): Locale | null {
   try {
     const value = window.sessionStorage.getItem(pendingLocaleRefreshKey);
     return locales.some((locale) => locale === value) ? (value as Locale) : null;
-  } catch {
+  } catch (error) {
+    console.error("Failed to read pending locale refresh target:", error);
     return null;
   }
 }
@@ -45,8 +46,8 @@ function setPendingLocaleRefreshTarget(locale: Locale) {
 
   try {
     window.sessionStorage.setItem(pendingLocaleRefreshKey, locale);
-  } catch {
-    // 存储失败不影响路由切换，只会跳过额外的 RSC 刷新兜底。
+  } catch (error) {
+    console.error("Failed to persist pending locale refresh target:", error);
   }
 }
 
@@ -59,8 +60,8 @@ function clearPendingLocaleRefreshTarget() {
 
   try {
     window.sessionStorage.removeItem(pendingLocaleRefreshKey);
-  } catch {
-    // 清理失败可忽略，下一次读取会重新校验 locale 是否有效。
+  } catch (error) {
+    console.error("Failed to clear pending locale refresh target:", error);
   }
 }
 
@@ -79,10 +80,8 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
 
   React.useEffect(() => {
     const storedRefreshTarget =
-      pendingLocale !== null || activePendingLocaleRefreshTarget !== null
-        ? getPendingLocaleRefreshTarget()
-        : null;
-    const refreshTarget = pendingLocale ?? storedRefreshTarget;
+      activePendingLocaleRefreshTarget === null ? null : getPendingLocaleRefreshTarget();
+    const refreshTarget = pendingLocale ?? activePendingLocaleRefreshTarget ?? storedRefreshTarget;
 
     if (refreshTarget !== currentLocale) {
       return;
