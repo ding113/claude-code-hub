@@ -52,6 +52,7 @@ import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { deriveClientSafeUpstreamErrorMessage } from "./client-error-message";
+import { combineAbortSignals } from "./combine-abort-signals";
 import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
 import { resolveEndpointPolicy, shouldEnforceStrictEndpointPoolPolicy } from "./endpoint-policy";
 import {
@@ -2706,56 +2707,18 @@ export class ProxyForwarder {
     }
 
     // 2. 组合双路信号：response + client
-    let combinedSignal: AbortSignal | undefined;
     const signals = [responseController.signal];
     if (session.clientAbortSignal) {
       signals.push(session.clientAbortSignal);
     }
 
-    // ⭐ AbortSignal.any 实现（兼容所有环境）
-    // 原因：Next.js standalone 可能覆盖全局 AbortSignal，导致原生 any 方法不可用
-    if ("any" in AbortSignal && typeof AbortSignal.any === "function") {
-      // 优先使用原生实现（Node.js 20.3+）
-      combinedSignal = AbortSignal.any(signals);
-      logger.debug("ProxyForwarder: Using native AbortSignal.any", {
-        signalCount: signals.length,
-      });
-    } else {
-      // Polyfill: 手动实现多信号组合逻辑
-      logger.debug("ProxyForwarder: Using AbortSignal.any polyfill", {
-        signalCount: signals.length,
-        reason: "Native AbortSignal.any not available",
-      });
-
-      const combinedController = new AbortController();
-      const cleanupHandlers: Array<() => void> = [];
-
-      // 为每个信号添加监听器
-      for (const signal of signals) {
-        // 如果已经有信号中断，立即中断组合信号
-        if (signal.aborted) {
-          combinedController.abort();
-          break;
-        }
-
-        // 监听信号中断事件
-        const abortHandler = () => {
-          // 中断组合信号
-          combinedController.abort();
-          // 清理所有监听器（避免内存泄漏）
-          cleanupHandlers.forEach((cleanup) => cleanup());
-        };
-
-        signal.addEventListener("abort", abortHandler, { once: true });
-
-        // 记录清理函数
-        cleanupHandlers.push(() => {
-          signal.removeEventListener("abort", abortHandler);
-        });
-      }
-
-      combinedSignal = combinedController.signal;
-    }
+    // 优先 Node 20.3+ 原生 AbortSignal.any（V8 内部管理 listener，无需手动 cleanup）；
+    // Next.js standalone 覆盖全局时 fallback 到 polyfill，由调用方在请求结束时调用
+    // cleanupCombinedSignal 解绑源信号上的 listener，避免持有 session/请求体闭包。
+    const { signal: combinedSignal, cleanup: cleanupCombinedSignal } = combineAbortSignals(signals);
+    logger.debug("ProxyForwarder: Combined abort signals", {
+      signalCount: signals.length,
+    });
 
     const init: UndiciFetchOptions = {
       method: session.method,
@@ -2848,6 +2811,9 @@ export class ProxyForwarder {
       if (responseTimeoutId) {
         clearTimeout(responseTimeoutId);
       }
+
+      // Polyfill 路径上需要主动解绑源信号的 abort listener（response-handler 不会执行）。
+      cleanupCombinedSignal();
 
       // Release agent ref count on fetch failure (request never started streaming)
       const releaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
@@ -3281,6 +3247,8 @@ export class ProxyForwarder {
         if (errorReleaseKey && errorReleaseDispatcherId) {
           getGlobalAgentPool().releaseAgent(errorReleaseKey, errorReleaseDispatcherId);
         }
+        // 同上：response-handler 不会跑，polyfill 路径上的源信号 listener 必须在此解绑。
+        cleanupCombinedSignal();
       }
     }
 
@@ -3308,14 +3276,19 @@ export class ProxyForwarder {
 
     // Attach agent release callback for in-flight reference counting.
     // response-handler must call this in its finally block after the stream is fully consumed.
+    // 同时复用此回调作为 combineAbortSignals polyfill 的 cleanup 入口：response-handler 已经
+    // 保证在请求结束时（成功/异常）幂等地调用 releaseAgent，把 cleanup 合并到这里就不必再
+    // 改造 response-handler 的所有 finally 调用点。两个动作互不影响，cleanup 内部自带 cleaned
+    // 标志，重复调用安全。
     const agentCacheKeyToRelease = proxyConfig?.cacheKey ?? directConnectionCacheKey;
     const agentDispatcherIdToRelease = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
-    if (agentCacheKeyToRelease && agentDispatcherIdToRelease) {
-      const pool = getGlobalAgentPool();
-      sessionWithTimeout.releaseAgent = () => {
+    const pool = agentCacheKeyToRelease && agentDispatcherIdToRelease ? getGlobalAgentPool() : null;
+    sessionWithTimeout.releaseAgent = () => {
+      if (pool && agentCacheKeyToRelease && agentDispatcherIdToRelease) {
         pool.releaseAgent(agentCacheKeyToRelease, agentDispatcherIdToRelease);
-      };
-    }
+      }
+      cleanupCombinedSignal();
+    };
 
     return response;
   }
