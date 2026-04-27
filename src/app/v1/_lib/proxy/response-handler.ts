@@ -416,7 +416,7 @@ function hasBillableInputCostPerRequest(priceData: { input_cost_per_request?: un
   return (
     typeof inputCostPerRequest === "number" &&
     Number.isFinite(inputCostPerRequest) &&
-    inputCostPerRequest >= 0
+    inputCostPerRequest > 0
   );
 }
 

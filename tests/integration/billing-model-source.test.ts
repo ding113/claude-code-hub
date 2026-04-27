@@ -1137,6 +1137,50 @@ describe("模型重定向后的图片按次计费", () => {
       total: "0.12",
     });
   });
+
+  it("按次价格为 0 时不进入空 usage 计费写入路径", async () => {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      return makePriceRecord(modelName, { input_cost_per_request: 0 }, "manual");
+    });
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: "sess-image-edit-zero-per-request",
+      messageId: 4002,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+      },
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createImageEditResponseWithoutUsage()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
+    expect(RateLimitService.trackCost).not.toHaveBeenCalled();
+  });
 });
 
 describe("价格表缺失/查询失败：不计费放行", () => {
