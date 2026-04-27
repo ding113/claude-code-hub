@@ -10,8 +10,13 @@ import { AvailabilityDashboardSkeleton } from "./_components/availability-skelet
 
 export const dynamic = "force-dynamic";
 
-export default async function AvailabilityPage() {
-  const t = await getTranslations("dashboard");
+export default async function AvailabilityPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "dashboard" });
   const session = await getSession();
 
   // Only admin can access availability monitoring

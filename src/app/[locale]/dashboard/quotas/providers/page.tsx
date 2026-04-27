@@ -53,7 +53,7 @@ export default async function ProvidersQuotaPage({
     redirect({ href: session ? "/dashboard/my-quota" : "/login", locale });
   }
 
-  const t = await getTranslations("quota.providers");
+  const t = await getTranslations({ locale, namespace: "quota.providers" });
 
   return (
     <div className="space-y-4">
@@ -64,18 +64,18 @@ export default async function ProvidersQuotaPage({
       </div>
 
       <Suspense fallback={<ProvidersQuotaSkeleton />}>
-        <ProvidersQuotaContent />
+        <ProvidersQuotaContent locale={locale} />
       </Suspense>
     </div>
   );
 }
 
-async function ProvidersQuotaContent() {
+async function ProvidersQuotaContent({ locale }: { locale: string }) {
   const [providers, systemSettings] = await Promise.all([
     getProvidersWithQuotas(),
     getSystemSettings(),
   ]);
-  const t = await getTranslations("quota.providers");
+  const t = await getTranslations({ locale, namespace: "quota.providers" });
 
   return (
     <div className="space-y-3">

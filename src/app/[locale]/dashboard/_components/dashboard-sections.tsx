@@ -32,7 +32,13 @@ export async function DashboardStatisticsSection() {
   );
 }
 
-export async function DashboardLeaderboardSection({ isAdmin }: { isAdmin: boolean }) {
+export async function DashboardLeaderboardSection({
+  isAdmin,
+  locale,
+}: {
+  isAdmin: boolean;
+  locale: string;
+}) {
   const systemSettings = await getCachedSystemSettings();
   const canViewLeaderboard = isAdmin || systemSettings.allowGlobalUsageView;
 
@@ -40,7 +46,7 @@ export async function DashboardLeaderboardSection({ isAdmin }: { isAdmin: boolea
     return null;
   }
 
-  const t = await getTranslations("dashboard");
+  const t = await getTranslations({ locale, namespace: "dashboard" });
 
   return (
     <div className="space-y-4">

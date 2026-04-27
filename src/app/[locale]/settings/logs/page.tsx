@@ -5,8 +5,13 @@ import { LogLevelForm } from "./_components/log-level-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsLogsPage() {
-  const t = await getTranslations("settings");
+export default async function SettingsLogsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "settings" });
 
   return (
     <>

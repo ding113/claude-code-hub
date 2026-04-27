@@ -15,9 +15,48 @@ import { normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
 import { usePathname, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils/index";
 
+const pendingLocaleRefreshKey = "cch.pendingLocaleRefresh";
+
 interface LanguageSwitcherProps {
   className?: string;
   size?: "sm" | "default";
+}
+
+function getPendingLocaleRefreshTarget(): Locale | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const value = window.sessionStorage.getItem(pendingLocaleRefreshKey);
+    return locales.some((locale) => locale === value) ? (value as Locale) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setPendingLocaleRefreshTarget(locale: Locale) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(pendingLocaleRefreshKey, locale);
+  } catch {
+    // 存储失败不影响路由切换，只会跳过额外的 RSC 刷新兜底。
+  }
+}
+
+function clearPendingLocaleRefreshTarget() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(pendingLocaleRefreshKey);
+  } catch {
+    // 清理失败可忽略，下一次读取会重新校验 locale 是否有效。
+  }
 }
 
 /**
@@ -31,6 +70,21 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
   const router = useRouter();
   const pathname = usePathname();
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const [pendingLocale, setPendingLocale] = React.useState<Locale | null>(null);
+
+  React.useEffect(() => {
+    const refreshTarget = pendingLocale ?? getPendingLocaleRefreshTarget();
+
+    if (refreshTarget !== currentLocale) {
+      return;
+    }
+
+    // Locale route 已切换后刷新当前 RSC 树，避免布局与服务端标题继续显示旧语言。
+    router.refresh();
+    clearPendingLocaleRefreshTarget();
+    setPendingLocale(null);
+    setIsTransitioning(false);
+  }, [currentLocale, pendingLocale, router]);
 
   const handleLocaleChange = React.useCallback(
     (newLocale: Locale) => {
@@ -39,11 +93,15 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
       }
 
       setIsTransitioning(true);
+      setPendingLocale(newLocale);
+      setPendingLocaleRefreshTarget(newLocale);
 
       try {
         router.push(normalizePathnameForLocaleNavigation(pathname), { locale: newLocale });
       } catch (error) {
         console.error("Failed to switch locale:", error);
+        clearPendingLocaleRefreshTarget();
+        setPendingLocale(null);
         setIsTransitioning(false);
       }
     },

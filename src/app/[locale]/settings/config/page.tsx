@@ -9,8 +9,13 @@ import { SystemSettingsForm } from "./_components/system-settings-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsConfigPage() {
-  const t = await getTranslations("settings");
+export default async function SettingsConfigPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "settings" });
 
   return (
     <>
@@ -20,14 +25,14 @@ export default async function SettingsConfigPage() {
         icon="settings"
       />
       <Suspense fallback={<SettingsConfigSkeleton />}>
-        <SettingsConfigContent />
+        <SettingsConfigContent locale={locale} />
       </Suspense>
     </>
   );
 }
 
-async function SettingsConfigContent() {
-  const t = await getTranslations("settings");
+async function SettingsConfigContent({ locale }: { locale: string }) {
+  const t = await getTranslations({ locale, namespace: "settings" });
   const settings = await getSystemSettings();
 
   return (

@@ -34,7 +34,7 @@ export default async function PublicStatusGroupPage({
   params: Promise<{ locale: string; slug: string }>;
 }) {
   const { locale, slug } = await params;
-  const t = await getTranslations("settings");
+  const t = await getTranslations({ locale, namespace: "settings" });
   const {
     followServerDefaults,
     initialPayload,

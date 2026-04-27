@@ -9,8 +9,13 @@ import { RequestFiltersTableSkeleton } from "./_components/request-filters-skele
 
 export const dynamic = "force-dynamic";
 
-export default async function RequestFiltersPage() {
-  const t = await getTranslations("settings.requestFilters");
+export default async function RequestFiltersPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "settings.requestFilters" });
 
   return (
     <>

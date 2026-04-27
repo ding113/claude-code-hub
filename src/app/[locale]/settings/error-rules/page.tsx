@@ -12,8 +12,9 @@ import { RuleListTable } from "./_components/rule-list-table";
 
 export const dynamic = "force-dynamic";
 
-export default async function ErrorRulesPage() {
-  const t = await getTranslations("settings");
+export default async function ErrorRulesPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "settings" });
 
   return (
     <>
