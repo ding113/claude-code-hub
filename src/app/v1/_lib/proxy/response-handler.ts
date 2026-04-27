@@ -424,7 +424,8 @@ async function resolveBillableUsageMetricsForCost(
   session: ProxySession,
   provider: Provider | null,
   usageMetrics: UsageMetrics | null,
-  statusCode: number
+  statusCode: number,
+  responseText?: string | null
 ): Promise<UsageMetrics | null> {
   if (isNonBillingUsageEndpoint(session)) {
     return null;
@@ -452,6 +453,21 @@ async function resolveBillableUsageMetricsForCost(
 
   if (!resolvedPricing?.priceData || !hasBillableInputCostPerRequest(resolvedPricing.priceData)) {
     return null;
+  }
+
+  if (responseText !== undefined && responseText !== null) {
+    const detected = detectUpstreamErrorFromSseOrJsonText(responseText, {
+      maxJsonCharsForMessageCheck: 0,
+    });
+    if (detected.isError) {
+      logger.warn("[CostCalculation] Skipping per-request billing for fake-200 error payload", {
+        code: detected.code,
+        detail: detected.detail,
+        originalModel: session.getOriginalModel(),
+        redirectedModel: session.getCurrentModel(),
+      });
+      return null;
+    }
   }
 
   // 成功响应可能没有 token usage（例如 OpenAI Images），但本地价格表仍可配置按次价格。
@@ -1222,7 +1238,8 @@ export class ProxyResponseHandler {
           session,
           provider,
           usageMetrics,
-          statusCode
+          statusCode,
+          responseText
         );
 
         if (billableUsageMetrics) {
@@ -2394,7 +2411,8 @@ export class ProxyResponseHandler {
           session,
           provider,
           usageForCost,
-          effectiveStatusCode
+          effectiveStatusCode,
+          allContent
         );
 
         const costUpdateResult = await updateRequestCostFromUsage(
@@ -3666,7 +3684,8 @@ export async function finalizeRequestStats(
       session,
       provider,
       null,
-      statusCode
+      statusCode,
+      responseText
     );
     let perRequestCostUsd: string | undefined;
 

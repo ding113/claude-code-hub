@@ -281,6 +281,20 @@ function createImageEditResponseWithoutUsage(): Response {
   );
 }
 
+function createFake200ErrorResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        message: "invalid api key",
+      },
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }
+  );
+}
+
 function createStreamResponse(usage: { input_tokens: number; output_tokens: number }): Response {
   const sseText = `event: message_delta\ndata: ${JSON.stringify({ usage })}\n\n`;
   const encoder = new TextEncoder();
@@ -1224,6 +1238,54 @@ describe("模型重定向后的图片按次计费", () => {
     expect(clientResponse.status).toBe(200);
     expect(JSON.parse(responseText)).toMatchObject({
       data: [{ b64_json: "test-image-bytes" }],
+    });
+    expect(updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
+    expect(RateLimitService.trackCost).not.toHaveBeenCalled();
+  });
+
+  it("上游假 200 错误 payload 不触发图片按次计费", async () => {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      return makePriceRecord(modelName, { input_cost_per_request: 0.01 }, "manual");
+    });
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: "sess-image-edit-fake-200-error",
+      messageId: 4005,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+      },
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200ErrorResponse()
+    );
+    const responseText = await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(clientResponse.status).toBe(200);
+    expect(JSON.parse(responseText)).toMatchObject({
+      error: { message: "invalid api key" },
     });
     expect(updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
     expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
