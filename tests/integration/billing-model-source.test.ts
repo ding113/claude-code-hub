@@ -77,7 +77,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
   },
 }));
 
-import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import { finalizeRequestStats, ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { getCachedSystemSettings, invalidateSystemSettingsCache } from "@/lib/config";
 import { SessionManager } from "@/lib/session-manager";
@@ -1180,6 +1180,62 @@ describe("模型重定向后的图片按次计费", () => {
     expect(updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
     expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
     expect(RateLimitService.trackCost).not.toHaveBeenCalled();
+  });
+
+  it("finalizeRequestStats 的按次计费 session usage 保留 errorMessage", async () => {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+    const errorMessage = "fake 200 upstream warning";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      return makePriceRecord(modelName, { input_cost_per_request: 0.01 }, "manual");
+    });
+
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+
+    let sessionUsagePayload: Record<string, unknown> | undefined;
+    vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
+      async (_sessionId: string, payload: Record<string, unknown>) => {
+        sessionUsagePayload = payload;
+      }
+    );
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: "sess-image-edit-finalize-error-message",
+      messageId: 4003,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+      },
+    });
+
+    await finalizeRequestStats(
+      session,
+      JSON.stringify({
+        created: 1_776_729_600,
+        data: [{ b64_json: "test-image-bytes" }],
+      }),
+      200,
+      42,
+      errorMessage,
+      99,
+      false
+    );
+
+    expect(sessionUsagePayload).toMatchObject({
+      costUsd: "0.01",
+      status: "completed",
+      statusCode: 200,
+      errorMessage,
+    });
   });
 });
 

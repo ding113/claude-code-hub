@@ -3696,6 +3696,7 @@ export async function finalizeRequestStats(
         costUsd: perRequestCostUsd,
         status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
         statusCode,
+        ...(errorMessage ? { errorMessage } : {}),
       }).catch((error: unknown) => {
         logger.error("[ResponseHandler] Failed to update session usage:", error);
       });
