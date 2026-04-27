@@ -411,6 +411,43 @@ function isNonBillingUsageEndpoint(session: ProxySession): boolean {
   return isNonBillingEndpoint(session.getEndpoint());
 }
 
+function hasBillableInputCostPerRequest(priceData: { input_cost_per_request?: unknown }): boolean {
+  const inputCostPerRequest = priceData.input_cost_per_request;
+  return (
+    typeof inputCostPerRequest === "number" &&
+    Number.isFinite(inputCostPerRequest) &&
+    inputCostPerRequest >= 0
+  );
+}
+
+async function resolveBillableUsageMetricsForCost(
+  session: ProxySession,
+  provider: Provider | null,
+  usageMetrics: UsageMetrics | null,
+  statusCode: number
+): Promise<UsageMetrics | null> {
+  if (isNonBillingUsageEndpoint(session)) {
+    return null;
+  }
+
+  if (usageMetrics) {
+    return usageMetrics;
+  }
+
+  if (statusCode < 200 || statusCode >= 300) {
+    return null;
+  }
+
+  const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
+  if (!resolvedPricing?.priceData || !hasBillableInputCostPerRequest(resolvedPricing.priceData)) {
+    return null;
+  }
+
+  // 成功响应可能没有 token usage（例如 OpenAI Images），但本地价格表仍可配置按次价格。
+  // 这里用空 usage 只承载 input_cost_per_request，不新增按图、按 token 等语义。
+  return {};
+}
+
 type FinalizeDeferredStreamingResult = {
   /**
    * “内部结算用”的状态码。
@@ -1145,11 +1182,9 @@ export class ProxyResponseHandler {
         if (sessionWithCleanup.clearResponseTimeout) {
           sessionWithCleanup.clearResponseTimeout();
         }
-        let usageRecord: Record<string, unknown> | null = null;
         let usageMetrics: UsageMetrics | null = null;
 
         const usageResult = parseUsageFromResponseText(responseText, provider.providerType);
-        usageRecord = usageResult.usageRecord;
         usageMetrics = usageResult.usageMetrics;
         const actualServiceTier = parseServiceTierFromResponseText(responseText);
         const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
@@ -1172,8 +1207,12 @@ export class ProxyResponseHandler {
         // 关键：必须在 normalizeUsageWithSwap 之后再快照 billable 视图，
         // 否则 updateRequestCostFromUsage / trackCostToRedis 会用未归一化的旧值，
         // 导致缓存 TTL swap、bucket 归一化等场景下的账单与限流统计错位。
-        const billableUsageMetrics =
-          usageMetrics && !isNonBillingUsageEndpoint(session) ? usageMetrics : null;
+        const billableUsageMetrics = await resolveBillableUsageMetricsForCost(
+          session,
+          provider,
+          usageMetrics,
+          statusCode
+        );
 
         if (billableUsageMetrics) {
           maybeSetCodexContext1m(session, provider, billableUsageMetrics.input_tokens);
@@ -1221,7 +1260,7 @@ export class ProxyResponseHandler {
           });
         }
 
-        if (usageRecord && billableUsageMetrics && messageContext) {
+        if (billableUsageMetrics && messageContext) {
           const costUpdateResult = await updateRequestCostFromUsage(
             messageContext.id,
             session,
@@ -1315,12 +1354,16 @@ export class ProxyResponseHandler {
         }
 
         // 更新 session 使用量到 Redis（用于实时监控）
-        if (session.sessionId && usageMetrics && session.shouldTrackSessionObservability()) {
+        if (
+          session.sessionId &&
+          (usageMetrics || costUsdStr !== undefined) &&
+          session.shouldTrackSessionObservability()
+        ) {
           void SessionManager.updateSessionUsage(session.sessionId, {
-            inputTokens: usageMetrics.input_tokens,
-            outputTokens: usageMetrics.output_tokens,
-            cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
-            cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
+            inputTokens: usageMetrics?.input_tokens,
+            outputTokens: usageMetrics?.output_tokens,
+            cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
+            cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             costUsd: costUsdStr,
             status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
             statusCode: statusCode,
@@ -2336,8 +2379,12 @@ export class ProxyResponseHandler {
           }
         }
 
-        const billableUsageForCost =
-          usageForCost && !isNonBillingUsageEndpoint(session) ? usageForCost : null;
+        const billableUsageForCost = await resolveBillableUsageMetricsForCost(
+          session,
+          provider,
+          usageForCost,
+          effectiveStatusCode
+        );
 
         const costUpdateResult = await updateRequestCostFromUsage(
           messageContext.id,
@@ -2443,6 +2490,8 @@ export class ProxyResponseHandler {
             payload.outputTokens = usageForCost.output_tokens;
             payload.cacheCreationInputTokens = usageForCost.cache_creation_input_tokens;
             payload.cacheReadInputTokens = usageForCost.cache_read_input_tokens;
+          }
+          if (costUsdStr !== undefined) {
             payload.costUsd = costUsdStr;
           }
 
@@ -3602,6 +3651,56 @@ export async function finalizeRequestStats(
   }
   const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
   if (!usageMetrics) {
+    const billablePerRequestUsage = await resolveBillableUsageMetricsForCost(
+      session,
+      provider,
+      null,
+      statusCode
+    );
+    let perRequestCostUsd: string | undefined;
+
+    if (billablePerRequestUsage) {
+      const costUpdateResult = await updateRequestCostFromUsage(
+        messageContext.id,
+        session,
+        billablePerRequestUsage,
+        provider,
+        provider.costMultiplier,
+        session.getContext1mApplied(),
+        priorityServiceTierApplied,
+        session.getGroupCostMultiplier()
+      );
+      if (costUpdateResult.resolvedPricing) {
+        ensurePricingResolutionSpecialSetting(session, costUpdateResult.resolvedPricing);
+      }
+      if (costUpdateResult.longContextPricingApplied) {
+        ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
+      }
+
+      await trackCostToRedis(
+        session,
+        billablePerRequestUsage,
+        priorityServiceTierApplied,
+        costUpdateResult.resolvedPricing,
+        costUpdateResult.longContextPricing
+      );
+      perRequestCostUsd = costUpdateResult.costUsd ?? undefined;
+    }
+
+    if (
+      session.sessionId &&
+      perRequestCostUsd !== undefined &&
+      session.shouldTrackSessionObservability()
+    ) {
+      void SessionManager.updateSessionUsage(session.sessionId, {
+        costUsd: perRequestCostUsd,
+        status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
+        statusCode,
+      }).catch((error: unknown) => {
+        logger.error("[ResponseHandler] Failed to update session usage:", error);
+      });
+    }
+
     await updateMessageRequestDetails(messageContext.id, {
       statusCode: statusCode,
       ...(errorMessage ? { errorMessage } : {}),
