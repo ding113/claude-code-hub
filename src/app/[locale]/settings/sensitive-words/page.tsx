@@ -11,8 +11,13 @@ import { WordListTable } from "./_components/word-list-table";
 
 export const dynamic = "force-dynamic";
 
-export default async function SensitiveWordsPage() {
-  const t = await getTranslations("settings");
+export default async function SensitiveWordsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "settings" });
 
   return (
     <>

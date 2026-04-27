@@ -11,20 +11,29 @@ import { UploadPriceDialog } from "./_components/upload-price-dialog";
 
 export const dynamic = "force-dynamic";
 
+type SettingsPricesSearchParams = {
+  required?: string;
+  page?: string;
+  pageSize?: string;
+  size?: string;
+  search?: string;
+  source?: string;
+  litellmProvider?: string;
+};
+
 interface SettingsPricesPageProps {
-  searchParams: Promise<{
-    required?: string;
-    page?: string;
-    pageSize?: string;
-    size?: string;
-    search?: string;
-    source?: string;
-    litellmProvider?: string;
+  params: Promise<{
+    locale: string;
   }>;
+  searchParams: Promise<SettingsPricesSearchParams>;
 }
 
-export default async function SettingsPricesPage({ searchParams }: SettingsPricesPageProps) {
-  const t = await getTranslations("settings");
+export default async function SettingsPricesPage({
+  params,
+  searchParams,
+}: SettingsPricesPageProps) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "settings" });
 
   return (
     <>
@@ -34,14 +43,20 @@ export default async function SettingsPricesPage({ searchParams }: SettingsPrice
         icon="dollar-sign"
       />
       <Suspense fallback={<PricesSkeleton />}>
-        <SettingsPricesContent searchParams={searchParams} />
+        <SettingsPricesContent locale={locale} searchParams={searchParams} />
       </Suspense>
     </>
   );
 }
 
-async function SettingsPricesContent({ searchParams }: SettingsPricesPageProps) {
-  const t = await getTranslations("settings");
+async function SettingsPricesContent({
+  locale,
+  searchParams,
+}: {
+  locale: string;
+  searchParams: Promise<SettingsPricesSearchParams>;
+}) {
+  const t = await getTranslations({ locale, namespace: "settings" });
   const params = await searchParams;
 
   // 解析分页参数

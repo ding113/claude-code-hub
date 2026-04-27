@@ -2,8 +2,15 @@ import { getTranslations } from "next-intl/server";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "@/i18n/routing";
 
-export default async function QuotasLayout({ children }: { children: React.ReactNode }) {
-  const t = await getTranslations("quota.layout");
+export default async function QuotasLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "quota.layout" });
 
   return (
     <div className="space-y-6">

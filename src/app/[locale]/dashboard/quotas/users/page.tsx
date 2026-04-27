@@ -129,7 +129,7 @@ export default async function UsersQuotaPage({ params }: { params: Promise<{ loc
     return redirect({ href: session ? "/dashboard/my-quota" : "/login", locale });
   }
 
-  const t = await getTranslations("quota.users");
+  const t = await getTranslations({ locale, namespace: "quota.users" });
 
   return (
     <div className="space-y-4">
@@ -162,15 +162,15 @@ export default async function UsersQuotaPage({ params }: { params: Promise<{ loc
       />
 
       <Suspense fallback={<UsersQuotaSkeleton />}>
-        <UsersQuotaContent />
+        <UsersQuotaContent locale={locale} />
       </Suspense>
     </div>
   );
 }
 
-async function UsersQuotaContent() {
+async function UsersQuotaContent({ locale }: { locale: string }) {
   const [users, systemSettings] = await Promise.all([getUsersWithQuotas(), getSystemSettings()]);
-  const t = await getTranslations("quota.users");
+  const t = await getTranslations({ locale, namespace: "quota.users" });
 
   return (
     <div className="space-y-3">

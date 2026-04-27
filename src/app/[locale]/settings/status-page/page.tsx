@@ -5,8 +5,13 @@ import { loadStatusPageSettings } from "./loader";
 
 export const dynamic = "force-dynamic";
 
-export default async function StatusPageSettingsPage() {
-  const t = await getTranslations("settings");
+export default async function StatusPageSettingsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "settings" });
   const settings = await loadStatusPageSettings();
 
   return (
