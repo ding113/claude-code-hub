@@ -1,6 +1,7 @@
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
@@ -124,49 +125,6 @@ function maybeSetCodexContext1m(
   ) {
     session.setContext1mApplied(true);
   }
-}
-
-/**
- * Fire Langfuse trace asynchronously. Non-blocking, error-tolerant.
- */
-function emitLangfuseTrace(
-  session: ProxySession,
-  data: {
-    responseHeaders: Headers;
-    responseText: string;
-    usageMetrics: UsageMetrics | null;
-    costUsd: string | undefined;
-    costBreakdown?: CostBreakdown;
-    statusCode: number;
-    durationMs: number;
-    isStreaming: boolean;
-    sseEventCount?: number;
-    errorMessage?: string;
-  }
-): void {
-  if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) return;
-
-  void import("@/lib/langfuse/trace-proxy-request")
-    .then(({ traceProxyRequest }) => {
-      void traceProxyRequest({
-        session,
-        responseHeaders: data.responseHeaders,
-        durationMs: data.durationMs,
-        statusCode: data.statusCode,
-        isStreaming: data.isStreaming,
-        responseText: data.responseText,
-        usageMetrics: data.usageMetrics,
-        costUsd: data.costUsd,
-        costBreakdown: data.costBreakdown,
-        sseEventCount: data.sseEventCount,
-        errorMessage: data.errorMessage,
-      });
-    })
-    .catch((err) => {
-      logger.warn("[ResponseHandler] Langfuse trace failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
 }
 
 /**
@@ -984,7 +942,7 @@ export class ProxyResponseHandler {
               false // Gemini 非流式透传
             );
 
-            emitLangfuseTrace(session, {
+            emitProxyLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText,
               usageMetrics: finalizedUsage,
@@ -1396,7 +1354,7 @@ export class ProxyResponseHandler {
           statusCode,
         });
 
-        emitLangfuseTrace(session, {
+        emitProxyLangfuseTrace(session, {
           responseHeaders: response.headers,
           responseText,
           usageMetrics,
@@ -1883,7 +1841,7 @@ export class ProxyResponseHandler {
               true // Gemini 流式透传(NDJSON 无 data:/event: 前缀,必须显式告知)
             );
 
-            emitLangfuseTrace(session, {
+            emitProxyLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText: allContent,
               usageMetrics: finalizedUsage,
@@ -2480,7 +2438,7 @@ export class ProxyResponseHandler {
           specialSettings: session.getSpecialSettings() ?? undefined,
         });
 
-        emitLangfuseTrace(session, {
+        emitProxyLangfuseTrace(session, {
           responseHeaders: response.headers,
           responseText: allContent,
           usageMetrics: usageForCost,
@@ -3988,7 +3946,7 @@ async function persistRequestFailure(options: {
   }
 
   // Emit Langfuse trace for error/abort paths
-  emitLangfuseTrace(session, {
+  emitProxyLangfuseTrace(session, {
     responseHeaders: new Headers(),
     responseText: "",
     usageMetrics: null,
@@ -3996,6 +3954,7 @@ async function persistRequestFailure(options: {
     statusCode,
     durationMs: duration,
     isStreaming: phase === "stream",
+    sseEventCount: phase === "stream" ? 0 : undefined,
     errorMessage,
   });
 }

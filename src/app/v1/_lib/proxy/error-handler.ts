@@ -5,6 +5,7 @@ import {
   isOpenAIErrorFormat,
   isValidErrorOverrideResponse,
 } from "@/lib/error-override-validator";
+import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
@@ -32,6 +33,25 @@ type ErrorOverrideForMessageResolver = { response?: unknown; statusCode?: number
 
 function stripUpstreamDetailSuffix(message: string): string {
   return message.replace(/\s+Upstream detail:\s*[\s\S]*$/u, "").trim() || message;
+}
+
+function getErrorResponseText(error: unknown): string {
+  if (!(error instanceof ProxyError)) {
+    return "";
+  }
+
+  // Langfuse trace 用于排查上游故障，按产品预期保留原始上游错误主体。
+  return error.upstreamError?.rawBody ?? error.upstreamError?.body ?? "";
+}
+
+function isRequestStreaming(session: ProxySession): boolean {
+  const requestUrl = session.requestUrl;
+
+  return (
+    session.request?.message?.stream === true ||
+    requestUrl?.pathname.includes("streamGenerateContent") ||
+    requestUrl?.searchParams.get("alt") === "sse"
+  );
 }
 
 function getGenericProxyErrorFallbackMessage(
@@ -184,6 +204,12 @@ export class ProxyErrorHandler {
       // 构建详细的 402 响应
       const response = ProxyErrorHandler.buildRateLimitResponse(error);
 
+      ProxyErrorHandler.emitErrorTrace(session, {
+        error,
+        errorMessage: logErrorMessage,
+        statusCode,
+      });
+
       // 记录错误到数据库（包含 rate_limit 元数据）
       await ProxyErrorHandler.logErrorToDatabase(
         session,
@@ -222,6 +248,12 @@ export class ProxyErrorHandler {
         statusCode = lastRequestStatusCode;
       }
     }
+
+    ProxyErrorHandler.emitErrorTrace(session, {
+      error,
+      errorMessage: logErrorMessage,
+      statusCode,
+    });
 
     // 记录错误到数据库（始终记录详细错误消息，包含供应商名称）
     await ProxyErrorHandler.logErrorToDatabase(session, logErrorMessage, statusCode, null);
@@ -588,6 +620,25 @@ export class ProxyErrorHandler {
     // 记录请求结束
     const tracker = ProxyStatusTracker.getInstance();
     tracker.endRequest(session.messageContext.user.id, session.messageContext.id);
+  }
+
+  private static emitErrorTrace(
+    session: ProxySession,
+    data: { error: unknown; errorMessage: string; statusCode: number }
+  ): void {
+    const isStreaming = isRequestStreaming(session);
+
+    emitProxyLangfuseTrace(session, {
+      responseHeaders: new Headers(),
+      responseText: getErrorResponseText(data.error),
+      usageMetrics: null,
+      costUsd: undefined,
+      statusCode: data.statusCode,
+      durationMs: Math.max(0, Date.now() - session.startTime),
+      isStreaming,
+      sseEventCount: isStreaming ? 0 : undefined,
+      errorMessage: data.errorMessage,
+    });
   }
 
   /**
