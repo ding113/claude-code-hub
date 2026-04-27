@@ -80,7 +80,9 @@ export function EditKeyQuotaDialog({
   const [limitMonthly, setLimitMonthly] = useState<string>(
     currentQuota?.costMonthly.limit?.toString() ?? ""
   );
-  const [limitTotal, setLimitTotal] = useState<string>(currentQuota?.costTotal.limit?.toString() ?? "");
+  const [limitTotal, setLimitTotal] = useState<string>(
+    currentQuota?.costTotal.limit?.toString() ?? ""
+  );
   const [limitConcurrent, setLimitConcurrent] = useState<string>(
     currentQuota?.concurrentSessions.limit?.toString() ?? "0"
   );

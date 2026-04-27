@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getSessionMock = vi.fn();
 const findProviderByIdMock = vi.fn();
 const sumProviderCostInTimeRangeMock = vi.fn();
+const sumProviderTotalCostMock = vi.fn();
 const getProviderSessionCountMock = vi.fn();
 const getProviderSessionCountBatchMock = vi.fn();
 const getTimeRangeForPeriodMock = vi.fn();
@@ -37,6 +38,7 @@ vi.mock("@/repository/provider", () => ({
 vi.mock("@/repository/statistics", () => ({
   sumProviderCostInTimeRange: (providerId: number, startTime: Date, endTime: Date) =>
     sumProviderCostInTimeRangeMock(providerId, startTime, endTime),
+  sumProviderTotalCost: (providerId: number) => sumProviderTotalCostMock(providerId),
 }));
 
 vi.mock("@/lib/session-tracker", () => ({
@@ -166,6 +168,7 @@ describe("getProviderLimitUsage", () => {
 
     // Default DB costs
     sumProviderCostInTimeRangeMock.mockResolvedValue(5.5);
+    sumProviderTotalCostMock.mockResolvedValue(0);
   });
 
   afterEach(() => {
@@ -403,6 +406,7 @@ describe("getProviderLimitUsageBatch", () => {
     get5hWindowResetAtMock.mockResolvedValue(null);
 
     sumProviderCostInTimeRangeMock.mockResolvedValue(5.5);
+    sumProviderTotalCostMock.mockResolvedValue(0);
   });
 
   afterEach(() => {

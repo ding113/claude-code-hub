@@ -219,7 +219,8 @@ export function ProviderQuotaListItem({
           )}
 
         {/* 总限额 */}
-        {provider.quota.limitTotalUsd.limit && provider.quota.limitTotalUsd.limit > 0 &&
+        {provider.quota.limitTotalUsd.limit &&
+          provider.quota.limitTotalUsd.limit > 0 &&
           renderQuotaItem(
             t("costTotal.label"),
             provider.quota.limitTotalUsd.current,
