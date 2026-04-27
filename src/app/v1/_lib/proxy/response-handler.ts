@@ -438,7 +438,18 @@ async function resolveBillableUsageMetricsForCost(
     return null;
   }
 
-  const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
+  let resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>>;
+  try {
+    resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
+  } catch (error) {
+    logger.error("[CostCalculation] Failed to resolve per-request pricing, skipping billing", {
+      error: error instanceof Error ? error.message : String(error),
+      originalModel: session.getOriginalModel(),
+      redirectedModel: session.getCurrentModel(),
+    });
+    return null;
+  }
+
   if (!resolvedPricing?.priceData || !hasBillableInputCostPerRequest(resolvedPricing.priceData)) {
     return null;
   }

@@ -1182,6 +1182,54 @@ describe("模型重定向后的图片按次计费", () => {
     expect(RateLimitService.trackCost).not.toHaveBeenCalled();
   });
 
+  it("价格查询失败时跳过按次计费且不影响成功响应", async () => {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async () => {
+      throw new Error("pricing db unavailable");
+    });
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: "sess-image-edit-pricing-error",
+      messageId: 4004,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+      },
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createImageEditResponseWithoutUsage()
+    );
+    const responseText = await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(clientResponse.status).toBe(200);
+    expect(JSON.parse(responseText)).toMatchObject({
+      data: [{ b64_json: "test-image-bytes" }],
+    });
+    expect(updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
+    expect(RateLimitService.trackCost).not.toHaveBeenCalled();
+  });
+
   it("finalizeRequestStats 的按次计费 session usage 保留 errorMessage", async () => {
     invalidateSystemSettingsCache();
 
