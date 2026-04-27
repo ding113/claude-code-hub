@@ -32,6 +32,7 @@ interface KeyQuota {
   costDaily: { current: number; limit: number | null; resetAt?: Date };
   costWeekly: { current: number; limit: number | null };
   costMonthly: { current: number; limit: number | null };
+  costTotal: { current: number; limit: number | null };
   concurrentSessions: { current: number; limit: number };
 }
 
@@ -79,6 +80,7 @@ export function EditKeyQuotaDialog({
   const [limitMonthly, setLimitMonthly] = useState<string>(
     currentQuota?.costMonthly.limit?.toString() ?? ""
   );
+  const [limitTotal, setLimitTotal] = useState<string>(currentQuota?.costTotal.limit?.toString() ?? "");
   const [limitConcurrent, setLimitConcurrent] = useState<string>(
     currentQuota?.concurrentSessions.limit?.toString() ?? "0"
   );
@@ -98,6 +100,7 @@ export function EditKeyQuotaDialog({
           dailyResetTime: resetTime,
           limitWeeklyUsd: limitWeekly ? parseFloat(limitWeekly) : null,
           limitMonthlyUsd: limitMonthly ? parseFloat(limitMonthly) : null,
+          limitTotalUsd: limitTotal ? parseFloat(limitTotal) : null,
           limitConcurrentSessions: limitConcurrent ? parseInt(limitConcurrent, 10) : 0,
         });
 
@@ -127,6 +130,7 @@ export function EditKeyQuotaDialog({
           dailyResetTime: resetTime,
           limitWeeklyUsd: null,
           limitMonthlyUsd: null,
+          limitTotalUsd: null,
           limitConcurrentSessions: 0,
         });
 
@@ -330,6 +334,32 @@ export function EditKeyQuotaDialog({
                       currency: currencySymbol,
                       current: Number(currentQuota.costMonthly.current).toFixed(4),
                       limit: Number(currentQuota.costMonthly.limit).toFixed(2),
+                    })}
+                  </p>
+                )}
+              </div>
+
+              {/* 总限额 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="limitTotal" className="text-xs">
+                  {t("limitTotalUsd.label")}
+                </Label>
+                <Input
+                  id="limitTotal"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder={t("limitTotalUsd.placeholder")}
+                  value={limitTotal}
+                  onChange={(e) => setLimitTotal(e.target.value)}
+                  className="h-9"
+                />
+                {currentQuota?.costTotal.limit && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("limitTotalUsd.current", {
+                      currency: currencySymbol,
+                      current: Number(currentQuota.costTotal.current).toFixed(4),
+                      limit: Number(currentQuota.costTotal.limit).toFixed(2),
                     })}
                   </p>
                 )}
