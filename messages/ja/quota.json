@@ -130,6 +130,9 @@
       "label": "月次コスト",
       "resetAt": "リセット時刻"
     },
+    "costTotal": {
+      "label": "総コスト"
+    },
     "concurrentSessions": {
       "label": "同時セッション"
     },

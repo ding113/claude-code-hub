@@ -153,6 +153,9 @@
       "label": "Monthly Cost",
       "resetAt": "Resets at"
     },
+    "costTotal": {
+      "label": "Total Cost"
+    },
     "concurrentSessions": {
       "label": "Concurrent Sessions"
     },

@@ -153,6 +153,9 @@
       "label": "Ежемесячные расходы",
       "resetAt": "Сброс в"
     },
+    "costTotal": {
+      "label": "Общие расходы"
+    },
     "concurrentSessions": {
       "label": "Параллельные сессии"
     },
