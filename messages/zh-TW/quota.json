@@ -128,6 +128,9 @@
       "label": "月消費",
       "resetAt": "重置於"
     },
+    "costTotal": {
+      "label": "總消費"
+    },
     "concurrentSessions": {
       "label": "並發 Session"
     },

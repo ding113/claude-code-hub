@@ -16,6 +16,7 @@ interface ProviderQuota {
   costWeekly: { current: number; limit: number | null; resetAt: Date };
   costMonthly: { current: number; limit: number | null; resetAt: Date };
   concurrentSessions: { current: number; limit: number };
+  limitTotalUsd: { current: number; limit: number | null };
 }
 
 interface ProviderWithQuota {
@@ -215,6 +216,14 @@ export function ProviderQuotaListItem({
             provider.quota.costMonthly.current,
             provider.quota.costMonthly.limit,
             provider.quota.costMonthly.resetAt
+          )}
+
+        {/* 总限额 */}
+        {provider.quota.limitTotalUsd.limit && provider.quota.limitTotalUsd.limit > 0 &&
+          renderQuotaItem(
+            t("costTotal.label"),
+            provider.quota.limitTotalUsd.current,
+            provider.quota.limitTotalUsd.limit
           )}
 
         {/* 并发Session */}
