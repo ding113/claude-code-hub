@@ -1,7 +1,16 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { AlertTriangle, Book, ExternalLink, Eye, EyeOff, Key, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Book,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Key,
+  Loader2,
+  ShieldCheck,
+} from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -94,19 +103,28 @@ function LoginPageContent() {
   const from = searchParams.get("from") || "";
 
   const apiKeyInputRef = useRef<HTMLInputElement>(null);
+  const otpInputRef = useRef<HTMLInputElement>(null);
   const [apiKey, setApiKey] = useState("");
   const [status, setStatus] = useState<LoginStatus>("idle");
   const [error, setError] = useState("");
+  const [requiresOtp, setRequiresOtp] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
   const [showHttpWarning, setShowHttpWarning] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [versionInfo, setVersionInfo] = useState<LoginVersionInfo | null>(null);
   const [siteTitle, setSiteTitle] = useState(DEFAULT_SITE_TITLE);
 
   useEffect(() => {
-    if (status === "error" && apiKeyInputRef.current) {
-      apiKeyInputRef.current.focus();
+    if (status !== "error") {
+      return;
     }
-  }, [status]);
+
+    if (requiresOtp) {
+      otpInputRef.current?.focus();
+    } else {
+      apiKeyInputRef.current?.focus();
+    }
+  }, [status, requiresOtp]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -176,7 +194,7 @@ function LoginPageContent() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: apiKey }),
+        body: JSON.stringify(requiresOtp ? { key: apiKey, otpCode } : { key: apiKey }),
       });
 
       const data = await response.json();
@@ -184,6 +202,13 @@ function LoginPageContent() {
       if (!response.ok) {
         setError(data.error || t("errors.loginFailed"));
         setStatus("error");
+        return;
+      }
+
+      if (data.requiresOtp === true) {
+        setRequiresOtp(true);
+        setOtpCode("");
+        setStatus("idle");
         return;
       }
 
@@ -200,6 +225,7 @@ function LoginPageContent() {
   };
 
   const isLoading = status === "submitting" || status === "success";
+  const canSubmit = requiresOtp ? /^\d{6}$/.test(otpCode.trim()) : Boolean(apiKey.trim());
 
   return (
     <div className="relative min-h-[var(--cch-viewport-height,100vh)] overflow-hidden bg-gradient-to-br from-background via-background to-orange-500/5 dark:to-orange-500/10">
@@ -342,7 +368,11 @@ function LoginPageContent() {
                             type={showPassword ? "text" : "password"}
                             placeholder={t("placeholders.apiKeyExample")}
                             value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
+                            onChange={(e) => {
+                              setApiKey(e.target.value);
+                              setRequiresOtp(false);
+                              setOtpCode("");
+                            }}
                             className="pl-9 pr-10"
                             required
                             disabled={isLoading}
@@ -365,6 +395,35 @@ function LoginPageContent() {
                         </div>
                       </div>
 
+                      {requiresOtp ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="otpCode">{t("form.otpCodeLabel")}</Label>
+                          <div className="relative">
+                            <ShieldCheck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              id="otpCode"
+                              ref={otpInputRef}
+                              inputMode="numeric"
+                              autoComplete="one-time-code"
+                              pattern="[0-9]*"
+                              maxLength={6}
+                              placeholder={t("placeholders.otpCodeExample")}
+                              value={otpCode}
+                              onChange={(e) =>
+                                setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                              }
+                              className="pl-9 font-mono tracking-[0.2em]"
+                              required
+                              disabled={isLoading}
+                              autoFocus
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {t("form.otpDescription")}
+                          </p>
+                        </div>
+                      ) : null}
+
                       {error ? (
                         <Alert variant="destructive">
                           <AlertDescription>{error}</AlertDescription>
@@ -382,7 +441,7 @@ function LoginPageContent() {
                       <Button
                         type="submit"
                         className="w-full max-w-full"
-                        disabled={isLoading || !apiKey.trim()}
+                        disabled={isLoading || !canSubmit}
                       >
                         {isLoading ? (
                           <>
@@ -390,7 +449,7 @@ function LoginPageContent() {
                             {t("login.loggingIn")}
                           </>
                         ) : (
-                          t("actions.enterConsole")
+                          t(requiresOtp ? "actions.verifyOtp" : "actions.enterConsole")
                         )}
                       </Button>
                       <p className="text-center text-xs text-muted-foreground">

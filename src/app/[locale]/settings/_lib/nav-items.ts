@@ -39,6 +39,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Status Page",
     iconName: "activity",
   },
+  {
+    href: "/settings/security",
+    labelKey: "nav.security",
+    label: "Security",
+    iconName: "shield-alert",
+  },
   { href: "/settings/prices", labelKey: "nav.prices", label: "Prices", iconName: "dollar-sign" },
   {
     href: "/settings/providers",

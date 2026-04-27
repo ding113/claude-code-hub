@@ -785,6 +785,8 @@
     "auditLogs": "Audit logs",
     "documentation": "Docs",
     "systemSettings": "Settings",
+    "settings": "Settings",
+    "securitySettings": "Security Settings",
     "feedback": "Feedback",
     "login": "Login",
     "logout": "Logout"

@@ -9,6 +9,8 @@ const mockToKeyFingerprint = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
 const mockCreateSession = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
+const mockGetSecuritySubjectId = vi.hoisted(() => vi.fn());
+const mockGetUserSecuritySettings = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
@@ -49,6 +51,11 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: mockGetEnvConfig,
+}));
+
+vi.mock("@/repository/user-security-settings", () => ({
+  getSecuritySubjectId: mockGetSecuritySubjectId,
+  getUserSecuritySettings: mockGetUserSecuritySettings,
 }));
 
 vi.mock("@/lib/security/auth-response-headers", () => ({
@@ -99,6 +106,13 @@ describe("POST /api/auth/login session token mode integration", () => {
       "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
     );
     mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
+    mockGetSecuritySubjectId.mockReturnValue("user:1");
+    mockGetUserSecuritySettings.mockResolvedValue({
+      subjectId: "user:1",
+      totpEnabled: false,
+      totpSecret: null,
+      totpBoundAt: null,
+    });
     mockCreateSession.mockResolvedValue({
       sessionId: "sid_opaque_session_123",
       keyFingerprint: "sha256:abcdef",

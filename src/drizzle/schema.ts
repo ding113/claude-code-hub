@@ -152,6 +152,20 @@ export const keys = pgTable('keys', {
   keysDeletedAtIdx: index('idx_keys_deleted_at').on(table.deletedAt),
 }));
 
+export const userSecuritySettings = pgTable('user_security_settings', {
+  id: serial('id').primaryKey(),
+  subjectId: varchar('subject_id', { length: 128 }).notNull(),
+  totpEnabled: boolean('totp_enabled').notNull().default(false),
+  totpSecret: text('totp_secret'),
+  totpBoundAt: timestamp('totp_bound_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userSecuritySettingsSubjectIdIdx: uniqueIndex('uniq_user_security_settings_subject_id').on(
+    table.subjectId
+  ),
+}));
+
 // Provider Vendors table - 以官网域名聚合的供应商实体（与 key/providerGroup 字段无关）
 export const providerVendors = pgTable('provider_vendors', {
   id: serial('id').primaryKey(),

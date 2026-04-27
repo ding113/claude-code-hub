@@ -5,6 +5,7 @@
   "providers": "供应商",
   "sensitiveWords": "敏感词",
   "requestFilters": "请求过滤",
+  "security": "安全设置",
   "clientVersions": "客户端升级提醒",
   "data": "数据管理",
   "logs": "日志",

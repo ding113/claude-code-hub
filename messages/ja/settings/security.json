@@ -1,0 +1,31 @@
+{
+  "title": "セキュリティ設定",
+  "description": "現在のアカウントのログイン保護を管理します。",
+  "loadFailed": "セキュリティ設定の読み込みに失敗しました",
+  "setupFailed": "認証アプリの設定を開始できませんでした",
+  "enableFailed": "二要素認証を有効にできませんでした",
+  "disableFailed": "二要素認証を無効にできませんでした",
+  "invalidCode": "認証コードが無効または期限切れです",
+  "enabled": "二要素認証を有効にしました",
+  "disabled": "二要素認証を無効にしました",
+  "disableConfirm": "このアカウントの二要素認証を無効にしますか？",
+  "totp": {
+    "title": "二要素認証",
+    "description": "API Key の確認後、認証アプリの6桁コードを追加で要求します。",
+    "toggle": "二要素認証を切り替え"
+  },
+  "status": {
+    "enabled": "有効",
+    "disabled": "無効",
+    "boundAt": "設定日時: {date}"
+  },
+  "setup": {
+    "title": "認証アプリを設定",
+    "description": "認証アプリでQRコードを読み取り、現在の6桁コードを入力してください。",
+    "manualSecret": "手動入力用シークレット",
+    "codeLabel": "認証コード",
+    "notice": "コードの検証に成功した後でのみシークレットが保存されます。",
+    "cancel": "キャンセル",
+    "confirm": "確認して有効化"
+  }
+}

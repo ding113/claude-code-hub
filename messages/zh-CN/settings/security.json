@@ -1,0 +1,31 @@
+{
+  "title": "安全设置",
+  "description": "管理当前账号的登录安全保护。",
+  "loadFailed": "安全设置加载失败",
+  "setupFailed": "无法开始验证器绑定",
+  "enableFailed": "二次验证启用失败",
+  "disableFailed": "二次验证关闭失败",
+  "invalidCode": "验证码无效或已过期",
+  "enabled": "二次验证已启用",
+  "disabled": "二次验证已关闭",
+  "disableConfirm": "确定要关闭当前账号的二次验证吗？",
+  "totp": {
+    "title": "二次验证",
+    "description": "API Key 校验通过后，额外要求输入验证器 App 的 6 位动态验证码。",
+    "toggle": "切换二次验证"
+  },
+  "status": {
+    "enabled": "已开启",
+    "disabled": "未开启",
+    "boundAt": "绑定时间：{date}"
+  },
+  "setup": {
+    "title": "绑定验证器",
+    "description": "使用验证器 App 扫描二维码，然后输入当前 6 位验证码。",
+    "manualSecret": "手动输入密钥",
+    "codeLabel": "验证码",
+    "notice": "只有验证码验证通过后，密钥才会保存并正式启用。",
+    "cancel": "取消",
+    "confirm": "验证并启用"
+  }
+}

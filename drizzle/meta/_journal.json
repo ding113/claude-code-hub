@@ -694,6 +694,13 @@
       "when": 1776965161943,
       "tag": "0098_equal_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1776965161944,
+      "tag": "0099_user_security_settings",
+      "breakpoints": true
     }
   ]
 }

@@ -15,7 +15,9 @@ import { logger } from "@/lib/logger";
 import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
+import { verifyTotp } from "@/lib/security/totp";
 import { createAuditLogAsync } from "@/repository/audit-log";
+import { getSecuritySubjectId, getUserSecuritySettings } from "@/repository/user-security-settings";
 
 // 需要数据库连接
 export const runtime = "nodejs";
@@ -177,7 +179,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { key } = await request.json();
+    const { key, otpCode } = await request.json();
 
     if (!key || typeof key !== "string") {
       loginPolicy.recordFailure(clientIp);
@@ -246,6 +248,48 @@ export async function POST(request: NextRequest) {
       }
 
       return withAuthResponseHeaders(NextResponse.json(responseBody, { status: 401 }));
+    }
+
+    const securitySettings = await getUserSecuritySettings(getSecuritySubjectId(session));
+    if (securitySettings.totpEnabled) {
+      const totpSecret = securitySettings.totpSecret;
+      if (!totpSecret) {
+        const serverError = t?.("serverError") ?? "Internal server error";
+        return withAuthResponseHeaders(
+          NextResponse.json(
+            { error: serverError, errorCode: "OTP_NOT_CONFIGURED" },
+            { status: 503 }
+          )
+        );
+      }
+
+      if (!otpCode || typeof otpCode !== "string") {
+        return withAuthResponseHeaders(
+          NextResponse.json({
+            ok: true,
+            requiresOtp: true,
+            otp: { method: "totp" },
+          })
+        );
+      }
+
+      const otpValid = verifyTotp({ secret: totpSecret, code: otpCode });
+      if (!otpValid) {
+        loginPolicy.recordFailure(clientIp);
+        createAuditLogAsync({
+          actionCategory: "auth",
+          actionType: "login.failure",
+          operatorIp: auditIp,
+          userAgent,
+          success: false,
+          errorMessage: "OTP_INVALID",
+        });
+
+        const error = t?.("otpInvalid") ?? t?.("loginFailed") ?? "Invalid verification code";
+        return withAuthResponseHeaders(
+          NextResponse.json({ error, errorCode: "OTP_INVALID" }, { status: 401 })
+        );
+      }
     }
 
     const mode = getSessionTokenMode();

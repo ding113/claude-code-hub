@@ -1,0 +1,31 @@
+{
+  "title": "Security Settings",
+  "description": "Manage login protection for your current account.",
+  "loadFailed": "Failed to load security settings",
+  "setupFailed": "Failed to start authenticator setup",
+  "enableFailed": "Failed to enable two-factor authentication",
+  "disableFailed": "Failed to disable two-factor authentication",
+  "invalidCode": "The verification code is invalid or expired",
+  "enabled": "Two-factor authentication enabled",
+  "disabled": "Two-factor authentication disabled",
+  "disableConfirm": "Disable two-factor authentication for this account?",
+  "totp": {
+    "title": "Two-factor authentication",
+    "description": "Require a 6-digit authenticator code after the API Key is validated.",
+    "toggle": "Toggle two-factor authentication"
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "boundAt": "Bound at {date}"
+  },
+  "setup": {
+    "title": "Bind authenticator",
+    "description": "Scan the QR code with an authenticator app, then enter the current 6-digit code.",
+    "manualSecret": "Manual secret",
+    "codeLabel": "Verification code",
+    "notice": "The secret is saved only after the verification code passes.",
+    "cancel": "Cancel",
+    "confirm": "Verify and enable"
+  }
+}

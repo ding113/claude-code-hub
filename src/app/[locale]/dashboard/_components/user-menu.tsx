@@ -1,9 +1,19 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import { LogOut, Settings, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useRouter } from "@/i18n/routing";
 
 interface UserMenuProps {
@@ -37,24 +47,41 @@ export function UserMenu({ user }: UserMenuProps) {
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-muted/50 border border-border/50">
-        <Avatar className="h-7 w-7">
-          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-xs">
-            {getInitials(user.name)}
-          </AvatarFallback>
-        </Avatar>
-        <span className="text-sm font-medium text-foreground/90">{user.name}</span>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={handleLogout}
-        className="h-9 w-9 rounded-full hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
-        title={t("logout")}
-      >
-        <LogOut className="h-4 w-4" />
-      </Button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-muted/50 border border-border/50 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Avatar className="h-7 w-7">
+            <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-xs">
+              {getInitials(user.name)}
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-sm font-medium text-foreground/90">{user.name}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="truncate">{user.name}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Settings className="h-4 w-4" />
+            <span>{t("settings")}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-44">
+            <DropdownMenuItem onSelect={() => router.push("/settings/security")}>
+              <ShieldCheck className="h-4 w-4" />
+              <span>{t("securitySettings")}</span>
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
+          <LogOut className="h-4 w-4" />
+          <span>{t("logout")}</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

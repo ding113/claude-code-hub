@@ -786,6 +786,8 @@
     "auditLogs": "Журнал аудита",
     "documentation": "Доки",
     "systemSettings": "Настройки",
+    "settings": "Настройки",
+    "securitySettings": "Security Settings",
     "feedback": "Обратная связь",
     "login": "Вход",
     "logout": "Выход"

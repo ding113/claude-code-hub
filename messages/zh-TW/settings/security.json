@@ -1,0 +1,31 @@
+{
+  "title": "安全設定",
+  "description": "管理目前帳號的登入安全保護。",
+  "loadFailed": "安全設定載入失敗",
+  "setupFailed": "無法開始驗證器綁定",
+  "enableFailed": "二次驗證啟用失敗",
+  "disableFailed": "二次驗證關閉失敗",
+  "invalidCode": "驗證碼無效或已過期",
+  "enabled": "二次驗證已啟用",
+  "disabled": "二次驗證已關閉",
+  "disableConfirm": "確定要關閉目前帳號的二次驗證嗎？",
+  "totp": {
+    "title": "二次驗證",
+    "description": "API Key 驗證通過後，額外要求輸入驗證器 App 的 6 位動態驗證碼。",
+    "toggle": "切換二次驗證"
+  },
+  "status": {
+    "enabled": "已開啟",
+    "disabled": "未開啟",
+    "boundAt": "綁定時間：{date}"
+  },
+  "setup": {
+    "title": "綁定驗證器",
+    "description": "使用驗證器 App 掃描 QR code，然後輸入目前 6 位驗證碼。",
+    "manualSecret": "手動輸入密鑰",
+    "codeLabel": "驗證碼",
+    "notice": "只有驗證碼通過後，密鑰才會保存並正式啟用。",
+    "cancel": "取消",
+    "confirm": "驗證並啟用"
+  }
+}

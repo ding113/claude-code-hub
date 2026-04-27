@@ -785,6 +785,8 @@
     "auditLogs": "审计日志",
     "documentation": "文档",
     "systemSettings": "系统设置",
+    "settings": "设置",
+    "securitySettings": "安全设置",
     "feedback": "反馈问题",
     "login": "登录",
     "logout": "退出登录"
