@@ -21,6 +21,7 @@ export interface KeyQuotaItem {
   limit: number | null;
   mode?: "fixed" | "rolling";
   time?: string;
+  resetAt?: Date;
 }
 
 export interface KeyQuotaUsageResult {
@@ -164,6 +165,7 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
         type: "limitTotal",
         current: totalCost,
         limit: parseNumericLimit(keyRow.limitTotalUsd),
+        resetAt: costResetAt ?? undefined,
       },
       {
         type: "limitSessions",

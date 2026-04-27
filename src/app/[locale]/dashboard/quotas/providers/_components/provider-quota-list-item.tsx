@@ -16,7 +16,7 @@ interface ProviderQuota {
   costWeekly: { current: number; limit: number | null; resetAt: Date };
   costMonthly: { current: number; limit: number | null; resetAt: Date };
   concurrentSessions: { current: number; limit: number };
-  limitTotalUsd: { current: number; limit: number | null };
+  limitTotalUsd: { current: number; limit: number | null; resetAt?: Date };
 }
 
 interface ProviderWithQuota {

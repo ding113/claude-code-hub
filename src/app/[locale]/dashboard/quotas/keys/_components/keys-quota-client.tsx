@@ -35,7 +35,7 @@ interface KeyQuota {
   costDaily: { current: number; limit: number | null; resetAt?: Date };
   costWeekly: { current: number; limit: number | null; resetAt?: Date };
   costMonthly: { current: number; limit: number | null; resetAt?: Date };
-  costTotal: { current: number; limit: number | null };
+  costTotal: { current: number; limit: number | null; resetAt?: Date };
   concurrentSessions: { current: number; limit: number };
 }
 
