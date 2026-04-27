@@ -1,5 +1,5 @@
 import { CONTEXT_1M_TOKEN_THRESHOLD } from "@/lib/special-attributes";
-import type { ModelPriceData } from "@/types/model-price";
+import type { ModelPriceData, ServiceTierPricing } from "@/types/model-price";
 import { COST_SCALE, Decimal, toDecimal } from "./currency";
 
 const OPENAI_LONG_CONTEXT_TOKEN_THRESHOLD = 272000;
@@ -39,6 +39,8 @@ type RequestCostBreakdownOptions = Omit<
   RequestCostCalculationOptions,
   "multiplier" | "groupMultiplier"
 >;
+
+type ServiceTierName = "priority";
 
 export interface LongContextPricingMatch {
   thresholdTokens: number;
@@ -111,6 +113,47 @@ function multiplyCost(quantity: number | undefined, unitCost: number | undefined
   return qtyDecimal.mul(costDecimal);
 }
 
+function getServiceTierPricing(
+  priceData: ModelPriceData,
+  serviceTier?: ServiceTierName | null
+): ServiceTierPricing | null {
+  if (!serviceTier) {
+    return null;
+  }
+
+  const pricing = priceData.service_tier_pricing;
+  if (!pricing || typeof pricing !== "object" || Array.isArray(pricing)) {
+    return null;
+  }
+
+  const tierPricing = pricing[serviceTier];
+  if (!tierPricing || typeof tierPricing !== "object" || Array.isArray(tierPricing)) {
+    return null;
+  }
+
+  return tierPricing;
+}
+
+function getPriorityServiceTierPricing(
+  priceData: ModelPriceData,
+  priorityServiceTierApplied: boolean
+): ServiceTierPricing | null {
+  return priorityServiceTierApplied ? getServiceTierPricing(priceData, "priority") : null;
+}
+
+function resolvePriorityAwareRate(
+  priorityServiceTierApplied: boolean,
+  serviceTierRate: number | undefined,
+  legacyPriorityRate: number | undefined,
+  baseRate: number | undefined
+): number | undefined {
+  if (!priorityServiceTierApplied) {
+    return baseRate;
+  }
+
+  return serviceTierRate ?? legacyPriorityRate ?? baseRate;
+}
+
 function resolveLongContextThreshold(priceData: ModelPriceData): number {
   const has272kFields =
     typeof priceData.input_cost_per_token_above_272k_tokens === "number" ||
@@ -131,9 +174,11 @@ function resolveLongContextThreshold(priceData: ModelPriceData): number {
 }
 
 export function resolveLongContextPricing(
-  priceData: ModelPriceData
+  priceData: ModelPriceData,
+  serviceTier?: ServiceTierName | null
 ): ResolvedLongContextPricing | null {
-  const pricing = priceData.long_context_pricing;
+  const serviceTierPricing = getServiceTierPricing(priceData, serviceTier);
+  const pricing = serviceTierPricing?.long_context_pricing ?? priceData.long_context_pricing;
   if (!pricing) {
     return null;
   }
@@ -143,17 +188,35 @@ export function resolveLongContextPricing(
     return null;
   }
 
-  const baseInputCost = priceData.input_cost_per_token;
-  const baseOutputCost = priceData.output_cost_per_token;
+  const priorityServiceTierApplied = serviceTier === "priority";
+  const baseInputCost = resolvePriorityAwareRate(
+    priorityServiceTierApplied,
+    serviceTierPricing?.input_cost_per_token,
+    priceData.input_cost_per_token_priority,
+    priceData.input_cost_per_token
+  );
+  const baseOutputCost = resolvePriorityAwareRate(
+    priorityServiceTierApplied,
+    serviceTierPricing?.output_cost_per_token,
+    priceData.output_cost_per_token_priority,
+    priceData.output_cost_per_token
+  );
   const baseCacheCreation5mCost =
+    serviceTierPricing?.cache_creation_input_token_cost ??
     priceData.cache_creation_input_token_cost ??
     (baseInputCost != null ? baseInputCost * 1.25 : undefined);
   const baseCacheCreation1hCost =
+    serviceTierPricing?.cache_creation_input_token_cost_above_1hr ??
     priceData.cache_creation_input_token_cost_above_1hr ??
     (baseInputCost != null ? baseInputCost * 2 : undefined) ??
     baseCacheCreation5mCost;
   const baseCacheReadCost =
-    priceData.cache_read_input_token_cost ??
+    resolvePriorityAwareRate(
+      priorityServiceTierApplied,
+      serviceTierPricing?.cache_read_input_token_cost,
+      priceData.cache_read_input_token_cost_priority,
+      priceData.cache_read_input_token_cost
+    ) ??
     (baseInputCost != null
       ? baseInputCost * 0.1
       : baseOutputCost != null
@@ -301,11 +364,18 @@ function resolvePriorityAwareLongContextRate(
     above272kPriority?: number;
     above200k?: number;
     above200kPriority?: number;
+    serviceTierAbove272k?: number;
+    serviceTierAbove200k?: number;
   }
 ): number | undefined {
   if (priorityServiceTierApplied) {
     return (
-      fields.above272kPriority ?? fields.above200kPriority ?? fields.above272k ?? fields.above200k
+      fields.serviceTierAbove272k ??
+      fields.serviceTierAbove200k ??
+      fields.above272kPriority ??
+      fields.above200kPriority ??
+      fields.above272k ??
+      fields.above200k
     );
   }
 
@@ -332,9 +402,10 @@ export function getLongContextTriggerInputTokens(
 
 export function matchLongContextPricing(
   usage: UsageMetrics,
-  priceData: ModelPriceData
+  priceData: ModelPriceData,
+  serviceTier?: ServiceTierName | null
 ): LongContextPricingMatch | null {
-  const pricing = resolveLongContextPricing(priceData);
+  const pricing = resolveLongContextPricing(priceData, serviceTier);
   if (!pricing) {
     return null;
   }
@@ -387,17 +458,24 @@ export function calculateRequestCostBreakdown(
 
   const baseInputCostPerToken = priceData.input_cost_per_token;
   const baseOutputCostPerToken = priceData.output_cost_per_token;
-  const inputCostPerToken =
-    options.priorityServiceTierApplied &&
-    typeof priceData.input_cost_per_token_priority === "number"
-      ? priceData.input_cost_per_token_priority
-      : baseInputCostPerToken;
-  const outputCostPerToken =
-    options.priorityServiceTierApplied &&
-    typeof priceData.output_cost_per_token_priority === "number"
-      ? priceData.output_cost_per_token_priority
-      : baseOutputCostPerToken;
-  const inputCostPerRequest = priceData.input_cost_per_request;
+  const priorityTierPricing = getPriorityServiceTierPricing(
+    priceData,
+    options.priorityServiceTierApplied
+  );
+  const inputCostPerToken = resolvePriorityAwareRate(
+    options.priorityServiceTierApplied,
+    priorityTierPricing?.input_cost_per_token,
+    priceData.input_cost_per_token_priority,
+    baseInputCostPerToken
+  );
+  const outputCostPerToken = resolvePriorityAwareRate(
+    options.priorityServiceTierApplied,
+    priorityTierPricing?.output_cost_per_token,
+    priceData.output_cost_per_token_priority,
+    baseOutputCostPerToken
+  );
+  const inputCostPerRequest =
+    priorityTierPricing?.input_cost_per_request ?? priceData.input_cost_per_request;
   const longContextPricing = options.longContextPricing;
 
   // Per-request cost -> input bucket
@@ -413,23 +491,27 @@ export function calculateRequestCostBreakdown(
   }
 
   const cacheCreation5mCost =
+    priorityTierPricing?.cache_creation_input_token_cost ??
     priceData.cache_creation_input_token_cost ??
-    (baseInputCostPerToken != null ? baseInputCostPerToken * 1.25 : undefined);
+    (inputCostPerToken != null ? inputCostPerToken * 1.25 : undefined);
 
   const cacheCreation1hCost =
+    priorityTierPricing?.cache_creation_input_token_cost_above_1hr ??
     priceData.cache_creation_input_token_cost_above_1hr ??
-    (baseInputCostPerToken != null ? baseInputCostPerToken * 2 : undefined) ??
+    (inputCostPerToken != null ? inputCostPerToken * 2 : undefined) ??
     cacheCreation5mCost;
 
   const cacheReadCost =
-    (options.priorityServiceTierApplied &&
-    typeof priceData.cache_read_input_token_cost_priority === "number"
-      ? priceData.cache_read_input_token_cost_priority
-      : priceData.cache_read_input_token_cost) ??
-    (baseInputCostPerToken != null
-      ? baseInputCostPerToken * 0.1
-      : baseOutputCostPerToken != null
-        ? baseOutputCostPerToken * 0.1
+    resolvePriorityAwareRate(
+      options.priorityServiceTierApplied,
+      priorityTierPricing?.cache_read_input_token_cost,
+      priceData.cache_read_input_token_cost_priority,
+      priceData.cache_read_input_token_cost
+    ) ??
+    (inputCostPerToken != null
+      ? inputCostPerToken * 0.1
+      : outputCostPerToken != null
+        ? outputCostPerToken * 0.1
         : undefined);
 
   // Derive cache creation tokens by TTL
@@ -457,6 +539,8 @@ export function calculateRequestCostBreakdown(
       above272kPriority: priceData.input_cost_per_token_above_272k_tokens_priority,
       above200k: priceData.input_cost_per_token_above_200k_tokens,
       above200kPriority: priceData.input_cost_per_token_above_200k_tokens_priority,
+      serviceTierAbove272k: priorityTierPricing?.input_cost_per_token_above_272k_tokens,
+      serviceTierAbove200k: priorityTierPricing?.input_cost_per_token_above_200k_tokens,
     }
   );
   const outputAboveThreshold = resolvePriorityAwareLongContextRate(
@@ -466,12 +550,18 @@ export function calculateRequestCostBreakdown(
       above272kPriority: priceData.output_cost_per_token_above_272k_tokens_priority,
       above200k: priceData.output_cost_per_token_above_200k_tokens,
       above200kPriority: priceData.output_cost_per_token_above_200k_tokens_priority,
+      serviceTierAbove272k: priorityTierPricing?.output_cost_per_token_above_272k_tokens,
+      serviceTierAbove200k: priorityTierPricing?.output_cost_per_token_above_200k_tokens,
     }
   );
   const cacheCreationAboveThreshold =
+    priorityTierPricing?.cache_creation_input_token_cost_above_272k_tokens ??
+    priorityTierPricing?.cache_creation_input_token_cost_above_200k_tokens ??
     priceData.cache_creation_input_token_cost_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_200k_tokens;
   const cacheCreation1hAboveThreshold =
+    priorityTierPricing?.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
+    priorityTierPricing?.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
     priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
     cacheCreationAboveThreshold;
@@ -482,6 +572,8 @@ export function calculateRequestCostBreakdown(
       above272kPriority: priceData.cache_read_input_token_cost_above_272k_tokens_priority,
       above200k: priceData.cache_read_input_token_cost_above_200k_tokens,
       above200kPriority: priceData.cache_read_input_token_cost_above_200k_tokens_priority,
+      serviceTierAbove272k: priorityTierPricing?.cache_read_input_token_cost_above_272k_tokens,
+      serviceTierAbove200k: priorityTierPricing?.cache_read_input_token_cost_above_200k_tokens,
     }
   );
   const longContextThreshold = resolveLongContextThreshold(priceData);
@@ -656,17 +748,24 @@ export function calculateRequestCost(
 
   const baseInputCostPerToken = priceData.input_cost_per_token;
   const baseOutputCostPerToken = priceData.output_cost_per_token;
-  const inputCostPerToken =
-    options.priorityServiceTierApplied &&
-    typeof priceData.input_cost_per_token_priority === "number"
-      ? priceData.input_cost_per_token_priority
-      : baseInputCostPerToken;
-  const outputCostPerToken =
-    options.priorityServiceTierApplied &&
-    typeof priceData.output_cost_per_token_priority === "number"
-      ? priceData.output_cost_per_token_priority
-      : baseOutputCostPerToken;
-  const inputCostPerRequest = priceData.input_cost_per_request;
+  const priorityTierPricing = getPriorityServiceTierPricing(
+    priceData,
+    options.priorityServiceTierApplied
+  );
+  const inputCostPerToken = resolvePriorityAwareRate(
+    options.priorityServiceTierApplied,
+    priorityTierPricing?.input_cost_per_token,
+    priceData.input_cost_per_token_priority,
+    baseInputCostPerToken
+  );
+  const outputCostPerToken = resolvePriorityAwareRate(
+    options.priorityServiceTierApplied,
+    priorityTierPricing?.output_cost_per_token,
+    priceData.output_cost_per_token_priority,
+    baseOutputCostPerToken
+  );
+  const inputCostPerRequest =
+    priorityTierPricing?.input_cost_per_request ?? priceData.input_cost_per_request;
   const longContextPricing = options.longContextPricing;
 
   if (
@@ -681,23 +780,27 @@ export function calculateRequestCost(
   }
 
   const cacheCreation5mCost =
+    priorityTierPricing?.cache_creation_input_token_cost ??
     priceData.cache_creation_input_token_cost ??
-    (baseInputCostPerToken != null ? baseInputCostPerToken * 1.25 : undefined);
+    (inputCostPerToken != null ? inputCostPerToken * 1.25 : undefined);
 
   const cacheCreation1hCost =
+    priorityTierPricing?.cache_creation_input_token_cost_above_1hr ??
     priceData.cache_creation_input_token_cost_above_1hr ??
-    (baseInputCostPerToken != null ? baseInputCostPerToken * 2 : undefined) ??
+    (inputCostPerToken != null ? inputCostPerToken * 2 : undefined) ??
     cacheCreation5mCost;
 
   const cacheReadCost =
-    (options.priorityServiceTierApplied &&
-    typeof priceData.cache_read_input_token_cost_priority === "number"
-      ? priceData.cache_read_input_token_cost_priority
-      : priceData.cache_read_input_token_cost) ??
-    (baseInputCostPerToken != null
-      ? baseInputCostPerToken * 0.1
-      : baseOutputCostPerToken != null
-        ? baseOutputCostPerToken * 0.1
+    resolvePriorityAwareRate(
+      options.priorityServiceTierApplied,
+      priorityTierPricing?.cache_read_input_token_cost,
+      priceData.cache_read_input_token_cost_priority,
+      priceData.cache_read_input_token_cost
+    ) ??
+    (inputCostPerToken != null
+      ? inputCostPerToken * 0.1
+      : outputCostPerToken != null
+        ? outputCostPerToken * 0.1
         : undefined);
 
   // Derive cache creation tokens by TTL
@@ -725,6 +828,8 @@ export function calculateRequestCost(
       above272kPriority: priceData.input_cost_per_token_above_272k_tokens_priority,
       above200k: priceData.input_cost_per_token_above_200k_tokens,
       above200kPriority: priceData.input_cost_per_token_above_200k_tokens_priority,
+      serviceTierAbove272k: priorityTierPricing?.input_cost_per_token_above_272k_tokens,
+      serviceTierAbove200k: priorityTierPricing?.input_cost_per_token_above_200k_tokens,
     }
   );
   const outputAboveThreshold = resolvePriorityAwareLongContextRate(
@@ -734,12 +839,18 @@ export function calculateRequestCost(
       above272kPriority: priceData.output_cost_per_token_above_272k_tokens_priority,
       above200k: priceData.output_cost_per_token_above_200k_tokens,
       above200kPriority: priceData.output_cost_per_token_above_200k_tokens_priority,
+      serviceTierAbove272k: priorityTierPricing?.output_cost_per_token_above_272k_tokens,
+      serviceTierAbove200k: priorityTierPricing?.output_cost_per_token_above_200k_tokens,
     }
   );
   const cacheCreationAboveThreshold =
+    priorityTierPricing?.cache_creation_input_token_cost_above_272k_tokens ??
+    priorityTierPricing?.cache_creation_input_token_cost_above_200k_tokens ??
     priceData.cache_creation_input_token_cost_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_200k_tokens;
   const cacheCreation1hAboveThreshold =
+    priorityTierPricing?.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
+    priorityTierPricing?.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
     priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
     cacheCreationAboveThreshold;
@@ -750,6 +861,8 @@ export function calculateRequestCost(
       above272kPriority: priceData.cache_read_input_token_cost_above_272k_tokens_priority,
       above200k: priceData.cache_read_input_token_cost_above_200k_tokens,
       above200kPriority: priceData.cache_read_input_token_cost_above_200k_tokens_priority,
+      serviceTierAbove272k: priorityTierPricing?.cache_read_input_token_cost_above_272k_tokens,
+      serviceTierAbove200k: priorityTierPricing?.cache_read_input_token_cost_above_200k_tokens,
     }
   );
   const longContextThreshold = resolveLongContextThreshold(priceData);

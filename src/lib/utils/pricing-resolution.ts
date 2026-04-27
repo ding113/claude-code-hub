@@ -68,7 +68,7 @@ const PROVIDER_DETAIL_FIELDS = [
   "input_cost_per_image_token",
 ] as const;
 
-const DETAIL_SCORE_OBJECT_FIELDS = ["long_context_pricing"] as const;
+const DETAIL_SCORE_OBJECT_FIELDS = ["long_context_pricing", "service_tier_pricing"] as const;
 
 const DETAIL_TIE_BREAK_ORDER = [
   "openrouter",

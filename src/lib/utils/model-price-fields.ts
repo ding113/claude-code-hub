@@ -59,6 +59,11 @@ const SUPPORTED_LONG_CONTEXT_KEYS = new Set([
   "cache_read_input_token_cost",
 ]);
 
+const SUPPORTED_SERVICE_TIER_KEYS = new Set([
+  ...SUPPORTED_TOP_LEVEL_BILLING_KEYS,
+  "long_context_pricing",
+]);
+
 const CORE_TOP_LEVEL_FIELDS = new Set([
   "mode",
   "display_name",
@@ -124,7 +129,8 @@ export function isPriceLikeFieldPath(path: string): boolean {
 function classifyField(path: string, key: string): ModelPriceFieldKind {
   if (
     SUPPORTED_TOP_LEVEL_BILLING_KEYS.has(key) ||
-    (path.startsWith("long_context_pricing.") && SUPPORTED_LONG_CONTEXT_KEYS.has(key))
+    (path.startsWith("long_context_pricing.") && SUPPORTED_LONG_CONTEXT_KEYS.has(key)) ||
+    (path.startsWith("service_tier_pricing.") && SUPPORTED_SERVICE_TIER_KEYS.has(key))
   ) {
     return "supported";
   }
@@ -150,7 +156,11 @@ function isCoreField(
     return true;
   }
 
-  return CORE_TOP_LEVEL_FIELDS.has(key) || path.startsWith("long_context_pricing.");
+  return (
+    CORE_TOP_LEVEL_FIELDS.has(key) ||
+    path.startsWith("long_context_pricing.") ||
+    path.startsWith("service_tier_pricing.")
+  );
 }
 
 function pushEntries(

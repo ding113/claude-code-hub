@@ -630,6 +630,74 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(rateLimitCosts[0]).toBe(64);
   });
 
+  it("codex fast: uses model-specific service_tier_pricing priority rates", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.5") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 0.000005,
+              output_cost_per_token: 0.00003,
+              cache_read_input_token_cost: 0.0000005,
+              input_cost_per_token_priority: 0.00001,
+              output_cost_per_token_priority: 0.00006,
+              cache_read_input_token_cost_priority: 0.000001,
+              service_tier_pricing: {
+                priority: {
+                  input_cost_per_token: 0.0000125,
+                  output_cost_per_token: 0.000075,
+                  cache_read_input_token_cost: 0.00000125,
+                },
+              },
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+    const rateLimitCosts = captureRateLimitCosts();
+
+    const session = createSession({
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-service-tier-pricing",
+      messageId: 3202,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+      requestMessage: { service_tier: "priority" },
+    });
+
+    const response = createNonStreamResponse({
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+    });
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("87.5");
+    expect(rateLimitCosts[0]).toBe(87.5);
+  });
+
   it("codex fast: uses long-context priority pricing when request is priority and response omits service_tier", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
     vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);

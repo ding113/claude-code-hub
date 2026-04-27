@@ -1257,8 +1257,11 @@ export class ProxyResponseHandler {
               if (resolvedPricing) {
                 ensurePricingResolutionSpecialSetting(session, resolvedPricing);
                 const longContextPricing =
-                  matchLongContextPricing(billableUsageMetrics, resolvedPricing.priceData)
-                    ?.pricing ?? null;
+                  matchLongContextPricing(
+                    billableUsageMetrics,
+                    resolvedPricing.priceData,
+                    priorityServiceTierApplied ? "priority" : null
+                  )?.pricing ?? null;
                 const cost = calculateRequestCost(
                   billableUsageMetrics,
                   resolvedPricing.priceData,
@@ -2373,8 +2376,11 @@ export class ProxyResponseHandler {
               if (resolvedPricing) {
                 ensurePricingResolutionSpecialSetting(session, resolvedPricing);
                 const longContextPricing =
-                  matchLongContextPricing(billableUsageForCost, resolvedPricing.priceData)
-                    ?.pricing ?? null;
+                  matchLongContextPricing(
+                    billableUsageForCost,
+                    resolvedPricing.priceData,
+                    priorityServiceTierApplied ? "priority" : null
+                  )?.pricing ?? null;
                 const cost = calculateRequestCost(
                   billableUsageForCost,
                   resolvedPricing.priceData,
@@ -3466,7 +3472,11 @@ async function updateRequestCostFromUsage(
     }
 
     const longContextPricing =
-      matchLongContextPricing(usage, resolvedPricing.priceData)?.pricing ?? null;
+      matchLongContextPricing(
+        usage,
+        resolvedPricing.priceData,
+        priorityServiceTierApplied ? "priority" : null
+      )?.pricing ?? null;
     const cost = calculateRequestCost(
       usage,
       resolvedPricing.priceData,
@@ -3669,8 +3679,11 @@ export async function finalizeRequestStats(
         if (resolvedPricing) {
           ensurePricingResolutionSpecialSetting(session, resolvedPricing);
           const longContextPricing =
-            matchLongContextPricing(billableNormalizedUsage, resolvedPricing.priceData)?.pricing ??
-            null;
+            matchLongContextPricing(
+              billableNormalizedUsage,
+              resolvedPricing.priceData,
+              priorityServiceTierApplied ? "priority" : null
+            )?.pricing ?? null;
           const cost = calculateRequestCost(
             billableNormalizedUsage,
             resolvedPricing.priceData,
@@ -3778,7 +3791,11 @@ async function trackCostToRedis(
     ensurePricingResolutionSpecialSetting(session, resolvedPricing);
     const longContextPricing =
       longContextPricingOverride === undefined
-        ? (matchLongContextPricing(usage, resolvedPricing.priceData)?.pricing ?? null)
+        ? (matchLongContextPricing(
+            usage,
+            resolvedPricing.priceData,
+            priorityServiceTierApplied ? "priority" : null
+          )?.pricing ?? null)
         : longContextPricingOverride;
 
     const cost = calculateRequestCost(
