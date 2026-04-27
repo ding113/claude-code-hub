@@ -35,6 +35,7 @@ interface KeyQuota {
   costDaily: { current: number; limit: number | null; resetAt?: Date };
   costWeekly: { current: number; limit: number | null; resetAt?: Date };
   costMonthly: { current: number; limit: number | null; resetAt?: Date };
+  costTotal: { current: number; limit: number | null };
   concurrentSessions: { current: number; limit: number };
 }
 
@@ -166,6 +167,7 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                       <TableHead className="w-[150px]">{t("table.costDaily")}</TableHead>
                       <TableHead className="w-[150px]">{t("table.costWeekly")}</TableHead>
                       <TableHead className="w-[150px]">{t("table.costMonthly")}</TableHead>
+                      <TableHead className="w-[150px]">{t("table.costTotal")}</TableHead>
                       <TableHead className="w-[120px]">{t("table.concurrentSessions")}</TableHead>
                       <TableHead className="w-[100px]">{t("table.status")}</TableHead>
                       <TableHead className="w-[100px] text-right">{t("table.actions")}</TableHead>
@@ -379,6 +381,54 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                   {getUsageRate(
                                     key.quota.costMonthly.current,
                                     key.quota.costMonthly.limit
+                                  ).toFixed(1)}
+                                  %
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+
+                          {/* 总限额 */}
+                          <TableCell>
+                            {hasKeyQuota && key.quota && key.quota.costTotal.limit !== null ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs text-muted-foreground">
+                                    {t("table.costTotal")}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono">
+                                    {formatCurrency(key.quota.costTotal.current, currencyCode)}/
+                                    <QuotaQuickEditPopover
+                                      currentLimit={key.quota.costTotal.limit}
+                                      label={t("table.costTotal")}
+                                      unit="currency"
+                                      currencyCode={currencyCode}
+                                      onSave={(v) =>
+                                        handleSaveLimit(key.id, key.name, "limitTotalUsd", v)
+                                      }
+                                    >
+                                      <button
+                                        type="button"
+                                        className="underline-offset-4 hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      >
+                                        {formatCurrency(key.quota.costTotal.limit, currencyCode)}
+                                      </button>
+                                    </QuotaQuickEditPopover>
+                                  </span>
+                                </div>
+                                <QuotaProgress
+                                  current={key.quota.costTotal.current}
+                                  limit={key.quota.costTotal.limit}
+                                  className="h-1"
+                                />
+                                <div className="text-xs text-muted-foreground text-right">
+                                  {getUsageRate(
+                                    key.quota.costTotal.current,
+                                    key.quota.costTotal.limit
                                   ).toFixed(1)}
                                   %
                                 </div>
