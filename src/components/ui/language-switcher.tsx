@@ -16,6 +16,7 @@ import { usePathname, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils/index";
 
 const pendingLocaleRefreshKey = "cch.pendingLocaleRefresh";
+let activePendingLocaleRefreshTarget: Locale | null = null;
 
 interface LanguageSwitcherProps {
   className?: string;
@@ -36,6 +37,8 @@ function getPendingLocaleRefreshTarget(): Locale | null {
 }
 
 function setPendingLocaleRefreshTarget(locale: Locale) {
+  activePendingLocaleRefreshTarget = locale;
+
   if (typeof window === "undefined") {
     return;
   }
@@ -48,6 +51,8 @@ function setPendingLocaleRefreshTarget(locale: Locale) {
 }
 
 function clearPendingLocaleRefreshTarget() {
+  activePendingLocaleRefreshTarget = null;
+
   if (typeof window === "undefined") {
     return;
   }
@@ -73,7 +78,11 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
   const [pendingLocale, setPendingLocale] = React.useState<Locale | null>(null);
 
   React.useEffect(() => {
-    const refreshTarget = pendingLocale ?? getPendingLocaleRefreshTarget();
+    const storedRefreshTarget =
+      pendingLocale !== null || activePendingLocaleRefreshTarget !== null
+        ? getPendingLocaleRefreshTarget()
+        : null;
+    const refreshTarget = pendingLocale ?? storedRefreshTarget;
 
     if (refreshTarget !== currentLocale) {
       return;

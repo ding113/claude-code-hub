@@ -11,7 +11,7 @@ import type { Locale } from "@/i18n/config";
 
 const testState = vi.hoisted(() => ({
   currentLocale: "zh-CN" as Locale,
-  pathname: "/zh-CN/settings/config",
+  pathname: "/settings/config",
   router: {
     push: vi.fn(),
     refresh: vi.fn(),
@@ -75,7 +75,7 @@ describe("LanguageSwitcher", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
     testState.currentLocale = "zh-CN";
-    testState.pathname = "/zh-CN/settings/config";
+    testState.pathname = "/settings/config";
     testState.router.push.mockReset();
     testState.router.refresh.mockReset();
   });
@@ -128,5 +128,15 @@ describe("LanguageSwitcher", () => {
 
     expect(testState.router.refresh).toHaveBeenCalledTimes(1);
     expect(window.sessionStorage.getItem("cch.pendingLocaleRefresh")).toBeNull();
+  });
+
+  test("does not refresh from a stale stored locale marker on mount", () => {
+    window.sessionStorage.setItem("cch.pendingLocaleRefresh", "en");
+    testState.currentLocale = "en";
+
+    view = render(<LanguageSwitcher />);
+
+    expect(testState.router.refresh).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem("cch.pendingLocaleRefresh")).toBe("en");
   });
 });
