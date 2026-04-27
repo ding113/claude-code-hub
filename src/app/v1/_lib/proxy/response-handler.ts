@@ -42,6 +42,7 @@ import type { GeminiResponse } from "../gemini/types";
 import { extractActualResponseModelForProvider } from "./actual-response-model";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { isClientAbortError, isTransportError } from "./errors";
+import { getOpenAIImageEndpoint } from "./openai-image-compat";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
 
@@ -110,7 +111,101 @@ export type UsageMetrics = {
   // 图片 modality tokens（从 candidatesTokensDetails/promptTokensDetails 提取）
   input_image_tokens?: number;
   output_image_tokens?: number;
+  // 图片张数（OpenAI images 等无 token usage 的端点使用）
+  input_images?: number;
+  output_images?: number;
 };
+
+function normalizePositiveInteger(value: unknown): number | undefined {
+  const numericValue = typeof value === "string" ? Number(value) : value;
+  if (typeof numericValue !== "number" || !Number.isFinite(numericValue) || numericValue <= 0) {
+    return undefined;
+  }
+  return Math.floor(numericValue);
+}
+
+function countOpenAIImageResponseData(responseText: string): number | undefined {
+  try {
+    const parsed = JSON.parse(responseText) as Record<string, unknown>;
+    const data = parsed.data;
+    return Array.isArray(data) ? data.length : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getRequestedOpenAIImageCount(session: ProxySession): number | undefined {
+  const directCount = normalizePositiveInteger(session.request.message.n);
+  if (directCount !== undefined) {
+    return directCount;
+  }
+
+  const metadata = session.request.imageRequestMetadata;
+  const nPart = metadata?.parts.find((part) => part.kind === "text" && part.name === "n");
+  return nPart?.kind === "text" ? normalizePositiveInteger(nPart.value) : undefined;
+}
+
+function getInputOpenAIImageCount(session: ProxySession): number | undefined {
+  const metadata = session.request.imageRequestMetadata;
+  if (metadata?.parts.length) {
+    const count = metadata.parts.filter(
+      (part) => part.kind === "file" && (part.name === "image" || part.name === "image[]")
+    ).length;
+    if (count > 0) {
+      return count;
+    }
+  }
+
+  const image = session.request.message.image;
+  if (Array.isArray(image)) {
+    return image.length > 0 ? image.length : undefined;
+  }
+  return image != null ? 1 : undefined;
+}
+
+function extractOpenAIImageUsageMetrics(
+  session: ProxySession,
+  responseText: string,
+  statusCode: number
+): UsageMetrics | null {
+  if (statusCode < 200 || statusCode >= 300) {
+    return null;
+  }
+
+  const endpoint = getOpenAIImageEndpoint(session.requestUrl.pathname);
+  if (!endpoint) {
+    return null;
+  }
+
+  const usage: UsageMetrics = {};
+  const outputImageCount =
+    countOpenAIImageResponseData(responseText) ?? getRequestedOpenAIImageCount(session);
+  if (outputImageCount !== undefined && outputImageCount > 0) {
+    usage.output_images = outputImageCount;
+  }
+
+  if (endpoint !== "generations") {
+    const inputImageCount = getInputOpenAIImageCount(session);
+    if (inputImageCount !== undefined && inputImageCount > 0) {
+      usage.input_images = inputImageCount;
+    }
+  }
+
+  return usage;
+}
+
+function mergeUsageMetricsWithImageUsage(
+  usageMetrics: UsageMetrics | null,
+  imageUsageMetrics: UsageMetrics | null
+): UsageMetrics | null {
+  if (!imageUsageMetrics) {
+    return usageMetrics;
+  }
+  return {
+    ...(usageMetrics ?? {}),
+    ...imageUsageMetrics,
+  };
+}
 
 function maybeSetCodexContext1m(
   session: ProxySession,
@@ -1145,12 +1240,13 @@ export class ProxyResponseHandler {
         if (sessionWithCleanup.clearResponseTimeout) {
           sessionWithCleanup.clearResponseTimeout();
         }
-        let usageRecord: Record<string, unknown> | null = null;
         let usageMetrics: UsageMetrics | null = null;
 
         const usageResult = parseUsageFromResponseText(responseText, provider.providerType);
-        usageRecord = usageResult.usageRecord;
-        usageMetrics = usageResult.usageMetrics;
+        usageMetrics = mergeUsageMetricsWithImageUsage(
+          usageResult.usageMetrics,
+          extractOpenAIImageUsageMetrics(session, responseText, statusCode)
+        );
         const actualServiceTier = parseServiceTierFromResponseText(responseText);
         const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
           session,
@@ -1221,7 +1317,7 @@ export class ProxyResponseHandler {
           });
         }
 
-        if (usageRecord && billableUsageMetrics && messageContext) {
+        if (billableUsageMetrics && messageContext) {
           const costUpdateResult = await updateRequestCostFromUsage(
             messageContext.id,
             session,
@@ -2287,7 +2383,10 @@ export class ProxyResponseHandler {
         tracker.endRequest(messageContext.user.id, messageContext.id);
 
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
-        usageForCost = usageResult.usageMetrics;
+        usageForCost = mergeUsageMetricsWithImageUsage(
+          usageResult.usageMetrics,
+          extractOpenAIImageUsageMetrics(session, allContent, statusCode)
+        );
 
         const actualServiceTier = parseServiceTierFromResponseText(allContent);
         const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
@@ -3591,7 +3690,11 @@ export async function finalizeRequestStats(
   const resolvedIsStream = isStreaming ?? isSSEText(responseText);
 
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
-  const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
+  const parsedUsage = parseUsageFromResponseText(responseText, provider.providerType);
+  const usageMetrics = mergeUsageMetricsWithImageUsage(
+    parsedUsage.usageMetrics,
+    extractOpenAIImageUsageMetrics(session, responseText, statusCode)
+  );
   const actualServiceTier = parseServiceTierFromResponseText(responseText);
   const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
     session,

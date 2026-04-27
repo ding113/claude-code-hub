@@ -256,6 +256,21 @@ function createNonStreamResponse(
   );
 }
 
+function createImageResponse(imageCount: number): Response {
+  return new Response(
+    JSON.stringify({
+      created: 1_771_000_000,
+      data: Array.from({ length: imageCount }, (_, index) => ({
+        b64_json: `image-${index}`,
+      })),
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }
+  );
+}
+
 function createStreamResponse(usage: { input_tokens: number; output_tokens: number }): Response {
   const sseText = `event: message_delta\ndata: ${JSON.stringify({ usage })}\n\n`;
   const encoder = new TextEncoder();
@@ -993,6 +1008,122 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
     expect(dbCosts[0]).toBe("32");
     expect(rateLimitCosts[0]).toBe(32);
+  });
+});
+
+describe("OpenAI images billing without usage payload", () => {
+  async function runImageBillingScenario({
+    billingModelSource,
+  }: {
+    billingModelSource: SystemSettings["billingModelSource"];
+  }): Promise<{
+    dbCostUsd: string;
+    rateLimitCost: number;
+    storedBreakdown: unknown;
+    sessionCostUsd: string;
+  }> {
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings(billingModelSource));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === originalModel) {
+        return makePriceRecord(modelName, {
+          mode: "image_generation",
+          input_cost_per_request: 0.01,
+          output_cost_per_image: 0.02,
+        });
+      }
+      if (modelName === redirectedModel) {
+        return makePriceRecord(modelName, {
+          mode: "image_generation",
+          input_cost_per_request: 0.1,
+          output_cost_per_image: 0.2,
+        });
+      }
+      return null;
+    });
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    const dbCosts: string[] = [];
+    const storedBreakdowns: unknown[] = [];
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
+      async (_id: number, costUsd: unknown, breakdown: unknown) => {
+        dbCosts.push(String(costUsd));
+        storedBreakdowns.push(breakdown);
+      }
+    );
+
+    const rateLimitCosts = captureRateLimitCosts();
+    const sessionCosts: string[] = [];
+    vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
+      async (_sessionId: string, payload: Record<string, unknown>) => {
+        if (typeof payload.costUsd === "string") {
+          sessionCosts.push(payload.costUsd);
+        }
+      }
+    );
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: `sess-image-${billingModelSource}`,
+      messageId: billingModelSource === "original" ? 4000 : 4001,
+      providerOverrides: {
+        providerType: "openai",
+        costMultiplier: 2,
+      },
+    });
+    session.requestUrl = new URL("http://localhost/v1/images/edits");
+    session.setGroupCostMultiplier(1.5);
+
+    const clientResponse = await ProxyResponseHandler.dispatch(session, createImageResponse(2));
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    return {
+      dbCostUsd: dbCosts[0] ?? "",
+      rateLimitCost: rateLimitCosts[0] ?? Number.NaN,
+      storedBreakdown: storedBreakdowns[0],
+      sessionCostUsd: sessionCosts[0] ?? "",
+    };
+  }
+
+  it("重定向前模型的本地按次和按图价格应在无 usage 响应中计费", async () => {
+    const result = await runImageBillingScenario({ billingModelSource: "original" });
+
+    expect(result.dbCostUsd).toBe("0.15");
+    expect(result.rateLimitCost).toBe(0.15);
+    expect(result.sessionCostUsd).toBe("0.15");
+    expect(result.storedBreakdown).toMatchObject({
+      input: "0.01",
+      output: "0.04",
+      base_total: "0.05",
+      provider_multiplier: 2,
+      group_multiplier: 1.5,
+      total: "0.15",
+    });
+  });
+
+  it("重定向后模型的本地按次和按图价格应在无 usage 响应中计费", async () => {
+    const result = await runImageBillingScenario({ billingModelSource: "redirected" });
+
+    expect(result.dbCostUsd).toBe("1.5");
+    expect(result.rateLimitCost).toBe(1.5);
+    expect(result.sessionCostUsd).toBe("1.5");
+    expect(result.storedBreakdown).toMatchObject({
+      input: "0.1",
+      output: "0.4",
+      base_total: "0.5",
+      provider_multiplier: 2,
+      group_multiplier: 1.5,
+      total: "1.5",
+    });
   });
 });
 

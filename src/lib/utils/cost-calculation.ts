@@ -15,6 +15,9 @@ type UsageMetrics = {
   // 图片 modality tokens（从 candidatesTokensDetails/promptTokensDetails 提取）
   input_image_tokens?: number;
   output_image_tokens?: number;
+  // 图片张数（OpenAI images 等无 token usage 的端点使用）
+  input_images?: number;
+  output_images?: number;
 };
 
 export interface ResolvedLongContextPricing {
@@ -412,6 +415,16 @@ export function calculateRequestCostBreakdown(
     }
   }
 
+  if (usage.input_images != null && usage.input_images > 0) {
+    inputBucket = inputBucket.add(multiplyCost(usage.input_images, priceData.input_cost_per_image));
+  }
+
+  if (usage.output_images != null && usage.output_images > 0) {
+    outputBucket = outputBucket.add(
+      multiplyCost(usage.output_images, priceData.output_cost_per_image)
+    );
+  }
+
   const cacheCreation5mCost =
     priceData.cache_creation_input_token_cost ??
     (baseInputCostPerToken != null ? baseInputCostPerToken * 1.25 : undefined);
@@ -678,6 +691,14 @@ export function calculateRequestCost(
     if (requestCost) {
       segments.push(requestCost);
     }
+  }
+
+  if (usage.input_images != null && usage.input_images > 0) {
+    segments.push(multiplyCost(usage.input_images, priceData.input_cost_per_image));
+  }
+
+  if (usage.output_images != null && usage.output_images > 0) {
+    segments.push(multiplyCost(usage.output_images, priceData.output_cost_per_image));
   }
 
   const cacheCreation5mCost =
