@@ -8,7 +8,6 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ApiTestButton } from "@/app/[locale]/settings/providers/_components/forms/api-test-button";
-import { CUSTOM_HEADERS_PLACEHOLDER } from "@/lib/custom-headers";
 import apiTestMessages from "../../../../messages/en/settings/providers/form/apiTest.json";
 import providerTypesMessages from "../../../../messages/en/settings/providers/form/providerTypes.json";
 
@@ -50,6 +49,11 @@ function render(node: ReactNode) {
 
   return {
     container,
+    rerender: (next: ReactNode) => {
+      act(() => {
+        root.render(next);
+      });
+    },
     unmount: () => {
       act(() => {
         root.unmount();
@@ -293,7 +297,8 @@ describe("ApiTestButton", () => {
       "textarea#test-custom-headers"
     ) as HTMLTextAreaElement | null;
     expect(textarea).not.toBeNull();
-    expect(textarea?.placeholder).toBe(CUSTOM_HEADERS_PLACEHOLDER);
+    // Placeholder is stored in i18n with ICU-escaped braces ('{' '}'); next-intl unwraps to literal { }
+    expect(textarea?.placeholder).toBe('{"cf-aig-authorization": "Bearer your-token"}');
 
     expect(document.body.textContent || "").toContain(apiTestMessages.customHeaders.label);
 
@@ -434,7 +439,7 @@ describe("ApiTestButton", () => {
   });
 
   test("does not overwrite user-edited custom headers when prop changes for same provider", async () => {
-    const { container, unmount } = render(
+    const { container, rerender, unmount } = render(
       <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
         <ApiTestButton
           providerId={42}
@@ -461,15 +466,66 @@ describe("ApiTestButton", () => {
       });
     }
 
-    const root = container.firstChild as HTMLElement | null;
-    void root;
-
-    // Re-render with a different prop value but the same providerId
-    const root2 = container as HTMLElement;
-    const newProvider = { "x-foo": "different" };
-    void newProvider;
+    // Re-render with a different prop value but the same providerId — must not clobber user edits
+    rerender(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerId={42}
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          providerType="openai-compatible"
+          customHeaders={{ "x-foo": "different" }}
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+    await flushTicks(2);
 
     expect(textarea?.value).toContain("x-baz");
+    expect(textarea?.value).not.toContain("different");
+
+    unmount();
+  });
+
+  test("preserves test-button textarea when parent customHeaders is undefined (mid-typing)", async () => {
+    const { container, rerender, unmount } = render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerId={42}
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          providerType="openai-compatible"
+          customHeaders={{ "x-foo": "bar" }}
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(2);
+
+    const textarea = container.querySelector(
+      "textarea#test-custom-headers"
+    ) as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+    expect(textarea?.value).toContain("x-foo");
+
+    // Parent flips customHeaders to undefined (e.g. options-section sees mid-typing invalid JSON)
+    rerender(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerId={42}
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          providerType="openai-compatible"
+          customHeaders={undefined}
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+    await flushTicks(2);
+
+    // Textarea should still contain the previous value, not be wiped
+    expect(textarea?.value).toContain("x-foo");
 
     unmount();
   });

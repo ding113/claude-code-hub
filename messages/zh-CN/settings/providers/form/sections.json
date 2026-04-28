@@ -148,13 +148,15 @@
     },
     "customHeaders": {
       "label": "自定义请求头（JSON）",
-      "desc": "静态请求头会合并到出站请求；不会覆盖鉴权头或最终 request filter。",
+      "desc": "静态请求头会合并到出站请求；不会覆盖鉴权头或最终请求过滤器。",
+      "placeholder": "'{'\"cf-aig-authorization\": \"Bearer your-token\"'}'",
       "errors": {
         "invalidJson": "自定义请求头必须是合法 JSON",
         "notObject": "自定义请求头必须是 JSON 对象",
         "invalidName": "请求头名称包含不允许的字符",
         "duplicateName": "请求头名称重复（不区分大小写）",
         "protectedName": "鉴权请求头不能通过自定义请求头设置",
+        "forbiddenName": "传输级请求头（content-length、connection、transfer-encoding）不能通过自定义请求头设置",
         "invalidValue": "请求头值必须为字符串",
         "emptyName": "请求头名称不能为空",
         "crlf": "请求头名称和值不能包含换行符"

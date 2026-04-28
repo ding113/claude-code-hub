@@ -8,6 +8,7 @@ export type CustomHeadersValidationErrorCode =
   | "invalid_name"
   | "duplicate_name"
   | "protected_name"
+  | "forbidden_name"
   | "invalid_value"
   | "empty_name"
   | "crlf";
@@ -16,14 +17,19 @@ export type CustomHeadersParseResult =
   | { ok: true; value: Record<string, string> | null }
   | { ok: false; code: CustomHeadersValidationErrorCode; path?: string };
 
-export const CUSTOM_HEADERS_PLACEHOLDER = '{"cf-aig-authorization": "Bearer your-token"}';
-
 const HTTP_TOKEN_NAME_REGEX = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export const PROTECTED_AUTH_HEADER_NAMES: ReadonlySet<string> = new Set([
   "authorization",
   "x-api-key",
   "x-goog-api-key",
+]);
+
+// 拒绝在自定义头中出现的 hop-by-hop / 传输级头：它们由代理框架管理，被人为注入会破坏请求帧。
+export const FORBIDDEN_CUSTOM_HEADER_NAMES: ReadonlySet<string> = new Set([
+  "content-length",
+  "connection",
+  "transfer-encoding",
 ]);
 
 function hasCrlf(s: string): boolean {
@@ -54,6 +60,9 @@ export function normalizeCustomHeadersRecord(input: unknown): CustomHeadersParse
     const lower = name.toLowerCase();
     if (PROTECTED_AUTH_HEADER_NAMES.has(lower)) {
       return { ok: false, code: "protected_name", path: name };
+    }
+    if (FORBIDDEN_CUSTOM_HEADER_NAMES.has(lower)) {
+      return { ok: false, code: "forbidden_name", path: name };
     }
     if (seenLower.has(lower)) {
       return { ok: false, code: "duplicate_name", path: name };

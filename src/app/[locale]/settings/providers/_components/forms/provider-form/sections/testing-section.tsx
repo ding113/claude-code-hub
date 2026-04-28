@@ -26,10 +26,11 @@ export function TestingSection() {
   const isBatch = mode === "batch";
 
   // Forward parsed custom headers from form state to ApiTestButton; on parse failure
-  // (user is mid-typing), pass null so the button's own textarea handles correction.
-  const customHeadersForTestButton = useMemo<Record<string, string> | null>(() => {
+  // (user is mid-typing), pass undefined so the test-button keeps the last-good textarea
+  // contents instead of getting wiped.
+  const customHeadersForTestButton = useMemo<Record<string, string> | null | undefined>(() => {
     const result = parseCustomHeadersJsonText(state.routing.customHeadersText);
-    if (!result.ok) return null;
+    if (!result.ok) return undefined;
     return result.value;
   }, [state.routing.customHeadersText]);
 

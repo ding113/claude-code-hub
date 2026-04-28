@@ -15,7 +15,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CUSTOM_HEADERS_PLACEHOLDER } from "@/lib/custom-headers";
 import type {
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
@@ -116,7 +115,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                     onChange={(e) =>
                       dispatch({ type: "SET_CUSTOM_HEADERS_TEXT", payload: e.target.value })
                     }
-                    placeholder={CUSTOM_HEADERS_PLACEHOLDER}
+                    placeholder={t("sections.routing.customHeaders.placeholder")}
                     disabled={state.ui.isPending}
                     rows={3}
                     spellCheck={false}

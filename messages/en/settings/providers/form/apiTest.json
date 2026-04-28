@@ -16,6 +16,7 @@
   "customHeaders": {
     "label": "Custom request headers (JSON)",
     "desc": "Static headers merged into the outbound test request. Will not override authentication.",
+    "placeholder": "'{'\"cf-aig-authorization\": \"Bearer your-token\"'}'",
     "geminiNotSupported": "Custom headers are not supported for the Gemini test path",
     "errors": {
       "invalidJson": "Custom headers must be valid JSON",
@@ -23,6 +24,7 @@
       "invalidName": "Header name contains characters that are not allowed",
       "duplicateName": "Header name appears more than once (case-insensitive)",
       "protectedName": "Authentication headers cannot be set via custom headers",
+      "forbiddenName": "Transport headers (content-length, connection, transfer-encoding) cannot be set via custom headers",
       "invalidValue": "Header values must be strings",
       "emptyName": "Header name cannot be empty",
       "crlf": "Header name and value cannot contain line breaks"
