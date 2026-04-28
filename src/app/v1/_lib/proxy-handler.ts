@@ -6,6 +6,7 @@ import { SessionTracker } from "@/lib/session-tracker";
 import { ProxyErrorHandler } from "./proxy/error-handler";
 import { attachSessionIdToErrorResponse } from "./proxy/error-session-id";
 import { ProxyError } from "./proxy/errors";
+import { tryFakeStreamingPath } from "./proxy/fake-streaming/proxy-integration";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
 import { GuardPipelineBuilder } from "./proxy/guard-pipeline";
@@ -16,13 +17,16 @@ import { ProxySession } from "./proxy/session";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
   let session: ProxySession | null = null;
+  let cachedSystemSettings: Awaited<ReturnType<typeof getCachedSystemSettings>> | null = null;
   try {
     session = await ProxySession.fromContext(c);
     try {
-      const systemSettings = await getCachedSystemSettings();
-      session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
+      cachedSystemSettings = await getCachedSystemSettings();
+      session.setHighConcurrencyModeEnabled(
+        cachedSystemSettings.enableHighConcurrencyMode ?? false
+      );
       session.setRawCrossProviderFallbackEnabled(
-        systemSettings.allowNonConversationEndpointProviderFallback ?? true
+        cachedSystemSettings.allowNonConversationEndpointProviderFallback ?? true
       );
     } catch (settingsError) {
       logger.warn(
@@ -101,6 +105,29 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     }
 
     session.recordForwardStart();
+
+    // Fake streaming: if the client-requested model is whitelisted for the
+    // current provider group, hand off to the fake-streaming runner which
+    // keeps the SSE connection alive with heartbeats while it serially calls
+    // upstream and validates the buffered response before emitting it.
+    //
+    // We do NOT swallow exceptions: `tryFakeStreamingPath` mutates the session
+    // (request body, URL) before the forwarder runs. Falling back to the
+    // normal flow with a mutated session would either double-hit the upstream
+    // (duplicating cost / message context) or leave the request in an
+    // inconsistent state. Let the outer error handler turn the failure into a
+    // protocol error response instead.
+    //
+    // Reuse the system settings already loaded above (with its fallback path)
+    // instead of re-reading the cache. A transient cache miss must not turn an
+    // otherwise-routable request into an error response.
+    if (cachedSystemSettings) {
+      const fakeStreamingResponse = await tryFakeStreamingPath(session, cachedSystemSettings);
+      if (fakeStreamingResponse) {
+        return await attachSessionIdToErrorResponse(session.sessionId, fakeStreamingResponse);
+      }
+    }
+
     const response = await ProxyForwarder.send(session);
     const handled = await ProxyResponseHandler.dispatch(session, response);
     const finalResponse = await attachSessionIdToErrorResponse(session.sessionId, handled);

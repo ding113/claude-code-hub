@@ -13,6 +13,22 @@ export interface ResponseFixerConfig {
   maxFixSize: number;
 }
 
+// Fake streaming whitelist entry: pairs an exact client-requested model name
+// with optional provider group tags. Empty groupTags means "all groups".
+export interface FakeStreamingWhitelistEntry {
+  model: string;
+  groupTags: string[];
+}
+
+// Default whitelist used when system_settings has no persisted value (legacy
+// upgrade path). A persisted empty array is preserved as explicit opt-out.
+export const DEFAULT_FAKE_STREAMING_WHITELIST: ReadonlyArray<FakeStreamingWhitelistEntry> = [
+  { model: "gpt-image-2", groupTags: [] },
+  { model: "gpt-image-1.5", groupTags: [] },
+  { model: "gemini-3.1-flash-image-preview", groupTags: [] },
+  { model: "gemini-3-pro-image-preview", groupTags: [] },
+];
+
 export interface SystemSettings {
   id: number;
   siteTitle: string;
@@ -78,6 +94,9 @@ export interface SystemSettings {
   // 非对话端点跨供应商 fallback（默认开启）
   // 当前仅作用于 count_tokens / compact 这两个 raw endpoint
   allowNonConversationEndpointProviderFallback: boolean;
+
+  // Fake 流式输出白名单（缺省时使用 DEFAULT_FAKE_STREAMING_WHITELIST，持久化空数组表示显式禁用）
+  fakeStreamingWhitelist: FakeStreamingWhitelistEntry[];
 
   // Codex Session ID 补全（默认开启）
   // 目标：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
@@ -166,6 +185,9 @@ export interface UpdateSystemSettingsInput {
 
   // 非对话端点跨供应商 fallback（可选）
   allowNonConversationEndpointProviderFallback?: boolean;
+
+  // Fake 流式输出白名单（可选）
+  fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
 
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion?: boolean;

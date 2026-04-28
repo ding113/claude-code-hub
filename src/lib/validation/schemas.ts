@@ -1003,6 +1003,43 @@ export const UpdateSystemSettingsSchema = z.object({
   enableResponseInputRectifier: z.boolean().optional(),
   // 非对话端点跨供应商 fallback（可选）
   allowNonConversationEndpointProviderFallback: z.boolean().optional(),
+  // Fake 流式输出白名单（可选）。空数组表示显式禁用；缺省 → 使用默认四个图像生成模型。
+  fakeStreamingWhitelist: z
+    .array(
+      z.object({
+        model: z
+          .string()
+          .min(1, "model 不能为空")
+          .max(200, "model 不能超过 200 个字符")
+          .transform((value) => value.trim())
+          .refine((value) => value.length > 0, { message: "model 不能为空" }),
+        groupTags: z
+          .array(
+            z
+              .string()
+              .min(1)
+              .transform((value) => value.trim())
+              .refine((value) => value.length > 0, { message: "groupTag 不能为空" })
+          )
+          .default([])
+          .transform((tags) => Array.from(new Set(tags))),
+      })
+    )
+    .superRefine((entries, ctx) => {
+      const seen = new Set<string>();
+      for (let index = 0; index < entries.length; index += 1) {
+        const model = entries[index].model;
+        if (seen.has(model)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `fakeStreamingWhitelist 模型重复: ${model}`,
+            path: [index, "model"],
+          });
+        }
+        seen.add(model);
+      }
+    })
+    .optional(),
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion: z.boolean().optional(),
   // Claude metadata.user_id 注入（可选）

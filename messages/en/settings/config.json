@@ -70,6 +70,17 @@
     "enableResponseInputRectifierDesc": "Automatically normalizes non-array input (string shortcut or single message object) in /v1/responses requests to standard array format before processing (enabled by default).",
     "allowNonConversationEndpointProviderFallback": "Allow cross-provider fallback for non-conversation endpoints",
     "allowNonConversationEndpointProviderFallbackDesc": "Controls whether /v1/messages/count_tokens and /v1/responses/compact may reuse the existing decision chain to switch to a compatible provider after the current provider fails. Enabled by default while preserving raw passthrough and non-billing semantics.",
+    "fakeStreaming": {
+      "title": "Fake streaming whitelist",
+      "description": "For long-running synchronous generations (image / video) that exceed Cloudflare's 120s no-body timeout, CCH keeps the SSE connection alive with safe heartbeat pings while it serially calls upstream providers internally and only emits a final, non-empty result. Listed models are auto-enabled; an empty list disables fake streaming entirely.",
+      "modelLabel": "Model",
+      "modelPlaceholder": "exact client-requested model name",
+      "groupsLabel": "Groups",
+      "allGroupsHint": "No groups selected — applies to all provider groups.",
+      "addModel": "Add model",
+      "remove": "Remove",
+      "emptyState": "No models configured. Fake streaming is disabled — use \"Add model\" to enable it for specific models."
+    },
     "enableCodexSessionIdCompletion": "Enable Codex Session ID Completion",
     "enableCodexSessionIdCompletionDesc": "When Codex requests provide only one of session_id (header) or prompt_cache_key (body), automatically completes the other. If both are missing, generates a UUID v7 session id and reuses it stably within the same conversation.",
     "enableClaudeMetadataUserIdInjection": "Enable Claude metadata.user_id Injection",

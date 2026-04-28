@@ -70,6 +70,17 @@
     "enableResponseInputRectifierDesc": "/v1/responses リクエストの非配列 input（文字列ショートカットまたは role/type 付き単一メッセージオブジェクト）を処理前に標準の配列形式に自動正規化します（既定で有効）。",
     "allowNonConversationEndpointProviderFallback": "非会話エンドポイントのクロスプロバイダ fallback を許可",
     "allowNonConversationEndpointProviderFallbackDesc": "/v1/messages/count_tokens と /v1/responses/compact で現在のプロバイダが失敗した際に、既存の決定チェーンを使って互換プロバイダへ切り替えて再試行するかを制御します。既定で有効で、raw passthrough と非課金の意味論は維持されます。",
+    "fakeStreaming": {
+      "title": "Fake ストリーミング出力ホワイトリスト",
+      "description": "画像 / 動画など Cloudflare の 120 秒ノーボディタイムアウトを超えやすい長時間同期生成では、CCH が SSE ハートビートで接続を維持しつつ内部で上流プロバイダを直列に呼び出し、最終的な非空結果のみをクライアントへ返します。リスト掲載モデルは自動的に有効化、空リストは完全に無効化を意味します。",
+      "modelLabel": "モデル",
+      "modelPlaceholder": "クライアント要求の正確なモデル名",
+      "groupsLabel": "プロバイダグループ",
+      "allGroupsHint": "グループ未選択 → すべてのプロバイダグループに適用されます。",
+      "addModel": "モデル追加",
+      "remove": "削除",
+      "emptyState": "モデル未設定 — fake streaming は無効です。「モデル追加」で対象モデルを設定すると有効化されます。"
+    },
     "enableCodexSessionIdCompletion": "Codex セッションID補完を有効化",
     "enableCodexSessionIdCompletionDesc": "Codex リクエストで session_id（ヘッダー）または prompt_cache_key（ボディ）のどちらか一方しか提供されない場合に、欠けている方を自動補完します。両方ない場合は UUID v7 のセッションIDを生成し、同一対話内で安定して再利用します。",
     "enableClaudeMetadataUserIdInjection": "Claude metadata.user_id 注入を有効化",
