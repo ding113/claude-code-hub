@@ -19,17 +19,20 @@ export interface FakeStreamingRunInput {
  * Synchronous entry for the stream client path: returns a Response immediately
  * so the SSE heartbeat can flush before the orchestrator finishes.
  *
- * For non-stream clients, callers should use `buildFakeStreamingNonStreamResponse`
- * which awaits the orchestrator and returns an accurate HTTP status code.
+ * For non-stream clients, use `buildFakeStreamingNonStreamResponse` directly —
+ * it awaits the orchestrator and returns an accurate HTTP status code (200 /
+ * 502 / 499). Calling this synchronous entry with `isStream: false` cannot
+ * surface a non-200 status (Response status is locked at construction), so we
+ * fail fast rather than silently report 200 on upstream failure.
  */
 export function buildFakeStreamingResponse(input: FakeStreamingRunInput): Response {
-  if (input.isStream) {
-    return buildStreamResponse(input);
+  if (!input.isStream) {
+    throw new Error(
+      "buildFakeStreamingResponse requires isStream=true. " +
+        "Use buildFakeStreamingNonStreamResponse for non-stream clients."
+    );
   }
-  // Tests / callers that pass `isStream: false` here get a placeholder 200
-  // response whose body resolves once the orchestrator settles; for accurate
-  // HTTP status, prefer `buildFakeStreamingNonStreamResponse`.
-  return buildLegacyNonStreamPlaceholder(input);
+  return buildStreamResponse(input);
 }
 
 function buildStreamResponse(input: FakeStreamingRunInput): Response {
@@ -76,6 +79,7 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
         performAttempt: input.performAttempt,
         abortSignal: input.abortSignal,
         maxAttempts: input.maxAttempts,
+        isStream: false,
       })
         .then((result) => {
           cleanupHeartbeat();
@@ -135,40 +139,6 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     },
-  });
-}
-
-/**
- * Placeholder for the synchronous `isStream: false` path. Status is fixed at
- * 200; callers that need accurate HTTP status should use
- * `buildFakeStreamingNonStreamResponse`.
- */
-function buildLegacyNonStreamPlaceholder(input: FakeStreamingRunInput): Response {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const result = await orchestrateFakeStreamingAttempts({
-        family: input.family,
-        performAttempt: input.performAttempt,
-        abortSignal: input.abortSignal,
-        maxAttempts: input.maxAttempts,
-      });
-      const body =
-        result.ok && typeof result.finalBody === "string"
-          ? emitFinalNonStream({ family: input.family, finalBody: result.finalBody })
-          : JSON.stringify({
-              error: {
-                code: result.errorCode ?? "upstream_all_attempts_failed",
-                message: result.errorMessage ?? "all upstream attempts failed",
-              },
-            });
-      controller.enqueue(encoder.encode(body));
-      controller.close();
-    },
-  });
-  return new Response(stream, {
-    status: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
   });
 }
 

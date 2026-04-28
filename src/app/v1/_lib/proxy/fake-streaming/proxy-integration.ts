@@ -71,6 +71,14 @@ export async function tryFakeStreamingPath(
   applyNonStreamMutation(session);
 
   const performAttempt = buildAttemptPerformer(session);
+  if (session.clientAbortSignal === null) {
+    // No client abort signal means heartbeat / orchestrator can't observe
+    // client disconnect — surface the silent degradation in the log so it's
+    // not invisible in edge-middleware / test environments where this happens.
+    logger.warn("[FakeStreaming] session.clientAbortSignal is null; abort propagation disabled", {
+      model: clientModel,
+    });
+  }
   const abortSignal = session.clientAbortSignal ?? new AbortController().signal;
 
   if (isStream) {
@@ -134,11 +142,39 @@ function buildAttemptPerformer(session: ProxySession): AttemptPerformer {
       throw Object.assign(new Error("aborted"), { name: "AbortError" });
     }
     const response = await ProxyForwarder.send(session);
-    const body = await response.text();
-    return {
-      status: response.status,
-      body,
-      providerId: session.provider?.id != null ? String(session.provider.id) : "unknown",
-    };
+    try {
+      const body = await response.text();
+      return {
+        status: response.status,
+        body,
+        providerId: session.provider?.id != null ? String(session.provider.id) : "unknown",
+      };
+    } finally {
+      // ProxyForwarder.send hangs cleanup callbacks on the session that
+      // ProxyResponseHandler.dispatch is normally responsible for invoking.
+      // Since fake streaming consumes the response body itself, we must run
+      // them here or the response timeout timer + agent-pool reservation will
+      // leak.
+      releaseForwarderResources(session);
+    }
   };
+}
+
+function releaseForwarderResources(session: ProxySession): void {
+  const augmented = session as ProxySession & {
+    clearResponseTimeout?: (() => void) | null;
+    releaseAgent?: (() => void) | null;
+  };
+  try {
+    augmented.clearResponseTimeout?.();
+  } catch {
+    /* swallow cleanup errors */
+  }
+  augmented.clearResponseTimeout = null;
+  try {
+    augmented.releaseAgent?.();
+  } catch {
+    /* swallow cleanup errors */
+  }
+  augmented.releaseAgent = null;
 }

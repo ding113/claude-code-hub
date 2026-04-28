@@ -107,16 +107,17 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // current provider group, hand off to the fake-streaming runner which
     // keeps the SSE connection alive with heartbeats while it serially calls
     // upstream and validates the buffered response before emitting it.
-    try {
-      const fakeStreamingSettings = await getCachedSystemSettings();
-      const fakeStreamingResponse = await tryFakeStreamingPath(session, fakeStreamingSettings);
-      if (fakeStreamingResponse) {
-        return await attachSessionIdToErrorResponse(session.sessionId, fakeStreamingResponse);
-      }
-    } catch (fakeStreamingError) {
-      logger.warn("[ProxyHandler] fake streaming path threw; falling back to normal flow", {
-        error: fakeStreamingError,
-      });
+    //
+    // We do NOT swallow exceptions: `tryFakeStreamingPath` mutates the session
+    // (request body, URL) before the forwarder runs. Falling back to the
+    // normal flow with a mutated session would either double-hit the upstream
+    // (duplicating cost / message context) or leave the request in an
+    // inconsistent state. Let the outer error handler turn the failure into a
+    // protocol error response instead.
+    const fakeStreamingSettings = await getCachedSystemSettings();
+    const fakeStreamingResponse = await tryFakeStreamingPath(session, fakeStreamingSettings);
+    if (fakeStreamingResponse) {
+      return await attachSessionIdToErrorResponse(session.sessionId, fakeStreamingResponse);
     }
 
     const response = await ProxyForwarder.send(session);

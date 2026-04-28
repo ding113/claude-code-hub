@@ -247,24 +247,32 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       ipExtractionConfigToSave = parsed as IpExtractionConfig;
     }
 
-    const sanitizedFakeStreamingWhitelist: FakeStreamingWhitelistEntry[] = [];
-    {
-      const seenModels = new Set<string>();
+    const sanitizedFakeStreamingWhitelist: FakeStreamingWhitelistEntry[] = (() => {
+      // If the same model is listed multiple times, merge their groupTags
+      // (deduped, trimmed) instead of silently dropping later entries. The
+      // server-side schema rejects duplicates, so this aggregates client
+      // intent before submission.
+      const merged = new Map<string, Set<string>>();
+      const order: string[] = [];
       for (const entry of fakeStreamingWhitelist) {
         const model = entry.model.trim();
-        if (!model || seenModels.has(model)) continue;
-        seenModels.add(model);
-        const groupSeen = new Set<string>();
-        const groupTags: string[] = [];
+        if (!model) continue;
+        let groups = merged.get(model);
+        if (!groups) {
+          groups = new Set<string>();
+          merged.set(model, groups);
+          order.push(model);
+        }
         for (const tag of entry.groupTags) {
           const trimmed = tag.trim();
-          if (!trimmed || groupSeen.has(trimmed)) continue;
-          groupSeen.add(trimmed);
-          groupTags.push(trimmed);
+          if (trimmed) groups.add(trimmed);
         }
-        sanitizedFakeStreamingWhitelist.push({ model, groupTags });
       }
-    }
+      return order.map((model) => ({
+        model,
+        groupTags: Array.from(merged.get(model) ?? new Set<string>()),
+      }));
+    })();
 
     startTransition(async () => {
       const result = await saveSystemSettings({

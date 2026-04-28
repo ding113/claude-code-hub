@@ -31,7 +31,11 @@ export interface OrchestrateInput {
   performAttempt: AttemptPerformer;
   abortSignal: AbortSignal;
   maxAttempts: number;
-  isStream?: boolean; // default true: orchestrator runs while client expects a stream
+  // The orchestrator buffers each upstream attempt fully before validation, so
+  // by default it asks the validator to apply non-stream rules. Set `true`
+  // explicitly when the buffered body is itself an SSE byte stream and you
+  // want stream-specific event-shape checks.
+  isStream?: boolean;
 }
 
 export interface OrchestrateResult {
@@ -62,7 +66,7 @@ export async function orchestrateFakeStreamingAttempts(
   // The validator default is "stream === false" semantics, but for fake
   // streaming we always buffer upstream as non-stream and rely on the
   // protocol-family validation rules. Allow callers to override.
-  const validateAsStream = input.isStream === true ? true : false;
+  const validateAsStream = input.isStream === true;
 
   for (let attemptIndex = 0; attemptIndex < input.maxAttempts; attemptIndex += 1) {
     if (input.abortSignal.aborted) {
@@ -77,6 +81,19 @@ export async function orchestrateFakeStreamingAttempts(
     const attemptAbort = new AbortController();
     const onParentAbort = () => attemptAbort.abort();
     input.abortSignal.addEventListener("abort", onParentAbort, { once: true });
+    // AbortSignal.addEventListener does NOT retroactively fire for a signal
+    // that is already aborted, so we must re-check after wiring the listener
+    // to close the race window between the loop-top check and this binding.
+    if (input.abortSignal.aborted) {
+      attemptAbort.abort();
+      input.abortSignal.removeEventListener("abort", onParentAbort);
+      return {
+        ok: false,
+        attempts,
+        errorCode: "client_abort",
+        errorMessage: "client disconnected",
+      };
+    }
 
     let outcome: FakeStreamingAttemptOutcome | null;
     try {

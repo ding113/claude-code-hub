@@ -195,13 +195,9 @@ export function toModelPrice(dbPrice: any): ModelPrice {
 }
 
 function normalizeFakeStreamingWhitelist(value: unknown): FakeStreamingWhitelistEntry[] {
-  // null / undefined → use legacy default; persisted [] is preserved as opt-out.
-  if (value === undefined || value === null) {
-    return DEFAULT_FAKE_STREAMING_WHITELIST.map((entry) => ({
-      model: entry.model,
-      groupTags: [...entry.groupTags],
-    }));
-  }
+  // null / undefined / non-array (legacy schemas) → fall back to the default
+  // image-model list. A persisted empty array is preserved as explicit
+  // opt-out and bypasses this branch.
   if (!Array.isArray(value)) {
     return DEFAULT_FAKE_STREAMING_WHITELIST.map((entry) => ({
       model: entry.model,

@@ -280,9 +280,9 @@ function eventCarriesDeliverable(
         if (Array.isArray(output) && output.length > 0) return true;
       }
     }
-    if (typed.type === "response.created" && eventName !== "response.created") {
-      return true;
-    }
+    // response.created is purely a metadata envelope; do not treat it as
+    // deliverable, otherwise streams that contain only metadata events with
+    // no output would falsely pass validation.
     return false;
   }
 
