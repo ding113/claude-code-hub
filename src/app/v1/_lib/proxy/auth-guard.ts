@@ -1,3 +1,4 @@
+import { isReadonlyKey } from "@/lib/auth/readonly-access";
 import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
@@ -131,6 +132,7 @@ export class ProxyAuthenticator {
         user: null,
         key: null,
         apiKey: null,
+        readonlyAccess: false,
         success: false,
         errorResponse: ProxyResponses.buildError(
           401,
@@ -151,6 +153,7 @@ export class ProxyAuthenticator {
         user: null,
         key: null,
         apiKey: null,
+        readonlyAccess: false,
         success: false,
         errorResponse: ProxyResponses.buildError(
           401,
@@ -173,6 +176,7 @@ export class ProxyAuthenticator {
         user: null,
         key: null,
         apiKey,
+        readonlyAccess: false,
         success: false,
         errorResponse: ProxyResponses.buildError(
           401,
@@ -195,6 +199,7 @@ export class ProxyAuthenticator {
         user: null,
         key: null,
         apiKey,
+        readonlyAccess: false,
         success: false,
         errorResponse: ProxyResponses.buildError(
           401,
@@ -222,6 +227,7 @@ export class ProxyAuthenticator {
         user: null,
         key: null,
         apiKey,
+        readonlyAccess: false,
         success: false,
         errorResponse: ProxyResponses.buildError(
           401,
@@ -237,7 +243,13 @@ export class ProxyAuthenticator {
       keyName: authResult.key.name,
     });
 
-    return { user: authResult.user, key: authResult.key, apiKey, success: true };
+    return {
+      user: authResult.user,
+      key: authResult.key,
+      apiKey,
+      readonlyAccess: isReadonlyKey(authResult.key),
+      success: true,
+    };
   }
 
   private static extractKeyFromAuthorization(authHeader?: string): string | null {

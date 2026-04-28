@@ -34,6 +34,7 @@ export interface AuthState {
   user: User | null;
   key: Key | null;
   apiKey: string | null;
+  readonlyAccess: boolean;
   success: boolean;
   errorResponse?: Response; // 认证失败时的详细错误响应
 }

@@ -1099,6 +1099,17 @@ const { route: getMyUsageMetadataRoute, handler: getMyUsageMetadataHandler } = c
 );
 app.openapi(getMyUsageMetadataRoute, getMyUsageMetadataHandler);
 
+const myUsageQuotaWindowSchema = z.object({
+  period: z.enum(["5h", "daily", "weekly", "monthly", "total"]),
+  limitUsd: z.number().nullable().describe("该周期有效限额；null 表示不限额"),
+  usedUsd: z.number().describe("该周期已用金额"),
+  remainingUsd: z.number().nullable().describe("该周期剩余金额；null 表示不限额"),
+  usedPercent: z.number().nullable().describe("该周期已用百分比；null 表示不限额或限额为 0"),
+  remainingPercent: z.number().nullable().describe("该周期剩余百分比；null 表示不限额或限额为 0"),
+  isUnlimited: z.boolean().describe("该周期是否不限额"),
+  isExhausted: z.boolean().describe("该周期是否已无剩余额度"),
+});
+
 const { route: getMyQuotaRoute, handler: getMyQuotaHandler } = createActionRoute(
   "my-usage",
   "getMyQuota",
@@ -1124,6 +1135,7 @@ const { route: getMyQuotaRoute, handler: getMyQuotaHandler } = createActionRoute
       userLimitMonthlyUsd: z.number().nullable(),
       userLimitTotalUsd: z.number().nullable(),
       userLimitConcurrentSessions: z.number().nullable(),
+      userRpmLimit: z.number().nullable(),
       userCurrent5hUsd: z.number(),
       userCurrentDailyUsd: z.number(),
       userCurrentWeeklyUsd: z.number(),
@@ -1141,9 +1153,59 @@ const { route: getMyQuotaRoute, handler: getMyQuotaHandler } = createActionRoute
       keyName: z.string(),
       keyIsEnabled: z.boolean(),
 
+      providerGroup: z.string().nullable(),
+
+      limit5hUsd: z.number().nullable(),
+      used5hUsd: z.number(),
+      remaining5hUsd: z.number().nullable(),
+
+      limitDailyUsd: z.number().nullable(),
+      usedDailyUsd: z.number(),
+      remainingDailyUsd: z.number().nullable(),
+
+      limitWeeklyUsd: z.number().nullable(),
+      usedWeeklyUsd: z.number(),
+      remainingWeeklyUsd: z.number().nullable(),
+
+      limitMonthlyUsd: z.number().nullable(),
+      usedMonthlyUsd: z.number(),
+      remainingMonthlyUsd: z.number().nullable(),
+
+      limitTotalUsd: z.number().nullable(),
+      usedTotalUsd: z.number(),
+      remainingTotalUsd: z.number().nullable(),
+
+      quotaWindows: z.object({
+        fiveHour: myUsageQuotaWindowSchema,
+        daily: myUsageQuotaWindowSchema,
+        weekly: myUsageQuotaWindowSchema,
+        monthly: myUsageQuotaWindowSchema,
+        total: myUsageQuotaWindowSchema,
+      }),
+      todayUsedUsd: z.number().describe("按当前 Key 日限额窗口计算的已用金额"),
+      todayRemainingUsd: z.number().nullable().describe("按当前 Key 日限额窗口计算的剩余金额"),
+      todayUsedPercent: z.number().nullable().describe("按当前 Key 日限额窗口计算的已用百分比"),
+      todayRemainingPercent: z
+        .number()
+        .nullable()
+        .describe("按当前 Key 日限额窗口计算的剩余百分比"),
+      remainingPercent: z.number().nullable().describe("所有已配置金额限额中最少的剩余百分比"),
+
+      rpmLimit: z.number().nullable(),
+      concurrentSessions: z.number(),
+      concurrentSessionsLimit: z.number().nullable(),
+
+      userAllowedModels: z.array(z.string()),
+      userAllowedClients: z.array(z.string()),
+      readonlyRedactedFields: z.array(z.string()).optional(),
+
       expiresAt: z.string().nullable(),
       dailyResetMode: z.enum(["fixed", "rolling"]),
       dailyResetTime: z.string(),
+      resetMode: z.enum(["fixed", "rolling"]),
+      resetTime: z.string(),
+      remaining: z.number().nullable(),
+      unit: z.literal("USD"),
     }),
     description: "获取当前会话的限额与当前使用量（仅返回自己的数据）",
     summary: "获取我的限额与用量",
