@@ -5,6 +5,7 @@ import {
   PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
+import { normalizeCustomHeadersRecord } from "@/lib/custom-headers";
 import { PROVIDER_ALLOWED_MODEL_RULES_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_MODEL_REDIRECT_RULES_SCHEMA } from "@/lib/provider-model-redirect-schema";
 import {
@@ -428,6 +429,30 @@ export const KeyFormSchema = z.object({
   cacheTtlPreference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
 });
 
+// 共享：静态自定义请求头的 zod 校验器，复用 normalizeCustomHeadersRecord 中的全部规则。
+// 行为：
+// - 缺失 → 输出中省略字段（保留可选性，不修改既有行为）
+// - 显式 null → null（清空）
+// - {} → null（归一化为清空）
+// - 合法对象 → 通过
+// - 否则触发自定义 zod issue，错误码以 custom_headers_<code> 形式暴露给上层
+const PROVIDER_CUSTOM_HEADERS_SCHEMA = z
+  .any()
+  .transform((val, ctx) => {
+    if (val === undefined) return undefined;
+    if (val === null) return null;
+    const result = normalizeCustomHeadersRecord(val);
+    if (!result.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `custom_headers_${result.code}`,
+      });
+      return z.NEVER;
+    }
+    return result.value;
+  })
+  .optional();
+
 /**
  * 服务商创建数据验证schema
  */
@@ -578,6 +603,8 @@ export const CreateProviderSchema = z
     // 代理配置
     proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
     proxy_fallback_to_direct: z.boolean().optional().default(false),
+    // 静态自定义请求头
+    custom_headers: PROVIDER_CUSTOM_HEADERS_SCHEMA,
     // 超时配置（毫秒）
     // 注意：0 表示禁用超时（Infinity）
     first_byte_timeout_streaming_ms: z
@@ -810,6 +837,8 @@ export const UpdateProviderSchema = z
     // 代理配置
     proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
     proxy_fallback_to_direct: z.boolean().optional(),
+    // 静态自定义请求头
+    custom_headers: PROVIDER_CUSTOM_HEADERS_SCHEMA,
     // 超时配置（毫秒）
     // 注意：0 表示禁用超时（Infinity）
     first_byte_timeout_streaming_ms: z

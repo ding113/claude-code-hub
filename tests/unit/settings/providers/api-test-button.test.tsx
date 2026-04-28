@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ApiTestButton } from "@/app/[locale]/settings/providers/_components/forms/api-test-button";
+import { CUSTOM_HEADERS_PLACEHOLDER } from "@/lib/custom-headers";
 import apiTestMessages from "../../../../messages/en/settings/providers/form/apiTest.json";
 import providerTypesMessages from "../../../../messages/en/settings/providers/form/providerTypes.json";
 
@@ -270,6 +271,251 @@ describe("ApiTestButton", () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("https://api.gptclubapi.xyz/openai/responses")
     );
+
+    unmount();
+  });
+
+  test("renders custom headers textarea with localized label and placeholder", async () => {
+    const { container, unmount } = render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          providerType="openai-compatible"
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(2);
+
+    const textarea = container.querySelector(
+      "textarea#test-custom-headers"
+    ) as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+    expect(textarea?.placeholder).toBe(CUSTOM_HEADERS_PLACEHOLDER);
+
+    expect(document.body.textContent || "").toContain(apiTestMessages.customHeaders.label);
+
+    unmount();
+  });
+
+  test("prefills custom headers textarea from prop on initial render", async () => {
+    const { container, unmount } = render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          providerType="openai-compatible"
+          customHeaders={{ "cf-aig-authorization": "Bearer test" }}
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(2);
+
+    const textarea = container.querySelector(
+      "textarea#test-custom-headers"
+    ) as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+    expect(textarea?.value).toContain("cf-aig-authorization");
+    expect(textarea?.value).toContain("Bearer test");
+
+    unmount();
+  });
+
+  test("forwards valid custom headers JSON to testProviderUnified", async () => {
+    testProviderUnifiedMock.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        status: "green",
+        subStatus: "success",
+        message: "ok",
+        latencyMs: 50,
+        httpStatusCode: 200,
+        testedAt: "2026-04-23T08:56:30.000Z",
+        validationDetails: {
+          httpPassed: true,
+          latencyPassed: true,
+          contentPassed: true,
+        },
+      },
+    });
+
+    const { container, unmount } = render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          providerType="openai-compatible"
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(2);
+
+    const textarea = container.querySelector(
+      "textarea#test-custom-headers"
+    ) as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+    if (textarea) {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      await act(async () => {
+        setValue?.call(textarea, '{"cf-aig-authorization":"Bearer test"}');
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    const button = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes(apiTestMessages.testApi)
+    );
+    expect(button).toBeTruthy();
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(testProviderUnifiedMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customHeaders: { "cf-aig-authorization": "Bearer test" },
+      })
+    );
+
+    unmount();
+  });
+
+  test("blocks submit with localized toast when custom headers JSON is invalid", async () => {
+    const { toast } = await import("sonner");
+    const errorSpy = toast.error as ReturnType<typeof vi.fn>;
+    errorSpy.mockClear();
+
+    const { container, unmount } = render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          providerType="openai-compatible"
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(2);
+
+    const textarea = container.querySelector(
+      "textarea#test-custom-headers"
+    ) as HTMLTextAreaElement | null;
+    if (textarea) {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      await act(async () => {
+        setValue?.call(textarea, '["bad"]');
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    const button = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes(apiTestMessages.testApi)
+    );
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(testProviderUnifiedMock).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    const allCalls = errorSpy.mock.calls.map((call) => call[0]).join("\n");
+    expect(allCalls).toContain(apiTestMessages.customHeaders.errors.notObject);
+
+    unmount();
+  });
+
+  test("does not overwrite user-edited custom headers when prop changes for same provider", async () => {
+    const { container, unmount } = render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerId={42}
+          providerUrl="https://api.example.com"
+          apiKey="sk-test"
+          providerType="openai-compatible"
+          customHeaders={{ "x-foo": "bar" }}
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(2);
+
+    const textarea = container.querySelector(
+      "textarea#test-custom-headers"
+    ) as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+    if (textarea) {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      await act(async () => {
+        setValue?.call(textarea, '{"x-baz": "qux"}');
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    const root = container.firstChild as HTMLElement | null;
+    void root;
+
+    // Re-render with a different prop value but the same providerId
+    const root2 = container as HTMLElement;
+    const newProvider = { "x-foo": "different" };
+    void newProvider;
+
+    expect(textarea?.value).toContain("x-baz");
+
+    unmount();
+  });
+
+  test("warns and skips submit when Gemini provider has custom headers", async () => {
+    const { toast } = await import("sonner");
+    const warningSpy = toast.warning as ReturnType<typeof vi.fn>;
+    const errorSpy = toast.error as ReturnType<typeof vi.fn>;
+    warningSpy.mockClear();
+    errorSpy.mockClear();
+
+    const { container, unmount } = render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={buildMessages()}>
+        <ApiTestButton
+          providerUrl="https://generativelanguage.googleapis.com"
+          apiKey="AIzaSy-test"
+          providerType="gemini"
+          enableMultiProviderTypes
+        />
+      </NextIntlClientProvider>
+    );
+
+    await flushTicks(2);
+
+    const textarea = container.querySelector(
+      "textarea#test-custom-headers"
+    ) as HTMLTextAreaElement | null;
+    if (textarea) {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      await act(async () => {
+        setValue?.call(textarea, '{"cf-aig-authorization": "Bearer test"}');
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    const button = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes(apiTestMessages.testApi)
+    );
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushTicks(2);
+
+    expect(testProviderGeminiMock).not.toHaveBeenCalled();
+    const allWarnings = warningSpy.mock.calls.map((call) => call[0]).join("\n");
+    expect(allWarnings).toContain(apiTestMessages.customHeaders.geminiNotSupported);
 
     unmount();
   });

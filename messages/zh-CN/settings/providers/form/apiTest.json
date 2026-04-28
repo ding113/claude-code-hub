@@ -19,6 +19,21 @@
   "requestConfig": "请求配置",
   "presetConfig": "预置配置",
   "customConfig": "自定义",
+  "customHeaders": {
+    "label": "自定义请求头（JSON）",
+    "desc": "静态请求头会合并到本次测试请求；不会覆盖鉴权头。",
+    "geminiNotSupported": "Gemini 测试通道暂不支持自定义请求头",
+    "errors": {
+      "invalidJson": "自定义请求头必须是合法 JSON",
+      "notObject": "自定义请求头必须是 JSON 对象",
+      "invalidName": "请求头名称包含不允许的字符",
+      "duplicateName": "请求头名称重复（不区分大小写）",
+      "protectedName": "鉴权请求头不能通过自定义请求头设置",
+      "invalidValue": "请求头值必须为字符串",
+      "emptyName": "请求头名称不能为空",
+      "crlf": "请求头名称和值不能包含换行符"
+    }
+  },
   "selectPreset": "选择预置模板",
   "presetDesc": "预置模板包含真实 CLI 请求特征，用于通过中转服务验证",
   "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
