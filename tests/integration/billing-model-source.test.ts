@@ -334,7 +334,14 @@ async function runScenario({
   billingModelSource: SystemSettings["billingModelSource"];
   isStream: boolean;
   enableHighConcurrencyMode?: boolean;
-}): Promise<{ dbCostUsd: string; sessionCostUsd: string; rateLimitCost: number }> {
+}): Promise<{
+  dbCostCalls: number;
+  dbCostUsd: string;
+  rateLimitCalls: number;
+  rateLimitCost: number;
+  sessionCostCalls: number;
+  sessionCostUsd: string;
+}> {
   invalidateSystemSettingsCache();
 
   const usage = { input_tokens: 2, output_tokens: 3 };
@@ -406,11 +413,14 @@ async function runScenario({
 
   await drainAsyncTasks();
 
-  const dbCostUsd = dbCosts[0] ?? "";
-  const sessionCostUsd = sessionCosts[0] ?? "";
-  const rateLimitCost = rateLimitCosts[0] ?? Number.NaN;
-
-  return { dbCostUsd, sessionCostUsd, rateLimitCost };
+  return {
+    dbCostCalls: dbCosts.length,
+    dbCostUsd: dbCosts[0] ?? "",
+    rateLimitCalls: rateLimitCosts.length,
+    rateLimitCost: rateLimitCosts[0] ?? Number.NaN,
+    sessionCostCalls: sessionCosts.length,
+    sessionCostUsd: sessionCosts[0] ?? "",
+  };
 }
 
 describe("Billing model source - Redis session cost vs DB cost", () => {
@@ -1039,10 +1049,13 @@ describe("模型重定向后的图片按次计费", () => {
   async function runImageEditPerRequestScenario(
     billingModelSource: SystemSettings["billingModelSource"]
   ): Promise<{
+    dbCostCalls: number;
     dbCostUsd: string;
-    storedBreakdown: Record<string, unknown> | undefined;
-    sessionCostUsd: string;
+    rateLimitCalls: number;
     rateLimitCost: number;
+    sessionCostCalls: number;
+    sessionCostUsd: string;
+    storedBreakdown: Record<string, unknown> | undefined;
   }> {
     invalidateSystemSettingsCache();
 
@@ -1115,10 +1128,13 @@ describe("模型重定向后的图片按次计费", () => {
     await drainAsyncTasks();
 
     return {
+      dbCostCalls: dbCosts.length,
       dbCostUsd: dbCosts[0] ?? "",
-      storedBreakdown,
-      sessionCostUsd: sessionCosts[0] ?? "",
+      rateLimitCalls: rateLimitCosts.length,
       rateLimitCost: rateLimitCosts[0] ?? Number.NaN,
+      sessionCostCalls: sessionCosts.length,
+      sessionCostUsd: sessionCosts[0] ?? "",
+      storedBreakdown,
     };
   }
 
@@ -1128,6 +1144,9 @@ describe("模型重定向后的图片按次计费", () => {
     expect(result.dbCostUsd).toBe("0.06");
     expect(result.sessionCostUsd).toBe("0.06");
     expect(result.rateLimitCost).toBe(0.06);
+    expect(result.dbCostCalls).toBe(1);
+    expect(result.sessionCostCalls).toBe(1);
+    expect(result.rateLimitCalls).toBe(1);
     expect(result.storedBreakdown).toMatchObject({
       input: "0.01",
       base_total: "0.01",
@@ -1143,6 +1162,9 @@ describe("模型重定向后的图片按次计费", () => {
     expect(result.dbCostUsd).toBe("0.12");
     expect(result.sessionCostUsd).toBe("0.12");
     expect(result.rateLimitCost).toBe(0.12);
+    expect(result.dbCostCalls).toBe(1);
+    expect(result.sessionCostCalls).toBe(1);
+    expect(result.rateLimitCalls).toBe(1);
     expect(result.storedBreakdown).toMatchObject({
       input: "0.02",
       base_total: "0.02",
