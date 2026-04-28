@@ -113,7 +113,8 @@
       "!**/.next",
       "!**/dist",
       "!**/drizzle",
-      "!**/docs-site"
+      "!**/docs-site",
+      "!src/lib/api-client/v1/openapi-types.gen.ts"
     ]
   }
 }
