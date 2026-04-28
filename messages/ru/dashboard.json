@@ -779,6 +779,7 @@
     "usageLogs": "Журналы",
     "leaderboard": "Лидеры",
     "availability": "Мониторинг",
+    "systemStatus": "Статус системы",
     "myQuota": "Моя квота",
     "quotasManagement": "Квоты",
     "userManagement": "Пользователи",
@@ -1522,7 +1523,8 @@
         "disabled": "Отключен"
       },
       "actions": {
-        "addKey": "Добавить ключ"
+        "addKey": "Добавить ключ",
+        "addTemporaryKey": "Временные ключи"
       }
     },
     "keyFullDisplay": {
@@ -1605,6 +1607,52 @@
       "createKeyTitle": "Создать ключ",
       "editKeyTitle": "Редактировать ключ"
     },
+    "temporaryKeys": {
+      "createDialog": {
+        "title": "Пакетная генерация временных ключей",
+        "description": "Выберите базовый ключ и массово создайте временные API-ключи в отдельной группе.",
+        "baseKeyLabel": "Базовый ключ",
+        "baseKeyPlaceholder": "Выберите базовый ключ",
+        "baseKeyRequired": "Выберите базовый ключ",
+        "groupNameLabel": "Имя группы",
+        "groupNamePlaceholder": "Например: campaign-april",
+        "quantityLabel": "Количество",
+        "quantityDescription": "Быстрая генерация 5 / 10 / 20 / 50 / 100 ключей или ввод своего количества.",
+        "customLimitLabel": "Общий лимит на ключ (USD)",
+        "customLimitPlaceholder": "Оставьте пустым, чтобы использовать лимит базового ключа",
+        "customLimitDescription": "Переопределяется только общий лимит. Остальные настройки копируются с базового ключа.",
+        "baseKeyRequiredHint": "Перед генерацией выберите базовый ключ.",
+        "baseKeyRequiredShort": "Выберите базовый ключ",
+        "submit": "Сгенерировать",
+        "submitting": "Генерация...",
+        "noKeys": "У пользователя нет доступного базового ключа",
+        "invalidCount": "Введите корректное количество",
+        "invalidLimit": "Введите корректный общий лимит",
+        "genericError": "Не удалось сгенерировать временные ключи"
+      },
+      "success": {
+        "title": "Временные ключи готовы",
+        "description": "В группе {group} создано {count} временных ключей. Сразу скачайте полный список ключей и сохраните его.",
+        "groupName": "Имя группы",
+        "sourceKey": "Базовый ключ",
+        "previewTitle": "Предпросмотр (первые 5)",
+        "download": "Скачать CSV"
+      },
+      "groups": {
+        "title": "Группы временных ключей",
+        "groupBadge": "Temp",
+        "count": "{count} keys",
+        "download": "Скачать",
+        "delete": "Удалить группу"
+      },
+      "toasts": {
+        "createSuccess": "Сгенерировано временных ключей: {count}",
+        "createFailed": "Не удалось сгенерировать временные ключи: {error}",
+        "deleteSuccess": "Группа {group} удалена ({count} keys)",
+        "deleteFailed": "Не удалось удалить группу временных ключей: {error}",
+        "downloadFailed": "Не удалось скачать временные ключи: {error}"
+      }
+    },
     "editDialog": {
       "title": "Редактировать пользователя",
       "description": "Редактирование данных пользователя",
@@ -1622,6 +1670,12 @@
       "deleteFailed": "Не удалось удалить пользователя",
       "userDeleted": "Пользователь удален",
       "saving": "Сохранение...",
+      "syncKeys": {
+        "button": "Синхронизировать с Key",
+        "loading": "Синхронизация...",
+        "success": "Синхронизировано ключей: {count}",
+        "error": "Не удалось синхронизировать ключи"
+      },
       "resetSection": {
         "title": "Параметры сброса"
       },
@@ -1680,6 +1734,8 @@
         "title": "Подтвердить массовое обновление",
         "description": "Будут обновлены {users} пользователей и {keys} ключей. Это действие нельзя отменить.",
         "userFields": "Поля пользователя",
+        "syncKeys": "Sync to Keys",
+        "syncKeysDescription": "This will overwrite all undeleted keys for these {users} users from their current user settings.",
         "keyFields": "Поля ключа",
         "goBack": "Вернуться и изменить",
         "update": "Подтвердить обновление",
@@ -1688,8 +1744,10 @@
       "toast": {
         "usersUpdated": "Обновлено {count} пользователей",
         "keysUpdated": "Обновлено {count} ключей",
+        "keysSynced": "Synced {keys} keys for {users} users",
         "usersFailed": "Не удалось обновить пользователей: {error}",
         "keysFailed": "Не удалось обновить ключи: {error}",
+        "syncFailed": "Sync to keys failed: {error}",
         "batchFailed": "Массовое обновление не удалось"
       },
       "validation": {
@@ -1711,12 +1769,14 @@
           "limit5h": "Лимит за 5 часов (USD)",
           "limitDaily": "Дневной лимит (USD)",
           "limitWeekly": "Недельный лимит (USD)",
-          "limitMonthly": "Месячный лимит (USD)"
+          "limitMonthly": "Месячный лимит (USD)",
+          "syncKeys": "Sync to Keys"
         },
         "placeholders": {
           "emptyToClear": "Оставьте пустым, чтобы очистить",
           "tagsPlaceholder": "Нажмите Enter, чтобы добавить, можно разделять запятыми",
-          "emptyNoLimit": "Оставьте пустым для безлимита"
+          "emptyNoLimit": "Оставьте пустым для безлимита",
+          "syncKeysDescription": "When enabled, user fields from this batch edit are saved first, then all undeleted keys for each user are overwritten from that user's settings."
         }
       },
       "key": {

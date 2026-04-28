@@ -91,3 +91,5 @@ tmp/
 .omx/
 .opencode/
 bunx-*/
+# Local runtime artifacts
+.runtime/

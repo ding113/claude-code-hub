@@ -14,9 +14,13 @@ vi.mock("@/i18n/routing", () => ({
   },
 }));
 
-vi.mock("@/lib/config/env.schema", () => ({
-  isDevelopment: () => false,
-}));
+vi.mock("@/lib/config/env.schema", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config/env.schema")>();
+  return {
+    ...actual,
+    isDevelopment: () => false,
+  };
+});
 
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -99,5 +103,18 @@ describe("proxy auth cookie passthrough", () => {
     expect(collisionResponse.status).toBeGreaterThanOrEqual(300);
     expect(collisionResponse.status).toBeLessThan(400);
     expect(collisionResponse.headers.get("location")).toContain("/login");
+  });
+
+  it("allows /status without any cookie", async () => {
+    const localeResponse = new Response(null, {
+      status: 200,
+      headers: { "x-test": "status-ok" },
+    });
+    mockIntlMiddleware.mockReturnValue(localeResponse);
+
+    const { default: proxyHandler } = await import("@/proxy");
+    const response = proxyHandler(makeRequest("/status"));
+
+    expect(response.headers.get("x-test")).toBe("status-ok");
   });
 });

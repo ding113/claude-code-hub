@@ -20,6 +20,7 @@ export interface BatchUserSectionState {
   limitWeeklyUsd: string;
   limitMonthlyUsdEnabled: boolean;
   limitMonthlyUsd: string;
+  syncKeysEnabled: boolean;
 }
 
 export interface BatchUserSectionProps {
@@ -38,11 +39,13 @@ export interface BatchUserSectionProps {
       limitDaily: string;
       limitWeekly: string;
       limitMonthly: string;
+      syncKeys: string;
     };
     placeholders: {
       emptyToClear: string;
       tagsPlaceholder: string;
       emptyNoLimit: string;
+      syncKeysDescription: string;
     };
   };
 }
@@ -170,6 +173,17 @@ export function BatchUserSection({
             disabled={!state.limitMonthlyUsdEnabled}
             placeholder={translations.placeholders.emptyNoLimit}
           />
+        </FieldCard>
+
+        <FieldCard
+          title={translations.fields.syncKeys}
+          enabled={state.syncKeysEnabled}
+          onEnabledChange={(enabled) => onChange({ syncKeysEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
+        >
+          <p className="text-sm text-muted-foreground">
+            {translations.placeholders.syncKeysDescription}
+          </p>
         </FieldCard>
       </div>
     </div>

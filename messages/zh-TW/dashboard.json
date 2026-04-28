@@ -776,6 +776,7 @@
     "usageLogs": "使用記錄",
     "leaderboard": "排行",
     "availability": "可用性監控",
+    "systemStatus": "系統狀態",
     "myQuota": "我的額度",
     "quotasManagement": "額度管理",
     "userManagement": "使用者管理",
@@ -1525,7 +1526,8 @@
         "disabled": "已停用"
       },
       "actions": {
-        "addKey": "新增金鑰"
+        "addKey": "新增金鑰",
+        "addTemporaryKey": "臨時 Key"
       }
     },
     "keyFullDisplay": {
@@ -1608,6 +1610,52 @@
       "createKeyTitle": "建立 Key",
       "editKeyTitle": "編輯 Key"
     },
+    "temporaryKeys": {
+      "createDialog": {
+        "title": "批量產生臨時 Key",
+        "description": "選擇一個基礎 Key，並按分組批量產生臨時 API Key。",
+        "baseKeyLabel": "基礎 Key",
+        "baseKeyPlaceholder": "請選擇基礎 Key",
+        "baseKeyRequired": "請選擇基礎 Key",
+        "groupNameLabel": "分組名稱",
+        "groupNamePlaceholder": "例如：渠道A-4月活動",
+        "quantityLabel": "產生數量",
+        "quantityDescription": "支援快速產生 5 / 10 / 20 / 50 / 100，也可自訂數量。",
+        "customLimitLabel": "每個 Key 總額度 (USD)",
+        "customLimitPlaceholder": "留空則沿用基礎 Key 的總額度設定",
+        "customLimitDescription": "僅覆寫總額度，其餘設定保持和基礎 Key 一致。",
+        "baseKeyRequiredHint": "請先選擇基礎 Key 再產生。",
+        "baseKeyRequiredShort": "請選擇基礎 Key",
+        "submit": "立即產生",
+        "submitting": "產生中...",
+        "noKeys": "目前使用者沒有可用的基礎 Key",
+        "invalidCount": "請輸入有效的產生數量",
+        "invalidLimit": "請輸入有效的總額度",
+        "genericError": "批量產生失敗"
+      },
+      "success": {
+        "title": "臨時 Key 已產生",
+        "description": "分組 {group} 已成功產生 {count} 個臨時 Key，請立即下載保存完整金鑰。",
+        "groupName": "分組名稱",
+        "sourceKey": "基礎 Key",
+        "previewTitle": "預覽（前 5 條）",
+        "download": "下載 CSV"
+      },
+      "groups": {
+        "title": "臨時 Key 分組",
+        "groupBadge": "臨時",
+        "count": "{count} 個 Key",
+        "download": "下載",
+        "delete": "刪除分組"
+      },
+      "toasts": {
+        "createSuccess": "已產生 {count} 個臨時 Key",
+        "createFailed": "產生臨時 Key 失敗：{error}",
+        "deleteSuccess": "已刪除分組 {group}（{count} 個 Key）",
+        "deleteFailed": "刪除臨時 Key 分組失敗：{error}",
+        "downloadFailed": "下載臨時 Key 失敗：{error}"
+      }
+    },
     "editDialog": {
       "title": "編輯使用者",
       "description": "編輯使用者資訊",
@@ -1625,6 +1673,12 @@
       "deleteFailed": "刪除使用者失敗",
       "userDeleted": "使用者已刪除",
       "saving": "儲存中...",
+      "syncKeys": {
+        "button": "同步到 Key",
+        "loading": "同步中...",
+        "success": "已同步到 {count} 把 Key",
+        "error": "同步 Key 失敗"
+      },
       "resetSection": {
         "title": "重置選項"
       },
@@ -1683,6 +1737,8 @@
         "title": "確認批量更新",
         "description": "此操作將更新 {users} 位使用者和 {keys} 個金鑰，操作不可撤銷。",
         "userFields": "使用者欄位",
+        "syncKeys": "同步到 Key",
+        "syncKeysDescription": "會按目前使用者設定覆蓋這 {users} 位使用者的全部未刪除 Key。",
         "keyFields": "金鑰欄位",
         "goBack": "返回編輯",
         "update": "確認更新",
@@ -1691,8 +1747,10 @@
       "toast": {
         "usersUpdated": "已更新 {count} 位使用者",
         "keysUpdated": "已更新 {count} 個金鑰",
+        "keysSynced": "已同步 {users} 位使用者的 {keys} 個 Key",
         "usersFailed": "使用者更新失敗：{error}",
         "keysFailed": "金鑰更新失敗：{error}",
+        "syncFailed": "同步到 Key 失敗：{error}",
         "batchFailed": "批量更新失敗"
       },
       "validation": {
@@ -1714,12 +1772,14 @@
           "limit5h": "5h 限額（USD）",
           "limitDaily": "每日限額（USD）",
           "limitWeekly": "週限額（USD）",
-          "limitMonthly": "月限額（USD）"
+          "limitMonthly": "月限額（USD）",
+          "syncKeys": "同步到 Key"
         },
         "placeholders": {
           "emptyToClear": "留空表示清除",
           "tagsPlaceholder": "輸入後按 Enter 新增，支援逗號分隔",
-          "emptyNoLimit": "留空表示不限額"
+          "emptyNoLimit": "留空表示不限額",
+          "syncKeysDescription": "啟用後，會先儲存本次批量編輯中的使用者欄位，再按使用者設定同步該使用者全部未刪除 Key。"
         }
       },
       "key": {

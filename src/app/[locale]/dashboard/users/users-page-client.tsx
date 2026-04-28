@@ -32,6 +32,7 @@ import type { User, UserDisplay } from "@/types/user";
 import { AddKeyDialog } from "../_components/user/add-key-dialog";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
 import { CreateUserDialog } from "../_components/user/create-user-dialog";
+import { TemporaryKeyBatchDialog } from "../_components/user/temporary-key-batch-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
 
 /**
@@ -311,6 +312,8 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   // Add key dialog state
   const [showAddKeyDialog, setShowAddKeyDialog] = useState(false);
   const [addKeyUser, setAddKeyUser] = useState<UserDisplay | null>(null);
+  const [showTemporaryKeyDialog, setShowTemporaryKeyDialog] = useState(false);
+  const [temporaryKeyUser, setTemporaryKeyUser] = useState<UserDisplay | null>(null);
 
   const handleCreateUser = useCallback(() => {
     setShowCreateDialog(true);
@@ -333,6 +336,18 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     setShowAddKeyDialog(open);
     if (!open) {
       setAddKeyUser(null);
+    }
+  }, []);
+
+  const handleAddTemporaryKey = useCallback((user: UserDisplay) => {
+    setTemporaryKeyUser(user);
+    setShowTemporaryKeyDialog(true);
+  }, []);
+
+  const handleTemporaryKeyDialogClose = useCallback((open: boolean) => {
+    setShowTemporaryKeyDialog(open);
+    if (!open) {
+      setTemporaryKeyUser(null);
     }
   }, []);
 
@@ -383,7 +398,8 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           (key.name.toLowerCase().includes(normalizedTerm) ||
             key.maskedKey.toLowerCase().includes(normalizedTerm) ||
             (key.fullKey || "").toLowerCase().includes(normalizedTerm) ||
-            (key.providerGroup || "").toLowerCase().includes(normalizedTerm));
+            (key.providerGroup || "").toLowerCase().includes(normalizedTerm) ||
+            (key.temporaryGroupName || "").toLowerCase().includes(normalizedTerm));
 
         const matchesKeyGroup =
           keyGroupFilters.length > 0 &&
@@ -771,6 +787,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             currencyCode={systemSettings?.currencyDisplay ?? "USD"}
             onCreateUser={isAdmin ? handleCreateUser : handleCreateKey}
             onAddKey={handleAddKey}
+            onAddTemporaryKey={isAdmin ? handleAddTemporaryKey : undefined}
             highlightKeyIds={shouldHighlightKeys ? matchingKeyIds : undefined}
             autoExpandOnFilter={shouldHighlightKeys}
             isMultiSelectMode={isAdmin && isMultiSelectMode}
@@ -845,6 +862,15 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           onSuccess={handleKeyCreated}
         />
       )}
+
+      {temporaryKeyUser ? (
+        <TemporaryKeyBatchDialog
+          open={showTemporaryKeyDialog}
+          onOpenChange={handleTemporaryKeyDialogClose}
+          user={temporaryKeyUser}
+          onSuccess={handleKeyCreated}
+        />
+      ) : null}
     </div>
   );
 }

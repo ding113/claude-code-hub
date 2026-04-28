@@ -208,6 +208,7 @@ Once started:
 - **Admin Dashboard**: `http://localhost:23000` (login with `ADMIN_TOKEN` from `.env`)
 - **API Docs (Scalar UI)**: `http://localhost:23000/api/actions/scalar`
 - **API Docs (Swagger UI)**: `http://localhost:23000/api/actions/docs`
+- **Temporary key group API examples**: [docs/examples/temporary-key-groups.md](docs/examples/temporary-key-groups.md)
 
 > 💡 **Tip**: To change the port, edit the `ports` section in `docker-compose.yml`.
 

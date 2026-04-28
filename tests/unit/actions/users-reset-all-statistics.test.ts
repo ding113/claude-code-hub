@@ -73,6 +73,7 @@ vi.mock("@/lib/logger", () => ({
 // Mock invalidateCachedUser (called directly after transaction)
 const invalidateCachedUserMock = vi.fn();
 vi.mock("@/lib/security/api-key-auth-cache", () => ({
+  invalidateCachedKey: vi.fn(),
   invalidateCachedUser: invalidateCachedUserMock,
 }));
 

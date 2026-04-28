@@ -10,6 +10,15 @@ import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import {
+  buildTemporaryKeyCreatePayloads,
+  buildTemporaryKeyGroupText,
+  normalizeTemporaryGroupName,
+  resolveTemporaryGroupName,
+  TEMPORARY_GROUP_NAME_MAX_LENGTH,
+  TEMPORARY_KEY_BATCH_MAX_COUNT,
+  validateTemporaryKeyLimitsAgainstUser,
+} from "@/lib/keys/temporary-key-groups";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { invalidateCachedKey } from "@/lib/security/api-key-auth-cache";
@@ -22,7 +31,9 @@ import { toKey } from "@/repository/_shared/transformers";
 import type { KeyStatistics } from "@/repository/key";
 import {
   countActiveKeysByUser,
+  createKeysBatch,
   createKey,
+  deleteKeysBatch,
   deleteKey,
   findActiveKeyByUserIdAndName,
   findKeyById,
@@ -825,6 +836,249 @@ export async function getKeysWithStatistics(
   } catch (error) {
     logger.error("获取密钥统计失败:", error);
     return { ok: false, error: "获取密钥统计失败" };
+  }
+}
+
+export interface CreateTemporaryKeysBatchParams {
+  userId: number;
+  baseKeyId: number;
+  count: number;
+  customLimitTotalUsd?: number;
+}
+
+export interface TemporaryKeyBatchItem {
+  name: string;
+  key: string;
+  createdAt: string;
+  expiresAt: string | null;
+  limitTotalUsd: number | null;
+}
+
+export interface CreateTemporaryKeysBatchResult {
+  groupName: string;
+  createdCount: number;
+  sourceKeyName: string;
+  keys: TemporaryKeyBatchItem[];
+}
+
+export async function createTemporaryKeysBatch(
+  params: CreateTemporaryKeysBatchParams
+): Promise<ActionResult<CreateTemporaryKeysBatchResult>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const count = Number.isFinite(params.count) ? Math.trunc(params.count) : 0;
+    if (count < 1 || count > TEMPORARY_KEY_BATCH_MAX_COUNT) {
+      return {
+        ok: false,
+        error: `单次最多生成 ${TEMPORARY_KEY_BATCH_MAX_COUNT} 个临时 Key`,
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const { findUserById } = await import("@/repository/user");
+    const user = await findUserById(params.userId);
+    if (!user) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const normalizedGroupName = resolveTemporaryGroupName(user.providerGroup);
+    if (normalizedGroupName.length > TEMPORARY_GROUP_NAME_MAX_LENGTH) {
+      return {
+        ok: false,
+        error: `临时分组名称不能超过 ${TEMPORARY_GROUP_NAME_MAX_LENGTH} 个字符`,
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const baseKey = await findKeyById(params.baseKeyId);
+    if (!baseKey || baseKey.userId !== params.userId) {
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const limitValidationError = validateTemporaryKeyLimitsAgainstUser(
+      user,
+      {
+        limit5hUsd: baseKey.limit5hUsd,
+        limitDailyUsd: baseKey.limitDailyUsd,
+        limitWeeklyUsd: baseKey.limitWeeklyUsd,
+        limitMonthlyUsd: baseKey.limitMonthlyUsd,
+        limitTotalUsd:
+          params.customLimitTotalUsd !== undefined
+            ? params.customLimitTotalUsd
+            : (baseKey.limitTotalUsd ?? null),
+        limitConcurrentSessions: baseKey.limitConcurrentSessions,
+      },
+      tError
+    );
+    if (limitValidationError) {
+      return { ok: false, error: limitValidationError };
+    }
+
+    const existingKeys = await findKeyList(params.userId);
+    const createPayloads = buildTemporaryKeyCreatePayloads({
+      userId: params.userId,
+      baseKey,
+      existingKeys,
+      groupName: normalizedGroupName,
+      count,
+      customLimitTotalUsd: params.customLimitTotalUsd,
+      createKeyString: () => `sk-${randomBytes(16).toString("hex")}`,
+    });
+
+    const createdKeys = await createKeysBatch(createPayloads);
+
+    revalidatePath("/dashboard");
+
+    return {
+      ok: true,
+      data: {
+        groupName: normalizedGroupName,
+        createdCount: createdKeys.length,
+        sourceKeyName: baseKey.name,
+        keys: createdKeys.map((key) => ({
+          name: key.name,
+          key: key.key,
+          createdAt: key.createdAt.toISOString(),
+          expiresAt: key.expiresAt?.toISOString() ?? null,
+          limitTotalUsd: key.limitTotalUsd ?? null,
+        })),
+      },
+    };
+  } catch (error) {
+    logger.error("批量创建临时 Key 失败:", error);
+    const message = error instanceof Error ? error.message : "批量创建临时 Key 失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.CREATE_FAILED };
+  }
+}
+
+export async function removeTemporaryKeyGroup(params: {
+  userId: number;
+  groupName: string;
+}): Promise<ActionResult<{ deletedCount: number; groupName: string }>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const normalizedGroupName = normalizeTemporaryGroupName(params.groupName);
+    if (!normalizedGroupName) {
+      return {
+        ok: false,
+        error: "临时分组名称不能为空",
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
+    }
+
+    const userKeys = await findKeyList(params.userId);
+    const groupKeys = userKeys.filter((key) => key.temporaryGroupName === normalizedGroupName);
+    if (groupKeys.length === 0) {
+      return {
+        ok: false,
+        error: "临时 Key 分组不存在",
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const enabledCountInGroup = groupKeys.filter((key) => key.isEnabled).length;
+    if (enabledCountInGroup > 0) {
+      const activeKeyCount = await countActiveKeysByUser(params.userId);
+      if (activeKeyCount - enabledCountInGroup < 1) {
+        return {
+          ok: false,
+          error: tError("CANNOT_DISABLE_LAST_KEY"),
+          errorCode: ERROR_CODES.OPERATION_FAILED,
+        };
+      }
+    }
+
+    const deletedCount = await deleteKeysBatch(groupKeys.map((key) => key.id));
+    revalidatePath("/dashboard");
+
+    return {
+      ok: true,
+      data: {
+        deletedCount,
+        groupName: normalizedGroupName,
+      },
+    };
+  } catch (error) {
+    logger.error("删除临时 Key 分组失败:", error);
+    const message = error instanceof Error ? error.message : "删除临时 Key 分组失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
+  }
+}
+
+export async function downloadTemporaryKeyGroup(params: {
+  userId: number;
+  groupName: string;
+}): Promise<ActionResult<string>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const normalizedGroupName = normalizeTemporaryGroupName(params.groupName);
+    if (!normalizedGroupName) {
+      return {
+        ok: false,
+        error: "临时分组名称不能为空",
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
+    }
+
+    const userKeys = await findKeyList(params.userId);
+    const groupKeys = userKeys
+      .filter((key) => key.temporaryGroupName === normalizedGroupName)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    if (groupKeys.length === 0) {
+      return {
+        ok: false,
+        error: "临时 Key 分组不存在",
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    return {
+      ok: true,
+      data: buildTemporaryKeyGroupText(groupKeys),
+    };
+  } catch (error) {
+    logger.error("下载临时 Key 分组失败:", error);
+    const message = error instanceof Error ? error.message : "下载临时 Key 分组失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
   }
 }
 

@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { Section } from "@/components/section";
+import { Button } from "@/components/ui/button";
 import { getSystemSettings } from "@/repository/system-config";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { AutoCleanupForm } from "./_components/auto-cleanup-form";
@@ -23,6 +25,11 @@ export default async function SettingsConfigPage({
         title={t("config.title")}
         description={t("config.description")}
         icon="settings"
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href="#billing-correction">{t("config.form.billingCorrection.title")}</Link>
+          </Button>
+        }
       />
       <Suspense fallback={<SettingsConfigSkeleton />}>
         <SettingsConfigContent locale={locale} />
@@ -50,6 +57,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             currencyDisplay: settings.currencyDisplay,
             billingModelSource: settings.billingModelSource,
             codexPriorityBillingSource: settings.codexPriorityBillingSource,
+            costMultiplierCorrection: settings.costMultiplierCorrection,
             timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
             passThroughUpstreamErrorMessage: settings.passThroughUpstreamErrorMessage,

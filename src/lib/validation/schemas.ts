@@ -928,6 +928,11 @@ export const UpdateSystemSettingsSchema = z.object({
   codexPriorityBillingSource: z
     .enum(["requested", "actual"], { message: "不支持的 Codex Priority 计费来源" })
     .optional(),
+  costMultiplierCorrection: z.coerce
+    .number()
+    .min(-100, "成本倍率修正值不能小于 -100")
+    .max(100, "成本倍率修正值不能大于 100")
+    .optional(),
   // 系统时区配置（可选）
   // 必须是有效的 IANA 时区标识符（如 "Asia/Shanghai", "America/New_York"）
   timezone: z

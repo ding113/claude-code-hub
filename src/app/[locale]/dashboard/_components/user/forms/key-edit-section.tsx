@@ -54,6 +54,10 @@ export interface KeyEditSectionProps {
   showLimitRules?: boolean;
   /** 是否显示到期时间区域，默认为 true */
   showExpireTime?: boolean;
+  /** 是否显示供应商分组，默认为 true */
+  showProviderGroup?: boolean;
+  /** 是否显示启用状态，默认为 true */
+  showEnableStatus?: boolean;
   onChange: {
     (field: string, value: any): void;
     (batch: Record<string, any>): void;
@@ -131,6 +135,8 @@ export function KeyEditSection({
   userProviderGroup,
   showLimitRules = true,
   showExpireTime = true,
+  showProviderGroup = true,
+  showEnableStatus = true,
   onChange,
   scrollRef,
   translations,
@@ -338,36 +344,38 @@ export function KeyEditSection({
           value={keyData.name}
           onChange={(val) => onChange("name", val)}
         />
-        <div className="flex items-center justify-between gap-4 py-1">
-          <div className="space-y-0.5">
-            <Label htmlFor={`key-enable-${keyData.id}`} className="text-sm font-medium">
-              {translations.fields.enableStatus?.label || "Enable Status"}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {translations.fields.enableStatus?.description || "Disabled keys cannot be used"}
-            </p>
+        {showEnableStatus && (
+          <div className="flex items-center justify-between gap-4 py-1">
+            <div className="space-y-0.5">
+              <Label htmlFor={`key-enable-${keyData.id}`} className="text-sm font-medium">
+                {translations.fields.enableStatus?.label || "Enable Status"}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {translations.fields.enableStatus?.description || "Disabled keys cannot be used"}
+              </p>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center">
+                  <Switch
+                    id={`key-enable-${keyData.id}`}
+                    checked={keyData.isEnabled ?? true}
+                    disabled={isLastEnabledKey}
+                    onCheckedChange={(checked) => onChange("isEnabled", checked)}
+                  />
+                </div>
+              </TooltipTrigger>
+              {isLastEnabledKey && (
+                <TooltipContent>
+                  <p className="text-xs">
+                    {translations.fields.enableStatus?.cannotDisableTooltip ||
+                      "Cannot disable the last enabled key"}
+                  </p>
+                </TooltipContent>
+              )}
+            </Tooltip>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center">
-                <Switch
-                  id={`key-enable-${keyData.id}`}
-                  checked={keyData.isEnabled ?? true}
-                  disabled={isLastEnabledKey}
-                  onCheckedChange={(checked) => onChange("isEnabled", checked)}
-                />
-              </div>
-            </TooltipTrigger>
-            {isLastEnabledKey && (
-              <TooltipContent>
-                <p className="text-xs">
-                  {translations.fields.enableStatus?.cannotDisableTooltip ||
-                    "Cannot disable the last enabled key"}
-                </p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </div>
+        )}
       </section>
 
       {/* 到期时间区域 - 仅在 showExpireTime 为 true 时显示 */}
@@ -458,7 +466,7 @@ export function KeyEditSection({
           />
         </div>
 
-        {isAdmin ? (
+        {showProviderGroup && isAdmin ? (
           <ProviderGroupSelect
             value={keyData.providerGroup || PROVIDER_GROUP.DEFAULT}
             onChange={(val) => onChange("providerGroup", val)}
@@ -468,7 +476,7 @@ export function KeyEditSection({
               placeholder: translations.fields.providerGroup.placeholder,
             }}
           />
-        ) : userGroups.length > 0 ? (
+        ) : showProviderGroup && userGroups.length > 0 ? (
           <div className="space-y-2">
             {keyData.id > 0 ? (
               // 编辑模式：只读显示
@@ -508,7 +516,7 @@ export function KeyEditSection({
               />
             )}
           </div>
-        ) : keyGroupOptions.length > 0 ? (
+        ) : showProviderGroup && keyGroupOptions.length > 0 ? (
           <div className="space-y-2">
             <Label>{translations.fields.providerGroup.label}</Label>
             <div className="flex flex-wrap gap-2">
@@ -527,11 +535,11 @@ export function KeyEditSection({
               {translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"}
             </p>
           </div>
-        ) : (
+        ) : showProviderGroup ? (
           <div className="text-sm text-muted-foreground">
             {translations.fields.providerGroup.noGroupHint || "您没有分组限制，可以访问所有供应商"}
           </div>
-        )}
+        ) : null}
 
         <div className="space-y-2">
           <Label>{translations.fields.cacheTtl.label}</Label>

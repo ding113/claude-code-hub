@@ -81,6 +81,7 @@ export function toKey(dbKey: any): Key {
     limitConcurrentSessions: dbKey?.limitConcurrentSessions ?? 0,
     providerGroup: dbKey?.providerGroup ?? null,
     cacheTtlPreference: dbKey?.cacheTtlPreference ?? null,
+    temporaryGroupName: dbKey?.temporaryGroupName ?? null,
     createdAt: dbKey?.createdAt ? new Date(dbKey.createdAt) : new Date(),
     updatedAt: dbKey?.updatedAt ? new Date(dbKey.updatedAt) : new Date(),
   };
@@ -210,6 +211,11 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       dbSettings?.codexPriorityBillingSource === "actual"
         ? dbSettings.codexPriorityBillingSource
         : "requested",
+    costMultiplierCorrection:
+      dbSettings?.costMultiplierCorrection !== null &&
+      dbSettings?.costMultiplierCorrection !== undefined
+        ? parseFloat(dbSettings.costMultiplierCorrection)
+        : 0,
     timezone: dbSettings?.timezone ?? null,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,
