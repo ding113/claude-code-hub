@@ -347,10 +347,9 @@ function collectSseEvents(body: string): SseEvent[] {
     }
     if (line.startsWith("data:")) {
       dataLines.push(line.slice(5).replace(/^\s/, ""));
-      continue;
     }
-    if (line.startsWith("id:") || line.startsWith("retry:")) {
-    }
+    // `id:` / `retry:` are valid SSE fields that don't carry deliverable data,
+    // so we intentionally skip them without bumping any state.
   }
   flush();
   return events;

@@ -17,13 +17,16 @@ import { ProxySession } from "./proxy/session";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
   let session: ProxySession | null = null;
+  let cachedSystemSettings: Awaited<ReturnType<typeof getCachedSystemSettings>> | null = null;
   try {
     session = await ProxySession.fromContext(c);
     try {
-      const systemSettings = await getCachedSystemSettings();
-      session.setHighConcurrencyModeEnabled(systemSettings.enableHighConcurrencyMode ?? false);
+      cachedSystemSettings = await getCachedSystemSettings();
+      session.setHighConcurrencyModeEnabled(
+        cachedSystemSettings.enableHighConcurrencyMode ?? false
+      );
       session.setRawCrossProviderFallbackEnabled(
-        systemSettings.allowNonConversationEndpointProviderFallback ?? true
+        cachedSystemSettings.allowNonConversationEndpointProviderFallback ?? true
       );
     } catch (settingsError) {
       logger.warn(
@@ -114,10 +117,15 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     // (duplicating cost / message context) or leave the request in an
     // inconsistent state. Let the outer error handler turn the failure into a
     // protocol error response instead.
-    const fakeStreamingSettings = await getCachedSystemSettings();
-    const fakeStreamingResponse = await tryFakeStreamingPath(session, fakeStreamingSettings);
-    if (fakeStreamingResponse) {
-      return await attachSessionIdToErrorResponse(session.sessionId, fakeStreamingResponse);
+    //
+    // Reuse the system settings already loaded above (with its fallback path)
+    // instead of re-reading the cache. A transient cache miss must not turn an
+    // otherwise-routable request into an error response.
+    if (cachedSystemSettings) {
+      const fakeStreamingResponse = await tryFakeStreamingPath(session, cachedSystemSettings);
+      if (fakeStreamingResponse) {
+        return await attachSessionIdToErrorResponse(session.sessionId, fakeStreamingResponse);
+      }
     }
 
     const response = await ProxyForwarder.send(session);

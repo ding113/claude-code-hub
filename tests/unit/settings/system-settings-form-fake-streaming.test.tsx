@@ -271,6 +271,50 @@ describe("SystemSettingsForm fake streaming whitelist", () => {
     unmount();
   });
 
+  test("merges duplicate model entries and keeps 'all groups' as the broader scope", async () => {
+    // Two entries for the same model: one explicit `["group-a"]`, one empty
+    // (meaning "all groups"). Empty is strictly broader, so the merge result
+    // must keep groupTags=[] instead of narrowing to ["group-a"].
+    const initial = {
+      ...baseSettings,
+      fakeStreamingWhitelist: [
+        { model: "gpt-image-2", groupTags: ["group-a"] },
+        { model: "gpt-image-2", groupTags: [] },
+        { model: "gemini-3.1-flash-image-preview", groupTags: ["group-a"] },
+        { model: "gemini-3.1-flash-image-preview", groupTags: ["group-b"] },
+      ],
+    } satisfies typeof baseSettings;
+
+    const { unmount } = render(<SystemSettingsForm initialSettings={initial} />);
+
+    await submitForm();
+
+    const lastCall =
+      systemConfigActionMocks.saveSystemSettings.mock.calls[
+        systemConfigActionMocks.saveSystemSettings.mock.calls.length - 1
+      ];
+    const sentList = (lastCall?.[0] as { fakeStreamingWhitelist?: unknown })
+      ?.fakeStreamingWhitelist as Array<{ model: string; groupTags: string[] }>;
+
+    const imageEntry = sentList.find((e) => e.model === "gpt-image-2");
+    expect(imageEntry).toBeTruthy();
+    expect(imageEntry?.groupTags).toEqual([]);
+
+    // For models with only explicit tags across rows, union deduped tags.
+    const geminiEntry = sentList.find((e) => e.model === "gemini-3.1-flash-image-preview");
+    expect(geminiEntry).toBeTruthy();
+    expect(geminiEntry?.groupTags?.sort()).toEqual(["group-a", "group-b"].sort());
+
+    // Each model should appear exactly once after the merge.
+    const counts = new Map<string, number>();
+    for (const entry of sentList) {
+      counts.set(entry.model, (counts.get(entry.model) ?? 0) + 1);
+    }
+    for (const [, count] of counts) expect(count).toBe(1);
+
+    unmount();
+  });
+
   test("all locales define fake streaming labels", () => {
     const locales = ["zh-CN", "zh-TW", "en", "ja", "ru"] as const;
 

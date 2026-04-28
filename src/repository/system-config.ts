@@ -809,7 +809,10 @@ export async function updateSystemSettings(
           );
 
           try {
-            const withoutPassThroughUpdates = { ...updates };
+            // Continue pruning from the already-reduced object, otherwise the
+            // freshly removed `fakeStreamingWhitelist` (and any other newer
+            // columns) would be reintroduced and fail again on legacy schemas.
+            const withoutPassThroughUpdates = { ...updatesWithoutNonConversationFallback };
             delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
             [updated] = await executor
               .update(systemSettings)
@@ -821,7 +824,9 @@ export async function updateSystemSettings(
               throw passThroughFallbackError;
             }
 
-            const downgradedUpdates = { ...updates };
+            // Same rationale: clone from the already-pruned object to avoid
+            // re-introducing newer columns the legacy schema can't handle.
+            const downgradedUpdates = { ...updatesWithoutNonConversationFallback };
             delete downgradedUpdates.passThroughUpstreamErrorMessage;
             delete downgradedUpdates.enableHighConcurrencyMode;
             delete downgradedUpdates.publicStatusWindowHours;
@@ -829,9 +834,12 @@ export async function updateSystemSettings(
             delete downgradedUpdates.ipExtractionConfig;
             delete downgradedUpdates.ipGeoLookupEnabled;
 
+            // legacyUpdates already inherits the pruning from
+            // updatesWithoutNonConversationFallback (which dropped
+            // allowNonConversationEndpointProviderFallback), so we only need
+            // to additionally remove codexPriorityBillingSource here.
             const legacyUpdates = { ...downgradedUpdates };
             delete legacyUpdates.codexPriorityBillingSource;
-            delete legacyUpdates.allowNonConversationEndpointProviderFallback;
 
             try {
               [updated] = await executor

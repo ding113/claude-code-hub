@@ -45,7 +45,10 @@ function hasAltSse(search: string): boolean {
   if (!normalized) return false;
   try {
     const params = new URLSearchParams(normalized);
-    return params.get("alt") === "sse";
+    // `alt` may legally appear multiple times (e.g. ?alt=json&alt=sse). Only
+    // looking at the first value would misclassify such requests as
+    // non-streaming.
+    return params.getAll("alt").includes("sse");
   } catch {
     return false;
   }
@@ -81,8 +84,13 @@ function stripAltSse(search: string): string {
   if (!raw) return "";
   try {
     const params = new URLSearchParams(raw);
-    if (params.get("alt") === "sse") {
+    const altValues = params.getAll("alt");
+    if (altValues.includes("sse")) {
+      // Drop only the sse occurrences; preserve any other `alt` values.
       params.delete("alt");
+      for (const value of altValues) {
+        if (value !== "sse") params.append("alt", value);
+      }
     }
     const remaining = params.toString();
     if (!remaining) return "";

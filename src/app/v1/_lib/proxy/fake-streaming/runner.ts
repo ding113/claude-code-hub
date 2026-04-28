@@ -149,12 +149,32 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
 export async function buildFakeStreamingNonStreamResponse(
   input: Omit<FakeStreamingRunInput, "isStream" | "heartbeatIntervalMs">
 ): Promise<Response> {
-  const result = await orchestrateFakeStreamingAttempts({
-    family: input.family,
-    performAttempt: input.performAttempt,
-    abortSignal: input.abortSignal,
-    maxAttempts: input.maxAttempts,
-  });
+  let result: Awaited<ReturnType<typeof orchestrateFakeStreamingAttempts>>;
+  try {
+    result = await orchestrateFakeStreamingAttempts({
+      family: input.family,
+      performAttempt: input.performAttempt,
+      abortSignal: input.abortSignal,
+      maxAttempts: input.maxAttempts,
+    });
+  } catch (error) {
+    // Orchestrator only re-throws non-abort exceptions (e.g., transport
+    // failures). Surface a structured 502 here so non-stream clients get the
+    // same JSON contract they would for "all attempts failed", instead of the
+    // outer ProxyErrorHandler turning this into a different shape.
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: "runner_error",
+          message: error instanceof Error ? error.message : "fake streaming runner failed",
+        },
+      }),
+      {
+        status: 502,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      }
+    );
+  }
 
   if (result.ok && typeof result.finalBody === "string") {
     return new Response(emitFinalNonStream({ family: input.family, finalBody: result.finalBody }), {

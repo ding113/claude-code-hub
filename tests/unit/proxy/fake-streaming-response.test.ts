@@ -83,7 +83,7 @@ describe("emitFinalStream — anthropic", () => {
     }
   });
 
-  test("emits content_block_start with full block for non-text content (tool_use)", () => {
+  test("emits tool_use as start(empty input) + input_json_delta + stop", () => {
     const finalBody = JSON.stringify({
       id: "msg_1",
       type: "message",
@@ -103,12 +103,27 @@ describe("emitFinalStream — anthropic", () => {
 
     const sse = emitFinalStream({ family: "anthropic", finalBody });
     const events = parseSseEvents(sse);
+
+    // The Anthropic SDK only populates tool_use input from input_json_delta
+    // events; data inlined into content_block_start is silently ignored.
     const blockStart = events.find((e) => e.event === "content_block_start");
     expect(blockStart).toBeTruthy();
     if (blockStart) {
       const parsed = JSON.parse(blockStart.data);
       expect(parsed.content_block.type).toBe("tool_use");
-      expect(parsed.content_block.input).toEqual({ query: "x" });
+      expect(parsed.content_block.id).toBe("tu_1");
+      expect(parsed.content_block.name).toBe("search");
+      expect(parsed.content_block.input).toEqual({});
+    }
+
+    const inputJsonDelta = events.find(
+      (e) =>
+        e.event === "content_block_delta" && JSON.parse(e.data).delta?.type === "input_json_delta"
+    );
+    expect(inputJsonDelta).toBeTruthy();
+    if (inputJsonDelta) {
+      const parsed = JSON.parse(inputJsonDelta.data);
+      expect(parsed.delta.partial_json).toBe(JSON.stringify({ query: "x" }));
     }
 
     // No text delta for tool_use
@@ -116,6 +131,31 @@ describe("emitFinalStream — anthropic", () => {
       (e) => e.event === "content_block_delta" && JSON.parse(e.data).delta?.type === "text_delta"
     );
     expect(textDeltas.length).toBe(0);
+
+    const blockStop = events.find((e) => e.event === "content_block_stop");
+    expect(blockStop).toBeTruthy();
+  });
+
+  test("tool_use with missing/null input still emits a delta with empty object JSON", () => {
+    const finalBody = JSON.stringify({
+      id: "msg_2",
+      type: "message",
+      role: "assistant",
+      model: "claude-3-5",
+      content: [{ type: "tool_use", id: "tu_2", name: "noop" }],
+      stop_reason: "tool_use",
+    });
+    const sse = emitFinalStream({ family: "anthropic", finalBody });
+    const events = parseSseEvents(sse);
+    const inputJsonDelta = events.find(
+      (e) =>
+        e.event === "content_block_delta" && JSON.parse(e.data).delta?.type === "input_json_delta"
+    );
+    expect(inputJsonDelta).toBeTruthy();
+    if (inputJsonDelta) {
+      const parsed = JSON.parse(inputJsonDelta.data);
+      expect(parsed.delta.partial_json).toBe("{}");
+    }
   });
 });
 
@@ -221,6 +261,26 @@ describe("emitFinalStream — gemini", () => {
     expect(events.length).toBe(1);
     const parsed = JSON.parse(events[0].data);
     expect(parsed).toEqual(finalObj);
+  });
+
+  test("preserves multi-line (pretty-printed) JSON across SSE data lines", () => {
+    const finalObj = {
+      candidates: [{ content: { parts: [{ text: "multi\nline" }] }, finishReason: "STOP" }],
+      modelVersion: "gemini-3-pro",
+    };
+    // Pretty-print with 2-space indent so the body contains real newlines.
+    const finalBody = JSON.stringify(finalObj, null, 2);
+    const sse = emitFinalStream({ family: "gemini", finalBody });
+
+    // Every non-blank line in the framed payload must carry the `data:` prefix
+    // — otherwise SSE consumers drop the trailing JSON lines.
+    const framedLines = sse.split(/\r?\n/).filter((line) => line.length > 0);
+    expect(framedLines.every((line) => line.startsWith("data: "))).toBe(true);
+
+    // And after parsing, the recovered object must round-trip exactly.
+    const events = parseSseEvents(sse);
+    expect(events.length).toBe(1);
+    expect(JSON.parse(events[0].data)).toEqual(finalObj);
   });
 });
 

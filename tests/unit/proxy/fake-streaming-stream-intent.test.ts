@@ -239,4 +239,21 @@ describe("cloneRequestForInternalNonStreamAttempt", () => {
     expect(clone.pathname).toBe("/v1beta/models/gemini-1.5-pro:generateContent");
     expect(clone.search).toBe("");
   });
+
+  test("multi-valued alt: detects sse even when not first, and only strips sse occurrences", () => {
+    const original = {
+      format: "gemini" as ClientFormat,
+      pathname: "/v1beta/models/gemini-1.5-pro:generateContent",
+      search: "?alt=json&alt=sse&key=abc",
+      body: {} as Record<string, unknown>,
+    };
+    const intent = detectClientStreamIntent(original);
+    expect(intent).toBe(true);
+
+    const clone = cloneRequestForInternalNonStreamAttempt(original);
+    // Only `alt=sse` should be removed; `alt=json` and `key` are preserved.
+    const params = new URLSearchParams(clone.search.replace(/^\?/, ""));
+    expect(params.getAll("alt")).toEqual(["json"]);
+    expect(params.get("key")).toBe("abc");
+  });
 });

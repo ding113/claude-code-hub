@@ -105,7 +105,7 @@ function emitAnthropicStream(parsed: unknown): string {
   for (let i = 0; i < blocks.length; i += 1) {
     const block = blocks[i];
     if (!block || typeof block !== "object") continue;
-    const typed = block as { type?: unknown; text?: unknown };
+    const typed = block as { type?: unknown; text?: unknown; input?: unknown };
     if (typed.type === "text" && typeof typed.text === "string") {
       parts.push(
         formatSseEvent("content_block_start", {
@@ -124,7 +124,39 @@ function emitAnthropicStream(parsed: unknown): string {
       parts.push(formatSseEvent("content_block_stop", { type: "content_block_stop", index: i }));
       continue;
     }
-    // Non-text block: emit content_block_start with the full block, then stop.
+    if (typed.type === "tool_use") {
+      // Anthropic SDKs only populate tool_use input from input_json_delta
+      // events; fields embedded in content_block_start are ignored. To stay
+      // protocol-compatible we open with an empty `input: {}`, stream the
+      // serialized input as a single partial_json delta, then close.
+      const startBlock: Record<string, unknown> = {
+        type: "tool_use",
+        id: (block as { id?: unknown }).id,
+        name: (block as { name?: unknown }).name,
+        input: {},
+      };
+      parts.push(
+        formatSseEvent("content_block_start", {
+          type: "content_block_start",
+          index: i,
+          content_block: startBlock,
+        })
+      );
+      const inputJson =
+        typed.input !== undefined && typed.input !== null ? JSON.stringify(typed.input) : "{}";
+      parts.push(
+        formatSseEvent("content_block_delta", {
+          type: "content_block_delta",
+          index: i,
+          delta: { type: "input_json_delta", partial_json: inputJson },
+        })
+      );
+      parts.push(formatSseEvent("content_block_stop", { type: "content_block_stop", index: i }));
+      continue;
+    }
+    // Other non-text blocks (thinking / image / etc.): emit content_block_start
+    // with the full block, then stop. These shapes don't have an SDK-side
+    // accumulator that requires deltas.
     parts.push(
       formatSseEvent("content_block_start", {
         type: "content_block_start",
@@ -325,8 +357,17 @@ function emitGeminiStream(_parsed: unknown, finalBody: string): string {
   // bundle. Since the upstream validation guaranteed the body is a complete
   // candidates payload, emit the whole thing as a single SSE event.
   // Re-stringifying through JSON.parse/stringify would lose key ordering /
-  // numerical precision; just trim and emit the original bytes.
-  return formatRawSse(`data: ${finalBody.trim()}\n\n`);
+  // numerical precision; just emit the original bytes line-by-line.
+  //
+  // Per SSE spec, every line of a multi-line `data:` field requires its own
+  // `data:` prefix. Pretty-printed upstream JSON would otherwise be silently
+  // truncated by SSE consumers after the first newline.
+  const trimmed = finalBody.trim();
+  const framed = trimmed
+    .split(/\r?\n/)
+    .map((line) => `data: ${line}`)
+    .join("\n");
+  return formatRawSse(`${framed}\n\n`);
 }
 
 function formatSseEvent(eventName: string, payload: unknown): string {

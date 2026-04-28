@@ -252,17 +252,28 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       // (deduped, trimmed) instead of silently dropping later entries. The
       // server-side schema rejects duplicates, so this aggregates client
       // intent before submission.
+      //
+      // Empty groupTags means "all groups" — that is strictly broader than any
+      // explicit tag set, so once any entry for a model selects "all groups"
+      // the merged result must remain empty (do not narrow it by unioning in
+      // explicit tags from sibling rows).
       const merged = new Map<string, Set<string>>();
+      const allGroupsModels = new Set<string>();
       const order: string[] = [];
       for (const entry of fakeStreamingWhitelist) {
         const model = entry.model.trim();
         if (!model) continue;
-        let groups = merged.get(model);
-        if (!groups) {
-          groups = new Set<string>();
-          merged.set(model, groups);
+        if (!merged.has(model)) {
+          merged.set(model, new Set<string>());
           order.push(model);
         }
+        if (entry.groupTags.length === 0) {
+          allGroupsModels.add(model);
+          continue;
+        }
+        if (allGroupsModels.has(model)) continue;
+        const groups = merged.get(model);
+        if (!groups) continue;
         for (const tag of entry.groupTags) {
           const trimmed = tag.trim();
           if (trimmed) groups.add(trimmed);
@@ -270,7 +281,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       }
       return order.map((model) => ({
         model,
-        groupTags: Array.from(merged.get(model) ?? new Set<string>()),
+        groupTags: allGroupsModels.has(model)
+          ? []
+          : Array.from(merged.get(model) ?? new Set<string>()),
       }));
     })();
 
