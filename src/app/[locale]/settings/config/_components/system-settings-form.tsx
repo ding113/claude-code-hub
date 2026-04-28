@@ -11,8 +11,11 @@ import {
   MapPin,
   Network,
   Pencil,
+  Plus,
+  Radio,
   Terminal,
   Thermometer,
+  Trash2,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -21,6 +24,7 @@ import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { saveSystemSettings } from "@/actions/system-config";
+import { GroupMultiSelect } from "@/app/[locale]/settings/request-filters/_components/group-multi-select";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { InlineWarning } from "@/components/ui/inline-warning";
@@ -49,6 +53,7 @@ import { DEFAULT_IP_EXTRACTION_CONFIG, type IpExtractionConfig } from "@/types/i
 import type {
   BillingModelSource,
   CodexPriorityBillingSource,
+  FakeStreamingWhitelistEntry,
   SystemSettings,
 } from "@/types/system-config";
 
@@ -71,6 +76,7 @@ interface SystemSettingsFormProps {
     | "enableResponseInputRectifier"
     | "enableThinkingBudgetRectifier"
     | "allowNonConversationEndpointProviderFallback"
+    | "fakeStreamingWhitelist"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
@@ -144,6 +150,14 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     allowNonConversationEndpointProviderFallback,
     setAllowNonConversationEndpointProviderFallback,
   ] = useState(initialSettings.allowNonConversationEndpointProviderFallback);
+  const [fakeStreamingWhitelist, setFakeStreamingWhitelist] = useState<
+    FakeStreamingWhitelistEntry[]
+  >(() =>
+    (initialSettings.fakeStreamingWhitelist ?? []).map((entry) => ({
+      model: entry.model,
+      groupTags: [...entry.groupTags],
+    }))
+  );
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
   );
@@ -233,6 +247,25 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       ipExtractionConfigToSave = parsed as IpExtractionConfig;
     }
 
+    const sanitizedFakeStreamingWhitelist: FakeStreamingWhitelistEntry[] = [];
+    {
+      const seenModels = new Set<string>();
+      for (const entry of fakeStreamingWhitelist) {
+        const model = entry.model.trim();
+        if (!model || seenModels.has(model)) continue;
+        seenModels.add(model);
+        const groupSeen = new Set<string>();
+        const groupTags: string[] = [];
+        for (const tag of entry.groupTags) {
+          const trimmed = tag.trim();
+          if (!trimmed || groupSeen.has(trimmed)) continue;
+          groupSeen.add(trimmed);
+          groupTags.push(trimmed);
+        }
+        sanitizedFakeStreamingWhitelist.push({ model, groupTags });
+      }
+    }
+
     startTransition(async () => {
       const result = await saveSystemSettings({
         siteTitle,
@@ -250,6 +283,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableBillingHeaderRectifier,
         enableResponseInputRectifier,
         allowNonConversationEndpointProviderFallback,
+        fakeStreamingWhitelist: sanitizedFakeStreamingWhitelist,
         enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion,
         enableClaudeMetadataUserIdInjection,
@@ -287,6 +321,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableResponseInputRectifier(result.data.enableResponseInputRectifier);
         setAllowNonConversationEndpointProviderFallback(
           result.data.allowNonConversationEndpointProviderFallback
+        );
+        setFakeStreamingWhitelist(
+          (result.data.fakeStreamingWhitelist ?? []).map((entry) => ({
+            model: entry.model,
+            groupTags: [...entry.groupTags],
+          }))
         );
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
@@ -712,6 +752,109 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             onCheckedChange={(checked) => setAllowNonConversationEndpointProviderFallback(checked)}
             disabled={isPending}
           />
+        </div>
+
+        {/* Fake Streaming Whitelist */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+              <Radio className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("fakeStreaming.title")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("fakeStreaming.description")}
+              </p>
+            </div>
+          </div>
+
+          {fakeStreamingWhitelist.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic px-1">
+              {t("fakeStreaming.emptyState")}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {fakeStreamingWhitelist.map((entry, index) => (
+                <div
+                  key={index}
+                  className="rounded-lg border border-border bg-muted/30 p-3 space-y-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor={`fake-streaming-model-${index}`}
+                      className="text-xs font-medium text-muted-foreground w-20 shrink-0"
+                    >
+                      {t("fakeStreaming.modelLabel")}
+                    </Label>
+                    <Input
+                      id={`fake-streaming-model-${index}`}
+                      data-testid={`fake-streaming-model-${index}`}
+                      value={entry.model}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setFakeStreamingWhitelist((prev) =>
+                          prev.map((item, i) => (i === index ? { ...item, model: next } : item))
+                        );
+                      }}
+                      placeholder={t("fakeStreaming.modelPlaceholder")}
+                      disabled={isPending}
+                      className={inputClassName}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      data-testid={`fake-streaming-remove-${index}`}
+                      onClick={() => {
+                        setFakeStreamingWhitelist((prev) => prev.filter((_, i) => i !== index));
+                      }}
+                      disabled={isPending}
+                      aria-label={t("fakeStreaming.remove")}
+                      className="shrink-0 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Label className="text-xs font-medium text-muted-foreground w-20 shrink-0 pt-2">
+                      {t("fakeStreaming.groupsLabel")}
+                    </Label>
+                    <div className="flex-1 space-y-1">
+                      <GroupMultiSelect
+                        selectedGroupTags={entry.groupTags}
+                        onChange={(groupTags) => {
+                          setFakeStreamingWhitelist((prev) =>
+                            prev.map((item, i) => (i === index ? { ...item, groupTags } : item))
+                          );
+                        }}
+                        disabled={isPending}
+                      />
+                      {entry.groupTags.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          {t("fakeStreaming.allGroupsHint")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="fake-streaming-add"
+            onClick={() => {
+              setFakeStreamingWhitelist((prev) => [...prev, { model: "", groupTags: [] }]);
+            }}
+            disabled={isPending}
+            className="w-full"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            {t("fakeStreaming.addModel")}
+          </Button>
         </div>
 
         {/* Enable Codex Session ID Completion */}

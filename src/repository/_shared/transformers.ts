@@ -5,7 +5,12 @@ import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
 import type { Provider } from "@/types/provider";
-import type { ResponseFixerConfig, SystemSettings } from "@/types/system-config";
+import {
+  DEFAULT_FAKE_STREAMING_WHITELIST,
+  type FakeStreamingWhitelistEntry,
+  type ResponseFixerConfig,
+  type SystemSettings,
+} from "@/types/system-config";
 import type { User } from "@/types/user";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -189,6 +194,44 @@ export function toModelPrice(dbPrice: any): ModelPrice {
   };
 }
 
+function normalizeFakeStreamingWhitelist(value: unknown): FakeStreamingWhitelistEntry[] {
+  // null / undefined → use legacy default; persisted [] is preserved as opt-out.
+  if (value === undefined || value === null) {
+    return DEFAULT_FAKE_STREAMING_WHITELIST.map((entry) => ({
+      model: entry.model,
+      groupTags: [...entry.groupTags],
+    }));
+  }
+  if (!Array.isArray(value)) {
+    return DEFAULT_FAKE_STREAMING_WHITELIST.map((entry) => ({
+      model: entry.model,
+      groupTags: [...entry.groupTags],
+    }));
+  }
+  const seen = new Set<string>();
+  const result: FakeStreamingWhitelistEntry[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const candidate = raw as { model?: unknown; groupTags?: unknown };
+    const model = typeof candidate.model === "string" ? candidate.model.trim() : "";
+    if (model.length === 0 || seen.has(model)) continue;
+    seen.add(model);
+    const groupTags: string[] = [];
+    if (Array.isArray(candidate.groupTags)) {
+      const groupSeen = new Set<string>();
+      for (const tag of candidate.groupTags) {
+        if (typeof tag !== "string") continue;
+        const trimmed = tag.trim();
+        if (trimmed.length === 0 || groupSeen.has(trimmed)) continue;
+        groupSeen.add(trimmed);
+        groupTags.push(trimmed);
+      }
+    }
+    result.push({ model, groupTags });
+  }
+  return result;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toSystemSettings(dbSettings: any): SystemSettings {
   const defaultResponseFixerConfig: ResponseFixerConfig = {
@@ -227,6 +270,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableResponseInputRectifier: dbSettings?.enableResponseInputRectifier ?? true,
     allowNonConversationEndpointProviderFallback:
       dbSettings?.allowNonConversationEndpointProviderFallback ?? true,
+    fakeStreamingWhitelist: normalizeFakeStreamingWhitelist(dbSettings?.fakeStreamingWhitelist),
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
     enableClaudeMetadataUserIdInjection: dbSettings?.enableClaudeMetadataUserIdInjection ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,

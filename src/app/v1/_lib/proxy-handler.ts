@@ -6,6 +6,7 @@ import { SessionTracker } from "@/lib/session-tracker";
 import { ProxyErrorHandler } from "./proxy/error-handler";
 import { attachSessionIdToErrorResponse } from "./proxy/error-session-id";
 import { ProxyError } from "./proxy/errors";
+import { tryFakeStreamingPath } from "./proxy/fake-streaming/proxy-integration";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
 import { GuardPipelineBuilder } from "./proxy/guard-pipeline";
@@ -101,6 +102,23 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     }
 
     session.recordForwardStart();
+
+    // Fake streaming: if the client-requested model is whitelisted for the
+    // current provider group, hand off to the fake-streaming runner which
+    // keeps the SSE connection alive with heartbeats while it serially calls
+    // upstream and validates the buffered response before emitting it.
+    try {
+      const fakeStreamingSettings = await getCachedSystemSettings();
+      const fakeStreamingResponse = await tryFakeStreamingPath(session, fakeStreamingSettings);
+      if (fakeStreamingResponse) {
+        return await attachSessionIdToErrorResponse(session.sessionId, fakeStreamingResponse);
+      }
+    } catch (fakeStreamingError) {
+      logger.warn("[ProxyHandler] fake streaming path threw; falling back to normal flow", {
+        error: fakeStreamingError,
+      });
+    }
+
     const response = await ProxyForwarder.send(session);
     const handled = await ProxyResponseHandler.dispatch(session, response);
     const finalResponse = await attachSessionIdToErrorResponse(session.sessionId, handled);

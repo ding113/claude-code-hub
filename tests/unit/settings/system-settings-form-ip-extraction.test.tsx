@@ -57,6 +57,7 @@ const baseSettings = {
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
+  fakeStreamingWhitelist: [],
   responseFixerConfig: {
     fixEncoding: true,
     fixSseFormat: true,

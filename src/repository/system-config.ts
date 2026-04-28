@@ -5,7 +5,11 @@ import { db } from "@/drizzle/db";
 import { systemSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
-import type { SystemSettings, UpdateSystemSettingsInput } from "@/types/system-config";
+import {
+  DEFAULT_FAKE_STREAMING_WHITELIST,
+  type SystemSettings,
+  type UpdateSystemSettingsInput,
+} from "@/types/system-config";
 import { toSystemSettings } from "./_shared/transformers";
 
 type TransactionExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -159,6 +163,10 @@ function createFallbackSettings(): SystemSettings {
     enableBillingHeaderRectifier: true,
     enableResponseInputRectifier: true,
     allowNonConversationEndpointProviderFallback: true,
+    fakeStreamingWhitelist: DEFAULT_FAKE_STREAMING_WHITELIST.map((entry) => ({
+      model: entry.model,
+      groupTags: [...entry.groupTags],
+    })),
     enableCodexSessionIdCompletion: true,
     enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
@@ -270,6 +278,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     };
     const fullSelection = {
       passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+      fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
       ...selectionWithoutPassThrough,
     };
 
@@ -287,12 +296,36 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
-        // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
+        // 第一层降级：仅移除本次新增的 fakeStreamingWhitelist 列，
         // 其它已迁移的现代字段保留，避免只缺该列时其它设置被连带默认化。
+        const {
+          fakeStreamingWhitelist: _omitFakeStreamingWhitelist,
+          ...selectionWithoutFakeStreamingWhitelist
+        } = fullSelection;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutFakeStreamingWhitelist)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (fakeStreamingFallbackError) {
+          if (!isUndefinedColumnError(fakeStreamingFallbackError)) {
+            throw fakeStreamingFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到上一代字段集。",
+            { error: fakeStreamingFallbackError }
+          );
+        }
+
+        // 第二层降级：再移除 allowNonConversationEndpointProviderFallback 列。
         const {
           allowNonConversationEndpointProviderFallback: _omitNonConversationFallback,
           ...selectionWithoutNonConversationFallback
-        } = fullSelection;
+        } = selectionWithoutFakeStreamingWhitelist;
 
         try {
           const [row] = await db
@@ -533,6 +566,7 @@ export async function updateSystemSettings(
   };
   const fullReturning = {
     passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+    fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
     ...returningWithoutPassThrough,
   };
 
@@ -698,6 +732,11 @@ export async function updateSystemSettings(
       updates.ipGeoLookupEnabled = payload.ipGeoLookupEnabled;
     }
 
+    // Fake 流式输出白名单（如果提供；空数组表示显式禁用，null 留待 transformer 落默认）
+    if (payload.fakeStreamingWhitelist !== undefined) {
+      updates.fakeStreamingWhitelist = payload.fakeStreamingWhitelist;
+    }
+
     let updated;
     try {
       [updated] = await executor
@@ -714,87 +753,116 @@ export async function updateSystemSettings(
         error,
       });
 
-      // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
-      // 其它字段继续原值更新 / 返回，避免只缺该列时连带丢失 codex/highConcurrency 等更新。
+      // 第一层降级：仅移除本次新增的 fakeStreamingWhitelist 列，
+      // 其它字段继续原值更新 / 返回。
       const {
-        allowNonConversationEndpointProviderFallback: _omitUpdate,
-        ...updatesWithoutNonConversationFallback
+        fakeStreamingWhitelist: _omitUpdateFakeStreaming,
+        ...updatesWithoutFakeStreamingWhitelist
       } = updates;
       const {
-        allowNonConversationEndpointProviderFallback: _omitReturning,
-        ...returningWithoutNonConversationFallback
+        fakeStreamingWhitelist: _omitReturningFakeStreaming,
+        ...returningWithoutFakeStreamingWhitelist
       } = fullReturning;
 
       try {
         [updated] = await executor
           .update(systemSettings)
-          .set(updatesWithoutNonConversationFallback)
+          .set(updatesWithoutFakeStreamingWhitelist)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutNonConversationFallback);
-      } catch (nonConversationFallbackError) {
-        if (!isUndefinedColumnError(nonConversationFallbackError)) {
-          throw nonConversationFallbackError;
+          .returning(returningWithoutFakeStreamingWhitelist);
+      } catch (fakeStreamingFallbackError) {
+        if (!isUndefinedColumnError(fakeStreamingFallbackError)) {
+          throw fakeStreamingFallbackError;
         }
 
         logger.warn(
-          "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
-          { error: nonConversationFallbackError }
+          "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到 allowNonConversationEndpointProviderFallback 之外的字段集。",
+          { error: fakeStreamingFallbackError }
         );
+      }
 
+      // 第二层降级：再移除 allowNonConversationEndpointProviderFallback 列。
+      const {
+        allowNonConversationEndpointProviderFallback: _omitUpdate,
+        ...updatesWithoutNonConversationFallback
+      } = updatesWithoutFakeStreamingWhitelist;
+      const {
+        allowNonConversationEndpointProviderFallback: _omitReturning,
+        ...returningWithoutNonConversationFallback
+      } = returningWithoutFakeStreamingWhitelist;
+
+      if (!updated) {
         try {
-          const withoutPassThroughUpdates = { ...updates };
-          delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
           [updated] = await executor
             .update(systemSettings)
-            .set(withoutPassThroughUpdates)
+            .set(updatesWithoutNonConversationFallback)
             .where(eq(systemSettings.id, current.id))
-            .returning(returningWithoutPassThrough);
-        } catch (passThroughFallbackError) {
-          if (!isUndefinedColumnError(passThroughFallbackError)) {
-            throw passThroughFallbackError;
+            .returning(returningWithoutNonConversationFallback);
+        } catch (nonConversationFallbackError) {
+          if (!isUndefinedColumnError(nonConversationFallbackError)) {
+            throw nonConversationFallbackError;
           }
 
-          const downgradedUpdates = { ...updates };
-          delete downgradedUpdates.passThroughUpstreamErrorMessage;
-          delete downgradedUpdates.enableHighConcurrencyMode;
-          delete downgradedUpdates.publicStatusWindowHours;
-          delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
-          delete downgradedUpdates.ipExtractionConfig;
-          delete downgradedUpdates.ipGeoLookupEnabled;
-
-          const legacyUpdates = { ...downgradedUpdates };
-          delete legacyUpdates.codexPriorityBillingSource;
-          delete legacyUpdates.allowNonConversationEndpointProviderFallback;
+          logger.warn(
+            "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
+            { error: nonConversationFallbackError }
+          );
 
           try {
+            const withoutPassThroughUpdates = { ...updates };
+            delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
             [updated] = await executor
               .update(systemSettings)
-              .set(downgradedUpdates)
+              .set(withoutPassThroughUpdates)
               .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutHighConcurrencyMode);
-          } catch (downgradedFallbackError) {
-            if (!isUndefinedColumnError(downgradedFallbackError)) {
-              throw downgradedFallbackError;
+              .returning(returningWithoutPassThrough);
+          } catch (passThroughFallbackError) {
+            if (!isUndefinedColumnError(passThroughFallbackError)) {
+              throw passThroughFallbackError;
             }
 
-            logger.warn(
-              "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
-              { error: downgradedFallbackError }
-            );
+            const downgradedUpdates = { ...updates };
+            delete downgradedUpdates.passThroughUpstreamErrorMessage;
+            delete downgradedUpdates.enableHighConcurrencyMode;
+            delete downgradedUpdates.publicStatusWindowHours;
+            delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
+            delete downgradedUpdates.ipExtractionConfig;
+            delete downgradedUpdates.ipGeoLookupEnabled;
 
-            [updated] = await executor
-              .update(systemSettings)
-              .set(legacyUpdates)
-              .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutCodexAndHighConcurrency);
-          }
+            const legacyUpdates = { ...downgradedUpdates };
+            delete legacyUpdates.codexPriorityBillingSource;
+            delete legacyUpdates.allowNonConversationEndpointProviderFallback;
 
-          if (!updated) {
-            [updated] = await executor
-              .update(systemSettings)
-              .set(legacyUpdates)
-              .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutCodexAndHighConcurrency);
+            try {
+              [updated] = await executor
+                .update(systemSettings)
+                .set(downgradedUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutHighConcurrencyMode);
+            } catch (downgradedFallbackError) {
+              if (!isUndefinedColumnError(downgradedFallbackError)) {
+                throw downgradedFallbackError;
+              }
+
+              logger.warn(
+                "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
+                { error: downgradedFallbackError }
+              );
+
+              [updated] = await executor
+                .update(systemSettings)
+                .set(legacyUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutCodexAndHighConcurrency);
+            }
+
+            if (!updated) {
+              [updated] = await executor
+                .update(systemSettings)
+                .set(legacyUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutCodexAndHighConcurrency);
+            }
           }
         }
       }

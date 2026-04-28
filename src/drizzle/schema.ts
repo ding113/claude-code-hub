@@ -799,6 +799,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // Fake 流式输出白名单（缺省 NULL → transformer 落 DEFAULT_FAKE_STREAMING_WHITELIST；
+  // 显式 [] → 表示禁用 fake streaming）
+  fakeStreamingWhitelist: jsonb('fake_streaming_whitelist').$type<
+    Array<{ model: string; groupTags: string[] }>
+  >(),
+
   // Codex Session ID 补全（默认开启）
   // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean('enable_codex_session_id_completion')

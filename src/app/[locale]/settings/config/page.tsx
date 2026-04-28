@@ -62,6 +62,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             enableResponseInputRectifier: settings.enableResponseInputRectifier,
             allowNonConversationEndpointProviderFallback:
               settings.allowNonConversationEndpointProviderFallback,
+            fakeStreamingWhitelist: settings.fakeStreamingWhitelist,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableClaudeMetadataUserIdInjection: settings.enableClaudeMetadataUserIdInjection,
             enableResponseFixer: settings.enableResponseFixer,

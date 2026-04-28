@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS: Pick<
   | "enableBillingHeaderRectifier"
   | "enableResponseInputRectifier"
   | "allowNonConversationEndpointProviderFallback"
+  | "fakeStreamingWhitelist"
   | "enableCodexSessionIdCompletion"
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
@@ -61,6 +62,9 @@ const DEFAULT_SETTINGS: Pick<
   enableResponseInputRectifier: true,
   // 安全敏感开关：冷缓存 / DB 读取失败时 fail-closed，避免意外重新开启跨供应商 raw fallback。
   allowNonConversationEndpointProviderFallback: false,
+  // Fake streaming 在 DB 完全不可达时 fail-closed（空白名单 → 走原有直传路径），
+  // 避免在不确定状态下劫持流式。Transformer / createFallbackSettings 仍走 4 个默认模型。
+  fakeStreamingWhitelist: [],
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
@@ -143,6 +147,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableResponseInputRectifier: DEFAULT_SETTINGS.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
         DEFAULT_SETTINGS.allowNonConversationEndpointProviderFallback,
+      fakeStreamingWhitelist: DEFAULT_SETTINGS.fakeStreamingWhitelist,
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: DEFAULT_SETTINGS.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,

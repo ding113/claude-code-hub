@@ -14,6 +14,7 @@ import { getSystemSettings, updateSystemSettings } from "@/repository/system-con
 import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   CodexPriorityBillingSource,
+  FakeStreamingWhitelistEntry,
   ResponseFixerConfig,
   SystemSettings,
 } from "@/types/system-config";
@@ -72,6 +73,7 @@ export async function saveSystemSettings(formData: {
   enableBillingHeaderRectifier?: boolean;
   enableResponseInputRectifier?: boolean;
   allowNonConversationEndpointProviderFallback?: boolean;
+  fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -121,6 +123,7 @@ export async function saveSystemSettings(formData: {
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
         validated.allowNonConversationEndpointProviderFallback,
+      fakeStreamingWhitelist: validated.fakeStreamingWhitelist,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,

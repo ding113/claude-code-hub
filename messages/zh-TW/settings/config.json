@@ -70,6 +70,17 @@
     "enableResponseInputRectifierDesc": "自動將 /v1/responses 請求中的非陣列 input（字串簡寫或帶 role/type 的單訊息物件）規範化為標準陣列格式後再處理（預設開啟）。",
     "allowNonConversationEndpointProviderFallback": "允許非對話端點跨供應商 fallback",
     "allowNonConversationEndpointProviderFallbackDesc": "控制 /v1/messages/count_tokens 與 /v1/responses/compact 在目前供應商失敗時，是否沿用既有決策鏈切換到相容供應商重試。預設開啟，並持續保持 raw passthrough 與非計費語義。",
+    "fakeStreaming": {
+      "title": "Fake 串流輸出白名單",
+      "description": "針對圖像 / 影片等長耗時同步生成場景（容易超過 Cloudflare 120 秒無回應主體逾時），CCH 會先回傳 SSE 心跳保持連線，在內部串行呼叫上游供應商，僅在最終取得非空結果時才回寫最終回應。命中白名單的模型會啟用 fake streaming；列表為空表示完全停用。",
+      "modelLabel": "模型",
+      "modelPlaceholder": "客戶端請求中的精確模型名稱",
+      "groupsLabel": "供應商分組",
+      "allGroupsHint": "未選擇分組 → 套用於所有供應商分組。",
+      "addModel": "新增模型",
+      "remove": "刪除",
+      "emptyState": "尚未設定任何模型，fake streaming 已關閉。點擊「新增模型」即可為指定模型啟用。"
+    },
     "enableCodexSessionIdCompletion": "啟用 Codex Session ID 補全",
     "enableCodexSessionIdCompletionDesc": "當 Codex 請求僅提供 session_id（請求頭）或 prompt_cache_key（請求體）之一時，自動補全另一個；若兩者皆缺失，則產生 UUID v7 會話 ID，並在同一對話內穩定複用。",
     "enableClaudeMetadataUserIdInjection": "啟用 Claude metadata.user_id 注入",
