@@ -464,6 +464,7 @@ export interface ProviderDisplay {
   limitWeeklyUsd: number | null;
   limitMonthlyUsd: number | null;
   limitTotalUsd: number | null;
+  totalCostResetAt?: Date | null;
   limitConcurrentSessions: number;
   // 熔断器配置
   maxRetryAttempts: number | null;

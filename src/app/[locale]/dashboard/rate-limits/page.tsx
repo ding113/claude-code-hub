@@ -17,7 +17,7 @@ export default async function RateLimitsPage({ params }: { params: Promise<{ loc
     return redirect({ href: "/dashboard", locale });
   }
 
-  const t = await getTranslations("dashboard.rateLimits");
+  const t = await getTranslations({ locale, namespace: "dashboard.rateLimits" });
 
   return (
     <div className="space-y-6">

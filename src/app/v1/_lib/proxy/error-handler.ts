@@ -5,6 +5,7 @@ import {
   isOpenAIErrorFormat,
   isValidErrorOverrideResponse,
 } from "@/lib/error-override-validator";
+import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
@@ -32,6 +33,25 @@ type ErrorOverrideForMessageResolver = { response?: unknown; statusCode?: number
 
 function stripUpstreamDetailSuffix(message: string): string {
   return message.replace(/\s+Upstream detail:\s*[\s\S]*$/u, "").trim() || message;
+}
+
+function getErrorResponseText(error: unknown): string {
+  if (!(error instanceof ProxyError)) {
+    return "";
+  }
+
+  // Langfuse trace 用于排查上游故障，按产品预期保留原始上游错误主体。
+  return error.upstreamError?.rawBody ?? error.upstreamError?.body ?? "";
+}
+
+function isRequestStreaming(session: ProxySession): boolean {
+  const requestUrl = session.requestUrl;
+
+  return (
+    session.request?.message?.stream === true ||
+    requestUrl?.pathname.includes("streamGenerateContent") ||
+    requestUrl?.searchParams.get("alt") === "sse"
+  );
 }
 
 function getGenericProxyErrorFallbackMessage(
@@ -184,6 +204,12 @@ export class ProxyErrorHandler {
       // 构建详细的 402 响应
       const response = ProxyErrorHandler.buildRateLimitResponse(error);
 
+      ProxyErrorHandler.emitErrorTrace(session, {
+        error,
+        errorMessage: logErrorMessage,
+        statusCode,
+      });
+
       // 记录错误到数据库（包含 rate_limit 元数据）
       await ProxyErrorHandler.logErrorToDatabase(
         session,
@@ -223,8 +249,35 @@ export class ProxyErrorHandler {
       }
     }
 
-    // 记录错误到数据库（始终记录详细错误消息，包含供应商名称）
-    await ProxyErrorHandler.logErrorToDatabase(session, logErrorMessage, statusCode, null);
+    const finalizeErrorResponse = async (
+      response: Response,
+      traceErrorMessage: string,
+      options: { traceFinalResponseBody?: boolean } = {}
+    ) => {
+      const finalResponse = await attachSessionIdToErrorResponse(session.sessionId, response);
+      let responseText: string | undefined;
+      if (options.traceFinalResponseBody) {
+        try {
+          responseText = await finalResponse.clone().text();
+        } catch {
+          responseText = undefined;
+        }
+      }
+      ProxyErrorHandler.emitErrorTrace(session, {
+        error,
+        errorMessage: traceErrorMessage,
+        statusCode: finalResponse.status,
+        responseText,
+      });
+      // 先发出 trace，再写数据库，避免 DB 持久化失败吞掉本次错误诊断。
+      await ProxyErrorHandler.logErrorToDatabase(
+        session,
+        logErrorMessage,
+        finalResponse.status,
+        null
+      );
+      return finalResponse;
+    };
 
     // 检测是否有覆写配置（响应体或状态码）
     // 使用异步版本确保错误规则已加载
@@ -271,15 +324,16 @@ export class ProxyErrorHandler {
                 settings,
                 override: { response: null, statusCode: override.statusCode },
               });
-              return await attachSessionIdToErrorResponse(
-                session.sessionId,
+              return await finalizeErrorResponse(
                 ProxyResponses.buildError(
                   responseStatusCode,
                   finalClientErrorMessage,
                   undefined,
                   undefined,
                   safeRequestId
-                )
+                ),
+                finalClientErrorMessage,
+                { traceFinalResponseBody: true }
               );
             }
             // 两者都无效，返回原始错误（但仍透传 request_id，因为有覆写意图）
@@ -289,15 +343,16 @@ export class ProxyErrorHandler {
               settings,
               override: { response: null, statusCode: null },
             });
-            return await attachSessionIdToErrorResponse(
-              session.sessionId,
+            return await finalizeErrorResponse(
               ProxyResponses.buildError(
                 statusCode,
                 finalClientErrorMessage,
                 undefined,
                 undefined,
                 safeRequestId
-              )
+              ),
+              finalClientErrorMessage,
+              { traceFinalResponseBody: true }
             );
           }
 
@@ -346,12 +401,13 @@ export class ProxyErrorHandler {
             overridden: true,
           });
 
-          return await attachSessionIdToErrorResponse(
-            session.sessionId,
+          return await finalizeErrorResponse(
             new Response(JSON.stringify(responseBody), {
               status: responseStatusCode,
               headers: { "Content-Type": "application/json" },
-            })
+            }),
+            String(responseBody.error.message),
+            { traceFinalResponseBody: true }
           );
         }
 
@@ -376,15 +432,16 @@ export class ProxyErrorHandler {
           override: { response: null, statusCode: override.statusCode },
         });
 
-        return await attachSessionIdToErrorResponse(
-          session.sessionId,
+        return await finalizeErrorResponse(
           ProxyResponses.buildError(
             responseStatusCode,
             finalClientErrorMessage,
             undefined,
             undefined,
             safeRequestId
-          )
+          ),
+          finalClientErrorMessage,
+          { traceFinalResponseBody: true }
         );
       }
     }
@@ -463,15 +520,15 @@ export class ProxyErrorHandler {
       override: null,
     });
 
-    return await attachSessionIdToErrorResponse(
-      session.sessionId,
+    return await finalizeErrorResponse(
       ProxyResponses.buildError(
         statusCode,
         finalClientErrorMessage,
         undefined,
         details,
         safeRequestId
-      )
+      ),
+      logErrorMessage
     );
   }
 
@@ -588,6 +645,25 @@ export class ProxyErrorHandler {
     // 记录请求结束
     const tracker = ProxyStatusTracker.getInstance();
     tracker.endRequest(session.messageContext.user.id, session.messageContext.id);
+  }
+
+  private static emitErrorTrace(
+    session: ProxySession,
+    data: { error: unknown; errorMessage: string; statusCode: number; responseText?: string }
+  ): void {
+    const isStreaming = isRequestStreaming(session);
+
+    emitProxyLangfuseTrace(session, {
+      responseHeaders: new Headers(),
+      responseText: data.responseText ?? getErrorResponseText(data.error),
+      usageMetrics: null,
+      costUsd: undefined,
+      statusCode: data.statusCode,
+      durationMs: Math.max(0, Date.now() - session.startTime),
+      isStreaming,
+      sseEventCount: isStreaming ? 0 : undefined,
+      errorMessage: data.errorMessage,
+    });
   }
 
   /**

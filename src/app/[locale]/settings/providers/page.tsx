@@ -14,8 +14,13 @@ import { SchedulingRulesDialog } from "./_components/scheduling-rules-dialog";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsProvidersPage() {
-  const t = await getTranslations("settings");
+export default async function SettingsProvidersPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "settings" });
   const session = await getSession();
   const providers = await getProviders();
 

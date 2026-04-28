@@ -18,7 +18,7 @@ interface LimitUsageData {
   costDaily: { current: number; limit: number | null };
   costWeekly: { current: number; limit: number | null };
   costMonthly: { current: number; limit: number | null };
-  costTotal: { current: number; limit: number | null };
+  costTotal: { current: number; limit: number | null; resetAt?: Date };
   concurrentSessions: { current: number; limit: number };
 }
 

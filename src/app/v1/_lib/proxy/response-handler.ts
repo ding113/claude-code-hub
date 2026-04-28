@@ -1,6 +1,7 @@
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
@@ -124,49 +125,6 @@ function maybeSetCodexContext1m(
   ) {
     session.setContext1mApplied(true);
   }
-}
-
-/**
- * Fire Langfuse trace asynchronously. Non-blocking, error-tolerant.
- */
-function emitLangfuseTrace(
-  session: ProxySession,
-  data: {
-    responseHeaders: Headers;
-    responseText: string;
-    usageMetrics: UsageMetrics | null;
-    costUsd: string | undefined;
-    costBreakdown?: CostBreakdown;
-    statusCode: number;
-    durationMs: number;
-    isStreaming: boolean;
-    sseEventCount?: number;
-    errorMessage?: string;
-  }
-): void {
-  if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) return;
-
-  void import("@/lib/langfuse/trace-proxy-request")
-    .then(({ traceProxyRequest }) => {
-      void traceProxyRequest({
-        session,
-        responseHeaders: data.responseHeaders,
-        durationMs: data.durationMs,
-        statusCode: data.statusCode,
-        isStreaming: data.isStreaming,
-        responseText: data.responseText,
-        usageMetrics: data.usageMetrics,
-        costUsd: data.costUsd,
-        costBreakdown: data.costBreakdown,
-        sseEventCount: data.sseEventCount,
-        errorMessage: data.errorMessage,
-      });
-    })
-    .catch((err) => {
-      logger.warn("[ResponseHandler] Langfuse trace failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
 }
 
 /**
@@ -409,6 +367,70 @@ function buildCostCalculationOptions(
 
 function isNonBillingUsageEndpoint(session: ProxySession): boolean {
   return isNonBillingEndpoint(session.getEndpoint());
+}
+
+function hasBillableInputCostPerRequest(priceData: { input_cost_per_request?: unknown }): boolean {
+  const inputCostPerRequest = priceData.input_cost_per_request;
+  return (
+    typeof inputCostPerRequest === "number" &&
+    Number.isFinite(inputCostPerRequest) &&
+    inputCostPerRequest > 0
+  );
+}
+
+async function resolveBillableUsageMetricsForCost(
+  session: ProxySession,
+  provider: Provider | null,
+  usageMetrics: UsageMetrics | null,
+  statusCode: number,
+  responseText?: string | null
+): Promise<UsageMetrics | null> {
+  if (isNonBillingUsageEndpoint(session)) {
+    return null;
+  }
+
+  if (statusCode < 200 || statusCode >= 300) {
+    return null;
+  }
+
+  if (responseText !== undefined && responseText !== null) {
+    const detected = detectUpstreamErrorFromSseOrJsonText(responseText, {
+      maxJsonCharsForMessageCheck: 0,
+    });
+    if (detected.isError) {
+      logger.warn("[CostCalculation] Skipping billing for fake-200 error payload", {
+        code: detected.code,
+        detail: detected.detail,
+        originalModel: session.getOriginalModel(),
+        redirectedModel: session.getCurrentModel(),
+      });
+      return null;
+    }
+  }
+
+  if (usageMetrics) {
+    return usageMetrics;
+  }
+
+  let resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>>;
+  try {
+    resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
+  } catch (error) {
+    logger.error("[CostCalculation] Failed to resolve per-request pricing, skipping billing", {
+      error: error instanceof Error ? error.message : String(error),
+      originalModel: session.getOriginalModel(),
+      redirectedModel: session.getCurrentModel(),
+    });
+    return null;
+  }
+
+  if (!resolvedPricing?.priceData || !hasBillableInputCostPerRequest(resolvedPricing.priceData)) {
+    return null;
+  }
+
+  // 成功响应可能没有 token usage（例如 OpenAI Images），但本地价格表仍可配置按次价格。
+  // 这里用显式零 token sentinel 只承载 input_cost_per_request，不新增按图、按 token 等语义。
+  return { input_tokens: 0, output_tokens: 0 };
 }
 
 type FinalizeDeferredStreamingResult = {
@@ -984,7 +1006,7 @@ export class ProxyResponseHandler {
               false // Gemini 非流式透传
             );
 
-            emitLangfuseTrace(session, {
+            emitProxyLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText,
               usageMetrics: finalizedUsage,
@@ -1145,11 +1167,9 @@ export class ProxyResponseHandler {
         if (sessionWithCleanup.clearResponseTimeout) {
           sessionWithCleanup.clearResponseTimeout();
         }
-        let usageRecord: Record<string, unknown> | null = null;
         let usageMetrics: UsageMetrics | null = null;
 
         const usageResult = parseUsageFromResponseText(responseText, provider.providerType);
-        usageRecord = usageResult.usageRecord;
         usageMetrics = usageResult.usageMetrics;
         const actualServiceTier = parseServiceTierFromResponseText(responseText);
         const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
@@ -1172,8 +1192,13 @@ export class ProxyResponseHandler {
         // 关键：必须在 normalizeUsageWithSwap 之后再快照 billable 视图，
         // 否则 updateRequestCostFromUsage / trackCostToRedis 会用未归一化的旧值，
         // 导致缓存 TTL swap、bucket 归一化等场景下的账单与限流统计错位。
-        const billableUsageMetrics =
-          usageMetrics && !isNonBillingUsageEndpoint(session) ? usageMetrics : null;
+        const billableUsageMetrics = await resolveBillableUsageMetricsForCost(
+          session,
+          provider,
+          usageMetrics,
+          statusCode,
+          responseText
+        );
 
         if (billableUsageMetrics) {
           maybeSetCodexContext1m(session, provider, billableUsageMetrics.input_tokens);
@@ -1221,7 +1246,7 @@ export class ProxyResponseHandler {
           });
         }
 
-        if (usageRecord && billableUsageMetrics && messageContext) {
+        if (billableUsageMetrics && messageContext) {
           const costUpdateResult = await updateRequestCostFromUsage(
             messageContext.id,
             session,
@@ -1315,12 +1340,16 @@ export class ProxyResponseHandler {
         }
 
         // 更新 session 使用量到 Redis（用于实时监控）
-        if (session.sessionId && usageMetrics && session.shouldTrackSessionObservability()) {
+        if (
+          session.sessionId &&
+          (usageMetrics || costUsdStr !== undefined) &&
+          session.shouldTrackSessionObservability()
+        ) {
           void SessionManager.updateSessionUsage(session.sessionId, {
-            inputTokens: usageMetrics.input_tokens,
-            outputTokens: usageMetrics.output_tokens,
-            cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
-            cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
+            inputTokens: usageMetrics?.input_tokens,
+            outputTokens: usageMetrics?.output_tokens,
+            cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
+            cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             costUsd: costUsdStr,
             status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
             statusCode: statusCode,
@@ -1396,7 +1425,7 @@ export class ProxyResponseHandler {
           statusCode,
         });
 
-        emitLangfuseTrace(session, {
+        emitProxyLangfuseTrace(session, {
           responseHeaders: response.headers,
           responseText,
           usageMetrics,
@@ -1883,7 +1912,7 @@ export class ProxyResponseHandler {
               true // Gemini 流式透传(NDJSON 无 data:/event: 前缀,必须显式告知)
             );
 
-            emitLangfuseTrace(session, {
+            emitProxyLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText: allContent,
               usageMetrics: finalizedUsage,
@@ -2336,8 +2365,13 @@ export class ProxyResponseHandler {
           }
         }
 
-        const billableUsageForCost =
-          usageForCost && !isNonBillingUsageEndpoint(session) ? usageForCost : null;
+        const billableUsageForCost = await resolveBillableUsageMetricsForCost(
+          session,
+          provider,
+          usageForCost,
+          effectiveStatusCode,
+          allContent
+        );
 
         const costUpdateResult = await updateRequestCostFromUsage(
           messageContext.id,
@@ -2443,6 +2477,8 @@ export class ProxyResponseHandler {
             payload.outputTokens = usageForCost.output_tokens;
             payload.cacheCreationInputTokens = usageForCost.cache_creation_input_tokens;
             payload.cacheReadInputTokens = usageForCost.cache_read_input_tokens;
+          }
+          if (costUsdStr !== undefined) {
             payload.costUsd = costUsdStr;
           }
 
@@ -2480,7 +2516,7 @@ export class ProxyResponseHandler {
           specialSettings: session.getSpecialSettings() ?? undefined,
         });
 
-        emitLangfuseTrace(session, {
+        emitProxyLangfuseTrace(session, {
           responseHeaders: response.headers,
           responseText: allContent,
           usageMetrics: usageForCost,
@@ -3602,6 +3638,58 @@ export async function finalizeRequestStats(
   }
   const priorityServiceTierApplied = codexPriorityBillingDecision?.effectivePriority ?? false;
   if (!usageMetrics) {
+    const billablePerRequestUsage = await resolveBillableUsageMetricsForCost(
+      session,
+      provider,
+      null,
+      statusCode,
+      responseText
+    );
+    let perRequestCostUsd: string | undefined;
+
+    if (billablePerRequestUsage) {
+      const costUpdateResult = await updateRequestCostFromUsage(
+        messageContext.id,
+        session,
+        billablePerRequestUsage,
+        provider,
+        provider.costMultiplier,
+        session.getContext1mApplied(),
+        priorityServiceTierApplied,
+        session.getGroupCostMultiplier()
+      );
+      if (costUpdateResult.resolvedPricing) {
+        ensurePricingResolutionSpecialSetting(session, costUpdateResult.resolvedPricing);
+      }
+      if (costUpdateResult.longContextPricingApplied) {
+        ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
+      }
+
+      await trackCostToRedis(
+        session,
+        billablePerRequestUsage,
+        priorityServiceTierApplied,
+        costUpdateResult.resolvedPricing,
+        costUpdateResult.longContextPricing
+      );
+      perRequestCostUsd = costUpdateResult.costUsd ?? undefined;
+    }
+
+    if (
+      session.sessionId &&
+      perRequestCostUsd !== undefined &&
+      session.shouldTrackSessionObservability()
+    ) {
+      void SessionManager.updateSessionUsage(session.sessionId, {
+        costUsd: perRequestCostUsd,
+        status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
+        statusCode,
+        ...(errorMessage ? { errorMessage } : {}),
+      }).catch((error: unknown) => {
+        logger.error("[ResponseHandler] Failed to update session usage:", error);
+      });
+    }
+
     await updateMessageRequestDetails(messageContext.id, {
       statusCode: statusCode,
       ...(errorMessage ? { errorMessage } : {}),
@@ -3988,7 +4076,7 @@ async function persistRequestFailure(options: {
   }
 
   // Emit Langfuse trace for error/abort paths
-  emitLangfuseTrace(session, {
+  emitProxyLangfuseTrace(session, {
     responseHeaders: new Headers(),
     responseText: "",
     usageMetrics: null,
@@ -3996,6 +4084,7 @@ async function persistRequestFailure(options: {
     statusCode,
     durationMs: duration,
     isStreaming: phase === "stream",
+    sseEventCount: phase === "stream" ? 0 : undefined,
     errorMessage,
   });
 }

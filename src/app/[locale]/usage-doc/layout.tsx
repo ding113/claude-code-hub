@@ -45,7 +45,7 @@ export default async function UsageDocLayout({
     <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">
       {/* 条件渲染头部：已登录显示 DashboardHeader，未登录显示简化版头部 */}
       {session ? (
-        <DashboardHeader session={session} />
+        <DashboardHeader session={session} locale={locale} />
       ) : (
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="container flex h-14 items-center justify-between px-6">

@@ -1,4 +1,4 @@
-import { useTranslations } from "next-intl";
+import { getTranslations } from "next-intl/server";
 import { VersionUpdateNotifier } from "@/components/customs/version-update-notifier";
 import { Button } from "@/components/ui/button";
 import { LanguageSwitcher } from "@/components/ui/language-switcher";
@@ -11,10 +11,11 @@ import { UserMenu } from "./user-menu";
 
 interface DashboardHeaderProps {
   session: AuthSession | null;
+  locale: string;
 }
 
-export function DashboardHeader({ session }: DashboardHeaderProps) {
-  const t = useTranslations("dashboard.nav");
+export async function DashboardHeader({ session, locale }: DashboardHeaderProps) {
+  const t = await getTranslations({ locale, namespace: "dashboard.nav" });
   const isAdmin = session?.user.role === "admin";
 
   const NAV_ITEMS: (DashboardNavItem & { adminOnly?: boolean })[] = [

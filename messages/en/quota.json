@@ -153,6 +153,9 @@
       "label": "Monthly Cost",
       "resetAt": "Resets at"
     },
+    "costTotal": {
+      "label": "Total Cost"
+    },
     "concurrentSessions": {
       "label": "Concurrent Sessions"
     },
@@ -183,6 +186,7 @@
       "costDaily": "Daily Quota",
       "costWeekly": "Weekly Quota",
       "costMonthly": "Monthly Quota",
+      "costTotal": "Total Quota",
       "concurrentSessions": "Concurrent Limit",
       "status": "Status",
       "actions": "Actions"
@@ -232,6 +236,11 @@
       },
       "costMonthly": {
         "label": "Monthly Quota (USD)",
+        "placeholder": "Unlimited",
+        "current": "Current usage: {currency}{current} / {currency}{limit}"
+      },
+      "limitTotalUsd": {
+        "label": "Total Quota (USD)",
         "placeholder": "Unlimited",
         "current": "Current usage: {currency}{current} / {currency}{limit}"
       },

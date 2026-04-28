@@ -153,6 +153,9 @@
       "label": "月消费",
       "resetAt": "重置于"
     },
+    "costTotal": {
+      "label": "总消费"
+    },
     "concurrentSessions": {
       "label": "并发 Session"
     },
@@ -183,6 +186,7 @@
       "costDaily": "每日限额",
       "costWeekly": "周限额",
       "costMonthly": "月限额",
+      "costTotal": "总限额",
       "concurrentSessions": "并发限制",
       "status": "状态",
       "actions": "操作"
@@ -232,6 +236,11 @@
       },
       "costMonthly": {
         "label": "月限额(USD)",
+        "placeholder": "不限制",
+        "current": "当前已用: {currency}{current} / {currency}{limit}"
+      },
+      "limitTotalUsd": {
+        "label": "总限额(USD)",
         "placeholder": "不限制",
         "current": "当前已用: {currency}{current} / {currency}{limit}"
       },

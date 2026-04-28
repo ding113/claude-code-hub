@@ -30,7 +30,7 @@ export default async function DashboardProvidersPage({
   // TypeScript: session is guaranteed to be non-null after the redirect check
   const currentUser = session!.user;
 
-  const t = await getTranslations("settings");
+  const t = await getTranslations({ locale, namespace: "settings" });
   const providers = await getProviders();
 
   return (

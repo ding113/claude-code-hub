@@ -77,7 +77,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
   },
 }));
 
-import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import { finalizeRequestStats, ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { getCachedSystemSettings, invalidateSystemSettingsCache } from "@/lib/config";
 import { SessionManager } from "@/lib/session-manager";
@@ -139,12 +139,17 @@ function makeSystemSettings(
   };
 }
 
-function makePriceRecord(modelName: string, priceData: ModelPriceData): ModelPrice {
+function makePriceRecord(
+  modelName: string,
+  priceData: ModelPriceData,
+  source: ModelPrice["source"] = "litellm"
+): ModelPrice {
   const now = new Date();
   return {
     id: 1,
     modelName,
     priceData,
+    source,
     createdAt: now,
     updatedAt: now,
   };
@@ -158,6 +163,8 @@ function createSession({
   enableHighConcurrencyMode = false,
   providerOverrides,
   requestMessage,
+  requestPath = "/v1/messages",
+  groupCostMultiplier,
 }: {
   originalModel: string;
   redirectedModel: string;
@@ -166,6 +173,8 @@ function createSession({
   enableHighConcurrencyMode?: boolean;
   providerOverrides?: Record<string, unknown>;
   requestMessage?: Record<string, unknown>;
+  requestPath?: string;
+  groupCostMultiplier?: number;
 }): ProxySession {
   const session = new (
     ProxySession as unknown as {
@@ -184,7 +193,7 @@ function createSession({
   )({
     startTime: Date.now(),
     method: "POST",
-    requestUrl: new URL("http://localhost/v1/messages"),
+    requestUrl: new URL(`http://localhost${requestPath}`),
     headers: new Headers(),
     headerLog: "",
     request: { message: requestMessage ?? {}, log: "(test)", model: redirectedModel },
@@ -196,6 +205,9 @@ function createSession({
   session.setOriginalModel(originalModel);
   session.setSessionId(sessionId);
   session.setHighConcurrencyModeEnabled(enableHighConcurrencyMode);
+  if (groupCostMultiplier !== undefined) {
+    session.setGroupCostMultiplier(groupCostMultiplier);
+  }
 
   const provider = {
     id: 99,
@@ -256,6 +268,33 @@ function createNonStreamResponse(
   );
 }
 
+function createImageEditResponseWithoutUsage(): Response {
+  return new Response(
+    JSON.stringify({
+      created: 1_776_729_600,
+      data: [{ b64_json: "test-image-bytes" }],
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }
+  );
+}
+
+function createFake200ErrorResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        message: "invalid api key",
+      },
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }
+  );
+}
+
 function createStreamResponse(usage: { input_tokens: number; output_tokens: number }): Response {
   const sseText = `event: message_delta\ndata: ${JSON.stringify({ usage })}\n\n`;
   const encoder = new TextEncoder();
@@ -295,7 +334,14 @@ async function runScenario({
   billingModelSource: SystemSettings["billingModelSource"];
   isStream: boolean;
   enableHighConcurrencyMode?: boolean;
-}): Promise<{ dbCostUsd: string; sessionCostUsd: string; rateLimitCost: number }> {
+}): Promise<{
+  dbCostCalls: number;
+  dbCostUsd: string;
+  rateLimitCalls: number;
+  rateLimitCost: number;
+  sessionCostCalls: number;
+  sessionCostUsd: string;
+}> {
   invalidateSystemSettingsCache();
 
   const usage = { input_tokens: 2, output_tokens: 3 };
@@ -367,11 +413,14 @@ async function runScenario({
 
   await drainAsyncTasks();
 
-  const dbCostUsd = dbCosts[0] ?? "";
-  const sessionCostUsd = sessionCosts[0] ?? "";
-  const rateLimitCost = rateLimitCosts[0] ?? Number.NaN;
-
-  return { dbCostUsd, sessionCostUsd, rateLimitCost };
+  return {
+    dbCostCalls: dbCosts.length,
+    dbCostUsd: dbCosts[0] ?? "",
+    rateLimitCalls: rateLimitCosts.length,
+    rateLimitCost: rateLimitCosts[0] ?? Number.NaN,
+    sessionCostCalls: sessionCosts.length,
+    sessionCostUsd: sessionCosts[0] ?? "",
+  };
 }
 
 describe("Billing model source - Redis session cost vs DB cost", () => {
@@ -993,6 +1042,332 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
     expect(dbCosts[0]).toBe("32");
     expect(rateLimitCosts[0]).toBe(32);
+  });
+});
+
+describe("模型重定向后的图片按次计费", () => {
+  async function runImageEditPerRequestScenario(
+    billingModelSource: SystemSettings["billingModelSource"]
+  ): Promise<{
+    dbCostCalls: number;
+    dbCostUsd: string;
+    rateLimitCalls: number;
+    rateLimitCost: number;
+    sessionCostCalls: number;
+    sessionCostUsd: string;
+    storedBreakdown: Record<string, unknown> | undefined;
+  }> {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+    const providerMultiplier = 2;
+    const groupCostMultiplier = 3;
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings(billingModelSource));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === originalModel) {
+        return makePriceRecord(modelName, { input_cost_per_request: 0.01 }, "manual");
+      }
+      if (modelName === redirectedModel) {
+        return makePriceRecord(modelName, { input_cost_per_request: 0.02 }, "manual");
+      }
+      return null;
+    });
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    const dbCosts: string[] = [];
+    let storedBreakdown: Record<string, unknown> | undefined;
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockImplementation(
+      async (_id: number, costUsd: unknown, breakdown?: Record<string, unknown>) => {
+        dbCosts.push(String(costUsd));
+        storedBreakdown = breakdown;
+      }
+    );
+
+    const sessionCosts: string[] = [];
+    vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
+      async (_sessionId: string, payload: Record<string, unknown>) => {
+        if (typeof payload.costUsd === "string") {
+          sessionCosts.push(payload.costUsd);
+        }
+      }
+    );
+
+    const rateLimitCosts: number[] = [];
+    vi.mocked(RateLimitService.trackCost).mockImplementation(
+      async (_keyId: number, _providerId: number, _sessionId: string, costUsd: number) => {
+        rateLimitCosts.push(costUsd);
+      }
+    );
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: `sess-image-edit-${billingModelSource}`,
+      messageId: billingModelSource === "original" ? 4000 : 4001,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+        costMultiplier: providerMultiplier,
+      },
+      groupCostMultiplier,
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createImageEditResponseWithoutUsage()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    return {
+      dbCostCalls: dbCosts.length,
+      dbCostUsd: dbCosts[0] ?? "",
+      rateLimitCalls: rateLimitCosts.length,
+      rateLimitCost: rateLimitCosts[0] ?? Number.NaN,
+      sessionCostCalls: sessionCosts.length,
+      sessionCostUsd: sessionCosts[0] ?? "",
+      storedBreakdown,
+    };
+  }
+
+  it("配置 = original 时命中重定向前模型的本地按次价格并应用倍率", async () => {
+    const result = await runImageEditPerRequestScenario("original");
+
+    expect(result.dbCostUsd).toBe("0.06");
+    expect(result.sessionCostUsd).toBe("0.06");
+    expect(result.rateLimitCost).toBe(0.06);
+    expect(result.dbCostCalls).toBe(1);
+    expect(result.sessionCostCalls).toBe(1);
+    expect(result.rateLimitCalls).toBe(1);
+    expect(result.storedBreakdown).toMatchObject({
+      input: "0.01",
+      base_total: "0.01",
+      provider_multiplier: 2,
+      group_multiplier: 3,
+      total: "0.06",
+    });
+  });
+
+  it("配置 = redirected 时命中重定向后模型的本地按次价格并应用倍率", async () => {
+    const result = await runImageEditPerRequestScenario("redirected");
+
+    expect(result.dbCostUsd).toBe("0.12");
+    expect(result.sessionCostUsd).toBe("0.12");
+    expect(result.rateLimitCost).toBe(0.12);
+    expect(result.dbCostCalls).toBe(1);
+    expect(result.sessionCostCalls).toBe(1);
+    expect(result.rateLimitCalls).toBe(1);
+    expect(result.storedBreakdown).toMatchObject({
+      input: "0.02",
+      base_total: "0.02",
+      provider_multiplier: 2,
+      group_multiplier: 3,
+      total: "0.12",
+    });
+  });
+
+  it("按次价格为 0 时不进入空 usage 计费写入路径", async () => {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      return makePriceRecord(modelName, { input_cost_per_request: 0 }, "manual");
+    });
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: "sess-image-edit-zero-per-request",
+      messageId: 4002,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+      },
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createImageEditResponseWithoutUsage()
+    );
+    await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
+    expect(RateLimitService.trackCost).not.toHaveBeenCalled();
+  });
+
+  it("价格查询失败时跳过按次计费且不影响成功响应", async () => {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async () => {
+      throw new Error("pricing db unavailable");
+    });
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: "sess-image-edit-pricing-error",
+      messageId: 4004,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+      },
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createImageEditResponseWithoutUsage()
+    );
+    const responseText = await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(clientResponse.status).toBe(200);
+    expect(JSON.parse(responseText)).toMatchObject({
+      data: [{ b64_json: "test-image-bytes" }],
+    });
+    expect(updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
+    expect(RateLimitService.trackCost).not.toHaveBeenCalled();
+  });
+
+  it("上游假 200 错误 payload 不触发图片按次计费", async () => {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      return makePriceRecord(modelName, { input_cost_per_request: 0.01 }, "manual");
+    });
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: "sess-image-edit-fake-200-error",
+      messageId: 4005,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+      },
+    });
+
+    const clientResponse = await ProxyResponseHandler.dispatch(
+      session,
+      createFake200ErrorResponse()
+    );
+    const responseText = await clientResponse.text();
+    await drainAsyncTasks();
+
+    expect(clientResponse.status).toBe(200);
+    expect(JSON.parse(responseText)).toMatchObject({
+      error: { message: "invalid api key" },
+    });
+    expect(updateMessageRequestCostWithBreakdown).not.toHaveBeenCalled();
+    expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
+    expect(RateLimitService.trackCost).not.toHaveBeenCalled();
+  });
+
+  it("finalizeRequestStats 的按次计费 session usage 保留 errorMessage", async () => {
+    invalidateSystemSettingsCache();
+
+    const originalModel = "gpt-image-2";
+    const redirectedModel = "gpt-image-2-all";
+    const errorMessage = "fake 200 upstream warning";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      return makePriceRecord(modelName, { input_cost_per_request: 0.01 }, "manual");
+    });
+
+    vi.mocked(updateMessageRequestCostWithBreakdown).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+
+    let sessionUsagePayload: Record<string, unknown> | undefined;
+    vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
+      async (_sessionId: string, payload: Record<string, unknown>) => {
+        sessionUsagePayload = payload;
+      }
+    );
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: "sess-image-edit-finalize-error-message",
+      messageId: 4003,
+      requestPath: "/v1/images/edits",
+      providerOverrides: {
+        providerType: "openai",
+        url: "https://api.openai.com/v1",
+      },
+    });
+
+    await finalizeRequestStats(
+      session,
+      JSON.stringify({
+        created: 1_776_729_600,
+        data: [{ b64_json: "test-image-bytes" }],
+      }),
+      200,
+      42,
+      errorMessage,
+      99,
+      false
+    );
+
+    expect(sessionUsagePayload).toMatchObject({
+      costUsd: "0.01",
+      status: "completed",
+      statusCode: 200,
+      errorMessage,
+    });
   });
 });
 

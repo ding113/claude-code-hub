@@ -108,8 +108,8 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
 ];
 
 // Helper function to get translated nav items
-export async function getTranslatedNavItems(): Promise<SettingsNavItem[]> {
-  const t = await getTranslations("settings");
+export async function getTranslatedNavItems(locale: string): Promise<SettingsNavItem[]> {
+  const t = await getTranslations({ locale, namespace: "settings" });
   return SETTINGS_NAV_ITEMS.map((item) => ({
     ...item,
     label: item.labelKey ? t(item.labelKey) : item.label,

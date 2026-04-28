@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getSessionMock = vi.fn();
 const findProviderByIdMock = vi.fn();
 const sumProviderCostInTimeRangeMock = vi.fn();
+const sumProviderTotalCostMock = vi.fn();
 const getProviderSessionCountMock = vi.fn();
 const getProviderSessionCountBatchMock = vi.fn();
 const getTimeRangeForPeriodMock = vi.fn();
@@ -37,6 +38,8 @@ vi.mock("@/repository/provider", () => ({
 vi.mock("@/repository/statistics", () => ({
   sumProviderCostInTimeRange: (providerId: number, startTime: Date, endTime: Date) =>
     sumProviderCostInTimeRangeMock(providerId, startTime, endTime),
+  sumProviderTotalCost: (providerId: number, resetAt?: Date | null) =>
+    sumProviderTotalCostMock(providerId, resetAt),
 }));
 
 vi.mock("@/lib/session-tracker", () => ({
@@ -97,6 +100,8 @@ describe("getProviderLimitUsage", () => {
     limitDailyUsd: 50,
     limitWeeklyUsd: 200,
     limitMonthlyUsd: 500,
+    limitTotalUsd: 1000,
+    totalCostResetAt: new Date(nowMs - 3 * 60 * 60 * 1000),
     limitConcurrentSessions: 5,
   };
 
@@ -166,6 +171,7 @@ describe("getProviderLimitUsage", () => {
 
     // Default DB costs
     sumProviderCostInTimeRangeMock.mockResolvedValue(5.5);
+    sumProviderTotalCostMock.mockResolvedValue(0);
   });
 
   afterEach(() => {
@@ -195,6 +201,14 @@ describe("getProviderLimitUsage", () => {
     expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("5h", undefined);
     expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("weekly", undefined);
     expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("monthly", undefined);
+  });
+
+  it("should pass total cost reset time to sumProviderTotalCost", async () => {
+    const { getProviderLimitUsage } = await import("@/actions/providers");
+
+    await getProviderLimitUsage(1);
+
+    expect(sumProviderTotalCostMock).toHaveBeenCalledWith(1, mockProvider.totalCostResetAt);
   });
 
   it("should call getTimeRangeForPeriodWithMode for daily with provider config", async () => {
@@ -323,6 +337,8 @@ describe("getProviderLimitUsageBatch", () => {
       limitDailyUsd: 50,
       limitWeeklyUsd: 200,
       limitMonthlyUsd: 500,
+      limitTotalUsd: 1000,
+      totalCostResetAt: new Date(nowMs - 3 * 60 * 60 * 1000),
       limitConcurrentSessions: 5,
     },
     {
@@ -334,6 +350,8 @@ describe("getProviderLimitUsageBatch", () => {
       limitDailyUsd: 100,
       limitWeeklyUsd: 400,
       limitMonthlyUsd: 1000,
+      limitTotalUsd: 2000,
+      totalCostResetAt: new Date(nowMs - 6 * 60 * 60 * 1000),
       limitConcurrentSessions: 10,
     },
   ];
@@ -403,6 +421,7 @@ describe("getProviderLimitUsageBatch", () => {
     get5hWindowResetAtMock.mockResolvedValue(null);
 
     sumProviderCostInTimeRangeMock.mockResolvedValue(5.5);
+    sumProviderTotalCostMock.mockResolvedValue(0);
   });
 
   afterEach(() => {
@@ -431,6 +450,15 @@ describe("getProviderLimitUsageBatch", () => {
 
     // Provider 2: rolling mode
     expect(getTimeRangeForPeriodWithModeMock).toHaveBeenCalledWith("daily", "18:00", "rolling");
+  });
+
+  it("should pass each provider total reset time to sumProviderTotalCost", async () => {
+    const { getProviderLimitUsageBatch } = await import("@/actions/providers");
+
+    await getProviderLimitUsageBatch(mockProviders);
+
+    expect(sumProviderTotalCostMock).toHaveBeenCalledWith(1, mockProviders[0].totalCostResetAt);
+    expect(sumProviderTotalCostMock).toHaveBeenCalledWith(2, mockProviders[1].totalCostResetAt);
   });
 
   it("should return empty map for empty providers array", async () => {

@@ -10,8 +10,9 @@ import { LeaderboardView } from "./_components/leaderboard-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function LeaderboardPage() {
-  const t = await getTranslations("dashboard");
+export default async function LeaderboardPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "dashboard" });
   // 获取用户 session 和系统设置
   const session = await getSession();
   const systemSettings = await getSystemSettings();

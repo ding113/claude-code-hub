@@ -82,6 +82,50 @@ export interface TraceContext {
   costBreakdown?: CostBreakdown;
 }
 
+function hasRequestInput(ctx: TraceContext): boolean {
+  if (
+    typeof ctx.session.forwardedRequestBody === "string" &&
+    ctx.session.forwardedRequestBody.trim().length > 0
+  ) {
+    return true;
+  }
+
+  return Object.keys(ctx.session.request.message ?? {}).length > 0;
+}
+
+function isResponseMissing(ctx: TraceContext): boolean {
+  if (ctx.responseText) return false;
+  if (ctx.errorMessage) return true;
+  if (!hasRequestInput(ctx)) return false;
+  if (ctx.isStreaming) return ctx.sseEventCount === 0;
+
+  return true;
+}
+
+function buildResponseOutput(ctx: TraceContext): unknown {
+  if (ctx.responseText) {
+    return tryParseJsonSafe(ctx.responseText);
+  }
+
+  const responseMissing = isResponseMissing(ctx);
+  const output: Record<string, unknown> = ctx.isStreaming
+    ? { streaming: true, sseEventCount: ctx.sseEventCount }
+    : { statusCode: ctx.statusCode };
+
+  if (responseMissing) {
+    output.responseMissing = true;
+  }
+
+  if (ctx.errorMessage) {
+    if (ctx.isStreaming) {
+      output.statusCode = ctx.statusCode;
+    }
+    output.errorMessage = ctx.errorMessage;
+  }
+
+  return output;
+}
+
 /**
  * Send a trace to Langfuse for a completed proxy request.
  * Fully async and non-blocking. Errors are caught and logged.
@@ -138,11 +182,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       : session.request.message;
 
     // Actual response body - no truncation
-    const actualResponseBody = ctx.responseText
-      ? tryParseJsonSafe(ctx.responseText)
-      : isStreaming
-        ? { streaming: true, sseEventCount: ctx.sseEventCount }
-        : { statusCode };
+    const actualResponseBody = buildResponseOutput(ctx);
+    const responseMissing = isResponseMissing(ctx);
 
     // Root span metadata (former input/output summaries moved here)
     const rootSpanMetadata: Record<string, unknown> = {
@@ -153,6 +194,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       providerName: provider?.name,
       statusCode,
       durationMs,
+      errorMessage: ctx.errorMessage,
+      responseMissing,
       hasUsage: !!ctx.usageMetrics,
       costUsd: ctx.costUsd,
       timingBreakdown,
@@ -336,11 +379,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
 
         // Generation input/output = raw payload, no truncation
         const generationInput = actualRequestBody;
-        const generationOutput = ctx.responseText
-          ? tryParseJsonSafe(ctx.responseText)
-          : isStreaming
-            ? { streaming: true, sseEventCount: ctx.sseEventCount }
-            : { statusCode };
+        const generationOutput = buildResponseOutput(ctx);
 
         // Create the LLM generation observation
         const generation = rootSpan.startObservation(

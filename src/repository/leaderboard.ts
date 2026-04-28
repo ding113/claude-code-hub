@@ -364,7 +364,7 @@ async function findLeaderboardWithTimezone(
     .innerJoin(users, and(sql`${usageLedger.userId} = ${users.id}`, isNull(users.deletedAt)))
     .where(and(...whereConditions))
     .groupBy(usageLedger.userId, users.name)
-    .orderBy(desc(sql`sum(${usageLedger.costUsd})`));
+    .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`));
 
   const baseEntries: LeaderboardEntry[] = rankings.map((entry) => ({
     userId: entry.userId,
@@ -404,7 +404,7 @@ async function findLeaderboardWithTimezone(
     .innerJoin(users, and(sql`${usageLedger.userId} = ${users.id}`, isNull(users.deletedAt)))
     .where(and(...whereConditions))
     .groupBy(usageLedger.userId, modelField)
-    .orderBy(desc(sql`sum(${usageLedger.costUsd})`));
+    .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`));
 
   const modelStatsByUser = new Map<number, UserModelStat[]>();
   for (const row of modelRows) {
@@ -696,7 +696,7 @@ async function findProviderLeaderboardWithTimezone(
       and(...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c))
     )
     .groupBy(usageLedger.finalProviderId, providers.name)
-    .orderBy(desc(sql`sum(${usageLedger.costUsd})`));
+    .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`));
 
   const baseEntries: ProviderLeaderboardEntry[] = rankings.map((entry) => {
     const totalCost = parseFloat(entry.totalCost);
@@ -747,7 +747,7 @@ async function findProviderLeaderboardWithTimezone(
       and(...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c))
     )
     .groupBy(usageLedger.finalProviderId, modelField)
-    .orderBy(desc(sql`sum(${usageLedger.costUsd})`), desc(sql`count(*)`));
+    .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`), desc(sql`count(*)`));
 
   const modelStatsByProvider = new Map<number, ModelProviderStat[]>();
   for (const row of modelRows) {
@@ -1153,7 +1153,7 @@ async function findModelLeaderboardWithTimezone(
     .from(usageLedger)
     .where(and(LEDGER_BILLING_CONDITION, buildDateCondition(period, timezone, dateRange)))
     .groupBy(modelField)
-    .orderBy(desc(sql`count(*)`)); // 按请求数排序
+    .orderBy(desc(sql`COALESCE(sum(${usageLedger.costUsd}), 0)`), desc(sql`count(*)`));
 
   return rankings
     .filter((entry) => entry.model !== null && entry.model !== "")

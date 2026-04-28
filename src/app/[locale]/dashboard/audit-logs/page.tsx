@@ -17,7 +17,7 @@ export default async function AuditLogsPage({ params }: { params: Promise<{ loca
     return redirect({ href: "/dashboard", locale });
   }
 
-  const t = await getTranslations("auditLogs");
+  const t = await getTranslations({ locale, namespace: "auditLogs" });
 
   return (
     <div className="space-y-6">

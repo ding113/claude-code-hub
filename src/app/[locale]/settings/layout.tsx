@@ -28,11 +28,11 @@ export default async function SettingsLayout({
   }
 
   // Get translated navigation items
-  const translatedNavItems = await getTranslatedNavItems();
+  const translatedNavItems = await getTranslatedNavItems(locale);
 
   return (
     <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">
-      <DashboardHeader session={session} />
+      <DashboardHeader session={session} locale={locale} />
       <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8 pb-24 md:pb-8">
         <div className="space-y-6">
           {/* Desktop: Grid layout with sidebar */}
@@ -42,7 +42,7 @@ export default async function SettingsLayout({
               <SettingsNav items={translatedNavItems} />
             </aside>
             {/* Content area */}
-            <div className="space-y-6">
+            <div className="min-w-0 space-y-6">
               {/* Tablet: Horizontal nav shown above content */}
               <div className="lg:hidden">
                 <SettingsNav items={translatedNavItems} />

@@ -21,7 +21,7 @@ export default async function ClientVersionsPage({
   // Await params to ensure locale is available in the async context
   const { locale } = await params;
 
-  const t = await getTranslations("settings");
+  const t = await getTranslations({ locale, namespace: "settings" });
   const session = await getSession();
 
   if (!session || session.user.role !== "admin") {
@@ -55,7 +55,7 @@ export default async function ClientVersionsPage({
         iconColor="text-[#E25706]"
       >
         <Suspense fallback={<ClientVersionsTableSkeleton />}>
-          <ClientVersionsStatsContent />
+          <ClientVersionsStatsContent locale={locale} />
         </Suspense>
       </SettingsSection>
     </div>
@@ -71,8 +71,8 @@ async function ClientVersionsSettingsContent() {
   return <ClientVersionToggle enabled={enableClientVersionCheck} />;
 }
 
-async function ClientVersionsStatsContent() {
-  const t = await getTranslations("settings");
+async function ClientVersionsStatsContent({ locale }: { locale: string }) {
+  const t = await getTranslations({ locale, namespace: "settings" });
   const statsResult = await fetchClientVersionStats();
   const stats = statsResult.ok ? statsResult.data : [];
 

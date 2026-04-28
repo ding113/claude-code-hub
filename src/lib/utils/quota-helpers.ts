@@ -10,6 +10,7 @@ export type KeyQuota = {
   costDaily: { current: number; limit: number | null };
   costWeekly: { current: number; limit: number | null };
   costMonthly: { current: number; limit: number | null };
+  costTotal?: { current: number; limit: number | null };
   concurrentSessions: { current: number; limit: number };
 } | null;
 
@@ -22,7 +23,7 @@ export type UserQuota = {
  * 判断密钥是否设置了限额
  *
  * @param quota - 密钥限额数据
- * @returns 是否设置了任意限额（5h/周/月/并发）
+ * @returns 是否设置了任意限额（5h/日/周/月/总额/并发）
  */
 export function hasKeyQuotaSet(quota: KeyQuota): boolean {
   if (!quota) return false;
@@ -32,6 +33,7 @@ export function hasKeyQuotaSet(quota: KeyQuota): boolean {
     quota.costDaily.limit ||
     quota.costWeekly.limit ||
     quota.costMonthly.limit ||
+    quota.costTotal?.limit ||
     (quota.concurrentSessions.limit && quota.concurrentSessions.limit > 0)
   );
 }
@@ -86,6 +88,9 @@ export function getMaxUsageRate(quota: KeyQuota): number {
   }
   if (quota.costMonthly.limit) {
     rates.push(getUsageRate(quota.costMonthly.current, quota.costMonthly.limit));
+  }
+  if (quota.costTotal?.limit) {
+    rates.push(getUsageRate(quota.costTotal.current, quota.costTotal.limit));
   }
   if (quota.concurrentSessions.limit > 0) {
     rates.push(getUsageRate(quota.concurrentSessions.current, quota.concurrentSessions.limit));

@@ -327,6 +327,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
         limitTotalUsd: provider.limitTotalUsd,
+        totalCostResetAt: provider.totalCostResetAt,
         limitConcurrentSessions: provider.limitConcurrentSessions,
         maxRetryAttempts: provider.maxRetryAttempts,
         circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
@@ -1257,6 +1258,15 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
     const ok = await resetProviderTotalCostResetAt(providerId, new Date());
     if (!ok) {
       return { ok: false, error: "供应商不存在" };
+    }
+
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("resetProviderTotalUsage:cache_invalidation_failed", {
+        providerId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return { ok: true };
@@ -2690,6 +2700,7 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     costDaily: { current: number; limit: number | null; resetAt?: Date };
     costWeekly: { current: number; limit: number | null; resetAt: Date };
     costMonthly: { current: number; limit: number | null; resetAt: Date };
+    limitTotalUsd: { current: number; limit: number | null; resetAt?: Date };
     concurrentSessions: { current: number; limit: number };
   }>
 > {
@@ -2713,7 +2724,9 @@ export async function getProviderLimitUsage(providerId: number): Promise<
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
     const { RateLimitService } = await import("@/lib/rate-limit");
-    const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
+    const { sumProviderCostInTimeRange, sumProviderTotalCost } = await import(
+      "@/repository/statistics"
+    );
     const limit5hResetMode = provider.limit5hResetMode ?? "rolling";
 
     // 计算各周期的时间范围
@@ -2732,15 +2745,23 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     ]);
 
     // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
-    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
-      limit5hResetMode === "fixed"
-        ? RateLimitService.getCurrentCost(providerId, "provider", "5h", undefined, limit5hResetMode)
-        : sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
-      sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
-      sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
-      sumProviderCostInTimeRange(providerId, rangeMonthly.startTime, rangeMonthly.endTime),
-      SessionTracker.getProviderSessionCount(providerId),
-    ]);
+    const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
+      await Promise.all([
+        limit5hResetMode === "fixed"
+          ? RateLimitService.getCurrentCost(
+              providerId,
+              "provider",
+              "5h",
+              undefined,
+              limit5hResetMode
+            )
+          : sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
+        sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
+        sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
+        sumProviderCostInTimeRange(providerId, rangeMonthly.startTime, rangeMonthly.endTime),
+        sumProviderTotalCost(providerId, provider.totalCostResetAt),
+        SessionTracker.getProviderSessionCount(providerId),
+      ]);
 
     // 获取重置时间信息
     const resetDaily = await getResetInfoWithMode(
@@ -2779,6 +2800,11 @@ export async function getProviderLimitUsage(providerId: number): Promise<
           limit: provider.limitMonthlyUsd,
           resetAt: resetMonthly.resetAt!,
         },
+        limitTotalUsd: {
+          current: totalCost,
+          limit: provider.limitTotalUsd ?? null,
+          resetAt: provider.totalCostResetAt ?? undefined,
+        },
         concurrentSessions: {
           current: concurrentSessions,
           limit: provider.limitConcurrentSessions || 0,
@@ -2800,6 +2826,7 @@ export type ProviderLimitUsageData = {
   costDaily: { current: number; limit: number | null; resetAt?: Date };
   costWeekly: { current: number; limit: number | null; resetAt: Date };
   costMonthly: { current: number; limit: number | null; resetAt: Date };
+  limitTotalUsd: { current: number; limit: number | null; resetAt?: Date };
   concurrentSessions: { current: number; limit: number };
 };
 
@@ -2820,6 +2847,8 @@ export async function getProviderLimitUsageBatch(
     limitDailyUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
+    limitTotalUsd?: number | null;
+    totalCostResetAt?: Date | null;
     limitConcurrentSessions?: number | null;
   }>
 ): Promise<Map<number, ProviderLimitUsageData>> {
@@ -2845,7 +2874,9 @@ export async function getProviderLimitUsageBatch(
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
     const { RateLimitService } = await import("@/lib/rate-limit");
-    const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
+    const { sumProviderCostInTimeRange, sumProviderTotalCost } = await import(
+      "@/repository/statistics"
+    );
 
     const providerIds = providers.map((p) => p.id);
 
@@ -2871,7 +2902,7 @@ export async function getProviderLimitUsageBatch(
       );
 
       // 并行查询该供应商的各周期消费（直接查询数据库）
-      const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly] = await Promise.all([
+      const [cost5h, resetAt5h, costDaily, costWeekly, costMonthly, totalCost] = await Promise.all([
         limit5hResetMode === "fixed"
           ? RateLimitService.getCurrentCost(
               provider.id,
@@ -2887,6 +2918,7 @@ export async function getProviderLimitUsageBatch(
         sumProviderCostInTimeRange(provider.id, rangeDaily.startTime, rangeDaily.endTime),
         sumProviderCostInTimeRange(provider.id, rangeWeekly.startTime, rangeWeekly.endTime),
         sumProviderCostInTimeRange(provider.id, rangeMonthly.startTime, rangeMonthly.endTime),
+        sumProviderTotalCost(provider.id, provider.totalCostResetAt ?? null),
       ]);
 
       const sessionCount = sessionCountMap.get(provider.id) || 0;
@@ -2925,6 +2957,11 @@ export async function getProviderLimitUsageBatch(
           current: costMonthly,
           limit: provider.limitMonthlyUsd ?? null,
           resetAt: resetMonthly.resetAt!,
+        },
+        limitTotalUsd: {
+          current: totalCost,
+          limit: provider.limitTotalUsd ?? null,
+          resetAt: provider.totalCostResetAt ?? undefined,
         },
         concurrentSessions: {
           current: sessionCount,

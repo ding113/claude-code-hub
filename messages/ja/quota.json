@@ -130,6 +130,9 @@
       "label": "月次コスト",
       "resetAt": "リセット時刻"
     },
+    "costTotal": {
+      "label": "総コスト"
+    },
     "concurrentSessions": {
       "label": "同時セッション"
     },
@@ -160,6 +163,7 @@
       "costDaily": "日次クォータ",
       "costWeekly": "週次クォータ",
       "costMonthly": "月次クォータ",
+      "costTotal": "総クォータ",
       "concurrentSessions": "同時制限",
       "status": "ステータス",
       "actions": "アクション"
@@ -209,6 +213,11 @@
       },
       "costMonthly": {
         "label": "月次クォータ (USD)",
+        "placeholder": "無制限",
+        "current": "現在使用: {currency}{current} / {currency}{limit}"
+      },
+      "limitTotalUsd": {
+        "label": "総クォータ (USD)",
         "placeholder": "無制限",
         "current": "現在使用: {currency}{current} / {currency}{limit}"
       },

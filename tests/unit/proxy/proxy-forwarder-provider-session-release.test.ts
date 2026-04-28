@@ -109,4 +109,61 @@ describe("ProxyForwarder provider failure session release", () => {
     expect(failedProviderIds).toEqual([42]);
     expect(mocks.releaseProviderSession).not.toHaveBeenCalled();
   });
+
+  it("同步 hedge 胜出 shadow session 时保留 releaseAgent cleanup 回调", async () => {
+    const { ProxyForwarder } = await import("@/app/v1/_lib/proxy/forwarder");
+    const forwarderInternals = ProxyForwarder as unknown as {
+      syncWinningAttemptSession: (target: ProxySession, source: ProxySession) => void;
+    };
+    const clearResponseTimeout = vi.fn();
+    const releaseAgent = vi.fn();
+    const responseController = new AbortController();
+    const setTargetCacheTtlResolved = vi.fn();
+    const setTargetContext1mApplied = vi.fn();
+    const target = {
+      request: { message: null, buffer: null, log: null, note: null },
+      requestUrl: new URL("https://example.com/v1/messages"),
+      forwardedRequestBody: null,
+      providerChain: [],
+      specialSettings: [],
+      originalModelName: null,
+      originalUrlPathname: null,
+      currentModelRedirect: null,
+      getCacheTtlResolved: vi.fn(() => null),
+      setCacheTtlResolved: setTargetCacheTtlResolved,
+      getContext1mApplied: vi.fn(() => false),
+      setContext1mApplied: setTargetContext1mApplied,
+    } as unknown as ProxySession;
+    const source = {
+      request: { message: "winner", buffer: null, log: null, note: null },
+      requestUrl: new URL("https://shadow.example.com/v1/messages"),
+      forwardedRequestBody: '{"model":"winner"}',
+      providerChain: [],
+      specialSettings: [],
+      originalModelName: "winner-model",
+      originalUrlPathname: "/v1/messages",
+      currentModelRedirect: null,
+      getCacheTtlResolved: vi.fn(() => "5m"),
+      setCacheTtlResolved: vi.fn(),
+      getContext1mApplied: vi.fn(() => true),
+      setContext1mApplied: vi.fn(),
+      clearResponseTimeout,
+      responseController,
+      releaseAgent,
+    } as unknown as ProxySession;
+
+    forwarderInternals.syncWinningAttemptSession(target, source);
+
+    expect(
+      (target as ProxySession & { clearResponseTimeout?: () => void }).clearResponseTimeout
+    ).toBe(clearResponseTimeout);
+    expect(
+      (target as ProxySession & { responseController?: AbortController }).responseController
+    ).toBe(responseController);
+    expect((target as ProxySession & { releaseAgent?: () => void }).releaseAgent).toBe(
+      releaseAgent
+    );
+    expect(setTargetCacheTtlResolved).toHaveBeenCalledWith("5m");
+    expect(setTargetContext1mApplied).toHaveBeenCalledWith(true);
+  });
 });

@@ -127,6 +127,7 @@ import type { Provider } from "@/types/provider";
 type AttemptRuntime = {
   clearResponseTimeout?: () => void;
   responseController?: AbortController;
+  releaseAgent?: () => void;
 };
 
 function createProvider(overrides: Partial<Provider> = {}): Provider {
@@ -545,11 +546,14 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       const controller1 = new AbortController();
       const controller2 = new AbortController();
+      const releaseInitialAgent = vi.fn();
+      const releaseLoserAgent = vi.fn();
 
       doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller1;
         runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseInitialAgent;
         expect(
           ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
         ).toBe(true);
@@ -564,6 +568,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller2;
         runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseLoserAgent;
         expect(
           ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
         ).toBe(true);
@@ -601,6 +606,77 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         billingModel: requestedModel,
       });
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(fireworks.id, "sess-hedge");
+      expect(releaseInitialAgent).toHaveBeenCalledTimes(1);
+      expect(releaseLoserAgent).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("hedge loser 在 releaseAgent 晚到时仍会释放 agent cleanup", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const slow = createProvider({ id: 383, name: "slow", firstByteTimeoutStreamingMs: 100 });
+      const fast = createProvider({ id: 206, name: "fast", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      setProviderWithSessionRef(session, slow);
+      session.addProviderToChain(slow, { reason: "initial_selection" });
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(fast);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const slowController = new AbortController();
+      const fastController = new AbortController();
+      const releaseSlowAgent = vi.fn();
+      const releaseFastAgent = vi.fn();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 180));
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = slowController;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseSlowAgent;
+        return createStreamingResponse({
+          label: "slow",
+          firstChunkDelayMs: 0,
+          controller: slowController,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = fastController;
+        runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseFastAgent;
+        return createStreamingResponse({
+          label: "fast",
+          firstChunkDelayMs: 20,
+          controller: fastController,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(50);
+      const response = await responsePromise;
+      expect(await response.text()).toContain('"provider":"fast"');
+      expect(releaseSlowAgent).not.toHaveBeenCalled();
+      expect(releaseFastAgent).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(150);
+
+      expect(releaseSlowAgent).toHaveBeenCalledTimes(1);
+      expect(releaseFastAgent).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

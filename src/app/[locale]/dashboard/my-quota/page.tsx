@@ -9,13 +9,13 @@ export const dynamic = "force-dynamic";
 
 export default async function MyQuotaPage({ params }: { params: Promise<{ locale: string }> }) {
   // Await params to ensure locale is available in the async context
-  await params;
+  const { locale } = await params;
 
   const [quotaResult, systemSettings, tNav, tCommon] = await Promise.all([
     getMyQuota(),
     getSystemSettings(),
-    getTranslations("dashboard.nav"),
-    getTranslations("common"),
+    getTranslations({ locale, namespace: "dashboard.nav" }),
+    getTranslations({ locale, namespace: "common" }),
   ]);
 
   // Handle error state

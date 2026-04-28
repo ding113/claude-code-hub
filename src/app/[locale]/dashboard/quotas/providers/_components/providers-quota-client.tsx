@@ -15,6 +15,7 @@ interface ProviderQuota {
   costWeekly: { current: number; limit: number | null; resetAt: Date };
   costMonthly: { current: number; limit: number | null; resetAt: Date };
   concurrentSessions: { current: number; limit: number };
+  limitTotalUsd: { current: number; limit: number | null; resetAt?: Date };
 }
 
 interface ProviderWithQuota {
@@ -35,10 +36,12 @@ interface ProvidersQuotaClientProps {
   currencyCode?: CurrencyCode;
 }
 
-// 判断供应商是否设置了限额
+// 判断供应商是否设置了任意限额
 function hasQuotaLimit(quota: ProviderQuota | null): boolean {
   if (!quota) return false;
+
   return (
+    (quota.limitTotalUsd.limit !== null && quota.limitTotalUsd.limit > 0) ||
     (quota.cost5h.limit !== null && quota.cost5h.limit > 0) ||
     (quota.costDaily.limit !== null && quota.costDaily.limit > 0) ||
     (quota.costWeekly.limit !== null && quota.costWeekly.limit > 0) ||
@@ -69,6 +72,9 @@ function calculateMaxUsage(provider: ProviderWithQuota): number {
     usages.push(
       (provider.quota.concurrentSessions.current / provider.quota.concurrentSessions.limit) * 100
     );
+  }
+  if (provider.quota.limitTotalUsd.limit && provider.quota.limitTotalUsd.limit > 0) {
+    usages.push((provider.quota.limitTotalUsd.current / provider.quota.limitTotalUsd.limit) * 100);
   }
 
   return usages.length > 0 ? Math.max(...usages) : 0;
