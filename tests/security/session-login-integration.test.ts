@@ -56,6 +56,7 @@ vi.mock("@/lib/config/env.schema", () => ({
 vi.mock("@/repository/user-security-settings", () => ({
   getSecuritySubjectId: mockGetSecuritySubjectId,
   getUserSecuritySettings: mockGetUserSecuritySettings,
+  saveTotpLastUsedCounter: vi.fn(),
 }));
 
 vi.mock("@/lib/security/auth-response-headers", () => ({
@@ -111,6 +112,7 @@ describe("POST /api/auth/login session token mode integration", () => {
       subjectId: "user:1",
       totpEnabled: false,
       totpSecret: null,
+      totpLastUsedCounter: null,
       totpPendingSecret: null,
       totpPendingExpiresAt: null,
       totpBoundAt: null,

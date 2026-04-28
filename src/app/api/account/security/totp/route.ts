@@ -3,15 +3,25 @@ import { getSession } from "@/lib/auth";
 import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
-import { buildTotpAuthUri, generateBase32Secret, verifyTotp } from "@/lib/security/totp";
-import { isTotpSecretEncryptionConfigured } from "@/lib/security/totp-secret-encryption";
+import {
+  buildTotpAuthUri,
+  generateBase32Secret,
+  verifyTotp,
+  verifyTotpAndGetCounter,
+} from "@/lib/security/totp";
+import {
+  getTotpSecretKeySource,
+  isTotpSecretEncryptionConfigured,
+} from "@/lib/security/totp-secret-encryption";
 import { createAuditLogAsync } from "@/repository/audit-log";
 import {
   disableTotp,
   getSecuritySubjectId,
   getUserSecuritySettings,
   saveTotpEnabled,
+  saveTotpLastUsedCounter,
   saveTotpSetupPending,
+  type UserSecuritySettings,
 } from "@/repository/user-security-settings";
 
 export const runtime = "nodejs";
@@ -86,6 +96,27 @@ function otpInvalidResponse() {
   return noStore(NextResponse.json({ errorCode: "OTP_INVALID" }, { status: 400 }));
 }
 
+async function verifyCurrentTotpForMutation(
+  subjectId: string,
+  settings: UserSecuritySettings,
+  code: string
+): Promise<boolean> {
+  if (!settings.totpSecret) {
+    return false;
+  }
+
+  const otpResult = verifyTotpAndGetCounter({ secret: settings.totpSecret, code });
+  if (!otpResult) {
+    return false;
+  }
+
+  if (settings.totpLastUsedCounter != null && otpResult.counter <= settings.totpLastUsedCounter) {
+    return false;
+  }
+
+  return saveTotpLastUsedCounter(subjectId, otpResult.counter);
+}
+
 export async function GET() {
   const context = await getSecurityContext();
   if (!context) {
@@ -122,6 +153,12 @@ export async function POST(request: NextRequest) {
       await recordTotpAudit(request, context, "totp.setup", false, "ENCRYPTION_NOT_CONFIGURED");
       return noStore(
         NextResponse.json({ errorCode: "TOTP_ENCRYPTION_NOT_CONFIGURED" }, { status: 503 })
+      );
+    }
+    if (getTotpSecretKeySource() === "admin-token") {
+      logger.warn(
+        "TOTP setup is using ADMIN_TOKEN fallback for secret encryption; set TOTP_SECRET_ENCRYPTION_KEY before rotating ADMIN_TOKEN",
+        { subjectId: context.subjectId }
       );
     }
 
@@ -162,8 +199,13 @@ export async function POST(request: NextRequest) {
       return otpInvalidResponse();
     }
 
-    if (settings.totpEnabled && settings.totpSecret) {
-      if (!verifyTotp({ secret: settings.totpSecret, code: oldOtpCode })) {
+    if (settings.totpEnabled) {
+      if (!settings.totpSecret) {
+        await recordTotpAudit(request, context, "totp.enable", false, "OTP_NOT_CONFIGURED");
+        return noStore(NextResponse.json({ errorCode: "OTP_NOT_CONFIGURED" }, { status: 503 }));
+      }
+
+      if (!(await verifyCurrentTotpForMutation(context.subjectId, settings, oldOtpCode))) {
         await recordTotpAudit(request, context, "totp.enable", false, "CURRENT_OTP_INVALID");
         return otpInvalidResponse();
       }
@@ -200,7 +242,7 @@ export async function DELETE(request: NextRequest) {
       return noStore(NextResponse.json({ errorCode: "OTP_NOT_CONFIGURED" }, { status: 503 }));
     }
 
-    if (!verifyTotp({ secret: settings.totpSecret, code: otpCode })) {
+    if (!(await verifyCurrentTotpForMutation(context.subjectId, settings, otpCode))) {
       await recordTotpAudit(request, context, "totp.disable", false, "OTP_INVALID");
       return otpInvalidResponse();
     }

@@ -52,6 +52,7 @@ vi.mock("@/lib/security/auth-response-headers", () => ({
 vi.mock("@/repository/user-security-settings", () => ({
   getSecuritySubjectId: mockGetSecuritySubjectId,
   getUserSecuritySettings: mockGetUserSecuritySettings,
+  saveTotpLastUsedCounter: vi.fn(),
 }));
 
 function makeRequest(body: unknown, xForwardedProto = "https"): NextRequest {
@@ -111,6 +112,7 @@ describe("Login Regression Matrix", () => {
       subjectId: "user:1",
       totpEnabled: false,
       totpSecret: null,
+      totpLastUsedCounter: null,
       totpPendingSecret: null,
       totpPendingExpiresAt: null,
       totpBoundAt: null,

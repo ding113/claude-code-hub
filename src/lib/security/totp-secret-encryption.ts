@@ -6,19 +6,41 @@ const CURRENT_KEY_VERSION = 1;
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
-function getKeyMaterial(): string {
+export type TotpSecretKeySource = "totp-secret-encryption-key" | "admin-token" | "missing";
+
+export class TotpSecretDecryptionError extends Error {
+  constructor(message = "Failed to decrypt TOTP secret") {
+    super(message);
+    this.name = "TotpSecretDecryptionError";
+  }
+}
+
+export function getTotpSecretKeySource(): TotpSecretKeySource {
   const env = getEnvConfig();
-  const keyMaterial = env.TOTP_SECRET_ENCRYPTION_KEY || env.ADMIN_TOKEN;
-  if (!keyMaterial) {
-    throw new Error("TOTP_SECRET_ENCRYPTION_KEY is required to store authenticator secrets");
+  if (env.TOTP_SECRET_ENCRYPTION_KEY) {
+    return "totp-secret-encryption-key";
+  }
+  if (env.ADMIN_TOKEN) {
+    return "admin-token";
   }
 
-  return keyMaterial;
+  return "missing";
+}
+
+function getKeyMaterial(): string {
+  const env = getEnvConfig();
+  if (env.TOTP_SECRET_ENCRYPTION_KEY) {
+    return env.TOTP_SECRET_ENCRYPTION_KEY;
+  }
+  if (env.ADMIN_TOKEN) {
+    return env.ADMIN_TOKEN;
+  }
+
+  throw new Error("TOTP_SECRET_ENCRYPTION_KEY is required to store authenticator secrets");
 }
 
 export function isTotpSecretEncryptionConfigured(): boolean {
-  const env = getEnvConfig();
-  return Boolean(env.TOTP_SECRET_ENCRYPTION_KEY || env.ADMIN_TOKEN);
+  return getTotpSecretKeySource() !== "missing";
 }
 
 function getAesKey(): Buffer {
@@ -58,13 +80,24 @@ export function decryptTotpSecret(ciphertext: string | null): string | null {
     return ciphertext;
   }
 
-  const decipher = createDecipheriv("aes-256-gcm", getAesKey(), Buffer.from(ivValue, "base64url"), {
-    authTagLength: AUTH_TAG_LENGTH,
-  });
-  decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+  try {
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      getAesKey(),
+      Buffer.from(ivValue, "base64url"),
+      {
+        authTagLength: AUTH_TAG_LENGTH,
+      }
+    );
+    decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
 
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedValue, "base64url")),
-    decipher.final(),
-  ]).toString("utf8");
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedValue, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+  } catch (error) {
+    throw new TotpSecretDecryptionError(
+      error instanceof Error ? error.message : "Failed to decrypt TOTP secret"
+    );
+  }
 }

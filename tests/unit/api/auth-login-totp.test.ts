@@ -7,9 +7,10 @@ const mockGetSessionTokenMode = vi.hoisted(() => vi.fn());
 const mockGetLoginRedirectTarget = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
-const mockVerifyTotp = vi.hoisted(() => vi.fn());
+const mockVerifyTotpAndGetCounter = vi.hoisted(() => vi.fn());
 const mockGetSecuritySubjectId = vi.hoisted(() => vi.fn());
 const mockGetUserSecuritySettings = vi.hoisted(() => vi.fn());
+const mockSaveTotpLastUsedCounter = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
@@ -31,12 +32,13 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/security/totp", () => ({
-  verifyTotp: mockVerifyTotp,
+  verifyTotpAndGetCounter: mockVerifyTotpAndGetCounter,
 }));
 
 vi.mock("@/repository/user-security-settings", () => ({
   getSecuritySubjectId: mockGetSecuritySubjectId,
   getUserSecuritySettings: mockGetUserSecuritySettings,
+  saveTotpLastUsedCounter: mockSaveTotpLastUsedCounter,
 }));
 
 vi.mock("next-intl/server", () => ({
@@ -94,14 +96,16 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
       subjectId: "user:1",
       totpEnabled: true,
       totpSecret: "JBSWY3DPEHPK3PXP",
+      totpLastUsedCounter: null,
       totpPendingSecret: null,
       totpPendingExpiresAt: null,
       totpBoundAt: new Date("2026-04-27T00:00:00.000Z"),
     });
+    mockSaveTotpLastUsedCounter.mockResolvedValue(true);
     mockSetAuthCookie.mockResolvedValue(undefined);
     mockGetSessionTokenMode.mockReturnValue("legacy");
     mockGetLoginRedirectTarget.mockReturnValue("/dashboard");
-    mockVerifyTotp.mockReturnValue(false);
+    mockVerifyTotpAndGetCounter.mockReturnValue(null);
 
     const mod = await import("@/app/api/auth/login/route");
     POST = mod.POST;
@@ -112,6 +116,7 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
       subjectId: "user:1",
       totpEnabled: false,
       totpSecret: null,
+      totpLastUsedCounter: null,
       totpPendingSecret: null,
       totpPendingExpiresAt: null,
       totpBoundAt: null,
@@ -126,7 +131,7 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
       redirectTo: "/dashboard",
       loginType: "dashboard_user",
     });
-    expect(mockVerifyTotp).not.toHaveBeenCalled();
+    expect(mockVerifyTotpAndGetCounter).not.toHaveBeenCalled();
     expect(mockSetAuthCookie).toHaveBeenCalledWith("valid-key");
   });
 
@@ -142,7 +147,7 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
       otp: { method: "totp" },
     });
     expect(mockValidateKey).toHaveBeenCalledWith("valid-key", { allowReadOnlyAccess: true });
-    expect(mockVerifyTotp).not.toHaveBeenCalled();
+    expect(mockVerifyTotpAndGetCounter).not.toHaveBeenCalled();
     expect(mockSetAuthCookie).not.toHaveBeenCalled();
   });
 
@@ -155,15 +160,16 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
       error: "translated:otpInvalid",
       errorCode: "OTP_INVALID",
     });
-    expect(mockVerifyTotp).toHaveBeenCalledWith({
+    expect(mockVerifyTotpAndGetCounter).toHaveBeenCalledWith({
       secret: "JBSWY3DPEHPK3PXP",
       code: "000000",
     });
+    expect(mockSaveTotpLastUsedCounter).not.toHaveBeenCalled();
     expect(mockSetAuthCookie).not.toHaveBeenCalled();
   });
 
   it("sets the login cookie after a valid OTP code", async () => {
-    mockVerifyTotp.mockReturnValue(true);
+    mockVerifyTotpAndGetCounter.mockReturnValue({ counter: 123 });
 
     const res = await POST(makeRequest({ key: "valid-key", otpCode: "123456" }));
     const json = await res.json();
@@ -180,6 +186,46 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
       redirectTo: "/dashboard",
       loginType: "dashboard_user",
     });
+    expect(mockSaveTotpLastUsedCounter).toHaveBeenCalledWith("user:1", 123);
     expect(mockSetAuthCookie).toHaveBeenCalledWith("valid-key");
+  });
+
+  it("rejects a replayed OTP counter without setting a cookie", async () => {
+    mockGetUserSecuritySettings.mockResolvedValue({
+      subjectId: "user:1",
+      totpEnabled: true,
+      totpSecret: "JBSWY3DPEHPK3PXP",
+      totpLastUsedCounter: 123,
+      totpPendingSecret: null,
+      totpPendingExpiresAt: null,
+      totpBoundAt: new Date("2026-04-27T00:00:00.000Z"),
+    });
+    mockVerifyTotpAndGetCounter.mockReturnValue({ counter: 123 });
+
+    const res = await POST(makeRequest({ key: "valid-key", otpCode: "123456" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(json).toEqual({
+      error: "translated:otpInvalid",
+      errorCode: "OTP_INVALID",
+    });
+    expect(mockSaveTotpLastUsedCounter).not.toHaveBeenCalled();
+    expect(mockSetAuthCookie).not.toHaveBeenCalled();
+  });
+
+  it("rejects a valid OTP when another request records the same counter first", async () => {
+    mockVerifyTotpAndGetCounter.mockReturnValue({ counter: 123 });
+    mockSaveTotpLastUsedCounter.mockResolvedValue(false);
+
+    const res = await POST(makeRequest({ key: "valid-key", otpCode: "123456" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(json).toEqual({
+      error: "translated:otpInvalid",
+      errorCode: "OTP_INVALID",
+    });
+    expect(mockSetAuthCookie).not.toHaveBeenCalled();
   });
 });

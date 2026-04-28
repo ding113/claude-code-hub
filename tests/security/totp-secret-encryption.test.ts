@@ -32,4 +32,18 @@ describe("TOTP secret encryption", () => {
 
     expect(decryptTotpSecret("JBSWY3DPEHPK3PXP")).toBe("JBSWY3DPEHPK3PXP");
   });
+
+  it("throws a typed error when encrypted secrets cannot be authenticated", async () => {
+    const { decryptTotpSecret, encryptTotpSecret, TotpSecretDecryptionError } = await import(
+      "@/lib/security/totp-secret-encryption"
+    );
+
+    const encrypted = encryptTotpSecret("JBSWY3DPEHPK3PXP");
+    mockGetEnvConfig.mockReturnValue({
+      TOTP_SECRET_ENCRYPTION_KEY: "different-totp-secret-key",
+      ADMIN_TOKEN: undefined,
+    });
+
+    expect(() => decryptTotpSecret(encrypted.ciphertext)).toThrow(TotpSecretDecryptionError);
+  });
 });

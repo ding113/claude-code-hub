@@ -48,6 +48,7 @@ vi.mock("@/lib/logger", () => ({
 vi.mock("@/repository/user-security-settings", () => ({
   getSecuritySubjectId: mockGetSecuritySubjectId,
   getUserSecuritySettings: mockGetUserSecuritySettings,
+  saveTotpLastUsedCounter: vi.fn(),
 }));
 
 type LoginPostHandler = (request: NextRequest) => Promise<Response>;
@@ -107,6 +108,7 @@ describe("security headers auth route integration", () => {
       subjectId: "user:1",
       totpEnabled: false,
       totpSecret: null,
+      totpLastUsedCounter: null,
       totpPendingSecret: null,
       totpPendingExpiresAt: null,
       totpBoundAt: null,

@@ -18,6 +18,10 @@ export interface VerifyTotpOptions extends GenerateTotpOptions {
   window?: number;
 }
 
+export interface TotpVerificationResult {
+  counter: number;
+}
+
 export interface BuildTotpAuthUriOptions {
   secret: string;
   accountName: string;
@@ -66,6 +70,10 @@ function normalizeDigits(value: number | undefined): number {
   return Math.min(10, Math.max(6, value));
 }
 
+function getTotpCounter(timestampMs: number, stepSeconds: number): number {
+  return Math.floor(timestampMs / 1000 / stepSeconds);
+}
+
 function encodeBase32(bytes: Buffer): string {
   let bits = "";
   let output = "";
@@ -109,10 +117,12 @@ export function generateTotp(options: GenerateTotpOptions): string {
   const stepSeconds = options.stepSeconds ?? DEFAULT_STEP_SECONDS;
   const digits = normalizeDigits(options.digits);
   const timestampMs = options.timestampMs ?? Date.now();
-  const counter = Math.floor(timestampMs / 1000 / stepSeconds);
-  const hmac = createHmac("sha1", decodeBase32(options.secret))
-    .update(counterToBuffer(counter))
-    .digest();
+  const counter = getTotpCounter(timestampMs, stepSeconds);
+  return generateTotpForCounter(options.secret, counter, digits);
+}
+
+function generateTotpForCounter(secret: string, counter: number, digits: number): string {
+  const hmac = createHmac("sha1", decodeBase32(secret)).update(counterToBuffer(counter)).digest();
   const offset = hmac[hmac.length - 1] & 0x0f;
   const binary =
     ((hmac[offset] & 0x7f) << 24) |
@@ -123,33 +133,36 @@ export function generateTotp(options: GenerateTotpOptions): string {
   return String(binary % 10 ** digits).padStart(digits, "0");
 }
 
-export function verifyTotp(options: VerifyTotpOptions): boolean {
+export function verifyTotpAndGetCounter(options: VerifyTotpOptions): TotpVerificationResult | null {
   const code = options.code.trim();
   if (!/^\d{6}$/.test(code)) {
-    return false;
+    return null;
   }
 
   const digits = DEFAULT_DIGITS;
   const timestampMs = options.timestampMs ?? Date.now();
   const stepSeconds = options.stepSeconds ?? DEFAULT_STEP_SECONDS;
   const window = Math.max(0, Math.floor(options.window ?? DEFAULT_WINDOW));
+  const currentCounter = getTotpCounter(timestampMs, stepSeconds);
 
   try {
     for (let offset = -window; offset <= window; offset++) {
-      const candidate = generateTotp({
-        secret: options.secret,
-        timestampMs: timestampMs + offset * stepSeconds * 1000,
-        stepSeconds,
-        digits,
-      });
+      const counter = currentCounter + offset;
+      if (counter < 0) continue;
+
+      const candidate = generateTotpForCounter(options.secret, counter, digits);
 
       if (constantTimeEqual(candidate, code)) {
-        return true;
+        return { counter };
       }
     }
   } catch {
-    return false;
+    return null;
   }
 
-  return false;
+  return null;
+}
+
+export function verifyTotp(options: VerifyTotpOptions): boolean {
+  return verifyTotpAndGetCounter(options) !== null;
 }

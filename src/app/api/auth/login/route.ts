@@ -15,9 +15,13 @@ import { logger } from "@/lib/logger";
 import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
-import { verifyTotp } from "@/lib/security/totp";
+import { verifyTotpAndGetCounter } from "@/lib/security/totp";
 import { createAuditLogAsync } from "@/repository/audit-log";
-import { getSecuritySubjectId, getUserSecuritySettings } from "@/repository/user-security-settings";
+import {
+  getSecuritySubjectId,
+  getUserSecuritySettings,
+  saveTotpLastUsedCounter,
+} from "@/repository/user-security-settings";
 
 // 需要数据库连接
 export const runtime = "nodejs";
@@ -250,7 +254,8 @@ export async function POST(request: NextRequest) {
       return withAuthResponseHeaders(NextResponse.json(responseBody, { status: 401 }));
     }
 
-    const securitySettings = await getUserSecuritySettings(getSecuritySubjectId(session));
+    const securitySubjectId = getSecuritySubjectId(session);
+    const securitySettings = await getUserSecuritySettings(securitySubjectId);
     if (securitySettings.totpEnabled) {
       const totpSecret = securitySettings.totpSecret;
       if (!totpSecret) {
@@ -278,8 +283,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const otpValid = verifyTotp({ secret: totpSecret, code: otpCode });
-      if (!otpValid) {
+      const otpResult = verifyTotpAndGetCounter({ secret: totpSecret, code: otpCode });
+      const otpCounterAccepted =
+        otpResult &&
+        (securitySettings.totpLastUsedCounter == null ||
+          otpResult.counter > securitySettings.totpLastUsedCounter) &&
+        (await saveTotpLastUsedCounter(securitySubjectId, otpResult.counter));
+
+      if (!otpCounterAccepted) {
         loginPolicy.recordFailure(clientIp);
         createAuditLogAsync({
           actionCategory: "auth",

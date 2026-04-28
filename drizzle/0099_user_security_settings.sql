@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS "user_security_settings" (
   "totp_enabled" boolean DEFAULT false NOT NULL,
   "totp_secret" text,
   "totp_secret_key_version" integer,
+  "totp_last_used_counter" integer,
   "totp_pending_secret" text,
   "totp_pending_secret_key_version" integer,
   "totp_pending_expires_at" timestamp with time zone,

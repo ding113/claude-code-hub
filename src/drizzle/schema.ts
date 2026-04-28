@@ -158,6 +158,7 @@ export const userSecuritySettings = pgTable('user_security_settings', {
   totpEnabled: boolean('totp_enabled').notNull().default(false),
   totpSecret: text('totp_secret'),
   totpSecretKeyVersion: integer('totp_secret_key_version'),
+  totpLastUsedCounter: integer('totp_last_used_counter'),
   totpPendingSecret: text('totp_pending_secret'),
   totpPendingSecretKeyVersion: integer('totp_pending_secret_key_version'),
   totpPendingExpiresAt: timestamp('totp_pending_expires_at', { withTimezone: true }),

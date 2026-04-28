@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generateTotp, verifyTotp } from "@/lib/security/totp";
+import { generateTotp, verifyTotp, verifyTotpAndGetCounter } from "@/lib/security/totp";
 
 const RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
 
@@ -26,9 +26,25 @@ describe("TOTP verification", () => {
     expect(verifyTotp({ secret: RFC_SECRET, code: staleCode, timestampMs: now })).toBe(false);
   });
 
+  it("returns the matched time-step counter for replay protection", () => {
+    const now = 1_700_000_000_000;
+    const currentCode = generateTotp({ secret: RFC_SECRET, timestampMs: now });
+    const previousCode = generateTotp({ secret: RFC_SECRET, timestampMs: now - 30_000 });
+
+    expect(
+      verifyTotpAndGetCounter({ secret: RFC_SECRET, code: currentCode, timestampMs: now })
+    ).toEqual({ counter: Math.floor(now / 1000 / 30) });
+    expect(
+      verifyTotpAndGetCounter({ secret: RFC_SECRET, code: previousCode, timestampMs: now })
+    ).toEqual({ counter: Math.floor((now - 30_000) / 1000 / 30) });
+  });
+
   it("rejects malformed codes and secrets", () => {
     expect(verifyTotp({ secret: RFC_SECRET, code: "12345x", timestampMs: 59_000 })).toBe(false);
     expect(verifyTotp({ secret: RFC_SECRET, code: "94287082", timestampMs: 59_000 })).toBe(false);
     expect(verifyTotp({ secret: "not base32!", code: "123456", timestampMs: 59_000 })).toBe(false);
+    expect(
+      verifyTotpAndGetCounter({ secret: RFC_SECRET, code: "94287082", timestampMs: 59_000 })
+    ).toBeNull();
   });
 });
