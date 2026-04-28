@@ -761,6 +761,13 @@ export const systemSettings = pgTable('system_settings', {
   // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
   enableHttp2: boolean('enable_http2').notNull().default(false),
 
+  // 启用 OpenAI Responses WebSocket 支持（默认开启，仅对 Codex 类型供应商生效）
+  // 开启后：当客户端以 WebSocket 建连至 /v1/responses 时，CCH 会尝试与上游建立 WS 连接；
+  // 若上游不支持或握手失败，优雅降级为普通 HTTP Responses 请求，客户端 WebSocket 保持打开。
+  enableOpenaiResponsesWebsocket: boolean('enable_openai_responses_websocket')
+    .notNull()
+    .default(true),
+
   // 高并发模式（默认关闭）
   // 开启后：关闭部分 Redis 调试快照与实时观测写入，降低高并发下的 CPU 与 IO 开销
   enableHighConcurrencyMode: boolean('enable_high_concurrency_mode').notNull().default(false),

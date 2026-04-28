@@ -708,6 +708,13 @@
       "when": 1777362451734,
       "tag": "0100_equal_expediter",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1777362451735,
+      "tag": "0101_worthless_gauntlet",
+      "breakpoints": true
     }
   ]
 }

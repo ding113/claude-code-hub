@@ -49,6 +49,9 @@ import type {
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
+import { evaluateResponsesWsEligibility } from "../responses-ws/eligibility";
+import { markResponsesWsUnsupported } from "../responses-ws/unsupported-cache";
+import { tryResponsesWebsocketUpstream } from "../responses-ws/upstream-adapter";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
 import { bindClientAbortListener } from "./client-abort-listener";
@@ -93,6 +96,37 @@ import {
 /** Default User-Agent for Codex CLI requests when none is provided */
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
+
+/**
+ * Best-effort decode of the *final* outgoing request body into a JSON object.
+ *
+ * The Responses WebSocket adapter needs the same payload that would have been
+ * sent over HTTP — including all filterPrivateParameters() / request-filter
+ * rewrites. The forwarder represents that body as a `BodyInit` (Buffer,
+ * string, FormData, ReadableStream, etc.). We only support the byte/string
+ * shapes here; multipart and stream shapes return null so the caller falls
+ * back to the HTTP path.
+ */
+function decodeRequestBodyAsJson(body: BodyInit | undefined): Record<string, unknown> | null {
+  if (body == null) return null;
+  let text: string | null = null;
+  if (typeof body === "string") {
+    text = body;
+  } else if (Buffer.isBuffer(body)) {
+    text = body.toString("utf8");
+  } else if (body instanceof Uint8Array) {
+    text = Buffer.from(body).toString("utf8");
+  }
+  if (text == null) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
 
@@ -2801,19 +2835,114 @@ export class ProxyForwarder {
 
       (init as Record<string, unknown>).verbose = true;
 
+      // OpenAI Responses WebSocket 上游尝试（仅 Codex 供应商 + 开关开启 + 客户端以 WS 接入）
+      // 若握手失败或首帧前关闭，降级到下面的 HTTP 路径；不计入熔断器。
+      let responsesWsResponse: Response | null = null;
+      const responsesWsEndpointId = endpointAudit?.endpointId ?? null;
+      try {
+        const wsEligibility = await evaluateResponsesWsEligibility({
+          headers: processedHeaders,
+          provider,
+          endpointId: responsesWsEndpointId,
+        });
+
+        if (wsEligibility.eligible) {
+          // Use the *final* outgoing body so the WS frame matches the HTTP
+          // path: it has been through filterPrivateParameters() and any
+          // request-filter transformations. Falling back to
+          // session.request.message would skip those rewrites and could leak
+          // private fields or cause the upstream to reject the request.
+          const requestBodyJson = decodeRequestBodyAsJson(requestBody);
+
+          if (requestBodyJson) {
+            const wsResult = await tryResponsesWebsocketUpstream({
+              provider,
+              upstreamUrl: proxyUrl,
+              upstreamHeaders: processedHeaders,
+              body: requestBodyJson,
+              abortSignal: combinedSignal,
+            });
+
+            if ("response" in wsResult) {
+              responsesWsResponse = wsResult.response;
+              logger.info("ProxyForwarder: Upstream Responses WebSocket connected", {
+                providerId: provider.id,
+                providerName: provider.name,
+                endpointId: responsesWsEndpointId,
+                connected: wsResult.connected,
+              });
+              session.addProviderToChain(provider, {
+                reason: "responses_ws_attempted",
+                endpointId: responsesWsEndpointId,
+                endpointUrl: endpointAudit?.endpointUrl,
+                attemptNumber: undefined,
+              });
+            } else {
+              // Only cache when the failure proves the endpoint does not
+              // speak the WS protocol (HTTP 4xx / 501 on the upgrade). Any
+              // transient failure (network, auth, silent upstream) should
+              // re-probe on the next request rather than skipping WS for
+              // the full TTL.
+              if (wsResult.cacheableAsUnsupported) {
+                markResponsesWsUnsupported(provider.id, responsesWsEndpointId, wsResult.reason);
+              }
+              logger.info(
+                "ProxyForwarder: Upstream Responses WebSocket unavailable, falling back to HTTP",
+                {
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  endpointId: responsesWsEndpointId,
+                  reason: wsResult.reason,
+                  cacheable: wsResult.cacheableAsUnsupported,
+                  message: wsResult.message,
+                }
+              );
+              session.addProviderToChain(provider, {
+                reason: "responses_ws_fallback",
+                endpointId: responsesWsEndpointId,
+                endpointUrl: endpointAudit?.endpointUrl,
+                errorMessage: wsResult.message,
+                attemptNumber: undefined,
+              });
+            }
+          }
+        } else if (wsEligibility.isWebsocketClient && wsEligibility.downgradeReason) {
+          session.addProviderToChain(provider, {
+            reason: "responses_ws_fallback",
+            endpointId: responsesWsEndpointId,
+            endpointUrl: endpointAudit?.endpointUrl,
+            errorMessage: wsEligibility.downgradeReason,
+            attemptNumber: undefined,
+          });
+        }
+      } catch (wsError) {
+        logger.warn(
+          "ProxyForwarder: Upstream Responses WebSocket attempt threw, falling back to HTTP",
+          {
+            providerId: provider.id,
+            providerName: provider.name,
+            error: String(
+              wsError && (wsError as Error).message ? (wsError as Error).message : wsError
+            ),
+          }
+        );
+      }
+
       // ⭐ 所有供应商使用 undici.request 绕过 fetch 的自动解压
       // 原因：undici fetch 无法关闭自动解压，上游可能无视 accept-encoding: identity 返回 gzip
       // 当 gzip 流被提前终止时（如连接关闭），undici Gunzip 会抛出 "TypeError: terminated"
-      response = useErrorTolerantFetch
-        ? await ProxyForwarder.fetchWithoutAutoDecode(
-            proxyUrl,
-            init,
-            provider.id,
-            provider.name,
-            session,
-            deferDetailSnapshotPersistence
-          )
-        : await fetch(proxyUrl, init);
+      response = responsesWsResponse
+        ? responsesWsResponse
+        : useErrorTolerantFetch
+          ? await ProxyForwarder.fetchWithoutAutoDecode(
+              proxyUrl,
+              init,
+              provider.id,
+              provider.name,
+              session,
+              deferDetailSnapshotPersistence
+            )
+          : await fetch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
       // 注意：undici 的 fetch 在收到 HTTP 响应头后就 resolve，但实际数据（SSE 首字节 / 完整 JSON）
       // 还没到达。responseTimeoutId 需要延续到 response-handler 中才能真正控制"首字节"或"总耗时"

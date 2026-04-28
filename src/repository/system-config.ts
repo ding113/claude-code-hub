@@ -156,6 +156,7 @@ function createFallbackSettings(): SystemSettings {
     verboseProviderError: false,
     passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
+    enableOpenaiResponsesWebsocket: true,
     enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
@@ -279,6 +280,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     const fullSelection = {
       passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
       fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
+      enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
       ...selectionWithoutPassThrough,
     };
 
@@ -296,12 +298,35 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
-        // 第一层降级：仅移除本次新增的 fakeStreamingWhitelist 列，
-        // 其它已迁移的现代字段保留，避免只缺该列时其它设置被连带默认化。
+        // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列。
+        const {
+          enableOpenaiResponsesWebsocket: _omitOpenaiResponsesWebsocket,
+          ...selectionWithoutOpenaiResponsesWebsocket
+        } = fullSelection;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutOpenaiResponsesWebsocket)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (openaiResponsesWebsocketFallbackError) {
+          if (!isUndefinedColumnError(openaiResponsesWebsocketFallbackError)) {
+            throw openaiResponsesWebsocketFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续回退到上一代字段集。",
+            { error: openaiResponsesWebsocketFallbackError }
+          );
+        }
+
+        // 第一层降级：再移除 fakeStreamingWhitelist 列。
         const {
           fakeStreamingWhitelist: _omitFakeStreamingWhitelist,
           ...selectionWithoutFakeStreamingWhitelist
-        } = fullSelection;
+        } = selectionWithoutOpenaiResponsesWebsocket;
 
         try {
           const [row] = await db
@@ -567,6 +592,7 @@ export async function updateSystemSettings(
   const fullReturning = {
     passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
     fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
+    enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
     ...returningWithoutPassThrough,
   };
 
@@ -636,6 +662,11 @@ export async function updateSystemSettings(
     // HTTP/2 配置字段（如果提供）
     if (payload.enableHttp2 !== undefined) {
       updates.enableHttp2 = payload.enableHttp2;
+    }
+
+    // OpenAI Responses WebSocket 开关（如果提供）
+    if (payload.enableOpenaiResponsesWebsocket !== undefined) {
+      updates.enableOpenaiResponsesWebsocket = payload.enableOpenaiResponsesWebsocket;
     }
 
     // 高并发模式开关（如果提供）
@@ -753,32 +784,60 @@ export async function updateSystemSettings(
         error,
       });
 
-      // 第一层降级：仅移除本次新增的 fakeStreamingWhitelist 列，
-      // 其它字段继续原值更新 / 返回。
+      // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列。
       const {
-        fakeStreamingWhitelist: _omitUpdateFakeStreaming,
-        ...updatesWithoutFakeStreamingWhitelist
+        enableOpenaiResponsesWebsocket: _omitUpdateOpenaiResponsesWebsocket,
+        ...updatesWithoutOpenaiResponsesWebsocket
       } = updates;
       const {
-        fakeStreamingWhitelist: _omitReturningFakeStreaming,
-        ...returningWithoutFakeStreamingWhitelist
+        enableOpenaiResponsesWebsocket: _omitReturningOpenaiResponsesWebsocket,
+        ...returningWithoutOpenaiResponsesWebsocket
       } = fullReturning;
 
       try {
         [updated] = await executor
           .update(systemSettings)
-          .set(updatesWithoutFakeStreamingWhitelist)
+          .set(updatesWithoutOpenaiResponsesWebsocket)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutFakeStreamingWhitelist);
-      } catch (fakeStreamingFallbackError) {
-        if (!isUndefinedColumnError(fakeStreamingFallbackError)) {
-          throw fakeStreamingFallbackError;
+          .returning(returningWithoutOpenaiResponsesWebsocket);
+      } catch (openaiResponsesWebsocketFallbackError) {
+        if (!isUndefinedColumnError(openaiResponsesWebsocketFallbackError)) {
+          throw openaiResponsesWebsocketFallbackError;
         }
 
         logger.warn(
-          "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到 allowNonConversationEndpointProviderFallback 之外的字段集。",
-          { error: fakeStreamingFallbackError }
+          "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续降级更新。",
+          { error: openaiResponsesWebsocketFallbackError }
         );
+      }
+
+      // 第一层降级：再移除 fakeStreamingWhitelist 列。
+      const {
+        fakeStreamingWhitelist: _omitUpdateFakeStreaming,
+        ...updatesWithoutFakeStreamingWhitelist
+      } = updatesWithoutOpenaiResponsesWebsocket;
+      const {
+        fakeStreamingWhitelist: _omitReturningFakeStreaming,
+        ...returningWithoutFakeStreamingWhitelist
+      } = returningWithoutOpenaiResponsesWebsocket;
+
+      if (!updated) {
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(updatesWithoutFakeStreamingWhitelist)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutFakeStreamingWhitelist);
+        } catch (fakeStreamingFallbackError) {
+          if (!isUndefinedColumnError(fakeStreamingFallbackError)) {
+            throw fakeStreamingFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到 allowNonConversationEndpointProviderFallback 之外的字段集。",
+            { error: fakeStreamingFallbackError }
+          );
+        }
       }
 
       // 第二层降级：再移除 allowNonConversationEndpointProviderFallback 列。

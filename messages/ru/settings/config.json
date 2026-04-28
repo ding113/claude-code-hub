@@ -56,6 +56,8 @@
     "enableAutoCleanupDesc": "Автоматически очищать исторические логи по расписанию",
     "enableHttp2": "Включить HTTP/2",
     "enableHttp2Desc": "При включении прокси-запросы будут отдавать приоритет HTTP/2. Если HTTP/2 не удастся, произойдёт автоматическое понижение до HTTP/1.1.",
+    "enableOpenaiResponsesWebsocket": "Включить OpenAI Responses WebSocket",
+    "enableOpenaiResponsesWebsocketDesc": "Если включено, то когда клиент открывает WebSocket-соединение с /v1/responses и выбирается провайдер типа Codex, CCH попытается установить WebSocket-соединение с вышестоящим сервером. Если сервер не поддерживает WebSocket или рукопожатие не удастся, CCH плавно переключится на обычный HTTP Responses, сохраняя WebSocket клиента открытым; этот fallback не учитывается в circuit breaker. Клиенты без WebSocket и провайдеры, отличные от Codex, работают без изменений.",
     "enableHighConcurrencyMode": "Включить режим высокой нагрузки",
     "enableHighConcurrencyModeDesc": "Если включено, CCH отключит часть Redis-снимков для отладки и записи real-time Session-наблюдения, чтобы снизить нагрузку на CPU и IO при высоком RPM. Пересылка, rectifier-логика, обнаружение fake 200, биллинг и лимиты сохраняются, но детализация отладки в Sessions может уменьшиться или запаздывать.",
     "enableResponseFixer": "Включить исправление ответов",
