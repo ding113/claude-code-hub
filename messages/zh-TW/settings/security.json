@@ -6,6 +6,7 @@
   "enableFailed": "二次驗證啟用失敗",
   "disableFailed": "二次驗證關閉失敗",
   "invalidCode": "驗證碼無效或已過期",
+  "statusChanged": "二次驗證狀態已變更，請重新開啟設定後再試。",
   "enabled": "二次驗證已啟用",
   "disabled": "二次驗證已關閉",
   "disableConfirm": "確定要關閉目前帳號的二次驗證嗎？",

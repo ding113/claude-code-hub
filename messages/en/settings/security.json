@@ -6,6 +6,7 @@
   "enableFailed": "Failed to enable two-factor authentication",
   "disableFailed": "Failed to disable two-factor authentication",
   "invalidCode": "The verification code is invalid or expired",
+  "statusChanged": "Two-factor authentication status changed. Reopen settings and try again.",
   "enabled": "Two-factor authentication enabled",
   "disabled": "Two-factor authentication disabled",
   "disableConfirm": "Disable two-factor authentication for this account?",

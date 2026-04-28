@@ -3,7 +3,7 @@
 import { QRCode } from "antd";
 import { Loader2, ShieldCheck, ShieldOff } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Section } from "@/components/section";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -56,17 +56,20 @@ export function SecuritySettingsClient() {
   const [disableOpen, setDisableOpen] = useState(false);
   const [disableOtpCode, setDisableOtpCode] = useState("");
 
+  const loadTotpStatus = useCallback(async (): Promise<TotpStatus> => {
+    const response = await fetch("/api/account/security/totp");
+    if (!response.ok) throw new Error("load failed");
+    const data = (await response.json()) as TotpStatus;
+    return { enabled: Boolean(data.enabled), boundAt: data.boundAt ?? null };
+  }, []);
+
   useEffect(() => {
     let active = true;
 
-    void fetch("/api/account/security/totp")
-      .then((response) => {
-        if (!response.ok) throw new Error("load failed");
-        return response.json() as Promise<TotpStatus>;
-      })
+    void loadTotpStatus()
       .then((data) => {
         if (!active) return;
-        setStatus({ enabled: Boolean(data.enabled), boundAt: data.boundAt ?? null });
+        setStatus(data);
       })
       .catch(() => {
         if (active) toast.error(t("loadFailed"));
@@ -78,7 +81,7 @@ export function SecuritySettingsClient() {
     return () => {
       active = false;
     };
-  }, [t]);
+  }, [loadTotpStatus, t]);
 
   const startSetup = async () => {
     setSaving(true);
@@ -108,6 +111,16 @@ export function SecuritySettingsClient() {
     setSaving(true);
 
     try {
+      const latestStatus = await loadTotpStatus();
+      setStatus(latestStatus);
+      if (latestStatus.enabled) {
+        setSetupOpen(false);
+        setSetup(null);
+        setOtpCode("");
+        toast.error(t("statusChanged"));
+        return;
+      }
+
       const response = await fetch("/api/account/security/totp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

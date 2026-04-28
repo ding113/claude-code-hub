@@ -6,6 +6,7 @@
   "enableFailed": "二次验证启用失败",
   "disableFailed": "二次验证关闭失败",
   "invalidCode": "验证码无效或已过期",
+  "statusChanged": "二次验证状态已变化，请重新打开设置后再试。",
   "enabled": "二次验证已启用",
   "disabled": "二次验证已关闭",
   "disableConfirm": "确定要关闭当前账号的二次验证吗？",
