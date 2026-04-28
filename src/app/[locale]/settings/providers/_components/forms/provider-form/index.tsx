@@ -68,6 +68,7 @@ const CUSTOM_HEADERS_ERROR_KEYS: Record<CustomHeadersValidationErrorCode, string
   invalid_name: "sections.routing.customHeaders.errors.invalidName",
   duplicate_name: "sections.routing.customHeaders.errors.duplicateName",
   protected_name: "sections.routing.customHeaders.errors.protectedName",
+  forbidden_name: "sections.routing.customHeaders.errors.forbiddenName",
   invalid_value: "sections.routing.customHeaders.errors.invalidValue",
   empty_name: "sections.routing.customHeaders.errors.emptyName",
   crlf: "sections.routing.customHeaders.errors.crlf",
@@ -315,14 +316,17 @@ function ProviderFormContent({
         // Handle key: in edit mode, only include if user provided a new key
         const trimmedKey = state.basic.key.trim();
 
-        // Static custom headers: validateForm has already rejected invalid input,
-        // so the parse here is guaranteed to succeed at this point.
+        // Static custom headers: validateForm has already rejected invalid input.
+        // If we still see a parse failure here, surface a localized toast and abort
+        // submit instead of silently clearing the saved value.
         const parsedCustomHeadersResult = parseCustomHeadersJsonText(
           state.routing.customHeadersText
         );
-        const parsedCustomHeaders = parsedCustomHeadersResult.ok
-          ? (parsedCustomHeadersResult.value ?? null)
-          : null;
+        if (!parsedCustomHeadersResult.ok) {
+          toast.error(t(CUSTOM_HEADERS_ERROR_KEYS[parsedCustomHeadersResult.code]));
+          return;
+        }
+        const parsedCustomHeaders = parsedCustomHeadersResult.value ?? null;
 
         // Base form data without key (for type safety)
         const effectiveProviderUrl = endpointPoolHideLegacyUrlInput

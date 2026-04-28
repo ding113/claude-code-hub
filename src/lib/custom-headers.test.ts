@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  CUSTOM_HEADERS_PLACEHOLDER,
   normalizeCustomHeadersRecord,
   parseCustomHeadersJsonText,
   stringifyCustomHeadersForTextarea,
@@ -192,6 +191,32 @@ describe("parseCustomHeadersJsonText - protected auth headers", () => {
   });
 });
 
+describe("parseCustomHeadersJsonText - forbidden transport headers", () => {
+  test("rejects content-length (any case)", () => {
+    for (const name of ["content-length", "Content-Length", "CONTENT-LENGTH"]) {
+      const r = parseCustomHeadersJsonText(`{"${name}": "9999"}`);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.code).toBe("forbidden_name");
+    }
+  });
+
+  test("rejects connection (any case)", () => {
+    for (const name of ["connection", "Connection", "CONNECTION"]) {
+      const r = parseCustomHeadersJsonText(`{"${name}": "keep-alive"}`);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.code).toBe("forbidden_name");
+    }
+  });
+
+  test("rejects transfer-encoding (any case)", () => {
+    for (const name of ["transfer-encoding", "Transfer-Encoding", "TRANSFER-ENCODING"]) {
+      const r = parseCustomHeadersJsonText(`{"${name}": "chunked"}`);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.code).toBe("forbidden_name");
+    }
+  });
+});
+
 describe("normalizeCustomHeadersRecord", () => {
   test("null is not_object", () => {
     const r = normalizeCustomHeadersRecord(null);
@@ -253,22 +278,5 @@ describe("stringifyCustomHeadersForTextarea", () => {
     const text = stringifyCustomHeadersForTextarea(original);
     const parsed = parseCustomHeadersJsonText(text);
     expect(parsed).toEqual({ ok: true, value: original });
-  });
-});
-
-describe("CUSTOM_HEADERS_PLACEHOLDER", () => {
-  test("is a parseable, valid JSON object", () => {
-    const r = parseCustomHeadersJsonText(CUSTOM_HEADERS_PLACEHOLDER);
-    expect(r.ok).toBe(true);
-  });
-
-  test("contains a non-protected header name", () => {
-    const r = parseCustomHeadersJsonText(CUSTOM_HEADERS_PLACEHOLDER);
-    if (r.ok && r.value) {
-      const protectedNames = new Set(["authorization", "x-api-key", "x-goog-api-key"]);
-      for (const name of Object.keys(r.value)) {
-        expect(protectedNames.has(name.toLowerCase())).toBe(false);
-      }
-    }
   });
 });

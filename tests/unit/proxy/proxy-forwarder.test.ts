@@ -530,6 +530,27 @@ describe("ProxyForwarder - buildHeaders custom headers", () => {
     expect(resultHeaders.get("cf-aig-authorization")).toBeNull();
     expect(resultHeaders.get("content-type")).toBe("application/json");
   });
+
+  it("即使 DB 中 customHeaders 包含 hop-by-hop 传输头，也不能注入出站请求", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      "content-length": "9999",
+      Connection: "keep-alive",
+      "Transfer-Encoding": "chunked",
+      "x-tenant-id": "tenant-42",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("content-length")).toBeNull();
+    expect(resultHeaders.get("connection")).toBeNull();
+    expect(resultHeaders.get("transfer-encoding")).toBeNull();
+    // 合法的非传输头应正常注入
+    expect(resultHeaders.get("x-tenant-id")).toBe("tenant-42");
+  });
 });
 
 describe("ProxyForwarder - buildGeminiHeaders custom headers", () => {
@@ -628,5 +649,40 @@ describe("ProxyForwarder - buildGeminiHeaders custom headers", () => {
     );
 
     expect(resultHeaders.get("authorization")).toBe("Bearer upstream-oauth-token");
+  });
+
+  it("Gemini 路径也应剥离 hop-by-hop 传输头，避免脏数据破坏请求帧", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createGeminiProvider("gemini"), {
+      "content-length": "9999",
+      Connection: "keep-alive",
+      "Transfer-Encoding": "chunked",
+      "x-tenant-id": "tenant-42",
+    });
+    const { buildGeminiHeaders } = ProxyForwarder as unknown as {
+      buildGeminiHeaders: (
+        session: ProxySession,
+        provider: Provider,
+        baseUrl: string,
+        accessToken: string,
+        isApiKey: boolean
+      ) => Headers;
+    };
+
+    const resultHeaders = buildGeminiHeaders(
+      session,
+      provider,
+      "https://generativelanguage.googleapis.com/v1beta",
+      "upstream-api-key",
+      true
+    );
+
+    expect(resultHeaders.get("content-length")).toBeNull();
+    expect(resultHeaders.get("connection")).toBeNull();
+    expect(resultHeaders.get("transfer-encoding")).toBeNull();
+    expect(resultHeaders.get("x-tenant-id")).toBe("tenant-42");
   });
 });

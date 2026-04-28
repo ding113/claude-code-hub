@@ -257,6 +257,20 @@ describe("Provider schemas - custom_headers", () => {
       });
       expect(result.success).toBe(false);
     });
+
+    test("拒绝 hop-by-hop 传输头 (content-length / connection / transfer-encoding)", () => {
+      for (const header of [
+        { "content-length": "9999" },
+        { Connection: "keep-alive" },
+        { "Transfer-Encoding": "chunked" },
+      ]) {
+        const result = CreateProviderSchema.safeParse({
+          ...baseCreate,
+          custom_headers: header,
+        });
+        expect(result.success).toBe(false);
+      }
+    });
   });
 
   describe("UpdateProviderSchema", () => {

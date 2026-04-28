@@ -193,12 +193,14 @@
     "customHeaders": {
       "label": "カスタムリクエストヘッダー（JSON）",
       "desc": "静的なヘッダーが送信リクエストにマージされます。認証ヘッダーや最終リクエストフィルターを上書きしません。",
+      "placeholder": "'{'\"cf-aig-authorization\": \"Bearer your-token\"'}'",
       "errors": {
         "invalidJson": "カスタムヘッダーは有効な JSON である必要があります",
         "notObject": "カスタムヘッダーは JSON オブジェクトである必要があります",
         "invalidName": "ヘッダー名に許可されていない文字が含まれています",
         "duplicateName": "ヘッダー名が重複しています（大文字小文字を区別しません）",
         "protectedName": "認証ヘッダーはカスタムヘッダーで設定できません",
+        "forbiddenName": "トランスポート系ヘッダー（content-length、connection、transfer-encoding）はカスタムヘッダーで設定できません",
         "invalidValue": "ヘッダー値は文字列である必要があります",
         "emptyName": "ヘッダー名は空にできません",
         "crlf": "ヘッダー名と値に改行を含めることはできません"

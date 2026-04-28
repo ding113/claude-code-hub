@@ -16,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import {
-  CUSTOM_HEADERS_PLACEHOLDER,
   type CustomHeadersValidationErrorCode,
   parseCustomHeadersJsonText,
   stringifyCustomHeadersForTextarea,
@@ -29,6 +28,18 @@ const API_TEST_UI_CONFIG = {
   TOAST_SUCCESS_DURATION: 3000,
   TOAST_ERROR_DURATION: 5000,
 } as const;
+
+const CUSTOM_HEADER_ERROR_KEYS: Record<CustomHeadersValidationErrorCode, string> = {
+  invalid_json: "customHeaders.errors.invalidJson",
+  not_object: "customHeaders.errors.notObject",
+  invalid_name: "customHeaders.errors.invalidName",
+  duplicate_name: "customHeaders.errors.duplicateName",
+  protected_name: "customHeaders.errors.protectedName",
+  forbidden_name: "customHeaders.errors.forbiddenName",
+  invalid_value: "customHeaders.errors.invalidValue",
+  empty_name: "customHeaders.errors.emptyName",
+  crlf: "customHeaders.errors.crlf",
+};
 
 const DEFAULT_MODELS: Record<ProviderType, string> = {
   claude: "claude-haiku-4-5-20251001",
@@ -89,7 +100,9 @@ interface ApiTestButtonProps {
   providerId?: number;
   providerType?: ProviderType | null;
   allowedModels?: AllowedModelRuleInput[];
-  customHeaders?: Record<string, string> | null;
+  // 当 options-form 中 JSON 处于"中途无效"状态时，调用方应传入 undefined 以保留现有 textarea 内容；
+  // 传入 null 表示"显式空值"，会同步清空 textarea。
+  customHeaders?: Record<string, string> | null | undefined;
   enableMultiProviderTypes: boolean;
 }
 
@@ -122,13 +135,21 @@ export function ApiTestButton({
   const [testModel, setTestModel] = useState(() =>
     getDefaultModelForProvider(providerType, normalizedAllowedModels[0])
   );
-  const initialCustomHeadersText = useMemo(
-    () => stringifyCustomHeadersForTextarea(customHeaders ?? null),
-    // 仅根据 providerId + 序列化值计算初始值，避免引用相等触发不必要的更新
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [providerId, JSON.stringify(customHeaders ?? null)]
+  // undefined 表示父级处于"中途无效 JSON"状态，应保留 textarea；null/对象走正常同步路径。
+  const customHeadersSerialized = useMemo(
+    () => (customHeaders === undefined ? undefined : JSON.stringify(customHeaders ?? null)),
+    [customHeaders]
   );
-  const [customHeadersText, setCustomHeadersText] = useState(initialCustomHeadersText);
+  const initialCustomHeadersText = useMemo(
+    () =>
+      customHeadersSerialized === undefined
+        ? undefined
+        : stringifyCustomHeadersForTextarea(customHeaders ?? null),
+    // customHeadersSerialized 已经把对象引用变化收敛成稳定的字符串依赖；
+    // customHeaders 直接进入 deps，确保 prop 引用变化时重新格式化（成本仅一次 stringify）。
+    [customHeadersSerialized, customHeaders]
+  );
+  const [customHeadersText, setCustomHeadersText] = useState(initialCustomHeadersText ?? "");
   const [isCustomHeadersManuallyEdited, setIsCustomHeadersManuallyEdited] = useState(false);
   const [testResult, setTestResult] = useState<UnifiedTestResultData | null>(null);
 
@@ -146,20 +167,11 @@ export function ApiTestButton({
   }, [providerId]);
 
   useEffect(() => {
-    if (isCustomHeadersManuallyEdited) return;
+    // initialCustomHeadersText === undefined 时表示父级仍在中途无效 JSON 状态，
+    // 跳过同步以保留用户未手动编辑前的最后一次有效值。
+    if (isCustomHeadersManuallyEdited || initialCustomHeadersText === undefined) return;
     setCustomHeadersText(initialCustomHeadersText);
   }, [initialCustomHeadersText, isCustomHeadersManuallyEdited]);
-
-  const CUSTOM_HEADER_ERROR_KEYS: Record<CustomHeadersValidationErrorCode, string> = {
-    invalid_json: "customHeaders.errors.invalidJson",
-    not_object: "customHeaders.errors.notObject",
-    invalid_name: "customHeaders.errors.invalidName",
-    duplicate_name: "customHeaders.errors.duplicateName",
-    protected_name: "customHeaders.errors.protectedName",
-    invalid_value: "customHeaders.errors.invalidValue",
-    empty_name: "customHeaders.errors.emptyName",
-    crlf: "customHeaders.errors.crlf",
-  };
 
   const handleTest = async () => {
     if (!providerUrl.trim()) {
@@ -451,7 +463,7 @@ export function ApiTestButton({
             setIsCustomHeadersManuallyEdited(true);
             setCustomHeadersText(event.target.value);
           }}
-          placeholder={CUSTOM_HEADERS_PLACEHOLDER}
+          placeholder={t("customHeaders.placeholder")}
           disabled={isTesting}
           rows={3}
           spellCheck={false}

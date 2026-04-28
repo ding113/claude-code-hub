@@ -192,13 +192,15 @@
     },
     "customHeaders": {
       "label": "自訂請求標頭（JSON）",
-      "desc": "靜態請求標頭會合併到出站請求；不會覆蓋鑑權標頭或最終 request filter。",
+      "desc": "靜態請求標頭會合併到出站請求；不會覆蓋鑑權標頭或最終請求過濾器。",
+      "placeholder": "'{'\"cf-aig-authorization\": \"Bearer your-token\"'}'",
       "errors": {
         "invalidJson": "自訂請求標頭必須為合法 JSON",
         "notObject": "自訂請求標頭必須為 JSON 物件",
         "invalidName": "請求標頭名稱包含不允許的字元",
         "duplicateName": "請求標頭名稱重複（不區分大小寫）",
         "protectedName": "鑑權請求標頭不能透過自訂請求標頭設定",
+        "forbiddenName": "傳輸級請求標頭（content-length、connection、transfer-encoding）不能透過自訂請求標頭設定",
         "invalidValue": "請求標頭值必須為字串",
         "emptyName": "請求標頭名稱不能為空",
         "crlf": "請求標頭名稱和值不能包含換行符"

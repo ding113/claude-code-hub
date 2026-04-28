@@ -193,12 +193,14 @@
     "customHeaders": {
       "label": "Custom request headers (JSON)",
       "desc": "Static headers merged into outbound requests. Cannot override authentication or final request filters.",
+      "placeholder": "'{'\"cf-aig-authorization\": \"Bearer your-token\"'}'",
       "errors": {
         "invalidJson": "Custom headers must be valid JSON",
         "notObject": "Custom headers must be a JSON object",
         "invalidName": "Header name contains characters that are not allowed",
         "duplicateName": "Header name appears more than once (case-insensitive)",
         "protectedName": "Authentication headers cannot be set via custom headers",
+        "forbiddenName": "Transport headers (content-length, connection, transfer-encoding) cannot be set via custom headers",
         "invalidValue": "Header values must be strings",
         "emptyName": "Header name cannot be empty",
         "crlf": "Header name and value cannot contain line breaks"
