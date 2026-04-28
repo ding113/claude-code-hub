@@ -25,6 +25,8 @@ async function getProvidersWithQuotas() {
       limitDailyUsd: p.limitDailyUsd,
       limitWeeklyUsd: p.limitWeeklyUsd,
       limitMonthlyUsd: p.limitMonthlyUsd,
+      limitTotalUsd: p.limitTotalUsd,
+      totalCostResetAt: p.totalCostResetAt,
       limitConcurrentSessions: p.limitConcurrentSessions,
     }))
   );

@@ -128,6 +128,9 @@
       "label": "月消費",
       "resetAt": "重置於"
     },
+    "costTotal": {
+      "label": "總消費"
+    },
     "concurrentSessions": {
       "label": "並發 Session"
     },
@@ -158,6 +161,7 @@
       "costDaily": "每日限額",
       "costWeekly": "周限額",
       "costMonthly": "月限額",
+      "costTotal": "總限額",
       "concurrentSessions": "並發限制",
       "status": "狀態",
       "actions": "操作"
@@ -207,6 +211,11 @@
       },
       "costMonthly": {
         "label": "月限額 (USD)",
+        "placeholder": "不限制",
+        "current": "當前已用: {currency}{current} / {currency}{limit}"
+      },
+      "limitTotalUsd": {
+        "label": "總限額 (USD)",
         "placeholder": "不限制",
         "current": "當前已用: {currency}{current} / {currency}{limit}"
       },

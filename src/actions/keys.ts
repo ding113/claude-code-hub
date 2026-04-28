@@ -837,7 +837,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     costDaily: { current: number; limit: number | null; resetAt?: Date };
     costWeekly: { current: number; limit: number | null; resetAt?: Date };
     costMonthly: { current: number; limit: number | null; resetAt?: Date };
-    costTotal: { current: number; limit: number | null };
+    costTotal: { current: number; limit: number | null; resetAt?: Date };
     concurrentSessions: { current: number; limit: number };
   }>
 > {
@@ -958,6 +958,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
         costTotal: {
           current: totalCost,
           limit: key.limitTotalUsd ?? null,
+          resetAt: costResetAt ?? undefined,
         },
         concurrentSessions: {
           current: concurrentSessions,

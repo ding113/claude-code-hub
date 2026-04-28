@@ -153,6 +153,9 @@
       "label": "Ежемесячные расходы",
       "resetAt": "Сброс в"
     },
+    "costTotal": {
+      "label": "Общие расходы"
+    },
     "concurrentSessions": {
       "label": "Параллельные сессии"
     },
@@ -183,6 +186,7 @@
       "costDaily": "Дневная квота",
       "costWeekly": "Еженедельная квота",
       "costMonthly": "Ежемесячная квота",
+      "costTotal": "Общая квота",
       "concurrentSessions": "Лимит параллельных",
       "status": "Статус",
       "actions": "Действия"
@@ -232,6 +236,11 @@
       },
       "costMonthly": {
         "label": "Ежемесячная квота (USD)",
+        "placeholder": "Неограниченно",
+        "current": "Использовано: {currency}{current} из {currency}{limit}"
+      },
+      "limitTotalUsd": {
+        "label": "Общая квота (USD)",
         "placeholder": "Неограниченно",
         "current": "Использовано: {currency}{current} из {currency}{limit}"
       },
