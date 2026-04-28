@@ -13,6 +13,15 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { createManagementDocsApp } from "@/app/api/v1/_root/docs";
 import { managementApiDocumentConfig } from "@/app/api/v1/_root/document";
+import {
+  AUTH_MODE_CONTEXT_KEY,
+  attachRequestId,
+  SESSION_CONTEXT_KEY,
+} from "@/lib/api/v1/_shared/audit-context";
+import { requireAuth } from "@/lib/api/v1/_shared/auth-middleware";
+import { setNoStore } from "@/lib/api/v1/_shared/cache-control";
+import { generateCsrfToken } from "@/lib/api/v1/_shared/csrf";
+import type { AuthSession } from "@/lib/auth";
 
 /** 管理 API 的对外路径前缀（同时也是 OpenAPI servers[0].url） */
 const MANAGEMENT_API_BASE_PATH = "/api/v1";
@@ -24,6 +33,11 @@ const MANAGEMENT_API_VERSION = "1.0.0";
 const OPENAPI_JSON_URL = `${MANAGEMENT_API_BASE_PATH}/openapi.json`;
 
 const app = new OpenAPIHono().basePath(MANAGEMENT_API_BASE_PATH);
+
+// ==================== 全局前置中间件 ====================
+
+// 必须最先执行：每个响应（含 404 / 错误）都需要 X-Request-Id
+app.use("*", attachRequestId());
 
 // ==================== 安全方案 ====================
 
@@ -71,6 +85,42 @@ app.get("/openapi.json", (c) => {
 
 // 文档 UI 与健康检查由子 app 提供
 app.route("/", createManagementDocsApp(OPENAPI_JSON_URL));
+
+// ==================== CSRF 令牌端点 ====================
+
+// GET /api/v1/auth/csrf
+// - 任意 read 级身份均可访问；
+// - cookie 会话返回 { csrfToken: string, mode: "cookie" }（前端必须随写请求带回 X-CCH-CSRF）；
+// - api-key / admin-token 调用返回 { csrfToken: null, mode: "api-key" | "admin-token" }
+//   （CSRF 仅保护 cookie 通道，API key 调用不需要 CSRF 校验）。
+app.get("/auth/csrf", requireAuth({ tier: "read" }), (c) => {
+  setNoStore(c);
+  const ctx = c as unknown as {
+    get(k: string): unknown;
+    json: (typeof c)["json"];
+  };
+  const session = ctx.get(SESSION_CONTEXT_KEY) as AuthSession | null;
+  const mode = ctx.get(AUTH_MODE_CONTEXT_KEY) as
+    | "session"
+    | "api-key"
+    | "admin-token"
+    | null
+    | undefined;
+
+  if (mode !== "session" || !session) {
+    return c.json(
+      {
+        csrfToken: null,
+        mode: mode ?? "api-key",
+        note: "CSRF protection is not required for non-cookie authentication.",
+      },
+      200
+    );
+  }
+
+  const token = generateCsrfToken(session.key.key, session.user.id);
+  return c.json({ csrfToken: token, mode: "cookie" }, 200);
+});
 
 // ==================== 404 处理（Problem Details） ====================
 
