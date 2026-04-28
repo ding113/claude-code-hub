@@ -3418,9 +3418,11 @@ export class ProxyForwarder {
 
     const releaseAttemptAgent = (attempt: StreamingHedgeAttempt) => {
       if (attempt.agentReleased) return;
+      const releaseAgent = attempt.releaseAgent;
+      if (!releaseAgent) return;
       attempt.agentReleased = true;
       try {
-        attempt.releaseAgent?.();
+        releaseAgent();
       } catch (releaseError) {
         logger.debug("ProxyForwarder: hedge attempt releaseAgent failed", {
           error: releaseError instanceof Error ? releaseError.message : String(releaseError),
