@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
+import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
 import {
   buildTotpAuthUri,
   generateBase32Secret,
@@ -32,6 +33,12 @@ const csrfGuard = createCsrfOriginGuard({
 });
 
 const SETUP_SECRET_TTL_MS = 10 * 60 * 1000;
+const totpMutationOtpPolicy = new LoginAbusePolicy({
+  maxAttemptsPerIp: 5,
+  maxAttemptsPerKey: 5,
+  windowSeconds: 300,
+  lockoutSeconds: 300,
+});
 
 function noStore<T extends NextResponse>(response: T): T {
   response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -101,6 +108,47 @@ async function recordTotpAudit(
 
 function otpInvalidResponse() {
   return noStore(NextResponse.json({ errorCode: "OTP_INVALID" }, { status: 400 }));
+}
+
+function otpRateLimitedResponse(retryAfterSeconds?: number) {
+  const response = noStore(NextResponse.json({ errorCode: "OTP_RATE_LIMITED" }, { status: 429 }));
+  if (retryAfterSeconds != null) {
+    response.headers.set("Retry-After", String(retryAfterSeconds));
+  }
+
+  return response;
+}
+
+async function getTotpAttemptScope(
+  request: NextRequest,
+  context: NonNullable<Awaited<ReturnType<typeof getSecurityContext>>>
+): Promise<string> {
+  let operatorIp = "unknown";
+  try {
+    operatorIp = await resolveClientIp(request);
+  } catch (error) {
+    logger.warn("TOTP attempt IP resolution failed", {
+      subjectId: context.subjectId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return `${context.subjectId}:${operatorIp}`;
+}
+
+async function checkTotpAttemptPolicy(
+  request: NextRequest,
+  context: NonNullable<Awaited<ReturnType<typeof getSecurityContext>>>,
+  actionType: "totp.enable" | "totp.disable"
+): Promise<{ allowed: true; scope: string } | { allowed: false; response: NextResponse }> {
+  const scope = await getTotpAttemptScope(request, context);
+  const decision = totpMutationOtpPolicy.check(scope);
+  if (decision.allowed) {
+    return { allowed: true, scope };
+  }
+
+  await recordTotpAudit(request, context, actionType, false, "OTP_RATE_LIMITED");
+  return { allowed: false, response: otpRateLimitedResponse(decision.retryAfterSeconds) };
 }
 
 async function verifyCurrentTotpForMutation(
@@ -196,11 +244,17 @@ export async function POST(request: NextRequest) {
       return noStore(NextResponse.json({ errorCode: "SETUP_EXPIRED" }, { status: 400 }));
     }
 
+    const attemptPolicy = await checkTotpAttemptPolicy(request, context, "totp.enable");
+    if (!attemptPolicy.allowed) {
+      return attemptPolicy.response;
+    }
+
     const pendingOtpResult = verifyTotpAndGetCounter({
       secret: settings.totpPendingSecret,
       code: otpCode,
     });
     if (!pendingOtpResult) {
+      totpMutationOtpPolicy.recordFailure(attemptPolicy.scope);
       await recordTotpAudit(request, context, "totp.enable", false, "OTP_INVALID");
       return otpInvalidResponse();
     }
@@ -212,6 +266,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!(await verifyCurrentTotpForMutation(context.subjectId, settings, oldOtpCode))) {
+        totpMutationOtpPolicy.recordFailure(attemptPolicy.scope);
         await recordTotpAudit(request, context, "totp.enable", false, "CURRENT_OTP_INVALID");
         return otpInvalidResponse();
       }
@@ -222,6 +277,7 @@ export async function POST(request: NextRequest) {
       settings.totpPendingSecret,
       pendingOtpResult.counter
     );
+    totpMutationOtpPolicy.recordSuccess(attemptPolicy.scope);
     logger.info("TOTP enabled", { subjectId: context.subjectId });
     await recordTotpAudit(request, context, "totp.enable", true);
 
@@ -252,10 +308,18 @@ export async function DELETE(request: NextRequest) {
       return noStore(NextResponse.json({ errorCode: "OTP_NOT_CONFIGURED" }, { status: 503 }));
     }
 
+    const attemptPolicy = await checkTotpAttemptPolicy(request, context, "totp.disable");
+    if (!attemptPolicy.allowed) {
+      return attemptPolicy.response;
+    }
+
     if (!(await verifyCurrentTotpForMutation(context.subjectId, settings, otpCode))) {
+      totpMutationOtpPolicy.recordFailure(attemptPolicy.scope);
       await recordTotpAudit(request, context, "totp.disable", false, "OTP_INVALID");
       return otpInvalidResponse();
     }
+
+    totpMutationOtpPolicy.recordSuccess(attemptPolicy.scope);
   }
 
   await disableTotp(context.subjectId);

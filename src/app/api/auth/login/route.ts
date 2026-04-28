@@ -183,7 +183,27 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { key, otpCode } = await request.json();
+    let body: { key?: unknown; otpCode?: unknown };
+    try {
+      const parsedBody = await request.json();
+      body = parsedBody && typeof parsedBody === "object" ? parsedBody : {};
+    } catch {
+      loginPolicy.recordFailure(clientIp);
+      createAuditLogAsync({
+        actionCategory: "auth",
+        actionType: "login.failure",
+        operatorIp: auditIp,
+        userAgent,
+        success: false,
+        errorMessage: "BAD_REQUEST",
+      });
+
+      return withAuthResponseHeaders(
+        NextResponse.json({ errorCode: "BAD_REQUEST" }, { status: 400 })
+      );
+    }
+
+    const { key, otpCode } = body;
 
     if (!key || typeof key !== "string") {
       loginPolicy.recordFailure(clientIp);

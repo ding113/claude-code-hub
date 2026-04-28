@@ -66,6 +66,17 @@ function makeRequest(body: unknown, xForwardedProto = "https"): NextRequest {
   });
 }
 
+function makeRawRequest(body: string): NextRequest {
+  return new NextRequest("http://localhost/api/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-forwarded-proto": "https",
+    },
+    body,
+  });
+}
+
 const adminSession = {
   user: {
     id: -1,
@@ -230,6 +241,15 @@ describe("Login Regression Matrix", () => {
         error: "translated:apiKeyRequired",
         errorCode: "KEY_REQUIRED",
       });
+      expect(mockValidateKey).not.toHaveBeenCalled();
+      expect(mockSetAuthCookie).not.toHaveBeenCalled();
+    });
+
+    it("malformed JSON body: 400 + BAD_REQUEST", async () => {
+      const res = await POST(makeRawRequest("{not-json"));
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ errorCode: "BAD_REQUEST" });
       expect(mockValidateKey).not.toHaveBeenCalled();
       expect(mockSetAuthCookie).not.toHaveBeenCalled();
     });

@@ -309,6 +309,22 @@ describe("account security TOTP API", () => {
     expect(mockDisableTotp).not.toHaveBeenCalled();
   });
 
+  it("rate limits repeated invalid current OTP attempts", async () => {
+    mockGetUserSecuritySettings.mockResolvedValue(enabledSettings());
+
+    for (let index = 0; index < 5; index++) {
+      const res = await DELETE(makeDeleteRequest({ otpCode: "000000" }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ errorCode: "OTP_INVALID" });
+    }
+
+    const limitedRes = await DELETE(makeDeleteRequest({ otpCode: "000000" }));
+    expect(limitedRes.status).toBe(429);
+    expect(await limitedRes.json()).toEqual({ errorCode: "OTP_RATE_LIMITED" });
+    expect(limitedRes.headers.get("Retry-After")).not.toBeNull();
+    expect(mockDisableTotp).not.toHaveBeenCalled();
+  });
+
   it("rejects disable requests that replay the last accepted OTP counter", async () => {
     mockGetUserSecuritySettings.mockResolvedValue({
       ...enabledSettings(),
