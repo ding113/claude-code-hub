@@ -144,6 +144,37 @@ export const EnvSchema = z.object({
   IP_GEO_API_TOKEN: z.string().optional(),
   IP_GEO_CACHE_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   IP_GEO_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).default(1500),
+
+  // ==================== 管理 API 迁移（v1）开关 ====================
+  // 是否启用旧版 /api/actions/* 管理接口
+  // - true (默认)：旧接口仍可调用，但响应会附带 Deprecation/Sunset/Link/Warning 头
+  // - false：旧接口的「执行端点」直接返回 410 Gone（problem+json），文档行为由 LEGACY_ACTIONS_DOCS_MODE 决定
+  ENABLE_LEGACY_ACTIONS_API: z
+    .string()
+    .default("true")
+    .transform(booleanTransform)
+    .describe("是否启用旧版 /api/actions/* 管理接口（默认开启，迁移期保持向后兼容）"),
+  // 旧版管理接口的文档展示模式
+  // - deprecated (默认)：仍提供 /api/actions/openapi.json /docs /scalar，但响应附带 deprecation 头
+  // - hidden：返回 404，引导调用方迁移到 /api/v1
+  LEGACY_ACTIONS_DOCS_MODE: z
+    .enum(["deprecated", "hidden"])
+    .default("deprecated")
+    .describe("旧版 /api/actions/* 文档路由展示模式（deprecated 仍可访问，hidden 返回 404）"),
+  // 旧版管理接口的下线日期（YYYY-MM-DD），写入 Sunset 响应头
+  LEGACY_ACTIONS_SUNSET_DATE: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "LEGACY_ACTIONS_SUNSET_DATE 必须为 YYYY-MM-DD 格式")
+    .default("2026-12-31")
+    .describe("旧版 /api/actions/* 计划下线日期（ISO 日期，写入 Sunset 响应头）"),
+  // 是否允许使用 API Key（X-Api-Key 头）访问管理接口
+  // - false (默认)：仅允许 Cookie/Bearer 认证（沿用现有行为）
+  // - true：允许通过 X-Api-Key 头访问 /api/v1/* 管理接口（用于第三方系统集成）
+  ENABLE_API_KEY_ADMIN_ACCESS: z
+    .string()
+    .default("false")
+    .transform(booleanTransform)
+    .describe("是否允许通过 API Key（X-Api-Key 头）访问管理接口（默认关闭）"),
 });
 
 /**
@@ -164,8 +195,47 @@ export function getEnvConfig(): EnvConfig {
 }
 
 /**
+ * 重置已缓存的环境变量配置（仅供测试使用）
+ *
+ * 配合 vi.stubEnv / vi.unstubAllEnvs 使用：
+ * - 测试 setUp 中：调整 process.env 后调用以丢弃旧的解析结果
+ * - 测试 tearDown 中：调用以避免泄漏到其他测试
+ */
+export function resetEnvConfigForTests(): void {
+  _envConfig = null;
+}
+
+/**
  * 检查是否为开发环境
  */
 export function isDevelopment(): boolean {
   return getEnvConfig().NODE_ENV === "development";
+}
+
+/**
+ * 检查是否启用旧版 /api/actions/* 管理接口
+ */
+export function isLegacyActionsApiEnabled(): boolean {
+  return getEnvConfig().ENABLE_LEGACY_ACTIONS_API;
+}
+
+/**
+ * 检查是否允许通过 API Key 访问管理接口
+ */
+export function isApiKeyAdminAccessEnabled(): boolean {
+  return getEnvConfig().ENABLE_API_KEY_ADMIN_ACCESS;
+}
+
+/**
+ * 获取旧版 /api/actions/* 计划下线日期（YYYY-MM-DD）
+ */
+export function getLegacyActionsSunsetDate(): string {
+  return getEnvConfig().LEGACY_ACTIONS_SUNSET_DATE;
+}
+
+/**
+ * 获取旧版 /api/actions/* 文档展示模式
+ */
+export function getLegacyActionsDocsMode(): "deprecated" | "hidden" {
+  return getEnvConfig().LEGACY_ACTIONS_DOCS_MODE;
 }

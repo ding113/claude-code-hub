@@ -278,6 +278,9 @@ export function createActionRoute(
     description,
     summary,
     tags,
+    // 旧版 /api/actions/* 已废弃，标记每个路由为 deprecated；
+    // 与运行时下发的 Deprecation/Sunset/Link/Warning 头部一致。
+    deprecated: true,
     request: {
       body: {
         content: {

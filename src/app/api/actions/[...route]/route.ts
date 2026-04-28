@@ -35,6 +35,11 @@ import * as usageLogActions from "@/actions/usage-logs";
 import * as userActions from "@/actions/users";
 import * as webhookTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
+import {
+  getLegacyActionsDocsMode,
+  getLegacyActionsSunsetDate,
+  isLegacyActionsApiEnabled,
+} from "@/lib/config/env.schema";
 import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
 import { PROVIDER_MODEL_REDIRECT_RULE_SCHEMA } from "@/lib/provider-model-redirect-schema";
@@ -68,6 +73,89 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
   bearerFormat: "API Key",
   description:
     "Authorization: Bearer <token> 方式认证（适合脚本/CLI 调用）。注意：token 与 Cookie 中 auth-token 值一致。",
+});
+
+// ==================== 旧版接口废弃中间件 ====================
+// 标识 /api/actions/* 为已废弃，统一附加 Deprecation/Sunset/Link/Warning 头部；
+// 当 ENABLE_LEGACY_ACTIONS_API=false 时，执行端点（/{module}/{action}）短路返回 410 Gone（problem+json）；
+// 当 LEGACY_ACTIONS_DOCS_MODE=hidden 时，文档 URL（openapi.json/docs/scalar）返回 404（problem+json）。
+const LEGACY_DEPRECATION_WARNING = '299 - "The /api/actions API is deprecated; use /api/v1"';
+const LEGACY_SUCCESSOR_LINK = '</api/v1/openapi.json>; rel="successor-version"';
+const LEGACY_DOCS_PATHS = new Set(["/openapi.json", "/docs", "/scalar"]);
+const LEGACY_ACTION_EXEC_PATTERN = /^\/[^/]+\/[^/]+$/;
+
+function applyLegacyDeprecationHeaders(headers: Headers): void {
+  headers.set("Deprecation", "true");
+  headers.set("Sunset", getLegacyActionsSunsetDate());
+  headers.set("Link", LEGACY_SUCCESSOR_LINK);
+  headers.set("Warning", LEGACY_DEPRECATION_WARNING);
+}
+
+function buildProblemJsonResponse(
+  status: number,
+  body: Record<string, unknown>,
+  headers: Headers
+): Response {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("Content-Type", "application/problem+json");
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: responseHeaders,
+  });
+}
+
+app.use("*", async (c, next) => {
+  // c.req.path 在 basePath 下仍为完整路径（含 /api/actions 前缀），
+  // 但 Hono 内部路由匹配使用相对子路径。这里使用相对路径判断逻辑。
+  const fullPath = c.req.path;
+  const relativePath = fullPath.startsWith("/api/actions")
+    ? fullPath.slice("/api/actions".length) || "/"
+    : fullPath;
+
+  const isDocsPath = LEGACY_DOCS_PATHS.has(relativePath);
+  const isActionExecPath = LEGACY_ACTION_EXEC_PATTERN.test(relativePath);
+
+  // 文档路由：当模式为 hidden 时直接返回 404 problem+json
+  if (isDocsPath && getLegacyActionsDocsMode() === "hidden") {
+    const headers = new Headers();
+    applyLegacyDeprecationHeaders(headers);
+    return buildProblemJsonResponse(
+      404,
+      {
+        type: "about:blank",
+        title: "Not Found",
+        status: 404,
+        detail: "/api/actions docs are hidden by configuration",
+        instance: fullPath,
+        errorCode: "NOT_FOUND",
+        link: "/api/v1/openapi.json",
+      },
+      headers
+    );
+  }
+
+  // 执行端点：当旧版接口被禁用时返回 410 Gone problem+json
+  if (isActionExecPath && !isLegacyActionsApiEnabled()) {
+    const headers = new Headers();
+    applyLegacyDeprecationHeaders(headers);
+    return buildProblemJsonResponse(
+      410,
+      {
+        type: "about:blank",
+        title: "Gone",
+        status: 410,
+        detail: "/api/actions/* has been disabled",
+        instance: fullPath,
+        errorCode: "API_GONE",
+        link: "/api/v1/openapi.json",
+      },
+      headers
+    );
+  }
+
+  // 默认：放行至下游处理器，并在响应头上附加废弃元数据
+  await next();
+  applyLegacyDeprecationHeaders(c.res.headers);
 });
 
 // ==================== 用户管理 ====================
