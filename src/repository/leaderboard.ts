@@ -1153,7 +1153,7 @@ async function findModelLeaderboardWithTimezone(
     .from(usageLedger)
     .where(and(LEDGER_BILLING_CONDITION, buildDateCondition(period, timezone, dateRange)))
     .groupBy(modelField)
-    .orderBy(desc(sql`count(*)`)); // 按请求数排序
+    .orderBy(desc(sql`sum(${usageLedger.costUsd})`), desc(sql`count(*)`));
 
   return rankings
     .filter((entry) => entry.model !== null && entry.model !== "")

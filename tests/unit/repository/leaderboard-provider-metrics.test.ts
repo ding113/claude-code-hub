@@ -691,3 +691,52 @@ describe("Model Leaderboard basis handling", () => {
     });
   });
 });
+
+describe("Model Leaderboard sort order", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    selectCallIndex = 0;
+    chainMocks = [];
+    mockSelect.mockClear();
+    mocks.resolveSystemTimezone.mockResolvedValue("UTC");
+    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+  });
+
+  it("orders by total cost descending with request count as tiebreaker", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          model: "expensive-low-volume",
+          totalRequests: 5,
+          totalCost: "50.0",
+          totalTokens: 1000,
+          successRate: 1.0,
+        },
+        {
+          model: "cheap-high-volume",
+          totalRequests: 200,
+          totalCost: "1.0",
+          totalTokens: 100000,
+          successRate: 1.0,
+        },
+      ]),
+    ];
+
+    const { findDailyModelLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyModelLeaderboard();
+
+    expect(result).toHaveLength(2);
+    expect(result[0].model).toBe("expensive-low-volume");
+    expect(result[0].totalCost).toBe(50);
+    expect(result[1].model).toBe("cheap-high-volume");
+    expect(result[1].totalCost).toBe(1);
+
+    const orderByMock = chainMocks[0].orderBy;
+    expect(orderByMock).toHaveBeenCalledTimes(1);
+
+    const args = orderByMock.mock.calls[0];
+    expect(args).toHaveLength(2);
+    expect(JSON.stringify(args[0])).toContain("sum");
+    expect(JSON.stringify(args[1])).toContain("count");
+  });
+});
