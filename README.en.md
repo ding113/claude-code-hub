@@ -344,7 +344,7 @@ See **[docs/k8s-deployment.md](docs/k8s-deployment.md)** for full options, place
 | `API_KEY_AUTH_CACHE_TTL_SECONDS`           | `60`                     | API Key auth cache TTL in seconds (default 60, max 3600).                                             |
 | `SESSION_TTL`                              | `300`                    | Session cache window (seconds) that drives vendor reuse.                                             |
 | `ENABLE_SECURE_COOKIES`                    | `true`                   | Browsers require HTTPS for Secure cookies; set to `false` when serving plain HTTP outside localhost. |
-| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | When `true`, network errors also trip the circuit breaker for quicker isolation.                     |
+| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `true`                   | When `true`, only connectivity failures and timeouts affect provider circuit breaker state.          |
 | `APP_PORT`                                 | `23000`                  | Production port (override via container or process manager).                                         |
 | `APP_URL`                                  | empty                    | Populate to expose correct `servers` entries in OpenAPI docs.                                        |
 | `API_TEST_TIMEOUT_MS`                      | `15000`                  | Timeout (ms) for provider API connectivity tests. Accepts 5000-120000 for regional tuning.           |

@@ -110,7 +110,7 @@ export const EnvSchema = z.object({
   DEBUG_MODE: z.string().default("false").transform(booleanTransform),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),
-  ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS: z.string().default("false").transform(booleanTransform),
+  ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS: z.string().default("true").transform(booleanTransform),
   // 端点级别熔断器开关
   // - false (默认)：禁用端点熔断器，所有端点均可使用
   // - true：启用端点熔断器，连续失败的端点会被临时屏蔽

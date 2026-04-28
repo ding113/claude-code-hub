@@ -351,7 +351,7 @@ describe("Endpoint circuit breaker isolation", () => {
     setupCommonMocks();
   });
 
-  it("fake-200 error should call recordFailure but NOT recordEndpointFailure", async () => {
+  it("fake-200 error should NOT call provider or endpoint circuit breaker failure", async () => {
     const session = createSession();
     setDeferredMeta(session, 42);
 
@@ -359,10 +359,7 @@ describe("Endpoint circuit breaker isolation", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    expect(mockRecordFailure).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
-    );
+    expect(mockRecordFailure).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
     expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
 
@@ -378,7 +375,7 @@ describe("Endpoint circuit breaker isolation", () => {
     ).toBe(true);
   });
 
-  it("高并发模式下，fake-200 流式错误仍应记录核心失败，但跳过 session 观测写入", async () => {
+  it("高并发模式下，fake-200 流式错误仍应记录核心失败，但不累计熔断", async () => {
     const session = createSession();
     session.setHighConcurrencyModeEnabled(true);
     setDeferredMeta(session, 42);
@@ -387,10 +384,7 @@ describe("Endpoint circuit breaker isolation", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    expect(mockRecordFailure).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
-    );
+    expect(mockRecordFailure).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
     expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
     expect(SessionManager.updateSessionUsage).not.toHaveBeenCalled();
@@ -421,7 +415,7 @@ describe("Endpoint circuit breaker isolation", () => {
     ).toBe(true);
   });
 
-  it("non-200 HTTP status should call recordFailure but NOT recordEndpointFailure", async () => {
+  it("non-200 HTTP status should NOT call provider or endpoint circuit breaker failure", async () => {
     const session = createSession();
     // Set upstream status to 429 in deferred meta
     setDeferredStreamingFinalization(session, {
@@ -441,7 +435,7 @@ describe("Endpoint circuit breaker isolation", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    expect(mockRecordFailure).toHaveBeenCalledWith(1, expect.any(Error));
+    expect(mockRecordFailure).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
   });
 
