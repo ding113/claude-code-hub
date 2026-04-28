@@ -18,9 +18,9 @@ import type { FakeStreamingWhitelistEntry } from "@/types/system-config";
 export function isFakeStreamingEligible(
   clientRequestedModel: string,
   providerGroupTag: string | null | undefined,
-  whitelist: ReadonlyArray<FakeStreamingWhitelistEntry>
+  whitelist: ReadonlyArray<FakeStreamingWhitelistEntry> | null | undefined
 ): boolean {
-  if (whitelist.length === 0) return false;
+  if (!whitelist || whitelist.length === 0) return false;
 
   const model = clientRequestedModel.trim();
   if (model.length === 0) return false;
