@@ -10,7 +10,6 @@ const mockSaveTotpLastUsedCounter = vi.hoisted(() => vi.fn());
 const mockDisableTotp = vi.hoisted(() => vi.fn());
 const mockGenerateBase32Secret = vi.hoisted(() => vi.fn());
 const mockBuildTotpAuthUri = vi.hoisted(() => vi.fn());
-const mockVerifyTotp = vi.hoisted(() => vi.fn());
 const mockVerifyTotpAndGetCounter = vi.hoisted(() => vi.fn());
 const mockCreateAuditLogAsync = vi.hoisted(() => vi.fn());
 const mockIsTotpSecretEncryptionConfigured = vi.hoisted(() => vi.fn());
@@ -32,7 +31,6 @@ vi.mock("@/repository/user-security-settings", () => ({
 vi.mock("@/lib/security/totp", () => ({
   generateBase32Secret: mockGenerateBase32Secret,
   buildTotpAuthUri: mockBuildTotpAuthUri,
-  verifyTotp: mockVerifyTotp,
   verifyTotpAndGetCounter: mockVerifyTotpAndGetCounter,
 }));
 
@@ -143,7 +141,6 @@ describe("account security TOTP API", () => {
     mockBuildTotpAuthUri.mockReturnValue(
       "otpauth://totp/Claude%20Code%20Hub:Alice?secret=JBSWY3DPEHPK3PXP&issuer=Claude%20Code%20Hub"
     );
-    mockVerifyTotp.mockReturnValue(false);
     mockVerifyTotpAndGetCounter.mockReturnValue(null);
     mockCreateAuditLogAsync.mockResolvedValue(undefined);
     mockIsTotpSecretEncryptionConfigured.mockReturnValue(true);
@@ -204,7 +201,7 @@ describe("account security TOTP API", () => {
       totpPendingSecret: "JBSWY3DPEHPK3PXP",
       totpPendingExpiresAt: new Date(Date.now() + 60_000),
     });
-    mockVerifyTotp.mockReturnValue(true);
+    mockVerifyTotpAndGetCounter.mockReturnValue({ counter: 123 });
 
     const res = await POST(
       makeRequest({ action: "enable", secret: "CLIENT_SUPPLIED_SECRET", otpCode: "123456" })
@@ -213,11 +210,11 @@ describe("account security TOTP API", () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({ enabled: true, boundAt: "2026-04-28T00:00:00.000Z" });
-    expect(mockVerifyTotp).toHaveBeenCalledWith({
+    expect(mockVerifyTotpAndGetCounter).toHaveBeenCalledWith({
       secret: "JBSWY3DPEHPK3PXP",
       code: "123456",
     });
-    expect(mockSaveTotpEnabled).toHaveBeenCalledWith("user:1", "JBSWY3DPEHPK3PXP");
+    expect(mockSaveTotpEnabled).toHaveBeenCalledWith("user:1", "JBSWY3DPEHPK3PXP", 123);
   });
 
   it("rejects enable requests without a valid pending setup secret", async () => {
@@ -226,7 +223,7 @@ describe("account security TOTP API", () => {
 
     expect(res.status).toBe(400);
     expect(json).toEqual({ errorCode: "SETUP_EXPIRED" });
-    expect(mockVerifyTotp).not.toHaveBeenCalled();
+    expect(mockVerifyTotpAndGetCounter).not.toHaveBeenCalled();
     expect(mockSaveTotpEnabled).not.toHaveBeenCalled();
   });
 
@@ -236,19 +233,18 @@ describe("account security TOTP API", () => {
       totpPendingSecret: "NEWSECRET",
       totpPendingExpiresAt: new Date(Date.now() + 60_000),
     });
-    mockVerifyTotp.mockReturnValue(true);
-    mockVerifyTotpAndGetCounter.mockReturnValue(null);
+    mockVerifyTotpAndGetCounter.mockReturnValueOnce({ counter: 200 }).mockReturnValueOnce(null);
 
     const res = await POST(makeRequest({ action: "enable", otpCode: "123456" }));
     const json = await res.json();
 
     expect(res.status).toBe(400);
     expect(json).toEqual({ errorCode: "OTP_INVALID" });
-    expect(mockVerifyTotp).toHaveBeenNthCalledWith(1, {
+    expect(mockVerifyTotpAndGetCounter).toHaveBeenNthCalledWith(1, {
       secret: "NEWSECRET",
       code: "123456",
     });
-    expect(mockVerifyTotpAndGetCounter).toHaveBeenCalledWith({
+    expect(mockVerifyTotpAndGetCounter).toHaveBeenNthCalledWith(2, {
       secret: "CURRENTSECRET",
       code: "",
     });
@@ -335,8 +331,9 @@ describe("account security TOTP API", () => {
       totpPendingSecret: "NEWSECRET",
       totpPendingExpiresAt: new Date(Date.now() + 60_000),
     });
-    mockVerifyTotp.mockReturnValue(true);
-    mockVerifyTotpAndGetCounter.mockReturnValue({ counter: 123 });
+    mockVerifyTotpAndGetCounter
+      .mockReturnValueOnce({ counter: 200 })
+      .mockReturnValueOnce({ counter: 123 });
     mockSaveTotpLastUsedCounter.mockResolvedValue(false);
 
     const res = await POST(

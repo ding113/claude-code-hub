@@ -32,6 +32,15 @@ function getKeyMaterial(): string {
   if (env.TOTP_SECRET_ENCRYPTION_KEY) {
     return env.TOTP_SECRET_ENCRYPTION_KEY;
   }
+
+  throw new Error("TOTP_SECRET_ENCRYPTION_KEY is required to store authenticator secrets");
+}
+
+function getDecryptionKeyMaterial(): string {
+  const env = getEnvConfig();
+  if (env.TOTP_SECRET_ENCRYPTION_KEY) {
+    return env.TOTP_SECRET_ENCRYPTION_KEY;
+  }
   if (env.ADMIN_TOKEN) {
     return env.ADMIN_TOKEN;
   }
@@ -40,11 +49,11 @@ function getKeyMaterial(): string {
 }
 
 export function isTotpSecretEncryptionConfigured(): boolean {
-  return getTotpSecretKeySource() !== "missing";
+  return getTotpSecretKeySource() === "totp-secret-encryption-key";
 }
 
-function getAesKey(): Buffer {
-  return createHash("sha256").update(getKeyMaterial()).digest();
+function getAesKey(keyMaterial: string): Buffer {
+  return createHash("sha256").update(keyMaterial).digest();
 }
 
 export function getTotpSecretKeyVersion(): number {
@@ -53,7 +62,7 @@ export function getTotpSecretKeyVersion(): number {
 
 export function encryptTotpSecret(secret: string): { ciphertext: string; keyVersion: number } {
   const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv("aes-256-gcm", getAesKey(), iv, {
+  const cipher = createCipheriv("aes-256-gcm", getAesKey(getKeyMaterial()), iv, {
     authTagLength: AUTH_TAG_LENGTH,
   });
   const encrypted = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
@@ -83,7 +92,7 @@ export function decryptTotpSecret(ciphertext: string | null): string | null {
   try {
     const decipher = createDecipheriv(
       "aes-256-gcm",
-      getAesKey(),
+      getAesKey(getDecryptionKeyMaterial()),
       Buffer.from(ivValue, "base64url"),
       {
         authTagLength: AUTH_TAG_LENGTH,

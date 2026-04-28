@@ -6,7 +6,6 @@ import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
 import {
   buildTotpAuthUri,
   generateBase32Secret,
-  verifyTotp,
   verifyTotpAndGetCounter,
 } from "@/lib/security/totp";
 import {
@@ -155,18 +154,13 @@ export async function POST(request: NextRequest) {
 
   if (body?.action === "setup") {
     if (!isTotpSecretEncryptionConfigured()) {
-      logger.warn("TOTP setup rejected: encryption key is not configured", {
+      logger.warn("TOTP setup rejected: dedicated encryption key is not configured", {
         subjectId: context.subjectId,
+        keySource: getTotpSecretKeySource(),
       });
       await recordTotpAudit(request, context, "totp.setup", false, "ENCRYPTION_NOT_CONFIGURED");
       return noStore(
         NextResponse.json({ errorCode: "TOTP_ENCRYPTION_NOT_CONFIGURED" }, { status: 503 })
-      );
-    }
-    if (getTotpSecretKeySource() === "admin-token") {
-      logger.warn(
-        "TOTP setup is using ADMIN_TOKEN fallback for secret encryption; set TOTP_SECRET_ENCRYPTION_KEY before rotating ADMIN_TOKEN",
-        { subjectId: context.subjectId }
       );
     }
 
@@ -202,7 +196,11 @@ export async function POST(request: NextRequest) {
       return noStore(NextResponse.json({ errorCode: "SETUP_EXPIRED" }, { status: 400 }));
     }
 
-    if (!verifyTotp({ secret: settings.totpPendingSecret, code: otpCode })) {
+    const pendingOtpResult = verifyTotpAndGetCounter({
+      secret: settings.totpPendingSecret,
+      code: otpCode,
+    });
+    if (!pendingOtpResult) {
       await recordTotpAudit(request, context, "totp.enable", false, "OTP_INVALID");
       return otpInvalidResponse();
     }
@@ -219,7 +217,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const boundAt = await saveTotpEnabled(context.subjectId, settings.totpPendingSecret);
+    const boundAt = await saveTotpEnabled(
+      context.subjectId,
+      settings.totpPendingSecret,
+      pendingOtpResult.counter
+    );
     logger.info("TOTP enabled", { subjectId: context.subjectId });
     await recordTotpAudit(request, context, "totp.enable", true);
 

@@ -33,6 +33,22 @@ describe("TOTP secret encryption", () => {
     expect(decryptTotpSecret("JBSWY3DPEHPK3PXP")).toBe("JBSWY3DPEHPK3PXP");
   });
 
+  it("requires a dedicated stable encryption key for new secrets", async () => {
+    const { encryptTotpSecret, getTotpSecretKeySource, isTotpSecretEncryptionConfigured } =
+      await import("@/lib/security/totp-secret-encryption");
+
+    mockGetEnvConfig.mockReturnValue({
+      TOTP_SECRET_ENCRYPTION_KEY: undefined,
+      ADMIN_TOKEN: "admin-token-fallback",
+    });
+
+    expect(getTotpSecretKeySource()).toBe("admin-token");
+    expect(isTotpSecretEncryptionConfigured()).toBe(false);
+    expect(() => encryptTotpSecret("JBSWY3DPEHPK3PXP")).toThrow(
+      "TOTP_SECRET_ENCRYPTION_KEY is required"
+    );
+  });
+
   it("throws a typed error when encrypted secrets cannot be authenticated", async () => {
     const { decryptTotpSecret, encryptTotpSecret, TotpSecretDecryptionError } = await import(
       "@/lib/security/totp-secret-encryption"

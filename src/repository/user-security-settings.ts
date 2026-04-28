@@ -120,7 +120,11 @@ export async function saveTotpSetupPending(
     });
 }
 
-export async function saveTotpEnabled(subjectId: string, secret: string): Promise<Date> {
+export async function saveTotpEnabled(
+  subjectId: string,
+  secret: string,
+  initialCounter: number | null = null
+): Promise<Date> {
   const now = new Date();
   const encryptedSecret = encryptTotpSecret(secret);
   await db
@@ -130,7 +134,7 @@ export async function saveTotpEnabled(subjectId: string, secret: string): Promis
       totpEnabled: true,
       totpSecret: encryptedSecret.ciphertext,
       totpSecretKeyVersion: encryptedSecret.keyVersion,
-      totpLastUsedCounter: null,
+      totpLastUsedCounter: initialCounter,
       totpPendingSecret: null,
       totpPendingSecretKeyVersion: null,
       totpPendingExpiresAt: null,
@@ -143,7 +147,7 @@ export async function saveTotpEnabled(subjectId: string, secret: string): Promis
         totpEnabled: true,
         totpSecret: encryptedSecret.ciphertext,
         totpSecretKeyVersion: encryptedSecret.keyVersion,
-        totpLastUsedCounter: null,
+        totpLastUsedCounter: initialCounter,
         totpPendingSecret: null,
         totpPendingSecretKeyVersion: null,
         totpPendingExpiresAt: null,

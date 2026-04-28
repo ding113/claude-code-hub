@@ -107,16 +107,18 @@ describe("Login Regression Matrix", () => {
     mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
     mockSetAuthCookie.mockResolvedValue(undefined);
     mockGetSessionTokenMode.mockReturnValue("legacy");
-    mockGetSecuritySubjectId.mockReturnValue("user:1");
-    mockGetUserSecuritySettings.mockResolvedValue({
-      subjectId: "user:1",
+    mockGetSecuritySubjectId.mockImplementation((session: { user: { id: number } }) =>
+      session.user.id === -1 ? "admin-token" : `user:${session.user.id}`
+    );
+    mockGetUserSecuritySettings.mockImplementation(async (subjectId: string) => ({
+      subjectId,
       totpEnabled: false,
       totpSecret: null,
       totpLastUsedCounter: null,
       totpPendingSecret: null,
       totpPendingExpiresAt: null,
       totpBoundAt: null,
-    });
+    }));
 
     const mod = await import("@/app/api/auth/login/route");
     POST = mod.POST;
@@ -143,6 +145,8 @@ describe("Login Regression Matrix", () => {
       });
       expect(mockSetAuthCookie).toHaveBeenCalledWith("admin-key");
       expect(mockGetLoginRedirectTarget).toHaveBeenCalledWith(adminSession);
+      expect(mockGetSecuritySubjectId).toHaveBeenCalledWith(adminSession);
+      expect(mockGetUserSecuritySettings).toHaveBeenCalledWith("admin-token");
     });
 
     it("dashboard user: redirectTo=/dashboard, loginType=dashboard_user", async () => {
@@ -165,6 +169,8 @@ describe("Login Regression Matrix", () => {
       });
       expect(mockSetAuthCookie).toHaveBeenCalledWith("dashboard-user-key");
       expect(mockGetLoginRedirectTarget).toHaveBeenCalledWith(dashboardUserSession);
+      expect(mockGetSecuritySubjectId).toHaveBeenCalledWith(dashboardUserSession);
+      expect(mockGetUserSecuritySettings).toHaveBeenCalledWith("user:1");
     });
 
     it("readonly user: redirectTo=/my-usage, loginType=readonly_user", async () => {
@@ -187,6 +193,31 @@ describe("Login Regression Matrix", () => {
       });
       expect(mockSetAuthCookie).toHaveBeenCalledWith("readonly-user-key");
       expect(mockGetLoginRedirectTarget).toHaveBeenCalledWith(readonlyUserSession);
+      expect(mockGetSecuritySubjectId).toHaveBeenCalledWith(readonlyUserSession);
+      expect(mockGetUserSecuritySettings).toHaveBeenCalledWith("user:2");
+    });
+
+    it("TOTP enabled user without OTP: 401 + OTP_REQUIRED", async () => {
+      mockValidateKey.mockResolvedValue(dashboardUserSession);
+      mockGetUserSecuritySettings.mockResolvedValueOnce({
+        subjectId: "user:1",
+        totpEnabled: true,
+        totpSecret: "JBSWY3DPEHPK3PXP",
+        totpLastUsedCounter: null,
+        totpPendingSecret: null,
+        totpPendingExpiresAt: null,
+        totpBoundAt: new Date("2026-04-27T00:00:00.000Z"),
+      });
+
+      const res = await POST(makeRequest({ key: "dashboard-user-key" }));
+
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({
+        error: "translated:otpRequired",
+        errorCode: "OTP_REQUIRED",
+        requiresOtp: true,
+      });
+      expect(mockSetAuthCookie).not.toHaveBeenCalled();
     });
   });
 
