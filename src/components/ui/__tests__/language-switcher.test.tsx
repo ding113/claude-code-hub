@@ -164,13 +164,13 @@ describe("LanguageSwitcher", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  test("does not refresh from a stale stored locale marker on mount", () => {
+  test("restores a pending refresh from sessionStorage after remount", () => {
     window.sessionStorage.setItem("cch.pendingLocaleRefresh", "en");
     testState.currentLocale = "en";
 
     view = render(<LanguageSwitcher />);
 
-    expect(testState.router.refresh).not.toHaveBeenCalled();
-    expect(window.sessionStorage.getItem("cch.pendingLocaleRefresh")).toBe("en");
+    expect(testState.router.refresh).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem("cch.pendingLocaleRefresh")).toBeNull();
   });
 });

@@ -1260,7 +1260,14 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
       return { ok: false, error: "供应商不存在" };
     }
 
-    await publishProviderCacheInvalidation();
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("resetProviderTotalUsage:cache_invalidation_failed", {
+        providerId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return { ok: true };
   } catch (error) {

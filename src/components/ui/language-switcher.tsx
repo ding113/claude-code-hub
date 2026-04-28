@@ -79,8 +79,7 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
   const [pendingLocale, setPendingLocale] = React.useState<Locale | null>(null);
 
   React.useEffect(() => {
-    const storedRefreshTarget =
-      activePendingLocaleRefreshTarget === null ? null : getPendingLocaleRefreshTarget();
+    const storedRefreshTarget = getPendingLocaleRefreshTarget();
     const refreshTarget = pendingLocale ?? activePendingLocaleRefreshTarget ?? storedRefreshTarget;
 
     if (refreshTarget !== currentLocale) {

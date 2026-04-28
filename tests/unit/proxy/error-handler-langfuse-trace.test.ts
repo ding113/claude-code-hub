@@ -180,6 +180,41 @@ describe("ProxyErrorHandler.handle - Langfuse error traces", () => {
     );
   });
 
+  test("emits final override response and status after error override is applied", async () => {
+    const session = createSession();
+    mocks.getErrorOverrideAsync.mockResolvedValueOnce({
+      statusCode: 429,
+      response: {
+        error: {
+          message: "masked quota message",
+          type: "rate_limit_error",
+        },
+      },
+    });
+
+    const response = await ProxyErrorHandler.handle(
+      session,
+      new ProxyError("Upstream failed", 502, {
+        rawBody: '{"error":{"message":"raw upstream failure"}}',
+        providerId: 7,
+        providerName: "provider-a",
+      })
+    );
+
+    expect(response.status).toBe(429);
+    expect(mocks.emitProxyLangfuseTrace).toHaveBeenCalledWith(
+      session,
+      expect.objectContaining({
+        responseText: expect.stringContaining("masked quota message"),
+        statusCode: 429,
+        errorMessage: "masked quota message",
+      })
+    );
+    expect(mocks.emitProxyLangfuseTrace.mock.calls[0][1].responseText).not.toContain(
+      "raw upstream failure"
+    );
+  });
+
   test("falls back to upstream body when raw body is missing", async () => {
     const session = createSession();
     const error = new ProxyError("Upstream failed", 502, {

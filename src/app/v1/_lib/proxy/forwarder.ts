@@ -103,6 +103,7 @@ type CacheTtlOption = CacheTtlPreference | null | undefined;
 type ProxySessionWithAttemptRuntime = ProxySession & {
   clearResponseTimeout?: () => void;
   responseController?: AbortController;
+  releaseAgent?: () => void;
 };
 
 type StreamingHedgeAttempt = {
@@ -2812,8 +2813,8 @@ export class ProxyForwarder {
         clearTimeout(responseTimeoutId);
       }
 
-      // Polyfill 路径上需要主动解绑源信号的 abort listener（response-handler 不会执行）。
-      cleanupCombinedSignal();
+      // fetch 失败后可能继续尝试 HTTP/1.1 / 直连 fallback。
+      // 这些 fallback 请求仍需响应客户端中断和响应超时，所以 cleanup 只能在最终失败时执行。
 
       // Release agent ref count on fetch failure (request never started streaming)
       const releaseKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
@@ -2864,6 +2865,7 @@ export class ProxyForwarder {
 
         // 抛出 ProxyError 并设置特殊状态码 524（Cloudflare: A Timeout Occurred）
         // 这样会被归类为 PROVIDER_ERROR，计入熔断器并直接切换供应商
+        cleanupCombinedSignal();
         throw new ProxyError(
           `${responseTimeoutType === "streaming_first_byte" ? "供应商首字节响应超时" : "供应商响应超时"}: ${responseTimeoutMs}ms 内未收到数据`,
           524, // 524 = A Timeout Occurred (Cloudflare standard)
@@ -2909,6 +2911,7 @@ export class ProxyForwarder {
         );
 
         // 抛出 ProxyError（归类为 PROVIDER_ERROR）
+        cleanupCombinedSignal();
         throw new ProxyError(
           `供应商流式响应静默超时: ${provider.streamingIdleTimeoutMs}ms 内未收到新数据`,
           524, // 524 = A Timeout Occurred
@@ -2945,6 +2948,7 @@ export class ProxyForwarder {
         });
 
         // 客户端中断不应计入熔断器，也不重试，直接抛出错误
+        cleanupCombinedSignal();
         throw new ProxyError(
           err.name === "ResponseAborted"
             ? "Response transmission aborted"
@@ -3066,6 +3070,7 @@ export class ProxyForwarder {
           });
 
           // 抛出 HTTP/1.1 错误，让正常的错误处理流程处理
+          cleanupCombinedSignal();
           throw http1Error;
         }
       } else if (proxyConfig) {
@@ -3140,10 +3145,12 @@ export class ProxyForwarder {
                 providerId: provider.id,
                 error: directError,
               });
+              cleanupCombinedSignal();
               throw fetchError; // 抛出原始代理错误
             }
           } else {
             // 不降级，直接抛出代理错误
+            cleanupCombinedSignal();
             throw new ProxyError("Service temporarily unavailable", 503);
           }
         } else {
@@ -3181,6 +3188,7 @@ export class ProxyForwarder {
             bodySize: requestBody ? JSON.stringify(requestBody).length : 0,
           });
 
+          cleanupCombinedSignal();
           throw fetchError;
         }
       } else {
@@ -3219,6 +3227,7 @@ export class ProxyForwarder {
           bodySize: requestBody ? JSON.stringify(requestBody).length : 0,
         });
 
+        cleanupCombinedSignal();
         throw fetchError;
       }
     }
@@ -4219,6 +4228,7 @@ export class ProxyForwarder {
       } | null;
       clearResponseTimeout?: () => void;
       responseController?: AbortController;
+      releaseAgent?: () => void;
     };
     const sourceRuntime = source as ProxySessionWithAttemptRuntime;
 
@@ -4255,6 +4265,7 @@ export class ProxyForwarder {
       : null;
     targetState.clearResponseTimeout = sourceRuntime.clearResponseTimeout;
     targetState.responseController = sourceRuntime.responseController;
+    targetState.releaseAgent = sourceRuntime.releaseAgent;
   }
 
   private static async clearSessionProviderBinding(session: ProxySession): Promise<void> {

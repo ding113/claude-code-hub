@@ -389,12 +389,27 @@ async function resolveBillableUsageMetricsForCost(
     return null;
   }
 
-  if (usageMetrics) {
-    return usageMetrics;
-  }
-
   if (statusCode < 200 || statusCode >= 300) {
     return null;
+  }
+
+  if (responseText !== undefined && responseText !== null) {
+    const detected = detectUpstreamErrorFromSseOrJsonText(responseText, {
+      maxJsonCharsForMessageCheck: 0,
+    });
+    if (detected.isError) {
+      logger.warn("[CostCalculation] Skipping billing for fake-200 error payload", {
+        code: detected.code,
+        detail: detected.detail,
+        originalModel: session.getOriginalModel(),
+        redirectedModel: session.getCurrentModel(),
+      });
+      return null;
+    }
+  }
+
+  if (usageMetrics) {
+    return usageMetrics;
   }
 
   let resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>>;
@@ -413,24 +428,9 @@ async function resolveBillableUsageMetricsForCost(
     return null;
   }
 
-  if (responseText !== undefined && responseText !== null) {
-    const detected = detectUpstreamErrorFromSseOrJsonText(responseText, {
-      maxJsonCharsForMessageCheck: 0,
-    });
-    if (detected.isError) {
-      logger.warn("[CostCalculation] Skipping per-request billing for fake-200 error payload", {
-        code: detected.code,
-        detail: detected.detail,
-        originalModel: session.getOriginalModel(),
-        redirectedModel: session.getCurrentModel(),
-      });
-      return null;
-    }
-  }
-
   // 成功响应可能没有 token usage（例如 OpenAI Images），但本地价格表仍可配置按次价格。
-  // 这里用空 usage 只承载 input_cost_per_request，不新增按图、按 token 等语义。
-  return {};
+  // 这里用显式零 token sentinel 只承载 input_cost_per_request，不新增按图、按 token 等语义。
+  return { input_tokens: 0, output_tokens: 0 };
 }
 
 type FinalizeDeferredStreamingResult = {

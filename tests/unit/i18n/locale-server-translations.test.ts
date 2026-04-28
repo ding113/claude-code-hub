@@ -29,11 +29,13 @@ describe("locale server translations", () => {
     const files = walk("src/app/[locale]").filter(isRouteOrServerChromeFile);
     const violations = files.flatMap((file) => {
       const content = readFileSync(file, "utf8");
-      return content
-        .split("\n")
-        .map((line, index) => ({ line, lineNumber: index + 1 }))
-        .filter(({ line }) => /getTranslations\(\s*["']/.test(line))
-        .map(({ line, lineNumber }) => `${file}:${lineNumber}: ${line.trim()}`);
+      const lines = content.split("\n");
+      return [...content.matchAll(/getTranslations\(\s*["']/g)].map((match) => {
+        const offset = match.index ?? 0;
+        const lineNumber = content.slice(0, offset).split("\n").length;
+        const line = lines[lineNumber - 1] ?? "";
+        return `${file}:${lineNumber}: ${line.trim()}`;
+      });
     });
 
     expect(violations).toEqual([]);

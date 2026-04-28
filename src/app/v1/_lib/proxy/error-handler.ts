@@ -249,14 +249,30 @@ export class ProxyErrorHandler {
       }
     }
 
-    ProxyErrorHandler.emitErrorTrace(session, {
-      error,
-      errorMessage: logErrorMessage,
-      statusCode,
-    });
-
-    // 记录错误到数据库（始终记录详细错误消息，包含供应商名称）
-    await ProxyErrorHandler.logErrorToDatabase(session, logErrorMessage, statusCode, null);
+    const finalizeErrorResponse = async (
+      response: Response,
+      traceErrorMessage: string,
+      options: { traceFinalResponseBody?: boolean } = {}
+    ) => {
+      const finalResponse = await attachSessionIdToErrorResponse(session.sessionId, response);
+      let responseText: string | undefined;
+      if (options.traceFinalResponseBody) {
+        try {
+          responseText = await finalResponse.clone().text();
+        } catch {
+          responseText = undefined;
+        }
+      }
+      ProxyErrorHandler.emitErrorTrace(session, {
+        error,
+        errorMessage: traceErrorMessage,
+        statusCode: finalResponse.status,
+        responseText,
+      });
+      // 先发出 trace，再写数据库，避免 DB 持久化失败吞掉本次错误诊断。
+      await ProxyErrorHandler.logErrorToDatabase(session, logErrorMessage, statusCode, null);
+      return finalResponse;
+    };
 
     // 检测是否有覆写配置（响应体或状态码）
     // 使用异步版本确保错误规则已加载
@@ -303,15 +319,16 @@ export class ProxyErrorHandler {
                 settings,
                 override: { response: null, statusCode: override.statusCode },
               });
-              return await attachSessionIdToErrorResponse(
-                session.sessionId,
+              return await finalizeErrorResponse(
                 ProxyResponses.buildError(
                   responseStatusCode,
                   finalClientErrorMessage,
                   undefined,
                   undefined,
                   safeRequestId
-                )
+                ),
+                finalClientErrorMessage,
+                { traceFinalResponseBody: true }
               );
             }
             // 两者都无效，返回原始错误（但仍透传 request_id，因为有覆写意图）
@@ -321,15 +338,16 @@ export class ProxyErrorHandler {
               settings,
               override: { response: null, statusCode: null },
             });
-            return await attachSessionIdToErrorResponse(
-              session.sessionId,
+            return await finalizeErrorResponse(
               ProxyResponses.buildError(
                 statusCode,
                 finalClientErrorMessage,
                 undefined,
                 undefined,
                 safeRequestId
-              )
+              ),
+              finalClientErrorMessage,
+              { traceFinalResponseBody: true }
             );
           }
 
@@ -378,12 +396,13 @@ export class ProxyErrorHandler {
             overridden: true,
           });
 
-          return await attachSessionIdToErrorResponse(
-            session.sessionId,
+          return await finalizeErrorResponse(
             new Response(JSON.stringify(responseBody), {
               status: responseStatusCode,
               headers: { "Content-Type": "application/json" },
-            })
+            }),
+            String(responseBody.error.message),
+            { traceFinalResponseBody: true }
           );
         }
 
@@ -408,15 +427,16 @@ export class ProxyErrorHandler {
           override: { response: null, statusCode: override.statusCode },
         });
 
-        return await attachSessionIdToErrorResponse(
-          session.sessionId,
+        return await finalizeErrorResponse(
           ProxyResponses.buildError(
             responseStatusCode,
             finalClientErrorMessage,
             undefined,
             undefined,
             safeRequestId
-          )
+          ),
+          finalClientErrorMessage,
+          { traceFinalResponseBody: true }
         );
       }
     }
@@ -495,15 +515,15 @@ export class ProxyErrorHandler {
       override: null,
     });
 
-    return await attachSessionIdToErrorResponse(
-      session.sessionId,
+    return await finalizeErrorResponse(
       ProxyResponses.buildError(
         statusCode,
         finalClientErrorMessage,
         undefined,
         details,
         safeRequestId
-      )
+      ),
+      logErrorMessage
     );
   }
 
@@ -624,13 +644,13 @@ export class ProxyErrorHandler {
 
   private static emitErrorTrace(
     session: ProxySession,
-    data: { error: unknown; errorMessage: string; statusCode: number }
+    data: { error: unknown; errorMessage: string; statusCode: number; responseText?: string }
   ): void {
     const isStreaming = isRequestStreaming(session);
 
     emitProxyLangfuseTrace(session, {
       responseHeaders: new Headers(),
-      responseText: getErrorResponseText(data.error),
+      responseText: data.responseText ?? getErrorResponseText(data.error),
       usageMetrics: null,
       costUsd: undefined,
       statusCode: data.statusCode,
