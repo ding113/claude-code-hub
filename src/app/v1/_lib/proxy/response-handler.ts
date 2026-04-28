@@ -3344,11 +3344,17 @@ export function parseUsageFromResponseText(
   return { usageRecord, usageMetrics };
 }
 
+// Provider types whose upstream APIs report cached tokens as a subset of
+// input_tokens (OpenAI semantics) rather than as a disjoint bucket (Anthropic
+// semantics). For these, subtract cache_read_input_tokens from input_tokens
+// before persistence so internal cost buckets are not double-counted.
+const PROVIDERS_WITH_CACHE_SUBSET_USAGE = new Set<string>(["codex", "openai-compatible"]);
+
 function adjustUsageForProviderType(
   usage: UsageMetrics,
   providerType: string | null | undefined
 ): UsageMetrics {
-  if (providerType !== "codex") {
+  if (!providerType || !PROVIDERS_WITH_CACHE_SUBSET_USAGE.has(providerType)) {
     return usage;
   }
 
@@ -3364,7 +3370,7 @@ function adjustUsageForProviderType(
     return usage;
   }
 
-  logger.debug("[UsageMetrics] Adjusted codex input tokens to exclude cached tokens", {
+  logger.debug("[UsageMetrics] Adjusted input tokens to exclude cached tokens", {
     providerType,
     originalInputTokens: inputTokens,
     cachedTokens,
