@@ -111,6 +111,8 @@ describe("POST /api/auth/login session token mode integration", () => {
       subjectId: "user:1",
       totpEnabled: false,
       totpSecret: null,
+      totpPendingSecret: null,
+      totpPendingExpiresAt: null,
       totpBoundAt: null,
     });
     mockCreateSession.mockResolvedValue({

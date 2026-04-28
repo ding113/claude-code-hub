@@ -9,6 +9,8 @@ const mockClearAuthCookie = vi.hoisted(() => vi.fn());
 const mockGetAuthCookie = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
+const mockGetSecuritySubjectId = vi.hoisted(() => vi.fn());
+const mockGetUserSecuritySettings = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
@@ -49,6 +51,11 @@ vi.mock("@/lib/security/auth-response-headers", () => ({
     (res as any).headers.set("Pragma", "no-cache");
     return res;
   },
+}));
+
+vi.mock("@/repository/user-security-settings", () => ({
+  getSecuritySubjectId: mockGetSecuritySubjectId,
+  getUserSecuritySettings: mockGetUserSecuritySettings,
 }));
 
 type LoginPostHandler = (request: NextRequest) => Promise<Response>;
@@ -109,6 +116,15 @@ describe("auth route csrf guard integration", () => {
     mockClearAuthCookie.mockResolvedValue(undefined);
     mockGetAuthCookie.mockResolvedValue(undefined);
     mockGetSessionTokenMode.mockReturnValue("legacy");
+    mockGetSecuritySubjectId.mockReturnValue("user:1");
+    mockGetUserSecuritySettings.mockResolvedValue({
+      subjectId: "user:1",
+      totpEnabled: false,
+      totpSecret: null,
+      totpPendingSecret: null,
+      totpPendingExpiresAt: null,
+      totpBoundAt: null,
+    });
 
     const loginRoute = await import("@/app/api/auth/login/route");
     loginPost = loginRoute.POST;

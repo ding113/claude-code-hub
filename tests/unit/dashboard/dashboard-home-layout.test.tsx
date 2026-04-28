@@ -212,6 +212,7 @@ describe("DashboardBento admin layout", () => {
         allowGlobalUsageView={false}
         enableHighConcurrencyMode={true}
         initialStatistics={mockStatisticsData}
+        initialOverview={mockOverviewData}
       />
     );
     await flushPromises();
@@ -239,6 +240,7 @@ describe("DashboardBento admin layout", () => {
         allowGlobalUsageView={false}
         enableHighConcurrencyMode={false}
         initialStatistics={mockStatisticsData}
+        initialOverview={mockOverviewData}
       />
     );
     await flushPromises();

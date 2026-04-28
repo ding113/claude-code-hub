@@ -1,17 +1,20 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { userSecuritySettings } from "@/drizzle/schema";
-import type { AuthSession } from "@/lib/auth";
+import { ADMIN_USER_ID, type AuthSession } from "@/lib/auth";
+import { decryptTotpSecret, encryptTotpSecret } from "@/lib/security/totp-secret-encryption";
 
 export interface UserSecuritySettings {
   subjectId: string;
   totpEnabled: boolean;
   totpSecret: string | null;
+  totpPendingSecret: string | null;
+  totpPendingExpiresAt: Date | null;
   totpBoundAt: Date | null;
 }
 
 export function getSecuritySubjectId(session: Pick<AuthSession, "user">): string {
-  return session.user.id === -1 ? "admin-token" : `user:${session.user.id}`;
+  return session.user.id === ADMIN_USER_ID ? "admin-token" : `user:${session.user.id}`;
 }
 
 function toUserSecuritySettings(
@@ -20,7 +23,9 @@ function toUserSecuritySettings(
   return {
     subjectId: row.subjectId,
     totpEnabled: row.totpEnabled,
-    totpSecret: row.totpSecret,
+    totpSecret: decryptTotpSecret(row.totpSecret),
+    totpPendingSecret: decryptTotpSecret(row.totpPendingSecret),
+    totpPendingExpiresAt: row.totpPendingExpiresAt,
     totpBoundAt: row.totpBoundAt,
   };
 }
@@ -43,19 +48,53 @@ export async function getUserSecuritySettings(subjectId: string): Promise<UserSe
       subjectId,
       totpEnabled: false,
       totpSecret: null,
+      totpPendingSecret: null,
+      totpPendingExpiresAt: null,
       totpBoundAt: null,
     }
   );
 }
 
-export async function saveTotpEnabled(subjectId: string, secret: string): Promise<void> {
+export async function saveTotpSetupPending(
+  subjectId: string,
+  secret: string,
+  expiresAt: Date
+): Promise<void> {
   const now = new Date();
+  const encryptedSecret = encryptTotpSecret(secret);
+  await db
+    .insert(userSecuritySettings)
+    .values({
+      subjectId,
+      totpPendingSecret: encryptedSecret.ciphertext,
+      totpPendingSecretKeyVersion: encryptedSecret.keyVersion,
+      totpPendingExpiresAt: expiresAt,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: userSecuritySettings.subjectId,
+      set: {
+        totpPendingSecret: encryptedSecret.ciphertext,
+        totpPendingSecretKeyVersion: encryptedSecret.keyVersion,
+        totpPendingExpiresAt: expiresAt,
+        updatedAt: now,
+      },
+    });
+}
+
+export async function saveTotpEnabled(subjectId: string, secret: string): Promise<Date> {
+  const now = new Date();
+  const encryptedSecret = encryptTotpSecret(secret);
   await db
     .insert(userSecuritySettings)
     .values({
       subjectId,
       totpEnabled: true,
-      totpSecret: secret,
+      totpSecret: encryptedSecret.ciphertext,
+      totpSecretKeyVersion: encryptedSecret.keyVersion,
+      totpPendingSecret: null,
+      totpPendingSecretKeyVersion: null,
+      totpPendingExpiresAt: null,
       totpBoundAt: now,
       updatedAt: now,
     })
@@ -63,11 +102,17 @@ export async function saveTotpEnabled(subjectId: string, secret: string): Promis
       target: userSecuritySettings.subjectId,
       set: {
         totpEnabled: true,
-        totpSecret: secret,
+        totpSecret: encryptedSecret.ciphertext,
+        totpSecretKeyVersion: encryptedSecret.keyVersion,
+        totpPendingSecret: null,
+        totpPendingSecretKeyVersion: null,
+        totpPendingExpiresAt: null,
         totpBoundAt: now,
         updatedAt: now,
       },
     });
+
+  return now;
 }
 
 export async function disableTotp(subjectId: string): Promise<void> {
@@ -78,6 +123,10 @@ export async function disableTotp(subjectId: string): Promise<void> {
       subjectId,
       totpEnabled: false,
       totpSecret: null,
+      totpSecretKeyVersion: null,
+      totpPendingSecret: null,
+      totpPendingSecretKeyVersion: null,
+      totpPendingExpiresAt: null,
       totpBoundAt: null,
       updatedAt: now,
     })
@@ -86,6 +135,10 @@ export async function disableTotp(subjectId: string): Promise<void> {
       set: {
         totpEnabled: false,
         totpSecret: null,
+        totpSecretKeyVersion: null,
+        totpPendingSecret: null,
+        totpPendingSecretKeyVersion: null,
+        totpPendingExpiresAt: null,
         totpBoundAt: null,
         updatedAt: now,
       },

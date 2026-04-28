@@ -199,16 +199,16 @@ function LoginPageContent() {
 
       const data = await response.json();
 
-      if (!response.ok) {
-        setError(data.error || t("errors.loginFailed"));
-        setStatus("error");
-        return;
-      }
-
       if (data.requiresOtp === true) {
         setRequiresOtp(true);
         setOtpCode("");
         setStatus("idle");
+        return;
+      }
+
+      if (!response.ok) {
+        setError(data.error || t("errors.loginFailed"));
+        setStatus("error");
         return;
       }
 

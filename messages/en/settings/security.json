@@ -27,5 +27,12 @@
     "notice": "The secret is saved only after the verification code passes.",
     "cancel": "Cancel",
     "confirm": "Verify and enable"
+  },
+  "disable": {
+    "title": "Disable two-factor authentication",
+    "description": "Enter the current 6-digit authenticator code to disable this protection.",
+    "codeLabel": "Verification code",
+    "cancel": "Cancel",
+    "confirm": "Disable"
   }
 }

@@ -27,5 +27,12 @@
     "notice": "只有验证码验证通过后，密钥才会保存并正式启用。",
     "cancel": "取消",
     "confirm": "验证并启用"
+  },
+  "disable": {
+    "title": "关闭二次验证",
+    "description": "请输入当前验证器 App 中的 6 位验证码来关闭此保护。",
+    "codeLabel": "验证码",
+    "cancel": "取消",
+    "confirm": "关闭"
   }
 }

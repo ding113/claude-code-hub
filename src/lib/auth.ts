@@ -40,6 +40,7 @@ declare global {
 
 export const AUTH_COOKIE_NAME = "auth-token";
 const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+export const ADMIN_USER_ID = -1;
 
 export interface AuthSession {
   user: User;
@@ -170,7 +171,7 @@ export async function validateKey(
   if (adminToken && constantTimeEqual(keyString, adminToken)) {
     const now = new Date();
     const adminUser: User = {
-      id: -1,
+      id: ADMIN_USER_ID,
       name: "Admin Token",
       description: "Environment admin session",
       role: "admin",
@@ -187,7 +188,7 @@ export async function validateKey(
     };
 
     const adminKey: Key = {
-      id: -1,
+      id: ADMIN_USER_ID,
       userId: adminUser.id,
       name: "ADMIN_TOKEN",
       key: keyString,

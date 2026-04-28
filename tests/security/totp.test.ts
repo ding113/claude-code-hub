@@ -28,6 +28,7 @@ describe("TOTP verification", () => {
 
   it("rejects malformed codes and secrets", () => {
     expect(verifyTotp({ secret: RFC_SECRET, code: "12345x", timestampMs: 59_000 })).toBe(false);
+    expect(verifyTotp({ secret: RFC_SECRET, code: "94287082", timestampMs: 59_000 })).toBe(false);
     expect(verifyTotp({ secret: "not base32!", code: "123456", timestampMs: 59_000 })).toBe(false);
   });
 });

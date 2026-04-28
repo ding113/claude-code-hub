@@ -95,7 +95,12 @@ describe("login page TOTP flow", () => {
         if (path === "/api/auth/login") {
           loginBodies.push(init?.body ? JSON.parse(String(init.body)) : null);
           if (loginBodies.length === 1) {
-            return Promise.resolve(mockJsonResponse({ ok: true, requiresOtp: true }));
+            return Promise.resolve(
+              mockJsonResponse(
+                { errorCode: "OTP_REQUIRED", requiresOtp: true, otp: { method: "totp" } },
+                false
+              )
+            );
           }
           return Promise.resolve(
             mockJsonResponse({

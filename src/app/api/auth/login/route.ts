@@ -264,12 +264,17 @@ export async function POST(request: NextRequest) {
       }
 
       if (!otpCode || typeof otpCode !== "string") {
+        const error = t?.("otpRequired") ?? t?.("loginFailed") ?? "Verification code required";
         return withAuthResponseHeaders(
-          NextResponse.json({
-            ok: true,
-            requiresOtp: true,
-            otp: { method: "totp" },
-          })
+          NextResponse.json(
+            {
+              error,
+              errorCode: "OTP_REQUIRED",
+              requiresOtp: true,
+              otp: { method: "totp" },
+            },
+            { status: 401 }
+          )
         );
       }
 

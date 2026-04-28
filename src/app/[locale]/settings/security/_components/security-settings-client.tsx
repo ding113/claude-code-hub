@@ -7,6 +7,15 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Section } from "@/components/section";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +37,12 @@ interface TotpStatus {
 interface TotpSetup {
   secret: string;
   otpauthUri: string;
+  expiresAt: string;
+}
+
+interface TotpEnableResponse {
+  enabled: boolean;
+  boundAt: string;
 }
 
 export function SecuritySettingsClient() {
@@ -38,12 +53,17 @@ export function SecuritySettingsClient() {
   const [setup, setSetup] = useState<TotpSetup | null>(null);
   const [otpCode, setOtpCode] = useState("");
   const [setupOpen, setSetupOpen] = useState(false);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [disableOtpCode, setDisableOtpCode] = useState("");
 
   useEffect(() => {
     let active = true;
 
     void fetch("/api/account/security/totp")
-      .then((response) => response.json() as Promise<TotpStatus>)
+      .then((response) => {
+        if (!response.ok) throw new Error("load failed");
+        return response.json() as Promise<TotpStatus>;
+      })
       .then((data) => {
         if (!active) return;
         setStatus({ enabled: Boolean(data.enabled), boundAt: data.boundAt ?? null });
@@ -93,7 +113,6 @@ export function SecuritySettingsClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "enable",
-          secret: setup.secret,
           otpCode,
         }),
       });
@@ -103,7 +122,8 @@ export function SecuritySettingsClient() {
         return;
       }
 
-      setStatus({ enabled: true, boundAt: new Date().toISOString() });
+      const data = (await response.json()) as TotpEnableResponse;
+      setStatus({ enabled: true, boundAt: data.boundAt });
       setSetupOpen(false);
       setSetup(null);
       setOtpCode("");
@@ -116,14 +136,24 @@ export function SecuritySettingsClient() {
   };
 
   const disableTotp = async () => {
-    if (!window.confirm(t("disableConfirm"))) return;
+    if (!/^\d{6}$/.test(disableOtpCode)) return;
     setSaving(true);
 
     try {
-      const response = await fetch("/api/account/security/totp", { method: "DELETE" });
-      if (!response.ok) throw new Error("disable failed");
+      const response = await fetch("/api/account/security/totp", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otpCode: disableOtpCode }),
+      });
+
+      if (!response.ok) {
+        toast.error(t("invalidCode"));
+        return;
+      }
 
       setStatus({ enabled: false, boundAt: null });
+      setDisableOpen(false);
+      setDisableOtpCode("");
       toast.success(t("disabled"));
     } catch {
       toast.error(t("disableFailed"));
@@ -136,7 +166,8 @@ export function SecuritySettingsClient() {
     if (checked) {
       void startSetup();
     } else {
-      void disableTotp();
+      setDisableOtpCode("");
+      setDisableOpen(true);
     }
   };
 
@@ -224,6 +255,51 @@ export function SecuritySettingsClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={disableOpen}
+        onOpenChange={(open) => {
+          if (saving) return;
+          setDisableOpen(open);
+          if (!open) setDisableOtpCode("");
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("disable.title")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("disable.description")}</AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="totpDisableCode">{t("disable.codeLabel")}</Label>
+            <Input
+              id="totpDisableCode"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={disableOtpCode}
+              onChange={(event) =>
+                setDisableOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              className="font-mono tracking-[0.2em]"
+              placeholder="123456"
+            />
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>{t("disable.cancel")}</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={disableTotp}
+              disabled={saving || !/^\d{6}$/.test(disableOtpCode)}
+            >
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {t("disable.confirm")}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

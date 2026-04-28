@@ -16,6 +16,8 @@ const mockCookieSet = vi.hoisted(() => vi.fn());
 const mockCookies = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
 const mockClearAuthCookie = vi.hoisted(() => vi.fn());
+const mockGetSecuritySubjectId = vi.hoisted(() => vi.fn());
+const mockGetUserSecuritySettings = vi.hoisted(() => vi.fn());
 
 const realWithNoStoreHeaders = vi.hoisted(() => {
   return <T extends InstanceType<typeof NextResponse>>(response: T): T => {
@@ -49,6 +51,11 @@ vi.mock("@/lib/config/env.schema", () => ({
 
 vi.mock("@/lib/security/auth-response-headers", () => ({
   withAuthResponseHeaders: realWithNoStoreHeaders,
+}));
+
+vi.mock("@/repository/user-security-settings", () => ({
+  getSecuritySubjectId: mockGetSecuritySubjectId,
+  getUserSecuritySettings: mockGetUserSecuritySettings,
 }));
 
 vi.mock("@/lib/config/config", () => ({ config: { auth: { adminToken: "test" } } }));
@@ -112,6 +119,15 @@ describe("session cookie hardening", () => {
       mockSetAuthCookie.mockResolvedValue(undefined);
       mockGetSessionTokenMode.mockReturnValue("legacy");
       mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
+      mockGetSecuritySubjectId.mockReturnValue("user:1");
+      mockGetUserSecuritySettings.mockResolvedValue({
+        subjectId: "user:1",
+        totpEnabled: false,
+        totpSecret: null,
+        totpPendingSecret: null,
+        totpPendingExpiresAt: null,
+        totpBoundAt: null,
+      });
 
       const mod = await import("@/app/api/auth/login/route");
       POST = mod.POST;

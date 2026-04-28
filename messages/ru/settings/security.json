@@ -1,31 +1,38 @@
 {
-  "title": "Security Settings",
-  "description": "Manage login protection for your current account.",
-  "loadFailed": "Failed to load security settings",
-  "setupFailed": "Failed to start authenticator setup",
-  "enableFailed": "Failed to enable two-factor authentication",
-  "disableFailed": "Failed to disable two-factor authentication",
-  "invalidCode": "The verification code is invalid or expired",
-  "enabled": "Two-factor authentication enabled",
-  "disabled": "Two-factor authentication disabled",
-  "disableConfirm": "Disable two-factor authentication for this account?",
+  "title": "Настройки безопасности",
+  "description": "Управляйте защитой входа для текущей учётной записи.",
+  "loadFailed": "Не удалось загрузить настройки безопасности",
+  "setupFailed": "Не удалось начать привязку аутентификатора",
+  "enableFailed": "Не удалось включить двухфакторную аутентификацию",
+  "disableFailed": "Не удалось отключить двухфакторную аутентификацию",
+  "invalidCode": "Код подтверждения неверен или истёк",
+  "enabled": "Двухфакторная аутентификация включена",
+  "disabled": "Двухфакторная аутентификация отключена",
+  "disableConfirm": "Отключить двухфакторную аутентификацию для этой учётной записи?",
   "totp": {
-    "title": "Two-factor authentication",
-    "description": "Require a 6-digit authenticator code after the API Key is validated.",
-    "toggle": "Toggle two-factor authentication"
+    "title": "Двухфакторная аутентификация",
+    "description": "Требовать 6-значный код из приложения-аутентификатора после проверки API Key.",
+    "toggle": "Переключить двухфакторную аутентификацию"
   },
   "status": {
-    "enabled": "Enabled",
-    "disabled": "Disabled",
-    "boundAt": "Bound at {date}"
+    "enabled": "Включена",
+    "disabled": "Отключена",
+    "boundAt": "Привязано: {date}"
   },
   "setup": {
-    "title": "Bind authenticator",
-    "description": "Scan the QR code with an authenticator app, then enter the current 6-digit code.",
-    "manualSecret": "Manual secret",
-    "codeLabel": "Verification code",
-    "notice": "The secret is saved only after the verification code passes.",
-    "cancel": "Cancel",
-    "confirm": "Verify and enable"
+    "title": "Привязать аутентификатор",
+    "description": "Отсканируйте QR-код в приложении-аутентификаторе, затем введите текущий 6-значный код.",
+    "manualSecret": "Секрет для ручного ввода",
+    "codeLabel": "Код подтверждения",
+    "notice": "Секрет сохраняется только после успешной проверки кода.",
+    "cancel": "Отмена",
+    "confirm": "Проверить и включить"
+  },
+  "disable": {
+    "title": "Отключить двухфакторную аутентификацию",
+    "description": "Введите текущий 6-значный код из приложения-аутентификатора, чтобы отключить эту защиту.",
+    "codeLabel": "Код подтверждения",
+    "cancel": "Отмена",
+    "confirm": "Отключить"
   }
 }

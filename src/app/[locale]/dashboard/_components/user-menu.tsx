@@ -21,12 +21,14 @@ interface UserMenuProps {
     id: number;
     name: string;
     description?: string | null;
+    role: string;
   };
 }
 
 export function UserMenu({ user }: UserMenuProps) {
   const t = useTranslations("dashboard.nav");
   const router = useRouter();
+  const canOpenSettings = user.role === "admin";
 
   const handleLogout = () => {
     // 立即跳转到登录页面，避免延迟
@@ -64,19 +66,23 @@ export function UserMenu({ user }: UserMenuProps) {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="truncate">{user.name}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Settings className="h-4 w-4" />
-            <span>{t("settings")}</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="w-44">
-            <DropdownMenuItem onSelect={() => router.push("/settings/security")}>
-              <ShieldCheck className="h-4 w-4" />
-              <span>{t("securitySettings")}</span>
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
+        {canOpenSettings ? (
+          <>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Settings className="h-4 w-4" />
+                <span>{t("settings")}</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-44">
+                <DropdownMenuItem onSelect={() => router.push("/settings/security")}>
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>{t("securitySettings")}</span>
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
           <LogOut className="h-4 w-4" />
           <span>{t("logout")}</span>

@@ -120,6 +120,8 @@ describe("POST /api/auth/login", () => {
       subjectId: "user:1",
       totpEnabled: false,
       totpSecret: null,
+      totpPendingSecret: null,
+      totpPendingExpiresAt: null,
       totpBoundAt: null,
     });
 

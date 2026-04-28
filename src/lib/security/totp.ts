@@ -93,7 +93,7 @@ export function generateBase32Secret(byteLength = 20): string {
 export function buildTotpAuthUri(options: BuildTotpAuthUriOptions): string {
   const issuer = options.issuer?.trim() || "Claude Code Hub";
   const accountName = options.accountName.trim() || "Web UI";
-  const label = `${issuer}:${accountName}`;
+  const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(accountName)}`;
   const params = new URLSearchParams({
     secret: options.secret,
     issuer,
@@ -102,7 +102,7 @@ export function buildTotpAuthUri(options: BuildTotpAuthUriOptions): string {
     period: "30",
   });
 
-  return `otpauth://totp/${encodeURIComponent(label)}?${params.toString()}`;
+  return `otpauth://totp/${label}?${params.toString()}`;
 }
 
 export function generateTotp(options: GenerateTotpOptions): string {
@@ -125,11 +125,11 @@ export function generateTotp(options: GenerateTotpOptions): string {
 
 export function verifyTotp(options: VerifyTotpOptions): boolean {
   const code = options.code.trim();
-  if (!/^\d{6,10}$/.test(code)) {
+  if (!/^\d{6}$/.test(code)) {
     return false;
   }
 
-  const digits = code.length;
+  const digits = DEFAULT_DIGITS;
   const timestampMs = options.timestampMs ?? Date.now();
   const stepSeconds = options.stepSeconds ?? DEFAULT_STEP_SECONDS;
   const window = Math.max(0, Math.floor(options.window ?? DEFAULT_WINDOW));

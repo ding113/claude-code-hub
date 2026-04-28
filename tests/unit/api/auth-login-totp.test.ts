@@ -94,6 +94,8 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
       subjectId: "user:1",
       totpEnabled: true,
       totpSecret: "JBSWY3DPEHPK3PXP",
+      totpPendingSecret: null,
+      totpPendingExpiresAt: null,
       totpBoundAt: new Date("2026-04-27T00:00:00.000Z"),
     });
     mockSetAuthCookie.mockResolvedValue(undefined);
@@ -110,6 +112,8 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
       subjectId: "user:1",
       totpEnabled: false,
       totpSecret: null,
+      totpPendingSecret: null,
+      totpPendingExpiresAt: null,
       totpBoundAt: null,
     });
 
@@ -130,9 +134,10 @@ describe("POST /api/auth/login with user-managed TOTP", () => {
     const res = await POST(makeRequest({ key: "valid-key" }));
     const json = await res.json();
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
     expect(json).toEqual({
-      ok: true,
+      error: "translated:otpRequired",
+      errorCode: "OTP_REQUIRED",
       requiresOtp: true,
       otp: { method: "totp" },
     });

@@ -25,7 +25,14 @@
     "manualSecret": "手動輸入密鑰",
     "codeLabel": "驗證碼",
     "notice": "只有驗證碼通過後，密鑰才會保存並正式啟用。",
-    "cancel": "取消",
+    "cancel": "返回",
     "confirm": "驗證並啟用"
+  },
+  "disable": {
+    "title": "關閉二次驗證",
+    "description": "請輸入目前驗證器 App 中的 6 位驗證碼來關閉此保護。",
+    "codeLabel": "驗證碼",
+    "cancel": "返回",
+    "confirm": "關閉"
   }
 }
