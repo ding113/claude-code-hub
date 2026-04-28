@@ -213,6 +213,12 @@ describe("ProxyErrorHandler.handle - Langfuse error traces", () => {
     expect(mocks.emitProxyLangfuseTrace.mock.calls[0][1].responseText).not.toContain(
       "raw upstream failure"
     );
+    expect(mocks.updateMessageRequestDetails).toHaveBeenCalledWith(
+      session.messageContext.id,
+      expect.objectContaining({
+        statusCode: 429,
+      })
+    );
   });
 
   test("falls back to upstream body when raw body is missing", async () => {

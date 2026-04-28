@@ -127,6 +127,7 @@ import type { Provider } from "@/types/provider";
 type AttemptRuntime = {
   clearResponseTimeout?: () => void;
   responseController?: AbortController;
+  releaseAgent?: () => void;
 };
 
 function createProvider(overrides: Partial<Provider> = {}): Provider {
@@ -545,11 +546,14 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
 
       const controller1 = new AbortController();
       const controller2 = new AbortController();
+      const releaseInitialAgent = vi.fn();
+      const releaseLoserAgent = vi.fn();
 
       doForward.mockImplementationOnce(async (attemptSession, providerForRequest) => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller1;
         runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseInitialAgent;
         expect(
           ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
         ).toBe(true);
@@ -564,6 +568,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         const runtime = attemptSession as ProxySession & AttemptRuntime;
         runtime.responseController = controller2;
         runtime.clearResponseTimeout = vi.fn();
+        runtime.releaseAgent = releaseLoserAgent;
         expect(
           ModelRedirector.apply(attemptSession as ProxySession, providerForRequest as Provider)
         ).toBe(true);
@@ -601,6 +606,8 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
         billingModel: requestedModel,
       });
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(fireworks.id, "sess-hedge");
+      expect(releaseInitialAgent).toHaveBeenCalledTimes(1);
+      expect(releaseLoserAgent).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

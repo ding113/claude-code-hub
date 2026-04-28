@@ -123,6 +123,8 @@ type StreamingHedgeAttempt = {
   thresholdTimer: NodeJS.Timeout | null;
   reader: ReadableStreamDefaultReader<Uint8Array> | null;
   response: Response | null;
+  releaseAgent: (() => void) | null;
+  agentReleased: boolean;
 };
 
 type ReactiveRectifierRetryState = {
@@ -3414,6 +3416,21 @@ export class ProxyForwarder {
       return attempt.modelRedirect;
     };
 
+    const releaseAttemptAgent = (attempt: StreamingHedgeAttempt) => {
+      if (attempt.agentReleased) return;
+      attempt.agentReleased = true;
+      try {
+        attempt.releaseAgent?.();
+      } catch (releaseError) {
+        logger.debug("ProxyForwarder: hedge attempt releaseAgent failed", {
+          error: releaseError instanceof Error ? releaseError.message : String(releaseError),
+          sessionId: attempt.session.sessionId ?? null,
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+        });
+      }
+    };
+
     const abortAttempt = (attempt: StreamingHedgeAttempt, reason: string) => {
       if (attempt.settled) return;
       attempt.settled = true;
@@ -3452,6 +3469,7 @@ export class ProxyForwarder {
           providerName: attempt.provider.name,
         });
       });
+      releaseAttemptAgent(attempt);
     };
 
     const armAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
@@ -3556,6 +3574,7 @@ export class ProxyForwarder {
         .then(async (response) => {
           if (settled || winnerCommitted || attempt.settled) {
             const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
+            attempt.releaseAgent = attemptRuntime.releaseAgent ?? attempt.releaseAgent;
             try {
               attemptRuntime.responseController?.abort(new Error("hedge_loser"));
             } catch (abortError) {
@@ -3575,12 +3594,14 @@ export class ProxyForwarder {
                 providerName: attempt.provider.name,
               });
             });
+            releaseAttemptAgent(attempt);
             return;
           }
 
           const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
           attempt.responseController = attemptRuntime.responseController ?? null;
           attempt.clearResponseTimeout = attemptRuntime.clearResponseTimeout ?? null;
+          attempt.releaseAgent = attemptRuntime.releaseAgent ?? null;
           attempt.clearResponseTimeout?.();
           attempt.response = response;
 
@@ -3985,6 +4006,8 @@ export class ProxyForwarder {
         thresholdTimer: null,
         reader: null,
         response: null,
+        releaseAgent: null,
+        agentReleased: false,
       };
 
       attempts.add(attempt);

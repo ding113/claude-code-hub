@@ -270,7 +270,12 @@ export class ProxyErrorHandler {
         responseText,
       });
       // 先发出 trace，再写数据库，避免 DB 持久化失败吞掉本次错误诊断。
-      await ProxyErrorHandler.logErrorToDatabase(session, logErrorMessage, statusCode, null);
+      await ProxyErrorHandler.logErrorToDatabase(
+        session,
+        logErrorMessage,
+        finalResponse.status,
+        null
+      );
       return finalResponse;
     };
 
