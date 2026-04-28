@@ -412,8 +412,8 @@ export function PriceList({
       </div>
 
       {/* 价格表格 */}
-      <div className="rounded-lg overflow-hidden border border-white/10 bg-white/[0.02]">
-        <table className="w-full table-fixed">
+      <div className="rounded-lg overflow-x-auto overflow-y-hidden border border-white/10 bg-white/[0.02]">
+        <table className="w-full min-w-[76rem] table-fixed">
           <thead>
             <tr className="border-b border-white/10">
               <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-72">

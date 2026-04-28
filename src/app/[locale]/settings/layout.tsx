@@ -42,7 +42,7 @@ export default async function SettingsLayout({
               <SettingsNav items={translatedNavItems} />
             </aside>
             {/* Content area */}
-            <div className="space-y-6">
+            <div className="min-w-0 space-y-6">
               {/* Tablet: Horizontal nav shown above content */}
               <div className="lg:hidden">
                 <SettingsNav items={translatedNavItems} />
