@@ -76,20 +76,28 @@ async function recordTotpAudit(
     });
   }
 
-  void createAuditLogAsync({
-    actionCategory: "auth",
-    actionType,
-    targetType: "security_settings",
-    targetId: context.subjectId,
-    operatorUserId: context.session.user.id,
-    operatorUserName: context.session.user.name,
-    operatorKeyId: context.session.key?.id ?? null,
-    operatorKeyName: context.session.key?.name ?? null,
-    operatorIp,
-    userAgent: request.headers.get("user-agent"),
-    success,
-    errorMessage,
-  });
+  try {
+    await createAuditLogAsync({
+      actionCategory: "auth",
+      actionType,
+      targetType: "security_settings",
+      targetId: context.subjectId,
+      operatorUserId: context.session.user.id,
+      operatorUserName: context.session.user.name,
+      operatorKeyId: context.session.key?.id ?? null,
+      operatorKeyName: context.session.key?.name ?? null,
+      operatorIp,
+      userAgent: request.headers.get("user-agent"),
+      success,
+      errorMessage,
+    });
+  } catch (error) {
+    logger.error("TOTP audit write failed", {
+      subjectId: context.subjectId,
+      actionType,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function otpInvalidResponse() {

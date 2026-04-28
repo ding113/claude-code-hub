@@ -269,7 +269,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!otpCode || typeof otpCode !== "string") {
-        const error = t?.("otpRequired") ?? t?.("loginFailed") ?? "Verification code required";
+        const error = t?.("otpRequired") ?? t?.("loginFailed") ?? t?.("serverError") ?? "";
         return withAuthResponseHeaders(
           NextResponse.json(
             {
@@ -301,7 +301,7 @@ export async function POST(request: NextRequest) {
           errorMessage: "OTP_INVALID",
         });
 
-        const error = t?.("otpInvalid") ?? t?.("loginFailed") ?? "Invalid verification code";
+        const error = t?.("otpInvalid") ?? t?.("loginFailed") ?? t?.("serverError") ?? "";
         return withAuthResponseHeaders(
           NextResponse.json({ error, errorCode: "OTP_INVALID" }, { status: 401 })
         );
