@@ -11,6 +11,7 @@ import {
   useRef,
 } from "react";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import { stringifyCustomHeadersForTextarea } from "@/lib/custom-headers";
 import { normalizeProviderModelRedirectRules } from "@/lib/provider-model-redirects";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
@@ -73,6 +74,7 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormActionWith5hResetMode["ty
   SET_GEMINI_GOOGLE_SEARCH: "routing.geminiGoogleSearchPreference",
   SET_ACTIVE_TIME_START: "routing.activeTimeStart",
   SET_ACTIVE_TIME_END: "routing.activeTimeEnd",
+  SET_CUSTOM_HEADERS_TEXT: "routing.customHeadersText",
   SET_LIMIT_5H_USD: "rateLimit.limit5hUsd",
   SET_LIMIT_5H_RESET_MODE: "rateLimit.limit5hResetMode",
   SET_LIMIT_DAILY_USD: "rateLimit.limitDailyUsd",
@@ -210,6 +212,8 @@ export function createInitialState(
           analysis.routing.activeTimeEnd.status === "uniform"
             ? analysis.routing.activeTimeEnd.value
             : null,
+        // Batch mode does not support customHeaders edits; always start empty
+        customHeadersText: "",
       },
       rateLimit: {
         limit5hUsd:
@@ -337,6 +341,7 @@ export function createInitialState(
         geminiGoogleSearchPreference: "inherit",
         activeTimeStart: null,
         activeTimeEnd: null,
+        customHeadersText: "",
       },
       rateLimit: {
         limit5hUsd: null,
@@ -415,6 +420,7 @@ export function createInitialState(
       geminiGoogleSearchPreference: sourceProvider?.geminiGoogleSearchPreference ?? "inherit",
       activeTimeStart: sourceProvider?.activeTimeStart ?? null,
       activeTimeEnd: sourceProvider?.activeTimeEnd ?? null,
+      customHeadersText: stringifyCustomHeadersForTextarea(sourceProvider?.customHeaders ?? null),
     },
     rateLimit: {
       limit5hUsd: sourceProvider?.limit5hUsd ?? null,
@@ -618,6 +624,11 @@ export function providerFormReducer(
       return {
         ...state,
         routing: { ...state.routing, activeTimeEnd: action.payload },
+      };
+    case "SET_CUSTOM_HEADERS_TEXT":
+      return {
+        ...state,
+        routing: { ...state.routing, customHeadersText: action.payload },
       };
 
     // Rate limit

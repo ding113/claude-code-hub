@@ -21,6 +21,7 @@ import {
   resetCircuit,
 } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { normalizeCustomHeadersRecord } from "@/lib/custom-headers";
 import { logger } from "@/lib/logger";
 import { PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
@@ -335,6 +336,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        customHeaders: provider.customHeaders,
         firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
         streamingIdleTimeoutMs: provider.streamingIdleTimeoutMs,
         requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
@@ -541,6 +543,7 @@ export async function addProvider(data: {
   circuit_breaker_half_open_success_threshold?: number;
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+  custom_headers?: Record<string, string> | null;
   first_byte_timeout_streaming_ms?: number;
   streaming_idle_timeout_ms?: number;
   request_timeout_non_streaming_ms?: number;
@@ -755,6 +758,7 @@ export async function editProvider(
     circuit_breaker_half_open_success_threshold?: number;
     proxy_url?: string | null;
     proxy_fallback_to_direct?: boolean;
+    custom_headers?: Record<string, string> | null;
     first_byte_timeout_streaming_ms?: number;
     streaming_idle_timeout_ms?: number;
     request_timeout_non_streaming_ms?: number;
@@ -937,7 +941,7 @@ export async function editProvider(
       before: preimageFields,
       after: data,
       success: true,
-      redactExtraKeys: ["key"],
+      redactExtraKeys: ["key", "custom_headers", "customHeaders"],
     });
     return {
       ok: true,
@@ -1464,6 +1468,7 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",
   proxy_url: "proxyUrl",
   proxy_fallback_to_direct: "proxyFallbackToDirect",
+  custom_headers: "customHeaders",
   first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
   streaming_idle_timeout_ms: "streamingIdleTimeoutMs",
   request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
@@ -4632,6 +4637,19 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
     };
   }
 
+  // Validate static custom headers via shared parser；错误码不包含原始值，避免日志/错误泄漏
+  let normalizedCustomHeaders: Record<string, string> | undefined;
+  if (data.customHeaders !== undefined) {
+    const headerValidation = normalizeCustomHeadersRecord(data.customHeaders);
+    if (!headerValidation.ok) {
+      return {
+        ok: false,
+        error: `custom_headers_${headerValidation.code}`,
+      };
+    }
+    normalizedCustomHeaders = headerValidation.value ?? undefined;
+  }
+
   try {
     // Build test configuration
     const config: ProviderTestConfig = {
@@ -4647,7 +4665,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
       // Custom configuration fields
       preset: data.preset,
       customPayload: data.customPayload,
-      customHeaders: data.customHeaders,
+      customHeaders: normalizedCustomHeaders,
     };
 
     // Execute test

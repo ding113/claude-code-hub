@@ -1,0 +1,1 @@
+ALTER TABLE "providers" ADD COLUMN "custom_headers" jsonb;

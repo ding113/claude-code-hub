@@ -25,6 +25,10 @@ import {
   AlertDialogTitle as AlertTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  type CustomHeadersValidationErrorCode,
+  parseCustomHeadersJsonText,
+} from "@/lib/custom-headers";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderDisplay, ProviderEndpoint, ProviderType } from "@/types/provider";
@@ -56,6 +60,18 @@ export interface ProviderFormProps {
   urlResolver?: (providerType: ProviderType) => Promise<string | null>;
   allowedProviderTypes?: ProviderType[];
 }
+
+// Map shared custom-headers parser error codes to localized message keys (settings.providers.form scope)
+const CUSTOM_HEADERS_ERROR_KEYS: Record<CustomHeadersValidationErrorCode, string> = {
+  invalid_json: "sections.routing.customHeaders.errors.invalidJson",
+  not_object: "sections.routing.customHeaders.errors.notObject",
+  invalid_name: "sections.routing.customHeaders.errors.invalidName",
+  duplicate_name: "sections.routing.customHeaders.errors.duplicateName",
+  protected_name: "sections.routing.customHeaders.errors.protectedName",
+  invalid_value: "sections.routing.customHeaders.errors.invalidValue",
+  empty_name: "sections.routing.customHeaders.errors.emptyName",
+  crlf: "sections.routing.customHeaders.errors.crlf",
+};
 
 // Internal form component that uses context
 function ProviderFormContent({
@@ -255,6 +271,15 @@ function ProviderFormContent({
     if (!isEdit && !state.basic.key.trim()) {
       return t("errors.keyRequired");
     }
+
+    // Custom headers JSON: parse-on-submit; invalid input maps to a localized message
+    if (mode !== "batch") {
+      const customHeadersResult = parseCustomHeadersJsonText(state.routing.customHeadersText);
+      if (!customHeadersResult.ok) {
+        return t(CUSTOM_HEADERS_ERROR_KEYS[customHeadersResult.code]);
+      }
+    }
+
     return null;
   };
 
@@ -289,6 +314,15 @@ function ProviderFormContent({
 
         // Handle key: in edit mode, only include if user provided a new key
         const trimmedKey = state.basic.key.trim();
+
+        // Static custom headers: validateForm has already rejected invalid input,
+        // so the parse here is guaranteed to succeed at this point.
+        const parsedCustomHeadersResult = parseCustomHeadersJsonText(
+          state.routing.customHeadersText
+        );
+        const parsedCustomHeaders = parsedCustomHeadersResult.ok
+          ? (parsedCustomHeadersResult.value ?? null)
+          : null;
 
         // Base form data without key (for type safety)
         const effectiveProviderUrl = endpointPoolHideLegacyUrlInput
@@ -345,6 +379,7 @@ function ProviderFormContent({
           max_retry_attempts: state.circuitBreaker.maxRetryAttempts,
           proxy_url: state.network.proxyUrl?.trim() || null,
           proxy_fallback_to_direct: state.network.proxyFallbackToDirect,
+          custom_headers: parsedCustomHeaders,
           first_byte_timeout_streaming_ms: firstByteTimeoutMs,
           streaming_idle_timeout_ms: idleTimeoutMs,
           request_timeout_non_streaming_ms: nonStreamingTimeoutMs,
@@ -516,7 +551,9 @@ function ProviderFormContent({
       state.routing.geminiGoogleSearchPreference !== "inherit" ||
       // Active time
       state.routing.activeTimeStart !== null ||
-      state.routing.activeTimeEnd !== null
+      state.routing.activeTimeEnd !== null ||
+      // Custom headers
+      state.routing.customHeadersText.trim().length > 0
     ) {
       status.options = "configured";
     }

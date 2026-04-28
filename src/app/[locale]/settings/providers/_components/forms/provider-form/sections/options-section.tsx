@@ -13,7 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CUSTOM_HEADERS_PLACEHOLDER } from "@/lib/custom-headers";
 import type {
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
@@ -101,6 +103,26 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                   disabled={state.ui.isPending}
                 />
               </ToggleRow>
+
+              {/* Static Custom Request Headers - persistent provider config (not exposed in batch mode) */}
+              {!isBatch && (
+                <SmartInputWrapper
+                  label={t("sections.routing.customHeaders.label")}
+                  description={t("sections.routing.customHeaders.desc")}
+                >
+                  <Textarea
+                    id={isEdit ? "edit-custom-headers" : "custom-headers"}
+                    value={state.routing.customHeadersText}
+                    onChange={(e) =>
+                      dispatch({ type: "SET_CUSTOM_HEADERS_TEXT", payload: e.target.value })
+                    }
+                    placeholder={CUSTOM_HEADERS_PLACEHOLDER}
+                    disabled={state.ui.isPending}
+                    rows={3}
+                    spellCheck={false}
+                  />
+                </SmartInputWrapper>
+              )}
 
               {/* Cache TTL */}
               <SmartInputWrapper

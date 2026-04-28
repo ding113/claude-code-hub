@@ -13,6 +13,21 @@
   "copyResult": "結果をコピー",
   "copySuccess": "クリップボードにコピーしました",
   "customConfig": "カスタム",
+  "customHeaders": {
+    "label": "カスタムリクエストヘッダー（JSON）",
+    "desc": "静的なヘッダーがテストリクエストにマージされます。認証ヘッダーは上書きされません。",
+    "geminiNotSupported": "Gemini テスト経路ではカスタムヘッダーをサポートしていません",
+    "errors": {
+      "invalidJson": "カスタムヘッダーは有効な JSON である必要があります",
+      "notObject": "カスタムヘッダーは JSON オブジェクトである必要があります",
+      "invalidName": "ヘッダー名に許可されていない文字が含まれています",
+      "duplicateName": "ヘッダー名が重複しています（大文字小文字を区別しません）",
+      "protectedName": "認証ヘッダーはカスタムヘッダーで設定できません",
+      "invalidValue": "ヘッダー値は文字列である必要があります",
+      "emptyName": "ヘッダー名は空にできません",
+      "crlf": "ヘッダー名と値に改行を含めることはできません"
+    }
+  },
   "customPayloadDesc": "カスタムJSONペイロードを入力してデフォルトのリクエストボディを上書き",
   "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
   "disclaimer": {

@@ -286,6 +286,10 @@ export const providers = pgTable('providers', {
   proxyUrl: varchar('proxy_url', { length: 512 }),
   proxyFallbackToDirect: boolean('proxy_fallback_to_direct').default(false),
 
+  // 静态自定义请求头（如 Cloudflare AI Gateway 的 cf-aig-authorization）
+  // null = 不附加；记录值会被合并到出站请求，但绝不能覆盖鉴权头或 final request filter
+  customHeaders: jsonb('custom_headers').$type<Record<string, string> | null>(),
+
   // 超时配置（毫秒）
   // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
   // 参考：https://github.com/nodejs/undici/discussions/1313
