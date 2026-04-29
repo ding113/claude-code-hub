@@ -33,6 +33,7 @@ Access tiers:
 - `admin`: accepts a valid session cookie, opaque session bearer token, and `ADMIN_TOKEN` by default. User API keys are rejected unless `ENABLE_API_KEY_ADMIN_ACCESS=true` and the key belongs to an admin user.
 
 Cookie-authenticated mutations must first call `GET /api/v1/auth/csrf` and send the returned token in `X-CCH-CSRF`.
+Set `CSRF_SECRET` in production, and use the same value on every replica.
 
 ## Error Format
 
@@ -40,7 +41,7 @@ Failures use RFC 9457-style `application/problem+json`:
 
 ```json
 {
-  "type": "https://claude-code-hub.local/problems/auth.forbidden",
+  "type": "urn:claude-code-hub:problem:auth.forbidden",
   "title": "Forbidden",
   "status": 403,
   "detail": "Admin access is required.",

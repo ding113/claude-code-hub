@@ -2,7 +2,7 @@ import "@/lib/polyfills/file";
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { withNoStoreHeaders } from "@/lib/api/v1/_shared/cache-control";
 import { API_VERSION_HEADER, MANAGEMENT_API_VERSION } from "@/lib/api/v1/_shared/constants";
-import { fromZodError } from "@/lib/api/v1/_shared/error-envelope";
+import { createProblemResponse, fromZodError } from "@/lib/api/v1/_shared/error-envelope";
 import { jsonResponse } from "@/lib/api/v1/_shared/response-helpers";
 import { adminUserInsightsRouter } from "../resources/admin-user-insights/router";
 import { auditLogsRouter } from "../resources/audit-logs/router";
@@ -103,7 +103,7 @@ const csrfRoute = createRoute({
       content: {
         "application/json": {
           schema: z.object({
-            csrfToken: z.string().nullable(),
+            csrfToken: z.string(),
           }),
         },
       },
@@ -119,13 +119,18 @@ app.openapi(csrfRoute, async (c) => {
     withNoStoreHeaders(auth.headers);
     return auth;
   }
+  if (!auth.token || !auth.session) {
+    return createProblemResponse({
+      status: 401,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "auth.invalid",
+      detail: "Authentication is invalid or expired.",
+    });
+  }
 
   return jsonResponse(
     {
-      csrfToken:
-        auth.token && auth.session
-          ? createCsrfToken({ authToken: auth.token, userId: auth.session.user.id })
-          : null,
+      csrfToken: createCsrfToken({ authToken: auth.token, userId: auth.session.user.id }),
     },
     { headers: withNoStoreHeaders() }
   );

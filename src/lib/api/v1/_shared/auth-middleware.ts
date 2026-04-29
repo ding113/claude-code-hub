@@ -3,6 +3,7 @@ import { getCookie } from "hono/cookie";
 import { extractApiCredentialFromHeaders } from "@/lib/api/auth-header-extractor";
 import type { AuthCredentialType, AuthSession } from "@/lib/auth";
 import { isApiKeyAdminAccessEnabled } from "@/lib/config/env.schema";
+import { logger } from "@/lib/logger";
 import { CSRF_HEADER } from "./constants";
 import { isMutationMethod, verifyCsrfToken } from "./csrf";
 import { createProblemResponse } from "./error-envelope";
@@ -160,7 +161,7 @@ async function classifyCredential(
   if (detectSessionTokenKind(token) === "opaque") {
     return classifyOpaqueSessionCredential(token);
   }
-  return "user-api-key";
+  return source === "cookie" ? "session" : "user-api-key";
 }
 
 async function classifyOpaqueSessionCredential(
@@ -170,8 +171,11 @@ async function classifyOpaqueSessionCredential(
     const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
     const sessionData = await new RedisSessionStore().read(token);
     return sessionData?.credentialType ?? "user-api-key";
-  } catch {
-    return "session";
+  } catch (error) {
+    logger.warn("[V1Auth] Failed to classify opaque session credential", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return "user-api-key";
   }
 }
 

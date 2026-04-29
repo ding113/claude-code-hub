@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ProviderTypeSchema } from "@/lib/api/v1/schemas/_common";
+import { ProblemJsonSchema, ProviderTypeSchema } from "@/lib/api/v1/schemas/_common";
 import { serializeDates, toIsoDateTime } from "@/lib/api/v1/_shared/serialization";
 
 describe("v1 schema serialization", () => {
@@ -18,5 +18,18 @@ describe("v1 schema serialization", () => {
     expect(ProviderTypeSchema.safeParse("openai-compatible").success).toBe(true);
     expect(ProviderTypeSchema.safeParse("claude-auth").success).toBe(false);
     expect(ProviderTypeSchema.safeParse("gemini-cli").success).toBe(false);
+  });
+
+  test("accepts URN problem type identifiers", () => {
+    expect(
+      ProblemJsonSchema.safeParse({
+        type: "urn:claude-code-hub:problem:auth.forbidden",
+        title: "Forbidden",
+        status: 403,
+        detail: "Admin access is required.",
+        instance: "/api/v1/providers",
+        errorCode: "auth.forbidden",
+      }).success
+    ).toBe(true);
   });
 });

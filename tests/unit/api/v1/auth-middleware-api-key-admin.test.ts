@@ -4,6 +4,17 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 const validateAuthTokenMock = vi.hoisted(() => vi.fn());
 const getProvidersMock = vi.hoisted(() => vi.fn());
 const redisReadMock = vi.hoisted(() => vi.fn());
+const loggerMock = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  fatal: vi.fn(),
+  info: vi.fn(),
+  trace: vi.fn(),
+  warn: vi.fn(),
+  level: "debug",
+}));
+
+vi.mock("@/lib/logger", () => ({ logger: loggerMock }));
 
 const adminSession = {
   user: { id: 1, role: "admin", isEnabled: true },
@@ -76,6 +87,27 @@ describe("v1 API key admin access flag", () => {
     expect(redisReadMock).toHaveBeenCalledWith("sid_admin");
   });
 
+  test("allows legacy cookie admin sessions on admin routes when API key admin access is disabled", async () => {
+    vi.resetModules();
+    vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
+    vi.stubEnv("SESSION_TOKEN_MODE", "legacy");
+    validateAuthTokenMock.mockResolvedValue(adminSession);
+
+    vi.doMock("@/lib/auth", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/auth")>();
+      return { ...actual, validateAuthToken: validateAuthTokenMock };
+    });
+    const { resolveAuth } = await import("@/lib/api/v1/_shared/auth-middleware");
+    const got = await resolveAuth(createCookieAuthContext("db-admin-key"), "admin");
+
+    expect(got).not.toBeInstanceOf(Response);
+    expect(got).toMatchObject({ credentialType: "session", source: "cookie" });
+    expect(validateAuthTokenMock).toHaveBeenCalledWith("db-admin-key", {
+      allowReadOnlyAccess: false,
+    });
+    expect(redisReadMock).not.toHaveBeenCalled();
+  });
+
   test("rejects opaque user API key bearer tokens at the v1 route layer when admin access is disabled", async () => {
     vi.resetModules();
     vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
@@ -115,6 +147,35 @@ describe("v1 API key admin access flag", () => {
     expect(getProvidersMock).not.toHaveBeenCalled();
   });
 
+  test("classifies opaque lookup failures as user API keys before admin route gating", async () => {
+    vi.resetModules();
+    vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
+    validateAuthTokenMock.mockResolvedValue(adminSession);
+    redisReadMock.mockRejectedValue(new Error("redis unavailable"));
+
+    vi.doMock("@/lib/auth", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/auth")>();
+      return { ...actual, validateAuthToken: validateAuthTokenMock };
+    });
+    vi.doMock("@/lib/auth-session-store/redis-session-store", () => ({
+      RedisSessionStore: class {
+        read = redisReadMock;
+      },
+    }));
+    const { resolveAuth } = await import("@/lib/api/v1/_shared/auth-middleware");
+    const got = await resolveAuth(createBearerAuthContext("sid_broken"), "admin");
+    const body = got instanceof Response ? await got.json() : null;
+
+    expect(got).toBeInstanceOf(Response);
+    expect((got as Response).status).toBe(403);
+    expect(body).toMatchObject({ errorCode: "auth.api_key_admin_disabled" });
+    expect(redisReadMock).toHaveBeenCalledWith("sid_broken");
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "[V1Auth] Failed to classify opaque session credential",
+      { error: "redis unavailable" }
+    );
+  });
+
   test("rejects opaque user API key cookies on admin routes when API key admin access is disabled", async () => {
     vi.resetModules();
     vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
@@ -152,6 +213,18 @@ describe("v1 API key admin access flag", () => {
 
 function createCookieAuthContext(token: string) {
   const headers = new Headers({ Cookie: `auth-token=${token}` });
+  return {
+    req: {
+      method: "GET",
+      url: "http://localhost/api/v1/providers",
+      raw: { headers },
+      header: (name: string) => headers.get(name) ?? undefined,
+    },
+  } as never;
+}
+
+function createBearerAuthContext(token: string) {
+  const headers = new Headers({ Authorization: `Bearer ${token}` });
   return {
     req: {
       method: "GET",

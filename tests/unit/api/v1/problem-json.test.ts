@@ -14,7 +14,7 @@ describe("v1 problem json", () => {
     expect(response.status).toBe(400);
     expect(response.headers.get("content-type")).toBe("application/problem+json");
     await expect(response.json()).resolves.toMatchObject({
-      type: "https://claude-code-hub.local/problems/user.name_required",
+      type: "urn:claude-code-hub:problem:user.name_required",
       title: "Bad request",
       status: 400,
       detail: "User name is required.",

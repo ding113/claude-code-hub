@@ -327,6 +327,106 @@ describe("Action Adapter：会话透传", () => {
     expect(action).not.toHaveBeenCalled();
   });
 
+  test("admin 路由默认拒绝 opaque 凭据来源读取失败的会话", async () => {
+    vi.resetModules();
+    redisReadMock.mockRejectedValue(new Error("redis unavailable"));
+
+    const mockSession = {
+      user: {
+        id: 123,
+        name: "admin",
+        description: "",
+        role: "admin" as const,
+        rpm: null,
+        dailyQuota: null,
+        providerGroup: null,
+        tags: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: undefined,
+        limit5hResetMode: "rolling" as const,
+        dailyResetMode: "fixed" as const,
+        dailyResetTime: "00:00",
+        isEnabled: true,
+        expiresAt: null,
+        allowedClients: [],
+        allowedModels: [],
+      },
+      key: {
+        id: 1,
+        userId: 123,
+        name: "admin-key",
+        key: "db-admin-key",
+        isEnabled: true,
+        expiresAt: undefined,
+        canLoginWebUi: true,
+        limit5hUsd: null,
+        limit5hResetMode: "rolling" as const,
+        limitDailyUsd: null,
+        dailyResetMode: "fixed" as const,
+        dailyResetTime: "00:00",
+        limitWeeklyUsd: null,
+        limitMonthlyUsd: null,
+        limitTotalUsd: null,
+        limitConcurrentSessions: 0,
+        providerGroup: null,
+        cacheTtlPreference: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: undefined,
+      },
+    };
+
+    vi.doMock("@/lib/auth", async (importActual) => {
+      const actual = (await importActual()) as typeof import("@/lib/auth");
+      return {
+        ...actual,
+        validateAuthToken: vi.fn(async () => mockSession),
+      };
+    });
+    vi.doMock("@/lib/auth-session-store/redis-session-store", () => ({
+      RedisSessionStore: class {
+        read = redisReadMock;
+      },
+    }));
+
+    const { createActionRoute } = await import("@/lib/api/action-adapter-openapi");
+    const action = vi.fn(async () => ({ ok: true, data: "ok" }));
+    const { handler } = createActionRoute("providers", "getProviders", action as any, {
+      requiresAuth: true,
+      requiredRole: "admin",
+    });
+
+    const request = new Request("http://localhost/api/actions/providers/getProviders", {
+      method: "POST",
+      headers: new Headers({ cookie: "auth-token=sid_broken" }),
+    });
+
+    const response = (await handler({
+      req: {
+        raw: request,
+        json: async () => ({}),
+        header: (name: string) =>
+          name.toLowerCase() === "cookie"
+            ? "auth-token=sid_broken"
+            : (request.headers.get(name) ?? undefined),
+      },
+      json: (payload: unknown, status = 200) =>
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+    } as any)) as Response;
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      errorCode: "auth.api_key_admin_disabled",
+    });
+    expect(redisReadMock).toHaveBeenCalledWith("sid_broken");
+    expect(action).not.toHaveBeenCalled();
+  });
+
   test("cookie 鉴权的 legacy mutation 需要 CSRF token", async () => {
     vi.resetModules();
 

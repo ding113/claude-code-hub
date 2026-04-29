@@ -142,6 +142,17 @@ describe("v1 management docs routes", () => {
     expect(serializedProviderPaths).not.toContain('"cc"');
   });
 
+  test("documents problem details with stable URN examples", async () => {
+    const { json } = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/openapi.json",
+    });
+    const serialized = JSON.stringify(json);
+
+    expect(serialized).toContain("urn:claude-code-hub:problem:request.validation_failed");
+    expect(serialized).not.toContain("claude-code-hub.local");
+  });
+
   test("declares the runtime CSRF header on every mutation operation", async () => {
     const { json } = await callV1Route({
       method: "GET",

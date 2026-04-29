@@ -145,7 +145,7 @@ describe("v1 key endpoints", () => {
       pathname: "/api/v1/users/1/keys",
       headers: {
         Cookie: "auth-token=user-api-key",
-        [CSRF_HEADER]: createCsrfToken({ authToken: "user-api-key", userId: 1 }) ?? "",
+        [CSRF_HEADER]: createCsrfToken({ authToken: "user-api-key", userId: 1 }),
       },
       body: { name: "blocked" },
     });

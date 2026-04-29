@@ -155,7 +155,7 @@ function ensureMediaExample(
 function defaultExampleValue(mediaType: string): unknown {
   if (mediaType === "application/problem+json") {
     return {
-      type: "https://claude-code-hub.local/problems/request.validation_failed",
+      type: "urn:claude-code-hub:problem:request.validation_failed",
       title: "Validation failed",
       status: 400,
       detail: "One or more fields are invalid.",

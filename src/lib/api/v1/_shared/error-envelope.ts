@@ -34,7 +34,7 @@ export type CreateProblemOptions = {
 };
 
 function problemTypeFor(errorCode: string): string {
-  return `https://claude-code-hub.local/problems/${encodeURIComponent(errorCode)}`;
+  return `urn:claude-code-hub:problem:${encodeURIComponent(errorCode)}`;
 }
 
 export function createProblemJson(options: CreateProblemOptions): ProblemJson {

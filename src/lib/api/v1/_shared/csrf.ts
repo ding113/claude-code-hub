@@ -1,14 +1,16 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getEnvConfig } from "@/lib/config/env.schema";
 
 const CSRF_WINDOW_MS = 30 * 60 * 1000;
+const PROCESS_CSRF_SECRET = randomBytes(32).toString("base64url");
 
 export function getCsrfBucket(now = Date.now()): number {
   return Math.floor(now / CSRF_WINDOW_MS);
 }
 
-export function getCsrfSecret(): string | null {
-  return getEnvConfig().ADMIN_TOKEN ?? null;
+export function getCsrfSecret(): string {
+  const env = getEnvConfig();
+  return env.CSRF_SECRET ?? env.ADMIN_TOKEN ?? PROCESS_CSRF_SECRET;
 }
 
 export function createCsrfToken(input: {
@@ -21,7 +23,7 @@ export function createCsrfToken(input: {
   if (!secret) return null;
   const bucket = getCsrfBucket(input.now);
   const payload = `${input.authToken}:${input.userId}:${bucket}`;
-  const signature = createHmac("sha256", secret).update(payload).digest("base64url");
+  const signature = signCsrfPayload(payload, secret).toString("base64url");
   return `${bucket}.${signature}`;
 }
 
@@ -43,7 +45,7 @@ export function verifyCsrfToken(input: {
   const secret = input.secret ?? getCsrfSecret();
   if (!secret) return false;
   const payload = `${input.authToken}:${input.userId}:${bucket}`;
-  const expected = createHmac("sha256", secret).update(payload).digest("base64url");
+  const expected = signCsrfPayload(payload, secret);
   return safeEqual(signature, expected);
 }
 
@@ -51,8 +53,11 @@ export function isMutationMethod(method: string): boolean {
   return ["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
+function signCsrfPayload(payload: string, secret: string): Buffer {
+  return createHmac("sha256", secret).update(payload).digest();
+}
+
+function safeEqual(signature: string, expected: Buffer): boolean {
+  const actual = Buffer.from(signature, "base64url");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }

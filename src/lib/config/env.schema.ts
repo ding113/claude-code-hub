@@ -84,6 +84,12 @@ export const EnvSchema = z.object({
     if (val === "change-me") return undefined;
     return val;
   }, z.string().min(1, "管理员令牌不能为空").optional()),
+  CSRF_SECRET: z.preprocess((val) => {
+    // 独立于 ADMIN_TOKEN 的管理 API CSRF 签名密钥，空值与占位符视为未配置
+    if (!val || typeof val !== "string") return undefined;
+    if (val === "change-me") return undefined;
+    return val;
+  }, z.string().min(16, "CSRF_SECRET 至少需要 16 个字符").optional()),
   // ⚠️ 注意: 不要使用 z.coerce.boolean(),它会把字符串 "false" 转换为 true!
   // 原因: Boolean("false") === true (任何非空字符串都是 truthy)
   // 正确做法: 使用 transform 显式处理 "false" 和 "0" 字符串

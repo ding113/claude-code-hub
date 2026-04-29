@@ -3069,7 +3069,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        csrfToken: string | null;
+                        csrfToken: string;
                     };
                 };
             };
@@ -3159,10 +3159,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3199,10 +3196,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3239,10 +3233,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3395,10 +3386,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3435,10 +3423,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3475,10 +3460,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3594,10 +3576,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3634,10 +3613,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3674,10 +3650,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3714,10 +3687,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3778,10 +3748,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3818,10 +3785,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -3858,10 +3822,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4014,10 +3975,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4054,10 +4012,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4094,10 +4049,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4173,10 +4125,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4213,10 +4162,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4253,10 +4199,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4458,10 +4401,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4498,10 +4438,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4538,10 +4475,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4578,10 +4512,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4913,10 +4844,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4953,10 +4881,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -4993,10 +4918,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5033,10 +4955,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5231,10 +5150,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5271,10 +5187,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5311,10 +5224,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5351,10 +5261,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5419,10 +5326,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5459,10 +5363,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5499,10 +5400,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5539,10 +5437,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5880,10 +5775,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5920,10 +5812,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -5960,10 +5849,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6000,10 +5886,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6066,10 +5949,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6106,10 +5986,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6146,10 +6023,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6186,10 +6060,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6253,10 +6124,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6293,10 +6161,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6333,10 +6198,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6373,10 +6235,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6441,10 +6300,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6481,10 +6337,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6521,10 +6374,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6561,10 +6411,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6629,10 +6476,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6669,10 +6513,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6709,10 +6550,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6749,10 +6587,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6821,10 +6656,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6861,10 +6693,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6901,10 +6730,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -6941,10 +6767,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7006,10 +6829,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7046,10 +6866,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7086,10 +6903,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7126,10 +6940,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7199,10 +7010,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7239,10 +7047,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7279,10 +7084,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7319,10 +7121,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7381,10 +7180,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7421,10 +7217,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7461,10 +7254,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7501,10 +7291,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7576,10 +7363,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7616,10 +7400,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7656,10 +7437,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7696,10 +7474,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7811,10 +7586,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7851,10 +7623,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7891,10 +7660,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -7931,10 +7697,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8003,10 +7766,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8043,10 +7803,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8083,10 +7840,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8123,10 +7877,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8197,10 +7948,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8237,10 +7985,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8277,10 +8022,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8317,10 +8059,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8396,10 +8135,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8436,10 +8172,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8476,10 +8209,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8516,10 +8246,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8603,10 +8330,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8643,10 +8367,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8683,10 +8404,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8723,10 +8441,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8797,10 +8512,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8837,10 +8549,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8877,10 +8586,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8917,10 +8623,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -8996,10 +8699,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9036,10 +8736,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9076,10 +8773,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9116,10 +8810,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9218,10 +8909,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9258,10 +8946,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9298,10 +8983,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9338,10 +9020,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9423,10 +9102,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9463,10 +9139,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9503,10 +9176,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9543,10 +9213,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9628,10 +9295,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9668,10 +9332,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9708,10 +9369,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9748,10 +9406,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9833,10 +9488,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9873,10 +9525,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9913,10 +9562,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -9953,10 +9599,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10038,10 +9681,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10078,10 +9718,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10118,10 +9755,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10158,10 +9792,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10224,10 +9855,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10264,10 +9892,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10304,10 +9929,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10344,10 +9966,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10434,10 +10053,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10474,10 +10090,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10514,10 +10127,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10554,10 +10164,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10620,10 +10227,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10660,10 +10264,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10700,10 +10301,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10740,10 +10338,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10815,10 +10410,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10855,10 +10447,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10895,10 +10484,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -10935,10 +10521,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11056,10 +10639,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11096,10 +10676,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11136,10 +10713,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11313,10 +10887,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11353,10 +10924,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11393,10 +10961,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11476,10 +11041,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11516,10 +11078,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11556,10 +11115,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11705,10 +11261,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11745,10 +11298,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11785,10 +11335,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11869,10 +11416,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11909,10 +11453,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -11949,10 +11490,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12137,10 +11675,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12177,10 +11712,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12217,10 +11749,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12529,10 +12058,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12569,10 +12095,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12609,10 +12132,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12649,10 +12169,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12722,10 +12239,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12762,10 +12276,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12802,10 +12313,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12865,10 +12373,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12905,10 +12410,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -12945,10 +12447,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13032,10 +12531,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13072,10 +12568,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13112,10 +12605,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13152,10 +12642,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13253,10 +12740,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13293,10 +12777,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13333,10 +12814,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13373,10 +12851,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13441,10 +12916,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13481,10 +12953,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13521,10 +12990,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13561,10 +13027,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13623,10 +13086,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13663,10 +13123,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13703,10 +13160,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13743,10 +13197,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13807,10 +13258,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13847,10 +13295,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13887,10 +13332,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -13927,10 +13369,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14033,10 +13472,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14073,10 +13509,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14113,10 +13546,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14153,10 +13583,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14252,10 +13679,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14292,10 +13716,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14332,10 +13753,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14372,10 +13790,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14496,10 +13911,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14536,10 +13948,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14576,10 +13985,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14616,10 +14022,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14695,10 +14098,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14735,10 +14135,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14775,10 +14172,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14815,10 +14209,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14877,10 +14268,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14917,10 +14305,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14957,10 +14342,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -14997,10 +14379,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15096,10 +14475,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15136,10 +14512,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15176,10 +14549,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15216,10 +14586,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15280,10 +14647,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15320,10 +14684,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15360,10 +14721,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15400,10 +14758,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15531,10 +14886,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15571,10 +14923,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15611,10 +14960,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15651,10 +14997,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15777,10 +15120,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15817,10 +15157,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15857,10 +15194,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -15897,10 +15231,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16076,10 +15407,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16116,10 +15444,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16156,10 +15481,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16196,10 +15518,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16262,10 +15581,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16302,10 +15618,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16342,10 +15655,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16382,10 +15692,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16450,10 +15757,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16490,10 +15794,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16530,10 +15831,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16570,10 +15868,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16633,10 +15928,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16673,10 +15965,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16713,10 +16002,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16753,10 +16039,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16817,10 +16100,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16857,10 +16137,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16897,10 +16174,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -16937,10 +16211,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17121,10 +16392,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17161,10 +16429,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17201,10 +16466,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17241,10 +16503,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17303,10 +16562,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17410,10 +16666,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17450,10 +16703,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17490,10 +16740,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17530,10 +16777,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17617,10 +16861,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17657,10 +16898,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17697,10 +16935,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17737,10 +16972,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17821,10 +17053,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17861,10 +17090,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17901,10 +17127,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -17941,10 +17164,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18036,10 +17256,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18076,10 +17293,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18116,10 +17330,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18156,10 +17367,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18220,10 +17428,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18260,10 +17465,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18300,10 +17502,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18340,10 +17539,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18438,10 +17634,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18478,10 +17671,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18518,10 +17708,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18558,10 +17745,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18670,10 +17854,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18710,10 +17891,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18750,10 +17928,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18790,10 +17965,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18870,10 +18042,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18910,10 +18079,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18950,10 +18116,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -18990,10 +18153,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19082,10 +18242,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19122,10 +18279,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19162,10 +18316,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19202,10 +18353,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19296,10 +18444,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19336,10 +18481,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19376,10 +18518,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19416,10 +18555,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19542,10 +18678,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19582,10 +18715,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19622,10 +18752,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19662,10 +18789,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19766,10 +18890,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19806,10 +18927,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19846,10 +18964,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19886,10 +19001,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -19992,10 +19104,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20032,10 +19141,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20072,10 +19178,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20112,10 +19215,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20188,10 +19288,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20228,10 +19325,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20268,10 +19362,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20308,10 +19399,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20371,10 +19459,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20411,10 +19496,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20451,10 +19533,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20491,10 +19570,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20576,10 +19652,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20616,10 +19689,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20656,10 +19726,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20696,10 +19763,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20775,10 +19839,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20815,10 +19876,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20855,10 +19913,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20895,10 +19950,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -20978,10 +20030,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21018,10 +20067,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21058,10 +20104,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21098,10 +20141,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21222,10 +20262,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21262,10 +20299,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21302,10 +20336,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21342,10 +20373,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21406,10 +20434,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21446,10 +20471,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21486,10 +20508,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21526,10 +20545,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21623,10 +20639,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21663,10 +20676,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21703,10 +20713,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21743,10 +20750,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21822,10 +20826,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21862,10 +20863,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21902,10 +20900,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -21967,10 +20962,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22007,10 +20999,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22047,10 +21036,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22110,10 +21096,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22150,10 +21133,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22190,10 +21170,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22252,10 +21229,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22292,10 +21266,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22332,10 +21303,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22395,10 +21363,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22435,10 +21400,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22475,10 +21437,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22550,10 +21509,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22590,10 +21546,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22630,10 +21583,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22692,10 +21642,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22732,10 +21679,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22772,10 +21716,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22835,10 +21776,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22875,10 +21813,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -22915,10 +21850,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23000,10 +21932,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23040,10 +21969,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23080,10 +22006,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23165,10 +22088,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23205,10 +22125,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23245,10 +22162,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23285,10 +22199,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23374,10 +22285,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23414,10 +22322,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23454,10 +22359,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23494,10 +22396,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23562,10 +22461,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23602,10 +22498,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23642,10 +22535,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23682,10 +22572,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23746,10 +22633,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23786,10 +22670,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23826,10 +22707,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23866,10 +22744,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23932,10 +22807,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -23972,10 +22844,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24012,10 +22881,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24052,10 +22918,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24121,10 +22984,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24161,10 +23021,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24201,10 +23058,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24241,10 +23095,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24313,10 +23164,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24353,10 +23201,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24393,10 +23238,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24433,10 +23275,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24496,10 +23335,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24536,10 +23372,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24576,10 +23409,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24616,10 +23446,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24682,10 +23509,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24722,10 +23546,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24762,10 +23583,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24802,10 +23620,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24868,10 +23683,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24908,10 +23720,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24948,10 +23757,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -24988,10 +23794,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25028,10 +23831,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25093,10 +23893,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25133,10 +23930,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25173,10 +23967,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25213,10 +24004,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25253,10 +24041,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25317,10 +24102,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25357,10 +24139,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25397,10 +24176,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25437,10 +24213,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25477,10 +24250,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25557,10 +24327,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25597,10 +24364,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25637,10 +24401,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25677,10 +24438,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25717,10 +24475,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25788,10 +24543,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25828,10 +24580,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25868,10 +24617,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25908,10 +24654,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -25948,10 +24691,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26037,10 +24777,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26077,10 +24814,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26117,10 +24851,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26157,10 +24888,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26197,10 +24925,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26261,10 +24986,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26301,10 +25023,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26341,10 +25060,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26381,10 +25097,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26421,10 +25134,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26505,10 +25215,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26545,10 +25252,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26585,10 +25289,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26625,10 +25326,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26665,10 +25363,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26740,10 +25435,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26780,10 +25472,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26820,10 +25509,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26860,10 +25546,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26900,10 +25583,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -26970,10 +25650,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27010,10 +25687,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27050,10 +25724,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27090,10 +25761,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27130,10 +25798,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27205,10 +25870,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27245,10 +25907,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27285,10 +25944,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27325,10 +25981,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27365,10 +26018,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27443,10 +26093,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27483,10 +26130,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27523,10 +26167,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27563,10 +26204,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27603,10 +26241,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27668,10 +26303,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27708,10 +26340,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27748,10 +26377,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27788,10 +26414,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27828,10 +26451,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27901,10 +26521,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27941,10 +26558,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -27981,10 +26595,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28021,10 +26632,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28061,10 +26669,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28125,10 +26730,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28165,10 +26767,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28205,10 +26804,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28245,10 +26841,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28285,10 +26878,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28353,10 +26943,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28393,10 +26980,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28433,10 +27017,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28473,10 +27054,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28513,10 +27091,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28589,10 +27164,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28629,10 +27201,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28669,10 +27238,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28709,10 +27275,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28749,10 +27312,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28823,10 +27383,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28863,10 +27420,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28903,10 +27457,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28943,10 +27494,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -28983,10 +27531,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29072,10 +27617,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29112,10 +27654,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29152,10 +27691,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29192,10 +27728,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29232,10 +27765,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29272,10 +27802,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29389,10 +27916,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29429,10 +27953,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29469,10 +27990,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29509,10 +28027,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29549,10 +28064,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29589,10 +28101,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29661,10 +28170,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29701,10 +28207,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29741,10 +28244,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29781,10 +28281,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29821,10 +28318,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29861,10 +28355,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29924,10 +28415,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -29964,10 +28452,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30004,10 +28489,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30044,10 +28526,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30084,10 +28563,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30124,10 +28600,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30187,10 +28660,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30227,10 +28697,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30267,10 +28734,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30307,10 +28771,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30347,10 +28808,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30387,10 +28845,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30454,10 +28909,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30494,10 +28946,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30534,10 +28983,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30574,10 +29020,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30614,10 +29057,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30654,10 +29094,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30721,10 +29158,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30761,10 +29195,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30801,10 +29232,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30841,10 +29269,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30881,10 +29306,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30921,10 +29343,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -30993,10 +29412,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31033,10 +29449,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31073,10 +29486,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31113,10 +29523,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31153,10 +29560,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31193,10 +29597,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31287,10 +29688,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31327,10 +29725,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31367,10 +29762,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31407,10 +29799,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31447,10 +29836,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31487,10 +29873,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31632,10 +30015,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31672,10 +30052,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31712,10 +30089,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31752,10 +30126,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31792,10 +30163,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31832,10 +30200,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31896,10 +30261,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31936,10 +30298,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -31976,10 +30335,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32016,10 +30372,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32056,10 +30409,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32096,10 +30446,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32216,10 +30563,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32256,10 +30600,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32296,10 +30637,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32336,10 +30674,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32376,10 +30711,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32416,10 +30748,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32491,10 +30820,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32531,10 +30857,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32571,10 +30894,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32611,10 +30931,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32651,10 +30968,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32691,10 +31005,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32768,10 +31079,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32808,10 +31116,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32848,10 +31153,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32888,10 +31190,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32928,10 +31227,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -32968,10 +31264,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33056,10 +31349,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33096,10 +31386,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33136,10 +31423,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33176,10 +31460,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33216,10 +31497,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33256,10 +31534,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33355,10 +31630,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33395,10 +31667,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33435,10 +31704,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33475,10 +31741,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33515,10 +31778,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33555,10 +31815,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33619,10 +31876,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33659,10 +31913,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33699,10 +31950,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33739,10 +31987,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33779,10 +32024,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33819,10 +32061,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33883,10 +32122,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33923,10 +32159,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -33963,10 +32196,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34003,10 +32233,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34043,10 +32270,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34083,10 +32307,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34152,10 +32373,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34192,10 +32410,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34232,10 +32447,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34272,10 +32484,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34384,10 +32593,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34424,10 +32630,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34464,10 +32667,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34504,10 +32704,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34569,10 +32766,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34609,10 +32803,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34649,10 +32840,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34689,10 +32877,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34753,10 +32938,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34793,10 +32975,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34833,10 +33012,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34873,10 +33049,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -34985,10 +33158,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35025,10 +33195,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35065,10 +33232,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35105,10 +33269,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35180,10 +33341,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35220,10 +33378,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35260,10 +33415,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35300,10 +33452,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35377,10 +33526,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35417,10 +33563,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35457,10 +33600,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35497,10 +33637,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35561,10 +33698,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35601,10 +33735,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35641,10 +33772,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35681,10 +33809,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35746,10 +33871,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35786,10 +33908,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35826,10 +33945,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35866,10 +33982,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35931,10 +34044,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -35971,10 +34081,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36011,10 +34118,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36051,10 +34155,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36128,10 +34229,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36168,10 +34266,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36208,10 +34303,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36248,10 +34340,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36342,10 +34431,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36382,10 +34468,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36422,10 +34505,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36462,10 +34542,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36557,10 +34634,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36597,10 +34671,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36637,10 +34708,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36677,10 +34745,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36772,10 +34837,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36812,10 +34874,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36852,10 +34911,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36892,10 +34948,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36954,10 +35007,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -36994,10 +35044,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37034,10 +35081,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37074,10 +35118,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37137,10 +35178,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37177,10 +35215,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37217,10 +35252,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37257,10 +35289,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37320,10 +35349,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37360,10 +35386,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37400,10 +35423,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37440,10 +35460,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37503,10 +35520,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37543,10 +35557,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37583,10 +35594,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37623,10 +35631,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37697,10 +35702,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37737,10 +35739,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37777,10 +35776,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37817,10 +35813,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37920,10 +35913,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -37960,10 +35950,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38000,10 +35987,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38040,10 +36024,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38105,10 +36086,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38145,10 +36123,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38185,10 +36160,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38225,10 +36197,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38291,10 +36260,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38331,10 +36297,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38371,10 +36334,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38411,10 +36371,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38473,10 +36430,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38513,10 +36467,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38553,10 +36504,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38593,10 +36541,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38655,10 +36600,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38695,10 +36637,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38735,10 +36674,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38775,10 +36711,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38837,10 +36770,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38877,10 +36807,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38917,10 +36844,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -38957,10 +36881,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39050,10 +36971,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39090,10 +37008,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39130,10 +37045,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39170,10 +37082,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39263,10 +37172,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39303,10 +37209,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39343,10 +37246,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39383,10 +37283,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39446,10 +37343,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39486,10 +37380,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39526,10 +37417,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39566,10 +37454,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39629,10 +37514,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39669,10 +37551,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39709,10 +37588,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39749,10 +37625,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39816,10 +37689,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39856,10 +37726,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39896,10 +37763,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -39936,10 +37800,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -40004,10 +37865,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -40044,10 +37902,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -40084,10 +37939,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;
@@ -40124,10 +37976,7 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": {
-                        /**
-                         * Format: uri
-                         * @description Stable problem type URL.
-                         */
+                        /** @description Stable problem type URI or URN. */
                         type: string;
                         /** @description Short problem title. */
                         title: string;

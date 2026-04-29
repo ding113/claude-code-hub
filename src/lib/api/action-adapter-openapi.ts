@@ -153,8 +153,11 @@ async function classifyOpaqueLegacyManagementCredential(
     const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
     const sessionData = await new RedisSessionStore().read(token);
     return sessionData?.credentialType ?? "user-api-key";
-  } catch {
-    return "session";
+  } catch (error) {
+    logger.warn("[ActionAPI] Failed to classify opaque management credential", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return "user-api-key";
   }
 }
 

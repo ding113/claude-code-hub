@@ -1,7 +1,8 @@
 import { z } from "@hono/zod-openapi";
+import { HIDDEN_PROVIDER_TYPES as HIDDEN_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
 import { ProviderTypeSchema } from "./_common";
 
-export const HIDDEN_PROVIDER_TYPES = new Set(["claude-auth", "gemini-cli"] as const);
+export const HIDDEN_PROVIDER_TYPES = new Set(HIDDEN_PROVIDER_TYPE_VALUES);
 
 const NullableStringSchema = z.string().nullable();
 

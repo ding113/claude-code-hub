@@ -13,7 +13,7 @@ export const InvalidParamSchema = z.object({
 });
 
 export const ProblemJsonSchema = z.object({
-  type: z.string().url().describe("Stable problem type URL."),
+  type: z.string().min(1).describe("Stable problem type URI or URN."),
   title: z.string().describe("Short problem title."),
   status: z.number().int().min(100).max(599).describe("HTTP status code."),
   detail: z.string().describe("Human-readable error detail."),
