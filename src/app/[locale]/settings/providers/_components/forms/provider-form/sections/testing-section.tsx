@@ -164,6 +164,7 @@ export function TestingSection() {
                     placeholder={t("sections.mcpPassthrough.urlPlaceholder")}
                     disabled={state.ui.isPending}
                     className="pr-10 font-mono text-sm"
+                    autoComplete="off"
                   />
                   <Link2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 </div>
