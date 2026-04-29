@@ -151,6 +151,7 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
                 placeholder={t("name.placeholder")}
                 disabled={state.ui.isPending}
                 className="pr-10"
+                autoComplete="off"
               />
               <User className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             </div>
@@ -175,6 +176,7 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
                 placeholder={t("websiteUrl.placeholder")}
                 disabled={state.ui.isPending}
                 className="pr-10"
+                autoComplete="off"
               />
               <ExternalLink className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             </div>
@@ -222,6 +224,7 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
                   placeholder={t("url.placeholder")}
                   disabled={state.ui.isPending}
                   className="pr-10 font-mono text-sm"
+                  autoComplete="off"
                 />
                 <Globe className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               </div>
@@ -282,6 +285,7 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
                 placeholder={isEdit ? t("key.leaveEmptyDesc") : t("key.placeholder")}
                 disabled={state.ui.isPending}
                 className="pr-10 font-mono text-sm"
+                autoComplete="new-password"
               />
               <button
                 type="button"
