@@ -59,7 +59,11 @@ export async function createUserKey(c: Context): Promise<Response> {
     c.get("auth")
   );
   if (!result.ok) return actionError(c, result);
-  return createdResponse(result.data, "/api/v1/keys", { headers: withNoStoreHeaders() });
+  const createdKeyId = (result.data as { id?: number }).id;
+  const location = createdKeyId
+    ? `/api/v1/keys/${createdKeyId}`
+    : `/api/v1/users/${params.userId}/keys`;
+  return createdResponse(result.data, location, { headers: withNoStoreHeaders() });
 }
 
 export async function getKey(c: Context): Promise<Response> {

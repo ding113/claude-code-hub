@@ -102,6 +102,14 @@ export async function updateProvider(c: Context): Promise<Response> {
   const existing = await findVisibleProvider(c, id);
   if (existing instanceof Response) return existing;
   if (!existing) return providerNotFound(c);
+  if (body.data.key !== undefined && hasLegacyRedactedWritePlaceholders(body.data.key)) {
+    return createProblemResponse({
+      status: 422,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "provider.redacted_placeholder_rejected",
+      detail: "Redacted placeholders cannot be used for the key field when updating providers.",
+    });
+  }
 
   const updatePayload = preserveRedactedProviderUpdateFields(body.data, existing);
   const providerActions = await import("@/actions/providers");

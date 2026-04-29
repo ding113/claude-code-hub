@@ -149,7 +149,7 @@ describe("v1 API key admin access flag", () => {
     expect(redisReadMock).toHaveBeenCalledWith("sid_legacy_browser_admin");
   });
 
-  test("allows legacy cookie admin sessions on admin routes when API key admin access is disabled", async () => {
+  test("rejects legacy raw API-key cookies on admin routes when API key admin access is disabled", async () => {
     vi.resetModules();
     vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
     vi.stubEnv("SESSION_TOKEN_MODE", "legacy");
@@ -161,9 +161,11 @@ describe("v1 API key admin access flag", () => {
     });
     const { resolveAuth } = await import("@/lib/api/v1/_shared/auth-middleware");
     const got = await resolveAuth(createCookieAuthContext("db-admin-key"), "admin");
+    const body = got instanceof Response ? await got.json() : null;
 
-    expect(got).not.toBeInstanceOf(Response);
-    expect(got).toMatchObject({ credentialType: "session", source: "cookie" });
+    expect(got).toBeInstanceOf(Response);
+    expect((got as Response).status).toBe(403);
+    expect(body).toMatchObject({ errorCode: "auth.api_key_admin_disabled" });
     expect(validateAuthTokenMock).toHaveBeenCalledWith("db-admin-key", {
       allowReadOnlyAccess: false,
     });

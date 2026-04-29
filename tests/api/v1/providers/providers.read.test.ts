@@ -516,6 +516,23 @@ describe("v1 providers read endpoints", () => {
     expect(addProviderMock).not.toHaveBeenCalled();
   });
 
+  test("rejects redacted placeholders in provider key updates", async () => {
+    const updated = await callV1Route({
+      method: "PATCH",
+      pathname: "/api/v1/providers/1",
+      headers: { Authorization: "Bearer admin-token" },
+      body: {
+        key: "sk-a...[REDACTED]...xxxx",
+      },
+    });
+
+    expect(updated.response.status).toBe(422);
+    expect(updated.json).toMatchObject({
+      errorCode: "provider.redacted_placeholder_rejected",
+    });
+    expect(editProviderMock).not.toHaveBeenCalled();
+  });
+
   test("rejects hidden provider types and deprecated provider fields on writes", async () => {
     const hiddenType = await callV1Route({
       method: "POST",

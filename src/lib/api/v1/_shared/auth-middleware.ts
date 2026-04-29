@@ -158,10 +158,11 @@ async function classifyCredential(
 
   const adminToken = config.auth.adminToken;
   if (adminToken && constantTimeEqual(token, adminToken)) return "admin-token";
-  if (detectSessionTokenKind(token) === "opaque") {
+  const tokenKind = detectSessionTokenKind(token);
+  if (tokenKind === "opaque") {
     return classifyOpaqueSessionCredential(token);
   }
-  return source === "cookie" ? "session" : "user-api-key";
+  return "user-api-key";
 }
 
 async function classifyOpaqueSessionCredential(

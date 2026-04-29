@@ -161,7 +161,6 @@ describe("v1 users endpoints", () => {
 
   test("returns the current user from a read-tier self list endpoint", async () => {
     validateAuthTokenMock.mockResolvedValueOnce(userSession);
-    getUsersMock.mockResolvedValueOnce([user(9)]);
 
     const self = await callV1Route({
       method: "GET",
@@ -179,10 +178,30 @@ describe("v1 users endpoints", () => {
       },
     });
     expect(JSON.stringify(self.json)).not.toContain("sk-user-secret");
-    expect(getUsersMock).toHaveBeenCalledWith();
+    expect(getUserByIdMock).toHaveBeenCalledWith(9);
+    expect(getUsersMock).not.toHaveBeenCalled();
     expect(validateAuthTokenMock).toHaveBeenCalledWith("user-token", {
       allowReadOnlyAccess: true,
     });
+  });
+
+  test("does not expose the admin inventory through the read-tier self endpoint", async () => {
+    validateAuthTokenMock.mockResolvedValueOnce(adminSession);
+
+    const self = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/users:self",
+      headers,
+    });
+
+    expect(self.response.status).toBe(200);
+    expect(self.json).toMatchObject({
+      items: [{ id: 1, name: "user-1" }],
+      pageInfo: { nextCursor: null, hasMore: false, limit: 1 },
+    });
+    expect(JSON.stringify(self.json)).not.toContain("user-250");
+    expect(getUserByIdMock).toHaveBeenCalledWith(1);
+    expect(getUsersMock).not.toHaveBeenCalled();
   });
 
   test("reads user detail from an id-capable action instead of the first list page", async () => {

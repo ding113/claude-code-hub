@@ -68,15 +68,29 @@ export async function listUsers(c: Context): Promise<Response> {
 }
 
 export async function listCurrentUser(c: Context): Promise<Response> {
+  const currentUserId = c.get("auth")?.session?.user.id;
+  if (!currentUserId) {
+    return createProblemResponse({
+      status: 401,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "auth.missing",
+      detail: "Authentication is required.",
+    });
+  }
   const actions = await import("@/actions/users");
-  const result = await callAction(c, actions.getUsers, [], c.get("auth"));
+  const result = await callAction(
+    c,
+    actions.getUserById,
+    [currentUserId] as never[],
+    c.get("auth")
+  );
   if (!result.ok) return actionError(c, result);
   return jsonResponse({
-    items: redactUserKeys(result.data),
+    items: [redactUserKeys(result.data)],
     pageInfo: {
       nextCursor: null,
       hasMore: false,
-      limit: result.data.length,
+      limit: 1,
     },
   });
 }

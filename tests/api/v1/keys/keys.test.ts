@@ -67,7 +67,10 @@ describe("v1 key endpoints", () => {
       ok: true,
       data: [{ id: 10, todayCallCount: 1 }],
     });
-    addKeyMock.mockResolvedValue({ ok: true, data: { generatedKey: "sk-new", name: "default" } });
+    addKeyMock.mockResolvedValue({
+      ok: true,
+      data: { id: 10, generatedKey: "sk-new", name: "default" },
+    });
     editKeyMock.mockResolvedValue({ ok: true });
     removeKeyMock.mockResolvedValue({ ok: true });
     getKeyLimitUsageMock.mockResolvedValue({
@@ -113,6 +116,7 @@ describe("v1 key endpoints", () => {
       body: { name: "default", providerGroup: "default" },
     });
     expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("Location")).toBe("/api/v1/keys/10");
     expect(created.response.headers.get("Cache-Control")).toContain("no-store");
     expect(created.response.headers.get("Pragma")).toBe("no-cache");
     expect(addKeyMock).toHaveBeenCalledWith({
@@ -153,6 +157,19 @@ describe("v1 key endpoints", () => {
     expect(response.response.status).toBe(401);
     expect(response.json).toMatchObject({ errorCode: "auth.missing" });
     expect(addKeyMock).not.toHaveBeenCalled();
+
+    const middlewareResponse = await resolveAuth(
+      createCookieAuthContext({
+        Cookie: "auth-token=user-api-key",
+        [CSRF_HEADER]: createCsrfToken({ authToken: "user-api-key", userId: 1 }),
+      }),
+      "admin"
+    );
+    expect(middlewareResponse).toBeInstanceOf(Response);
+    expect((middlewareResponse as Response).status).toBe(403);
+    expect(await (middlewareResponse as Response).json()).toMatchObject({
+      errorCode: "auth.api_key_admin_disabled",
+    });
   });
 
   test("rejects non-admin sessions for key management", async () => {
