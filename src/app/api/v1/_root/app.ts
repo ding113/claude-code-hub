@@ -15,9 +15,13 @@ import { createManagementDocsApp } from "@/app/api/v1/_root/docs";
 import { managementApiDocumentConfig } from "@/app/api/v1/_root/document";
 import { adminUserInsightsRouter } from "@/app/api/v1/resources/admin-user-insights/router";
 import { keysRouter } from "@/app/api/v1/resources/keys/router";
+import { modelPricesRouter } from "@/app/api/v1/resources/model-prices/router";
+import { notificationBindingsRouter } from "@/app/api/v1/resources/notification-bindings/router";
+import { notificationsRouter } from "@/app/api/v1/resources/notifications/router";
 import { providerEndpointsRouter } from "@/app/api/v1/resources/provider-endpoints/router";
 import { providerGroupsRouter } from "@/app/api/v1/resources/provider-groups/router";
 import { providersRouter } from "@/app/api/v1/resources/providers/router";
+import { systemRouter } from "@/app/api/v1/resources/system/router";
 import { usersRouter } from "@/app/api/v1/resources/users/router";
 import { webhookTargetsRouter } from "@/app/api/v1/resources/webhook-targets/router";
 import {
@@ -151,6 +155,18 @@ app.route("/", providerEndpointsRouter);
 
 // /provider-groups/*：admin tier；分组 CRUD。
 app.route("/", providerGroupsRouter);
+
+// /model-prices/*：admin tier（catalog 单独 read tier）；CRUD + 同步 + manual pin。
+app.route("/", modelPricesRouter);
+
+// /system/settings + /system/timezone：admin / read tier。
+app.route("/", systemRouter);
+
+// /notifications/settings + /notifications/test-webhook：admin tier。
+app.route("/", notificationsRouter);
+
+// /notifications/types/{type}/bindings：admin tier。
+app.route("/", notificationBindingsRouter);
 
 // ==================== 404 处理（Problem Details） ====================
 
