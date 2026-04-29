@@ -23,7 +23,7 @@ describe("openapi types drift", () => {
   });
 
   it("generate-v1-types --check exits 0 (no drift)", () => {
-    const result = spawnSync("bun", [SCRIPT, "--check"], {
+    const result = spawnSync("bun", ["--conditions=react-server", SCRIPT, "--check"], {
       cwd: REPO_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",

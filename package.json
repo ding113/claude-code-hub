@@ -37,8 +37,8 @@
     "i18n:audit-placeholders:fail": "node scripts/audit-settings-placeholders.js --scope=settings,dashboard,myUsage --format=tsv --fail",
     "i18n:audit-messages-no-emoji": "node scripts/audit-messages-no-emoji.js --format=tsv",
     "i18n:audit-messages-no-emoji:fail": "node scripts/audit-messages-no-emoji.js --format=tsv --fail",
-    "openapi:generate": "bun scripts/generate-v1-types.ts",
-    "openapi:check": "bun scripts/generate-v1-types.ts --check",
+    "openapi:generate": "bun --conditions=react-server scripts/generate-v1-types.ts",
+    "openapi:check": "bun --conditions=react-server scripts/generate-v1-types.ts --check",
     "test:v1": "vitest run --config tests/configs/v1.config.ts"
   },
   "dependencies": {
