@@ -1,14 +1,17 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { formatInTimeZone } from "date-fns-tz";
 import { Pencil, Trash2 } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { deleteSensitiveWordAction, updateSensitiveWordAction } from "@/actions/sensitive-words";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { ApiError, localizeError } from "@/lib/api-client/v1/client";
+import { sensitiveWordsClient } from "@/lib/api-client/v1/sensitive-words";
+import { sensitiveWordsKeys } from "@/lib/api-client/v1/sensitive-words/keys";
 import type { SensitiveWord } from "@/repository/sensitive-words";
 import { EditWordDialog } from "./edit-word-dialog";
 
@@ -25,6 +28,7 @@ const matchTypeColors = {
 export function WordListTable({ words }: WordListTableProps) {
   const t = useTranslations("settings");
   const timeZone = useTimeZone() ?? "UTC";
+  const queryClient = useQueryClient();
   const [selectedWord, setSelectedWord] = useState<SensitiveWord | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
@@ -34,13 +38,19 @@ export function WordListTable({ words }: WordListTableProps) {
     regex: t("sensitiveWords.table.matchTypeRegex"),
   };
 
-  const handleToggleEnabled = async (id: number, isEnabled: boolean) => {
-    const result = await updateSensitiveWordAction(id, { isEnabled });
+  const surfaceError = (err: unknown, fallback: string) => {
+    const message =
+      err instanceof ApiError ? localizeError(err) : err instanceof Error ? err.message : fallback;
+    toast.error(message || fallback);
+  };
 
-    if (result.ok) {
+  const handleToggleEnabled = async (id: number, isEnabled: boolean) => {
+    try {
+      await sensitiveWordsClient.update(id, { isEnabled });
+      await queryClient.invalidateQueries({ queryKey: sensitiveWordsKeys.all });
       toast.success(isEnabled ? t("sensitiveWords.enable") : t("sensitiveWords.disable"));
-    } else {
-      toast.error(result.error);
+    } catch (err) {
+      surfaceError(err, t("sensitiveWords.editFailed"));
     }
   };
 
@@ -49,12 +59,12 @@ export function WordListTable({ words }: WordListTableProps) {
       return;
     }
 
-    const result = await deleteSensitiveWordAction(id);
-
-    if (result.ok) {
+    try {
+      await sensitiveWordsClient.remove(id);
+      await queryClient.invalidateQueries({ queryKey: sensitiveWordsKeys.all });
       toast.success(t("sensitiveWords.deleteSuccess"));
-    } else {
-      toast.error(result.error);
+    } catch (err) {
+      surfaceError(err, t("sensitiveWords.editFailed"));
     }
   };
 

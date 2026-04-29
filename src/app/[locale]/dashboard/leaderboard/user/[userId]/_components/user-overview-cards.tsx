@@ -1,11 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { Activity, AlertCircle, Clock, DollarSign, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getUserInsightsOverview } from "@/actions/admin-user-insights";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUserInsightsOverview } from "@/lib/api-client/v1/admin-user-insights/hooks";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils";
 
 interface UserOverviewCardsProps {
@@ -22,14 +21,7 @@ function formatResponseTime(ms: number): string {
 export function UserOverviewCards({ userId, startDate, endDate }: UserOverviewCardsProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["user-insights-overview", userId, startDate, endDate],
-    queryFn: async () => {
-      const result = await getUserInsightsOverview(userId, startDate, endDate);
-      if (!result.ok) throw new Error(result.error);
-      return result.data;
-    },
-  });
+  const { data, isLoading, isError } = useUserInsightsOverview(userId, { startDate, endDate });
 
   if (isLoading) {
     return (

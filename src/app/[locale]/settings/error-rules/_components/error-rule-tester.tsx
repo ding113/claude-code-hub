@@ -4,10 +4,10 @@ import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { testErrorRuleAction } from "@/actions/error-rules";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useTestErrorRule } from "@/lib/api-client/v1/error-rules/hooks";
 import { cn } from "@/lib/utils";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 
@@ -28,8 +28,8 @@ interface TestResult {
 export function ErrorRuleTester() {
   const t = useTranslations("settings");
   const [message, setMessage] = useState("");
-  const [isTesting, setIsTesting] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
+  const { mutateAsync, isPending } = useTestErrorRule();
 
   const handleTest = async () => {
     const trimmedMessage = message.trim();
@@ -38,21 +38,13 @@ export function ErrorRuleTester() {
       return;
     }
 
-    setIsTesting(true);
     setResult(null);
 
     try {
-      const response = await testErrorRuleAction({ message });
-
-      if (response.ok) {
-        setResult(response.data);
-      } else {
-        toast.error(response.error);
-      }
+      const response = await mutateAsync({ message });
+      setResult(response as unknown as TestResult);
     } catch {
-      toast.error(t("errorRules.tester.testFailed"));
-    } finally {
-      setIsTesting(false);
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 
@@ -79,8 +71,8 @@ export function ErrorRuleTester() {
         />
       </div>
 
-      <Button onClick={handleTest} disabled={isTesting} className="bg-primary hover:bg-primary/90">
-        {isTesting ? (
+      <Button onClick={handleTest} disabled={isPending} className="bg-primary hover:bg-primary/90">
+        {isPending ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {t("errorRules.tester.testing")}

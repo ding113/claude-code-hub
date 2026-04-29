@@ -3,8 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getActiveSessions } from "@/actions/active-sessions";
 import { useRouter } from "@/i18n/routing";
+import { sessionsClient } from "@/lib/api-client/v1/sessions";
+import { sessionsKeys } from "@/lib/api-client/v1/sessions/keys";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ActiveSessionInfo } from "@/types/session";
 import { SessionListItem } from "./session-list-item";
@@ -12,11 +13,8 @@ import { SessionListItem } from "./session-list-item";
 const REFRESH_INTERVAL = 5000; // 5秒刷新一次
 
 async function fetchActiveSessions(): Promise<ActiveSessionInfo[]> {
-  const result = await getActiveSessions();
-  if (!result.ok) {
-    throw new Error(result.error || "获取活跃 Session 失败");
-  }
-  return result.data;
+  const response = await sessionsClient.list({ state: "active" });
+  return ((response as { items?: unknown[] })?.items ?? []) as unknown as ActiveSessionInfo[];
 }
 
 interface ActiveSessionsListProps {
@@ -53,7 +51,7 @@ export function ActiveSessionsList({
   const tc = useTranslations("customs");
 
   const { data = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
-    queryKey: ["active-sessions"],
+    queryKey: sessionsKeys.list({ state: "active" }),
     queryFn: fetchActiveSessions,
     refetchInterval: REFRESH_INTERVAL,
   });

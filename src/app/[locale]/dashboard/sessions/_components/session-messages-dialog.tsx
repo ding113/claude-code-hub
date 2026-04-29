@@ -3,7 +3,6 @@
 import { Eye } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { getSessionMessages } from "@/actions/active-sessions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +12,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ApiError, localizeError } from "@/lib/api-client/v1/client";
+import { sessionsClient } from "@/lib/api-client/v1/sessions";
 
 interface SessionMessagesDialogProps {
   sessionId: string;
@@ -31,14 +32,16 @@ export function SessionMessagesDialog({ sessionId }: SessionMessagesDialogProps)
     setError(null);
 
     try {
-      const result = await getSessionMessages(sessionId);
-      if (result.ok) {
-        setMessages(result.data);
-      } else {
-        setError(result.error || t("status.fetchFailed"));
-      }
+      const data = await sessionsClient.messages(sessionId);
+      setMessages(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("status.unknownError"));
+      const message =
+        err instanceof ApiError
+          ? localizeError(err)
+          : err instanceof Error
+            ? err.message
+            : t("status.unknownError");
+      setError(message || t("status.fetchFailed"));
     } finally {
       setIsLoading(false);
     }

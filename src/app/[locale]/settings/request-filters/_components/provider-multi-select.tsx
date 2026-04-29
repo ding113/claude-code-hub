@@ -2,8 +2,7 @@
 
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
-import { listProvidersForFilterAction } from "@/actions/request-filters";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,6 +15,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useRequestFilterProviderOptions } from "@/lib/api-client/v1/request-filters/hooks";
 
 interface ProviderMultiSelectProps {
   selectedProviderIds: number[];
@@ -30,20 +30,8 @@ export function ProviderMultiSelect({
 }: ProviderMultiSelectProps) {
   const t = useTranslations("settings.requestFilters.dialog");
   const [open, setOpen] = useState(false);
-  const [providers, setProviders] = useState<Array<{ id: number; name: string }>>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadProviders() {
-      setLoading(true);
-      const result = await listProvidersForFilterAction();
-      if (result.ok) {
-        setProviders(result.data);
-      }
-      setLoading(false);
-    }
-    loadProviders();
-  }, []);
+  const { data, isLoading } = useRequestFilterProviderOptions();
+  const providers = data?.items ?? [];
 
   const toggleProvider = (providerId: number) => {
     if (selectedProviderIds.includes(providerId)) {
@@ -78,7 +66,7 @@ export function ProviderMultiSelect({
               </Badge>
             </div>
           )}
-          {loading ? (
+          {isLoading ? (
             <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
           ) : (
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -94,9 +82,9 @@ export function ProviderMultiSelect({
         <Command shouldFilter={true} className="bg-transparent">
           <CommandInput placeholder={t("searchProviders")} className="border-border" />
           <CommandList className="max-h-[300px] overflow-y-auto">
-            <CommandEmpty>{loading ? t("loading") : t("noProvidersFound")}</CommandEmpty>
+            <CommandEmpty>{isLoading ? t("loading") : t("noProvidersFound")}</CommandEmpty>
 
-            {!loading && (
+            {!isLoading && (
               <>
                 <CommandGroup>
                   <div className="flex gap-2 p-2">

@@ -1,15 +1,18 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { formatInTimeZone } from "date-fns-tz";
 import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { deleteErrorRuleAction, updateErrorRuleAction } from "@/actions/error-rules";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ApiError, localizeError } from "@/lib/api-client/v1/client";
+import { errorRulesClient } from "@/lib/api-client/v1/error-rules";
+import { errorRulesKeys } from "@/lib/api-client/v1/error-rules/keys";
 import { cn } from "@/lib/utils";
 import type { ErrorRule } from "@/repository/error-rules";
 import { EditRuleDialog } from "./edit-rule-dialog";
@@ -31,16 +34,23 @@ const categoryColors: Record<string, { bg: string; text: string }> = {
 export function RuleListTable({ rules }: RuleListTableProps) {
   const t = useTranslations("settings");
   const timeZone = useTimeZone() ?? "UTC";
+  const queryClient = useQueryClient();
   const [selectedRule, setSelectedRule] = useState<ErrorRule | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  const handleToggleEnabled = async (id: number, isEnabled: boolean) => {
-    const result = await updateErrorRuleAction(id, { isEnabled });
+  const surfaceError = (err: unknown, fallback: string) => {
+    const message =
+      err instanceof ApiError ? localizeError(err) : err instanceof Error ? err.message : fallback;
+    toast.error(message || fallback);
+  };
 
-    if (result.ok) {
+  const handleToggleEnabled = async (id: number, isEnabled: boolean) => {
+    try {
+      await errorRulesClient.update(id, { isEnabled });
+      await queryClient.invalidateQueries({ queryKey: errorRulesKeys.all });
       toast.success(isEnabled ? t("errorRules.enable") : t("errorRules.disable"));
-    } else {
-      toast.error(result.error);
+    } catch (err) {
+      surfaceError(err, t("errorRules.editFailed"));
     }
   };
 
@@ -54,12 +64,12 @@ export function RuleListTable({ rules }: RuleListTableProps) {
       return;
     }
 
-    const result = await deleteErrorRuleAction(id);
-
-    if (result.ok) {
+    try {
+      await errorRulesClient.remove(id);
+      await queryClient.invalidateQueries({ queryKey: errorRulesKeys.all });
       toast.success(t("errorRules.deleteSuccess"));
-    } else {
-      toast.error(result.error);
+    } catch (err) {
+      surfaceError(err, t("errorRules.editFailed"));
     }
   };
 

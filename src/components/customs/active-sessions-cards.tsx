@@ -3,12 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ChevronRight, Clock, Cpu, Key, Loader2, User, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getActiveSessions } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "@/i18n/routing";
+import { sessionsClient } from "@/lib/api-client/v1/sessions";
+import { sessionsKeys } from "@/lib/api-client/v1/sessions/keys";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -17,11 +18,10 @@ import type { ActiveSessionInfo } from "@/types/session";
 const REFRESH_INTERVAL = 5000;
 
 async function fetchActiveSessions(): Promise<ActiveSessionInfo[]> {
-  const result = await getActiveSessions();
-  if (!result.ok) {
-    throw new Error(result.error || "Failed to fetch active sessions");
-  }
-  return result.data;
+  const response = await sessionsClient.list({ state: "active" });
+  // The v1 sessions list is passthrough; legacy ActiveSessionInfo fields (e.g. costUsd as string) are
+  // preserved verbatim. Cast back to the legacy shape so downstream code keeps working.
+  return ((response as { items?: unknown[] })?.items ?? []) as unknown as ActiveSessionInfo[];
 }
 
 function formatDuration(durationMs: number | undefined): string {
@@ -144,7 +144,7 @@ export function ActiveSessionsCards({ currencyCode = "USD", className }: ActiveS
   const tc = useTranslations("customs");
 
   const { data = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
-    queryKey: ["active-sessions"],
+    queryKey: sessionsKeys.list({ state: "active" }),
     queryFn: fetchActiveSessions,
     refetchInterval: REFRESH_INTERVAL,
   });

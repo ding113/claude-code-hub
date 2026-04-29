@@ -3,7 +3,6 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { updateSensitiveWordAction } from "@/actions/sensitive-words";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useUpdateSensitiveWord } from "@/lib/api-client/v1/sensitive-words/hooks";
 import type { SensitiveWord } from "@/repository/sensitive-words";
 
 interface EditWordDialogProps {
@@ -33,10 +33,10 @@ interface EditWordDialogProps {
 
 export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps) {
   const t = useTranslations("settings");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [wordText, setWordText] = useState("");
   const [matchType, setMatchType] = useState<string>("");
   const [description, setDescription] = useState("");
+  const { mutateAsync, isPending } = useUpdateSensitiveWord(word.id);
 
   // 当 word 改变时更新表单
   useEffect(() => {
@@ -55,25 +55,16 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
       return;
     }
 
-    setIsSubmitting(true);
-
     try {
-      const result = await updateSensitiveWordAction(word.id, {
+      await mutateAsync({
         word: wordText.trim(),
-        matchType,
+        matchType: matchType as "contains" | "exact" | "regex",
         description: description.trim() || undefined,
       });
-
-      if (result.ok) {
-        toast.success(t("sensitiveWords.editSuccess"));
-        onOpenChange(false);
-      } else {
-        toast.error(result.error);
-      }
+      toast.success(t("sensitiveWords.editSuccess"));
+      onOpenChange(false);
     } catch {
-      toast.error(t("sensitiveWords.editFailed"));
-    } finally {
-      setIsSubmitting(false);
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 
@@ -135,12 +126,12 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
+              disabled={isPending}
             >
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? t("sensitiveWords.dialog.saving") : t("common.save")}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? t("sensitiveWords.dialog.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </form>

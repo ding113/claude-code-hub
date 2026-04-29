@@ -4,7 +4,6 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { createSensitiveWordAction } from "@/actions/sensitive-words";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,14 +24,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useCreateSensitiveWord } from "@/lib/api-client/v1/sensitive-words/hooks";
 
 export function AddWordDialog() {
   const t = useTranslations("settings");
   const [open, setOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [word, setWord] = useState("");
   const [matchType, setMatchType] = useState<"contains" | "exact" | "regex">("contains");
   const [description, setDescription] = useState("");
+  const { mutateAsync, isPending } = useCreateSensitiveWord();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,29 +42,19 @@ export function AddWordDialog() {
       return;
     }
 
-    setIsSubmitting(true);
-
     try {
-      const result = await createSensitiveWordAction({
+      await mutateAsync({
         word: word.trim(),
         matchType,
         description: description.trim() || undefined,
       });
-
-      if (result.ok) {
-        toast.success(t("sensitiveWords.addSuccess"));
-        setOpen(false);
-        // 重置表单
-        setWord("");
-        setMatchType("contains");
-        setDescription("");
-      } else {
-        toast.error(result.error);
-      }
+      toast.success(t("sensitiveWords.addSuccess"));
+      setOpen(false);
+      setWord("");
+      setMatchType("contains");
+      setDescription("");
     } catch {
-      toast.error(t("sensitiveWords.addFailed"));
-    } finally {
-      setIsSubmitting(false);
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 
@@ -133,12 +123,12 @@ export function AddWordDialog() {
               type="button"
               variant="outline"
               onClick={() => setOpen(false)}
-              disabled={isSubmitting}
+              disabled={isPending}
             >
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? t("sensitiveWords.dialog.creating") : t("common.create")}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? t("sensitiveWords.dialog.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>

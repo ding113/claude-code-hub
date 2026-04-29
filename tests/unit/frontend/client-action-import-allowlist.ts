@@ -48,11 +48,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
   // Task 16: users / keys / providers / model-prices / admin-user-insights
   // ---------------------------------------------------------------------
   {
-    file: "src/app/[locale]/dashboard/_components/rate-limit-top-users.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
     file: "src/app/[locale]/dashboard/_components/user/batch-edit/batch-edit-dialog.tsx",
     module: "keys",
     task: 16,
@@ -98,21 +93,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 16,
   },
   {
-    file: "src/app/[locale]/dashboard/_components/user/forms/provider-group-select.tsx",
-    module: "providers",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/forms/user-form.tsx",
-    module: "providers",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/forms/user-form.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
     file: "src/app/[locale]/dashboard/_components/user/hooks/use-model-suggestions.ts",
     module: "providers",
     task: 16,
@@ -140,36 +120,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
   {
     file: "src/app/[locale]/dashboard/_components/user/user-management-table.tsx",
     module: "users",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/leaderboard/user/[userId]/_components/filters/user-insights-filter-bar.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/leaderboard/user/[userId]/_components/filters/user-insights-filter-bar.tsx",
-    module: "providers",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/leaderboard/user/[userId]/_components/user-key-trend-chart.tsx",
-    module: "admin-user-insights",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/leaderboard/user/[userId]/_components/user-model-breakdown.tsx",
-    module: "admin-user-insights",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/leaderboard/user/[userId]/_components/user-overview-cards.tsx",
-    module: "admin-user-insights",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/leaderboard/user/[userId]/_components/user-provider-breakdown.tsx",
-    module: "admin-user-insights",
     task: 16,
   },
   {
@@ -352,16 +302,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 17,
   },
   {
-    file: "src/app/[locale]/dashboard/rate-limits/_components/rate-limit-filters.tsx",
-    module: "providers",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/dashboard/rate-limits/_components/rate-limit-filters.tsx",
-    module: "users",
-    task: 17,
-  },
-  {
     file: "src/app/[locale]/settings/client-versions/_components/client-version-toggle.tsx",
     module: "system-config",
     task: 17,
@@ -369,31 +309,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
   {
     file: "src/app/[locale]/settings/config/_components/system-settings-form.tsx",
     module: "system-config",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/error-rules/_components/add-rule-dialog.tsx",
-    module: "error-rules",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/error-rules/_components/edit-rule-dialog.tsx",
-    module: "error-rules",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/error-rules/_components/error-rule-tester.tsx",
-    module: "error-rules",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/error-rules/_components/refresh-cache-button.tsx",
-    module: "error-rules",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/error-rules/_components/rule-list-table.tsx",
-    module: "error-rules",
     task: 17,
   },
   {
@@ -422,46 +337,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 17,
   },
   {
-    file: "src/app/[locale]/settings/request-filters/_components/filter-dialog.tsx",
-    module: "request-filters",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/request-filters/_components/filter-table.tsx",
-    module: "request-filters",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/request-filters/_components/group-multi-select.tsx",
-    module: "request-filters",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/request-filters/_components/provider-multi-select.tsx",
-    module: "request-filters",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/sensitive-words/_components/add-word-dialog.tsx",
-    module: "sensitive-words",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/sensitive-words/_components/edit-word-dialog.tsx",
-    module: "sensitive-words",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/sensitive-words/_components/refresh-cache-button.tsx",
-    module: "sensitive-words",
-    task: 17,
-  },
-  {
-    file: "src/app/[locale]/settings/sensitive-words/_components/word-list-table.tsx",
-    module: "sensitive-words",
-    task: 17,
-  },
-  {
     file: "src/app/[locale]/settings/status-page/_components/public-status-settings-form.tsx",
     module: "public-status",
     task: 17,
@@ -478,16 +353,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
   {
     file: "src/app/[locale]/dashboard/logs/_components/error-details-dialog/index.tsx",
     module: "active-sessions",
-    task: 18,
-  },
-  {
-    file: "src/app/[locale]/dashboard/logs/_components/filters/identity-filters.tsx",
-    module: "keys",
-    task: 18,
-  },
-  {
-    file: "src/app/[locale]/dashboard/logs/_components/filters/identity-filters.tsx",
-    module: "users",
     task: 18,
   },
   {
@@ -543,37 +408,7 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 18,
   },
   {
-    file: "src/app/[locale]/dashboard/sessions/_components/active-sessions-client.tsx",
-    module: "active-sessions",
-    task: 18,
-  },
-  {
-    file: "src/app/[locale]/dashboard/sessions/_components/active-sessions-table.tsx",
-    module: "active-sessions",
-    task: 18,
-  },
-  {
-    file: "src/app/[locale]/dashboard/sessions/_components/session-messages-dialog.tsx",
-    module: "active-sessions",
-    task: 18,
-  },
-  {
-    file: "src/app/[locale]/dashboard/sessions/[sessionId]/messages/_components/request-list-sidebar.tsx",
-    module: "active-sessions",
-    task: 18,
-  },
-  {
     file: "src/app/[locale]/dashboard/sessions/[sessionId]/messages/_components/session-messages-client.tsx",
-    module: "active-sessions",
-    task: 18,
-  },
-  {
-    file: "src/components/customs/active-sessions-cards.tsx",
-    module: "active-sessions",
-    task: 18,
-  },
-  {
-    file: "src/components/customs/active-sessions-list.tsx",
     module: "active-sessions",
     task: 18,
   },

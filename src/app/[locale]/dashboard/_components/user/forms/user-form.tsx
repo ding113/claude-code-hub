@@ -1,21 +1,18 @@
 "use client";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { getAvailableProviderGroups } from "@/actions/providers";
-import { addUser, editUser } from "@/actions/users";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { InlineWarning } from "@/components/ui/inline-warning";
 import { Switch } from "@/components/ui/switch";
+import { useCreateUser, useUpdateUser, useUserKeyGroups } from "@/lib/api-client/v1/users/hooks";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { formatDateToLocalYmd, parseYmdToLocalEndOfDay } from "@/lib/utils/date-input";
-import { getErrorMessage } from "@/lib/utils/error-messages";
 import { setZodErrorMap } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema } from "@/lib/validation/schemas";
 import { AccessRestrictionsSection } from "./access-restrictions-section";
@@ -52,9 +49,6 @@ interface UserFormProps {
 }
 
 export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
-  const [isPending, startTransition] = useTransition();
-  const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
-  const router = useRouter();
   const isEdit = Boolean(user?.id);
   const isAdmin = currentUser?.role === "admin";
 
@@ -70,13 +64,12 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
   }, [tErrors]);
 
   // 加载供应商分组建议
-  useEffect(() => {
-    getAvailableProviderGroups()
-      .then(setProviderGroupSuggestions)
-      .catch((err) => {
-        console.error("[UserForm] Failed to load provider groups:", err);
-      });
-  }, []);
+  const { data: keyGroupsData } = useUserKeyGroups();
+  const providerGroupSuggestions = useMemo(() => keyGroupsData?.items ?? [], [keyGroupsData]);
+
+  const createMutation = useCreateUser();
+  const updateMutation = useUpdateUser(user?.id ?? 0);
+  const isPending = createMutation.isPending || updateMutation.isPending;
 
   const form = useZodForm({
     schema: UserFormSchema, // 使用前端表单的 schema（接受字符串日期）
@@ -99,73 +92,45 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       allowedModels: user?.allowedModels || [],
     },
     onSubmit: async (data) => {
-      startTransition(async () => {
-        try {
-          const expiresAt = data.expiresAt ? parseYmdToLocalEndOfDay(data.expiresAt) : null;
-          if (data.expiresAt && !expiresAt) {
-            toast.error(tErrors("INVALID_FORMAT", { field: tErrors("EXPIRES_AT_FIELD") }));
-            return;
-          }
+      const expiresAt = data.expiresAt ? parseYmdToLocalEndOfDay(data.expiresAt) : null;
+      if (data.expiresAt && !expiresAt) {
+        toast.error(tErrors("INVALID_FORMAT", { field: tErrors("EXPIRES_AT_FIELD") }));
+        return;
+      }
 
-          let res;
-          if (isEdit && user?.id) {
-            res = await editUser(user.id, {
-              name: data.name,
-              note: data.note,
-              rpm: data.rpm,
-              dailyQuota: data.dailyQuota,
-              providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
-              tags: data.tags,
-              limit5hUsd: data.limit5hUsd,
-              limitWeeklyUsd: data.limitWeeklyUsd,
-              limitMonthlyUsd: data.limitMonthlyUsd,
-              limitTotalUsd: data.limitTotalUsd,
-              limitConcurrentSessions: data.limitConcurrentSessions,
-              isEnabled: data.isEnabled,
-              expiresAt,
-              allowedClients: data.allowedClients,
-              blockedClients: data.blockedClients,
-              allowedModels: data.allowedModels,
-            });
-          } else {
-            res = await addUser({
-              name: data.name,
-              note: data.note,
-              rpm: data.rpm,
-              dailyQuota: data.dailyQuota,
-              providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
-              tags: data.tags,
-              limit5hUsd: data.limit5hUsd,
-              limitWeeklyUsd: data.limitWeeklyUsd,
-              limitMonthlyUsd: data.limitMonthlyUsd,
-              limitTotalUsd: data.limitTotalUsd,
-              limitConcurrentSessions: data.limitConcurrentSessions,
-              isEnabled: data.isEnabled,
-              expiresAt,
-              allowedClients: data.allowedClients,
-              blockedClients: data.blockedClients,
-              allowedModels: data.allowedModels,
-            });
-          }
+      const sharedPayload = {
+        name: data.name,
+        note: data.note,
+        rpm: data.rpm ?? undefined,
+        dailyQuota: data.dailyQuota,
+        providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
+        tags: data.tags,
+        limit5hUsd: data.limit5hUsd,
+        limitWeeklyUsd: data.limitWeeklyUsd,
+        limitMonthlyUsd: data.limitMonthlyUsd,
+        limitTotalUsd: data.limitTotalUsd,
+        limitConcurrentSessions: data.limitConcurrentSessions,
+        isEnabled: data.isEnabled,
+        expiresAt,
+        allowedClients: data.allowedClients,
+        blockedClients: data.blockedClients,
+        allowedModels: data.allowedModels,
+      };
 
-          if (!res.ok) {
-            // Translate error code or use fallback error message
-            const msg = res.errorCode
-              ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
-              : res.error || tNotifications(isEdit ? "update_failed" : "create_failed");
-            toast.error(msg);
-            return;
-          }
-
-          // Show success notification
-          toast.success(tNotifications(isEdit ? "user_updated" : "user_created"));
-          onSuccess?.();
-          router.refresh();
-        } catch (err) {
-          console.error(`${isEdit ? "编辑" : "添加"}用户失败:`, err);
-          toast.error(tNotifications(isEdit ? "update_failed" : "create_failed"));
+      try {
+        if (isEdit && user?.id) {
+          await updateMutation.mutateAsync(sharedPayload);
+        } else {
+          // CreateUserSchema requires reset-mode defaults; backend applies defaults when omitted.
+          await createMutation.mutateAsync(
+            sharedPayload as unknown as Parameters<typeof createMutation.mutateAsync>[0]
+          );
         }
-      });
+        toast.success(tNotifications(isEdit ? "user_updated" : "user_created"));
+        onSuccess?.();
+      } catch {
+        // useApiMutation already surfaces toast errors via localizeError
+      }
     },
   });
 

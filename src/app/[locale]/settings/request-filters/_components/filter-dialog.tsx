@@ -1,11 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { createRequestFilterAction, updateRequestFilterAction } from "@/actions/request-filters";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +23,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  useCreateRequestFilter,
+  useUpdateRequestFilter,
+} from "@/lib/api-client/v1/request-filters/hooks";
 import type { FilterOperation } from "@/lib/request-filter-types";
 import { cn } from "@/lib/utils";
 import type {
@@ -119,9 +121,10 @@ function DarkTextarea({
 export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Props) {
   const t = useTranslations("settings.requestFilters");
   const tCommon = useTranslations("settings");
-  const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(open ?? false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const createMutation = useCreateRequestFilter();
+  const updateMutation = useUpdateRequestFilter(filter?.id ?? 0);
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const [name, setName] = useState(filter?.name ?? "");
   const [scope, setScope] = useState<RequestFilter["scope"]>(filter?.scope ?? "header");
   const [action, setAction] = useState<RequestFilter["action"]>(filter?.action ?? "remove");
@@ -224,8 +227,6 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
       return;
     }
 
-    setIsSubmitting(true);
-
     let parsedReplacement: unknown = null;
     if (showReplacement) {
       const raw = replacement.trim();
@@ -243,31 +244,29 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
       const raw = operationsJson.trim();
       if (!raw) {
         toast.error(t("dialog.validation.operationsRequired"));
-        setIsSubmitting(false);
         return;
       }
       try {
         parsedOperations = JSON.parse(raw);
         if (!Array.isArray(parsedOperations)) {
           toast.error(t("dialog.validation.invalidOperations"));
-          setIsSubmitting(false);
           return;
         }
       } catch {
         toast.error(t("dialog.validation.invalidOperations"));
-        setIsSubmitting(false);
         return;
       }
     }
 
     try {
+      const matchTypeValue =
+        showMatchType && ruleMode === "simple" ? (matchType ?? "contains") : undefined;
       const payload = {
         name: name.trim(),
         description: description.trim() || undefined,
         scope,
         action,
         target: ruleMode === "simple" ? target.trim() : "",
-        matchType: showMatchType && ruleMode === "simple" ? (matchType ?? "contains") : null,
         replacement: showReplacement && ruleMode === "simple" ? parsedReplacement : null,
         priority,
         isEnabled,
@@ -279,23 +278,22 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
         operations: ruleMode === "advanced" ? parsedOperations : null,
       };
 
-      const result =
-        mode === "create"
-          ? await createRequestFilterAction(payload)
-          : await updateRequestFilterAction(filter!.id, payload);
-
-      if (result.ok) {
-        toast.success(mode === "create" ? t("addSuccess") : t("editSuccess"));
-        setDialogOpen(false);
-        onOpenChange?.(false);
-        router.refresh();
+      if (mode === "create") {
+        await createMutation.mutateAsync({
+          ...payload,
+          matchType: matchTypeValue ?? null,
+        });
       } else {
-        toast.error(result.error);
+        await updateMutation.mutateAsync({
+          ...payload,
+          matchType: matchTypeValue,
+        });
       }
+      toast.success(mode === "create" ? t("addSuccess") : t("editSuccess"));
+      setDialogOpen(false);
+      onOpenChange?.(false);
     } catch {
-      toast.error(mode === "create" ? t("addFailed") : t("editFailed"));
-    } finally {
-      setIsSubmitting(false);
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 

@@ -3,7 +3,6 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { updateErrorRuleAction } from "@/actions/error-rules";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUpdateErrorRule } from "@/lib/api-client/v1/error-rules/hooks";
 import { cn } from "@/lib/utils";
 import type { ErrorOverrideResponse, ErrorRule } from "@/repository/error-rules";
 import { OverrideSection } from "./override-section";
@@ -34,13 +34,13 @@ interface EditRuleDialogProps {
 
 export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps) {
   const t = useTranslations("settings");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [pattern, setPattern] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [enableOverride, setEnableOverride] = useState(false);
   const [overrideResponse, setOverrideResponse] = useState("");
   const [overrideStatusCode, setOverrideStatusCode] = useState<string>("");
+  const { mutateAsync, isPending } = useUpdateErrorRule(rule.id);
 
   // Update form when rule changes
   useEffect(() => {
@@ -106,10 +106,8 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
       }
     }
 
-    setIsSubmitting(true);
-
     try {
-      const result = await updateErrorRuleAction(rule.id, {
+      await mutateAsync({
         pattern: pattern.trim(),
         category: category as
           | "prompt_limit"
@@ -123,17 +121,10 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
         overrideResponse: parsedOverrideResponse,
         overrideStatusCode: parsedStatusCode,
       });
-
-      if (result.ok) {
-        toast.success(t("errorRules.editSuccess"));
-        onOpenChange(false);
-      } else {
-        toast.error(result.error);
-      }
+      toast.success(t("errorRules.editSuccess"));
+      onOpenChange(false);
     } catch {
-      toast.error(t("errorRules.editFailed"));
-    } finally {
-      setIsSubmitting(false);
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 
@@ -262,17 +253,13 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
               type="button"
               variant="ghost"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
+              disabled={isPending}
               className="hover:bg-muted"
             >
               {t("common.cancel")}
             </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isSubmitting ? t("errorRules.dialog.saving") : t("common.save")}
+            <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90">
+              {isPending ? t("errorRules.dialog.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </form>

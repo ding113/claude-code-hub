@@ -4,8 +4,6 @@ import { format } from "date-fns";
 import { Calendar, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import { getProviders } from "@/actions/providers";
-import { searchUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useProvidersList } from "@/lib/api-client/v1/providers/hooks";
+import { useUsersList } from "@/lib/api-client/v1/users/hooks";
 import type { RateLimitEventFilters, RateLimitType } from "@/types/statistics";
 
 export interface RateLimitFiltersProps {
@@ -55,70 +55,24 @@ export function RateLimitFilters({
   const [startTime, setStartTime] = React.useState<Date | undefined>(initialFilters.start_time);
   const [endTime, setEndTime] = React.useState<Date | undefined>(initialFilters.end_time);
 
-  const [users, setUsers] = React.useState<Array<{ id: number; name: string }>>([]);
-  const [providers, setProviders] = React.useState<Array<{ id: number; name: string }>>([]);
-  const [loadingUsers, setLoadingUsers] = React.useState(true);
-  const [loadingProviders, setLoadingProviders] = React.useState(true);
-  const [usersLoadError, setUsersLoadError] = React.useState(false);
-  const [providersLoadError, setProvidersLoadError] = React.useState(false);
-
-  // 加载用户列表
-  React.useEffect(() => {
-    let cancelled = false;
-
-    void searchUsers()
-      .then((result) => {
-        if (!cancelled) {
-          setUsers(result.ok ? result.data : []);
-          setUsersLoadError(!result.ok);
-        }
-      })
-      .catch((error) => {
-        console.error("RateLimitFilters: failed to load users", error);
-        if (!cancelled) {
-          setUsers([]);
-          setUsersLoadError(true);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingUsers(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // 加载供应商列表
-  React.useEffect(() => {
-    let cancelled = false;
-
-    void getProviders()
-      .then((providerList) => {
-        if (!cancelled) {
-          setProviders(providerList);
-          setProvidersLoadError(false);
-        }
-      })
-      .catch((error) => {
-        console.error("RateLimitFilters: failed to load providers", error);
-        if (!cancelled) {
-          setProviders([]);
-          setProvidersLoadError(true);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingProviders(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data: usersResponse, isLoading: loadingUsers, isError: usersLoadError } = useUsersList();
+  const {
+    data: providersResponse,
+    isLoading: loadingProviders,
+    isError: providersLoadError,
+  } = useProvidersList();
+  const users = React.useMemo(
+    () => usersResponse?.items?.map((u) => ({ id: u.id, name: u.name })) ?? [],
+    [usersResponse]
+  );
+  const providers = React.useMemo(
+    () =>
+      (providersResponse?.items ?? []).map((p) => {
+        const provider = p as { id: number; name: string };
+        return { id: provider.id, name: provider.name };
+      }),
+    [providersResponse]
+  );
 
   // 应用过滤器
   const handleApply = () => {

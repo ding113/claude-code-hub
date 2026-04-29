@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { getProviderGroupsWithCount } from "@/actions/providers";
 import { TagInputField } from "@/components/form/form-field";
 import type { TagInputSuggestion } from "@/components/ui/tag-input";
+import { useProviderGroupsList } from "@/lib/api-client/v1/providers/hooks";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 
@@ -36,6 +36,11 @@ function getTranslation(translations: Record<string, unknown>, path: string, fal
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
+interface GroupCountItem {
+  group: string;
+  providerCount: number;
+}
+
 export function ProviderGroupSelect({
   value,
   onChange,
@@ -43,49 +48,20 @@ export function ProviderGroupSelect({
   showProviderCount = true,
   translations,
 }: ProviderGroupSelectProps) {
-  const [groups, setGroups] = useState<Array<{ group: string; providerCount: number }>>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { data, isLoading, isError } = useProviderGroupsList(
+    disabled ? undefined : { include: "count" }
+  );
+  const groups = useMemo(() => (data?.items ?? []) as unknown as GroupCountItem[], [data]);
+
   const loadFailedText = useMemo(
     () => getTranslation(translations, "errors.loadFailed", "Load failed"),
     [translations]
   );
 
-  useEffect(() => {
-    let alive = true;
-    if (disabled) {
-      setGroups([]);
-      setIsLoading(false);
-      return () => {
-        alive = false;
-      };
-    }
-    setIsLoading(true);
-    getProviderGroupsWithCount()
-      .then((res) => {
-        if (!alive) return;
-        if (res.ok) {
-          setGroups(res.data || []);
-          return;
-        }
-        console.error("获取供应商分组统计失败:", res.error);
-        toast.error(res.error || loadFailedText);
-        setGroups([]);
-      })
-      .catch((err) => {
-        if (!alive) return;
-        console.error("获取供应商分组统计失败:", err);
-        toast.error(loadFailedText);
-        setGroups([]);
-      })
-      .finally(() => {
-        if (!alive) return;
-        setIsLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [loadFailedText, disabled]);
+  // Surface load errors via toast (matches legacy UX).
+  if (isError) {
+    toast.error(loadFailedText);
+  }
 
   const suggestions: TagInputSuggestion[] = useMemo(() => {
     if (!showProviderCount) return groups.map((g) => g.group);

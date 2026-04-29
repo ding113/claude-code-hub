@@ -4,7 +4,6 @@ import { Circle, Eye, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { terminateActiveSession, terminateActiveSessionsBatch } from "@/actions/active-sessions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +28,8 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
+import { ApiError, localizeError } from "@/lib/api-client/v1/client";
+import { sessionsClient } from "@/lib/api-client/v1/sessions";
 import { getSessionDisplayStatus, SESSION_DISPLAY_STATUS } from "@/lib/session-status";
 import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -170,18 +171,20 @@ export function ActiveSessionsTable({
     setSelectedSessionIds(sortedSessions.map((session) => session.sessionId));
   };
 
+  const surfaceError = (err: unknown, fallback: string) => {
+    const message =
+      err instanceof ApiError ? localizeError(err) : err instanceof Error ? err.message : fallback;
+    toast.error(message || fallback);
+  };
+
   const handleTerminateSession = async (sessionId: string) => {
     setIsTerminatingSingle(true);
     try {
-      const result = await terminateActiveSession(sessionId);
-      if (result.ok) {
-        toast.success(t("actions.terminateSuccess"));
-        onSessionTerminated?.();
-      } else {
-        toast.error(result.error || t("actions.terminateFailed"));
-      }
-    } catch (_error) {
-      toast.error(t("actions.terminateFailed"));
+      await sessionsClient.terminate(sessionId);
+      toast.success(t("actions.terminateSuccess"));
+      onSessionTerminated?.();
+    } catch (err) {
+      surfaceError(err, t("actions.terminateFailed"));
     } finally {
       setIsTerminatingSingle(false);
       setSessionToTerminate(null);
@@ -198,13 +201,16 @@ export function ActiveSessionsTable({
     setTerminatingSessionIds(new Set(selectedSessionIds));
     setIsBatchTerminating(true);
     try {
-      const result = await terminateActiveSessionsBatch(selectedSessionIds);
-      if (!result.ok) {
-        toast.error(result.error || t("actions.terminateFailed"));
-        return;
-      }
+      // The v1 batchTerminate response is passthrough; legacy summary fields are preserved.
+      const summary = (await sessionsClient.batchTerminate({
+        sessionIds: selectedSessionIds,
+      })) as unknown as {
+        successCount: number;
+        unauthorizedCount: number;
+        missingCount: number;
+        allowedFailedCount: number;
+      } | null;
 
-      const summary = result.data;
       if (!summary) {
         toast.error(t("actions.terminateFailed"));
         return;
@@ -233,8 +239,8 @@ export function ActiveSessionsTable({
       }
 
       setSelectedSessionIds([]);
-    } catch (_error) {
-      toast.error(t("actions.terminateFailed"));
+    } catch (err) {
+      surfaceError(err, t("actions.terminateFailed"));
     } finally {
       setIsBatchTerminating(false);
       setTerminatingSessionIds(new Set());
