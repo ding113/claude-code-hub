@@ -1,10 +1,10 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 import { addDays } from "date-fns";
 import { Loader2, MoreVertical, SquarePen, Trash, Users } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { renewUser, toggleUserEnabled } from "@/actions/users";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,9 @@ import {
 import { Label } from "@/components/ui/label";
 import { ListContainer, ListItem, type ListItemData } from "@/components/ui/list";
 import { Switch } from "@/components/ui/switch";
+import { ApiError, localizeError } from "@/lib/api-client/v1/client";
+import { usersClient } from "@/lib/api-client/v1/users";
+import { usersKeys } from "@/lib/api-client/v1/users/keys";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 import type { User, UserDisplay } from "@/types/user";
 import { AddUserDialog } from "./add-user-dialog";
@@ -47,6 +50,13 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
   const isAdmin = currentUser?.role === "admin";
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
+  const queryClient = useQueryClient();
+
+  const surfaceError = useCallback((err: unknown, fallback: string) => {
+    const message =
+      err instanceof ApiError ? localizeError(err) : err instanceof Error ? err.message : fallback;
+    toast.error(message || fallback);
+  }, []);
 
   // 自定义续期对话框状态
   const [customRenewDialog, setCustomRenewDialog] = useState<{
@@ -105,18 +115,15 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
     startTransition(async () => {
       setPendingUserId(userId);
       try {
-        const res = await renewUser(userId, {
+        await usersClient.renew(userId, {
           expiresAt: targetDate.toISOString(),
           enableUser,
         });
-        if (!res.ok) {
-          toast.error(res.error || t("actions.failed"));
-          return;
-        }
+        await queryClient.invalidateQueries({ queryKey: usersKeys.all });
         toast.success(t("actions.success"));
       } catch (error) {
         console.error("[UserList] renewUser failed", error);
-        toast.error(t("actions.failed"));
+        surfaceError(error, t("actions.failed"));
       } finally {
         setPendingUserId(null);
       }
@@ -128,15 +135,12 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
     startTransition(async () => {
       setPendingUserId(user.id);
       try {
-        const res = await toggleUserEnabled(user.id, enabled);
-        if (!res.ok) {
-          toast.error(res.error || t("actions.failed"));
-          return;
-        }
+        await usersClient.enable(user.id, { enabled });
+        await queryClient.invalidateQueries({ queryKey: usersKeys.all });
         toast.success(t("actions.success"));
       } catch (error) {
         console.error("[UserList] toggleUserEnabled failed", error);
-        toast.error(t("actions.failed"));
+        surfaceError(error, t("actions.failed"));
       } finally {
         setPendingUserId(null);
       }

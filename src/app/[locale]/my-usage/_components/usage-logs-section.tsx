@@ -3,12 +3,6 @@
 import { ChevronDown, Filter, RefreshCw, ScrollText } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  getMyAvailableEndpoints,
-  getMyAvailableModels,
-  getMyUsageLogsBatchFull,
-  getMyUsageMetadata,
-} from "@/actions/my-usage";
 import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
 import {
   type LogsFetchFn,
@@ -27,10 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { meClient } from "@/lib/api-client/v1/me";
 import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { parseDateRangeToTimestamps } from "@/lib/utils/date-range";
+import type { MyUsageMetadata } from "@/types/my-usage";
 import type { BillingModelSource } from "@/types/system-config";
 
 /** Columns always hidden on my-usage page (user/key/provider not available) */
@@ -52,7 +48,31 @@ interface Filters {
   minRetryCount?: number;
 }
 
-const myUsageFetchFn: LogsFetchFn = (params) => getMyUsageLogsBatchFull(params);
+// Cast through unknown because MyUsage logs have a slimmer row shape (no
+// internal user/key/provider columns) that the shared VirtualizedLogsTable
+// type omits via `MY_USAGE_HIDDEN_COLUMNS`. Server enforces visibility.
+const myUsageFetchFn: LogsFetchFn = async (params) => {
+  try {
+    const { cursor, ...rest } = params;
+    const queryParams: Record<string, string | number | boolean | undefined> = {
+      ...rest,
+      cursorCreatedAt: cursor?.createdAt,
+      cursorId: cursor?.id,
+    };
+    const data = (await meClient.usageLogsFull(queryParams)) as unknown;
+    return {
+      ok: true,
+      data: data as unknown as Awaited<ReturnType<LogsFetchFn>> extends { ok: true; data: infer D }
+        ? D
+        : never,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Failed to load usage logs",
+    };
+  }
+};
 
 export function UsageLogsSection({
   autoRefreshSeconds,
@@ -76,28 +96,32 @@ export function UsageLogsSection({
     setIsModelsLoading(true);
     setIsEndpointsLoading(true);
 
-    void getMyAvailableModels()
-      .then((modelsResult) => {
-        if (modelsResult.ok && modelsResult.data) {
-          setModels(modelsResult.data);
-        }
+    void meClient
+      .models()
+      .then((data) => {
+        const list = (data as unknown as { items?: string[] }).items;
+        if (Array.isArray(list)) setModels(list);
       })
+      .catch(() => undefined)
       .finally(() => setIsModelsLoading(false));
 
-    void getMyAvailableEndpoints()
-      .then((endpointsResult) => {
-        if (endpointsResult.ok && endpointsResult.data) {
-          setEndpoints(endpointsResult.data);
-        }
+    void meClient
+      .endpoints()
+      .then((data) => {
+        const list = (data as unknown as { items?: string[] }).items;
+        if (Array.isArray(list)) setEndpoints(list);
       })
+      .catch(() => undefined)
       .finally(() => setIsEndpointsLoading(false));
 
-    void getMyUsageMetadata().then((metaResult) => {
-      if (metaResult.ok && metaResult.data) {
-        setCurrencyCode(metaResult.data.currencyCode);
-        setBillingModelSource(metaResult.data.billingModelSource);
-      }
-    });
+    void meClient
+      .metadata()
+      .then((data) => {
+        const meta = data as unknown as MyUsageMetadata;
+        if (meta?.currencyCode) setCurrencyCode(meta.currencyCode);
+        if (meta?.billingModelSource) setBillingModelSource(meta.billingModelSource);
+      })
+      .catch(() => undefined);
   }, []);
 
   // Convert date-based filters to VirtualizedLogsTable format (timestamps)

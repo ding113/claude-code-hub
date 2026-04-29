@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { toast } from "sonner";
-import { getUserStatistics } from "@/actions/statistics";
+import { dashboardClient } from "@/lib/api-client/v1/dashboard";
+import { dashboardKeys } from "@/lib/api-client/v1/dashboard/keys";
 import type { CurrencyCode } from "@/lib/utils";
 import type { TimeRange, UserStatisticsData } from "@/types/statistics";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
@@ -27,20 +28,12 @@ export function StatisticsWrapper({ initialData, currencyCode = "USD" }: Statist
     initialData?.timeRange ?? DEFAULT_TIME_RANGE
   );
 
-  const fetchStatistics = React.useCallback(
-    async (timeRange: TimeRange): Promise<UserStatisticsData> => {
-      const result = await getUserStatistics(timeRange);
-      if (!result.ok) {
-        throw new Error(result.error || t("states.fetchFailed"));
-      }
-      return result.data;
-    },
-    [t]
-  );
-
   const { data, error } = useQuery<UserStatisticsData, Error>({
-    queryKey: ["user-statistics", timeRange],
-    queryFn: () => fetchStatistics(timeRange),
+    queryKey: dashboardKeys.statistics(timeRange),
+    queryFn: async () => {
+      const result = (await dashboardClient.statistics(timeRange)) as unknown;
+      return result as UserStatisticsData;
+    },
     initialData,
     refetchInterval: STATISTICS_REFRESH_INTERVAL,
   });
@@ -48,9 +41,9 @@ export function StatisticsWrapper({ initialData, currencyCode = "USD" }: Statist
   // 错误提示
   React.useEffect(() => {
     if (error) {
-      toast.error(error.message);
+      toast.error(error.message || t("states.fetchFailed"));
     }
-  }, [error]);
+  }, [error, t]);
 
   // 处理时间范围变化
   const handleTimeRangeChange = React.useCallback((newTimeRange: TimeRange) => {

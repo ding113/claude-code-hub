@@ -2,9 +2,23 @@
 
 import { useCallback, useState, useTransition } from "react";
 import { toast } from "sonner";
-import type { ActionResult } from "@/actions/types";
 import { isNetworkError } from "@/lib/utils/error-detection";
 import { getSafeErrorToastMessage } from "@/lib/utils/user-visible-error";
+
+// Local mirror of ActionResult. Kept in-file to avoid a client import from
+// the server-only `@/actions/*` tree (Wave 4 frontend migration).
+type SuccessResult<T = undefined> = T extends undefined
+  ? { ok: true; data?: undefined }
+  : { ok: true; data: T };
+
+type ErrorResult = {
+  ok: false;
+  error: string;
+  errorCode?: string;
+  errorParams?: Record<string, string | number>;
+};
+
+export type ActionResult<T = undefined> = SuccessResult<T> | ErrorResult;
 
 /**
  * Server Action 执行选项

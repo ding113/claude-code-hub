@@ -3,7 +3,6 @@
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { getAllUserKeyGroups, getAllUserTags } from "@/actions/users";
 import { LeaderboardPrimaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-primary-tabs";
 import { LeaderboardSecondaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-secondary-tabs";
 import {
@@ -23,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TagInput } from "@/components/ui/tag-input";
 import { Link } from "@/i18n/routing";
+import { usersClient } from "@/lib/api-client/v1/users";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
   DateRangeParams,
@@ -123,12 +123,15 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     if (!isAdmin) return;
 
     const fetchSuggestions = async () => {
-      const [tagsResult, groupsResult] = await Promise.all([
-        getAllUserTags(),
-        getAllUserKeyGroups(),
-      ]);
-      if (tagsResult.ok) setTagSuggestions(tagsResult.data);
-      if (groupsResult.ok) setGroupSuggestions(groupsResult.data);
+      try {
+        const [tags, groups] = await Promise.all([usersClient.tags(), usersClient.keyGroups()]);
+        const tagItems = (tags as unknown as { items?: string[] }).items;
+        const groupItems = (groups as unknown as { items?: string[] }).items;
+        if (Array.isArray(tagItems)) setTagSuggestions(tagItems);
+        if (Array.isArray(groupItems)) setGroupSuggestions(groupItems);
+      } catch {
+        // suggestions are optional; keep empty on failure
+      }
     };
 
     fetchSuggestions();

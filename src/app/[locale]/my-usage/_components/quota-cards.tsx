@@ -3,13 +3,13 @@
 import { Infinity as InfinityIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
-import type { MyUsageQuota } from "@/actions/my-usage";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { calculateUsagePercent, isUnlimited } from "@/lib/utils/limit-helpers";
+import type { MyUsageQuota } from "@/types/my-usage";
 
 interface QuotaCardsProps {
   quota: MyUsageQuota | null;

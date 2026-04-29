@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LeaderboardView } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-view";
 
 const fetchMock = vi.fn<typeof fetch>();
-const { getAllUserTagsMock, getAllUserKeyGroupsMock } = vi.hoisted(() => ({
-  getAllUserTagsMock: vi.fn(),
-  getAllUserKeyGroupsMock: vi.fn(),
+const { usersTagsMock, usersKeyGroupsMock } = vi.hoisted(() => ({
+  usersTagsMock: vi.fn(),
+  usersKeyGroupsMock: vi.fn(),
 }));
 const searchParamsState = vi.hoisted(() => ({
   value: new URLSearchParams(),
@@ -24,9 +24,19 @@ vi.mock("next-intl", () => ({
   useTranslations: () => tMock,
 }));
 
-vi.mock("@/actions/users", () => ({
-  getAllUserTags: getAllUserTagsMock,
-  getAllUserKeyGroups: getAllUserKeyGroupsMock,
+vi.mock("@/lib/api-client/v1/users", () => ({
+  usersClient: {
+    list: vi.fn(),
+    detail: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    enable: vi.fn(),
+    renew: vi.fn(),
+    resetLimits: vi.fn(),
+    tags: usersTagsMock,
+    keyGroups: usersKeyGroupsMock,
+  },
 }));
 
 vi.mock("@/app/[locale]/settings/providers/_components/provider-type-filter", () => ({
@@ -52,8 +62,8 @@ describe("LeaderboardView user cache hit rate scope", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     searchParamsState.value = new URLSearchParams("scope=userCacheHitRate");
-    getAllUserTagsMock.mockResolvedValue({ ok: true, data: ["vip"] });
-    getAllUserKeyGroupsMock.mockResolvedValue({ ok: true, data: ["default"] });
+    usersTagsMock.mockResolvedValue({ items: ["vip"] });
+    usersKeyGroupsMock.mockResolvedValue({ items: ["default"] });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);

@@ -5,10 +5,10 @@ import { Activity, Clock, DollarSign, TrendingUp } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import { getActiveSessions } from "@/actions/active-sessions";
-import type { OverviewData } from "@/actions/overview";
-import { getOverviewData } from "@/actions/overview";
-import { getUserStatistics } from "@/actions/statistics";
+import { dashboardClient } from "@/lib/api-client/v1/dashboard";
+import { dashboardKeys } from "@/lib/api-client/v1/dashboard/keys";
+import { sessionsClient } from "@/lib/api-client/v1/sessions";
+import { sessionsKeys } from "@/lib/api-client/v1/sessions/keys";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -24,6 +24,19 @@ import { BentoGrid } from "./bento-grid";
 import { LeaderboardCard } from "./leaderboard-card";
 import { LiveSessionsPanel } from "./live-sessions-panel";
 import { BentoMetricCard } from "./metric-card";
+
+// OverviewData shape is now read from `/api/v1/dashboard/overview` (passthrough).
+interface OverviewData {
+  concurrentSessions: number;
+  todayRequests: number;
+  todayCost: number;
+  avgResponseTime: number;
+  todayErrorRate: number;
+  yesterdaySamePeriodRequests: number;
+  yesterdaySamePeriodCost: number;
+  yesterdaySamePeriodAvgResponseTime: number;
+  recentMinuteRequests: number;
+}
 
 const StatisticsChartCard = dynamic(
   () => import("./statistics-chart-card").then((mod) => ({ default: mod.StatisticsChartCard })),
@@ -50,21 +63,18 @@ interface LeaderboardData {
 }
 
 async function fetchOverviewData(): Promise<OverviewData> {
-  const result = await getOverviewData();
-  if (!result.ok) throw new Error(result.error || "Failed to fetch overview");
-  return result.data;
+  const data = (await dashboardClient.overview()) as unknown as OverviewData;
+  return data;
 }
 
 async function fetchActiveSessions(): Promise<ActiveSessionInfo[]> {
-  const result = await getActiveSessions();
-  if (!result.ok) throw new Error(result.error || "Failed to fetch sessions");
-  return result.data;
+  const data = await sessionsClient.list({ state: "active" });
+  return (data.items as unknown as ActiveSessionInfo[]) ?? [];
 }
 
 async function fetchStatistics(timeRange: TimeRange): Promise<UserStatisticsData> {
-  const result = await getUserStatistics(timeRange);
-  if (!result.ok) throw new Error(result.error || "Failed to fetch statistics");
-  return result.data;
+  const data = (await dashboardClient.statistics(timeRange)) as unknown as UserStatisticsData;
+  return data;
 }
 
 async function fetchLeaderboard(scope: "user" | "provider" | "model"): Promise<LeaderboardData[]> {
@@ -131,7 +141,7 @@ export function DashboardBento({
 
   // Overview metrics (available to all users, but shows different data based on permissions)
   const { data: overview } = useQuery<OverviewData>({
-    queryKey: ["overview-data"],
+    queryKey: dashboardKeys.overview(),
     queryFn: fetchOverviewData,
     refetchInterval: 15_000,
     staleTime: 10_000,
@@ -139,7 +149,7 @@ export function DashboardBento({
   });
 
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<ActiveSessionInfo[]>({
-    queryKey: ["active-sessions"],
+    queryKey: sessionsKeys.list({ state: "active" }),
     queryFn: fetchActiveSessions,
     refetchInterval: REFRESH_INTERVAL,
     enabled: isAdmin && !enableHighConcurrencyMode,
@@ -147,7 +157,7 @@ export function DashboardBento({
 
   // Statistics
   const { data: statistics } = useQuery<UserStatisticsData>({
-    queryKey: ["statistics", timeRange],
+    queryKey: dashboardKeys.statistics(timeRange),
     queryFn: () => fetchStatistics(timeRange),
     initialData: timeRange === DEFAULT_TIME_RANGE ? initialStatistics : undefined,
     staleTime: 30_000,

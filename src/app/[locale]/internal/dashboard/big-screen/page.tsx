@@ -36,11 +36,54 @@ import {
   YAxis,
 } from "recharts";
 import useSWR from "swr";
-import { getDashboardRealtimeData } from "@/actions/dashboard-realtime";
 import { type Locale, localeLabels, locales } from "@/i18n/config";
 import { normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
 import { usePathname, useRouter } from "@/i18n/routing";
+import { dashboardClient } from "@/lib/api-client/v1/dashboard";
 import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
+
+interface DashboardRealtimeShape {
+  metrics?: {
+    concurrentSessions?: number;
+    todayRequests?: number;
+    todayCost?: number;
+    avgResponseTime?: number;
+    todayErrorRate?: number;
+  };
+  activityStream?: Array<{
+    id: string;
+    user: string;
+    model: string;
+    provider: string;
+    latency: number;
+    status: number;
+  }>;
+  userRankings?: Array<{
+    userId: number;
+    userName: string;
+    totalCost: number;
+    totalRequests: number;
+  }>;
+  providerSlots?: Array<{
+    name: string;
+    usedSlots: number;
+    totalSlots: number;
+  }>;
+  providerRankings?: Array<{
+    providerId: number;
+    providerName: string;
+    totalCost: number;
+    totalTokens: number;
+  }>;
+  modelDistribution?: Array<{
+    model: string;
+    totalRequests: number;
+  }>;
+  trendData?: Array<{
+    hour: number;
+    value: number;
+  }>;
+}
 
 /**
  * ============================================================================
@@ -739,14 +782,11 @@ export default function BigScreenPage() {
   }, []);
 
   // 使用 SWR 获取数据，2秒刷新
-  const { data, error, mutate } = useSWR(
+  const { data, error, mutate } = useSWR<DashboardRealtimeShape>(
     "dashboard-realtime",
     async () => {
-      const result = await getDashboardRealtimeData();
-      if (!result.ok) {
-        throw new Error(result.error || "Failed to fetch data");
-      }
-      return result.data;
+      const result = (await dashboardClient.realtime()) as unknown as DashboardRealtimeShape;
+      return result;
     },
     {
       refreshInterval: 2000,
@@ -769,12 +809,13 @@ export default function BigScreenPage() {
   const currencySymbol = CURRENCY_CONFIG[systemSettings?.currencyDisplay ?? "USD"]?.symbol ?? "$";
 
   // 处理数据
-  const metrics = data?.metrics || {
-    concurrentSessions: 0,
-    todayRequests: 0,
-    todayCost: 0,
-    avgResponseTime: 0,
-    todayErrorRate: 0,
+  const metricsRaw = data?.metrics;
+  const metrics = {
+    concurrentSessions: metricsRaw?.concurrentSessions ?? 0,
+    todayRequests: metricsRaw?.todayRequests ?? 0,
+    todayCost: metricsRaw?.todayCost ?? 0,
+    avgResponseTime: metricsRaw?.avgResponseTime ?? 0,
+    todayErrorRate: metricsRaw?.todayErrorRate ?? 0,
   };
 
   const activities = (data?.activityStream || []).map((item) => ({

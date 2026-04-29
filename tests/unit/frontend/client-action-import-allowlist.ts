@@ -39,78 +39,8 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
   // Task 15: my-usage / overview / quotas / dashboard read panels
   // ---------------------------------------------------------------------
   {
-    file: "src/app/[locale]/dashboard/_components/bento/dashboard-bento.tsx",
-    module: "active-sessions",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/bento/dashboard-bento.tsx",
-    module: "overview",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/bento/dashboard-bento.tsx",
-    module: "statistics",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/statistics/wrapper.tsx",
-    module: "statistics",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/key-list-header.tsx",
-    module: "proxy-status",
-    task: 15,
-  },
-  {
     file: "src/app/[locale]/dashboard/_components/user/key-quota-usage-dialog.tsx",
     module: "key-quota",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/internal/dashboard/big-screen/page.tsx",
-    module: "dashboard-realtime",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/my-usage/_components/collapsible-quota-card.tsx",
-    module: "my-usage",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/my-usage/_components/quota-cards.tsx",
-    module: "my-usage",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/my-usage/_components/statistics-summary-card.tsx",
-    module: "my-usage",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/my-usage/_components/usage-logs-section.tsx",
-    module: "my-usage",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/my-usage/_components/usage-logs-table.tsx",
-    module: "my-usage",
-    task: 15,
-  },
-  {
-    file: "src/app/[locale]/my-usage/page.tsx",
-    module: "my-usage",
-    task: 15,
-  },
-  {
-    file: "src/components/customs/concurrent-sessions-card.tsx",
-    module: "concurrent-sessions",
-    task: 15,
-  },
-  {
-    file: "src/components/customs/overview-panel.tsx",
-    module: "overview",
     task: 15,
   },
 
@@ -158,16 +88,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 16,
   },
   {
-    file: "src/app/[locale]/dashboard/_components/user/forms/delete-key-confirm.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/forms/delete-user-confirm.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
     file: "src/app/[locale]/dashboard/_components/user/forms/edit-key-form.tsx",
     module: "keys",
     task: 16,
@@ -198,11 +118,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 16,
   },
   {
-    file: "src/app/[locale]/dashboard/_components/user/key-limit-usage.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
     file: "src/app/[locale]/dashboard/_components/user/key-quota-usage-dialog.tsx",
     module: "keys",
     task: 16,
@@ -223,17 +138,7 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 16,
   },
   {
-    file: "src/app/[locale]/dashboard/_components/user/user-list.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
     file: "src/app/[locale]/dashboard/_components/user/user-management-table.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/leaderboard/_components/leaderboard-view.tsx",
     module: "users",
     task: 16,
   },
@@ -457,11 +362,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 17,
   },
   {
-    file: "src/app/[locale]/my-usage/page.tsx",
-    module: "system-config",
-    task: 17,
-  },
-  {
     file: "src/app/[locale]/settings/client-versions/_components/client-version-toggle.tsx",
     module: "system-config",
     task: 17,
@@ -571,11 +471,6 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
   // Task 18: logs / audit / sessions / dispatch-simulator / shared types
   // ---------------------------------------------------------------------
   {
-    file: "src/app/[locale]/dashboard/audit-logs/_components/audit-logs-view.tsx",
-    module: "audit-logs",
-    task: 18,
-  },
-  {
     file: "src/app/[locale]/dashboard/logs/_components/error-details-dialog/components/LogicTraceTab.tsx",
     module: "session-origin-chain",
     task: 18,
@@ -681,17 +576,5 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     file: "src/components/customs/active-sessions-list.tsx",
     module: "active-sessions",
     task: 18,
-  },
-  {
-    file: "src/hooks/use-ip-geo.ts",
-    module: "types",
-    task: 18,
-    typeOnly: true,
-  },
-  {
-    file: "src/lib/hooks/use-server-action.ts",
-    module: "types",
-    task: 18,
-    typeOnly: true,
   },
 ];

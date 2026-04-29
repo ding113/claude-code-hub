@@ -2,9 +2,8 @@
 
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
-import { getKeyLimitUsage } from "@/actions/keys";
 import { Progress } from "@/components/ui/progress";
+import { useKeyLimitUsage } from "@/lib/api-client/v1/keys/hooks";
 import { cn } from "@/lib/utils";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 
@@ -13,43 +12,11 @@ interface KeyLimitUsageProps {
   currencyCode?: CurrencyCode;
 }
 
-interface LimitUsageData {
-  cost5h: { current: number; limit: number | null };
-  costDaily: { current: number; limit: number | null };
-  costWeekly: { current: number; limit: number | null };
-  costMonthly: { current: number; limit: number | null };
-  costTotal: { current: number; limit: number | null; resetAt?: Date };
-  concurrentSessions: { current: number; limit: number };
-}
-
 export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProps) {
-  const [data, setData] = useState<LimitUsageData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const t = useTranslations("dashboard.keyLimitUsage");
-
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result = await getKeyLimitUsage(keyId);
-        if (result.ok) {
-          setData(result.data);
-        } else {
-          // result.ok === false 时，result 是 { ok: false; error: string }
-          setError(result.error || t("error"));
-        }
-      } catch {
-        setError(t("networkError"));
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    void fetchData();
-  }, [keyId, t]);
+  const { data, isLoading, error } = useKeyLimitUsage(keyId);
+  const loading = isLoading;
+  const errorMessage = error ? (error.message ?? t("error")) : null;
 
   if (loading) {
     return (
@@ -60,11 +27,11 @@ export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProp
     );
   }
 
-  if (error) {
+  if (errorMessage) {
     return (
       <div className="flex items-center gap-2 text-sm text-destructive">
         <AlertCircle className="h-3 w-3" />
-        <span>{error}</span>
+        <span>{errorMessage}</span>
       </div>
     );
   }

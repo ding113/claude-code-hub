@@ -11,8 +11,19 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { DashboardBento } from "@/app/[locale]/dashboard/_components/bento/dashboard-bento";
 import { DashboardMain } from "@/app/[locale]/dashboard/_components/dashboard-main";
-import type { OverviewData } from "@/actions/overview";
 import type { UserStatisticsData } from "@/types/statistics";
+
+interface OverviewData {
+  concurrentSessions: number;
+  todayRequests: number;
+  todayCost: number;
+  avgResponseTime: number;
+  todayErrorRate: number;
+  yesterdaySamePeriodRequests: number;
+  yesterdaySamePeriodCost: number;
+  yesterdaySamePeriodAvgResponseTime: number;
+  recentMinuteRequests: number;
+}
 
 const routingMocks = vi.hoisted(() => ({
   usePathname: vi.fn(),
@@ -21,20 +32,43 @@ vi.mock("@/i18n/routing", () => ({
   usePathname: routingMocks.usePathname,
 }));
 
-const overviewMocks = vi.hoisted(() => ({
-  getOverviewData: vi.fn(),
+const dashboardClientMocks = vi.hoisted(() => ({
+  overview: vi.fn(),
+  realtime: vi.fn(),
+  statistics: vi.fn(),
+  concurrentSessions: vi.fn(),
+  providerSlots: vi.fn(),
+  rateLimitStats: vi.fn(),
+  clientVersions: vi.fn(),
+  proxyStatus: vi.fn(),
+  dispatchSimulatorDecisionTree: vi.fn(),
+  dispatchSimulatorSimulate: vi.fn(),
 }));
-vi.mock("@/actions/overview", () => overviewMocks);
+vi.mock("@/lib/api-client/v1/dashboard", () => ({
+  dashboardClient: dashboardClientMocks,
+}));
 
-const activeSessionsMocks = vi.hoisted(() => ({
-  getActiveSessions: vi.fn(),
+const sessionsClientMocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  detail: vi.fn(),
+  messages: vi.fn(),
+  requests: vi.fn(),
+  originChain: vi.fn(),
+  response: vi.fn(),
+  terminate: vi.fn(),
+  batchTerminate: vi.fn(),
 }));
-vi.mock("@/actions/active-sessions", () => activeSessionsMocks);
+vi.mock("@/lib/api-client/v1/sessions", () => ({
+  sessionsClient: sessionsClientMocks,
+}));
 
-const statisticsMocks = vi.hoisted(() => ({
-  getUserStatistics: vi.fn(),
-}));
-vi.mock("@/actions/statistics", () => statisticsMocks);
+// Backwards-compatible alias for older assertions referencing the legacy
+// action mock object.
+const activeSessionsMocks = {
+  get getActiveSessions() {
+    return sessionsClientMocks.list;
+  },
+};
 
 vi.mock("@/app/[locale]/dashboard/_components/bento/live-sessions-panel", () => ({
   LiveSessionsPanel: () => <div data-testid="live-sessions-panel" />,
@@ -154,9 +188,9 @@ async function flushPromises() {
 beforeEach(() => {
   vi.clearAllMocks();
   document.body.innerHTML = "";
-  overviewMocks.getOverviewData.mockResolvedValue({ ok: true, data: mockOverviewData });
-  activeSessionsMocks.getActiveSessions.mockResolvedValue({ ok: true, data: [] });
-  statisticsMocks.getUserStatistics.mockResolvedValue({ ok: true, data: mockStatisticsData });
+  dashboardClientMocks.overview.mockResolvedValue(mockOverviewData);
+  dashboardClientMocks.statistics.mockResolvedValue(mockStatisticsData);
+  sessionsClientMocks.list.mockResolvedValue({ items: [] });
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
