@@ -1,3 +1,4 @@
+import { extractApiKeyFromHeaders as sharedExtractApiKeyFromHeaders } from "@/lib/api/auth-header-extractor";
 import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
@@ -281,26 +282,5 @@ export function extractApiKeyFromHeaders(headers: {
   "x-api-key"?: string | null;
   "x-goog-api-key"?: string | null;
 }): string | null {
-  // 1. Bearer token
-  const authHeader = headers.authorization?.trim();
-  if (authHeader) {
-    const match = /^Bearer\s+(.+)$/i.exec(authHeader);
-    if (match?.[1]?.trim()) {
-      return match[1].trim();
-    }
-  }
-
-  // 2. x-api-key header
-  const apiKey = headers["x-api-key"]?.trim();
-  if (apiKey) {
-    return apiKey;
-  }
-
-  // 3. x-goog-api-key header (Gemini)
-  const geminiKey = headers["x-goog-api-key"]?.trim();
-  if (geminiKey) {
-    return geminiKey;
-  }
-
-  return null;
+  return sharedExtractApiKeyFromHeaders(headers);
 }

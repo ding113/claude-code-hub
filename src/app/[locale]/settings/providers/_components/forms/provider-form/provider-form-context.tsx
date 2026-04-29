@@ -40,6 +40,31 @@ type Limit5hResetModeAction = {
 
 type ProviderFormActionWith5hResetMode = ProviderFormAction | Limit5hResetModeAction;
 
+function hasRedactedUrlCredentials(value: string | null | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.username === "REDACTED" || url.password === "REDACTED";
+  } catch {
+    return false;
+  }
+}
+
+function cloneSafeUrlValue(value: string | null | undefined, isClone: boolean): string {
+  if (!value) return "";
+  return isClone && hasRedactedUrlCredentials(value) ? "" : value;
+}
+
+function cloneSafeCustomHeaders(
+  headers: Record<string, string> | null | undefined,
+  isClone: boolean
+): Record<string, string> | null {
+  if (!headers) return null;
+  if (!isClone) return headers;
+  const entries = Object.entries(headers).filter(([, value]) => value !== "[REDACTED]");
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
 function withLimit5hResetMode(state: ProviderFormState): ProviderFormStateWith5hResetMode {
   return state as ProviderFormStateWith5hResetMode;
 }
@@ -112,6 +137,7 @@ export function createInitialState(
 ): ProviderFormState {
   const isEdit = mode === "edit";
   const isBatch = mode === "batch";
+  const isClone = !isEdit && !!cloneProvider;
   const raw = isEdit ? provider : cloneProvider;
   const sourceProvider = raw ? structuredClone(raw) : undefined;
 
@@ -388,9 +414,9 @@ export function createInitialState(
         : cloneProvider
           ? `${cloneProvider.name}_Copy`
           : (preset?.name ?? ""),
-      url: sourceProvider?.url ?? preset?.url ?? "",
+      url: cloneSafeUrlValue(sourceProvider?.url ?? preset?.url, isClone),
       key: "",
-      websiteUrl: sourceProvider?.websiteUrl ?? preset?.websiteUrl ?? "",
+      websiteUrl: cloneSafeUrlValue(sourceProvider?.websiteUrl ?? preset?.websiteUrl, isClone),
     },
     routing: {
       providerType: sourceProvider?.providerType ?? preset?.providerType ?? "claude",
@@ -420,7 +446,9 @@ export function createInitialState(
       geminiGoogleSearchPreference: sourceProvider?.geminiGoogleSearchPreference ?? "inherit",
       activeTimeStart: sourceProvider?.activeTimeStart ?? null,
       activeTimeEnd: sourceProvider?.activeTimeEnd ?? null,
-      customHeadersText: stringifyCustomHeadersForTextarea(sourceProvider?.customHeaders ?? null),
+      customHeadersText: stringifyCustomHeadersForTextarea(
+        cloneSafeCustomHeaders(sourceProvider?.customHeaders, isClone)
+      ),
     },
     rateLimit: {
       limit5hUsd: sourceProvider?.limit5hUsd ?? null,
@@ -442,7 +470,7 @@ export function createInitialState(
       maxRetryAttempts: sourceProvider?.maxRetryAttempts ?? null,
     },
     network: {
-      proxyUrl: sourceProvider?.proxyUrl ?? "",
+      proxyUrl: cloneSafeUrlValue(sourceProvider?.proxyUrl, isClone),
       proxyFallbackToDirect: sourceProvider?.proxyFallbackToDirect ?? false,
       firstByteTimeoutStreamingSeconds: (() => {
         const ms = sourceProvider?.firstByteTimeoutStreamingMs;
@@ -459,7 +487,7 @@ export function createInitialState(
     },
     mcp: {
       mcpPassthroughType: sourceProvider?.mcpPassthroughType ?? "none",
-      mcpPassthroughUrl: sourceProvider?.mcpPassthroughUrl ?? "",
+      mcpPassthroughUrl: cloneSafeUrlValue(sourceProvider?.mcpPassthroughUrl, isClone),
     },
     batch: { isEnabled: "no_change" },
     ui: {

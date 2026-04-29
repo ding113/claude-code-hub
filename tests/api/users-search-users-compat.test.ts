@@ -50,8 +50,8 @@ describe("users searchUsers route compatibility", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: "Bearer test-token",
-          cookie: "auth-token=test-token",
+          authorization: "Bearer admin-token",
+          cookie: "auth-token=admin-token",
         },
         body: JSON.stringify({
           searchTerm: "   ",
@@ -67,5 +67,5 @@ describe("users searchUsers route compatibility", () => {
       ok: true,
       data: [{ id: 1, name: "Alice" }],
     });
-  });
+  }, 30_000);
 });

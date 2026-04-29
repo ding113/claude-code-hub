@@ -4,15 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { getProviderEndpoints } from "@/actions/provider-endpoints";
-import {
-  addProvider,
-  editProvider,
-  removeProvider,
-  undoProviderDelete,
-  undoProviderPatch,
-} from "@/actions/providers";
-import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +16,15 @@ import {
   AlertDialogTitle as AlertTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { getProviderEndpoints } from "@/lib/api-client/v1/actions/provider-endpoints";
+import {
+  addProvider,
+  editProvider,
+  removeProvider,
+  undoProviderDelete,
+  undoProviderPatch,
+} from "@/lib/api-client/v1/actions/providers";
+import { getDistinctProviderGroupsAction } from "@/lib/api-client/v1/actions/request-filters";
 import {
   type CustomHeadersValidationErrorCode,
   parseCustomHeadersJsonText,

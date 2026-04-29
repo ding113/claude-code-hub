@@ -45,7 +45,8 @@
     "provider": {
       "create": "建立供應商",
       "update": "更新供應商",
-      "delete": "刪除供應商"
+      "delete": "刪除供應商",
+      "key_reveal": "查看供應商金鑰"
     },
     "provider_group": {
       "create": "建立供應商分組",

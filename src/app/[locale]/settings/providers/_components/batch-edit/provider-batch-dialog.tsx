@@ -6,15 +6,6 @@ import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  applyProviderBatchPatch,
-  batchDeleteProviders,
-  batchResetProviderCircuits,
-  type PreviewProviderBatchPatchResult,
-  previewProviderBatchPatch,
-  undoProviderDelete,
-  undoProviderPatch,
-} from "@/actions/providers";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -33,6 +24,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  applyProviderBatchPatch,
+  batchDeleteProviders,
+  batchResetProviderCircuits,
+  type PreviewProviderBatchPatchResult,
+  previewProviderBatchPatch,
+  undoProviderDelete,
+  undoProviderPatch,
+} from "@/lib/api-client/v1/actions/providers";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import type { ProviderDisplay } from "@/types/provider";
 import { FormTabNav } from "../forms/provider-form/components/form-tab-nav";

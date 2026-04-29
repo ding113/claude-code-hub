@@ -15,7 +15,6 @@ import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { renewKeyExpiresAt, toggleKeyEnabled } from "@/actions/keys";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +31,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { renewKeyExpiresAt, toggleKeyEnabled } from "@/lib/api-client/v1/actions/keys";
 import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";

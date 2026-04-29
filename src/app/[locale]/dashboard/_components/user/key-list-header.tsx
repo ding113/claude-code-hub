@@ -4,7 +4,6 @@ import { formatInTimeZone } from "date-fns-tz";
 import { CheckCircle, Copy, Eye, EyeOff, ListPlus } from "lucide-react";
 import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
-import { getProxyStatus } from "@/actions/proxy-status";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { getProxyStatus } from "@/lib/api-client/v1/actions/proxy-status";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";

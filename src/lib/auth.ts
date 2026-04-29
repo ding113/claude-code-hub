@@ -57,6 +57,7 @@ export function getSessionTokenMode(): SessionTokenMode {
 export interface OpaqueSessionContract {
   sessionId: string; // random opaque token
   keyFingerprint: string; // hash of the API key (for audit, not auth)
+  credentialType?: "admin-token" | "user-api-key"; // token provenance for management API policy
   createdAt: number; // unix timestamp
   expiresAt: number; // unix timestamp
   userId: number;
@@ -103,6 +104,7 @@ export function isOpaqueSessionContract(value: unknown): value is OpaqueSessionC
   if (!value || typeof value !== "object") return false;
 
   const candidate = value as Record<string, unknown>;
+  const credentialType = candidate.credentialType;
   return (
     typeof candidate.sessionId === "string" &&
     candidate.sessionId.length > 0 &&
@@ -116,7 +118,10 @@ export function isOpaqueSessionContract(value: unknown): value is OpaqueSessionC
     typeof candidate.userId === "number" &&
     Number.isInteger(candidate.userId) &&
     typeof candidate.userRole === "string" &&
-    candidate.userRole.length > 0
+    candidate.userRole.length > 0 &&
+    (credentialType === undefined ||
+      credentialType === "admin-token" ||
+      credentialType === "user-api-key")
   );
 }
 
@@ -127,6 +132,8 @@ export function detectSessionTokenKind(token: string): SessionTokenKind {
   if (!trimmed) return "legacy";
   return trimmed.startsWith(OPAQUE_SESSION_ID_PREFIX) ? "opaque" : "legacy";
 }
+
+export type AuthCredentialType = "session" | "admin-token" | "user-api-key" | "none";
 
 export function isSessionTokenAccepted(
   token: string,

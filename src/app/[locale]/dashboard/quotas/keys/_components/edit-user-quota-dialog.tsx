@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { editUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { editUser } from "@/lib/api-client/v1/actions/users";
 import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
 
 interface UserQuota {

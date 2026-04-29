@@ -14,8 +14,6 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { removeKey } from "@/actions/keys";
-import { editUser, toggleUserEnabled } from "@/actions/users";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +21,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRouter } from "@/i18n/routing";
+import { removeKey } from "@/lib/api-client/v1/actions/keys";
+import { editUser, toggleUserEnabled } from "@/lib/api-client/v1/actions/users";
 import { clearUsageCache } from "@/lib/dashboard/user-limit-usage-cache";
 import { cn } from "@/lib/utils";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";

@@ -5,7 +5,7 @@
  */
 
 import { config } from "dotenv";
-import { afterAll, beforeAll } from "vitest";
+import { afterAll, beforeAll, vi } from "vitest";
 
 // ==================== 加载环境变量 ====================
 
@@ -164,6 +164,172 @@ afterAll(async () => {
 // 如果需要 mock 某些全局对象，可以在这里配置
 // 例如：mock console.error 以避免测试输出过多错误日志
 
+const actionCompatMocks: Record<string, string> = {
+  "active-sessions": "@/actions/active-sessions",
+  "admin-user-insights": "@/actions/admin-user-insights",
+  "audit-logs": "@/actions/audit-logs",
+  "client-versions": "@/actions/client-versions",
+  "concurrent-sessions": "@/actions/concurrent-sessions",
+  "dashboard-realtime": "@/actions/dashboard-realtime",
+  "dispatch-simulator": "@/actions/dispatch-simulator",
+  "error-rules": "@/actions/error-rules",
+  "key-quota": "@/actions/key-quota",
+  keys: "@/actions/keys",
+  "model-prices": "@/actions/model-prices",
+  "my-usage": "@/actions/my-usage",
+  "notification-bindings": "@/actions/notification-bindings",
+  notifications: "@/actions/notifications",
+  overview: "@/actions/overview",
+  "provider-endpoints": "@/actions/provider-endpoints",
+  "provider-groups": "@/actions/provider-groups",
+  "provider-slots": "@/actions/provider-slots",
+  "proxy-status": "@/actions/proxy-status",
+  "public-status": "@/actions/public-status",
+  "rate-limit-stats": "@/actions/rate-limit-stats",
+  "request-filters": "@/actions/request-filters",
+  "sensitive-words": "@/actions/sensitive-words",
+  "session-origin-chain": "@/actions/session-origin-chain",
+  "session-response": "@/actions/session-response",
+  statistics: "@/actions/statistics",
+  "system-config": "@/actions/system-config",
+  "usage-logs": "@/actions/usage-logs",
+  users: "@/actions/users",
+  "webhook-targets": "@/actions/webhook-targets",
+};
+
+const actionCompatSpecialMocks = new Set([
+  "keys",
+  "model-prices",
+  "providers",
+  "system-config",
+  "users",
+]);
+
+for (const [moduleName, actionModule] of Object.entries(actionCompatMocks)) {
+  if (actionCompatSpecialMocks.has(moduleName)) continue;
+  vi.doMock(`@/lib/api-client/v1/actions/${moduleName}`, async () => import(actionModule));
+}
+
+function getModuleExport<T>(moduleExports: object, exportName: string): T | undefined {
+  try {
+    return (moduleExports as Record<string, T>)[exportName];
+  } catch {
+    return undefined;
+  }
+}
+
+vi.doMock("@/lib/api-client/v1/actions/providers", async () => {
+  const [providers, modelPrices] = await Promise.all([
+    import("@/actions/providers"),
+    import("@/actions/model-prices"),
+  ]);
+  const getProviders = getModuleExport<typeof providers.getProviders>(providers, "getProviders");
+  const getAvailableProviderGroups = getModuleExport<typeof providers.getAvailableProviderGroups>(
+    providers,
+    "getAvailableProviderGroups"
+  );
+  const mockedGetAvailableModelCatalog = getModuleExport<
+    typeof modelPrices.getAvailableModelCatalog
+  >(modelPrices, "getAvailableModelCatalog");
+  const getAvailableModelCatalog = vi.fn(async () => []);
+  const getAvailableModelsByProviderType = vi.fn(async () => {
+    const items = await getAvailableModelCatalog({ scope: "chat" });
+    return items.map((item: { modelName: string }) => item.modelName);
+  });
+  return {
+    ...providers,
+    getProviders:
+      getProviders && vi.isMockFunction(getProviders) ? getProviders : vi.fn(async () => []),
+    getAvailableProviderGroups:
+      getAvailableProviderGroups && vi.isMockFunction(getAvailableProviderGroups)
+        ? getAvailableProviderGroups
+        : vi.fn(async () => []),
+    getAvailableModelCatalog:
+      mockedGetAvailableModelCatalog && vi.isMockFunction(mockedGetAvailableModelCatalog)
+        ? mockedGetAvailableModelCatalog
+        : getAvailableModelCatalog,
+    getAvailableModelsByProviderType: getAvailableModelsByProviderType,
+  };
+});
+
+vi.doMock("@/lib/api-client/v1/actions/keys", async () => {
+  const keys = await import("@/actions/keys");
+  const getKeys = getModuleExport<typeof keys.getKeys>(keys, "getKeys");
+  const getKeysWithStatistics = getModuleExport<typeof keys.getKeysWithStatistics>(
+    keys,
+    "getKeysWithStatistics"
+  );
+  return {
+    ...keys,
+    getKeys:
+      getKeys && vi.isMockFunction(getKeys) ? getKeys : vi.fn(async () => ({ ok: true, data: [] })),
+    getKeysWithStatistics:
+      getKeysWithStatistics && vi.isMockFunction(getKeysWithStatistics)
+        ? getKeysWithStatistics
+        : vi.fn(async () => ({ ok: true, data: [] })),
+  };
+});
+
+vi.doMock("@/lib/api-client/v1/actions/users", async () => {
+  const users = await import("@/actions/users");
+  const searchUsers = getModuleExport<typeof users.searchUsers>(users, "searchUsers");
+  const searchUsersForFilter = getModuleExport<typeof users.searchUsersForFilter>(
+    users,
+    "searchUsersForFilter"
+  );
+  return {
+    ...users,
+    searchUsers:
+      searchUsers && vi.isMockFunction(searchUsers)
+        ? searchUsers
+        : vi.fn(async () => ({ ok: true, data: [] })),
+    searchUsersForFilter:
+      searchUsersForFilter && vi.isMockFunction(searchUsersForFilter)
+        ? searchUsersForFilter
+        : vi.fn(async () => ({ ok: true, data: [] })),
+  };
+});
+
+vi.doMock("@/lib/api-client/v1/actions/model-prices", async () => {
+  const modelPrices = await import("@/actions/model-prices");
+  const mockedGetAvailableModelCatalog = getModuleExport<
+    typeof modelPrices.getAvailableModelCatalog
+  >(modelPrices, "getAvailableModelCatalog");
+  const getAvailableModelCatalog =
+    mockedGetAvailableModelCatalog && vi.isMockFunction(mockedGetAvailableModelCatalog)
+      ? mockedGetAvailableModelCatalog
+      : vi.fn(async () => []);
+  return {
+    ...modelPrices,
+    getAvailableModelCatalog,
+    getAvailableModelsByProviderType: vi.fn(async () => {
+      const items = await getAvailableModelCatalog({ scope: "chat" });
+      return items.map((item: { modelName: string }) => item.modelName);
+    }),
+  };
+});
+
+vi.doMock("@/lib/api-client/v1/actions/system-config", async () => {
+  const systemConfig = await import("@/actions/system-config");
+  const fetchSystemSettings = getModuleExport<typeof systemConfig.fetchSystemSettings>(
+    systemConfig,
+    "fetchSystemSettings"
+  );
+  const getSystemSettings = vi.fn(async () => {
+    if (fetchSystemSettings && vi.isMockFunction(fetchSystemSettings)) {
+      const result = await fetchSystemSettings();
+      if (result.ok) return result.data;
+      throw new Error(result.error);
+    }
+    return { billingModelSource: "redirected", currencyDisplay: "USD" };
+  });
+
+  return {
+    ...systemConfig,
+    getSystemSettings,
+  };
+});
+
 // 保存原始 console.error
 const originalConsoleError = console.error;
 
@@ -191,6 +357,7 @@ global.console.error = (...args: unknown[]) => {
 process.env.NODE_ENV = process.env.NODE_ENV || "test";
 process.env.API_BASE_URL = process.env.API_BASE_URL || "http://localhost:13500/api/actions";
 // 便于 API 测试复用 ADMIN_TOKEN（validateKey 支持该 token 直通管理员会话）
+process.env.ADMIN_TOKEN = process.env.ADMIN_TOKEN || "admin-token";
 process.env.TEST_ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
 
 // ==================== React act 环境标记 ====================

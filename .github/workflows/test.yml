@@ -47,6 +47,11 @@ jobs:
       - name: Run type checking
         run: bun run typecheck
 
+      - name: Check v1 OpenAPI contract
+        run: |
+          bun run openapi:check
+          bun run openapi:lint
+
       - name: Check formatting
         run: bun run format:check
 
@@ -81,6 +86,9 @@ jobs:
 
       - name: Run unit tests
         run: bun run test -- tests/unit/ --passWithNoTests
+
+      - name: Run v1 management API tests
+        run: bun run test:v1
 
   # ==================== 集成测试（需要数据库）====================
   integration-tests:
@@ -243,12 +251,13 @@ jobs:
 
       - name: Wait for server ready
         run: |
-          timeout 60 bash -c 'until curl -f http://localhost:13500/api/actions/health; do sleep 2; done'
+          timeout 60 bash -c 'until curl -f http://localhost:13500/api/actions/health && curl -f http://localhost:13500/api/v1/health; do sleep 2; done'
 
       - name: Run E2E API tests
         run: bun run test:e2e
         env:
           API_BASE_URL: http://localhost:13500/api/actions
+          API_E2E_BASE_URL: http://localhost:13500/api/v1
           TEST_ADMIN_TOKEN: test-admin-token-for-ci
           AUTO_CLEANUP_TEST_DATA: true
 

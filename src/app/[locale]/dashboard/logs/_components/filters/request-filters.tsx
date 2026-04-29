@@ -3,7 +3,6 @@
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getUsageLogSessionIdSuggestions } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -23,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getUsageLogSessionIdSuggestions } from "@/lib/api-client/v1/actions/usage-logs";
 import { SESSION_ID_SUGGESTION_MIN_LEN } from "@/lib/constants/usage-logs.constants";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { ProviderDisplay } from "@/types/provider";

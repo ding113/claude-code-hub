@@ -4,7 +4,6 @@ import { Circle, Eye, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { terminateActiveSession, terminateActiveSessionsBatch } from "@/actions/active-sessions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +28,10 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
+import {
+  terminateActiveSession,
+  terminateActiveSessionsBatch,
+} from "@/lib/api-client/v1/actions/active-sessions";
 import { getSessionDisplayStatus, SESSION_DISPLAY_STATUS } from "@/lib/session-status";
 import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";

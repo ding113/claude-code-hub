@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { defaultLocale, type Locale, locales } from "@/i18n/config";
 import {
+  type AuthCredentialType,
   type AuthSession,
   getLoginRedirectTarget,
   getSessionTokenMode,
@@ -129,9 +130,18 @@ async function createOpaqueSession(key: string, session: AuthSession) {
   const store = await getLoginSessionStore();
   return store.create({
     keyFingerprint: await toKeyFingerprint(key),
+    credentialType: classifyLoginCredential(key),
     userId: session.user.id,
     userRole: session.user.role,
   });
+}
+
+function classifyLoginCredential(
+  key: string
+): Extract<AuthCredentialType, "admin-token" | "user-api-key"> {
+  return getEnvConfig().ADMIN_TOKEN && key === getEnvConfig().ADMIN_TOKEN
+    ? "admin-token"
+    : "user-api-key";
 }
 
 export async function POST(request: NextRequest) {

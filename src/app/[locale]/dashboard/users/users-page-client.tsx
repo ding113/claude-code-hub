@@ -4,14 +4,6 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyUsageData } from "@/actions/users";
-import {
-  getAllUserKeyGroups,
-  getAllUserTags,
-  getUsers,
-  getUsersBatchCore,
-  getUsersUsageBatch,
-} from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,10 +15,18 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TagInput } from "@/components/ui/tag-input";
+import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
+import type { KeyUsageData } from "@/lib/api-client/v1/actions/users";
+import {
+  getAllUserKeyGroups,
+  getAllUserTags,
+  getUsers,
+  getUsersBatchCore,
+  getUsersUsageBatch,
+} from "@/lib/api-client/v1/actions/users";
 import { clearUsageCache } from "@/lib/dashboard/user-limit-usage-cache";
 import { loadUserUsagePagesSequentially } from "@/lib/dashboard/user-usage-loader";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import type { CurrencyCode } from "@/lib/utils/currency";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { User, UserDisplay } from "@/types/user";
 import { AddKeyDialog } from "../_components/user/add-key-dialog";
@@ -186,11 +186,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   // Fetch system settings for currency display
   const { data: systemSettings } = useQuery({
     queryKey: ["system-settings"],
-    queryFn: async () => {
-      const response = await fetch("/api/system-settings");
-      if (!response.ok) throw new Error("Failed to fetch settings");
-      return response.json() as Promise<{ currencyDisplay: CurrencyCode }>;
-    },
+    queryFn: getSystemSettings,
     staleTime: 30_000,
   });
 

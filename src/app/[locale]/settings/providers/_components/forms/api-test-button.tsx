@@ -2,19 +2,19 @@
 
 import { Activity, AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  getUnmaskedProviderKey,
-  type ProviderApiTestSuccessDetails,
-  testProviderGemini,
-  testProviderUnified,
-} from "@/actions/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import {
+  getUnmaskedProviderKey,
+  type ProviderApiTestSuccessDetails,
+  testProviderGemini,
+  testProviderUnified,
+} from "@/lib/api-client/v1/actions/providers";
 import {
   CUSTOM_HEADERS_PLACEHOLDER,
   type CustomHeadersValidationErrorCode,
@@ -124,10 +124,9 @@ export function ApiTestButton({
   );
   const initialCustomHeadersText = useMemo(
     () => stringifyCustomHeadersForTextarea(customHeaders ?? null),
-    // 仅根据 providerId + 序列化值计算初始值，避免引用相等触发不必要的更新
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [providerId, JSON.stringify(customHeaders ?? null)]
+    [customHeaders]
   );
+  const previousProviderId = useRef(providerId);
   const [customHeadersText, setCustomHeadersText] = useState(initialCustomHeadersText);
   const [isCustomHeadersManuallyEdited, setIsCustomHeadersManuallyEdited] = useState(false);
   const [testResult, setTestResult] = useState<UnifiedTestResultData | null>(null);
@@ -142,6 +141,10 @@ export function ApiTestButton({
 
   // 仅在用户未手动编辑时随 prop 变更同步；切换 provider 身份时重置编辑标志
   useEffect(() => {
+    if (previousProviderId.current === providerId) {
+      return;
+    }
+    previousProviderId.current = providerId;
     setIsCustomHeadersManuallyEdited(false);
   }, [providerId]);
 

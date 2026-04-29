@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getModelSuggestionsByProviderGroup } from "@/actions/providers";
+import { getModelSuggestionsByProviderGroup } from "@/lib/api-client/v1/actions/providers";
 
 /**
  * Hook to fetch model suggestions for autocomplete.

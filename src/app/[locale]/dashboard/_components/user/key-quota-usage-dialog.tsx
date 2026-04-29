@@ -4,8 +4,6 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getKeyQuotaUsage, type KeyQuotaItem, type KeyQuotaUsageResult } from "@/actions/key-quota";
-import { type PatchKeyLimitField, patchKeyLimit } from "@/actions/keys";
 import { QuotaProgress } from "@/components/quota/quota-progress";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Button } from "@/components/ui/button";
@@ -16,6 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  getKeyQuotaUsage,
+  type KeyQuotaItem,
+  type KeyQuotaUsageResult,
+} from "@/lib/api-client/v1/actions/key-quota";
+import { type PatchKeyLimitField, patchKeyLimit } from "@/lib/api-client/v1/actions/keys";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils";
 
 const KEY_FIELD_MAP: Record<KeyQuotaItem["type"], PatchKeyLimitField> = {

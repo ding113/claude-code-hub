@@ -12,10 +12,22 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
+import { CSRF_HEADER } from "@/lib/api/v1/_shared/constants";
+import { isMutationMethod, verifyCsrfToken } from "@/lib/api/v1/_shared/csrf";
+import { redactHeaderRecord, redactUrlCredentials } from "@/lib/api/v1/_shared/redaction";
 import { runWithRequestContext } from "@/lib/audit/request-context";
-import { AUTH_COOKIE_NAME, runWithAuthSession, validateAuthToken } from "@/lib/auth";
+import {
+  AUTH_COOKIE_NAME,
+  type AuthCredentialType,
+  detectSessionTokenKind,
+  runWithAuthSession,
+  validateAuthToken,
+} from "@/lib/auth";
+import { config } from "@/lib/config/config";
+import { isApiKeyAdminAccessEnabled } from "@/lib/config/env.schema";
 import { getClientIp } from "@/lib/ip";
 import { logger } from "@/lib/logger";
+import { constantTimeEqual } from "@/lib/security/constant-time-compare";
 
 function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim();
@@ -24,6 +36,126 @@ function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefin
   const match = /^Bearer\s+(.+)$/i.exec(trimmed);
   const token = match?.[1]?.trim();
   return token || undefined;
+}
+
+function getAuthCookieFromHeader(raw: string | null | undefined): string | undefined {
+  const cookiePairs = raw?.split(";") ?? [];
+  for (const pair of cookiePairs) {
+    const [name, ...valueParts] = pair.trim().split("=");
+    if (name !== AUTH_COOKIE_NAME) continue;
+    const value = valueParts.join("=").trim();
+    if (!value) return undefined;
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function redactManagementBody(body: unknown): unknown {
+  return redactManagementValue(body);
+}
+
+function redactIfPresent(value: unknown): unknown {
+  return value ? "[REDACTED]" : value;
+}
+
+function redactManagementValue(value: unknown, keyName?: string): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactManagementValue(item));
+  }
+  if (!value || typeof value !== "object") {
+    return redactScalarValue(keyName, value);
+  }
+
+  if (isHeaderKey(keyName)) {
+    return redactHeaderRecord(asHeaderRecord(value));
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => [
+      key,
+      redactManagementValue(child, key),
+    ])
+  );
+}
+
+function redactScalarValue(keyName: string | undefined, value: unknown): unknown {
+  if (isSensitiveScalarKey(keyName)) return redactIfPresent(value);
+  if (isUrlSecretKey(keyName) && typeof value === "string") {
+    return keyName?.toLowerCase().includes("webhook") ? "[REDACTED]" : redactUrlCredentials(value);
+  }
+  return value;
+}
+
+function normalizeManagementKeyName(keyName: string | undefined): string | undefined {
+  return keyName?.replace(/_/g, "").toLowerCase();
+}
+
+function isSensitiveScalarKey(keyName: string | undefined): boolean {
+  const normalized = normalizeManagementKeyName(keyName);
+  return (
+    normalized === "apikey" ||
+    normalized === "key" ||
+    normalized === "telegrambottoken" ||
+    normalized === "dingtalksecret"
+  );
+}
+
+function isUrlSecretKey(keyName: string | undefined): boolean {
+  const normalized = normalizeManagementKeyName(keyName);
+  if (!normalized) return false;
+  return (
+    normalized.includes("webhook") ||
+    ["url", "providerurl", "websiteurl", "proxyurl", "mcppassthroughurl"].includes(normalized)
+  );
+}
+
+function isHeaderKey(keyName: string | undefined): boolean {
+  return normalizeManagementKeyName(keyName) === "customheaders";
+}
+
+function asHeaderRecord(value: unknown): Record<string, string> | null | undefined {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as Record<string, string>;
+}
+
+function isLegacyBearerUserApiKey(token: string, source: "bearer" | "cookie"): boolean {
+  if (source !== "bearer") return false;
+  if (config.auth.adminToken && constantTimeEqual(token, config.auth.adminToken)) return false;
+  return detectSessionTokenKind(token) === "legacy";
+}
+
+async function classifyLegacyManagementCredential(
+  token: string,
+  source: "bearer" | "cookie"
+): Promise<AuthCredentialType> {
+  if (config.auth.adminToken && constantTimeEqual(token, config.auth.adminToken)) {
+    return "admin-token";
+  }
+
+  if (detectSessionTokenKind(token) === "opaque") {
+    return classifyOpaqueLegacyManagementCredential(token);
+  }
+
+  // 维持旧接口兼容：只把 bearer 形式的 legacy DB key 视为第三方 API key。
+  // legacy cookie 仍按 Web UI 会话处理，直到切到 opaque cookie 后可精确按 provenance 拦截。
+  return isLegacyBearerUserApiKey(token, source) ? "user-api-key" : "session";
+}
+
+async function classifyOpaqueLegacyManagementCredential(
+  token: string
+): Promise<AuthCredentialType> {
+  try {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+    const sessionData = await new RedisSessionStore().read(token);
+    return sessionData?.credentialType ?? "user-api-key";
+  } catch {
+    return "session";
+  }
 }
 
 // Server Action 函数签名 (支持两种格式)
@@ -306,9 +438,17 @@ export function createActionRoute(
 
       // 0. 认证检查 (如果需要)
       if (requiresAuth) {
-        const authToken =
-          getCookie(c, AUTH_COOKIE_NAME) ??
-          getBearerTokenFromAuthHeader(c.req.header("authorization"));
+        const cookieToken =
+          getCookie(c, AUTH_COOKIE_NAME) ||
+          getAuthCookieFromHeader(
+            c.req.header("cookie") ??
+              c.req.header("Cookie") ??
+              c.req.raw?.headers.get("cookie") ??
+              c.req.raw?.headers.get("Cookie")
+          );
+        const bearerToken = getBearerTokenFromAuthHeader(c.req.header("authorization"));
+        const authToken = bearerToken ?? cookieToken;
+        const authTokenSource: "cookie" | "bearer" = bearerToken ? "bearer" : "cookie";
         if (!authToken) {
           logger.warn(`[ActionAPI] ${fullPath} 认证失败: 缺少 ${AUTH_COOKIE_NAME}`);
           return c.json({ ok: false, error: "未认证" }, 401);
@@ -329,6 +469,52 @@ export function createActionRoute(
           });
           return c.json({ ok: false, error: "权限不足" }, 403);
         }
+
+        const credentialType =
+          requiredRole === "admin"
+            ? await classifyLegacyManagementCredential(authToken, authTokenSource)
+            : "session";
+        if (
+          requiredRole === "admin" &&
+          credentialType === "user-api-key" &&
+          !isApiKeyAdminAccessEnabled()
+        ) {
+          logger.warn(`[ActionAPI] ${fullPath} 拒绝用户 API Key 管理端访问`, {
+            userId: session.user.id,
+            userRole: session.user.role,
+          });
+          return c.json(
+            {
+              ok: false,
+              error: "API Key 管理端访问已关闭",
+              errorCode: "auth.api_key_admin_disabled",
+            },
+            403
+          );
+        }
+
+        if (
+          authTokenSource === "cookie" &&
+          isMutationMethod(c.req.raw?.method ?? "POST") &&
+          !verifyCsrfToken({
+            token: c.req.header(CSRF_HEADER),
+            authToken,
+            userId: session.user.id,
+          })
+        ) {
+          logger.warn(`[ActionAPI] ${fullPath} CSRF 校验失败`, {
+            userId: session.user.id,
+            userRole: session.user.role,
+          });
+          return c.json(
+            {
+              ok: false,
+              error: "CSRF token is missing or invalid.",
+              errorCode: "auth.csrf_invalid",
+            },
+            403
+          );
+        }
       }
 
       // 1. 解析并验证请求体 (Zod 自动验证)
@@ -337,7 +523,7 @@ export function createActionRoute(
       // 2. 调用 Server Action
       // 如果提供了 argsMapper，使用它来映射参数
       // 否则使用默认的参数推断逻辑
-      logger.debug(`[ActionAPI] Calling ${fullPath}`, { body });
+      logger.debug(`[ActionAPI] Calling ${fullPath}`, { body: redactManagementBody(body) });
 
       let args: unknown[];
 

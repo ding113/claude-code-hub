@@ -3,7 +3,6 @@
 import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Settings, Webhook } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { getNotificationSettingsAction } from "@/actions/notifications";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "@/i18n/routing";
+import { getNotificationSettingsAction } from "@/lib/api-client/v1/actions/notifications";
 import { logger } from "@/lib/logger";
 import { setOnboardingCompleted, shouldShowOnboarding } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";

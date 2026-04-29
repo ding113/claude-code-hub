@@ -93,6 +93,10 @@ export const EnvSchema = z.object({
   REDIS_TLS_REJECT_UNAUTHORIZED: z.string().default("true").transform(booleanTransform),
   ENABLE_RATE_LIMIT: z.string().default("true").transform(booleanTransform),
   ENABLE_SECURE_COOKIES: z.string().default("true").transform(booleanTransform),
+  ENABLE_LEGACY_ACTIONS_API: z.string().default("true").transform(booleanTransform),
+  LEGACY_ACTIONS_DOCS_MODE: z.enum(["deprecated", "hidden"]).default("deprecated"),
+  LEGACY_ACTIONS_SUNSET_DATE: z.string().default("2026-12-31"),
+  ENABLE_API_KEY_ADMIN_ACCESS: z.string().default("false").transform(booleanTransform),
   SESSION_TOKEN_MODE: z.enum(["legacy", "dual", "opaque"]).default("opaque"),
   SESSION_TTL: z.coerce.number().default(300),
   // 会话消息存储控制
@@ -168,4 +172,12 @@ export function getEnvConfig(): EnvConfig {
  */
 export function isDevelopment(): boolean {
   return getEnvConfig().NODE_ENV === "development";
+}
+
+export function isLegacyActionsApiEnabled(): boolean {
+  return getEnvConfig().ENABLE_LEGACY_ACTIONS_API;
+}
+
+export function isApiKeyAdminAccessEnabled(): boolean {
+  return getEnvConfig().ENABLE_API_KEY_ADMIN_ACCESS;
 }

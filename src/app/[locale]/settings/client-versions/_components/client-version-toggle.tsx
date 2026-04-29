@@ -4,7 +4,7 @@ import { AlertCircle, Shield, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { saveSystemSettings } from "@/actions/system-config";
+import { saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import { cn } from "@/lib/utils";
 import { SettingsToggleRow } from "../../_components/ui/settings-ui";
 

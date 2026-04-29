@@ -45,6 +45,7 @@ describe("session token contract and migration flags", () => {
     const validContract = {
       sessionId: "sid_opaque_session_123",
       keyFingerprint: "sha256:abc123",
+      credentialType: "user-api-key",
       createdAt: 1_700_000_000,
       expiresAt: 1_700_000_300,
       userId: 42,
@@ -52,6 +53,12 @@ describe("session token contract and migration flags", () => {
     };
 
     expect(isOpaqueSessionContract(validContract)).toBe(true);
+    expect(
+      isOpaqueSessionContract({
+        ...validContract,
+        credentialType: "service-account",
+      })
+    ).toBe(false);
     expect(
       isOpaqueSessionContract({
         ...validContract,

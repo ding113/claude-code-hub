@@ -3,11 +3,11 @@
 import { FileText, Gauge, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { hasSessionMessages } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { hasSessionMessages } from "@/lib/api-client/v1/actions/active-sessions";
 import { cn } from "@/lib/utils";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";

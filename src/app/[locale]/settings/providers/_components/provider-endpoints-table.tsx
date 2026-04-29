@@ -5,16 +5,6 @@ import { Edit2, Loader2, MoreHorizontal, Play, Plus, RotateCcw, Trash2 } from "l
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  addProviderEndpoint,
-  batchGetEndpointCircuitInfo,
-  editProviderEndpoint,
-  getProviderEndpoints,
-  getProviderEndpointsByVendor,
-  probeProviderEndpoint,
-  removeProviderEndpoint,
-  resetEndpointCircuit,
-} from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +42,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  addProviderEndpoint,
+  batchGetEndpointCircuitInfo,
+  editProviderEndpoint,
+  getProviderEndpoints,
+  getProviderEndpointsByVendor,
+  probeProviderEndpoint,
+  removeProviderEndpoint,
+  resetEndpointCircuit,
+} from "@/lib/api-client/v1/actions/provider-endpoints";
 import { useInViewOnce } from "@/lib/hooks/use-in-view-once";
 import {
   getAllProviderTypes,

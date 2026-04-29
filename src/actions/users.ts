@@ -492,6 +492,50 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
   }
 }
 
+/**
+ * 按 id 获取单个用户。
+ *
+ * 供新的 management REST detail endpoint 使用。这里保留 ActionResult，
+ * 避免列表 action 在内部异常时返回空数组并把真实错误伪装成 404。
+ */
+export async function getUserById(userId: number): Promise<ActionResult<User>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    if (session.user.role !== "admin" && session.user.id !== userId) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const user = await findUserById(userId);
+    if (!user) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    return { ok: true, data: user };
+  } catch (error) {
+    logger.error(`Failed to fetch user ${userId}:`, error);
+    const message = error instanceof Error ? error.message : "Failed to fetch user";
+    return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
+  }
+}
+
 export async function searchUsersForFilter(
   searchTerm?: string,
   limit?: number

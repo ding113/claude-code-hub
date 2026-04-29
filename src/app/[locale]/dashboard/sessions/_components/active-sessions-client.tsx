@@ -4,11 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { getAllSessions } from "@/actions/active-sessions";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "@/i18n/routing";
-import type { CurrencyCode } from "@/lib/utils/currency";
+import { getAllSessions } from "@/lib/api-client/v1/actions/active-sessions";
+import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import type { ActiveSessionInfo } from "@/types/session";
 import { ActiveSessionsTable } from "./active-sessions-table";
 
@@ -49,13 +49,7 @@ export function ActiveSessionsClient() {
 
   const { data: systemSettings } = useQuery({
     queryKey: ["system-settings"],
-    queryFn: async () => {
-      const response = await fetch("/api/system-settings");
-      if (!response.ok) {
-        throw new Error("FETCH_SETTINGS_FAILED");
-      }
-      return response.json() as Promise<{ currencyDisplay: CurrencyCode }>;
-    },
+    queryFn: getSystemSettings,
   });
 
   const activeSessions = data?.active || [];

@@ -3,9 +3,9 @@
 import { Infinity as InfinityIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
-import type { MyUsageQuota } from "@/actions/my-usage";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { MyUsageQuota } from "@/lib/api-client/v1/actions/my-usage";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";

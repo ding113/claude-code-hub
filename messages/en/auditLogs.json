@@ -45,7 +45,8 @@
     "provider": {
       "create": "Create provider",
       "update": "Update provider",
-      "delete": "Delete provider"
+      "delete": "Delete provider",
+      "key_reveal": "Reveal provider key"
     },
     "provider_group": {
       "create": "Create provider group",

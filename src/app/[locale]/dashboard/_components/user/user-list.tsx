@@ -4,7 +4,6 @@ import { Loader2, MoreVertical, SquarePen, Trash, Users } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { renewUser, toggleUserEnabled } from "@/actions/users";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { ListContainer, ListItem, type ListItemData } from "@/components/ui/list";
 import { Switch } from "@/components/ui/switch";
+import { renewUser, toggleUserEnabled } from "@/lib/api-client/v1/actions/users";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 import type { User, UserDisplay } from "@/types/user";
 import { AddUserDialog } from "./add-user-dialog";

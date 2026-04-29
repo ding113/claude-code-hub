@@ -14,8 +14,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import type { ActionResult } from "@/actions/types";
-import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +22,8 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { IpGeoLookupMode } from "@/hooks/use-ip-geo";
 import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
+import type { ActionResult } from "@/lib/api-client/v1/actions/types";
+import { getUsageLogsBatch } from "@/lib/api-client/v1/actions/usage-logs";
 import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";

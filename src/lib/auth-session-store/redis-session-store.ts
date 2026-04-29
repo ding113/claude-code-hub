@@ -43,12 +43,19 @@ function parseSessionData(raw: string): SessionData | null {
     if (typeof obj.keyFingerprint !== "string") return null;
     if (typeof obj.userRole !== "string") return null;
     if (typeof obj.userId !== "number" || !Number.isInteger(obj.userId)) return null;
+    const credentialType =
+      obj.credentialType === "admin-token" || obj.credentialType === "user-api-key"
+        ? obj.credentialType
+        : obj.userId === -1
+          ? "admin-token"
+          : "user-api-key";
     if (!Number.isFinite(obj.createdAt) || typeof obj.createdAt !== "number") return null;
     if (!Number.isFinite(obj.expiresAt) || typeof obj.expiresAt !== "number") return null;
 
     return {
       sessionId: obj.sessionId,
       keyFingerprint: obj.keyFingerprint,
+      credentialType,
       userId: obj.userId as number,
       userRole: obj.userRole,
       createdAt: obj.createdAt,
@@ -106,6 +113,7 @@ export class RedisSessionStore implements SessionStore {
     const sessionData: SessionData = {
       sessionId: `sid_${globalThis.crypto.randomUUID()}`,
       keyFingerprint: data.keyFingerprint,
+      credentialType: data.credentialType,
       userId: data.userId,
       userRole: data.userRole,
       createdAt,
@@ -196,6 +204,7 @@ export class RedisSessionStore implements SessionStore {
       nextSession = await this.create(
         {
           keyFingerprint: oldSession.keyFingerprint,
+          credentialType: oldSession.credentialType,
           userId: oldSession.userId,
           userRole: oldSession.userRole,
         },

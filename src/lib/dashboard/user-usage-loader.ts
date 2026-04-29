@@ -1,4 +1,4 @@
-import type { KeyUsageData } from "@/actions/users";
+import type { KeyUsageData } from "@/lib/api-client/v1/actions/users";
 
 export const USER_USAGE_IDLE_DELAY_MS = 250;
 

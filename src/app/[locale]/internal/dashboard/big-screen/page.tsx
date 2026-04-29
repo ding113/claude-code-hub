@@ -36,11 +36,12 @@ import {
   YAxis,
 } from "recharts";
 import useSWR from "swr";
-import { getDashboardRealtimeData } from "@/actions/dashboard-realtime";
 import { type Locale, localeLabels, locales } from "@/i18n/config";
 import { normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
 import { usePathname, useRouter } from "@/i18n/routing";
-import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
+import { getDashboardRealtimeData } from "@/lib/api-client/v1/actions/dashboard-realtime";
+import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
+import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 
 /**
  * ============================================================================
@@ -756,15 +757,10 @@ export default function BigScreenPage() {
   );
 
   // Fetch system settings for currency display
-  const { data: systemSettings } = useSWR(
-    "system-settings",
-    async () => {
-      const response = await fetch("/api/system-settings");
-      if (!response.ok) throw new Error("Failed to fetch settings");
-      return response.json() as Promise<{ currencyDisplay: CurrencyCode }>;
-    },
-    { revalidateOnFocus: false, refreshWhenHidden: false }
-  );
+  const { data: systemSettings } = useSWR("system-settings", getSystemSettings, {
+    revalidateOnFocus: false,
+    refreshWhenHidden: false,
+  });
 
   const currencySymbol = CURRENCY_CONFIG[systemSettings?.currencyDisplay ?? "USD"]?.symbol ?? "$";
 
