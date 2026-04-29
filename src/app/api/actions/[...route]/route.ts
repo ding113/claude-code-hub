@@ -37,6 +37,7 @@ import * as webhookTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 import {
   hasLegacyRedactedWritePlaceholders,
+  preserveLegacyNotificationSettingsUpdateInput,
   preserveLegacyProviderUpdateInput,
   preserveLegacyWebhookTargetUpdateInput,
   sanitizeLegacyNotificationBindingResponse,
@@ -135,7 +136,9 @@ async function getSanitizedLegacyNotificationSettingsAction() {
 async function updateSanitizedLegacyNotificationSettingsAction(
   input: Parameters<typeof notificationActions.updateNotificationSettingsAction>[0]
 ) {
-  const result = await notificationActions.updateNotificationSettingsAction(input);
+  const result = await notificationActions.updateNotificationSettingsAction(
+    preserveLegacyNotificationSettingsUpdateInput(input)
+  );
   if (!result.ok) return result;
   return {
     ...result,

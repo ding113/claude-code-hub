@@ -191,6 +191,22 @@ describe("v1 webhook targets CRUD", () => {
     expect(JSON.stringify(created.json)).not.toContain("webhook-secret");
     expect(JSON.stringify(created.json)).not.toContain("proxy-pass");
 
+    const redactedCreate = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/webhook-targets",
+      headers: { Authorization: "Bearer admin-token" },
+      body: {
+        name: "Copied Ops",
+        providerType: "dingtalk",
+        webhookUrl: "https://example.com/webhook",
+        customHeaders: { Authorization: "[REDACTED]" },
+      },
+    });
+    expect(redactedCreate.response.status).toBe(422);
+    expect(redactedCreate.json).toMatchObject({
+      errorCode: "webhook_target.redacted_placeholder_rejected",
+    });
+
     const updated = await callV1Route({
       method: "PATCH",
       pathname: "/api/v1/webhook-targets/10",

@@ -41,6 +41,21 @@ export function sanitizeLegacyNotificationSettingsResponse<
   } as T;
 }
 
+export function preserveLegacyNotificationSettingsUpdateInput<T extends object>(input: T): T {
+  const next: Record<string, unknown> = { ...(input as Record<string, unknown>) };
+  for (const field of [
+    "cacheHitRateAlertWebhook",
+    "circuitBreakerWebhook",
+    "costAlertWebhook",
+    "dailyLeaderboardWebhook",
+  ] as const) {
+    if (next[field] === "[REDACTED]") {
+      delete next[field];
+    }
+  }
+  return next as T;
+}
+
 export function sanitizeLegacyProviderResponse<T extends LegacySecretBearingRecord>(
   provider: T
 ): T {

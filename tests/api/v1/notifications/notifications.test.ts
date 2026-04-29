@@ -140,6 +140,24 @@ describe("v1 notification endpoints", () => {
     expect(updateNotificationSettingsActionMock).toHaveBeenCalledWith({ enabled: false });
   });
 
+  test("preserves legacy notification webhooks when redacted values are echoed", async () => {
+    const updated = await callV1Route({
+      method: "PUT",
+      pathname: "/api/v1/notifications/settings",
+      headers: { Authorization: "Bearer admin-token" },
+      body: {
+        enabled: false,
+        circuitBreakerWebhook: "[REDACTED]",
+        dailyLeaderboardWebhook: "[REDACTED]",
+        costAlertWebhook: "[REDACTED]",
+        cacheHitRateAlertWebhook: "[REDACTED]",
+      },
+    });
+
+    expect(updated.response.status).toBe(200);
+    expect(updateNotificationSettingsActionMock).toHaveBeenCalledWith({ enabled: false });
+  });
+
   test("tests webhook URLs and validates request body", async () => {
     const ok = await callV1Route({
       method: "POST",

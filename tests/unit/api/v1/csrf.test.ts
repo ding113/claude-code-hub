@@ -102,14 +102,27 @@ describe("v1 csrf helper", () => {
     expect(withAdminFallback.getCsrfSecret()).toBe("admin-token-secret");
   });
 
-  test("falls back to a process secret instead of returning null", () => {
-    expect(getCsrfSecret()).toEqual(expect.any(String));
+  test("falls back to the auth token so verification is deterministic across replicas", async () => {
+    vi.resetModules();
+    vi.stubEnv("ADMIN_TOKEN", undefined);
+    vi.stubEnv("CSRF_SECRET", undefined);
+
+    const csrf = await import("@/lib/api/v1/_shared/csrf");
+    const token = csrf.createCsrfToken({
+      authToken: "auth-token",
+      userId: 123,
+      now: 1_800_000,
+    });
+
+    expect(csrf.getCsrfSecret()).toBeNull();
+    expect(token).toEqual(expect.any(String));
     expect(
-      createCsrfToken({
+      csrf.verifyCsrfToken({
+        token,
         authToken: "auth-token",
         userId: 123,
         now: 1_800_000,
       })
-    ).toEqual(expect.any(String));
+    ).toBe(true);
   });
 });

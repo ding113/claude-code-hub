@@ -1,6 +1,9 @@
 import type { Context } from "hono";
 import type { ActionResult } from "@/actions/types";
-import { sanitizeLegacyNotificationSettingsResponse } from "@/lib/api/legacy-action-sanitizers";
+import {
+  preserveLegacyNotificationSettingsUpdateInput,
+  sanitizeLegacyNotificationSettingsResponse,
+} from "@/lib/api/legacy-action-sanitizers";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
 import {
   createProblemResponse,
@@ -27,10 +30,11 @@ export async function updateNotificationSettings(c: Context): Promise<Response> 
   const body = await parseHonoJsonBody(c, NotificationSettingsUpdateSchema);
   if (!body.ok) return body.response;
   const actions = await import("@/actions/notifications");
+  const updatePayload = preserveLegacyNotificationSettingsUpdateInput(body.data);
   const result = await callAction(
     c,
     actions.updateNotificationSettingsAction,
-    [body.data] as never[],
+    [updatePayload] as never[],
     c.get("auth")
   );
   if (!result.ok) return actionError(c, result);

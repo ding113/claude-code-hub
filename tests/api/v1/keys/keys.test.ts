@@ -322,6 +322,23 @@ describe("v1 key endpoints", () => {
     expect(failed.response.status).toBe(400);
     expect(failed.json).toMatchObject({ detail: "Bad request" });
     expect(JSON.stringify(failed.json)).not.toContain("leaked-secret");
+
+    editKeyMock.mockResolvedValueOnce({
+      ok: false,
+      error: "permission denied in English",
+      errorCode: "PERMISSION_DENIED",
+    });
+    const forbidden = await callV1Route({
+      method: "PATCH",
+      pathname: "/api/v1/keys/10",
+      headers,
+      body: { name: "default-4" },
+    });
+    expect(forbidden.response.status).toBe(403);
+    expect(forbidden.json).toMatchObject({
+      detail: "Forbidden",
+      errorCode: "PERMISSION_DENIED",
+    });
   });
 
   test("rejects invalid key requests and documents key REST paths", async () => {

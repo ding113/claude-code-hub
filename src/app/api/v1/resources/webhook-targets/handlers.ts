@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { ActionResult } from "@/actions/types";
+import { hasLegacyRedactedWritePlaceholders } from "@/lib/api/legacy-action-sanitizers";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
 import {
   createProblemResponse,
@@ -53,6 +54,14 @@ export async function getWebhookTarget(c: Context): Promise<Response> {
 export async function createWebhookTarget(c: Context): Promise<Response> {
   const body = await parseHonoJsonBody(c, WebhookTargetCreateSchema);
   if (!body.ok) return body.response;
+  if (hasLegacyRedactedWritePlaceholders(body.data)) {
+    return createProblemResponse({
+      status: 422,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "webhook_target.redacted_placeholder_rejected",
+      detail: "Redacted placeholders cannot be used when creating webhook targets.",
+    });
+  }
 
   const webhookTargetActions = await import("@/actions/webhook-targets");
   const result = await callAction(

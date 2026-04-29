@@ -217,9 +217,9 @@ function actionError(c: Context, result: Extract<ActionResult<unknown>, { ok: fa
   const detail = result.error || "Request failed.";
   const code = result.errorCode;
   const status =
-    code === "NOT_FOUND" || detail.includes("不存在") || detail.includes("not found")
+    isNotFoundActionCode(code) || detail.includes("不存在") || detail.includes("not found")
       ? 404
-      : detail.includes("权限")
+      : isPermissionActionCode(code) || detail.includes("权限")
         ? 403
         : 400;
   return createProblemResponse({
@@ -229,6 +229,20 @@ function actionError(c: Context, result: Extract<ActionResult<unknown>, { ok: fa
     errorParams: result.errorParams,
     detail: publicActionErrorDetail(status),
   });
+}
+
+function isNotFoundActionCode(code: string | undefined): boolean {
+  const normalized = code?.toUpperCase();
+  return normalized === "NOT_FOUND" || normalized?.endsWith("_NOT_FOUND") === true;
+}
+
+function isPermissionActionCode(code: string | undefined): boolean {
+  const normalized = code?.toUpperCase();
+  return (
+    normalized === "PERMISSION_DENIED" ||
+    normalized === "UNAUTHORIZED" ||
+    normalized?.includes("FORBIDDEN") === true
+  );
 }
 
 function sanitizeKey(item: unknown): unknown {
