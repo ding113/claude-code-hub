@@ -100,7 +100,13 @@ describe("/api/v1 docs routes & OpenAPI spec", () => {
     expect(serialized.includes("gemini-cli")).toBe(false);
   });
 
-  it("every defined operation declares a security requirement", async () => {
+  it("every defined operation declares a security requirement (or explicit public)", async () => {
+    // OpenAPI 3.x: an operation must declare `security`. An array with at
+    // least one requirement object means "auth required", and an explicit
+    // empty array `security: []` means "no auth required" (public override).
+    // Both are acceptable; only operations that omit `security` entirely
+    // (defaulting to the document-level requirement, which we do not set)
+    // are flagged.
     const { body } = await getJson<OpenApiDocument>("/api/v1/openapi.json");
     const paths = body.paths ?? {};
 
@@ -110,13 +116,12 @@ describe("/api/v1 docs routes & OpenAPI spec", () => {
       for (const [verb, operation] of Object.entries(pathItem)) {
         if (!OPENAPI_VERBS.has(verb.toLowerCase())) continue;
         const op = operation as { security?: Array<Record<string, unknown>> } | undefined;
-        if (!op || !Array.isArray(op.security) || op.security.length === 0) {
+        if (!op || !Array.isArray(op.security)) {
           offenders.push(`${verb.toUpperCase()} ${pathKey}`);
         }
       }
     }
 
-    // 当前阶段尚未挂载任何业务路由，offenders 应为空数组（空集合 vacuously satisfies）。
     expect(offenders).toEqual([]);
   });
 });

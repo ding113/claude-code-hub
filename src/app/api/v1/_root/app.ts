@@ -14,14 +14,24 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { createManagementDocsApp } from "@/app/api/v1/_root/docs";
 import { managementApiDocumentConfig } from "@/app/api/v1/_root/document";
 import { adminUserInsightsRouter } from "@/app/api/v1/resources/admin-user-insights/router";
+import { auditLogsRouter } from "@/app/api/v1/resources/audit-logs/router";
+import { dashboardRouter } from "@/app/api/v1/resources/dashboard/router";
+import { errorRulesRouter } from "@/app/api/v1/resources/error-rules/router";
+import { ipGeoRouter } from "@/app/api/v1/resources/ip-geo/router";
 import { keysRouter } from "@/app/api/v1/resources/keys/router";
+import { meRouter } from "@/app/api/v1/resources/me/router";
 import { modelPricesRouter } from "@/app/api/v1/resources/model-prices/router";
 import { notificationBindingsRouter } from "@/app/api/v1/resources/notification-bindings/router";
 import { notificationsRouter } from "@/app/api/v1/resources/notifications/router";
 import { providerEndpointsRouter } from "@/app/api/v1/resources/provider-endpoints/router";
 import { providerGroupsRouter } from "@/app/api/v1/resources/provider-groups/router";
 import { providersRouter } from "@/app/api/v1/resources/providers/router";
+import { publicStatusRouter } from "@/app/api/v1/resources/public-status/router";
+import { requestFiltersRouter } from "@/app/api/v1/resources/request-filters/router";
+import { sensitiveWordsRouter } from "@/app/api/v1/resources/sensitive-words/router";
+import { sessionsRouter } from "@/app/api/v1/resources/sessions/router";
 import { systemRouter } from "@/app/api/v1/resources/system/router";
+import { usageLogsRouter } from "@/app/api/v1/resources/usage-logs/router";
 import { usersRouter } from "@/app/api/v1/resources/users/router";
 import { webhookTargetsRouter } from "@/app/api/v1/resources/webhook-targets/router";
 import {
@@ -167,6 +177,36 @@ app.route("/", notificationsRouter);
 
 // /notifications/types/{type}/bindings：admin tier。
 app.route("/", notificationBindingsRouter);
+
+// /usage-logs/*：read tier；action 自身按 admin / user 过滤。
+app.route("/", usageLogsRouter);
+
+// /audit-logs/*：admin tier。
+app.route("/", auditLogsRouter);
+
+// /sessions/*：read tier；action 自身按 admin / user 过滤。
+app.route("/", sessionsRouter);
+
+// /dashboard/*：read tier 默认；admin-only 端点由 action 自身限制。
+app.route("/", dashboardRouter);
+
+// /me/*：read tier，self-scoped；底层 action 走 allowReadOnlyAccess。
+app.route("/", meRouter);
+
+// /public/status：完全公开；/public/status/settings：admin + CSRF。
+app.route("/", publicStatusRouter);
+
+// /ip-geo/{ip}：read tier；底层 action 自身限制为 admin。
+app.route("/", ipGeoRouter);
+
+// /error-rules/*：admin tier；包含 CRUD + 缓存 / 测试动作。
+app.route("/", errorRulesRouter);
+
+// /request-filters/*：admin tier。
+app.route("/", requestFiltersRouter);
+
+// /sensitive-words/*：admin tier。
+app.route("/", sensitiveWordsRouter);
 
 // ==================== 404 处理（Problem Details） ====================
 
