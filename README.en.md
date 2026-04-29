@@ -267,8 +267,10 @@ Docker Compose is the **preferred deployment method** — it automatically provi
    ```
 4. Upgrade:
    ```bash
-   docker compose pull && docker compose up -d
+   make app-update
    ```
+   This only pulls and recreates the `app` service, without pulling `postgres` or `redis`.
+   If you really need to upgrade the database and Redis images too, run `docker compose pull && docker compose up -d`.
    Stop and clean up with `docker compose down` when necessary.
 
 ### ☸️ Kubernetes / k3s (Production / HA / Multi-node)
