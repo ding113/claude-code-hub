@@ -11,6 +11,7 @@ import type {
   ProviderBatchUpdateInput,
   ProviderCreateInput,
   ProviderListResponse,
+  ProviderModelSuggestionsResponse,
   ProviderResponse,
   ProviderUpdateInput,
 } from "@/lib/api/v1/schemas/providers";
@@ -52,6 +53,19 @@ export function useProviderGroupsList(params?: {
   return useQuery<{ items: unknown[] }, ApiError | Error>({
     queryKey: providersKeys.groups(params),
     queryFn: () => providersClient.groups(params),
+  });
+}
+
+/**
+ * Returns deduplicated allowedModels from enabled providers in the given group.
+ * GET /api/v1/providers/model-suggestions?providerGroup=...
+ */
+export function useModelSuggestionsByProviderGroup(
+  providerGroup?: string | null
+): UseQueryResult<ProviderModelSuggestionsResponse, ApiError | Error> {
+  return useQuery<ProviderModelSuggestionsResponse, ApiError | Error>({
+    queryKey: providersKeys.modelSuggestions(providerGroup),
+    queryFn: () => providersClient.modelSuggestions(providerGroup),
   });
 }
 

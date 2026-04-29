@@ -11,11 +11,9 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { renewKeyExpiresAt, toggleKeyEnabled } from "@/actions/keys";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { keysClient } from "@/lib/api-client/v1/keys/index";
 import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
@@ -158,7 +157,6 @@ export function KeyRowItem({
   translations,
 }: KeyRowItemProps) {
   const locale = useLocale();
-  const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [fullKeyDialogOpen, setFullKeyDialogOpen] = useState(false);
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
@@ -219,22 +217,14 @@ export function KeyRowItem({
     setIsTogglingEnabled(true);
 
     try {
-      const res = await toggleKeyEnabled(keyData.id, checked);
-      if (!res.ok) {
-        // 失败时回滚UI状态
-        setLocalStatus(checked ? "disabled" : "enabled");
-        toast.error(res.error || tKeyStatus("operationFailed"));
-        setIsTogglingEnabled(false);
-        return;
-      }
+      await keysClient.enable(keyData.id, { enabled: checked });
       toast.success(checked ? tKeyStatus("keyEnabled") : tKeyStatus("keyDisabled"));
-      // 刷新服务端数据
-      router.refresh();
     } catch (error) {
       // 失败时回滚UI状态
       setLocalStatus(checked ? "disabled" : "enabled");
       console.error("[KeyRowItem] toggle key enabled failed", error);
-      toast.error(tKeyStatus("operationFailed"));
+      const message = error instanceof Error ? error.message : tKeyStatus("operationFailed");
+      toast.error(message || tKeyStatus("operationFailed"));
     } finally {
       setIsTogglingEnabled(false);
     }
@@ -253,22 +243,12 @@ export function KeyRowItem({
     }
 
     try {
-      // 使用专用的续期 action，避免 editKey 覆盖其他字段
-      const res = await renewKeyExpiresAt(keyData.id, {
+      // 使用专用的续期端点，避免 PATCH 覆盖其他字段
+      await keysClient.renew(keyData.id, {
         expiresAt: newExpiresAt,
         enableKey,
       });
-      if (!res.ok) {
-        // 失败时回滚UI状态
-        setLocalExpiresAt(keyData.expiresAt);
-        if (enableKey !== undefined) {
-          setLocalStatus(keyData.status);
-        }
-        toast.error(res.error || tKeyRenew("failed"));
-        return { ok: false };
-      }
       toast.success(tKeyRenew("success"));
-      router.refresh();
       return { ok: true };
     } catch (error) {
       // 失败时回滚UI状态
@@ -277,7 +257,8 @@ export function KeyRowItem({
         setLocalStatus(keyData.status);
       }
       console.error("[KeyRowItem] quick renew failed", error);
-      toast.error(tKeyRenew("failed"));
+      const message = error instanceof Error ? error.message : tKeyRenew("failed");
+      toast.error(message || tKeyRenew("failed"));
       return { ok: false };
     }
   };

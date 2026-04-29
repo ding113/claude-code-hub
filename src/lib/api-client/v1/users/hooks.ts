@@ -98,3 +98,33 @@ export function useResetUserLimits(id: number) {
     invalidates: [usersKeys.all],
   });
 }
+
+/**
+ * Reset ALL user statistics (delete logs + Redis cache + sessions). IRREVERSIBLE.
+ * Wraps POST /api/v1/users/{id}/statistics:reset.
+ */
+export function useResetUserAllStatistics(id: number) {
+  return useApiMutation<void, { ok: boolean }>({
+    mutationFn: () => usersClient.resetAllStatistics(id),
+    invalidates: [usersKeys.all],
+  });
+}
+
+/** Create a user without issuing a default key (POST /api/v1/users?withDefaultKey=false). */
+export function useCreateUserOnly() {
+  return useApiMutation<UserCreateInput, { user: UserCreateResponse["user"] }>({
+    mutationFn: (input) => usersClient.createOnly(input),
+    invalidates: [usersKeys.all],
+  });
+}
+
+/** GET /api/v1/providers/groups?userId=... — only groups accessible to the user. */
+export function useUserProviderGroupsForFilter(
+  userId: number
+): UseQueryResult<{ items: string[] }, ApiError | Error> {
+  return useQuery<{ items: string[] }, ApiError | Error>({
+    queryKey: [...usersKeys.all, "available-provider-groups", userId] as const,
+    queryFn: () => usersClient.availableProviderGroups(userId),
+    enabled: Number.isInteger(userId) && userId > 0,
+  });
+}

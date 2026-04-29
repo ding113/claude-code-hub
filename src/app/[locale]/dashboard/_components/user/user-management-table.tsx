@@ -2,13 +2,13 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw, Users } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { renewUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { useVirtualizer } from "@/hooks/use-virtualizer";
+import { usersClient } from "@/lib/api-client/v1/users";
+import { usersKeys } from "@/lib/api-client/v1/users/keys";
 import { cn } from "@/lib/utils";
 import type { User, UserDisplay } from "@/types/user";
 import { BatchEditToolbar } from "./batch-edit/batch-edit-toolbar";
@@ -130,7 +130,6 @@ export function UserManagementTable({
   onRefresh,
   isRefreshing,
 }: UserManagementTableProps) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const tUserList = useTranslations("dashboard.userList");
   const tUserMgmt = useTranslations("dashboard.userManagement");
@@ -361,22 +360,15 @@ export function UserManagementTable({
     });
 
     try {
-      const res = await renewUser(userId, { expiresAt: expiresAt.toISOString(), enableUser });
-      if (!res.ok) {
-        // 失败时回滚
-        setOptimisticUserExpiries((prev) => {
-          const next = new Map(prev);
-          next.delete(userId);
-          return next;
-        });
-        toast.error(res.error || tUserMgmt("quickRenew.failed"));
-        return { ok: false };
-      }
+      await usersClient.renew(userId, {
+        expiresAt: expiresAt.toISOString(),
+        enableUser,
+      });
       toast.success(tUserMgmt("quickRenew.success"));
       // 刷新服务端数据（成功后乐观更新状态会在useEffect中被props覆盖）
       // 使 React Query 缓存失效，确保数据刷新
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      router.refresh();
+      queryClient.invalidateQueries({ queryKey: usersKeys.all });
       return { ok: true };
     } catch (error) {
       // 失败时回滚
@@ -386,7 +378,8 @@ export function UserManagementTable({
         return next;
       });
       console.error("[QuickRenew] failed", error);
-      toast.error(tUserMgmt("quickRenew.failed"));
+      const message = error instanceof Error ? error.message : tUserMgmt("quickRenew.failed");
+      toast.error(message || tUserMgmt("quickRenew.failed"));
       return { ok: false };
     }
   };

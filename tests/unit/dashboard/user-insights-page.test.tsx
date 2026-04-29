@@ -27,6 +27,96 @@ vi.mock("@/actions/admin-user-insights", () => ({
   getUserInsightsProviderBreakdown: mockGetUserInsightsProviderBreakdown,
 }));
 
+// The dashboard now reads via v1 hooks; mirror the legacy mock fns by invoking
+// them and exposing a synchronous React Query–shaped result. Tests call
+// `mock.mockResolvedValue(...)` ahead of render, so we read the queued value
+// via mock.results and resolve it inline. The cache is shared across the file
+// and cleared in beforeEach to keep tests isolated.
+async function unwrapPromise(promise: unknown): Promise<unknown> {
+  if (!(promise instanceof Promise)) return promise;
+  const value = await promise;
+  if (value && typeof value === "object" && "ok" in (value as Record<string, unknown>)) {
+    const r = value as { ok: boolean; data?: unknown };
+    return r.ok ? r.data : undefined;
+  }
+  return value;
+}
+
+const insightsMockCache: Map<string, { data: unknown; loading: boolean }> = vi.hoisted(
+  () => new Map()
+);
+
+vi.mock("@/lib/api-client/v1/admin-user-insights/hooks", async () => {
+  const React = await import("react");
+
+  function useMockedQuery(
+    mock: ReturnType<typeof vi.fn>,
+    cacheKey: string,
+    args: unknown[]
+  ): { data: unknown; isLoading: boolean; isError: boolean; isFetching: boolean; error: null } {
+    const [, force] = React.useReducer((n: number) => n + 1, 0);
+
+    React.useEffect(() => {
+      const entry = insightsMockCache.get(cacheKey);
+      if (entry && !entry.loading) return; // already resolved
+      insightsMockCache.set(cacheKey, { data: undefined, loading: true });
+      const promise = mock(...args);
+      Promise.resolve(unwrapPromise(promise))
+        .then((value) => {
+          insightsMockCache.set(cacheKey, { data: value, loading: false });
+          force();
+        })
+        .catch(() => {
+          insightsMockCache.set(cacheKey, { data: undefined, loading: false });
+          force();
+        });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cacheKey]);
+
+    const entry = insightsMockCache.get(cacheKey);
+    return {
+      data: entry?.data,
+      isLoading: entry?.loading ?? true,
+      isError: false,
+      isFetching: entry?.loading ?? true,
+      error: null,
+    };
+  }
+
+  return {
+    useUserInsightsOverview: (userId: number, params: { startDate: string; endDate: string }) =>
+      useMockedQuery(
+        mockGetUserInsightsOverview,
+        `overview:${userId}:${params.startDate}:${params.endDate}`,
+        [userId, params.startDate, params.endDate]
+      ),
+    useUserInsightsKeyTrend: (userId: number, params: { startDate: string; endDate: string }) =>
+      useMockedQuery(
+        mockGetUserInsightsKeyTrend,
+        `keyTrend:${userId}:${params.startDate}:${params.endDate}`,
+        [userId, params.startDate, params.endDate]
+      ),
+    useUserInsightsModelBreakdown: (
+      userId: number,
+      params: { startDate: string; endDate: string }
+    ) =>
+      useMockedQuery(
+        mockGetUserInsightsModelBreakdown,
+        `model:${userId}:${params.startDate}:${params.endDate}`,
+        [userId, params.startDate, params.endDate]
+      ),
+    useUserInsightsProviderBreakdown: (
+      userId: number,
+      params: { startDate: string; endDate: string }
+    ) =>
+      useMockedQuery(
+        mockGetUserInsightsProviderBreakdown,
+        `provider:${userId}:${params.startDate}:${params.endDate}`,
+        [userId, params.startDate, params.endDate]
+      ),
+  };
+});
+
 const routerPushMock = vi.fn();
 vi.mock("@/i18n/routing", () => ({
   useRouter: () => ({
@@ -114,6 +204,7 @@ async function flushMicrotasks() {
 describe("UserInsightsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    insightsMockCache.clear();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, refetchOnWindowFocus: false },
@@ -275,6 +366,7 @@ describe("UserInsightsView", () => {
 describe("UserOverviewCards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    insightsMockCache.clear();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, refetchOnWindowFocus: false },
@@ -358,6 +450,7 @@ describe("UserOverviewCards", () => {
 describe("UserKeyTrendChart", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    insightsMockCache.clear();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, refetchOnWindowFocus: false },
@@ -396,6 +489,7 @@ describe("UserKeyTrendChart", () => {
 describe("UserModelBreakdown", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    insightsMockCache.clear();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, refetchOnWindowFocus: false },

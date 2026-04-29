@@ -51,6 +51,15 @@ vi.mock("@/actions/users", () => ({
   searchUsersForFilter: usersActionMocks.searchUsersForFilter,
 }));
 
+// IdentityFilters reads users/keys via v1 hooks. Stub them out so the tests
+// don't need a QueryClientProvider wrapper.
+vi.mock("@/lib/api-client/v1/users/hooks", () => ({
+  useUsersList: () => ({ data: { items: [] }, isLoading: false }),
+}));
+vi.mock("@/lib/api-client/v1/keys/hooks", () => ({
+  useUserKeysList: () => ({ data: { items: [] }, isLoading: false }),
+}));
+
 vi.mock("@/components/ui/popover", async () => {
   const React = await import("react");
 

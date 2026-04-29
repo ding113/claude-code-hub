@@ -36,15 +36,6 @@ export interface ClientActionImportEntry {
 
 export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
   // ---------------------------------------------------------------------
-  // Task 15: my-usage / overview / quotas / dashboard read panels
-  // ---------------------------------------------------------------------
-  {
-    file: "src/app/[locale]/dashboard/_components/user/key-quota-usage-dialog.tsx",
-    module: "key-quota",
-    task: 15,
-  },
-
-  // ---------------------------------------------------------------------
   // Task 16: users / keys / providers / model-prices / admin-user-insights
   // ---------------------------------------------------------------------
   {
@@ -58,123 +49,8 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 16,
   },
   {
-    file: "src/app/[locale]/dashboard/_components/user/create-user-dialog.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/create-user-dialog.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/edit-user-dialog.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/forms/add-key-form.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/forms/add-key-form.tsx",
-    module: "providers",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/forms/edit-key-form.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/forms/edit-key-form.tsx",
-    module: "providers",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/hooks/use-model-suggestions.ts",
-    module: "providers",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/key-quota-usage-dialog.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/key-row-item.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/user-key-table-row.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/user-key-table-row.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/_components/user/user-management-table.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/quotas/keys/_components/edit-key-quota-dialog.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/quotas/keys/_components/edit-user-quota-dialog.tsx",
-    module: "users",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/dashboard/quotas/keys/_components/keys-quota-client.tsx",
-    module: "keys",
-    task: 16,
-  },
-  {
     file: "src/app/[locale]/dashboard/users/users-page-client.tsx",
     module: "users",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/prices/_components/delete-model-dialog.tsx",
-    module: "model-prices",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/prices/_components/model-price-dialog.tsx",
-    module: "model-prices",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/prices/_components/model-price-drawer.tsx",
-    module: "model-prices",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/prices/_components/provider-pricing-dialog.tsx",
-    module: "model-prices",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/prices/_components/sync-litellm-button.tsx",
-    module: "model-prices",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/prices/_components/upload-price-dialog.tsx",
-    module: "model-prices",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/providers/_components/auto-sort-priority-dialog.tsx",
-    module: "providers",
     task: 16,
   },
   {
@@ -238,28 +114,8 @@ export const clientActionImportAllowlist: readonly ClientActionImportEntry[] = [
     task: 16,
   },
   {
-    file: "src/app/[locale]/settings/providers/_components/provider-list-item.legacy.tsx",
-    module: "providers",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/providers/_components/provider-list.tsx",
-    module: "provider-endpoints",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/providers/_components/provider-manager-loader.tsx",
-    module: "providers",
-    task: 16,
-  },
-  {
     file: "src/app/[locale]/settings/providers/_components/provider-rich-list-item.tsx",
     module: "providers",
-    task: 16,
-  },
-  {
-    file: "src/app/[locale]/settings/providers/_components/provider-vendor-view.tsx",
-    module: "provider-endpoints",
     task: 16,
   },
   {

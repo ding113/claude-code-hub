@@ -12,6 +12,7 @@
  */
 
 import type { Context } from "hono";
+import { getKeyQuotaUsage as getKeyQuotaUsageAction } from "@/actions/key-quota";
 import {
   addKey,
   editKey,
@@ -51,6 +52,7 @@ const toggleKeyEnabledAction = toggleKeyEnabled as unknown as AnyAction;
 const renewKeyAction = renewKeyExpiresAt as unknown as AnyAction;
 const resetKeyLimitsAction = resetKeyLimitsOnly as unknown as AnyAction;
 const getKeyLimitUsageAction = getKeyLimitUsage as unknown as AnyAction;
+const getKeyQuotaUsageFn = getKeyQuotaUsageAction as unknown as AnyAction;
 
 const RESOURCE_BASE_PATH = "/api/v1/keys";
 
@@ -236,6 +238,53 @@ interface KeyLimitUsageData {
   costMonthly: { current: number; limit: number | null; resetAt?: Date };
   costTotal: { current: number; limit: number | null; resetAt?: Date };
   concurrentSessions: { current: number; limit: number };
+}
+
+interface KeyQuotaUsageData {
+  keyName: string;
+  items: Array<{
+    type:
+      | "limit5h"
+      | "limitDaily"
+      | "limitWeekly"
+      | "limitMonthly"
+      | "limitTotal"
+      | "limitSessions";
+    current: number;
+    limit: number | null;
+    mode?: "fixed" | "rolling";
+    time?: string;
+    resetAt?: Date;
+  }>;
+  currencyCode: string;
+}
+
+// ==================== GET /keys/{id}/quota-usage ====================
+
+/**
+ * 与 GET /keys/{id}/limit-usage 不同；这个端点返回与 legacy getKeyQuotaUsage 完全
+ * 相同的 items[] 形状（含 type、mode、time、resetAt），方便迁移现有 quota dialog UI。
+ */
+export async function getKeyQuotaUsageHandler(c: Context): Promise<Response> {
+  const parsed = parseIdLike(c);
+  if (!parsed.ok) return parsed.response;
+  const result = await callAction<KeyQuotaUsageData>(c, getKeyQuotaUsageFn, [parsed.id], {
+    allowReadOnlyAccess: true,
+  });
+  if (!result.ok) return result.problem;
+  const items = result.data.items.map((item) => ({
+    ...item,
+    resetAt: item.resetAt instanceof Date ? item.resetAt.toISOString() : undefined,
+  }));
+  return respondJson(
+    c,
+    {
+      keyName: result.data.keyName,
+      items,
+      currencyCode: result.data.currencyCode,
+    },
+    200
+  );
 }
 
 export async function getKeyLimitUsageHandler(c: Context): Promise<Response> {

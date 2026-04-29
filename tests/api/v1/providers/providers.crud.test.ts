@@ -129,6 +129,7 @@ vi.mock("@/actions/providers", () => ({
     ok: true,
     data: { key: id === 1 ? "sk-RAW-PROVIDER-KEY-FULL-VALUE" : "" },
   })),
+  getModelSuggestionsByProviderGroup: vi.fn(async () => ({ ok: true, data: [] })),
 }));
 
 vi.mock("@/lib/auth", async (orig) => {

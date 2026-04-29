@@ -8,6 +8,7 @@ import type {
   KeyEnableInput,
   KeyLimitUsageResponse,
   KeyListResponse,
+  KeyQuotaUsageResponse,
   KeyRenewInput,
   KeyUpdateInput,
 } from "@/lib/api/v1/schemas/keys";
@@ -25,6 +26,7 @@ export interface KeysClient {
   renew(id: number, body: KeyRenewInput): Promise<{ ok: boolean }>;
   resetLimits(id: number): Promise<{ ok: boolean }>;
   limitUsage(id: number): Promise<KeyLimitUsageResponse>;
+  quotaUsage(id: number): Promise<KeyQuotaUsageResponse>;
 }
 
 async function listForUser(
@@ -86,6 +88,11 @@ async function limitUsage(id: number): Promise<KeyLimitUsageResponse> {
   return (await response.json()) as KeyLimitUsageResponse;
 }
 
+async function quotaUsage(id: number): Promise<KeyQuotaUsageResponse> {
+  const response = await fetchApi(`${KEYS_BASE_PATH}/${id}/quota-usage`, { method: "GET" });
+  return (await response.json()) as KeyQuotaUsageResponse;
+}
+
 export const keysClient: KeysClient = {
   listForUser,
   create,
@@ -95,6 +102,7 @@ export const keysClient: KeysClient = {
   renew,
   resetLimits,
   limitUsage,
+  quotaUsage,
 };
 
 Object.assign(apiClient, { keys: keysClient });

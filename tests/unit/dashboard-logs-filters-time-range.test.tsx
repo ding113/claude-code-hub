@@ -10,6 +10,16 @@ import { describe, expect, test, vi } from "vitest";
 import { UsageLogsFilters } from "@/app/[locale]/dashboard/logs/_components/usage-logs-filters";
 import dashboardMessages from "../../messages/en/dashboard.json";
 
+// IdentityFilters (rendered inside UsageLogsFilters when isAdmin=true) calls v1
+// hooks against TanStack Query; the test only uses isAdmin=false but the hooks
+// are still imported. Stub them with empty data so they no-op.
+vi.mock("@/lib/api-client/v1/users/hooks", () => ({
+  useUsersList: () => ({ data: { items: [] }, isLoading: false }),
+}));
+vi.mock("@/lib/api-client/v1/keys/hooks", () => ({
+  useUserKeysList: () => ({ data: { items: [] }, isLoading: false }),
+}));
+
 vi.mock("@/app/[locale]/dashboard/logs/_components/logs-date-range-picker", () => ({
   LogsDateRangePicker: ({
     onDateRangeChange,

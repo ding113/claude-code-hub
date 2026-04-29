@@ -5,7 +5,6 @@ import { ArrowRight, ListOrdered, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { autoSortProviderPriority } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { providersClient } from "@/lib/api-client/v1/providers/index";
 
 type AutoSortResult = {
   groups: Array<{
@@ -51,36 +51,10 @@ export function AutoSortPriorityDialog() {
   const queryClient = useQueryClient();
   const t = useTranslations("settings.providers.autoSort");
   const tCommon = useTranslations("settings.common");
-  const tErrors = useTranslations("errors");
-
   const [open, setOpen] = useState(false);
   const [previewData, setPreviewData] = useState<AutoSortResult | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isApplying, setIsApplying] = useState(false);
-
-  const getActionErrorMessage = (result: {
-    errorCode?: string;
-    errorParams?: Record<string, string | number>;
-    error?: string | null;
-  }): string => {
-    if (result.errorCode) {
-      try {
-        return tErrors(result.errorCode, result.errorParams);
-      } catch {
-        return t("error");
-      }
-    }
-
-    if (result.error) {
-      try {
-        return tErrors(result.error);
-      } catch {
-        return t("error");
-      }
-    }
-
-    return t("error");
-  };
 
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
@@ -88,16 +62,12 @@ export function AutoSortPriorityDialog() {
       // Load preview when dialog opens
       startTransition(async () => {
         try {
-          const result = await autoSortProviderPriority({ confirm: false });
-          if (result.ok) {
-            setPreviewData(result.data);
-          } else {
-            toast.error(getActionErrorMessage(result));
-            setOpen(false);
-          }
+          const result = await providersClient.autoSortPriority({ confirm: false });
+          setPreviewData(result as AutoSortResult);
         } catch (error) {
           console.error("autoSortProviderPriority preview failed", error);
-          toast.error(t("error"));
+          const message = error instanceof Error ? error.message : t("error");
+          toast.error(message || t("error"));
           setOpen(false);
         }
       });
@@ -110,17 +80,14 @@ export function AutoSortPriorityDialog() {
   const handleApply = async () => {
     setIsApplying(true);
     try {
-      const result = await autoSortProviderPriority({ confirm: true });
-      if (result.ok) {
-        toast.success(t("success", { count: result.data.summary.changedCount }));
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
-        setOpen(false);
-      } else {
-        toast.error(getActionErrorMessage(result));
-      }
+      const result = (await providersClient.autoSortPriority({ confirm: true })) as AutoSortResult;
+      toast.success(t("success", { count: result.summary.changedCount }));
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
+      setOpen(false);
     } catch (error) {
       console.error("autoSortProviderPriority apply failed", error);
-      toast.error(t("error"));
+      const message = error instanceof Error ? error.message : t("error");
+      toast.error(message || t("error"));
     } finally {
       setIsApplying(false);
     }

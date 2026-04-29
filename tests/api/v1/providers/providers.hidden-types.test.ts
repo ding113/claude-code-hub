@@ -32,6 +32,7 @@ vi.mock("@/actions/providers", () => ({
   autoSortProviderPriority: vi.fn(async () => ({ ok: true, data: {} })),
   batchUpdateProviders: vi.fn(async () => ({ ok: true, data: { updatedCount: 0 } })),
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: true, data: { key: "" } })),
+  getModelSuggestionsByProviderGroup: vi.fn(async () => ({ ok: true, data: [] })),
 }));
 
 vi.mock("@/lib/auth", async (orig) => {

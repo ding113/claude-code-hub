@@ -51,6 +51,7 @@ import {
   ProviderHealthStatusResponseSchema,
   ProviderKeyRevealResponseSchema,
   ProviderListResponseSchema,
+  ProviderModelSuggestionsResponseSchema,
   ProviderOkResponseSchema,
   ProviderResponseSchema,
   ProviderUpdateSchema,
@@ -63,6 +64,7 @@ import {
   createProviderHandler,
   deleteProviderHandler,
   getHealthStatus,
+  getModelSuggestionsHandler,
   getProvider,
   listProviderGroupsForProviders,
   listProviders,
@@ -221,6 +223,27 @@ export function createProvidersRouter(): OpenAPIHono {
       },
     },
     listProviderGroupsForProviders as never
+  );
+
+  // ============== GET /providers/model-suggestions ==============
+  router.openapi(
+    {
+      method: "get",
+      path: "/providers/model-suggestions",
+      tags: [TAG],
+      summary: "按 providerGroup 过滤后的模型建议列表",
+      description:
+        "返回匹配指定分组的所有启用 provider 的 allowedModels 中的精确模式，去重后排序。当 providerGroup 缺省时使用 'default'。",
+      security: SECURITY,
+      responses: {
+        200: {
+          description: "模型建议列表",
+          content: { "application/json": { schema: ProviderModelSuggestionsResponseSchema } },
+        },
+        ...errorResponses,
+      },
+    },
+    getModelSuggestionsHandler as never
   );
 
   // ============== GET /providers/{id} ==============

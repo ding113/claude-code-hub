@@ -12,6 +12,7 @@
 import type { Context } from "hono";
 import {
   addUser as addUserAction,
+  createUserOnly as createUserOnlyAction,
   editUser as editUserAction,
   type GetUsersBatchParams,
   getAllUserKeyGroups as getAllUserKeyGroupsAction,
@@ -19,6 +20,7 @@ import {
   getUsersBatch as getUsersBatchAction,
   removeUser as removeUserAction,
   renewUser as renewUserAction,
+  resetUserAllStatistics as resetUserAllStatisticsAction,
   resetUserLimitsOnly as resetUserLimitsOnlyAction,
   toggleUserEnabled as toggleUserEnabledAction,
 } from "@/actions/users";
@@ -49,16 +51,19 @@ const renewUserActionFn = renewUserAction as unknown as AnyAction;
 const resetLimits = resetUserLimitsOnlyAction as unknown as AnyAction;
 const tagsAction = getAllUserTagsAction as unknown as AnyAction;
 const groupsAction = getAllUserKeyGroupsAction as unknown as AnyAction;
+const createUserOnlyFn = createUserOnlyAction as unknown as AnyAction;
+const resetUserAllStatisticsFn = resetUserAllStatisticsAction as unknown as AnyAction;
 
 const RESOURCE_BASE_PATH = "/api/v1/users";
 
-/** 解析 path 参数；支持 :id / :idEnable / :idRenew / :idLimitsReset 多种格式。 */
+/** 解析 path 参数；支持 :id / :idEnable / :idRenew / :idLimitsReset / :idStatsReset 多种格式。 */
 function parseIdParam(c: Context): { ok: true; id: number } | { ok: false; response: Response } {
   const candidates = [
     c.req.param("id"),
     c.req.param("idEnable"),
     c.req.param("idRenew"),
     c.req.param("idLimitsReset"),
+    c.req.param("idStatsReset"),
   ];
   let raw: string | undefined;
   for (const cand of candidates) {
@@ -170,34 +175,67 @@ interface AddUserSuccess {
   defaultKey: { id: number; name: string; key: string };
 }
 
+interface CreateUserOnlySuccess {
+  user: Record<string, unknown> & {
+    id: number;
+    name: string;
+    role: string;
+    isEnabled: boolean;
+    expiresAt: Date | null;
+  };
+}
+
+function serializeUserCreatePayload(
+  u: Record<string, unknown> & {
+    id: number;
+    name: string;
+    role: string;
+    isEnabled: boolean;
+    expiresAt: Date | null;
+  }
+): Record<string, unknown> {
+  return {
+    id: u.id,
+    name: u.name,
+    note: (u.note as string | undefined) ?? null,
+    role: u.role,
+    isEnabled: u.isEnabled,
+    expiresAt: u.expiresAt instanceof Date ? u.expiresAt.toISOString() : null,
+    rpm: (u.rpm as number | null | undefined) ?? null,
+    dailyQuota: (u.dailyQuota as number | null | undefined) ?? null,
+    providerGroup: (u.providerGroup as string | null | undefined) ?? null,
+    tags: (u.tags as string[] | undefined) ?? [],
+    limit5hUsd: (u.limit5hUsd as number | null | undefined) ?? null,
+    limit5hResetMode: (u.limit5hResetMode as "fixed" | "rolling") ?? "rolling",
+    limitWeeklyUsd: (u.limitWeeklyUsd as number | null | undefined) ?? null,
+    limitMonthlyUsd: (u.limitMonthlyUsd as number | null | undefined) ?? null,
+    limitTotalUsd: (u.limitTotalUsd as number | null | undefined) ?? null,
+    limitConcurrentSessions: (u.limitConcurrentSessions as number | null | undefined) ?? null,
+    allowedModels: (u.allowedModels as string[] | undefined) ?? [],
+  };
+}
+
 export async function createUserHandler(c: Context): Promise<Response> {
   const body = await parseJsonBody<typeof UserCreateSchema>(c, UserCreateSchema);
   if (!body.ok) return body.response;
+
+  // ?withDefaultKey=false routes to legacy createUserOnly (no default key).
+  const withDefaultKey = c.req.query("withDefaultKey");
+  if (withDefaultKey === "false") {
+    const result = await callAction<CreateUserOnlySuccess>(c, createUserOnlyFn, [body.data]);
+    if (!result.ok) return result.problem;
+    const responseBody = {
+      user: serializeUserCreatePayload(result.data.user),
+    };
+    return respondCreated(c, responseBody, `${RESOURCE_BASE_PATH}/${result.data.user.id}`);
+  }
 
   const result = await callAction<AddUserSuccess>(c, createUser, [body.data]);
   if (!result.ok) return result.problem;
 
   const u = result.data.user;
   const responseBody = {
-    user: {
-      id: u.id,
-      name: u.name,
-      note: (u.note as string | undefined) ?? null,
-      role: u.role,
-      isEnabled: u.isEnabled,
-      expiresAt: u.expiresAt instanceof Date ? u.expiresAt.toISOString() : null,
-      rpm: (u.rpm as number | null | undefined) ?? null,
-      dailyQuota: (u.dailyQuota as number | null | undefined) ?? null,
-      providerGroup: (u.providerGroup as string | null | undefined) ?? null,
-      tags: (u.tags as string[] | undefined) ?? [],
-      limit5hUsd: (u.limit5hUsd as number | null | undefined) ?? null,
-      limit5hResetMode: (u.limit5hResetMode as "fixed" | "rolling") ?? "rolling",
-      limitWeeklyUsd: (u.limitWeeklyUsd as number | null | undefined) ?? null,
-      limitMonthlyUsd: (u.limitMonthlyUsd as number | null | undefined) ?? null,
-      limitTotalUsd: (u.limitTotalUsd as number | null | undefined) ?? null,
-      limitConcurrentSessions: (u.limitConcurrentSessions as number | null | undefined) ?? null,
-      allowedModels: (u.allowedModels as string[] | undefined) ?? [],
-    },
+    user: serializeUserCreatePayload(u),
     defaultKey: {
       id: result.data.defaultKey.id,
       name: result.data.defaultKey.name,
@@ -288,6 +326,20 @@ export async function resetUserLimitsHandler(c: Context): Promise<Response> {
   const parsed = parseIdParam(c);
   if (!parsed.ok) return parsed.response;
   const result = await callAction<void>(c, resetLimits, [parsed.id]);
+  if (!result.ok) return result.problem;
+  return respondJson(c, { ok: true }, 200);
+}
+
+// ==================== POST /users/{id}/statistics:reset ====================
+
+/**
+ * Reset ALL user statistics (logs + Redis cache + sessions). IRREVERSIBLE.
+ * Wraps legacy `resetUserAllStatistics`.
+ */
+export async function resetUserAllStatisticsHandler(c: Context): Promise<Response> {
+  const parsed = parseIdParam(c);
+  if (!parsed.ok) return parsed.response;
+  const result = await callAction<void>(c, resetUserAllStatisticsFn, [parsed.id]);
   if (!result.ok) return result.problem;
   return respondJson(c, { ok: true }, 200);
 }

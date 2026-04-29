@@ -1,12 +1,9 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { editKey, resetKeyLimitsOnly } from "@/actions/keys";
-import { getAvailableProviderGroups } from "@/actions/providers";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { NumberField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
@@ -31,9 +28,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { keysClient } from "@/lib/api-client/v1/keys/index";
+import { providersClient } from "@/lib/api-client/v1/providers/index";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
-import { getErrorMessage } from "@/lib/utils/error-messages";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { KeyDialogUserContext } from "@/types/user";
@@ -68,7 +66,6 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   const [isResettingLimits, setIsResettingLimits] = useState(false);
   const [resetLimitsDialogOpen, setResetLimitsDialogOpen] = useState(false);
   const locale = useLocale();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("quota.keys.editKeyForm");
   const tKeyEdit = useTranslations("dashboard.userManagement.keyEditSection.fields");
@@ -77,14 +74,14 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   );
   const tUI = useTranslations("ui.tagInput");
   const tCommon = useTranslations("common");
-  const tErrors = useTranslations("errors");
 
   // Load provider group suggestions
   useEffect(() => {
     // providerGroup 为 admin-only 字段：仅管理员允许编辑 Key.providerGroup
     if (!isAdmin) return;
-    getAvailableProviderGroups()
-      .then(setProviderGroupSuggestions)
+    providersClient
+      .groups()
+      .then((res) => setProviderGroupSuggestions(res.items as string[]))
       .catch((err) => {
         console.warn("[EditKeyForm] Failed to load provider group suggestions:", err);
       });
@@ -94,18 +91,14 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
     if (!keyData?.id) return;
     setIsResettingLimits(true);
     try {
-      const res = await resetKeyLimitsOnly(keyData.id);
-      if (!res.ok) {
-        toast.error(res.error || t("resetLimits.error"));
-        return;
-      }
+      await keysClient.resetLimits(keyData.id);
       toast.success(t("resetLimits.success"));
       setResetLimitsDialogOpen(false);
-      router.refresh();
       queryClient.invalidateQueries();
     } catch (error) {
       console.error("[EditKeyForm] reset limits only failed", error);
-      toast.error(t("resetLimits.error"));
+      const message = error instanceof Error ? error.message : t("resetLimits.error");
+      toast.error(message || t("resetLimits.error"));
     } finally {
       setIsResettingLimits(false);
     }
@@ -147,9 +140,9 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
 
       startTransition(async () => {
         try {
-          const res = await editKey(keyData.id, {
+          const payload = {
             name: data.name,
-            // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
+            // 重要：清除到期时间时用空字符串表达，与 legacy schema 行为对齐
             expiresAt: data.expiresAt ?? "",
             canLoginWebUi: data.canLoginWebUi,
             cacheTtlPreference: data.cacheTtlPreference,
@@ -163,22 +156,16 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             limitTotalUsd: data.limitTotalUsd,
             limitConcurrentSessions: data.limitConcurrentSessions,
             ...(isAdmin ? { providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT } : {}),
-          });
-          if (!res.ok) {
-            const msg = res.errorCode
-              ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
-              : res.error || t("error");
-            toast.error(msg);
-            return;
-          }
+          } as unknown as Parameters<typeof keysClient.update>[1];
+          await keysClient.update(keyData.id, payload);
           toast.success(t("success"));
           queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
           queryClient.invalidateQueries({ queryKey: ["userTags"] });
           onSuccess?.();
-          router.refresh();
         } catch (err) {
           console.error("编辑Key失败:", err);
-          toast.error(t("retryError"));
+          const message = err instanceof Error ? err.message : t("retryError");
+          toast.error(message || t("retryError"));
         }
       });
     },

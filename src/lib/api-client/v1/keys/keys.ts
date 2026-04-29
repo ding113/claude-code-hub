@@ -9,6 +9,7 @@ export const keysKeys = {
   listForUser: (userId: number, includeStatistics?: boolean) =>
     [...keysKeys.all, "list", userId, { includeStatistics: !!includeStatistics }] as const,
   limitUsage: (id: number) => [...keysKeys.all, "limit-usage", id] as const,
+  quotaUsage: (id: number) => [...keysKeys.all, "quota-usage", id] as const,
 };
 
 export type KeysQueryKey = ReturnType<(typeof keysKeys)[Exclude<keyof typeof keysKeys, "all">]>;

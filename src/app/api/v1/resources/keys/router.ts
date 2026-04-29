@@ -28,6 +28,7 @@ import {
   KeyEnableSchema,
   KeyLimitUsageResponseSchema,
   KeyListResponseSchema,
+  KeyQuotaUsageResponseSchema,
   KeyRenewSchema,
   KeyUpdateSchema,
 } from "@/lib/api/v1/schemas/keys";
@@ -37,6 +38,7 @@ import {
   deleteKeyHandler,
   enableKeyHandler,
   getKeyLimitUsageHandler,
+  getKeyQuotaUsageHandler,
   listKeysForUser,
   patchKey,
   renewKeyHandler,
@@ -98,13 +100,14 @@ export function createKeysRouter(): OpenAPIHono {
 
   // /users/{userId}/keys/* 与 /keys/* 都需要鉴权；GET /keys/{id}/limit-usage 是 read tier。
   router.use("/keys/:id/limit-usage", requireAuth({ tier: "read" }));
+  router.use("/keys/:id/quota-usage", requireAuth({ tier: "read" }));
   // 其他 /keys/* 与 /users/.../keys/* 都需 admin。
   router.use("/users/:userId/keys", requireAuth({ tier: "admin" }));
   router.use("/users/:userId/keys/*", requireAuth({ tier: "admin" }));
   router.use("/keys", requireAuth({ tier: "admin" }));
   router.use("/keys/*", async (c, next) => {
-    // limit-usage 已被前面的 read tier 处理；这里只在 path 不匹配时下沉到 admin。
-    if (c.req.path.endsWith("/limit-usage")) {
+    // limit-usage / quota-usage 已被前面的 read tier 处理；这里只在 path 不匹配时下沉到 admin。
+    if (c.req.path.endsWith("/limit-usage") || c.req.path.endsWith("/quota-usage")) {
       return next();
     }
     return requireAuth({ tier: "admin" })(c, next);
@@ -292,6 +295,28 @@ export function createKeysRouter(): OpenAPIHono {
     },
   });
   router.post("/keys/:idLimitsReset{[0-9]+}/limits:reset", resetKeyLimitsHandler);
+
+  // ============== GET /keys/{id}/quota-usage ==============
+  router.openapi(
+    {
+      method: "get",
+      path: "/keys/{id}/quota-usage",
+      tags: [TAG],
+      summary: "查询 key 的实时 quota 使用情况（含 5h/daily/weekly/monthly/total/sessions）",
+      description:
+        "返回与 legacy getKeyQuotaUsage 完全相同的 items[] 形状（含 type/mode/time/resetAt），便于前端 quota dialog 直接消费。Read tier；普通用户只能查询自己的 key。",
+      security: SECURITY,
+      request: { params: ResourceIdParamSchema },
+      responses: {
+        200: {
+          description: "Key quota 使用情况",
+          content: { "application/json": { schema: KeyQuotaUsageResponseSchema } },
+        },
+        ...errorResponses,
+      },
+    },
+    getKeyQuotaUsageHandler as never
+  );
 
   // ============== GET /keys/{id}/limit-usage ==============
   router.openapi(

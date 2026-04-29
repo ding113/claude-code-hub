@@ -2,13 +2,10 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Loader2, UserPlus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { addKey } from "@/actions/keys";
-import { createUserOnly, removeUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +18,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { keysClient } from "@/lib/api-client/v1/keys/index";
+import { usersClient } from "@/lib/api-client/v1/users/index";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { KeyFormSchema, UpdateUserSchema } from "@/lib/validation/schemas";
@@ -122,7 +121,6 @@ interface GeneratedKeyInfo {
 }
 
 function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProps) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("dashboard.userManagement");
   const tCommon = useTranslations("common");
@@ -145,12 +143,16 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
     onSubmit: async (data) => {
       startTransition(async () => {
         try {
-          // Create user first
-          const userRes = await createUserOnly({
+          // Create user first (without default key — POST /users?withDefaultKey=false)
+          const userPayload = {
             name: data.user.name,
             note: data.user.note,
             tags: data.user.tags,
-            expiresAt: data.user.expiresAt ?? null,
+            expiresAt: data.user.expiresAt
+              ? data.user.expiresAt instanceof Date
+                ? data.user.expiresAt.toISOString()
+                : (data.user.expiresAt as unknown as string)
+              : null,
             rpm: data.user.rpm,
             limit5hUsd: data.user.limit5hUsd,
             limit5hResetMode: data.user.limit5hResetMode,
@@ -164,19 +166,22 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
             allowedClients: data.user.allowedClients,
             blockedClients: data.user.blockedClients,
             allowedModels: data.user.allowedModels,
-          });
-          if (!userRes.ok) {
-            toast.error(userRes.error || t("createDialog.saveFailed"));
+          } as unknown as Parameters<typeof usersClient.createOnly>[0];
+          let userResult: Awaited<ReturnType<typeof usersClient.createOnly>>;
+          try {
+            userResult = await usersClient.createOnly(userPayload);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : t("createDialog.saveFailed");
+            toast.error(message || t("createDialog.saveFailed"));
             return;
           }
 
-          const newUserId = userRes.data.user.id;
+          const newUserId = userResult.user.id;
 
-          // Create the first key
-          const keyRes = await addKey({
-            userId: newUserId,
+          // Create the first key for the user
+          const keyPayload = {
             name: data.key.name,
-            // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
+            // 重要：清除到期时间时用空字符串表达
             expiresAt: data.key.expiresAt ?? "",
             canLoginWebUi: data.key.canLoginWebUi,
             providerGroup: normalizeProviderGroup(data.key.providerGroup),
@@ -190,18 +195,25 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
             limitMonthlyUsd: data.key.limitMonthlyUsd,
             limitTotalUsd: data.key.limitTotalUsd,
             limitConcurrentSessions: data.key.limitConcurrentSessions,
-          });
+          } as unknown as Parameters<typeof keysClient.create>[1];
 
-          if (!keyRes.ok) {
+          let keyResult: Awaited<ReturnType<typeof keysClient.create>>;
+          try {
+            keyResult = await keysClient.create(newUserId, keyPayload);
+          } catch (keyError) {
             // Rollback: delete the user since key creation failed
             let rollbackFailed = false;
             try {
-              await removeUser(newUserId);
+              await usersClient.remove(newUserId);
             } catch (rollbackError) {
               rollbackFailed = true;
               console.error("[CreateUserDialog] rollback failed", rollbackError);
             }
-            toast.error(keyRes.error || t("createDialog.keyCreateFailed", { name: data.key.name }));
+            const message =
+              keyError instanceof Error
+                ? keyError.message
+                : t("createDialog.keyCreateFailed", { name: data.key.name });
+            toast.error(message || t("createDialog.keyCreateFailed", { name: data.key.name }));
             if (rollbackFailed) {
               toast.error(t("createDialog.rollbackFailed", { userId: newUserId }));
             }
@@ -210,14 +222,13 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
 
           // Show generated key
           setGeneratedKey({
-            generatedKey: keyRes.data?.generatedKey || "",
+            generatedKey: keyResult.key,
             keyName: data.key.name,
             userName: data.user.name,
           });
 
           onSuccess?.();
           queryClient.invalidateQueries({ queryKey: ["users"] });
-          router.refresh();
         } catch (error) {
           console.error("[CreateUserDialog] submit failed", error);
           toast.error(t("createDialog.saveFailed"));

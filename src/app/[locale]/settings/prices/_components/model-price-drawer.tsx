@@ -4,7 +4,6 @@ import { Loader2, Pencil, Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { upsertSingleModelPrice } from "@/actions/model-prices";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +33,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useUpsertModelPrice } from "@/lib/api-client/v1/model-prices/hooks";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { getEditableExtraPriceData } from "@/lib/utils/model-price-fields";
 import type { ModelPrice } from "@/types/model-price";
@@ -89,7 +89,6 @@ export function ModelPriceDrawer({
   const tCommon = useTranslations("settings.common");
 
   const [open, setOpen] = useState(defaultOpen);
-  const [loading, setLoading] = useState(false);
 
   // 表单状态
   const [modelName, setModelName] = useState("");
@@ -239,13 +238,15 @@ export function ModelPriceDrawer({
     };
   }, [mode, open, debouncedPrefillQuery]);
 
+  const trimmedModelName = modelName.trim();
+  const upsertMutation = useUpsertModelPrice(trimmedModelName);
+  const loading = upsertMutation.isPending;
+
   const handleSubmit = async () => {
-    if (!modelName.trim()) {
+    if (!trimmedModelName) {
       toast.error(t("form.modelNameRequired"));
       return;
     }
-
-    setLoading(true);
 
     try {
       const inputCostPerToken =
@@ -267,8 +268,7 @@ export function ModelPriceDrawer({
         ? parsePricePerMillionToPerToken(cacheCreation1hPrice)
         : undefined;
 
-      const result = await upsertSingleModelPrice({
-        modelName: modelName.trim(),
+      await upsertMutation.mutateAsync({
         displayName: displayName.trim() || undefined,
         mode: modelMode,
         litellmProvider: provider.trim() || undefined,
@@ -283,20 +283,14 @@ export function ModelPriceDrawer({
         extraFieldsJson,
       });
 
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-
       toast.success(mode === "create" ? t("toast.createSuccess") : t("toast.updateSuccess"));
       setOpen(false);
       onSuccess?.();
       window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
       console.error("保存失败:", error);
-      toast.error(t("toast.saveFailed"));
-    } finally {
-      setLoading(false);
+      const message = error instanceof Error ? error.message : t("toast.saveFailed");
+      toast.error(message || t("toast.saveFailed"));
     }
   };
 

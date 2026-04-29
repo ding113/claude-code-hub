@@ -9,6 +9,7 @@ import type {
   ProviderCreateInput,
   ProviderKeyRevealResponse,
   ProviderListResponse,
+  ProviderModelSuggestionsResponse,
   ProviderResponse,
   ProviderUpdateInput,
 } from "@/lib/api/v1/schemas/providers";
@@ -30,6 +31,7 @@ export interface ProvidersClient {
   autoSortPriority(input: ProviderAutoSortPriorityInput): Promise<unknown>;
   batchUpdate(input: ProviderBatchUpdateInput): Promise<{ updatedCount: number }>;
   revealKey(id: number): Promise<ProviderKeyRevealResponse>;
+  modelSuggestions(providerGroup?: string | null): Promise<ProviderModelSuggestionsResponse>;
 }
 
 function buildQuery(params?: Record<string, string | number | undefined>): string {
@@ -129,6 +131,14 @@ async function revealKey(id: number): Promise<ProviderKeyRevealResponse> {
   return (await response.json()) as ProviderKeyRevealResponse;
 }
 
+async function modelSuggestions(
+  providerGroup?: string | null
+): Promise<ProviderModelSuggestionsResponse> {
+  const qs = providerGroup ? `?providerGroup=${encodeURIComponent(providerGroup)}` : "";
+  const response = await fetchApi(`${BASE_PATH}/model-suggestions${qs}`, { method: "GET" });
+  return (await response.json()) as ProviderModelSuggestionsResponse;
+}
+
 export const providersClient: ProvidersClient = {
   list,
   detail,
@@ -143,6 +153,7 @@ export const providersClient: ProvidersClient = {
   autoSortPriority,
   batchUpdate,
   revealKey,
+  modelSuggestions,
 };
 
 Object.assign(apiClient, { providers: providersClient });

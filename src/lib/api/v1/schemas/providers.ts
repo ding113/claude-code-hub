@@ -242,6 +242,21 @@ export const ProviderGroupsWithCountResponseSchema = z
   })
   .describe("provider 分组（含计数）");
 
+// ==================== 输出：模型建议 ====================
+
+export const ProviderModelSuggestionsResponseSchema = z
+  .object({
+    items: z
+      .array(z.string())
+      .describe("匹配指定分组的启用 provider 中收集的去重 allowedModels 模式列表")
+      .openapi({ example: ["claude-3-5-sonnet-20241022", "gpt-4o"] }),
+  })
+  .describe("按 providerGroup 过滤后的模型建议列表");
+
+export type ProviderModelSuggestionsResponse = z.infer<
+  typeof ProviderModelSuggestionsResponseSchema
+>;
+
 // ==================== 输出：key:reveal ====================
 
 /**

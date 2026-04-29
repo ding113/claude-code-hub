@@ -11,6 +11,8 @@ export const providersKeys = {
   health: () => [...providersKeys.all, "health"] as const,
   groups: (params?: Record<string, unknown>) =>
     [...providersKeys.all, "groups", params ?? {}] as const,
+  modelSuggestions: (providerGroup?: string | null) =>
+    [...providersKeys.all, "model-suggestions", providerGroup ?? ""] as const,
 };
 
 export type ProvidersQueryKey = ReturnType<

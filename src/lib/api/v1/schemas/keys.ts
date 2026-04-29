@@ -183,6 +183,31 @@ export const KeyLimitUsageResponseSchema = z
 
 export type KeyLimitUsageResponse = z.infer<typeof KeyLimitUsageResponseSchema>;
 
+// ==================== 输出：quota-usage（兼容 legacy getKeyQuotaUsage 形状） ====================
+
+const KeyQuotaItemSchema = z
+  .object({
+    type: z
+      .enum(["limit5h", "limitDaily", "limitWeekly", "limitMonthly", "limitTotal", "limitSessions"])
+      .describe("配额项类型"),
+    current: z.number().describe("当前已使用值"),
+    limit: z.number().nullable().describe("上限；null 表示不限制"),
+    mode: z.enum(["fixed", "rolling"]).optional().describe("窗口模式（仅 5h / daily 等返回）"),
+    time: z.string().optional().describe("HH:mm 重置时间（仅 daily 返回）"),
+    resetAt: IsoDateTimeSchema.optional().describe("软重置时间（仅 limitTotal 返回）"),
+  })
+  .describe("单个 quota 项");
+
+export const KeyQuotaUsageResponseSchema = z
+  .object({
+    keyName: z.string().describe("Key 名称").openapi({ example: "default" }),
+    items: z.array(KeyQuotaItemSchema).describe("quota 项列表（顺序固定）"),
+    currencyCode: z.string().describe("用于格式化的货币代码").openapi({ example: "USD" }),
+  })
+  .describe("Key 实时 quota 使用情况（保持与 legacy getKeyQuotaUsage 相同形状）");
+
+export type KeyQuotaUsageResponse = z.infer<typeof KeyQuotaUsageResponseSchema>;
+
 // ==================== 序列化：脱敏 ====================
 
 /**

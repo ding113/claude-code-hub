@@ -22,6 +22,7 @@ import {
   batchUpdateProviders as batchUpdateProvidersAction,
   editProvider as editProviderAction,
   getAvailableProviderGroups as getAvailableProviderGroupsAction,
+  getModelSuggestionsByProviderGroup as getModelSuggestionsByProviderGroupAction,
   getProviderGroupsWithCount as getProviderGroupsWithCountAction,
   getProviderStatisticsAsync as getProviderStatisticsAsyncAction,
   getProviders as getProvidersAction,
@@ -65,6 +66,7 @@ const groupsCountFn = getProviderGroupsWithCountAction as unknown as AnyAction;
 const autoSortFn = autoSortProviderPriorityAction as unknown as AnyAction;
 const batchUpdateFn = batchUpdateProvidersAction as unknown as AnyAction;
 const revealKeyFn = getUnmaskedProviderKeyAction as unknown as AnyAction;
+const modelSuggestionsFn = getModelSuggestionsByProviderGroupAction as unknown as AnyAction;
 
 const RESOURCE_BASE_PATH = "/api/v1/providers";
 
@@ -295,9 +297,29 @@ export async function listProviderGroupsForProviders(c: Context): Promise<Respon
     if (!result.ok) return result.problem;
     return respondJson(c, { items: result.data }, 200);
   }
-  const result = await callAction<string[]>(c, groupsAvailableFn, [], {
+  // Optional ?userId= filter: when supplied, the action returns only groups
+  // accessible to the given user (admin wildcard expansion still applies).
+  const userIdRaw = c.req.query("userId");
+  const userId =
+    userIdRaw && /^[0-9]+$/.test(userIdRaw) && Number(userIdRaw) > 0
+      ? Number(userIdRaw)
+      : undefined;
+  const result = await callAction<string[]>(c, groupsAvailableFn, userId ? [userId] : [], {
     treatRawAsActionResult: true,
   });
+  if (!result.ok) return result.problem;
+  return respondJson(c, { items: result.data ?? [] }, 200);
+}
+
+// ==================== GET /providers/model-suggestions ====================
+
+/**
+ * 返回按 providerGroup 过滤后的去重 allowedModels 列表，
+ * 用于用户/密钥编辑时模型限制下拉建议。
+ */
+export async function getModelSuggestionsHandler(c: Context): Promise<Response> {
+  const providerGroup = c.req.query("providerGroup");
+  const result = await callAction<string[]>(c, modelSuggestionsFn, [providerGroup]);
   if (!result.ok) return result.problem;
   return respondJson(c, { items: result.data ?? [] }, 200);
 }

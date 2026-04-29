@@ -11,6 +11,7 @@ import type {
   KeyEnableInput,
   KeyLimitUsageResponse,
   KeyListResponse,
+  KeyQuotaUsageResponse,
   KeyRenewInput,
   KeyUpdateInput,
 } from "@/lib/api/v1/schemas/keys";
@@ -38,6 +39,22 @@ export function useKeyLimitUsage(
     queryKey: keysKeys.limitUsage(id),
     queryFn: () => keysClient.limitUsage(id),
     enabled: Number.isInteger(id) && id > 0,
+  });
+}
+
+/**
+ * Real-time quota usage matching legacy `getKeyQuotaUsage` shape.
+ * Uses GET /api/v1/keys/{id}/quota-usage. Pass `enabled` to control re-fetching
+ * (the dialog re-fetches on demand without auto-firing on mount).
+ */
+export function useKeyQuotaUsage(
+  id: number,
+  options?: { enabled?: boolean }
+): UseQueryResult<KeyQuotaUsageResponse, ApiError | Error> {
+  return useQuery<KeyQuotaUsageResponse, ApiError | Error>({
+    queryKey: keysKeys.quotaUsage(id),
+    queryFn: () => keysClient.quotaUsage(id),
+    enabled: Number.isInteger(id) && id > 0 && (options?.enabled === undefined || options.enabled),
   });
 }
 

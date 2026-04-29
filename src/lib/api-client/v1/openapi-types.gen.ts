@@ -4932,6 +4932,235 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/statistics:reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 重置用户的所有统计数据（不可逆）
+         * @description 删除用户的所有 messageRequest 日志 + 清空 ledger + 清理 Redis 中的成本/会话缓存。仅 admin 可调用，操作不可逆。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Resource numeric id */
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 重置成功 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            ok?: boolean;
+                        };
+                    };
+                };
+                /** @description 请求参数无效 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 未认证 */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 无权限或 CSRF 校验失败 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 资源不存在 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 服务器内部错误 */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{userId}/keys": {
         parameters: {
             query?: never;
@@ -6731,6 +6960,269 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/keys/{id}/quota-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查询 key 的实时 quota 使用情况（含 5h/daily/weekly/monthly/total/sessions）
+         * @description 返回与 legacy getKeyQuotaUsage 完全相同的 items[] 形状（含 type/mode/time/resetAt），便于前端 quota dialog 直接消费。Read tier；普通用户只能查询自己的 key。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Resource numeric id */
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Key quota 使用情况 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /**
+                             * @description Key 名称
+                             * @example default
+                             */
+                            keyName: string;
+                            /** @description quota 项列表（顺序固定） */
+                            items: {
+                                /**
+                                 * @description 配额项类型
+                                 * @enum {string}
+                                 */
+                                type: "limit5h" | "limitDaily" | "limitWeekly" | "limitMonthly" | "limitTotal" | "limitSessions";
+                                /** @description 当前已使用值 */
+                                current: number;
+                                /** @description 上限；null 表示不限制 */
+                                limit: number | null;
+                                /**
+                                 * @description 窗口模式（仅 5h / daily 等返回）
+                                 * @enum {string}
+                                 */
+                                mode?: "fixed" | "rolling";
+                                /** @description HH:mm 重置时间（仅 daily 返回） */
+                                time?: string;
+                                /**
+                                 * Format: date-time
+                                 * @description 软重置时间（仅 limitTotal 返回）
+                                 * @example 2025-04-28T13:45:00.000Z
+                                 */
+                                resetAt?: string;
+                            }[];
+                            /**
+                             * @description 用于格式化的货币代码
+                             * @example USD
+                             */
+                            currencyCode: string;
+                        };
+                    };
+                };
+                /** @description 请求参数无效 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 未认证 */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 无权限或 CSRF 校验失败 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 资源不存在 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 服务器内部错误 */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -9099,6 +9591,239 @@ export interface paths {
                              * @example [
                              *       "default",
                              *       "team-a"
+                             *     ]
+                             */
+                            items: string[];
+                        };
+                    };
+                };
+                /** @description 请求参数无效 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 未认证 */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 无权限或 CSRF 校验失败 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 资源不存在 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description 服务器内部错误 */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": {
+                            /** @description URI identifying the problem type; about:blank when not applicable */
+                            type: string;
+                            /** @description Short, human-readable summary of the problem */
+                            title: string;
+                            /** @description HTTP status code mirroring the response */
+                            status: number;
+                            /** @description Human-readable explanation specific to this occurrence */
+                            detail?: string;
+                            /** @description URI reference identifying the request */
+                            instance?: string;
+                            /** @description Stable machine-readable error code for i18n / clients */
+                            errorCode: string;
+                            /** @description Parameters used to interpolate localized error messages */
+                            errorParams?: {
+                                [key: string]: string | number;
+                            };
+                            /** @description Per-request trace identifier; included in logs */
+                            traceId: string;
+                            /** @description List of invalid request parameters, when applicable */
+                            invalidParams?: {
+                                /** @description JSON path of the invalid field, root represented as [] */
+                                path: (string | number)[];
+                                /** @description Issue code (e.g. zod issue code) */
+                                code: string;
+                                /** @description Human-readable message */
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/model-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 按 providerGroup 过滤后的模型建议列表
+         * @description 返回匹配指定分组的所有启用 provider 的 allowedModels 中的精确模式，去重后排序。当 providerGroup 缺省时使用 'default'。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 模型建议列表 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /**
+                             * @description 匹配指定分组的启用 provider 中收集的去重 allowedModels 模式列表
+                             * @example [
+                             *       "claude-3-5-sonnet-20241022",
+                             *       "gpt-4o"
                              *     ]
                              */
                             items: string[];

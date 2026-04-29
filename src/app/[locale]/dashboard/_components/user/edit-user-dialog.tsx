@@ -2,18 +2,10 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw, Trash2, UserCog } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import {
-  editUser,
-  removeUser,
-  resetUserAllStatistics,
-  resetUserLimitsOnly,
-  toggleUserEnabled,
-} from "@/actions/users";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usersClient } from "@/lib/api-client/v1/users/index";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { cn } from "@/lib/utils";
 import { UpdateUserSchema } from "@/lib/validation/schemas";
@@ -88,7 +81,6 @@ function buildDefaultValues(user: UserDisplay): EditUserValues {
 }
 
 function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogProps) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("dashboard.userManagement");
   const tCommon = useTranslations("common");
@@ -112,11 +104,15 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     onSubmit: async (data) => {
       startTransition(async () => {
         try {
-          const userRes = await editUser(user.id, {
+          await usersClient.update(user.id, {
             name: data.name,
             note: data.note,
             tags: data.tags,
-            expiresAt: data.expiresAt ?? null,
+            expiresAt: data.expiresAt
+              ? data.expiresAt instanceof Date
+                ? data.expiresAt.toISOString()
+                : (data.expiresAt as unknown as string)
+              : null,
             providerGroup: normalizeProviderGroup(data.providerGroup),
             rpm: data.rpm,
             limit5hUsd: data.limit5hUsd,
@@ -131,11 +127,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
             allowedClients: data.allowedClients,
             blockedClients: data.blockedClients,
             allowedModels: data.allowedModels,
-          });
-          if (!userRes.ok) {
-            toast.error(userRes.error || t("editDialog.saveFailed"));
-            return;
-          }
+          } as Record<string, unknown>);
 
           toast.success(t("editDialog.saveSuccess"));
           onSuccess?.();
@@ -143,10 +135,10 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
           queryClient.invalidateQueries({ queryKey: ["users"] });
           queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
           queryClient.invalidateQueries({ queryKey: ["userTags"] });
-          router.refresh();
         } catch (error) {
           console.error("[EditUserDialog] submit failed", error);
-          toast.error(t("editDialog.saveFailed"));
+          const message = error instanceof Error ? error.message : t("editDialog.saveFailed");
+          toast.error(message || t("editDialog.saveFailed"));
         }
       });
     },
@@ -186,46 +178,39 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
 
   const handleDisableUser = async () => {
     try {
-      const res = await toggleUserEnabled(user.id, false);
-      if (!res.ok) {
-        toast.error(res.error || t("editDialog.operationFailed"));
-        return;
-      }
+      await usersClient.enable(user.id, { enabled: false });
       toast.success(t("editDialog.userDisabled"));
       onSuccess?.();
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
       queryClient.invalidateQueries({ queryKey: ["userTags"] });
-      router.refresh();
     } catch (error) {
       console.error("[EditUserDialog] disable user failed", error);
-      toast.error(t("editDialog.operationFailed"));
+      const message = error instanceof Error ? error.message : t("editDialog.operationFailed");
+      toast.error(message || t("editDialog.operationFailed"));
     }
   };
 
   const handleEnableUser = async () => {
     try {
-      const res = await toggleUserEnabled(user.id, true);
-      if (!res.ok) {
-        toast.error(res.error || t("editDialog.operationFailed"));
-        return;
-      }
+      await usersClient.enable(user.id, { enabled: true });
       toast.success(t("editDialog.userEnabled"));
       onSuccess?.();
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
       queryClient.invalidateQueries({ queryKey: ["userTags"] });
-      router.refresh();
     } catch (error) {
       console.error("[EditUserDialog] enable user failed", error);
-      toast.error(t("editDialog.operationFailed"));
+      const message = error instanceof Error ? error.message : t("editDialog.operationFailed");
+      toast.error(message || t("editDialog.operationFailed"));
     }
   };
 
   const handleDeleteUser = async () => {
-    const res = await removeUser(user.id);
-    if (!res.ok) {
-      throw new Error(res.error || t("editDialog.deleteFailed"));
+    try {
+      await usersClient.remove(user.id);
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : t("editDialog.deleteFailed"));
     }
     toast.success(t("editDialog.userDeleted"));
     onSuccess?.();
@@ -233,17 +218,12 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     queryClient.invalidateQueries({ queryKey: ["users"] });
     queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
     queryClient.invalidateQueries({ queryKey: ["userTags"] });
-    router.refresh();
   };
 
   const handleResetAllStatistics = async () => {
     setIsResettingAll(true);
     try {
-      const res = await resetUserAllStatistics(user.id);
-      if (!res.ok) {
-        toast.error(res.error || t("editDialog.resetData.error"));
-        return;
-      }
+      await usersClient.resetAllStatistics(user.id);
       toast.success(t("editDialog.resetData.success"));
       setResetAllDialogOpen(false);
 
@@ -251,7 +231,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
       window.location.reload();
     } catch (error) {
       console.error("[EditUserDialog] reset all statistics failed", error);
-      toast.error(t("editDialog.resetData.error"));
+      const message = error instanceof Error ? error.message : t("editDialog.resetData.error");
+      toast.error(message || t("editDialog.resetData.error"));
     } finally {
       setIsResettingAll(false);
     }
@@ -260,17 +241,14 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const handleResetLimitsOnly = async () => {
     setIsResettingLimits(true);
     try {
-      const res = await resetUserLimitsOnly(user.id);
-      if (!res.ok) {
-        toast.error(res.error || t("editDialog.resetLimits.error"));
-        return;
-      }
+      await usersClient.resetLimits(user.id);
       toast.success(t("editDialog.resetLimits.success"));
       setResetLimitsDialogOpen(false);
       window.location.reload();
     } catch (error) {
       console.error("[EditUserDialog] reset limits only failed", error);
-      toast.error(t("editDialog.resetLimits.error"));
+      const message = error instanceof Error ? error.message : t("editDialog.resetLimits.error");
+      toast.error(message || t("editDialog.resetLimits.error"));
     } finally {
       setIsResettingLimits(false);
     }

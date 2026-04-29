@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  getUnmaskedProviderKey,
   type ProviderApiTestSuccessDetails,
   testProviderGemini,
   testProviderUnified,
@@ -15,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import { providersClient } from "@/lib/api-client/v1/providers/index";
 import {
   CUSTOM_HEADERS_PLACEHOLDER,
   type CustomHeadersValidationErrorCode,
@@ -194,18 +194,18 @@ export function ApiTestButton({
       let resolvedKey = apiKey.trim();
 
       if (!resolvedKey && providerId) {
-        const result = await getUnmaskedProviderKey(providerId);
-        if (!result.ok) {
-          toast.error(result.error || t("fillKeyFirst"));
+        try {
+          const result = await providersClient.revealKey(providerId);
+          if (!result?.key) {
+            toast.error(t("fillKeyFirst"));
+            return;
+          }
+          resolvedKey = result.key;
+        } catch (revealError) {
+          const message = revealError instanceof Error ? revealError.message : t("fillKeyFirst");
+          toast.error(message || t("fillKeyFirst"));
           return;
         }
-
-        if (!result.data?.key) {
-          toast.error(t("fillKeyFirst"));
-          return;
-        }
-
-        resolvedKey = result.data.key;
       }
 
       if (!resolvedKey) {

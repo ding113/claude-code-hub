@@ -1,11 +1,9 @@
 "use client";
 import { formatInTimeZone } from "date-fns-tz";
 import { CheckCircle, Copy, Edit, Globe, Key, RotateCcw } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { getUnmaskedProviderKey, resetProviderCircuit } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
@@ -31,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { providersClient } from "@/lib/api-client/v1/providers/index";
 import { PROVIDER_LIMITS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
@@ -62,7 +61,6 @@ export function ProviderListItem({
   currencyCode = "USD",
   enableMultiProviderTypes,
 }: ProviderListItemProps) {
-  const router = useRouter();
   const timeZone = useTimeZone() ?? "UTC";
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
@@ -125,22 +123,15 @@ export function ProviderListItem({
   const handleResetCircuit = () => {
     startResetTransition(async () => {
       try {
-        const res = await resetProviderCircuit(item.id);
-        if (res.ok) {
-          toast.success("熔断器已重置", {
-            description: `供应商 "${item.name}" 的熔断状态已解除`,
-          });
-          // 刷新页面数据以同步熔断器状态
-          router.refresh();
-        } else {
-          toast.error("重置熔断器失败", {
-            description: res.error || "未知错误",
-          });
-        }
+        await providersClient.resetCircuit(item.id);
+        toast.success("熔断器已重置", {
+          description: `供应商 "${item.name}" 的熔断状态已解除`,
+        });
       } catch (error) {
         console.error("重置熔断器失败:", error);
+        const message = error instanceof Error ? error.message : "操作过程中出现异常";
         toast.error("重置熔断器失败", {
-          description: "操作过程中出现异常",
+          description: message,
         });
       }
     });
@@ -149,12 +140,13 @@ export function ProviderListItem({
   // 处理查看密钥
   const handleShowKey = async () => {
     setShowKeyDialog(true);
-    const result = await getUnmaskedProviderKey(item.id);
-    if (result.ok) {
-      setUnmaskedKey(result.data.key);
-    } else {
+    try {
+      const result = await providersClient.revealKey(item.id);
+      setUnmaskedKey(result.key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "未知错误";
       toast.error("获取密钥失败", {
-        description: result.error || "未知错误",
+        description: message,
       });
     }
   };
@@ -289,7 +281,7 @@ export function ProviderListItem({
                         onSuccess={() => {
                           setOpenEdit(false);
                           // 刷新页面数据以同步所有字段
-                          router.refresh();
+                          // React Query invalidations triggered by ProviderForm internals.
                         }}
                       />
                     </FormErrorBoundary>
@@ -317,7 +309,7 @@ export function ProviderListItem({
                         onSuccess={() => {
                           setOpenClone(false);
                           // 刷新页面数据以显示新添加的服务商
-                          router.refresh();
+                          // React Query invalidations triggered by ProviderForm internals.
                         }}
                       />
                     </FormErrorBoundary>

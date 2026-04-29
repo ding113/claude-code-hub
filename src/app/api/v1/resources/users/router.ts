@@ -50,6 +50,7 @@ import {
   listUserTags,
   patchUser,
   renewUserHandler,
+  resetUserAllStatisticsHandler,
   resetUserLimitsHandler,
 } from "./handlers";
 
@@ -331,6 +332,30 @@ export function createUsersRouter(): OpenAPIHono {
   });
   // Hono 不允许 `:id/limits:reset`，在尾段使用字面量 :reset。
   router.post("/users/:idLimitsReset{[0-9]+}/limits:reset", resetUserLimitsHandler);
+
+  // ============== POST /users/{id}/statistics:reset ==============
+  router.openAPIRegistry.registerPath({
+    method: "post",
+    path: "/users/{id}/statistics:reset",
+    tags: [TAG],
+    summary: "重置用户的所有统计数据（不可逆）",
+    description:
+      "删除用户的所有 messageRequest 日志 + 清空 ledger + 清理 Redis 中的成本/会话缓存。仅 admin 可调用，操作不可逆。",
+    security: SECURITY,
+    request: { params: ResourceIdParamSchema },
+    responses: {
+      200: {
+        description: "重置成功",
+        content: {
+          "application/json": {
+            schema: { type: "object", properties: { ok: { type: "boolean" } } },
+          },
+        },
+      },
+      ...errorResponses,
+    },
+  });
+  router.post("/users/:idStatsReset{[0-9]+}/statistics:reset", resetUserAllStatisticsHandler);
 
   return router;
 }

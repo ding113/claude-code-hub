@@ -112,6 +112,14 @@ vi.mock("@/actions/users", () => ({
   // syncUserProviderGroupFromKeys is referenced by keys.ts at module load time —
   // exporting a no-op avoids TS ReferenceError when test imports both.
   syncUserProviderGroupFromKeys: vi.fn(async () => undefined),
+  // Pass-3 backend extensions:
+  createUserOnly: vi.fn(async (input: Record<string, unknown>) => ({
+    ok: true,
+    data: { user: { id: 100, name: input.name } },
+  })),
+  resetUserAllStatistics: vi.fn(async () => ({ ok: true })),
+  batchUpdateUsers: vi.fn(async () => ({ ok: true, data: { updatedCount: 0 } })),
+  getAvailableProviderGroups: vi.fn(async () => ["default"]),
 }));
 
 vi.mock("@/lib/auth", async (orig) => {
