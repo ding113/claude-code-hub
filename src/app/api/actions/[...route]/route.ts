@@ -2397,9 +2397,43 @@ app.get("/openapi.json", (c) => {
   }
 });
 
+// 旧版文档 UI 顶部弃用横幅（指向新版 /api/v1/scalar）。
+// 通过 fixed 定位悬浮在页面顶部，不破坏文档原有 layout/JS。
+const LEGACY_DOCS_DEPRECATION_BANNER_HTML =
+  '<div role="alert" style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#7f1d1d;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,-apple-system,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.25)">此 API 已弃用，请使用新版 <a href="/api/v1/scalar" style="color:#fde68a;font-weight:600;text-decoration:underline">v1 管理 API</a>（/api/v1/*）。旧版 /api/actions/* 计划在 Sunset 日期后下线。</div>';
+
+// 仅当响应是 text/html 且包含 </body> 时注入横幅；其余情况完全透传。
+async function injectLegacyDeprecationBanner(
+  response: Response,
+  bannerHtml: string
+): Promise<Response> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("text/html")) {
+    return response;
+  }
+  const html = await response.text();
+  const closingBodyIndex = html.toLowerCase().lastIndexOf("</body>");
+  // 没有 </body> 时退化为前置插入，确保 try-it-now JS 可继续运行
+  const next =
+    closingBodyIndex >= 0
+      ? html.slice(0, closingBodyIndex) + bannerHtml + html.slice(closingBodyIndex)
+      : bannerHtml + html;
+  return new Response(next, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 // Swagger UI (传统风格)
 app.get(
   "/docs",
+  async (c, next) => {
+    await next();
+    if (c.res) {
+      c.res = await injectLegacyDeprecationBanner(c.res, LEGACY_DOCS_DEPRECATION_BANNER_HTML);
+    }
+  },
   swaggerUI({
     url: "/api/actions/openapi.json",
   })
@@ -2408,6 +2442,12 @@ app.get(
 // Scalar UI (现代风格,推荐)
 app.get(
   "/scalar",
+  async (c, next) => {
+    await next();
+    if (c.res) {
+      c.res = await injectLegacyDeprecationBanner(c.res, LEGACY_DOCS_DEPRECATION_BANNER_HTML);
+    }
+  },
   apiReference({
     theme: "purple",
     url: "/api/actions/openapi.json",

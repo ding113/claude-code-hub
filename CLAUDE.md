@@ -117,8 +117,8 @@ Key components:
 
 ### API Layer
 - **Proxy endpoints**: `/v1/messages`, `/v1/chat/completions`, `/v1/responses`
-- **Management API**: `/api/actions/{module}/{action}` - Auto-generated OpenAPI docs
-- **Docs**: `/api/actions/scalar` (Scalar UI), `/api/actions/docs` (Swagger)
+- **Management API (v1, recommended)**: `/api/v1/*` - REST management surface (95+ endpoints) with RFC 9457 problem+json errors, cursor pagination on logs/sessions, three auth tiers (public/read/admin), CSRF on cookie writes. OpenAPI at `/api/v1/openapi.json`; UIs at `/api/v1/scalar` (Scalar) and `/api/v1/docs` (Swagger). See `docs/api/v1/README.md` and `docs/api/v1/migration-guide.md`.
+- **Legacy Actions API (deprecated)**: `/api/actions/{module}/{action}` - Server Actions bridge; still works behind `ENABLE_LEGACY_ACTIONS_API=true`, will be removed at `LEGACY_ACTIONS_SUNSET_DATE`. Docs: `/api/actions/scalar`, `/api/actions/docs`.
 
 ## Code Conventions
 
