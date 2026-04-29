@@ -92,16 +92,13 @@ export const ResourceIdParamSchema = z
 /**
  * Provider 类型枚举（v1 公开版本）。
  *
- * 显式排除：
- *   - "claude-auth"  : 内部认证适配器，不暴露到公开 API；
- *   - "gemini-cli"   : CLI 模式专用，不暴露到公开 API。
- *
- * v1 写接口必须用本枚举校验 type 字段；v1 读接口在序列化时如果遇到上述
- * 隐藏类型必须返回 404（参考 plan「Hidden Provider」章节）。
+ * 显式排除某些内部 / CLI 专用 provider 类型——它们仅服务于内部代理流，
+ * 不暴露在公开 REST API；v1 写接口必须用本枚举校验 type 字段，v1 读接口
+ * 在序列化时如果遇到非公开类型必须返回 404（参考 plan「Hidden Provider」章节）。
  */
 export const ProviderTypeSchema = z
   .enum(["claude", "codex", "gemini", "openai-compatible"])
-  .describe("Provider 类型（不含隐藏类型 claude-auth / gemini-cli）")
+  .describe("Provider 类型枚举（v1 公开版本，仅包含通过审核的可写入类型）")
   .openapi({
     example: "claude",
   });

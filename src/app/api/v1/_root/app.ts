@@ -15,6 +15,9 @@ import { createManagementDocsApp } from "@/app/api/v1/_root/docs";
 import { managementApiDocumentConfig } from "@/app/api/v1/_root/document";
 import { adminUserInsightsRouter } from "@/app/api/v1/resources/admin-user-insights/router";
 import { keysRouter } from "@/app/api/v1/resources/keys/router";
+import { providerEndpointsRouter } from "@/app/api/v1/resources/provider-endpoints/router";
+import { providerGroupsRouter } from "@/app/api/v1/resources/provider-groups/router";
+import { providersRouter } from "@/app/api/v1/resources/providers/router";
 import { usersRouter } from "@/app/api/v1/resources/users/router";
 import { webhookTargetsRouter } from "@/app/api/v1/resources/webhook-targets/router";
 import {
@@ -139,6 +142,15 @@ app.route("/", keysRouter);
 
 // /admin/users/{id}/insights/*：admin tier；4 个洞察统计端点。
 app.route("/", adminUserInsightsRouter);
+
+// /providers/*：admin tier；包含 CRUD + 动作动词 + issue #1123 的 key:reveal。
+app.route("/", providersRouter);
+
+// /provider-vendors/* + /provider-endpoints/*：admin tier；vendor + endpoint 管理。
+app.route("/", providerEndpointsRouter);
+
+// /provider-groups/*：admin tier；分组 CRUD。
+app.route("/", providerGroupsRouter);
 
 // ==================== 404 处理（Problem Details） ====================
 
