@@ -13,6 +13,9 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { createManagementDocsApp } from "@/app/api/v1/_root/docs";
 import { managementApiDocumentConfig } from "@/app/api/v1/_root/document";
+import { adminUserInsightsRouter } from "@/app/api/v1/resources/admin-user-insights/router";
+import { keysRouter } from "@/app/api/v1/resources/keys/router";
+import { usersRouter } from "@/app/api/v1/resources/users/router";
 import { webhookTargetsRouter } from "@/app/api/v1/resources/webhook-targets/router";
 import {
   AUTH_MODE_CONTEXT_KEY,
@@ -127,6 +130,15 @@ app.get("/auth/csrf", requireAuth({ tier: "read" }), (c) => {
 
 // /webhook-targets：admin tier；写方法强制 CSRF（路由模块自管理）
 app.route("/", webhookTargetsRouter);
+
+// /users：admin tier；包含 CRUD + 动作动词与 tags / key-groups。
+app.route("/", usersRouter);
+
+// /keys + /users/{userId}/keys：admin tier；GET /keys/{id}/limit-usage 是 read tier。
+app.route("/", keysRouter);
+
+// /admin/users/{id}/insights/*：admin tier；4 个洞察统计端点。
+app.route("/", adminUserInsightsRouter);
 
 // ==================== 404 处理（Problem Details） ====================
 
