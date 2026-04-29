@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { ZodError } from "zod";
 import type { ActionResult } from "@/actions/types";
+import { hasLegacyRedactedWritePlaceholders } from "@/lib/api/legacy-action-sanitizers";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
 import { withNoStoreHeaders } from "@/lib/api/v1/_shared/cache-control";
 import {
@@ -61,6 +62,14 @@ export async function getProvider(c: Context): Promise<Response> {
 export async function createProvider(c: Context): Promise<Response> {
   const body = await parseHonoJsonBody(c, ProviderCreateSchema);
   if (!body.ok) return body.response;
+  if (hasLegacyRedactedWritePlaceholders(body.data)) {
+    return createProblemResponse({
+      status: 422,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "provider.redacted_placeholder_rejected",
+      detail: "Redacted placeholders cannot be used when creating providers.",
+    });
+  }
   const providerActions = await import("@/actions/providers");
   const result = await callAction(
     c,

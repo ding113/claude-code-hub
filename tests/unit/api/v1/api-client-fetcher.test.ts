@@ -6,6 +6,7 @@ describe("v1 api fetcher", () => {
   afterEach(() => {
     clearCsrfTokenCache();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   test("sends JSON requests with credentials", async () => {
@@ -95,5 +96,35 @@ describe("v1 api fetcher", () => {
     );
     const retryHeaders = fetchMock.mock.calls[3][1].headers as Headers;
     expect(retryHeaders.get("X-CCH-CSRF")).toBe("csrf-next");
+  });
+
+  test("refreshes cached CSRF tokens before the server window expires", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-29T00:00:00.000Z"));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken: "csrf-old" }))
+      .mockResolvedValueOnce(Response.json({ ok: true }))
+      .mockResolvedValueOnce(Response.json({ csrfToken: "csrf-new" }))
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      apiFetch("/api/v1/test", { method: "POST", body: { name: "a" } })
+    ).resolves.toEqual({ ok: true });
+    vi.advanceTimersByTime(26 * 60 * 1000);
+    await expect(
+      apiFetch("/api/v1/test", { method: "POST", body: { name: "b" } })
+    ).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/auth/csrf",
+      expect.objectContaining({ credentials: "include" })
+    );
+    const firstHeaders = fetchMock.mock.calls[1][1].headers as Headers;
+    const secondHeaders = fetchMock.mock.calls[3][1].headers as Headers;
+    expect(firstHeaders.get("X-CCH-CSRF")).toBe("csrf-old");
+    expect(secondHeaders.get("X-CCH-CSRF")).toBe("csrf-new");
   });
 });

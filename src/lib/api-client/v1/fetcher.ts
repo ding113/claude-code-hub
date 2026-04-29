@@ -8,6 +8,8 @@ type ProblemBody = {
   errorParams?: Record<string, unknown>;
 };
 
+const CSRF_TOKEN_CACHE_TTL_MS = 25 * 60 * 1000;
+
 export type ApiFetchOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   apiKey?: string;
@@ -16,6 +18,7 @@ export type ApiFetchOptions = Omit<RequestInit, "body"> & {
 };
 
 let csrfTokenPromise: Promise<string | null> | null = null;
+let csrfTokenExpiresAt = 0;
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
@@ -62,8 +65,10 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 }
 
 async function getCsrfToken(): Promise<string | null> {
-  if (csrfTokenPromise) return csrfTokenPromise;
+  const now = Date.now();
+  if (csrfTokenPromise && now < csrfTokenExpiresAt) return csrfTokenPromise;
 
+  csrfTokenExpiresAt = now + CSRF_TOKEN_CACHE_TTL_MS;
   csrfTokenPromise = fetch("/api/v1/auth/csrf", {
     credentials: "include",
     headers: { Accept: "application/json" },
@@ -88,6 +93,7 @@ async function getCsrfToken(): Promise<string | null> {
 
 export function clearCsrfTokenCache(): void {
   csrfTokenPromise = null;
+  csrfTokenExpiresAt = 0;
 }
 
 async function decodeApiError(response: Response): Promise<ApiError> {
