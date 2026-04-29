@@ -12,22 +12,11 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
-import { CSRF_HEADER } from "@/lib/api/v1/_shared/constants";
-import { isMutationMethod, verifyCsrfToken } from "@/lib/api/v1/_shared/csrf";
 import { redactHeaderRecord, redactUrlCredentials } from "@/lib/api/v1/_shared/redaction";
 import { runWithRequestContext } from "@/lib/audit/request-context";
-import {
-  AUTH_COOKIE_NAME,
-  type AuthCredentialType,
-  detectSessionTokenKind,
-  runWithAuthSession,
-  validateAuthToken,
-} from "@/lib/auth";
-import { config } from "@/lib/config/config";
-import { isApiKeyAdminAccessEnabled } from "@/lib/config/env.schema";
+import { AUTH_COOKIE_NAME, runWithAuthSession, validateAuthToken } from "@/lib/auth";
 import { getClientIp } from "@/lib/ip";
 import { logger } from "@/lib/logger";
-import { constantTimeEqual } from "@/lib/security/constant-time-compare";
 
 function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim();
@@ -121,44 +110,6 @@ function asHeaderRecord(value: unknown): Record<string, string> | null | undefin
   if (value === null || value === undefined) return value;
   if (typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as Record<string, string>;
-}
-
-function isLegacyBearerUserApiKey(token: string, source: "bearer" | "cookie"): boolean {
-  if (source !== "bearer") return false;
-  if (config.auth.adminToken && constantTimeEqual(token, config.auth.adminToken)) return false;
-  return detectSessionTokenKind(token) === "legacy";
-}
-
-async function classifyLegacyManagementCredential(
-  token: string,
-  source: "bearer" | "cookie"
-): Promise<AuthCredentialType> {
-  if (config.auth.adminToken && constantTimeEqual(token, config.auth.adminToken)) {
-    return "admin-token";
-  }
-
-  if (detectSessionTokenKind(token) === "opaque") {
-    return classifyOpaqueLegacyManagementCredential(token);
-  }
-
-  // 维持旧接口兼容：只把 bearer 形式的 legacy DB key 视为第三方 API key。
-  // legacy cookie 仍按 Web UI 会话处理，直到切到 opaque cookie 后可精确按 provenance 拦截。
-  return isLegacyBearerUserApiKey(token, source) ? "user-api-key" : "session";
-}
-
-async function classifyOpaqueLegacyManagementCredential(
-  token: string
-): Promise<AuthCredentialType> {
-  try {
-    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
-    const sessionData = await new RedisSessionStore().read(token);
-    return sessionData?.credentialType ?? "user-api-key";
-  } catch (error) {
-    logger.warn("[ActionAPI] Failed to classify opaque management credential", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return "user-api-key";
-  }
 }
 
 // Server Action 函数签名 (支持两种格式)
@@ -451,7 +402,6 @@ export function createActionRoute(
           );
         const bearerToken = getBearerTokenFromAuthHeader(c.req.header("authorization"));
         const authToken = bearerToken ?? cookieToken;
-        const authTokenSource: "cookie" | "bearer" = bearerToken ? "bearer" : "cookie";
         if (!authToken) {
           logger.warn(`[ActionAPI] ${fullPath} 认证失败: 缺少 ${AUTH_COOKIE_NAME}`);
           return c.json({ ok: false, error: "未认证" }, 401);
@@ -471,52 +421,6 @@ export function createActionRoute(
             userRole: session.user.role,
           });
           return c.json({ ok: false, error: "权限不足" }, 403);
-        }
-
-        const credentialType =
-          requiredRole === "admin"
-            ? await classifyLegacyManagementCredential(authToken, authTokenSource)
-            : "session";
-        if (
-          requiredRole === "admin" &&
-          credentialType === "user-api-key" &&
-          !isApiKeyAdminAccessEnabled()
-        ) {
-          logger.warn(`[ActionAPI] ${fullPath} 拒绝用户 API Key 管理端访问`, {
-            userId: session.user.id,
-            userRole: session.user.role,
-          });
-          return c.json(
-            {
-              ok: false,
-              error: "API Key 管理端访问已关闭",
-              errorCode: "auth.api_key_admin_disabled",
-            },
-            403
-          );
-        }
-
-        if (
-          authTokenSource === "cookie" &&
-          isMutationMethod(c.req.raw?.method ?? "POST") &&
-          !verifyCsrfToken({
-            token: c.req.header(CSRF_HEADER),
-            authToken,
-            userId: session.user.id,
-          })
-        ) {
-          logger.warn(`[ActionAPI] ${fullPath} CSRF 校验失败`, {
-            userId: session.user.id,
-            userRole: session.user.role,
-          });
-          return c.json(
-            {
-              ok: false,
-              error: "CSRF token is missing or invalid.",
-              errorCode: "auth.csrf_invalid",
-            },
-            403
-          );
         }
       }
 

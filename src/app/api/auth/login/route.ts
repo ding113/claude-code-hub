@@ -130,18 +130,21 @@ async function createOpaqueSession(key: string, session: AuthSession) {
   const store = await getLoginSessionStore();
   return store.create({
     keyFingerprint: await toKeyFingerprint(key),
-    credentialType: classifyLoginCredential(key),
+    credentialType: classifyLoginCredential(key, session),
     userId: session.user.id,
     userRole: session.user.role,
   });
 }
 
 function classifyLoginCredential(
-  key: string
-): Extract<AuthCredentialType, "admin-token" | "user-api-key"> {
-  return getEnvConfig().ADMIN_TOKEN && key === getEnvConfig().ADMIN_TOKEN
-    ? "admin-token"
-    : "user-api-key";
+  key: string,
+  session: AuthSession
+): Extract<AuthCredentialType, "admin-token" | "session" | "user-api-key"> {
+  if (getEnvConfig().ADMIN_TOKEN && key === getEnvConfig().ADMIN_TOKEN) {
+    return "admin-token";
+  }
+
+  return session.key.canLoginWebUi ? "session" : "user-api-key";
 }
 
 export async function POST(request: NextRequest) {

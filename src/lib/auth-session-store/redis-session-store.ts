@@ -44,7 +44,9 @@ function parseSessionData(raw: string): SessionData | null {
     if (typeof obj.userRole !== "string") return null;
     if (typeof obj.userId !== "number" || !Number.isInteger(obj.userId)) return null;
     const credentialType =
-      obj.credentialType === "admin-token" || obj.credentialType === "user-api-key"
+      obj.credentialType === "session" ||
+      obj.credentialType === "admin-token" ||
+      obj.credentialType === "user-api-key"
         ? obj.credentialType
         : obj.userId === -1
           ? "admin-token"

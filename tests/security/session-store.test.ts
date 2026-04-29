@@ -105,6 +105,26 @@ describe("RedisSessionStore", () => {
     expect(found).toEqual(session);
   });
 
+  it("read() preserves browser session credential provenance", async () => {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    const session = {
+      sessionId: "browser-admin-session",
+      keyFingerprint: "fp-browser",
+      credentialType: "session",
+      userId: 7,
+      userRole: "admin",
+      createdAt: 1_700_000_000_000,
+      expiresAt: 1_700_000_360_000,
+    };
+    redis.store.set(`cch:session:${session.sessionId}`, JSON.stringify(session));
+
+    const store = new RedisSessionStore();
+    const found = await store.read(session.sessionId);
+
+    expect(found).toEqual(session);
+  });
+
   it("read() classifies legacy admin opaque sessions without credentialType as admin-token", async () => {
     const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
 

@@ -150,7 +150,7 @@ describe("POST /api/auth/login session token mode integration", () => {
       expect.objectContaining({
         userId: 1,
         userRole: "user",
-        credentialType: "user-api-key",
+        credentialType: "session",
         keyFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       })
     );
@@ -175,7 +175,7 @@ describe("POST /api/auth/login session token mode integration", () => {
     expect(res.status).toBe(200);
     expect(mockCreateSession).toHaveBeenCalledTimes(1);
     expect(mockCreateSession).toHaveBeenCalledWith(
-      expect.objectContaining({ credentialType: "user-api-key" })
+      expect.objectContaining({ credentialType: "session" })
     );
     expect(mockSetAuthCookie).toHaveBeenCalledTimes(1);
     expect(mockSetAuthCookie).toHaveBeenCalledWith("sid_opaque_session_cookie");
@@ -280,5 +280,34 @@ describe("POST /api/auth/login session token mode integration", () => {
       })
     );
     expect(mockSetAuthCookie).toHaveBeenCalledWith("sid_admin_token_session");
+  });
+
+  it("opaque mode keeps browser-login capable admin keys as session credentials", async () => {
+    mockGetSessionTokenMode.mockReturnValue("opaque");
+    mockValidateKey.mockResolvedValue({
+      ...dashboardSession,
+      user: { ...dashboardSession.user, role: "admin" as const },
+      key: { ...dashboardSession.key, canLoginWebUi: true },
+    });
+    mockCreateSession.mockResolvedValue({
+      sessionId: "sid_browser_admin_session",
+      keyFingerprint: "sha256:abcdef",
+      userId: 1,
+      userRole: "admin",
+      createdAt: 100,
+      expiresAt: 200,
+    });
+
+    const res = await POST(makeRequest({ key: "browser-admin-db-key" }));
+
+    expect(res.status).toBe(200);
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 1,
+        userRole: "admin",
+        credentialType: "session",
+      })
+    );
+    expect(mockSetAuthCookie).toHaveBeenCalledWith("sid_browser_admin_session");
   });
 });

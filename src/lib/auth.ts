@@ -57,7 +57,7 @@ export function getSessionTokenMode(): SessionTokenMode {
 export interface OpaqueSessionContract {
   sessionId: string; // random opaque token
   keyFingerprint: string; // hash of the API key (for audit, not auth)
-  credentialType?: "admin-token" | "user-api-key"; // token provenance for management API policy
+  credentialType?: "session" | "admin-token" | "user-api-key"; // token provenance for management API policy
   createdAt: number; // unix timestamp
   expiresAt: number; // unix timestamp
   userId: number;
@@ -120,6 +120,7 @@ export function isOpaqueSessionContract(value: unknown): value is OpaqueSessionC
     typeof candidate.userRole === "string" &&
     candidate.userRole.length > 0 &&
     (credentialType === undefined ||
+      credentialType === "session" ||
       credentialType === "admin-token" ||
       credentialType === "user-api-key")
   );

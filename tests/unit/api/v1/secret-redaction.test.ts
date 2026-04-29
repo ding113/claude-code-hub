@@ -18,4 +18,20 @@ describe("v1 secret redaction", () => {
       "x-api-key": "[REDACTED]",
     });
   });
+
+  test("redacts provider key and proxy credentials", () => {
+    expect(redactSecret("sk-provider-1234567890")).toBe("sk-p...[REDACTED]...7890");
+
+    const providerHeaders = new Headers({
+      Authorization: "Bearer provider-secret",
+      "CF-AIG-Authorization": "Bearer upstream-secret",
+      "X-Trace": "safe-trace",
+    });
+
+    expect(redactHeaders(providerHeaders)).toEqual({
+      authorization: "[REDACTED]",
+      "cf-aig-authorization": "[REDACTED]",
+      "x-trace": "safe-trace",
+    });
+  });
 });
