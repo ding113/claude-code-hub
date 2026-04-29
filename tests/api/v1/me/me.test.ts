@@ -102,6 +102,26 @@ describe("v1 me endpoints", () => {
       pageSize: 10,
       excludeStatusCode200: false,
     });
+    expect(getMyUsageLogsMock).toHaveBeenCalledTimes(1);
+    expect(getMyUsageLogsBatchMock).not.toHaveBeenCalled();
+    getMyUsageLogsMock.mockClear();
+    getMyUsageLogsBatchMock.mockClear();
+
+    const firstCursorPage = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/me/usage-logs?limit=15",
+      headers,
+    });
+    expect(firstCursorPage.response.status).toBe(200);
+    expect(firstCursorPage.json).toMatchObject({
+      items: [{ id: 2, model: "codex" }],
+      pageInfo: { nextCursor: null, hasMore: false, limit: 15 },
+    });
+    expect(getMyUsageLogsBatchMock).toHaveBeenCalledWith({ limit: 15 });
+    expect(getMyUsageLogsBatchMock).toHaveBeenCalledTimes(1);
+    expect(getMyUsageLogsMock).not.toHaveBeenCalled();
+    getMyUsageLogsMock.mockClear();
+    getMyUsageLogsBatchMock.mockClear();
 
     const cursor = await callV1Route({
       method: "GET",
@@ -114,10 +134,33 @@ describe("v1 me endpoints", () => {
       items: [{ id: 2, model: "codex" }],
       pageInfo: { nextCursor: null, hasMore: false, limit: 15 },
     });
-    expect(getMyUsageLogsBatchMock).toHaveBeenCalledWith({
+    expect(getMyUsageLogsBatchMock).toHaveBeenLastCalledWith({
       limit: 15,
       cursor: { createdAt: "2026-04-28T00:00:00.000Z", id: 42 },
     });
+    expect(getMyUsageLogsBatchMock).toHaveBeenCalledTimes(1);
+    expect(getMyUsageLogsMock).not.toHaveBeenCalled();
+    getMyUsageLogsMock.mockClear();
+    getMyUsageLogsBatchMock.mockClear();
+
+    const mixed = await callV1Route({
+      method: "GET",
+      pathname:
+        "/api/v1/me/usage-logs?page=2&pageSize=10&cursorCreatedAt=2026-04-28T00:00:00.000Z&cursorId=42&limit=15",
+      headers,
+    });
+    expect(mixed.response.status).toBe(200);
+    expect(mixed.json).toMatchObject({
+      items: [{ id: 1, model: "claude" }],
+      pageInfo: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    });
+    expect(getMyUsageLogsMock).toHaveBeenCalledWith({
+      limit: 15,
+      page: 2,
+      pageSize: 10,
+    });
+    expect(getMyUsageLogsMock).toHaveBeenCalledTimes(1);
+    expect(getMyUsageLogsBatchMock).not.toHaveBeenCalled();
 
     const full = await callV1Route({
       method: "GET",

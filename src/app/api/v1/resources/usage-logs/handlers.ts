@@ -20,11 +20,13 @@ export async function listUsageLogs(c: Context): Promise<Response> {
   const query = parseUsageLogsQuery(c);
   if (query instanceof Response) return query;
   const actions = await import("@/actions/usage-logs");
-  const result = query.cursor
-    ? await callAction(c, actions.getUsageLogsBatch, [query] as never[], c.get("auth"))
-    : await callAction(c, actions.getUsageLogs, [query] as never[], c.get("auth"));
+  const useOffsetPagination = isOffsetUsageLogsQuery(query);
+  const actionQuery = useOffsetPagination ? withoutCursor(query) : query;
+  const result = useOffsetPagination
+    ? await callAction(c, actions.getUsageLogs, [actionQuery] as never[], c.get("auth"))
+    : await callAction(c, actions.getUsageLogsBatch, [actionQuery] as never[], c.get("auth"));
   return result.ok
-    ? jsonResponse(toUsageLogsListResponse(result.data, query))
+    ? jsonResponse(toUsageLogsListResponse(result.data, actionQuery))
     : actionError(c, result);
 }
 
@@ -160,6 +162,16 @@ function parseJobParams(c: Context): { jobId: string } | Response {
   const params = UsageLogExportJobParamSchema.safeParse({ jobId: c.req.param("jobId") });
   if (!params.success) return fromZodError(params.error, new URL(c.req.url).pathname);
   return params.data;
+}
+
+function isOffsetUsageLogsQuery(query: UsageLogsActionQueryInput): boolean {
+  return query.page !== undefined || query.pageSize !== undefined;
+}
+
+function withoutCursor(query: UsageLogsActionQueryInput): UsageLogsActionQueryInput {
+  const rest = { ...query };
+  delete rest.cursor;
+  return rest;
 }
 
 function actionJson<T>(c: Context, result: ActionResult<T>): Response {

@@ -105,6 +105,26 @@ describe("v1 usage log endpoints", () => {
       pageSize: 10,
       excludeStatusCode200: false,
     });
+    expect(getUsageLogsMock).toHaveBeenCalledTimes(1);
+    expect(getUsageLogsBatchMock).not.toHaveBeenCalled();
+    getUsageLogsMock.mockClear();
+    getUsageLogsBatchMock.mockClear();
+
+    const firstCursorPage = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?limit=15",
+      headers,
+    });
+    expect(firstCursorPage.response.status).toBe(200);
+    expect(firstCursorPage.json).toMatchObject({
+      items: [{ id: 2, model: "codex" }],
+      pageInfo: { nextCursor: null, hasMore: false, limit: 15 },
+    });
+    expect(getUsageLogsBatchMock).toHaveBeenCalledWith({ limit: 15 });
+    expect(getUsageLogsBatchMock).toHaveBeenCalledTimes(1);
+    expect(getUsageLogsMock).not.toHaveBeenCalled();
+    getUsageLogsMock.mockClear();
+    getUsageLogsBatchMock.mockClear();
 
     const cursor = await callV1Route({
       method: "GET",
@@ -116,10 +136,33 @@ describe("v1 usage log endpoints", () => {
       items: [{ id: 2, model: "codex" }],
       pageInfo: { nextCursor: null, hasMore: false, limit: 15 },
     });
-    expect(getUsageLogsBatchMock).toHaveBeenCalledWith({
+    expect(getUsageLogsBatchMock).toHaveBeenLastCalledWith({
       limit: 15,
       cursor: { createdAt: "2026-04-28T00:00:00.000Z", id: 42 },
     });
+    expect(getUsageLogsBatchMock).toHaveBeenCalledTimes(1);
+    expect(getUsageLogsMock).not.toHaveBeenCalled();
+    getUsageLogsMock.mockClear();
+    getUsageLogsBatchMock.mockClear();
+
+    const mixed = await callV1Route({
+      method: "GET",
+      pathname:
+        "/api/v1/usage-logs?page=2&pageSize=10&cursorCreatedAt=2026-04-28T00:00:00.000Z&cursorId=42&limit=15",
+      headers,
+    });
+    expect(mixed.response.status).toBe(200);
+    expect(mixed.json).toMatchObject({
+      items: [{ id: 1, model: "claude" }],
+      pageInfo: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    });
+    expect(getUsageLogsMock).toHaveBeenCalledWith({
+      limit: 15,
+      page: 2,
+      pageSize: 10,
+    });
+    expect(getUsageLogsMock).toHaveBeenCalledTimes(1);
+    expect(getUsageLogsBatchMock).not.toHaveBeenCalled();
   });
 
   test("reads stats filters lists and session suggestions", async () => {

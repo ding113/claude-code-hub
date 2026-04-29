@@ -34,11 +34,13 @@ export async function listMeUsageLogs(c: Context): Promise<Response> {
   const query = parseMeUsageLogsQuery(c);
   if (query instanceof Response) return query;
   const actions = await import("@/actions/my-usage");
-  const result = query.cursor
-    ? await callAction(c, actions.getMyUsageLogsBatch, [query] as never[], c.get("auth"))
-    : await callAction(c, actions.getMyUsageLogs, [query] as never[], c.get("auth"));
+  const useOffsetPagination = isOffsetUsageLogsQuery(query);
+  const actionQuery = useOffsetPagination ? withoutCursor(query) : query;
+  const result = useOffsetPagination
+    ? await callAction(c, actions.getMyUsageLogs, [actionQuery] as never[], c.get("auth"))
+    : await callAction(c, actions.getMyUsageLogsBatch, [actionQuery] as never[], c.get("auth"));
   return result.ok
-    ? jsonResponse(toMeUsageLogsListResponse(result.data, query))
+    ? jsonResponse(toMeUsageLogsListResponse(result.data, actionQuery))
     : actionError(c, result);
 }
 
@@ -118,6 +120,16 @@ function parseMeUsageLogsQuery(c: Context): MeUsageLogsActionQueryInput | Respon
     ...rest,
     cursor: cursorCreatedAt && cursorId ? { createdAt: cursorCreatedAt, id: cursorId } : undefined,
   };
+}
+
+function isOffsetUsageLogsQuery(query: MeUsageLogsActionQueryInput): boolean {
+  return query.page !== undefined || query.pageSize !== undefined;
+}
+
+function withoutCursor(query: MeUsageLogsActionQueryInput): MeUsageLogsActionQueryInput {
+  const rest = { ...query };
+  delete rest.cursor;
+  return rest;
 }
 
 function actionJson<T>(c: Context, result: ActionResult<T>): Response {
