@@ -118,6 +118,37 @@ describe("v1 API key admin access flag", () => {
     expect(redisReadMock).toHaveBeenCalledWith("sid_browser_admin");
   });
 
+  test("allows legacy opaque browser cookies without credential provenance on admin routes", async () => {
+    vi.resetModules();
+    vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
+    validateAuthTokenMock.mockResolvedValue(adminSession);
+    redisReadMock.mockResolvedValue({
+      sessionId: "sid_legacy_browser_admin",
+      keyFingerprint: "sha256:legacy-browser",
+      credentialType: "session",
+      userId: 1,
+      userRole: "admin",
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+    });
+
+    vi.doMock("@/lib/auth", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/auth")>();
+      return { ...actual, validateAuthToken: validateAuthTokenMock };
+    });
+    vi.doMock("@/lib/auth-session-store/redis-session-store", () => ({
+      RedisSessionStore: class {
+        read = redisReadMock;
+      },
+    }));
+    const { resolveAuth } = await import("@/lib/api/v1/_shared/auth-middleware");
+    const got = await resolveAuth(createCookieAuthContext("sid_legacy_browser_admin"), "admin");
+
+    expect(got).not.toBeInstanceOf(Response);
+    expect(got).toMatchObject({ credentialType: "session", source: "cookie" });
+    expect(redisReadMock).toHaveBeenCalledWith("sid_legacy_browser_admin");
+  });
+
   test("allows legacy cookie admin sessions on admin routes when API key admin access is disabled", async () => {
     vi.resetModules();
     vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");

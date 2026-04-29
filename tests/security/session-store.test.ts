@@ -150,7 +150,7 @@ describe("RedisSessionStore", () => {
     });
   });
 
-  it("read() classifies legacy non-admin opaque sessions without credentialType as user-api-key", async () => {
+  it("read() classifies legacy opaque browser sessions without credentialType as session", async () => {
     const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
 
     const legacyUserSession = {
@@ -171,7 +171,7 @@ describe("RedisSessionStore", () => {
 
     expect(found).toMatchObject({
       ...legacyUserSession,
-      credentialType: "user-api-key",
+      credentialType: "session",
     });
   });
 

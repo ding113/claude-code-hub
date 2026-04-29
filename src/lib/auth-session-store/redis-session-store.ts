@@ -50,7 +50,7 @@ function parseSessionData(raw: string): SessionData | null {
         ? obj.credentialType
         : obj.userId === -1
           ? "admin-token"
-          : "user-api-key";
+          : "session";
     if (!Number.isFinite(obj.createdAt) || typeof obj.createdAt !== "number") return null;
     if (!Number.isFinite(obj.expiresAt) || typeof obj.expiresAt !== "number") return null;
 
