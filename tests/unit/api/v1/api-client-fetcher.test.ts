@@ -47,6 +47,26 @@ describe("v1 api fetcher", () => {
     });
   });
 
+  test("preserves diagnostic context for malformed JSON error bodies", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("{not-json", {
+            status: 502,
+            statusText: "Bad Gateway",
+            headers: { "Content-Type": "application/problem+json" },
+          })
+      )
+    );
+
+    await expect(apiFetch("/api/v1/test")).rejects.toMatchObject<ApiError>({
+      status: 502,
+      errorCode: "api.malformed_error_body",
+      detail: "{not-json",
+    });
+  });
+
   test("does not permanently cache failed CSRF token lookups", async () => {
     const fetchMock = vi
       .fn()

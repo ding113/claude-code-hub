@@ -216,7 +216,7 @@ describe("v1 public status and ip geo endpoints", () => {
 
     savePublicStatusSettingsMock.mockResolvedValueOnce({
       ok: false,
-      error: "权限不足",
+      error: "not permitted",
       errorCode: "public_status.forbidden",
     });
     const forbidden = await callV1Route({
@@ -231,6 +231,27 @@ describe("v1 public status and ip geo endpoints", () => {
     });
     expect(forbidden.response.status).toBe(403);
     expect(forbidden.json).toMatchObject({ errorCode: "public_status.forbidden" });
+
+    savePublicStatusSettingsMock.mockResolvedValueOnce({
+      ok: false,
+      error: "权限不足",
+      errorCode: "public_status.action_failed",
+    });
+    const localizedFailure = await callV1Route({
+      method: "PUT",
+      pathname: "/api/v1/public/status/settings",
+      headers: { Authorization: "Bearer admin-token" },
+      body: {
+        publicStatusWindowHours: 24,
+        publicStatusAggregationIntervalMinutes: 5,
+        groups: [],
+      },
+    });
+    expect(localizedFailure.response.status).toBe(400);
+    expect(localizedFailure.json).toMatchObject({
+      detail: "Bad request",
+      errorCode: "public_status.action_failed",
+    });
 
     savePublicStatusSettingsMock.mockResolvedValueOnce({
       ok: false,

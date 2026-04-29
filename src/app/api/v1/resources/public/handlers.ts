@@ -129,8 +129,7 @@ export async function lookupIpGeo(c: Context): Promise<Response> {
 }
 
 function actionError(c: Context, result: Extract<ActionResult<unknown>, { ok: false }>): Response {
-  const detail = result.error || "Request failed.";
-  const status = detail.includes("权限") || detail.includes("UNAUTHORIZED") ? 403 : 400;
+  const status = isAuthorizationActionError(result.errorCode) ? 403 : 400;
   return createProblemResponse({
     status,
     instance: new URL(c.req.url).pathname,
@@ -138,4 +137,8 @@ function actionError(c: Context, result: Extract<ActionResult<unknown>, { ok: fa
     errorParams: result.errorParams,
     detail: publicActionErrorDetail(status),
   });
+}
+
+function isAuthorizationActionError(errorCode?: string): boolean {
+  return Boolean(errorCode?.startsWith("auth.") || errorCode?.endsWith(".forbidden"));
 }

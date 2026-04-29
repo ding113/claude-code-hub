@@ -96,7 +96,17 @@ async function decodeApiError(response: Response): Promise<ApiError> {
     contentType.includes("application/problem+json") ||
     contentType.includes("application/json")
   ) {
-    const body = (await response.json().catch(() => ({}))) as ProblemBody;
+    const bodyText = await response.text();
+    let body: ProblemBody = {};
+    try {
+      body = bodyText ? (JSON.parse(bodyText) as ProblemBody) : {};
+    } catch {
+      return new ApiError({
+        status: response.status,
+        errorCode: "api.malformed_error_body",
+        detail: bodyText.slice(0, 500) || response.statusText || "Request failed",
+      });
+    }
     return new ApiError({
       status: response.status,
       errorCode: body.errorCode ?? "api.error",

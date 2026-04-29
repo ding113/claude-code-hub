@@ -25,6 +25,7 @@ export function isApiError(error: unknown): error is ApiError {
 
 const API_ERROR_MESSAGE_KEYS: Record<string, string> = {
   "api.error": "INTERNAL_ERROR",
+  "api.malformed_error_body": "INTERNAL_ERROR",
   "auth.missing": "TOKEN_REQUIRED",
   "auth.invalid": "INVALID_TOKEN",
   "auth.forbidden": "PERMISSION_DENIED",
