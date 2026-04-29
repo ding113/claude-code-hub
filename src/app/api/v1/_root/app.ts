@@ -13,6 +13,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { createManagementDocsApp } from "@/app/api/v1/_root/docs";
 import { managementApiDocumentConfig } from "@/app/api/v1/_root/document";
+import { webhookTargetsRouter } from "@/app/api/v1/resources/webhook-targets/router";
 import {
   AUTH_MODE_CONTEXT_KEY,
   attachRequestId,
@@ -121,6 +122,11 @@ app.get("/auth/csrf", requireAuth({ tier: "read" }), (c) => {
   const token = generateCsrfToken(session.key.key, session.user.id);
   return c.json({ csrfToken: token, mode: "cookie" }, 200);
 });
+
+// ==================== 业务资源路由 ====================
+
+// /webhook-targets：admin tier；写方法强制 CSRF（路由模块自管理）
+app.route("/", webhookTargetsRouter);
 
 // ==================== 404 处理（Problem Details） ====================
 

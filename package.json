@@ -134,7 +134,7 @@
     "bun-types": "^1",
     "drizzle-kit": "^0.31",
     "happy-dom": "^20",
-    "openapi-typescript": "^7",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4"
