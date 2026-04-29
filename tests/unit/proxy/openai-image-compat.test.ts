@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Provider } from "@/types/provider";
 import {
+  buildOpenAIImageLogicalBody,
   parseOpenAIImageMultipartMetadata,
   sanitizeGenerationsRequestForProvider,
   serializeOpenAIImageMultipartRequest,
   setOpenAIImageMultipartModel,
+  syncOpenAIImageMultipartFromLogicalBody,
   validateOpenAIImageRequest,
   type OpenAIImageRequestMetadata,
 } from "@/app/v1/_lib/proxy/openai-image-compat";
@@ -424,5 +426,46 @@ describe("openai-image-compat - provider sanitizer", () => {
 
     expect(stripped).toBe(false);
     expect(body.response_format).toBe("url");
+  });
+});
+
+describe("openai-image-compat - multipart round-trip", () => {
+  it("does not duplicate mask field when round-tripping through logical body", async () => {
+    const metadata = await createMultipartMetadata({
+      pathname: "/v1/images/edits",
+      fields: [
+        ["prompt", "edit it"],
+        ["model", "gpt-image-1"],
+      ],
+      files: [
+        ["image", createPngFile("image.png", 32, 32)],
+        ["mask", createPngFile("mask.png", 32, 32)],
+      ],
+    });
+
+    const logicalBody = buildOpenAIImageLogicalBody(metadata);
+    expect(logicalBody.mask).toBe("[file]");
+
+    syncOpenAIImageMultipartFromLogicalBody(metadata, logicalBody);
+
+    const maskParts = metadata.parts.filter((part) => part.name === "mask");
+    expect(maskParts).toHaveLength(1);
+    expect(maskParts[0].kind).toBe("file");
+
+    const serialized = await serializeOpenAIImageMultipartRequest(metadata);
+    const reparsed = await parseOpenAIImageMultipartMetadata(
+      new Request("https://proxy.example.com/v1/images/edits", {
+        method: "POST",
+        body: serialized.body,
+        headers: { "content-type": serialized.contentType ?? "" },
+      }),
+      "/v1/images/edits",
+      serialized.contentType
+    );
+
+    expect(reparsed).not.toBeNull();
+    const reparsedMaskParts = reparsed?.parts.filter((part) => part.name === "mask") ?? [];
+    expect(reparsedMaskParts).toHaveLength(1);
+    expect(reparsedMaskParts[0]?.kind).toBe("file");
   });
 });
