@@ -4,34 +4,6 @@
 
 ---
 
-## Unreleased
-
-### 新增
-
-- 全新的 `/api/v1/*` 管理 API（Management API v1）：以纯 REST 风格统一暴露用户、密钥、供应商、供应商端点、供应商分组、模型价格、系统设置、通知与 Webhook、使用日志、审计日志、会话、Dashboard、Me（自助查询）、公开状态、IP 地理、错误规则、请求过滤器、敏感词、管理员-用户洞察等 95+ 个端点。OpenAPI 3.1 文档参见 `GET /api/v1/openapi.json`，交互式 UI 见 `/api/v1/scalar`（推荐）和 `/api/v1/docs`。详细使用与示例见 [docs/api/v1/README.md](docs/api/v1/README.md)。
-- 解决 Issue #1123：新增供应商搜索（`GET /api/v1/providers?q=...`），并提供唯一的真密钥披露入口 `GET /api/v1/providers/{id}/key:reveal`（list/detail 端点不再返回明文，调用全程审计）。
-- RFC 9457 problem+json 错误信封：`/api/v1/*` 全量错误响应统一附带 `errorCode`、`detail`、`instance`、`type`、`title`、`status`，便于前端做 i18n 与故障定位。
-- CSRF 中间件：cookie 通道下的写方法强制 `X-CCH-CSRF` 头校验，可通过 `GET /api/v1/auth/csrf` 获取令牌。
-
-### 变更
-
-- 旧版 `/api/actions/*` 接口标记为**已弃用（Deprecated）**：默认仍可调用，但每个响应附带 `Deprecation`/`Sunset`/`Link`/`Warning` 头；旧文档 UI（`/api/actions/scalar`、`/api/actions/docs`）顶部新增弃用横幅，引导迁移至 `/api/v1/scalar`。计划在下一次 major 版本中移除。
-- 旧版 `/api/actions/*` → 新版 `/api/v1/*` 的端点对照表见 [docs/api/v1/migration-guide.md](docs/api/v1/migration-guide.md)。
-- `CLAUDE.md` Architecture Overview > API Layer 增加 `/api/v1/*` 管理 API 条目。
-
-### 安全
-
-- 新增 `ENABLE_API_KEY_ADMIN_ACCESS` 开关，默认 `false`：admin tier 端点默认仅接受会话/`ADMIN_TOKEN`，需要让 admin 用户的 API key 也访问 admin 端点时才显式开启。安全权衡详见 [docs/security/api-key-admin-access.md](docs/security/api-key-admin-access.md)。
-
-### 新增环境变量
-
-- `ENABLE_LEGACY_ACTIONS_API`（默认 `true`）：旧版 `/api/actions/*` 总开关；置 `false` 后执行端点返回 410 Gone（problem+json）。
-- `LEGACY_ACTIONS_DOCS_MODE`（默认 `deprecated`）：旧版文档行为；`hidden` 时旧文档返回 404。
-- `LEGACY_ACTIONS_SUNSET_DATE`（默认 `2026-12-31`）：旧 API 计划下线日期，写入 `Sunset` 响应头。
-- `ENABLE_API_KEY_ADMIN_ACCESS`（默认 `false`）：是否允许 admin 用户的 API key 访问管理 API 的 admin tier 端点。
-
----
-
 ## v0.6.8 (2026-04-13)
 
 ### 新增
