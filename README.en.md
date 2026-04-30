@@ -93,6 +93,21 @@ For claude-code-hub users, AICodeMirror offers special benefits: register via th
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">
+<img src="public/readme/pateway.png" alt="PatewayAI Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: <a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">PatewayAI</a> is a premium model API relay provider built for power AI developers, focused on official direct access. It offers the full Claude lineup and Codex series with 100% official upstream channels, no mixed routes, and no watered-down quality. Billing is transparent and every token-level charge can be verified line by line.<br/>
+It also supports enterprise-grade high concurrency and provides a professional management platform for business customers. Enterprise clients can sign formal contracts and request invoices; visit the official website for contact details and more information.<br/>
+Register now via <a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">this link</a> to get a <b>$3 trial credit</b>. Top-ups can be as low as <b>60% of list price</b>, with two-way referral bonuses, and total referral rewards up to <b>$150</b>.
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.
