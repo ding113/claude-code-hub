@@ -120,3 +120,25 @@ describe("sanitizeForLogging", () => {
     expect(out.webhookUrl).toBe("https://x");
   });
 });
+
+describe("redactSecrets - circular reference protection", () => {
+  it("does not infinitely recurse on object cycles; emits [CIRCULAR] placeholder", () => {
+    type Node = { name: string; password: string; self?: Node };
+    const a: Node = { name: "x", password: "secret" };
+    a.self = a;
+    // 不抛错，且 password 仍然被脱敏；环上的引用替换为占位符。
+    const out = sanitizeForLogging(a as unknown as Record<string, unknown>);
+    expect(out.password).toBe(REDACTED);
+    expect(out.self).toBe("[CIRCULAR]");
+  });
+
+  it("does not infinitely recurse on array cycles", () => {
+    const arr: unknown[] = [{ password: "x" }];
+    arr.push(arr);
+    const wrapper = { items: arr } as Record<string, unknown>;
+    const out = sanitizeForLogging(wrapper);
+    const items = out.items as unknown[];
+    expect((items[0] as { password: string }).password).toBe(REDACTED);
+    expect(items[1]).toBe("[CIRCULAR]");
+  });
+});

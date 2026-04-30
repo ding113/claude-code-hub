@@ -96,6 +96,41 @@ interface UsersBatchData {
   hasMore: boolean;
 }
 
+/**
+ * `GetUsersBatchParams.sortBy` / `sortOrder` / `statusFilter` 的合法字面量集合。
+ *
+ * 之前直接把 query 字符串透传到 action（`as` 断言），而 action 内部把 sortBy
+ * 作为 sort-column map 的键使用：未知值会得到 undefined，进而抛运行时错误并
+ * 在 v1 表层显现为 500，而不是规范的 400 校验失败。这里通过白名单校验把
+ * 非法值降级为「不传」，与 legacy 默认行为对齐。
+ */
+const ALLOWED_SORT_BY = new Set<NonNullable<GetUsersBatchParams["sortBy"]>>([
+  "name",
+  "tags",
+  "expiresAt",
+  "rpm",
+  "limit5hUsd",
+  "limitDailyUsd",
+  "limitWeeklyUsd",
+  "limitMonthlyUsd",
+  "createdAt",
+]);
+
+const ALLOWED_SORT_ORDER = new Set<NonNullable<GetUsersBatchParams["sortOrder"]>>(["asc", "desc"]);
+
+const ALLOWED_STATUS_FILTER = new Set<NonNullable<GetUsersBatchParams["statusFilter"]>>([
+  "all",
+  "active",
+  "expired",
+  "expiringSoon",
+  "enabled",
+  "disabled",
+]);
+
+function pickAllowed<V extends string>(value: string, set: Set<V>): V | undefined {
+  return (set as Set<string>).has(value) ? (value as V) : undefined;
+}
+
 function parseListQuery(c: Context): GetUsersBatchParams {
   const q = c.req.query();
   const params: GetUsersBatchParams = {};
@@ -105,9 +140,18 @@ function parseListQuery(c: Context): GetUsersBatchParams {
     if (Number.isFinite(n) && n > 0) params.limit = Math.trunc(n);
   }
   if (q.searchTerm) params.searchTerm = q.searchTerm;
-  if (q.statusFilter) params.statusFilter = q.statusFilter as GetUsersBatchParams["statusFilter"];
-  if (q.sortBy) params.sortBy = q.sortBy as GetUsersBatchParams["sortBy"];
-  if (q.sortOrder) params.sortOrder = q.sortOrder as GetUsersBatchParams["sortOrder"];
+  if (q.statusFilter) {
+    const v = pickAllowed(q.statusFilter, ALLOWED_STATUS_FILTER);
+    if (v !== undefined) params.statusFilter = v;
+  }
+  if (q.sortBy) {
+    const v = pickAllowed(q.sortBy, ALLOWED_SORT_BY);
+    if (v !== undefined) params.sortBy = v;
+  }
+  if (q.sortOrder) {
+    const v = pickAllowed(q.sortOrder, ALLOWED_SORT_ORDER);
+    if (v !== undefined) params.sortOrder = v;
+  }
   if (q.tagFilters) {
     params.tagFilters = q.tagFilters
       .split(",")
@@ -144,14 +188,38 @@ export async function listUsers(c: Context): Promise<Response> {
 
 // ==================== GET /users/{id} ====================
 
+/**
+ * legacy `getUsersBatch` 默认页大小为 50；对于安装了 >50 用户的实例，仅查首屏会
+ * 让真实存在的用户被误判为 404。这里通过遍历 cursor 把所有页扫一遍，命中即返回。
+ *
+ * 该路径只在 admin 调用 `/users/{id}` 时触发，单次最多遍历 N/USER_LIST_MAX_LIMIT 页，
+ * 与 legacy 的 admin 看板一致；后续若 legacy action 暴露 `ids` 过滤再切换。
+ */
+async function findUserByIdAcrossPages(
+  c: Context,
+  id: number
+): Promise<{ ok: true; user: Record<string, unknown> | null } | { ok: false; response: Response }> {
+  let cursor: string | undefined;
+  // 上限避免恶意 cursor 死循环（legacy action 自身也有 hasMore 终止条件）
+  for (let i = 0; i < 1000; i++) {
+    const result = await callAction<UsersBatchData>(c, listUsersAction, [{ cursor, limit: 200 }]);
+    if (!result.ok) return { ok: false, response: result.problem };
+    const found = result.data.users.find((u) => (u as { id: number }).id === id);
+    if (found) return { ok: true, user: found };
+    if (!result.data.hasMore || !result.data.nextCursor) {
+      return { ok: true, user: null };
+    }
+    cursor = result.data.nextCursor;
+  }
+  return { ok: true, user: null };
+}
+
 export async function getUser(c: Context): Promise<Response> {
   const parsed = parseIdParam(c);
   if (!parsed.ok) return parsed.response;
-  // 复用 listUsersAction：legacy action 不暴露按 id 取单条，搜索是开销很小的回退路径。
-  const result = await callAction<UsersBatchData>(c, listUsersAction, [{}]);
-  if (!result.ok) return result.problem;
-  const user = result.data.users.find((u) => (u as { id: number }).id === parsed.id);
-  if (!user) {
+  const lookup = await findUserByIdAcrossPages(c, parsed.id);
+  if (!lookup.ok) return lookup.response;
+  if (!lookup.user) {
     return problem(c, {
       status: 404,
       errorCode: "not_found",
@@ -159,7 +227,7 @@ export async function getUser(c: Context): Promise<Response> {
       detail: `User #${parsed.id} does not exist.`,
     });
   }
-  return respondJson(c, serializeUser(user), 200);
+  return respondJson(c, serializeUser(lookup.user), 200);
 }
 
 // ==================== POST /users ====================
@@ -256,11 +324,11 @@ export async function patchUser(c: Context): Promise<Response> {
   const result = await callAction<void>(c, updateUser, [parsed.id, body.data]);
   if (!result.ok) return result.problem;
 
-  // editUser 不返回更新后的对象；通过 list action 重新查一次，对外保持 REST 语义。
-  const refreshed = await callAction<UsersBatchData>(c, listUsersAction, [{}]);
-  if (!refreshed.ok) return refreshed.problem;
-  const user = refreshed.data.users.find((u) => (u as { id: number }).id === parsed.id);
-  if (!user) {
+  // editUser 不返回更新后的对象；通过 list action 重新查一次（跨页遍历，避免
+  // user 不在首屏时返回 404），对外保持 REST 语义。
+  const lookup = await findUserByIdAcrossPages(c, parsed.id);
+  if (!lookup.ok) return lookup.response;
+  if (!lookup.user) {
     return problem(c, {
       status: 404,
       errorCode: "not_found",
@@ -268,7 +336,7 @@ export async function patchUser(c: Context): Promise<Response> {
       detail: `User #${parsed.id} does not exist after update.`,
     });
   }
-  return respondJson(c, serializeUser(user), 200);
+  return respondJson(c, serializeUser(lookup.user), 200);
 }
 
 // ==================== DELETE /users/{id} ====================

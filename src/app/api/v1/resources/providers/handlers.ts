@@ -107,6 +107,14 @@ function camelToSnakeKey(key: string): string {
   return key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
 }
 
+/**
+ * 浅层把顶层 camelCase 键转为 snake_case，保留嵌套对象/数组原貌。
+ *
+ * 重要假设：当前 schema 暴露的所有嵌套对象（例如 `customHeaders`）的内层
+ * 键都是「值域语义」（HTTP header 名 / 模型名等），它们必须按字面量保留，
+ * 不能再做 camelCase->snake_case 转换。如果未来新增「嵌套 camelCase 配置块」
+ * 的字段，请在调用前显式自行转换，避免此 helper 静默漏译。
+ */
 function v1ToLegacyProviderInput(input: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
@@ -178,18 +186,20 @@ export async function createProviderHandler(c: Context): Promise<Response> {
   });
   if (!listed.ok) return listed.problem;
   // 用 name 匹配（addProvider 内部把 name 当作唯一显示名，单测 mock 也按此处理）。
+  // 注意：如果两个并发 POST 用同一 name 同时落库，name 不再能唯一定位刚创建的
+  // 那一行——legacy 没有 last-insert-id 通道，这里只能选择「保守」语义：
+  // 找不到记录就返回 500，而不是回退一个 id=0 的不可达 Location。
   const name = (body.data as { name?: string }).name;
   const found = filterVisibleProviders(listed.data ?? []).find(
     (p) => (p as { name: string }).name === name
   );
   if (!found) {
-    // 若 list 找不到（mock 不更新 list 时的 fallback），仍返回 201 + 输入回显。
-    const fallbackId = 0;
-    return respondCreated(
-      c,
-      { ...body.data, id: fallbackId },
-      `${RESOURCE_BASE_PATH}/${fallbackId}`
-    );
+    return problem(c, {
+      status: 500,
+      errorCode: "internal_error",
+      title: "Internal Server Error",
+      detail: "Provider was created but could not be located in the subsequent list.",
+    });
   }
   const serialized = serializeProvider(found);
   return respondCreated(c, serialized, `${RESOURCE_BASE_PATH}/${serialized.id}`);

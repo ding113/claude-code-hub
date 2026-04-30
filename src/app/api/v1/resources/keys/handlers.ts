@@ -140,19 +140,30 @@ export async function createKeyHandler(c: Context): Promise<Response> {
   const result = await callAction<AddKeyData>(c, addKeyAction, [{ ...body.data, userId }]);
   if (!result.ok) return result.problem;
 
-  // legacy addKey 不返回完整 key 对象；要给前端回传 id，再查一次列表按 name 匹配。
+  // legacy addKey 不返回完整 key 对象；要给前端回传 id，再查一次列表按 name+key 匹配。
   const list = await callAction<Key[]>(c, getKeysAction, [userId]);
   if (!list.ok) return list.problem;
   const created = list.data.find(
     (k) => k.name === result.data.name && k.key === result.data.generatedKey
   );
-  const id = created?.id ?? 0;
+  if (!created) {
+    // 找不到时不能再回退到 id=0：parseIdLike 会拒绝 0，导致 Location 头指向
+    // 永远 400 的资源 URL。改为 500 problem+json，暴露后续运维侧定位线索。
+    // 注意：此响应仍然包含已生成的 key 字段会被丢失；但这是 legacy mock 不更新
+    // list 才会触发的边界，正确的 mock 已经把新 key 加进 list。
+    return problem(c, {
+      status: 500,
+      errorCode: "internal_error",
+      title: "Internal Server Error",
+      detail: "Key was created but could not be located in the subsequent list.",
+    });
+  }
   const responseBody = {
-    id,
+    id: created.id,
     name: result.data.name,
     key: result.data.generatedKey, // 原始 key，仅此一次
   };
-  return respondCreated(c, responseBody, `${RESOURCE_BASE_PATH}/${id}`);
+  return respondCreated(c, responseBody, `${RESOURCE_BASE_PATH}/${created.id}`);
 }
 
 // ==================== PATCH /keys/{id} ====================

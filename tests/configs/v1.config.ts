@@ -1,5 +1,19 @@
 import { createTestRunnerConfig } from "../vitest.base";
 
+/** 默认 vitest UI 端口（与现有约定保持一致） */
+const DEFAULT_VITEST_API_PORT = 51205;
+
+/** 解析 VITEST_API_PORT，校验范围合法时使用，否则回退默认值 */
+function resolveTestApiPort(): number {
+  const raw = process.env.VITEST_API_PORT;
+  if (!raw) return DEFAULT_VITEST_API_PORT;
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65535) {
+    return parsed;
+  }
+  return DEFAULT_VITEST_API_PORT;
+}
+
 /**
  * /api/v1 管理 API 与前端类型化客户端的测试运行配置。
  *
@@ -19,7 +33,7 @@ export default createTestRunnerConfig({
   ],
   api: {
     host: process.env.VITEST_API_HOST || "127.0.0.1",
-    port: Number(process.env.VITEST_API_PORT || 51205),
+    port: resolveTestApiPort(),
     strictPort: false,
   },
 });

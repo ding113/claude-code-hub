@@ -6,15 +6,50 @@
  */
 
 import type { Context } from "hono";
+import { CACHE_NONE } from "./cache-control";
 import { CONTENT_TYPE_JSON, HEADER_NAMES } from "./constants";
 
-/** 200 / 任意 2xx JSON 响应 */
-export function respondJson(_c: Context, body: unknown, status = 200): Response {
+/** respondJson 选项 */
+export interface RespondJsonOptions {
+  /**
+   * 写入 `Cache-Control: no-store, no-cache, must-revalidate` 与
+   * `Pragma: no-cache` 到该响应。
+   *
+   * 这是必要的：handler 即便提前调用了 `setNoStore(c)`，Hono 在直接返回新
+   * `Response` 时会用它替换 `c.res`，导致先前写到 `c.res` 上的 cache 头被丢弃。
+   * 因此「敏感数据响应」必须显式传 `noStore: true`，让 helper 把 cache 头写到
+   * 这个最终返回的 Response 上。
+   */
+  noStore?: boolean;
+}
+
+/**
+ * 成功 (2xx) JSON 响应。
+ *
+ * 入参 `status` 必须落在 200-299 之间；其它状态码请走 `problem(...)`。
+ * 通过显式断言禁止把错误状态混进成功通道，避免绕过 problem+json 契约。
+ */
+export function respondJson(
+  _c: Context,
+  body: unknown,
+  status = 200,
+  options?: RespondJsonOptions
+): Response {
+  if (!Number.isInteger(status) || status < 200 || status >= 300) {
+    throw new TypeError(
+      `respondJson only supports 2xx statuses (got ${status}). Use problem(...) for errors.`
+    );
+  }
+  const headers: Record<string, string> = {
+    [HEADER_NAMES.ContentType]: CONTENT_TYPE_JSON,
+  };
+  if (options?.noStore) {
+    headers[HEADER_NAMES.CacheControl] = CACHE_NONE;
+    headers[HEADER_NAMES.Pragma] = "no-cache";
+  }
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      [HEADER_NAMES.ContentType]: CONTENT_TYPE_JSON,
-    },
+    headers,
   });
 }
 

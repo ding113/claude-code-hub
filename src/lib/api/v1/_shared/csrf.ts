@@ -12,8 +12,9 @@
 import { createHmac, randomBytes } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import type { AuthSession } from "@/lib/auth";
+import { config } from "@/lib/config/config";
+import { constantTimeEqual } from "@/lib/security/constant-time-compare";
 import { AUTH_MODE_CONTEXT_KEY, type AuthMode, SESSION_CONTEXT_KEY } from "./audit-context";
-import { setNoStore } from "./cache-control";
 import { problem } from "./error-envelope";
 
 /** 请求头：CSRF 令牌 */
@@ -33,14 +34,15 @@ let _serverSecretCache: string | null = null;
 /**
  * 获取服务端 secret。
  *
- * 优先 ADMIN_TOKEN；缺失时使用进程级随机回退（仅 dev / 测试场景，重启后失效，
- * 因此生产环境必须设置 ADMIN_TOKEN）。
+ * 优先 `config.auth.adminToken`（由 ADMIN_TOKEN 环境变量解析得到）；缺失时使用
+ * 进程级随机回退（仅 dev / 测试场景，重启后失效，因此生产环境必须设置
+ * ADMIN_TOKEN）。直接走 config，避免散落的 `process.env` 访问，保证测试可控。
  */
 function getServerSecret(): string {
   if (_serverSecretCache !== null) return _serverSecretCache;
-  const fromEnv = process.env.ADMIN_TOKEN?.trim();
-  if (fromEnv) {
-    _serverSecretCache = fromEnv;
+  const fromConfig = config.auth.adminToken?.trim();
+  if (fromConfig) {
+    _serverSecretCache = fromConfig;
   } else {
     _serverSecretCache = `dev-fallback-${randomBytes(16).toString("hex")}`;
   }
@@ -74,17 +76,11 @@ export function generateCsrfToken(authToken: string, userId: number): string {
   return computeToken(authToken, userId, currentBucket());
 }
 
-function constantTimeStringEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
-
 /**
  * 校验 CSRF 令牌；接受当前桶与上一桶（处理跨小时边界）。
+ *
+ * 比较使用 `@/lib/security/constant-time-compare` 中的 `constantTimeEqual`，
+ * 与项目内其它安全敏感比较保持一致。
  */
 export function validateCsrfToken(provided: string, authToken: string, userId: number): boolean {
   if (!provided || typeof provided !== "string") return false;
@@ -93,7 +89,7 @@ export function validateCsrfToken(provided: string, authToken: string, userId: n
     computeToken(authToken, userId, bucket),
     computeToken(authToken, userId, bucket - 1),
   ];
-  return candidates.some((expected) => constantTimeStringEqual(provided, expected));
+  return candidates.some((expected) => constantTimeEqual(provided, expected));
 }
 
 /**
@@ -130,8 +126,9 @@ export function requireCsrf(): MiddlewareHandler {
         title: "CSRF token missing or invalid",
         detail: "Provide the X-CCH-CSRF header obtained from GET /api/v1/auth/csrf.",
       });
-      // 标记 no-store，避免中间缓存复用 403 响应
-      setNoStore(c);
+      // 标记 no-store，避免中间缓存复用 403 响应。
+      // Hono 在 handler 直接 return 一个 fresh Response 时会用它替换 c.res，
+      // 所以 cache-control 必须直接写到当前要返回的 response 上。
       response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
       response.headers.set("Pragma", "no-cache");
       return response;

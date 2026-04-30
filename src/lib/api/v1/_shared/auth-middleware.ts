@@ -19,6 +19,7 @@
 import "@/lib/auth-session-storage.node";
 
 import type { Context, MiddlewareHandler, Next } from "hono";
+import { getCookie } from "hono/cookie";
 import { extractApiKeyFromHeaders } from "@/app/v1/_lib/proxy/auth-guard";
 import { runWithRequestContext } from "@/lib/audit/request-context";
 import { type AuthSession, runWithAuthSession, validateAuthToken } from "@/lib/auth";
@@ -57,19 +58,22 @@ interface ExtractedToken {
   source: TokenSource;
 }
 
-function parseCookieHeader(rawCookie: string | null | undefined): Record<string, string> {
-  if (!rawCookie) return {};
-  const out: Record<string, string> = {};
-  for (const part of rawCookie.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq <= 0) continue;
-    const k = part.slice(0, eq).trim();
-    const v = part.slice(eq + 1).trim();
-    if (k && !(k in out)) {
-      out[k] = decodeURIComponent(v);
-    }
+/**
+ * 从 Hono 请求中读取并解码指定 cookie。
+ *
+ * 行为：
+ * - 直接复用 `hono/cookie` 的 `getCookie`，相比手动 `decodeURIComponent`
+ *   能正确处理 RFC 6265 中的 quoted value 与 percent-encoding；
+ * - 当 cookie 值包含非法的 percent-encoding 时 `getCookie` 内部会触发
+ *   `URIError`，我们在此 catch 并返回 `undefined`（语义：无 cookie），
+ *   避免恶意构造的 cookie 头让中间件抛 500，而是走标准 401 流程。
+ */
+function safeReadCookie(c: Context, name: string): string | undefined {
+  try {
+    return getCookie(c, name);
+  } catch {
+    return undefined;
   }
-  return out;
 }
 
 function extractTokenFromContext(c: Context): ExtractedToken | null {
@@ -92,8 +96,7 @@ function extractTokenFromContext(c: Context): ExtractedToken | null {
   }
 
   // Cookie：auth-token=...
-  const cookieJar = parseCookieHeader(c.req.header("cookie"));
-  const cookieToken = cookieJar[AUTH_COOKIE_NAME]?.trim();
+  const cookieToken = safeReadCookie(c, AUTH_COOKIE_NAME)?.trim();
   if (cookieToken) {
     return { token: cookieToken, source: "cookie" };
   }
@@ -127,13 +130,14 @@ function buildPermissionDenied(c: Context): Response {
 }
 
 function buildRateLimited(c: Context, retryAfterSeconds: number | undefined): Response {
-  const response = problem(c, {
-    status: 429,
-    errorCode: "rate_limited",
-    title: "Too Many Requests",
-    detail: "Too many authentication failures. Please retry later.",
-  });
-  attachNoStore(response);
+  const response = attachNoStore(
+    problem(c, {
+      status: 429,
+      errorCode: "rate_limited",
+      title: "Too Many Requests",
+      detail: "Too many authentication failures. Please retry later.",
+    })
+  );
   if (retryAfterSeconds != null) {
     response.headers.set("Retry-After", String(retryAfterSeconds));
   }
@@ -148,9 +152,11 @@ function isAdminTokenMatch(token: string): boolean {
 
 function determineAuthMode(extracted: ExtractedToken, isAdminEnv: boolean): AuthMode {
   if (isAdminEnv) return "admin-token";
-  if (extracted.source === "header") return "api-key";
-  // bearer + 非 admin 环境：通常是 cookie 登录后的 SDK 重发或脚本，按 session 处理
-  return "session";
+  // 仅 cookie auth-token 对应 "session"（CSRF 仅保护 cookie 通道）；
+  // bearer / X-Api-Key 都是非 cookie 凭证，统一归为 "api-key"，
+  // 这样 Bearer API key 调用不会被 CSRF 中间件误拦。
+  if (extracted.source === "cookie") return "session";
+  return "api-key";
 }
 
 function runDownstream(

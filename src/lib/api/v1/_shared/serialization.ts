@@ -49,6 +49,28 @@ export function dateToIso(date: Date | null | undefined): string | null {
 }
 
 /**
+ * 把声明字段的 `Date` 类型映射为对应的 ISO 字符串类型，保留 `null` / `undefined`。
+ */
+type SerializedDateValue<T> = T extends Date
+  ? string
+  : T extends Date | null
+    ? string | null
+    : T extends Date | undefined
+      ? string | undefined
+      : T extends Date | null | undefined
+        ? string | null | undefined
+        : T;
+
+/**
+ * `serializeRecord` 的精确返回类型：被声明的 K 字段从 `Date` 变成 ISO 字符串，
+ * 其它字段保持原类型。这样调用方拿到的对象不会再把 ISO 字段误当成 `Date`，
+ * 避免运行时 `out.createdAt.getTime()` 之类的炸点。
+ */
+export type SerializedRecord<T extends Record<string, unknown>, K extends keyof T> = Omit<T, K> & {
+  [P in K]: SerializedDateValue<T[P]>;
+};
+
+/**
  * 把对象上的若干字段从 Date 替换成 ISO 字符串，返回一个新对象。
  *
  * 设计目标：
@@ -56,11 +78,14 @@ export function dateToIso(date: Date | null | undefined): string | null {
  * - 仅对显式声明的字段进行处理，不对未声明字段做任何改动；
  * - 顶层处理；如果字段值是 Date 对象则替换为 ISO，
  *   如果是 null/undefined 则保持原值（不强制转换为 null）。
+ *
+ * 类型签名通过 `SerializedRecord<T, K>` 精确表达 K 字段的类型从 `Date` 变成
+ * `string`（含 null / undefined 形态），以避免调用方误把字段当成 `Date`。
  */
-export function serializeRecord<T extends Record<string, unknown>>(
+export function serializeRecord<T extends Record<string, unknown>, K extends keyof T>(
   input: T,
-  dateFields: ReadonlyArray<keyof T>
-): T {
+  dateFields: ReadonlyArray<K>
+): SerializedRecord<T, K> {
   const out: Record<string, unknown> = { ...input };
   for (const field of dateFields) {
     const value = out[field as string];
@@ -68,7 +93,7 @@ export function serializeRecord<T extends Record<string, unknown>>(
       out[field as string] = dateToIso(value);
     }
   }
-  return out as T;
+  return out as SerializedRecord<T, K>;
 }
 
 /**

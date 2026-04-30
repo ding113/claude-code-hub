@@ -140,8 +140,11 @@ export function decodeCursor(token: string): CursorPayload {
   if (!Number.isFinite(id) || !Number.isInteger(id) || id < 0) {
     throw new TypeError("decodeCursor: id is not a non-negative integer");
   }
-  // 校验 createdAt 是合法 ISO 时间
-  if (Number.isNaN(Date.parse(createdAt))) {
+  // 校验 createdAt 是合法 ISO 时间。
+  // 不能用 `Date.parse`：它接受很多非严格 ISO 形态（例如 "Apr 28 2025"），
+  // 与本模块对外承诺的「严格 ISO datetime cursor」契约不一致；攻击者
+  // 完全可以构造一个 Date.parse 接受、但不符合 OpenAPI schema 的 token。
+  if (!IsoDateTimeSchema.safeParse(createdAt).success) {
     throw new TypeError("decodeCursor: createdAt is not a valid ISO timestamp");
   }
   return { createdAt, id };

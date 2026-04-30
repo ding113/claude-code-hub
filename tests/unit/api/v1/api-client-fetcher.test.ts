@@ -42,7 +42,7 @@ describe("fetchApi", () => {
         instance: "/api/v1/widgets",
         errorCode: "VALIDATION_FAILED",
         errorParams: { field: "name" },
-        invalidParams: [{ path: "body.name", message: "Required", code: "required" }],
+        invalidParams: [{ path: ["body", "name"], message: "Required", code: "required" }],
         traceId: "trace-abc",
       })
     );
@@ -138,5 +138,54 @@ describe("fetchApi", () => {
       title: "Internal Error",
       errorCode: "UNKNOWN_ERROR",
     });
+  });
+
+  it("deduplicates concurrent /auth/csrf fetches via shared promise", async () => {
+    // 五个并发突变请求只应该触发一次 GET /auth/csrf。
+    let csrfCalls = 0;
+    let csrfResolver: ((res: Response) => void) | null = null;
+    const csrfPending = new Promise<Response>((resolve) => {
+      csrfResolver = resolve;
+    });
+
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/api/v1/auth/csrf")) {
+        csrfCalls += 1;
+        return csrfPending;
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const inflight = Promise.all(
+      Array.from({ length: 5 }).map(() =>
+        fetchApi("/api/v1/widgets", {
+          method: "POST",
+          body: JSON.stringify({ x: 1 }),
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
+
+    // 等微任务把 ensureCsrfToken 都注入 promise 链中
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 现在 resolve 共享的 CSRF promise
+    csrfResolver?.(
+      new Response(JSON.stringify({ csrfToken: "shared-token", mode: "cookie" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+
+    const responses = await inflight;
+    expect(responses.every((r) => r.status === 200)).toBe(true);
+    // 关键断言：5 个并发 POST 只共享 1 次 /auth/csrf 调用。
+    expect(csrfCalls).toBe(1);
   });
 });

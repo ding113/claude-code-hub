@@ -25,7 +25,7 @@
 
 import type { Context } from "hono";
 import type { ActionResult, ErrorResult } from "@/actions/types";
-import type { AuthSession } from "@/lib/auth";
+import { type AuthSession, getScopedAuthContext } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { SESSION_CONTEXT_KEY } from "./audit-context";
 import { problem } from "./error-envelope";
@@ -34,7 +34,18 @@ import { pickStatus, type Status } from "./status-code-map";
 
 /** callAction 选项 */
 export interface ActionBridgeOptions {
-  /** 透传给 `withRequestContext` 的 read-only 标记 */
+  /**
+   * 透传给 `withRequestContext` 的 read-only 标记。
+   *
+   * 默认行为：从外层 `requireAuth(...)` 注入的 ALS 中继承（`getScopedAuthContext()`）。
+   * 这样：
+   *  - read-tier 端点（auth-middleware 默认 `allowReadOnlyAccess=true`）在调用 action
+   *    时仍然允许 `canLoginWebUi=false` 的 key，避免桥接层把 read-tier 范围下调；
+   *  - admin-tier 端点（auth-middleware 强制 `allowReadOnlyAccess=false`）继续保持收紧。
+   *
+   * 显式传入 `true` / `false` 会覆盖 ALS 默认值；当 ALS 未注入（例如测试场景）
+   * 时回退为 `false`，保持向后兼容的安全侧默认。
+   */
   allowReadOnlyAccess?: boolean;
   /**
    * 当为 true 时，将 action 返回值整体当作成功 data（不要求 `{ ok: true, data }` 形态）。
@@ -73,24 +84,25 @@ function buildProblemFromError(
   return { status, response };
 }
 
-function buildInternalErrorProblem(
-  c: Context,
-  error: unknown
-): {
+/**
+ * 客户端可见的内部错误 detail。
+ *
+ * 不要把 `error.message` 透出给客户端：infra 层（Drizzle / Redis / pg / fetch ...）
+ * 抛出的异常常常包含 SQL 片段、表名、连接串、堆栈片段等敏感信息。
+ * 真实错误信息已经走 `logger.error` 进入服务端日志，足够排障。
+ */
+const INTERNAL_ERROR_PUBLIC_DETAIL =
+  "An unexpected error occurred. Please contact support if the problem persists.";
+
+function buildInternalErrorProblem(c: Context): {
   status: Status;
   response: Response;
 } {
-  const detail =
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : "Action threw an unexpected error.";
   const response = problem(c, {
     status: 500,
     errorCode: "internal_error",
     title: "Internal Server Error",
-    detail,
+    detail: INTERNAL_ERROR_PUBLIC_DETAIL,
   });
   return { status: 500, response };
 }
@@ -113,16 +125,23 @@ export async function callAction<T>(
   const session = (c.get(SESSION_CONTEXT_KEY) as AuthSession | null | undefined) ?? null;
   const treatRaw = opts?.treatRawAsActionResult === true;
 
+  // 缺省继承外层 auth 中间件设置的 allowReadOnlyAccess（来自 ALS），
+  // 仅在调用方显式覆盖时才使用 opts.allowReadOnlyAccess。
+  const inheritedReadOnly = getScopedAuthContext()?.allowReadOnlyAccess ?? false;
+  const allowReadOnlyAccess = opts?.allowReadOnlyAccess ?? inheritedReadOnly;
+
   let raw: unknown;
   try {
     raw = await withRequestContext(c, session, () => action(...args), {
-      allowReadOnlyAccess: opts?.allowReadOnlyAccess ?? false,
+      allowReadOnlyAccess,
     });
   } catch (error) {
+    // 完整的 error.message + stack 仅写日志；客户端拿到的是固定 detail，
+    // 避免把 SQL 片段 / 连接串 / 表名等 infra 内部信息暴露到 problem+json 响应。
     logger.error("[v1.action-bridge] action threw", {
       error: error instanceof Error ? error.message : String(error),
     });
-    const built = buildInternalErrorProblem(c, error);
+    const built = buildInternalErrorProblem(c);
     return { ok: false, status: built.status, problem: built.response };
   }
 
@@ -134,10 +153,7 @@ export async function callAction<T>(
     logger.error("[v1.action-bridge] action did not return ActionResult", {
       kind: typeof raw,
     });
-    const built = buildInternalErrorProblem(
-      c,
-      new Error("Action did not return an ActionResult envelope.")
-    );
+    const built = buildInternalErrorProblem(c);
     return { ok: false, status: built.status, problem: built.response };
   }
 

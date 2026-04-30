@@ -4,7 +4,6 @@
 
 import type { Context } from "hono";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
-import { setNoStore } from "@/lib/api/v1/_shared/cache-control";
 import { parseJsonBody } from "@/lib/api/v1/_shared/request-body";
 import { respondJson } from "@/lib/api/v1/_shared/response-helpers";
 import { DispatchSimulatorRequestSchema } from "@/lib/api/v1/schemas/dashboard";
@@ -65,8 +64,7 @@ export async function getOverview(c: Context): Promise<Response> {
   const action = await loadOverviewAction();
   const result = await callAction<unknown>(c, action, []);
   if (!result.ok) return result.problem;
-  setNoStore(c);
-  return respondJson(c, result.data, 200);
+  return respondJson(c, result.data, 200, { noStore: true });
 }
 
 // ==================== GET /dashboard/realtime ====================
@@ -75,8 +73,7 @@ export async function getRealtime(c: Context): Promise<Response> {
   const action = await loadRealtimeAction();
   const result = await callAction<unknown>(c, action, []);
   if (!result.ok) return result.problem;
-  setNoStore(c);
-  return respondJson(c, result.data, 200);
+  return respondJson(c, result.data, 200, { noStore: true });
 }
 
 // ==================== GET /dashboard/statistics ====================
@@ -95,8 +92,9 @@ export async function getConcurrentSessions(c: Context): Promise<Response> {
   const action = await loadConcurrentSessionsAction();
   const result = await callAction<number>(c, action, []);
   if (!result.ok) return result.problem;
-  setNoStore(c);
-  return respondJson(c, { count: result.data ?? 0, generatedAt: new Date().toISOString() }, 200);
+  return respondJson(c, { count: result.data ?? 0, generatedAt: new Date().toISOString() }, 200, {
+    noStore: true,
+  });
 }
 
 // ==================== GET /dashboard/provider-slots ====================
@@ -105,8 +103,9 @@ export async function getProviderSlots(c: Context): Promise<Response> {
   const action = await loadProviderSlotsAction();
   const result = await callAction<unknown[]>(c, action, []);
   if (!result.ok) return result.problem;
-  setNoStore(c);
-  return respondJson(c, { items: result.data ?? [], generatedAt: new Date().toISOString() }, 200);
+  return respondJson(c, { items: result.data ?? [], generatedAt: new Date().toISOString() }, 200, {
+    noStore: true,
+  });
 }
 
 // ==================== GET /dashboard/rate-limit-stats ====================
@@ -115,8 +114,7 @@ export async function getRateLimitStats(c: Context): Promise<Response> {
   const action = await loadRateLimitStatsAction();
   const result = await callAction<unknown>(c, action, []);
   if (!result.ok) return result.problem;
-  setNoStore(c);
-  return respondJson(c, result.data, 200);
+  return respondJson(c, result.data, 200, { noStore: true });
 }
 
 // ==================== GET /dashboard/client-versions ====================
@@ -125,8 +123,9 @@ export async function getClientVersions(c: Context): Promise<Response> {
   const action = await loadClientVersionsAction();
   const result = await callAction<unknown[]>(c, action, []);
   if (!result.ok) return result.problem;
-  setNoStore(c);
-  return respondJson(c, { items: result.data ?? [], generatedAt: new Date().toISOString() }, 200);
+  return respondJson(c, { items: result.data ?? [], generatedAt: new Date().toISOString() }, 200, {
+    noStore: true,
+  });
 }
 
 // ==================== GET /dashboard/proxy-status ====================
@@ -135,8 +134,7 @@ export async function getProxyStatus(c: Context): Promise<Response> {
   const action = await loadProxyStatusAction();
   const result = await callAction<unknown>(c, action, []);
   if (!result.ok) return result.problem;
-  setNoStore(c);
-  return respondJson(c, result.data, 200);
+  return respondJson(c, result.data, 200, { noStore: true });
 }
 
 // ==================== POST /dashboard/dispatch-simulator:decisionTree ====================

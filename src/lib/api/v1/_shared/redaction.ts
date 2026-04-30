@@ -10,6 +10,9 @@
 
 const REDACTED_PLACEHOLDER = "[REDACTED]";
 
+/** 循环引用占位符，避免日志对象成环时触发 Maximum call stack 异常 */
+const CIRCULAR_PLACEHOLDER = "[CIRCULAR]";
+
 /**
  * 默认脱敏字段：所有 v1 日志默认会屏蔽这些字段。
  *
@@ -48,20 +51,28 @@ function buildLowerCaseKeySet(keys: ReadonlyArray<string>): Set<string> {
   return set;
 }
 
-function redactValue(value: unknown, keySet: Set<string>): unknown {
+function redactValue(value: unknown, keySet: Set<string>, seen: WeakSet<object>): unknown {
   if (value === null || value === undefined) {
     return value;
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => redactValue(item, keySet));
+    if (seen.has(value)) {
+      return CIRCULAR_PLACEHOLDER;
+    }
+    seen.add(value);
+    return value.map((item) => redactValue(item, keySet, seen));
   }
 
   if (typeof value === "object") {
     // 仅处理朴素对象（包括 Record）；Date / Buffer / Map / Set 等保持原值。
     const proto = Object.getPrototypeOf(value);
     if (proto === Object.prototype || proto === null) {
-      return redactObject(value as Record<string, unknown>, keySet);
+      if (seen.has(value as object)) {
+        return CIRCULAR_PLACEHOLDER;
+      }
+      seen.add(value as object);
+      return redactObject(value as Record<string, unknown>, keySet, seen);
     }
     return value;
   }
@@ -69,14 +80,18 @@ function redactValue(value: unknown, keySet: Set<string>): unknown {
   return value;
 }
 
-function redactObject(obj: Record<string, unknown>, keySet: Set<string>): Record<string, unknown> {
+function redactObject(
+  obj: Record<string, unknown>,
+  keySet: Set<string>,
+  seen: WeakSet<object>
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (keySet.has(key.toLowerCase())) {
       out[key] = REDACTED_PLACEHOLDER;
       continue;
     }
-    out[key] = redactValue(value, keySet);
+    out[key] = redactValue(value, keySet, seen);
   }
   return out;
 }
@@ -86,7 +101,9 @@ function redactObject(obj: Record<string, unknown>, keySet: Set<string>): Record
  *
  * - 不修改 `obj` 本身；返回新结构；
  * - 递归处理嵌套对象与数组；
- * - 默认仅处理朴素对象（Date / Buffer / Map / Set 不展开，避免误伤）。
+ * - 默认仅处理朴素对象（Date / Buffer / Map / Set 不展开，避免误伤）；
+ * - 使用 `WeakSet` 跟踪已访问的对象 / 数组，遇到循环引用时返回
+ *   `"[CIRCULAR]"` 占位符而不是无限递归触发栈溢出。
  */
 export function redactSecrets<T extends Record<string, unknown>>(
   obj: T,
@@ -96,7 +113,9 @@ export function redactSecrets<T extends Record<string, unknown>>(
     return obj;
   }
   const keySet = buildLowerCaseKeySet(keys);
-  return redactObject(obj, keySet) as T;
+  const seen = new WeakSet<object>();
+  seen.add(obj);
+  return redactObject(obj, keySet, seen) as T;
 }
 
 /**

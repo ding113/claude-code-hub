@@ -20,8 +20,22 @@ import { ApiError, type ProblemJson } from "@/lib/api-client/v1/errors";
 /** 默认基础路径，可通过 setApiBaseUrl 覆盖 */
 let API_BASE_URL = "/api/v1";
 
-/** 模块级 CSRF token 缓存 */
+/**
+ * 模块级 CSRF token 缓存与并发去重 promise。
+ *
+ * 注意：本模块设计为 *客户端 only*。模块级状态在浏览器中是「一个 tab 一个用户」
+ * 的语义；如果错误地在 Next.js RSC / API Route / middleware 等服务端上下文中
+ * 导入，缓存的 token 会跨用户复用。重试路径会自动清空缓存并重试，因此不会越权，
+ * 但可能导致非预期的 403 csrf_invalid 影响 UX。请确保只在 "use client" 路径
+ * 下使用 fetchApi。
+ */
 let csrfTokenCache: string | null = null;
+
+/**
+ * 当多个突变请求并发触发时，让它们共享同一个 `/auth/csrf` 请求，
+ * 避免 N 次冗余 GET 触发后端额外开销与潜在的速率限制。
+ */
+let csrfTokenPromise: Promise<string | null> | null = null;
 
 /** 突变动词集合（需要 CSRF 保护） */
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -45,9 +59,10 @@ export function getApiBaseUrl(): string {
   return API_BASE_URL;
 }
 
-/** 测试辅助：清空模块级 CSRF 缓存 */
+/** 测试辅助：清空模块级 CSRF 缓存（同时清空进行中的去重 promise） */
 export function __resetCsrfTokenCacheForTests(): void {
   csrfTokenCache = null;
+  csrfTokenPromise = null;
 }
 
 /** 判断 init 中是否已显式提供 Authorization / X-Api-Key（即非纯 cookie 鉴权） */
@@ -74,33 +89,48 @@ function isAbortError(err: unknown): boolean {
   return name === "AbortError";
 }
 
-/** 在请求前确保 CSRF token 已就绪；返回 token 或 null（端点未实现 / 失败时降级） */
+/**
+ * 在请求前确保 CSRF token 已就绪；返回 token 或 null（端点未实现 / 失败时降级）。
+ *
+ * 并发安全：第一次调用会建立 `csrfTokenPromise`，后续在同一 tick / token 寿命内
+ * 的并发调用会共享这个 promise，避免重复 GET `/auth/csrf`。promise 完成后会
+ * 立即被清空（无论成功与否），下次再有需要时若缓存仍空会再次发起。
+ */
 async function ensureCsrfToken(): Promise<string | null> {
   if (csrfTokenCache) return csrfTokenCache;
-  try {
-    const response = await fetch(`${API_BASE_URL}/auth/csrf`, {
-      method: "GET",
-      credentials: "include",
-    });
-    if (response.status === 404) {
-      // CSRF 端点尚未实现（任务 4 完成后会上线）
+  if (csrfTokenPromise) return csrfTokenPromise;
+
+  const fetchPromise = (async (): Promise<string | null> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/csrf`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (response.status === 404) {
+        // CSRF 端点尚未实现（任务 4 完成后会上线）
+        return null;
+      }
+      if (!response.ok) {
+        return null;
+      }
+      const body = (await response.json().catch(() => null)) as {
+        token?: string;
+        csrfToken?: string;
+      } | null;
+      const token = body?.token ?? body?.csrfToken ?? null;
+      if (token) {
+        csrfTokenCache = token;
+      }
+      return csrfTokenCache;
+    } catch {
       return null;
+    } finally {
+      csrfTokenPromise = null;
     }
-    if (!response.ok) {
-      return null;
-    }
-    const body = (await response.json().catch(() => null)) as {
-      token?: string;
-      csrfToken?: string;
-    } | null;
-    const token = body?.token ?? body?.csrfToken ?? null;
-    if (token) {
-      csrfTokenCache = token;
-    }
-    return csrfTokenCache;
-  } catch {
-    return null;
-  }
+  })();
+
+  csrfTokenPromise = fetchPromise;
+  return fetchPromise;
 }
 
 /** 解析非 2xx 响应为 ApiError；非 problem+json 时构造一个最小化 ApiError */

@@ -116,10 +116,11 @@ app.route("/", createManagementDocsApp(OPENAPI_JSON_URL));
 //   （CSRF 仅保护 cookie 通道，API key 调用不需要 CSRF 校验）。
 app.get("/auth/csrf", requireAuth({ tier: "read" }), (c) => {
   setNoStore(c);
-  const ctx = c as unknown as {
-    get(k: string): unknown;
-    json: (typeof c)["json"];
-  };
+  // OpenAPIHono 对 c.get(key) 的 key 走严格联合类型推断，未在 Bindings.Variables
+  // 注册的 SESSION_CONTEXT_KEY / AUTH_MODE_CONTEXT_KEY 会被推断为 never。
+  // 这里通过窄类型化的 ctx 视图复用现有 c.get 实现，避免在每个 handler 都
+  // 重复写 `as unknown as`。返回值仍按业务类型断言。
+  const ctx = c as unknown as { get(k: string): unknown };
   const session = ctx.get(SESSION_CONTEXT_KEY) as AuthSession | null;
   const mode = ctx.get(AUTH_MODE_CONTEXT_KEY) as
     | "session"

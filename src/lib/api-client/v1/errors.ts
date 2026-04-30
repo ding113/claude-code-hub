@@ -10,8 +10,14 @@
 
 /** 字段级校验失败描述（Zod issue 投影） */
 export interface InvalidParam {
-  /** 字段路径，如 "body.name" 或 "query.limit" */
-  path: string;
+  /**
+   * 字段路径数组，如 `["body", "name"]` 或 `["query", "limit"]`。
+   * 与服务端 `src/lib/api/v1/_shared/error-envelope.ts` 中的
+   * `InvalidParam.path: ReadonlyArray<string | number>` 严格对齐，
+   * 与生成的 OpenAPI 类型 `(string | number)[]` 保持一致。
+   * 根字段使用空数组 `[]`。
+   */
+  path: ReadonlyArray<string | number>;
   /** 字段级提示，已脱去敏感数据 */
   message: string;
   /** 与 i18n 键相对应的稳定错误码 */

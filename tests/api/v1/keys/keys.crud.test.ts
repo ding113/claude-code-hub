@@ -38,13 +38,29 @@ const RAW_KEY = {
   updatedAt: new Date("2026-04-01T00:00:00Z"),
 };
 
+// 模拟 legacy actions：为了让 v1 createKey handler 能在 addKey 之后通过 getKeys
+// 反查到新建的 key（按 name + key 双重匹配），mock 把每次 addKey 的结果追加到
+// getKeys 返回值中。
+const MOCK_NEW_KEY_VALUE = "sk-NEW-RAW-KEY-EXPOSED-ONCE-1234";
+const MOCK_NEW_KEY_ID = 200;
+const __mockKeyList: Array<typeof RAW_KEY> = [RAW_KEY];
+
 vi.mock("@/actions/keys", () => ({
-  getKeys: vi.fn(async () => ({ ok: true, data: [RAW_KEY] })),
+  getKeys: vi.fn(async () => ({ ok: true, data: [...__mockKeyList] })),
   getKeysWithStatistics: vi.fn(async () => ({ ok: true, data: [] })),
-  addKey: vi.fn(async (input: Record<string, unknown>) => ({
-    ok: true,
-    data: { generatedKey: "sk-NEW-RAW-KEY-EXPOSED-ONCE-1234", name: input.name as string },
-  })),
+  addKey: vi.fn(async (input: Record<string, unknown>) => {
+    const name = (input.name as string) ?? "added";
+    __mockKeyList.push({
+      ...RAW_KEY,
+      id: MOCK_NEW_KEY_ID,
+      name,
+      key: MOCK_NEW_KEY_VALUE,
+    });
+    return {
+      ok: true,
+      data: { generatedKey: MOCK_NEW_KEY_VALUE, name },
+    };
+  }),
   editKey: vi.fn(async () => ({ ok: true })),
   removeKey: vi.fn(async () => ({ ok: true })),
   toggleKeyEnabled: vi.fn(async () => ({ ok: true })),
@@ -182,6 +198,9 @@ function authedRequest(
 describe("/api/v1/keys — list + redaction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // 让每个 it 看到干净的 mock list（之前 create 用例可能往里 push 了新 key）
+    __mockKeyList.length = 0;
+    __mockKeyList.push(RAW_KEY);
   });
 
   it("GET /users/{userId}/keys returns redacted key list", async () => {
@@ -207,6 +226,8 @@ describe("/api/v1/keys — list + redaction", () => {
 describe("/api/v1/keys — create + CRUD", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __mockKeyList.length = 0;
+    __mockKeyList.push(RAW_KEY);
   });
 
   it("POST /users/{userId}/keys returns 201 + Location + raw key string ONCE", async () => {

@@ -128,4 +128,63 @@ describe("callAction", () => {
     const body = (await res.json()) as { errorCode: string };
     expect(body.errorCode).toBe("internal_error");
   });
+
+  it("does not leak raw exception messages in 500 problem+json", async () => {
+    const app = makeApp();
+    app.get("/", async (c) => {
+      c.set(SESSION_CONTEXT_KEY, null);
+      const result = await callAction(c, async () => {
+        throw new Error("DB error: connection refused at 10.0.0.1:5432; SELECT * FROM secret");
+      }, []);
+      if (!result.ok) {
+        return result.problem;
+      }
+      return c.json({ unreachable: true });
+    });
+
+    const res = await app.request("http://localhost/");
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { errorCode: string; detail?: string; title?: string };
+    expect(body.errorCode).toBe("internal_error");
+    // 关键：客户端不应看到 SQL 片段、连接串 / IP 等内部细节。
+    expect(body.detail ?? "").not.toContain("SELECT");
+    expect(body.detail ?? "").not.toContain("10.0.0.1");
+    expect(body.detail ?? "").not.toContain("connection refused");
+  });
+
+  it("maps legacy SCREAMING_SNAKE_CASE error codes (DUPLICATE_NAME / NOT_FOUND) to 4xx", async () => {
+    const app = makeApp();
+    app.get("/dup", async (c) => {
+      c.set(SESSION_CONTEXT_KEY, null);
+      const result = await callAction(
+        c,
+        async () => ({
+          ok: false,
+          error: "name conflict",
+          errorCode: "DUPLICATE_NAME",
+        }),
+        []
+      );
+      if (!result.ok) return result.problem;
+      return c.json({ unreachable: true });
+    });
+    app.get("/notfound", async (c) => {
+      c.set(SESSION_CONTEXT_KEY, null);
+      const result = await callAction(
+        c,
+        async () => ({ ok: false, error: "missing", errorCode: "NOT_FOUND" }),
+        []
+      );
+      if (!result.ok) return result.problem;
+      return c.json({ unreachable: true });
+    });
+
+    // DUPLICATE_NAME -> 409 Conflict
+    const dup = await app.request("http://localhost/dup");
+    expect(dup.status).toBe(409);
+
+    // NOT_FOUND -> 404
+    const nf = await app.request("http://localhost/notfound");
+    expect(nf.status).toBe(404);
+  });
 });

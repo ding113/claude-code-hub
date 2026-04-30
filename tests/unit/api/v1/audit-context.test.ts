@@ -5,6 +5,7 @@
  * - attachRequestId() 中间件为响应附加 X-Request-Id（生成 / 透传）；
  * - 当请求带 X-Request-Id 时透传；
  * - 当请求未带时生成 req_<ts>_<rand> 形式；
+ * - 不安全的客户端 X-Request-Id（含引号 / 空格 / 控制字符 / 超长）会被拒绝；
  * - withRequestContext 包裹后，下游通过 getRequestContext() 能读到 ip / userAgent。
  */
 
@@ -47,6 +48,46 @@ describe("attachRequestId middleware", () => {
       })
     );
     expect(response.headers.get("X-Request-Id")).toBe("incoming-req-12345");
+  });
+
+  it("rejects unsafe X-Request-Id with JSON-breaking chars and falls back to server-generated id", async () => {
+    const app = makeApp();
+    // Headers API 在 fetch/Request 入口直接拒绝 CR/LF，这里用其它「打破日志 JSON」
+    // 的字符（引号 / 大括号 / 空格）做注入测试。白名单 [A-Za-z0-9_\-.] 应当忽略
+    // 来源值并改用服务端生成的 ID。
+    const malicious = `legit-id"} ,injected={"a":1`;
+    const response = await app.fetch(
+      new Request("http://localhost/probe", {
+        headers: { "X-Request-Id": malicious },
+      })
+    );
+    const id = response.headers.get("X-Request-Id");
+    expect(id).not.toBe(malicious);
+    expect(id).toMatch(/^req_\d+_[a-z0-9]{8}$/);
+  });
+
+  it("rejects X-Request-Id longer than 128 characters", async () => {
+    const app = makeApp();
+    const tooLong = "a".repeat(129);
+    const response = await app.fetch(
+      new Request("http://localhost/probe", {
+        headers: { "X-Request-Id": tooLong },
+      })
+    );
+    const id = response.headers.get("X-Request-Id");
+    expect(id).not.toBe(tooLong);
+    expect(id).toMatch(/^req_\d+_[a-z0-9]{8}$/);
+  });
+
+  it("preserves W3C-style request id (only safe ASCII characters)", async () => {
+    const app = makeApp();
+    const safe = "0af7651916cd43dd8448eb211c80319c.7c989be3-cb74";
+    const response = await app.fetch(
+      new Request("http://localhost/probe", {
+        headers: { "X-Request-Id": safe },
+      })
+    );
+    expect(response.headers.get("X-Request-Id")).toBe(safe);
   });
 });
 

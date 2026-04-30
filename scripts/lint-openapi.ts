@@ -123,6 +123,14 @@ function collectViolations(): { violations: OperationViolation[]; total: number 
 
 function main(): number {
   const { violations, total } = collectViolations();
+
+  // total === 0 视为失败：路由注册或文档构建异常导致 paths 为空时，原本会
+  // 输出 "OK" 并 0 退出，从而绕过质量门禁。即便偶发为空也至少应该让 CI 报错。
+  if (total === 0) {
+    console.error("[openapi:lint] FAIL — no operations discovered from OpenAPI document.");
+    return 1;
+  }
+
   const requiredFailures = violations.filter((v) => v.missingRequired.length > 0);
   const advisoryOnly = violations.filter(
     (v) => v.missingRequired.length === 0 && v.missingAdvisory.length > 0

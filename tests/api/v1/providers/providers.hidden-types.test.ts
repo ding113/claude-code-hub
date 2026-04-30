@@ -17,10 +17,29 @@ beforeAll(async () => {
   env.resetEnvConfigForTests();
 });
 
+// 让 createProviderHandler 在 addProvider 之后能从 getProviders 反查到新建项：
+// addProvider mock 把请求中的 name 加到内部列表，getProviders 返回当前列表。
+const __mockProviderList: Array<Record<string, unknown>> = [];
+
 vi.mock("@/actions/providers", () => ({
-  getProviders: vi.fn(async () => []),
+  getProviders: vi.fn(async () => [...__mockProviderList]),
   getProviderStatisticsAsync: vi.fn(async () => ({})),
-  addProvider: vi.fn(async () => ({ ok: true })),
+  addProvider: vi.fn(async (input: Record<string, unknown>) => {
+    __mockProviderList.push({
+      id: __mockProviderList.length + 1,
+      name: input.name ?? input.legacyName ?? "added",
+      provider_type: input.provider_type ?? input.providerType ?? "claude",
+      url: input.url ?? "",
+      key: input.key ?? "",
+      // serializeProvider only consumes a small set of fields; keep them present.
+      is_enabled: true,
+      priority: 0,
+      weight: 1,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+    return { ok: true };
+  }),
   editProvider: vi.fn(async () => ({ ok: true })),
   removeProvider: vi.fn(async () => ({ ok: true })),
   getProvidersHealthStatus: vi.fn(async () => ({})),
@@ -110,6 +129,7 @@ function authedRequest(
 describe("/api/v1/providers — hidden providerType rejection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __mockProviderList.length = 0;
   });
 
   it("POST with providerType=claude-auth → 400 validation_failed", async () => {

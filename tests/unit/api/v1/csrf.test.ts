@@ -174,6 +174,21 @@ describe("requireCsrf middleware - api-key tier skip", () => {
     expect(response.status).toBe(200);
   });
 
+  it("Bearer (non-admin) POST without X-CCH-CSRF header is allowed (skip)", async () => {
+    // Bearer 非 ADMIN_TOKEN 调用应被归类为 api-key 模式，跳过 CSRF。
+    // 之前会被错误归类为 "session"，导致脚本/CLI 使用 Bearer API key 时
+    // 在突变端点 403 csrf_invalid。
+    mockValidateAuthToken.mockResolvedValueOnce(makeFakeSession());
+    const app = makeProtectedApp();
+    const response = await app.fetch(
+      new Request("http://localhost/probe", {
+        method: "POST",
+        headers: { Authorization: "Bearer csrf-token-secret" },
+      })
+    );
+    expect(response.status).toBe(200);
+  });
+
   it("safe methods (GET/HEAD/OPTIONS) skip CSRF even on cookie session", async () => {
     mockValidateAuthToken.mockResolvedValueOnce(makeFakeSession());
     const app = makeProtectedApp();
@@ -232,5 +247,22 @@ describe("GET /api/v1/auth/csrf endpoint behavior", () => {
     const body = (await response.json()) as { csrfToken: null; mode: string };
     expect(body.csrfToken).toBeNull();
     expect(body.mode).toBe("api-key");
+  });
+});
+
+describe("requireAuth - malformed cookie tolerance", () => {
+  it("does not throw URIError when cookie value contains invalid percent-encoding", async () => {
+    // 之前 decodeURIComponent("%") 会抛 URIError，让中间件以 500 收尾，
+    // 现在通过 hono/cookie 的 getCookie + try/catch 兜底，应当回退到「无 token」
+    // 走标准 401 problem+json 流程。
+    const app = new Hono();
+    app.use("*", requireAuth({ tier: "read" }));
+    app.get("/probe", (c) => c.json({ ok: true }));
+    const req = new Request("http://localhost/probe");
+    req.headers.set("Cookie", "auth-token=%E0%A4%A");
+    const response = await app.fetch(req);
+    // 不能是 500；应该是 401（无可用 token）。
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Content-Type")).toBe("application/problem+json");
   });
 });

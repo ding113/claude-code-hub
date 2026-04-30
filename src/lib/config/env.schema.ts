@@ -165,6 +165,12 @@ export const EnvSchema = z.object({
   LEGACY_ACTIONS_SUNSET_DATE: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "LEGACY_ACTIONS_SUNSET_DATE 必须为 YYYY-MM-DD 格式")
+    // 仅校验「正则可通过」并不能拦下 2026-02-30 这种历法非法日期；这里再做一层
+    // 真实日期校验，避免下游构造 `Sunset` 头时收到无意义的日期。
+    .refine((value) => {
+      const d = new Date(`${value}T00:00:00Z`);
+      return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === value;
+    }, "LEGACY_ACTIONS_SUNSET_DATE 必须是有效日历日期")
     .default("2026-12-31")
     .describe("旧版 /api/actions/* 计划下线日期（ISO 日期，写入 Sunset 响应头）"),
   // 是否允许使用 API Key（X-Api-Key 头）访问管理接口

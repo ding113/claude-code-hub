@@ -28,7 +28,14 @@ export const HEADER_NAMES = {
 export const REQUEST_HEADER_NAMES = {
   Authorization: "Authorization",
   ApiKey: "X-Api-Key",
-  CsrfToken: "X-Csrf-Token",
+  /**
+   * CSRF Token 请求头。
+   *
+   * 必须与 `src/lib/api/v1/_shared/csrf.ts` 中的 `CSRF_TOKEN_HEADER`（"X-CCH-CSRF"）
+   * 保持一致；前端 fetcher (`src/lib/api-client/v1/fetcher.ts`) 也硬编码该值。
+   * 任何不一致都会让中间件读不到客户端发送的 token，从而静默绕过 CSRF 防护。
+   */
+  CsrfToken: "X-CCH-CSRF",
   IdempotencyKey: "Idempotency-Key",
 } as const;
 
