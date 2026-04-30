@@ -9,29 +9,34 @@ import { z } from "zod";
  */
 const booleanTransform = (s: string) => s !== "false" && s !== "0";
 
+const optionalPreprocessed = <T extends z.ZodType>(
+  preprocess: (value: unknown) => unknown,
+  schema: T
+) => z.preprocess(preprocess, z.union([schema, z.undefined()])).optional();
+
 /**
  * 可选数值解析（支持字符串）
  * - undefined/null/空字符串 -> undefined
  * - 其他 -> 交给 z.coerce.number 处理
  */
 const optionalNumber = (schema: z.ZodNumber) =>
-  z.preprocess((val) => {
+  optionalPreprocessed((val) => {
     if (val === undefined || val === null || val === "") return undefined;
     if (typeof val === "string") return Number(val);
     return val;
-  }, schema.optional());
+  }, schema);
 
 /**
  * 环境变量验证schema
  */
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
-  DSN: z.preprocess((val) => {
+  DSN: optionalPreprocessed((val) => {
     // 构建时如果 DSN 为空或是占位符,转为 undefined
     if (!val || typeof val !== "string") return undefined;
     if (val.includes("user:password@host:port")) return undefined; // 占位符模板
     return val;
-  }, z.string().url("数据库URL格式无效").optional()),
+  }, z.string().url("数据库URL格式无效")),
   // PostgreSQL 连接池配置（postgres.js）
   // - 多副本部署（k8s）需要结合数据库 max_connections 分摊配置
   // - 这些值为“每个应用进程”的连接池上限
@@ -78,18 +83,24 @@ export const EnvSchema = z.object({
       .min(100, "MESSAGE_REQUEST_ASYNC_MAX_PENDING 不能小于 100")
       .max(200000, "MESSAGE_REQUEST_ASYNC_MAX_PENDING 不能大于 200000")
   ),
-  ADMIN_TOKEN: z.preprocess((val) => {
-    // 空字符串或 "change-me" 占位符转为 undefined
-    if (!val || typeof val !== "string") return undefined;
-    if (val === "change-me") return undefined;
-    return val;
-  }, z.string().min(1, "管理员令牌不能为空").optional()),
-  CSRF_SECRET: z.preprocess((val) => {
-    // 独立于 ADMIN_TOKEN 的管理 API CSRF 签名密钥，空值与占位符视为未配置
-    if (!val || typeof val !== "string") return undefined;
-    if (val === "change-me") return undefined;
-    return val;
-  }, z.string().min(16, "CSRF_SECRET 至少需要 16 个字符").optional()),
+  ADMIN_TOKEN: optionalPreprocessed(
+    (val) => {
+      // 空字符串或 "change-me" 占位符转为 undefined
+      if (!val || typeof val !== "string") return undefined;
+      if (val === "change-me") return undefined;
+      return val;
+    },
+    z.string().min(1, "管理员令牌不能为空")
+  ),
+  CSRF_SECRET: optionalPreprocessed(
+    (val) => {
+      // 独立于 ADMIN_TOKEN 的管理 API CSRF 签名密钥，空值与占位符视为未配置
+      if (!val || typeof val !== "string") return undefined;
+      if (val === "change-me") return undefined;
+      return val;
+    },
+    z.string().min(16, "CSRF_SECRET 至少需要 16 个字符")
+  ),
   // ⚠️ 注意: 不要使用 z.coerce.boolean(),它会把字符串 "false" 转换为 true!
   // 原因: Boolean("false") === true (任何非空字符串都是 truthy)
   // 正确做法: 使用 transform 显式处理 "false" 和 "0" 字符串

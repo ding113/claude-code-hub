@@ -1,3 +1,4 @@
+import { z as openApiZ } from "@hono/zod-openapi";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 async function loadEnv() {
@@ -24,6 +25,32 @@ describe("management API env flags", () => {
     expect(isApiKeyAdminAccessEnabled()).toBe(false);
     expect(env.LEGACY_ACTIONS_DOCS_MODE).toBe("deprecated");
     expect(env.LEGACY_ACTIONS_SUNSET_DATE).toBe("2026-12-31");
+    expect(env.CSRF_SECRET).toBeUndefined();
+  });
+
+  test("keeps optional env fields unset after OpenAPI zod registration", async () => {
+    expect(typeof openApiZ.string().openapi).toBe("function");
+    for (const key of [
+      "DSN",
+      "DB_POOL_MAX",
+      "DB_POOL_IDLE_TIMEOUT",
+      "DB_POOL_CONNECT_TIMEOUT",
+      "MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS",
+      "MESSAGE_REQUEST_ASYNC_BATCH_SIZE",
+      "MESSAGE_REQUEST_ASYNC_MAX_PENDING",
+      "ADMIN_TOKEN",
+      "CSRF_SECRET",
+    ]) {
+      vi.stubEnv(key, undefined);
+    }
+
+    const { getEnvConfig } = await loadEnv();
+    const env = getEnvConfig();
+
+    expect(env.DSN).toBeUndefined();
+    expect(env.DB_POOL_MAX).toBeUndefined();
+    expect(env.MESSAGE_REQUEST_ASYNC_BATCH_SIZE).toBeUndefined();
+    expect(env.ADMIN_TOKEN).toBeUndefined();
     expect(env.CSRF_SECRET).toBeUndefined();
   });
 
