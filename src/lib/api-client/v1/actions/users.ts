@@ -1,4 +1,5 @@
 import type { BatchUpdateUsersParams, GetUsersBatchParams } from "@/actions/users";
+import { DASHBOARD_COMPAT_HEADER } from "@/lib/api/v1/_shared/constants";
 import { ApiError } from "@/lib/api-client/v1/errors";
 import type { UserDisplay } from "@/types/user";
 import {
@@ -32,6 +33,12 @@ type V1UsersPage = {
   hasMore?: boolean;
 };
 
+const dashboardCompatOptions = {
+  headers: {
+    [DASHBOARD_COMPAT_HEADER]: "1",
+  },
+} as const;
+
 export function getUsers(params?: GetUsersBatchParams): Promise<UserDisplay[]> {
   return apiGet<V1UsersPage>(`/api/v1/users${toUserListQuery(params)}`)
     .catch((error: unknown) => {
@@ -40,7 +47,7 @@ export function getUsers(params?: GetUsersBatchParams): Promise<UserDisplay[]> {
       }
       throw error;
     })
-    .then((body) => body.items ?? body.users ?? []);
+    .then((body) => normalizeUsers(body.items ?? body.users ?? []));
 }
 
 export function getUsersBatchCore(params?: GetUsersBatchParams) {
@@ -51,10 +58,39 @@ export function getUsersBatchCore(params?: GetUsersBatchParams) {
 
 function toLegacyUsersPage(body: V1UsersPage): UsersPage {
   return {
-    users: body.users ?? body.items ?? [],
+    users: normalizeUsers(body.users ?? body.items ?? []),
     nextCursor: body.nextCursor ?? body.pageInfo?.nextCursor ?? null,
     hasMore: body.hasMore ?? body.pageInfo?.hasMore ?? false,
   };
+}
+
+function normalizeUsers(users: UserDisplay[]): UserDisplay[] {
+  return users.map((user) => {
+    const normalizedUser = { ...user } as UserDisplay;
+    if ("costResetAt" in normalizedUser) {
+      normalizedUser.costResetAt = normalizeDate(normalizedUser.costResetAt);
+    }
+    if ("expiresAt" in normalizedUser) {
+      normalizedUser.expiresAt = normalizeDate(normalizedUser.expiresAt);
+    }
+    if (Array.isArray(normalizedUser.keys)) {
+      normalizedUser.keys = normalizedUser.keys.map((key) => ({
+        ...key,
+        createdAt: normalizeDate(key.createdAt) ?? new Date(0),
+        lastUsedAt: normalizeDate(key.lastUsedAt),
+      }));
+    }
+    return normalizedUser;
+  });
+}
+
+function normalizeDate(value: unknown): Date | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value !== "string" && typeof value !== "number") return null;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function getUsersUsageBatch(userIds: number[]) {
@@ -64,7 +100,8 @@ export function getUsersUsageBatch(userIds: number[]) {
 export function searchUsers(query?: string, limit?: number) {
   return toActionResult(
     apiGet<{ items?: Array<{ id: number; name: string }> }>(
-      `/api/v1/users:search${searchParams({ q: query, limit })}`
+      `/api/v1/users:search${searchParams({ q: query, limit })}`,
+      dashboardCompatOptions
     ).then((body) => unwrapItems(body))
   );
 }
@@ -72,7 +109,8 @@ export function searchUsers(query?: string, limit?: number) {
 export function searchUsersForFilter(query?: string, limit?: number) {
   return toActionResult(
     apiGet<{ items?: Array<{ id: number; name: string }> }>(
-      `/api/v1/users:filter-search${searchParams({ q: query, limit })}`
+      `/api/v1/users:filter-search${searchParams({ q: query, limit })}`,
+      dashboardCompatOptions
     ).then((body) => unwrapItems(body))
   );
 }

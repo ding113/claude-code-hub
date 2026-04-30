@@ -922,12 +922,43 @@ export async function getUsersBatchCore(
       };
     });
 
-    return { ok: true, data: { users: userDisplays, nextCursor, hasMore } };
+    return {
+      ok: true,
+      data: {
+        users: userDisplays.map(toActionTransportUserDisplay),
+        nextCursor,
+        hasMore,
+      },
+    };
   } catch (error) {
     logger.error("Failed to fetch user batch core data:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch user batch core data";
     return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
   }
+}
+
+function toActionTransportUserDisplay(user: UserDisplay): UserDisplay {
+  return {
+    ...user,
+    costResetAt: toActionTransportDate(user.costResetAt),
+    expiresAt: toActionTransportDate(user.expiresAt),
+    keys: user.keys.map((key) => ({
+      ...key,
+      createdAt: toRequiredActionTransportDate(key.createdAt),
+      lastUsedAt: toActionTransportDate(key.lastUsedAt),
+    })),
+  };
+}
+
+function toActionTransportDate(value: Date | null | undefined): Date | null {
+  if (!value) return null;
+  const timestamp = value.getTime();
+  return (Number.isFinite(timestamp) ? value.toISOString() : null) as unknown as Date;
+}
+
+function toRequiredActionTransportDate(value: Date): Date {
+  const timestamp = value.getTime();
+  return (Number.isFinite(timestamp) ? value.toISOString() : null) as unknown as Date;
 }
 
 /**

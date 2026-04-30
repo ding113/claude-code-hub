@@ -420,6 +420,14 @@ describe("v1 users endpoints", () => {
     expect(search.response.status).toBe(200);
     expect(searchUsersMock).toHaveBeenCalledWith("user", 10);
 
+    const largeSearch = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/users:search?limit=5000",
+      headers,
+    });
+    expect(largeSearch.response.status).toBe(200);
+    expect(searchUsersMock).toHaveBeenCalledWith("", 5000);
+
     const batch = await callV1Route({
       method: "POST",
       pathname: "/api/v1/users:batchUpdate",

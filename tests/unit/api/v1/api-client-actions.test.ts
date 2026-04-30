@@ -1,14 +1,17 @@
 import { Buffer } from "node:buffer";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { DASHBOARD_COMPAT_HEADER } from "@/lib/api/v1/_shared/constants";
 import { ApiError } from "@/lib/api-client/v1/errors";
 
 const getMock = vi.hoisted(() => vi.fn());
 const patchMock = vi.hoisted(() => vi.fn());
+const postMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api-client/v1/client", () => ({
   apiClient: {
     get: getMock,
     patch: patchMock,
+    post: postMock,
   },
 }));
 
@@ -68,6 +71,20 @@ describe("v1 action compatibility client", () => {
         operationId: "op-123",
         undoToken: "undo-123",
       },
+    });
+  });
+
+  test("marks provider reads as dashboard compatibility requests", async () => {
+    getMock.mockResolvedValue({
+      items: [{ id: 2, name: "Legacy hidden", providerType: "claude-auth" }],
+    });
+
+    await expect(providers.getProviders()).resolves.toEqual([
+      { id: 2, name: "Legacy hidden", providerType: "claude-auth" },
+    ]);
+
+    expect(getMock).toHaveBeenCalledWith("/api/v1/providers", {
+      headers: { [DASHBOARD_COMPAT_HEADER]: "1" },
     });
   });
 
@@ -137,6 +154,74 @@ describe("v1 action compatibility client", () => {
     expect(getMock).toHaveBeenNthCalledWith(2, "/api/v1/users:self");
   });
 
+  test("revives v1 user list date strings for legacy dashboard components", async () => {
+    getMock.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          name: "dated user",
+          keys: [
+            {
+              id: 11,
+              createdAt: "2026-04-30T07:41:10.000Z",
+              lastUsedAt: "2026-04-30T08:00:00.000Z",
+            },
+          ],
+          costResetAt: "2026-04-30T00:00:00.000Z",
+          expiresAt: "2026-05-07T07:41:10.000Z",
+        },
+      ],
+      pageInfo: { nextCursor: null, hasMore: false, limit: 50 },
+    });
+
+    const result = await users.getUsersBatchCore({ limit: 50 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [user] = result.data.users;
+    expect(user.expiresAt).toBeInstanceOf(Date);
+    expect(user.expiresAt?.toISOString()).toBe("2026-05-07T07:41:10.000Z");
+    expect(user.costResetAt).toBeInstanceOf(Date);
+    expect(user.keys[0]?.createdAt).toBeInstanceOf(Date);
+    expect(user.keys[0]?.lastUsedAt).toBeInstanceOf(Date);
+  });
+
+  test("revives numeric epoch timestamps instead of treating zero as empty", async () => {
+    getMock.mockResolvedValue({
+      items: [
+        {
+          id: 8,
+          name: "epoch user",
+          keys: [{ id: 12, createdAt: 0, lastUsedAt: 0 }],
+          costResetAt: 0,
+          expiresAt: 0,
+        },
+      ],
+      pageInfo: { nextCursor: null, hasMore: false, limit: 50 },
+    });
+
+    const result = await users.getUsersBatchCore({ limit: 50 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [user] = result.data.users;
+    expect(user.expiresAt?.toISOString()).toBe("1970-01-01T00:00:00.000Z");
+    expect(user.costResetAt?.toISOString()).toBe("1970-01-01T00:00:00.000Z");
+    expect(user.keys[0]?.createdAt.toISOString()).toBe("1970-01-01T00:00:00.000Z");
+    expect(user.keys[0]?.lastUsedAt?.toISOString()).toBe("1970-01-01T00:00:00.000Z");
+  });
+
+  test("marks dashboard user search as a compatibility request", async () => {
+    getMock.mockResolvedValue({ items: [{ id: 1, name: "Admin" }] });
+
+    const result = await users.searchUsers(undefined, 5000);
+
+    expect(getMock).toHaveBeenCalledWith("/api/v1/users:search?limit=5000", {
+      headers: { [DASHBOARD_COMPAT_HEADER]: "1" },
+    });
+    expect(result).toEqual({ ok: true, data: [{ id: 1, name: "Admin" }] });
+  });
+
   test("maps provider endpoint probe logs to the v1 resource endpoint", async () => {
     getMock.mockResolvedValue({ logs: [] });
 
@@ -145,8 +230,67 @@ describe("v1 action compatibility client", () => {
       limit: 50,
     });
 
-    expect(getMock).toHaveBeenCalledWith("/api/v1/provider-endpoints/12/probe-logs?limit=50");
+    expect(getMock).toHaveBeenCalledWith("/api/v1/provider-endpoints/12/probe-logs?limit=50", {
+      headers: { [DASHBOARD_COMPAT_HEADER]: "1" },
+    });
     expect(result).toEqual({ ok: true, data: { logs: [] } });
+  });
+
+  test("passes hidden provider endpoint filters through the dashboard compatibility path", async () => {
+    getMock.mockResolvedValue({
+      items: [{ id: 1, providerType: "claude-auth" }],
+    });
+
+    await expect(
+      providerEndpoints.getProviderEndpoints({
+        vendorId: 2,
+        providerType: "claude-auth",
+        dashboard: true,
+      })
+    ).resolves.toEqual([{ id: 1, providerType: "claude-auth" }]);
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/provider-vendors/2/endpoints?providerType=claude-auth&dashboard=true",
+      { headers: { [DASHBOARD_COMPAT_HEADER]: "1" } }
+    );
+  });
+
+  test("requests hidden provider endpoint stats from the server batch endpoint", async () => {
+    postMock.mockResolvedValue([
+      {
+        vendorId: 2,
+        total: 3,
+        enabled: 2,
+        healthy: 1,
+        unhealthy: 1,
+        unknown: 0,
+      },
+    ]);
+
+    const result = await providerEndpoints.batchGetVendorTypeEndpointStats({
+      vendorIds: [2, 2],
+      providerType: "claude-auth",
+    });
+
+    expect(getMock).not.toHaveBeenCalled();
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/v1/provider-vendors/endpoint-stats:batch",
+      { vendorIds: [2, 2], providerType: "claude-auth" },
+      { headers: { [DASHBOARD_COMPAT_HEADER]: "1" } }
+    );
+    expect(result).toEqual({
+      ok: true,
+      data: [
+        {
+          vendorId: 2,
+          total: 3,
+          enabled: 2,
+          healthy: 1,
+          unhealthy: 1,
+          unknown: 0,
+        },
+      ],
+    });
   });
 
   test("decodes opaque usage-log cursors before returning the legacy page shape", async () => {

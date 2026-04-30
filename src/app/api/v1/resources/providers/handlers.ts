@@ -1,9 +1,15 @@
 import type { Context } from "hono";
 import type { ZodError } from "zod";
+import { z } from "zod";
 import type { ActionResult } from "@/actions/types";
 import { hasLegacyRedactedWritePlaceholders } from "@/lib/api/legacy-action-sanitizers";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
+import type { ResolvedAuth } from "@/lib/api/v1/_shared/auth-middleware";
 import { withNoStoreHeaders } from "@/lib/api/v1/_shared/cache-control";
+import {
+  DASHBOARD_COMPAT_HEADER,
+  INTERNAL_PROVIDER_TYPE_VALUES,
+} from "@/lib/api/v1/_shared/constants";
 import {
   createProblemResponse,
   fromZodError,
@@ -27,7 +33,6 @@ import {
   ProviderFetchUpstreamModelsSchema,
   ProviderGroupsQuerySchema,
   ProviderIdsBodySchema,
-  type ProviderListQuery,
   ProviderListQuerySchema,
   ProviderModelSuggestionsQuerySchema,
   ProviderProxyTestSchema,
@@ -40,8 +45,30 @@ import {
 } from "@/lib/api/v1/schemas/providers";
 import type { ProviderDisplay } from "@/types/provider";
 
+const InternalProviderTypeSchema = z.enum(INTERNAL_PROVIDER_TYPE_VALUES);
+const InternalProviderListQuerySchema = ProviderListQuerySchema.extend({
+  providerType: InternalProviderTypeSchema.optional(),
+});
+const InternalProviderUpdateSchema = ProviderUpdateSchema.extend({
+  provider_type: InternalProviderTypeSchema.optional(),
+});
+type InternalProviderUpdateInput = z.infer<typeof InternalProviderUpdateSchema>;
+type ProviderUpdatePayload = ProviderUpdateInput | InternalProviderUpdateInput;
+const InternalProviderTypeQuerySchema = ProviderTypeQuerySchema.extend({
+  providerType: InternalProviderTypeSchema,
+});
+const InternalProviderUnifiedTestSchema = ProviderUnifiedTestSchema.extend({
+  providerType: InternalProviderTypeSchema,
+});
+const InternalProviderFetchUpstreamModelsSchema = ProviderFetchUpstreamModelsSchema.extend({
+  providerType: InternalProviderTypeSchema,
+});
+
 export async function listProviders(c: Context): Promise<Response> {
-  const query = ProviderListQuerySchema.safeParse({
+  const querySchema = isDashboardCompatRequest(c)
+    ? InternalProviderListQuerySchema
+    : ProviderListQuerySchema;
+  const query = querySchema.safeParse({
     q: c.req.query("q"),
     providerType: c.req.query("providerType"),
     include: c.req.query("include"),
@@ -98,7 +125,10 @@ export async function createProvider(c: Context): Promise<Response> {
 
 export async function updateProvider(c: Context): Promise<Response> {
   const id = Number(c.req.param("id"));
-  const body = await parseHonoJsonBody(c, ProviderUpdateSchema);
+  const body = await parseHonoJsonBody(
+    c,
+    isDashboardCompatRequest(c) ? InternalProviderUpdateSchema : ProviderUpdateSchema
+  );
   if (!body.ok) return body.response;
   const existing = await findVisibleProvider(c, id);
   if (existing instanceof Response) return existing;
@@ -373,7 +403,11 @@ export async function testProviderProxy(c: Context): Promise<Response> {
 }
 
 export async function testProviderUnified(c: Context): Promise<Response> {
-  return callProviderTest(c, ProviderUnifiedTestSchema, "testProviderUnified");
+  return callProviderTest(
+    c,
+    isDashboardCompatRequest(c) ? InternalProviderUnifiedTestSchema : ProviderUnifiedTestSchema,
+    "testProviderUnified"
+  );
 }
 
 export async function testProviderAnthropic(c: Context): Promise<Response> {
@@ -393,7 +427,9 @@ export async function testProviderGemini(c: Context): Promise<Response> {
 }
 
 export async function getProviderTestPresets(c: Context): Promise<Response> {
-  const query = ProviderTypeQuerySchema.safeParse({ providerType: c.req.query("providerType") });
+  const query = (
+    isDashboardCompatRequest(c) ? InternalProviderTypeQuerySchema : ProviderTypeQuerySchema
+  ).safeParse({ providerType: c.req.query("providerType") });
   if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
   const providerActions = await import("@/actions/providers");
   return actionJson(
@@ -408,7 +444,12 @@ export async function getProviderTestPresets(c: Context): Promise<Response> {
 }
 
 export async function fetchProviderUpstreamModels(c: Context): Promise<Response> {
-  const body = await parseJson(c, ProviderFetchUpstreamModelsSchema);
+  const body = await parseJson(
+    c,
+    isDashboardCompatRequest(c)
+      ? InternalProviderFetchUpstreamModelsSchema
+      : ProviderFetchUpstreamModelsSchema
+  );
   if (body instanceof Response) return body;
   const providerActions = await import("@/actions/providers");
   return actionJson(
@@ -448,9 +489,15 @@ async function loadVisibleProviders(c: Context): Promise<ProviderDisplay[] | Res
   const providerActions = await import("@/actions/providers");
   const result = await callAction(c, providerActions.getProviders, [], c.get("auth"));
   if (!result.ok) return actionError(c, result);
+  if (isDashboardCompatRequest(c)) return result.data;
   return result.data.filter(
     (provider) => !HIDDEN_PROVIDER_TYPES.has(provider.providerType as never)
   );
+}
+
+function isDashboardCompatRequest(c: Context): boolean {
+  const auth = c.get("auth") as ResolvedAuth | undefined;
+  return c.req.header(DASHBOARD_COMPAT_HEADER) === "1" && auth?.session?.user.role === "admin";
 }
 
 async function findVisibleProvider(
@@ -501,7 +548,7 @@ function undoMetadataHeaders(data: unknown): HeadersInit {
 
 function filterProviders(
   providers: ProviderDisplay[],
-  query: ProviderListQuery
+  query: { q?: string; providerType?: string; include?: "statistics" }
 ): ProviderDisplay[] {
   const normalizedQuery = query.q?.toLowerCase();
   return providers.filter((provider) => {
@@ -580,11 +627,11 @@ function sanitizeProvider(provider: ProviderDisplay): ProviderSummaryResponse {
   };
 }
 
-function preserveRedactedProviderUpdateFields(
-  input: ProviderUpdateInput,
+function preserveRedactedProviderUpdateFields<T extends ProviderUpdatePayload>(
+  input: T,
   existing: ProviderDisplay
-): ProviderUpdateInput {
-  const next: ProviderUpdateInput = { ...input };
+): T {
+  const next: T = { ...input };
   const urlFields = [
     ["url", "url"],
     ["proxy_url", "proxyUrl"],

@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, test } from "vitest";
 import { ProblemJsonSchema, ProviderTypeSchema } from "@/lib/api/v1/schemas/_common";
 import { serializeDates, toIsoDateTime } from "@/lib/api/v1/_shared/serialization";
@@ -10,6 +11,27 @@ describe("v1 schema serialization", () => {
     expect(serializeDates({ createdAt: date, nested: [date] })).toEqual({
       createdAt: "2026-04-28T00:00:00.000Z",
       nested: ["2026-04-28T00:00:00.000Z"],
+    });
+  });
+
+  test("serializes Date values from another VM context", () => {
+    const date = runInNewContext('new Date("2026-04-30T07:41:10.464Z")') as Date;
+
+    expect(date instanceof Date).toBe(false);
+    expect(serializeDates({ expiresAt: date, nested: { createdAt: date } })).toEqual({
+      expiresAt: "2026-04-30T07:41:10.464Z",
+      nested: { createdAt: "2026-04-30T07:41:10.464Z" },
+    });
+  });
+
+  test("serializes date-like objects through their JSON representation", () => {
+    const dateLike = {};
+    Object.defineProperty(dateLike, "toJSON", {
+      value: () => "2026-04-30T07:41:10.464Z",
+    });
+
+    expect(serializeDates({ expiresAt: dateLike })).toEqual({
+      expiresAt: "2026-04-30T07:41:10.464Z",
     });
   });
 

@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { PUBLIC_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
 
 export const ApiVersionSchema = z.literal("1.0.0").describe("Management API version.");
 
@@ -69,7 +70,7 @@ export const CursorPageInfoSchema = z.object({
 });
 
 export const ProviderTypeSchema = z
-  .enum(["claude", "codex", "gemini", "openai-compatible"])
+  .enum(PUBLIC_PROVIDER_TYPE_VALUES)
   .describe("Supported provider type. Hidden legacy provider types are intentionally excluded.");
 
 export function createPageResponseSchema<T extends z.ZodType>(itemSchema: T) {

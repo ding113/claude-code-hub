@@ -149,7 +149,7 @@ describe("v1 dashboard endpoints", () => {
     const rateLimit = await callV1Route({
       method: "GET",
       pathname:
-        "/api/v1/dashboard/rate-limit-stats?userId=1&providerId=2&keyId=3&limitType=rpm&startTime=2026-04-28T00:00:00.000Z",
+        "/api/v1/dashboard/rate-limit-stats?userId=1&providerId=2&keyId=3&limitType=rpm&startTime=2026-04-28T00:00:00.000Z&endTime=2026-04-30T00:00:00.000Z",
       headers,
     });
     expect(rateLimit.response.status).toBe(200);
@@ -159,7 +159,7 @@ describe("v1 dashboard endpoints", () => {
       key_id: 3,
       limit_type: "rpm",
       start_time: new Date("2026-04-28T00:00:00.000Z"),
-      end_time: undefined,
+      end_time: new Date("2026-04-30T00:00:00.000Z"),
     });
 
     const proxy = await callV1Route({
