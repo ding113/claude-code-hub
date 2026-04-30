@@ -4,17 +4,34 @@ import { Activity, AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  getUnmaskedProviderKey,
-  type ProviderApiTestSuccessDetails,
-  testProviderGemini,
-  testProviderUnified,
-} from "@/actions/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import {
+  callProviderGeminiTest,
+  callProviderUnifiedTest,
+} from "@/lib/api-client/v1/providers/hooks";
+import { providersClient } from "@/lib/api-client/v1/providers/index";
+
+/**
+ * Local mirror of the provider api-test success details shape (used to read
+ * the optional response payload). Kept inline to avoid a client import from
+ * the server-only `@/actions/providers` module.
+ */
+type ProviderApiTestSuccessDetails = {
+  responseTime?: number;
+  model?: string;
+  usage?: Record<string, unknown>;
+  content?: string;
+  rawResponse?: string;
+  streamInfo?: {
+    chunksReceived: number;
+    format: "sse" | "ndjson";
+  };
+};
+
 import {
   CUSTOM_HEADERS_PLACEHOLDER,
   type CustomHeadersValidationErrorCode,
@@ -194,18 +211,18 @@ export function ApiTestButton({
       let resolvedKey = apiKey.trim();
 
       if (!resolvedKey && providerId) {
-        const result = await getUnmaskedProviderKey(providerId);
-        if (!result.ok) {
-          toast.error(result.error || t("fillKeyFirst"));
+        try {
+          const result = await providersClient.revealKey(providerId);
+          if (!result?.key) {
+            toast.error(t("fillKeyFirst"));
+            return;
+          }
+          resolvedKey = result.key;
+        } catch (revealError) {
+          const message = revealError instanceof Error ? revealError.message : t("fillKeyFirst");
+          toast.error(message || t("fillKeyFirst"));
           return;
         }
-
-        if (!result.data?.key) {
-          toast.error(t("fillKeyFirst"));
-          return;
-        }
-
-        resolvedKey = result.data.key;
       }
 
       if (!resolvedKey) {
@@ -216,7 +233,21 @@ export function ApiTestButton({
       let testResultData: UnifiedTestResultData | null = null;
 
       if (resolvedProviderType === "gemini" || resolvedProviderType === "gemini-cli") {
-        const response = await testProviderGemini({
+        const response = await callProviderGeminiTest<
+          {
+            providerUrl: string;
+            apiKey: string;
+            model?: string;
+            proxyUrl: string | null;
+            proxyFallbackToDirect: boolean;
+            timeoutMs: number;
+          },
+          {
+            success: boolean;
+            message: string;
+            details?: ProviderApiTestSuccessDetails;
+          }
+        >({
           providerUrl: providerUrl.trim(),
           apiKey: resolvedKey,
           model: testModel.trim() || undefined,
@@ -321,7 +352,19 @@ export function ApiTestButton({
           });
         }
       } else {
-        const response = await testProviderUnified({
+        const response = await callProviderUnifiedTest<
+          {
+            providerUrl: string;
+            apiKey: string;
+            providerType: ProviderType;
+            model?: string;
+            proxyUrl: string | null;
+            proxyFallbackToDirect: boolean;
+            timeoutMs: number;
+            customHeaders?: Record<string, string>;
+          },
+          UnifiedTestResultData
+        >({
           providerUrl: providerUrl.trim(),
           apiKey: resolvedKey,
           providerType: resolvedProviderType,

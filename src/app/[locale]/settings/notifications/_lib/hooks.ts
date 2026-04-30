@@ -1,23 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getBindingsForTypeAction, updateBindingsAction } from "@/actions/notification-bindings";
-import {
-  getNotificationSettingsAction,
-  updateNotificationSettingsAction,
-} from "@/actions/notifications";
-import {
-  createWebhookTargetAction,
-  deleteWebhookTargetAction,
-  getWebhookTargetsAction,
-  testWebhookTargetAction,
-  updateWebhookTargetAction,
-} from "@/actions/webhook-targets";
+import { ApiError } from "@/lib/api-client/v1/client";
+import { notificationBindingsClient } from "@/lib/api-client/v1/notification-bindings/index";
+import { notificationsClient } from "@/lib/api-client/v1/notifications/index";
+import { webhookTargetsClient } from "@/lib/api-client/v1/webhook-targets/index";
 import {
   type CacheHitRateAlertSettingsWindowMode,
   isCacheHitRateAlertSettingsWindowMode,
 } from "@/lib/webhook/types";
 import type { NotificationType, WebhookProviderType } from "./schemas";
+
+function toClientResultError(err: unknown): string {
+  if (err instanceof ApiError) return err.title || "REQUEST_FAILED";
+  if (err instanceof Error) return err.message || "REQUEST_FAILED";
+  return "REQUEST_FAILED";
+}
 
 export interface ClientActionResult<T> {
   ok: boolean;
@@ -221,24 +219,29 @@ export function useNotificationsPageData() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const refreshSettings = useCallback(async () => {
-    const raw = await getNotificationSettingsAction();
+    const raw = await notificationsClient.getSettings();
     setSettings(toClientSettings(raw));
   }, []);
 
   const refreshTargets = useCallback(async () => {
-    const result = await getWebhookTargetsAction();
-    if (!result.ok) {
-      throw new Error(result.error || "LOAD_TARGETS_FAILED");
+    try {
+      const response = await webhookTargetsClient.list();
+      setTargets(response.items as unknown as WebhookTargetState[]);
+    } catch (err) {
+      throw new Error(toClientResultError(err));
     }
-    setTargets(result.data);
   }, []);
 
   const refreshBindingsForType = useCallback(async (type: NotificationType) => {
-    const result = await getBindingsForTypeAction(type);
-    if (!result.ok) {
-      throw new Error(result.error || "LOAD_BINDINGS_FAILED");
+    try {
+      const response = await notificationBindingsClient.list(type);
+      setBindingsByType((prev) => ({
+        ...prev,
+        [type]: response.items as unknown as NotificationBindingState[],
+      }));
+    } catch (err) {
+      throw new Error(toClientResultError(err));
     }
-    setBindingsByType((prev) => ({ ...prev, [type]: result.data }));
   }, []);
 
   const refreshAll = useCallback(async () => {
@@ -264,7 +267,7 @@ export function useNotificationsPageData() {
 
   const updateSettings = useCallback(
     async (patch: Partial<NotificationSettingsState>): Promise<ClientActionResult<void>> => {
-      type UpdatePayload = Parameters<typeof updateNotificationSettingsAction>[0];
+      type UpdatePayload = Parameters<typeof notificationsClient.updateSettings>[0];
       const payload: UpdatePayload = {};
 
       if (patch.enabled !== undefined) {
@@ -380,14 +383,13 @@ export function useNotificationsPageData() {
         }
       }
 
-      const result = await updateNotificationSettingsAction(payload);
-
-      if (!result.ok) {
-        return { ok: false, error: result.error || "SAVE_FAILED" };
+      try {
+        const result = await notificationsClient.updateSettings(payload);
+        setSettings(toClientSettings(result));
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: toClientResultError(err) };
       }
-
-      setSettings(toClientSettings(result.data));
-      return { ok: true };
     },
     []
   );
@@ -402,27 +404,33 @@ export function useNotificationsPageData() {
         scheduleTimezone?: string | null;
         templateOverride?: Record<string, unknown> | null;
       }>
-    ) => {
-      const result = await updateBindingsAction(type, bindings);
-      if (result.ok) {
+    ): Promise<ClientActionResult<void>> => {
+      try {
+        await notificationBindingsClient.update(type, { bindings });
         await refreshBindingsForType(type);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: toClientResultError(err) };
       }
-      return result;
     },
     [refreshBindingsForType]
   );
 
   const createTarget = useCallback(
     async (input: WebhookTargetCreateInput): Promise<ClientActionResult<WebhookTargetState>> => {
-      const result = await createWebhookTargetAction(input);
-      if (result.ok) {
+      try {
+        const data = await webhookTargetsClient.create(
+          input as Parameters<typeof webhookTargetsClient.create>[0]
+        );
         await Promise.all([
           refreshTargets(),
           ...NOTIFICATION_TYPES.map((type) => refreshBindingsForType(type)),
           refreshSettings(),
         ]);
+        return { ok: true, data: data as unknown as WebhookTargetState };
+      } catch (err) {
+        return { ok: false, error: toClientResultError(err) };
       }
-      return result;
     },
     [refreshBindingsForType, refreshSettings, refreshTargets]
   );
@@ -432,28 +440,35 @@ export function useNotificationsPageData() {
       id: number,
       input: WebhookTargetUpdateInput
     ): Promise<ClientActionResult<WebhookTargetState>> => {
-      const result = await updateWebhookTargetAction(id, input);
-      if (result.ok) {
+      try {
+        const data = await webhookTargetsClient.update(
+          id,
+          input as Parameters<typeof webhookTargetsClient.update>[1]
+        );
         await Promise.all([
           refreshTargets(),
           ...NOTIFICATION_TYPES.map((type) => refreshBindingsForType(type)),
         ]);
+        return { ok: true, data: data as unknown as WebhookTargetState };
+      } catch (err) {
+        return { ok: false, error: toClientResultError(err) };
       }
-      return result;
     },
     [refreshBindingsForType, refreshTargets]
   );
 
   const deleteTarget = useCallback(
     async (id: number): Promise<ClientActionResult<void>> => {
-      const result = await deleteWebhookTargetAction(id);
-      if (result.ok) {
+      try {
+        await webhookTargetsClient.remove(id);
         await Promise.all([
           refreshTargets(),
           ...NOTIFICATION_TYPES.map((type) => refreshBindingsForType(type)),
         ]);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: toClientResultError(err) };
       }
-      return result;
     },
     [refreshBindingsForType, refreshTargets]
   );
@@ -463,11 +478,13 @@ export function useNotificationsPageData() {
       id: number,
       type: NotificationType
     ): Promise<ClientActionResult<{ latencyMs: number }>> => {
-      const result = await testWebhookTargetAction(id, type);
-      if (result.ok) {
+      try {
+        const data = await webhookTargetsClient.test(id, { notificationType: type });
         await refreshTargets();
+        return { ok: true, data: { latencyMs: data.latencyMs ?? 0 } };
+      } catch (err) {
+        return { ok: false, error: toClientResultError(err) };
       }
-      return result;
     },
     [refreshTargets]
   );

@@ -6,10 +6,39 @@ import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getKeys } from "@/actions/keys";
-import type { OverviewData } from "@/actions/overview";
-import { getOverviewData } from "@/actions/overview";
-import { getProviders } from "@/actions/providers";
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
+
+/**
+ * Local mirror of `@/actions/overview#OverviewData`. Inlined here so this
+ * client component does not import the server-only actions module.
+ */
+interface OverviewData {
+  concurrentSessions: number;
+  todayRequests: number;
+  todayCost: number;
+  avgResponseTime: number;
+  todayErrorRate: number;
+  yesterdaySamePeriodRequests: number;
+  yesterdaySamePeriodCost: number;
+  yesterdaySamePeriodAvgResponseTime: number;
+  recentMinuteRequests: number;
+}
+
+// TODO: replace once /api/v1/keys?userId=... covers the legacy `getKeys` semantics.
+function callGetKeys(userId: number): Promise<LegacyActionResult<Key[]>> {
+  return callLegacyAction("keys", "getKeys", userId);
+}
+
+// TODO: replace once /api/v1/providers (full list) returns the legacy ProviderDisplay[].
+function callGetProviders(): Promise<LegacyActionResult<ProviderDisplay[]>> {
+  return callLegacyAction("providers", "getProviders", {});
+}
+
+// TODO: replace once /api/v1/dashboard/overview is exposed via the typed v1 client.
+function callGetOverviewData(): Promise<LegacyActionResult<OverviewData>> {
+  return callLegacyAction("overview", "getOverviewData", {});
+}
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -53,9 +82,9 @@ async function fetchSystemSettings(): Promise<SystemSettings> {
 }
 
 async function fetchOverviewData(): Promise<OverviewData> {
-  const result = await getOverviewData();
-  if (!result.ok) {
-    throw new Error(result.error || "FETCH_OVERVIEW_FAILED");
+  const result = await callGetOverviewData();
+  if (!result.ok || !result.data) {
+    throw new Error((!result.ok ? result.error : null) || "FETCH_OVERVIEW_FAILED");
   }
   return result.data;
 }
@@ -144,14 +173,17 @@ function UsageLogsViewContent({
     ProviderDisplay[]
   >({
     queryKey: ["usage-log-providers"],
-    queryFn: getProviders,
+    queryFn: async () => {
+      const result = await callGetProviders();
+      return result.ok && result.data ? result.data : [];
+    },
     enabled: isAdmin && providers === undefined,
     placeholderData: EMPTY_PROVIDERS,
   });
 
   const { data: keysResult, isLoading: isKeysLoading } = useQuery({
     queryKey: ["usage-log-keys", userId],
-    queryFn: () => getKeys(userId),
+    queryFn: () => callGetKeys(userId),
     enabled: !isAdmin && initialKeys === undefined,
   });
 

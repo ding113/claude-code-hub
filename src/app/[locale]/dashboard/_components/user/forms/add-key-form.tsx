@@ -1,10 +1,7 @@
 "use client";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { addKey } from "@/actions/keys";
-import { getAvailableProviderGroups } from "@/actions/providers";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { NumberField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
@@ -17,9 +14,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { keysClient } from "@/lib/api-client/v1/keys/index";
+import { providersClient } from "@/lib/api-client/v1/providers/index";
+import { usersClient } from "@/lib/api-client/v1/users/index";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
-import { getErrorMessage } from "@/lib/utils/error-messages";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { KeyDialogUserContext } from "@/types/user";
@@ -34,21 +33,25 @@ interface AddKeyFormProps {
 export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyFormProps) {
   const [isPending, startTransition] = useTransition();
   const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
-  const router = useRouter();
   const t = useTranslations("dashboard.addKeyForm");
   const tBalancePage = useTranslations(
     "dashboard.userManagement.keyEditSection.fields.balanceQueryPage"
   );
   const tUI = useTranslations("ui.tagInput");
   const tCommon = useTranslations("common");
-  const tErrors = useTranslations("errors");
 
   // Load provider group suggestions
   useEffect(() => {
     if (user?.id && !isAdmin) {
-      getAvailableProviderGroups(user.id).then(setProviderGroupSuggestions);
+      usersClient
+        .availableProviderGroups(user.id)
+        .then((res) => setProviderGroupSuggestions(res.items))
+        .catch(() => setProviderGroupSuggestions([]));
     } else {
-      getAvailableProviderGroups().then(setProviderGroupSuggestions);
+      providersClient
+        .groups()
+        .then((res) => setProviderGroupSuggestions(res.items as string[]))
+        .catch(() => setProviderGroupSuggestions([]));
     }
   }, [isAdmin, user?.id]);
 
@@ -76,10 +79,9 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
       }
 
       try {
-        const result = await addKey({
-          userId: userId!,
+        const payload = {
           name: data.name,
-          // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
+          // 重要：清除到期时间时用空字符串表达，与 legacy schema 行为对齐
           expiresAt: data.expiresAt ?? "",
           canLoginWebUi: data.canLoginWebUi,
           limit5hUsd: data.limit5hUsd,
@@ -93,32 +95,17 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           limitConcurrentSessions: data.limitConcurrentSessions,
           cacheTtlPreference: data.cacheTtlPreference,
           providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
-        });
-
-        if (!result.ok) {
-          const msg = result.errorCode
-            ? getErrorMessage(tErrors, result.errorCode, result.errorParams)
-            : result.error || t("errors.createFailed");
-          toast.error(msg);
-          return;
-        }
-
-        const payload = result.data;
-        if (!payload) {
-          toast.error(t("errors.noKeyReturned"));
-          return;
-        }
+        } as unknown as Parameters<typeof keysClient.create>[1];
+        const created = await keysClient.create(userId!, payload);
 
         startTransition(() => {
           onSuccess?.({
-            generatedKey: payload.generatedKey,
-            name: payload.name,
+            generatedKey: created.key,
+            name: created.name,
           });
-          router.refresh();
         });
       } catch (err) {
         console.error("添加Key失败:", err);
-        // 使用toast显示具体的错误信息
         const errorMessage = err instanceof Error ? err.message : t("errors.createFailed");
         toast.error(errorMessage);
       }

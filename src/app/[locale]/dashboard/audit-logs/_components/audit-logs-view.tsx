@@ -4,7 +4,6 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
-import { getAuditLogsBatch } from "@/actions/audit-logs";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import {
@@ -22,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
+import { auditLogsClient } from "@/lib/api-client/v1/audit-logs";
 import { cn } from "@/lib/utils";
 import type { AuditCategory, AuditLogRow } from "@/types/audit-log";
 import { AuditLogDetailSheet } from "./audit-log-detail-sheet";
@@ -68,15 +68,16 @@ export function AuditLogsView() {
     useInfiniteQuery({
       queryKey: ["audit-logs-batch", filter],
       queryFn: async ({ pageParam }) => {
-        const result = await getAuditLogsBatch({
-          filter,
-          cursor: pageParam ?? null,
-          pageSize: BATCH_SIZE,
+        const cursor = pageParam ?? null;
+        const data = await auditLogsClient.list({
+          ...filter,
+          limit: BATCH_SIZE,
+          ...(cursor ? { cursor: JSON.stringify(cursor) } : {}),
         });
-        if (!result.ok) {
-          throw new Error(result.error);
-        }
-        return result.data;
+        return {
+          rows: data.items as unknown as AuditLogRow[],
+          nextCursor: data.pageInfo.nextCursor as { createdAt: string; id: number } | null,
+        };
       },
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
       initialPageParam: undefined as { createdAt: string; id: number } | undefined,

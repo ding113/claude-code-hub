@@ -1,11 +1,9 @@
 "use client";
 
 import { Loader2, Settings } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { editKey } from "@/actions/keys";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { keysClient } from "@/lib/api-client/v1/keys/index";
 import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
 
 interface KeyQuota {
@@ -59,7 +58,6 @@ export function EditKeyQuotaDialog({
   dailyResetTime = "00:00",
   dailyResetMode = "fixed",
 }: EditKeyQuotaDialogProps) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const t = useTranslations("quota.keys.editDialog");
@@ -93,7 +91,7 @@ export function EditKeyQuotaDialog({
     startTransition(async () => {
       try {
         // 将空字符串转换为 null，数字字符串转换为数字
-        const result = await editKey(keyId, {
+        await keysClient.update(keyId, {
           name: keyName, // 保持名称不变
           limit5hUsd: limit5h ? parseFloat(limit5h) : null,
           limit5hResetMode: resetMode5h,
@@ -104,17 +102,12 @@ export function EditKeyQuotaDialog({
           limitMonthlyUsd: limitMonthly ? parseFloat(limitMonthly) : null,
           limitTotalUsd: limitTotal ? parseFloat(limitTotal) : null,
           limitConcurrentSessions: limitConcurrent ? parseInt(limitConcurrent, 10) : 0,
-        });
-
-        if (result.ok) {
-          toast.success(t("success"));
-          setOpen(false);
-          router.refresh();
-        } else {
-          toast.error(result.error || t("error"));
-        }
+        } as Record<string, unknown>);
+        toast.success(t("success"));
+        setOpen(false);
       } catch (error) {
-        toast.error(t("retryError"));
+        const message = error instanceof Error ? error.message : t("error");
+        toast.error(message || t("error"));
         console.error(error);
       }
     });
@@ -123,7 +116,7 @@ export function EditKeyQuotaDialog({
   const handleClearQuota = () => {
     startTransition(async () => {
       try {
-        const result = await editKey(keyId, {
+        await keysClient.update(keyId, {
           name: keyName,
           limit5hUsd: null,
           limit5hResetMode: resetMode5h,
@@ -134,17 +127,12 @@ export function EditKeyQuotaDialog({
           limitMonthlyUsd: null,
           limitTotalUsd: null,
           limitConcurrentSessions: 0,
-        });
-
-        if (result.ok) {
-          toast.success(t("clearSuccess"));
-          setOpen(false);
-          router.refresh();
-        } else {
-          toast.error(result.error || t("clearError"));
-        }
+        } as Record<string, unknown>);
+        toast.success(t("clearSuccess"));
+        setOpen(false);
       } catch (error) {
-        toast.error(t("retryError"));
+        const message = error instanceof Error ? error.message : t("clearError");
+        toast.error(message || t("clearError"));
         console.error(error);
       }
     });

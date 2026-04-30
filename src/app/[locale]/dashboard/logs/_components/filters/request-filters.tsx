@@ -3,7 +3,6 @@
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getUsageLogSessionIdSuggestions } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -23,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usageLogsClient } from "@/lib/api-client/v1/usage-logs/index";
 import { SESSION_ID_SUGGESTION_MIN_LEN } from "@/lib/constants/usage-logs.constants";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { ProviderDisplay } from "@/types/provider";
@@ -93,8 +93,8 @@ export function RequestFilters({
       lastLoadedSessionIdSuggestionsKeyRef.current = requestKey;
 
       try {
-        const result = await getUsageLogSessionIdSuggestions({
-          term,
+        const result = await usageLogsClient.sessionIdSuggestions({
+          q: term,
           userId: isAdmin ? filters.userId : undefined,
           keyId: filters.keyId,
           providerId: filters.providerId,
@@ -102,10 +102,10 @@ export function RequestFilters({
 
         if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
 
-        if (result.ok) {
-          setAvailableSessionIds(result.data);
+        const items = (result as unknown as { items?: string[] }).items;
+        if (Array.isArray(items)) {
+          setAvailableSessionIds(items);
         } else {
-          console.error("Failed to load sessionId suggestions:", result.error);
           setAvailableSessionIds([]);
         }
       } catch (error) {

@@ -2,10 +2,7 @@
 
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { getKeys } from "@/actions/keys";
-import { searchUsersForFilter } from "@/actions/users";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -24,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUserKeysList } from "@/lib/api-client/v1/keys/hooks";
+import { useUsersList } from "@/lib/api-client/v1/users/hooks";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { Key } from "@/types/key";
 import type { UsageLogFilters } from "./types";
@@ -43,80 +42,34 @@ export function IdentityFilters({
   filters,
   onFiltersChange,
   initialKeys,
-  isKeysLoading = false,
+  isKeysLoading: _isKeysLoading = false,
   onKeysChange,
   onUsersChange,
 }: IdentityFiltersProps) {
   const t = useTranslations("dashboard");
 
-  const [isUsersLoading, setIsUsersLoading] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const debouncedUserSearchTerm = useDebounce(userSearchTerm, 300);
-  const [availableUsers, setAvailableUsers] = useState<Array<{ id: number; name: string }>>([]);
-  const userSearchRequestIdRef = useRef(0);
-  const lastLoadedUserSearchTermRef = useRef<string | undefined>(undefined);
-  const isMountedRef = useRef(true);
-
-  const [keys, setKeys] = useState<Key[]>(initialKeys);
   const [userPopoverOpen, setUserPopoverOpen] = useState(false);
 
-  const userMap = useMemo(
-    () => new Map(availableUsers.map((user) => [user.id, user.name])),
-    [availableUsers]
+  // Use v1 users list with search term filtering server-side.
+  const { data: usersResponse, isLoading: isUsersLoading } = useUsersList(
+    isAdmin
+      ? debouncedUserSearchTerm.trim()
+        ? { searchTerm: debouncedUserSearchTerm.trim() }
+        : undefined
+      : { limit: 0 }
+  );
+  const availableUsers = useMemo(
+    () => usersResponse?.items?.map((u) => ({ id: u.id, name: u.name })) ?? [],
+    [usersResponse]
   );
 
   useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+    if (isAdmin) onUsersChange?.(availableUsers);
+  }, [availableUsers, isAdmin, onUsersChange]);
 
-  const loadUsersForFilter = useCallback(
-    async (term?: string) => {
-      const requestId = ++userSearchRequestIdRef.current;
-      setIsUsersLoading(true);
-      lastLoadedUserSearchTermRef.current = term;
-
-      try {
-        const result = await searchUsersForFilter(term);
-        if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
-
-        if (result.ok) {
-          setAvailableUsers(result.data);
-          onUsersChange?.(result.data);
-        } else {
-          console.error("Failed to load users for filter:", result.error);
-          setAvailableUsers([]);
-        }
-      } catch (error) {
-        if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
-
-        console.error("Failed to load users for filter:", error);
-        setAvailableUsers([]);
-      } finally {
-        if (isMountedRef.current && requestId === userSearchRequestIdRef.current) {
-          setIsUsersLoading(false);
-        }
-      }
-    },
-    [onUsersChange]
-  );
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    void loadUsersForFilter(undefined);
-  }, [isAdmin, loadUsersForFilter]);
-
-  useEffect(() => {
-    if (!isAdmin || !userPopoverOpen) return;
-
-    const term = debouncedUserSearchTerm.trim() || undefined;
-    if (term === lastLoadedUserSearchTermRef.current) return;
-
-    void loadUsersForFilter(term);
-  }, [isAdmin, userPopoverOpen, debouncedUserSearchTerm, loadUsersForFilter]);
-
+  // Reset search term when popover closes.
   useEffect(() => {
     if (!isAdmin) return;
     if (!userPopoverOpen) {
@@ -124,49 +77,28 @@ export function IdentityFilters({
     }
   }, [isAdmin, userPopoverOpen]);
 
-  useEffect(() => {
-    if (initialKeys.length > 0) {
-      setKeys(initialKeys);
-    }
-  }, [initialKeys]);
+  const userMap = useMemo(
+    () => new Map(availableUsers.map((user) => [user.id, user.name])),
+    [availableUsers]
+  );
 
-  // Load initial keys if userId is set
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run only on mount
-  useEffect(() => {
-    const loadInitialKeys = async () => {
-      if (isAdmin && filters.userId && initialKeys.length === 0) {
-        try {
-          const keysResult = await getKeys(filters.userId);
-          if (keysResult.ok && keysResult.data) {
-            setKeys(keysResult.data);
-            onKeysChange?.(keysResult.data);
-          }
-        } catch (error) {
-          console.error("Failed to load initial keys:", error);
-        }
-      }
-    };
-    loadInitialKeys();
-  }, []);
+  // Keys list — only fetched when a userId is selected.
+  const { data: keysResponse, isLoading: isKeysLoading } = useUserKeysList(filters.userId ?? 0);
+  const keys = useMemo<Key[]>(
+    () => (filters.userId ? ((keysResponse?.items ?? []) as unknown as Key[]) : initialKeys),
+    [keysResponse, filters.userId, initialKeys]
+  );
 
-  const handleUserChange = async (userId: string) => {
+  useEffect(() => {
+    if (filters.userId) onKeysChange?.(keys);
+  }, [keys, filters.userId, onKeysChange]);
+
+  const handleUserChange = (userId: string) => {
     const newUserId = userId ? parseInt(userId, 10) : undefined;
     const newFilters = { ...filters, userId: newUserId, keyId: undefined };
     onFiltersChange(newFilters);
 
-    if (newUserId) {
-      try {
-        const keysResult = await getKeys(newUserId);
-        if (keysResult.ok && keysResult.data) {
-          setKeys(keysResult.data);
-          onKeysChange?.(keysResult.data);
-        }
-      } catch (error) {
-        console.error("Failed to load keys:", error);
-        toast.error(t("logs.error.loadKeysFailed"));
-      }
-    } else {
-      setKeys([]);
+    if (!newUserId) {
       onKeysChange?.([]);
     }
   };
@@ -223,7 +155,7 @@ export function IdentityFilters({
                     <CommandItem
                       value={t("logs.filters.allUsers")}
                       onSelect={() => {
-                        void handleUserChange("");
+                        handleUserChange("");
                         setUserPopoverOpen(false);
                       }}
                       className="cursor-pointer"
@@ -236,7 +168,7 @@ export function IdentityFilters({
                         key={user.id}
                         value={user.name}
                         onSelect={() => {
-                          void handleUserChange(user.id.toString());
+                          handleUserChange(user.id.toString());
                           setUserPopoverOpen(false);
                         }}
                         className="cursor-pointer"

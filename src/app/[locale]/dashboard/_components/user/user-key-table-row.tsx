@@ -14,8 +14,6 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { removeKey } from "@/actions/keys";
-import { editUser, toggleUserEnabled } from "@/actions/users";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +21,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRouter } from "@/i18n/routing";
+import { keysClient } from "@/lib/api-client/v1/keys/index";
+import { usersClient } from "@/lib/api-client/v1/users/index";
 import { clearUsageCache } from "@/lib/dashboard/user-limit-usage-cache";
 import { cn } from "@/lib/utils";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
@@ -227,19 +227,15 @@ export function UserKeyTableRow({
       // 整数字段：rpm / sessions
       const isInt = field === "rpm" || field === "limitConcurrentSessions";
       const value = isInt ? (newLimit == null ? 0 : Math.round(newLimit)) : newLimit;
-      const res = await editUser(user.id, { [field]: value } as Parameters<typeof editUser>[1]);
-      if (!res.ok) {
-        toast.error(res.error || tQuickEdit("saveFailed"));
-        return false;
-      }
+      await usersClient.update(user.id, { [field]: value } as Record<string, unknown>);
       toast.success(tQuickEdit("saveSuccess"));
       clearUsageCache(user.id);
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      router.refresh();
       return true;
     } catch (err) {
       console.error("[UserKeyTableRow] save user limit failed", err);
-      toast.error(tQuickEdit("saveFailed"));
+      const message = err instanceof Error ? err.message : tQuickEdit("saveFailed");
+      toast.error(message || tQuickEdit("saveFailed"));
       return false;
     }
   };
@@ -248,15 +244,15 @@ export function UserKeyTableRow({
 
   const handleDeleteKey = (keyId: number) => {
     startTransition(async () => {
-      const res = await removeKey(keyId);
-      if (!res.ok) {
-        toast.error(res.error || tUserStatus("deleteFailed"));
-        return;
+      try {
+        await keysClient.remove(keyId);
+        toast.success(tUserStatus("deleteSuccess"));
+        // 使 React Query 缓存失效，确保数据刷新
+        queryClient.invalidateQueries({ queryKey: ["users"] });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : tUserStatus("deleteFailed");
+        toast.error(message || tUserStatus("deleteFailed"));
       }
-      toast.success(tUserStatus("deleteSuccess"));
-      // 使 React Query 缓存失效，确保数据刷新
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      router.refresh();
     });
   };
 
@@ -266,24 +262,16 @@ export function UserKeyTableRow({
     setIsTogglingEnabled(true);
 
     try {
-      const res = await toggleUserEnabled(user.id, checked);
-      if (!res.ok) {
-        // 失败时回滚UI状态
-        setLocalIsEnabled(!checked);
-        toast.error(res.error || tUserStatus("operationFailed"));
-        setIsTogglingEnabled(false);
-        return;
-      }
+      await usersClient.enable(user.id, { enabled: checked });
       toast.success(checked ? tUserStatus("userEnabled") : tUserStatus("userDisabled"));
       // 使 React Query 缓存失效，确保数据刷新
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      // 刷新服务端数据
-      router.refresh();
     } catch (error) {
       // 失败时回滚UI状态
       setLocalIsEnabled(!checked);
       console.error("[UserKeyTableRow] toggle user enabled failed", error);
-      toast.error(tUserStatus("operationFailed"));
+      const message = error instanceof Error ? error.message : tUserStatus("operationFailed");
+      toast.error(message || tUserStatus("operationFailed"));
     } finally {
       setIsTogglingEnabled(false);
     }
@@ -732,7 +720,6 @@ export function UserKeyTableRow({
               onSuccess={() => {
                 setEditingKeyId(null);
                 queryClient.invalidateQueries({ queryKey: ["users"] });
-                router.refresh();
               }}
             />
           );

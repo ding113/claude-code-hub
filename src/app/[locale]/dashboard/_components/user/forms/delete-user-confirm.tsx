@@ -1,8 +1,4 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { useTransition } from "react";
-import { toast } from "sonner";
-import { removeUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
   DialogClose,
@@ -11,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useDeleteUser } from "@/lib/api-client/v1/users/hooks";
 
 interface DeleteUserConfirmProps {
   user?: {
@@ -24,25 +21,16 @@ export function DeleteUserConfirm({
   user,
   onSuccess,
 }: DeleteUserConfirmProps & { onSuccess?: () => void }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { mutateAsync, isPending } = useDeleteUser(user?.id ?? 0);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!user) return;
-    startTransition(async () => {
-      try {
-        const res = await removeUser(user.id);
-        if (!res.ok) {
-          toast.error(res.error || "删除失败");
-          return;
-        }
-        onSuccess?.();
-        router.refresh();
-      } catch (error) {
-        console.error("删除用户失败:", error);
-        toast.error("删除失败，请稍后重试");
-      }
-    });
+    try {
+      await mutateAsync();
+      onSuccess?.();
+    } catch {
+      // useApiMutation already surfaces toast errors via localizeError
+    }
   };
 
   return (

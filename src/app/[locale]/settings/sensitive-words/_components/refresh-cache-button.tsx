@@ -2,10 +2,9 @@
 
 import { RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
 import { toast } from "sonner";
-import { refreshCacheAction } from "@/actions/sensitive-words";
 import { Button } from "@/components/ui/button";
+import { useRefreshSensitiveWordsCache } from "@/lib/api-client/v1/sensitive-words/hooks";
 
 interface RefreshCacheButtonProps {
   stats: {
@@ -19,24 +18,16 @@ interface RefreshCacheButtonProps {
 
 export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
   const t = useTranslations("settings");
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { mutateAsync, isPending } = useRefreshSensitiveWordsCache();
 
   const handleRefresh = async () => {
-    setIsRefreshing(true);
-
     try {
-      const result = await refreshCacheAction();
-
-      if (result.ok) {
-        const count = result.data.stats.totalCount;
-        toast.success(t("sensitiveWords.refreshCacheSuccess", { count }));
-      } else {
-        toast.error(result.error);
-      }
+      const result = await mutateAsync();
+      const totalCount =
+        (result as { stats?: { totalCount?: number } } | null | undefined)?.stats?.totalCount ?? 0;
+      toast.success(t("sensitiveWords.refreshCacheSuccess", { count: totalCount }));
     } catch {
-      toast.error(t("sensitiveWords.refreshCacheFailed"));
-    } finally {
-      setIsRefreshing(false);
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 
@@ -44,7 +35,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
     <Button
       variant="outline"
       onClick={handleRefresh}
-      disabled={isRefreshing}
+      disabled={isPending}
       className="bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
       title={
         stats
@@ -56,7 +47,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
           : t("sensitiveWords.refreshCache")
       }
     >
-      <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+      <RefreshCw className={`mr-2 h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
       {t("sensitiveWords.refreshCache")}
       {stats && <span className="ml-2 text-xs text-muted-foreground">({stats.totalCount})</span>}
     </Button>

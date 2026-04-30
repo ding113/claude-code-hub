@@ -23,7 +23,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { saveSystemSettings } from "@/actions/system-config";
 import { GroupMultiSelect } from "@/app/[locale]/settings/request-filters/_components/group-multi-select";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -40,6 +39,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ApiError } from "@/lib/api-client/v1/client";
+import { systemClient } from "@/lib/api-client/v1/system/index";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
@@ -54,6 +55,7 @@ import type {
   BillingModelSource,
   CodexPriorityBillingSource,
   FakeStreamingWhitelistEntry,
+  ResponseFixerConfig,
   SystemSettings,
 } from "@/types/system-config";
 
@@ -292,41 +294,82 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     })();
 
     startTransition(async () => {
-      const result = await saveSystemSettings({
-        siteTitle,
-        allowGlobalUsageView,
-        currencyDisplay,
-        billingModelSource,
-        codexPriorityBillingSource,
-        timezone,
-        verboseProviderError,
-        passThroughUpstreamErrorMessage,
-        enableHttp2,
-        enableOpenaiResponsesWebsocket,
-        enableHighConcurrencyMode,
-        interceptAnthropicWarmupRequests,
-        enableThinkingSignatureRectifier,
-        enableBillingHeaderRectifier,
-        enableResponseInputRectifier,
-        allowNonConversationEndpointProviderFallback,
-        fakeStreamingWhitelist: sanitizedFakeStreamingWhitelist,
-        enableThinkingBudgetRectifier,
-        enableCodexSessionIdCompletion,
-        enableClaudeMetadataUserIdInjection,
-        enableResponseFixer,
-        responseFixerConfig,
-        quotaDbRefreshIntervalSeconds: quotaDbRefreshIntervalSecondsToSave,
-        quotaLeasePercent5h,
-        quotaLeasePercentDaily,
-        quotaLeasePercentWeekly,
-        quotaLeasePercentMonthly,
-        quotaLeaseCapUsd: quotaLeaseCapUsd.trim() === "" ? null : parseFloat(quotaLeaseCapUsd),
-        ipGeoLookupEnabled,
-        ipExtractionConfig: ipExtractionConfigToSave,
-      });
-
-      if (!result.ok) {
-        toast.error(result.error || t("saveFailed"));
+      type LegacySystemSettings = {
+        siteTitle: string;
+        allowGlobalUsageView: boolean;
+        currencyDisplay: typeof currencyDisplay;
+        billingModelSource: typeof billingModelSource;
+        codexPriorityBillingSource: typeof codexPriorityBillingSource;
+        timezone: string;
+        verboseProviderError: boolean;
+        passThroughUpstreamErrorMessage: boolean;
+        enableHttp2: boolean;
+        enableOpenaiResponsesWebsocket: boolean;
+        enableHighConcurrencyMode: boolean;
+        interceptAnthropicWarmupRequests: boolean;
+        enableThinkingSignatureRectifier: boolean;
+        enableBillingHeaderRectifier: boolean;
+        enableResponseInputRectifier: boolean;
+        allowNonConversationEndpointProviderFallback: boolean;
+        fakeStreamingWhitelist?: Array<{ model: string; groupTags: string[] }> | null;
+        enableThinkingBudgetRectifier: boolean;
+        enableCodexSessionIdCompletion: boolean;
+        enableClaudeMetadataUserIdInjection: boolean;
+        enableResponseFixer: boolean;
+        responseFixerConfig: ResponseFixerConfig;
+        quotaDbRefreshIntervalSeconds?: number | null;
+        quotaLeasePercent5h?: number | null;
+        quotaLeasePercentDaily?: number | null;
+        quotaLeasePercentWeekly?: number | null;
+        quotaLeasePercentMonthly?: number | null;
+        quotaLeaseCapUsd?: number | string | null;
+        ipGeoLookupEnabled?: boolean | null;
+        ipExtractionConfig?: IpExtractionConfig | null;
+        publicStatusProjectionWarningCode?: string | null;
+      };
+      let result: { data: LegacySystemSettings | null };
+      try {
+        const data = (await systemClient.updateSettings({
+          siteTitle,
+          allowGlobalUsageView,
+          currencyDisplay,
+          billingModelSource,
+          codexPriorityBillingSource,
+          timezone,
+          verboseProviderError,
+          passThroughUpstreamErrorMessage,
+          enableHttp2,
+          enableOpenaiResponsesWebsocket,
+          enableHighConcurrencyMode,
+          interceptAnthropicWarmupRequests,
+          enableThinkingSignatureRectifier,
+          enableBillingHeaderRectifier,
+          enableResponseInputRectifier,
+          allowNonConversationEndpointProviderFallback,
+          fakeStreamingWhitelist: sanitizedFakeStreamingWhitelist,
+          enableThinkingBudgetRectifier,
+          enableCodexSessionIdCompletion,
+          enableClaudeMetadataUserIdInjection,
+          enableResponseFixer,
+          responseFixerConfig,
+          quotaDbRefreshIntervalSeconds: quotaDbRefreshIntervalSecondsToSave,
+          quotaLeasePercent5h,
+          quotaLeasePercentDaily,
+          quotaLeasePercentWeekly,
+          quotaLeasePercentMonthly,
+          quotaLeaseCapUsd: quotaLeaseCapUsd.trim() === "" ? null : parseFloat(quotaLeaseCapUsd),
+          ipGeoLookupEnabled,
+          ipExtractionConfig: ipExtractionConfigToSave,
+        })) as unknown as LegacySystemSettings;
+        result = { data };
+      } catch (err) {
+        const message =
+          err instanceof ApiError
+            ? err.title
+            : err instanceof Error
+              ? err.message
+              : t("saveFailed");
+        toast.error(message || t("saveFailed"));
         return;
       }
 

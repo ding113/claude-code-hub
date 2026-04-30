@@ -1,11 +1,9 @@
 "use client";
 
 import { Loader2, Settings } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { editUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usersClient } from "@/lib/api-client/v1/users/index";
 import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
 
 interface UserQuota {
@@ -40,7 +39,6 @@ export function EditUserQuotaDialog({
   currencyCode = "USD",
   trigger,
 }: EditUserQuotaDialogProps) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const t = useTranslations("quota.keys.editUserDialog");
@@ -58,20 +56,15 @@ export function EditUserQuotaDialog({
 
     startTransition(async () => {
       try {
-        const result = await editUser(userId, {
+        await usersClient.update(userId, {
           rpm: rpmLimit ? parseInt(rpmLimit, 10) : 60,
           dailyQuota: dailyQuota ? parseFloat(dailyQuota) : 100,
-        });
-
-        if (result.ok) {
-          toast.success(t("success"));
-          setOpen(false);
-          router.refresh();
-        } else {
-          toast.error(result.error || t("error"));
-        }
+        } as Record<string, unknown>);
+        toast.success(t("success"));
+        setOpen(false);
       } catch (error) {
-        toast.error(t("retryError"));
+        const message = error instanceof Error ? error.message : t("error");
+        toast.error(message || t("error"));
         console.error(error);
       }
     });

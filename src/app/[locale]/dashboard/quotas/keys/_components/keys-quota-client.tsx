@@ -1,11 +1,9 @@
 "use client";
 
 import { Settings } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { type PatchKeyLimitField, patchKeyLimit } from "@/actions/keys";
 import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { QuotaProgress } from "@/components/quota/quota-progress";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
@@ -23,12 +21,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { keysClient } from "@/lib/api-client/v1/keys/index";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { getUsageRate, hasKeyQuotaSet, isUserExceeded } from "@/lib/utils/quota-helpers";
 import { EditKeyQuotaDialog } from "./edit-key-quota-dialog";
 
-type KeyLimitField = PatchKeyLimitField;
+type KeyLimitField =
+  | "limit5hUsd"
+  | "limitDailyUsd"
+  | "limitWeeklyUsd"
+  | "limitMonthlyUsd"
+  | "limitTotalUsd"
+  | "limitConcurrentSessions";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null; resetAt?: Date };
@@ -71,7 +76,6 @@ interface KeysQuotaClientProps {
 export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClientProps) {
   const t = useTranslations("quota.keys");
   const tEdit = useTranslations("quota.quickEdit");
-  const router = useRouter();
   // 默认展开所有用户组
   const [openUsers, setOpenUsers] = useState<Set<number>>(new Set(users.map((user) => user.id)));
 
@@ -101,21 +105,17 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
               ? 0
               : Math.round(newLimit)
             : newLimit;
-        const res = await patchKeyLimit(keyId, field, value);
-        if (!res.ok) {
-          toast.error(res.error || tEdit("saveFailed"));
-          return false;
-        }
+        await keysClient.update(keyId, { [field]: value } as Record<string, unknown>);
         toast.success(tEdit("saveSuccess"));
-        router.refresh();
         return true;
       } catch (err) {
         console.error("[KeysQuotaClient] save failed", err);
-        toast.error(tEdit("saveFailed"));
+        const message = err instanceof Error ? err.message : tEdit("saveFailed");
+        toast.error(message || tEdit("saveFailed"));
         return false;
       }
     },
-    [router, tEdit]
+    [tEdit]
   );
 
   if (users.length === 0) {

@@ -3,7 +3,6 @@
 import { ArrowUpDown } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
-import { searchUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -14,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useUsersList } from "@/lib/api-client/v1/users/hooks";
 
 export interface RateLimitTopUsersProps {
   data: Record<number, number>;
@@ -30,40 +30,14 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
   const t = useTranslations("dashboard.rateLimits.topUsers");
   const tRateLimits = useTranslations("dashboard.rateLimits");
   const locale = useLocale();
-  const [users, setUsers] = React.useState<Array<{ id: number; name: string }>>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState(false);
   const [sortField, setSortField] = React.useState<SortField>("count");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
 
-  // 加载用户详情
-  React.useEffect(() => {
-    let cancelled = false;
-
-    void searchUsers(undefined, 5000)
-      .then((result) => {
-        if (!cancelled) {
-          setUsers(result.ok ? result.data : []);
-          setLoadError(!result.ok);
-        }
-      })
-      .catch((error) => {
-        console.error("RateLimitTopUsers: failed to load users", error);
-        if (!cancelled) {
-          setUsers([]);
-          setLoadError(true);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data: usersResponse, isLoading, isError } = useUsersList({ limit: 5000 });
+  const users = React.useMemo(
+    () => usersResponse?.items?.map((u) => ({ id: u.id, name: u.name })) ?? [],
+    [usersResponse]
+  );
 
   // 组合数据：用户信息 + 事件计数
   const tableData = React.useMemo(() => {
@@ -109,17 +83,17 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {loading ? (
+        {isLoading ? (
           <div className="flex h-[280px] items-center justify-center text-muted-foreground">
             {t("loading")}
           </div>
         ) : tableData.length === 0 ? (
           <div className="flex h-[280px] items-center justify-center text-muted-foreground">
-            {loadError ? tRateLimits("error") : t("noData")}
+            {isError ? tRateLimits("error") : t("noData")}
           </div>
         ) : (
           <div className="relative max-h-[280px] overflow-auto">
-            {loadError ? (
+            {isError ? (
               <div className="mb-2 text-xs text-destructive">{tRateLimits("error")}</div>
             ) : null}
             <Table>

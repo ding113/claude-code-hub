@@ -2,8 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
-import type { ActionResult } from "@/actions/types";
 import type { IpGeoLookupResponse } from "@/types/ip-geo";
+
+// Local mirror of ActionResult. Kept in-file to avoid a client import from
+// the server-only `@/actions/*` tree (Wave 4 frontend migration).
+type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export type IpGeoLookupMode = "default" | "my-usage";
 

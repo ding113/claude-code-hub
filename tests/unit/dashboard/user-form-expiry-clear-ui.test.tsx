@@ -36,6 +36,29 @@ const providersActionMocks = vi.hoisted(() => ({
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);
 
+// v1 hooks used by the migrated UserForm; the legacy `editUser` action mock above
+// stays for assertion compatibility — `useUpdateUser` forwards into it.
+const v1UsersHookMocks = vi.hoisted(() => ({
+  useCreateUser: () => ({
+    mutateAsync: vi.fn(async () => ({ user: { id: 1 } })),
+    isPending: false,
+  }),
+  useUpdateUser: (id: number) => ({
+    mutateAsync: vi.fn(async (patch: Record<string, unknown>) => {
+      await usersActionMocks.editUser(id, patch);
+      return { ok: true };
+    }),
+    isPending: false,
+  }),
+  useUserKeyGroups: () => ({ data: { items: [] } }),
+}));
+vi.mock("@/lib/api-client/v1/users/hooks", () => v1UsersHookMocks);
+
+const v1ProvidersHookMocks = vi.hoisted(() => ({
+  useModelSuggestionsByProviderGroup: () => ({ data: { items: [] } }),
+}));
+vi.mock("@/lib/api-client/v1/providers/hooks", () => v1ProvidersHookMocks);
+
 function loadMessages() {
   const base = path.join(process.cwd(), "messages/en");
   const read = (name: string) => JSON.parse(fs.readFileSync(path.join(base, name), "utf8"));

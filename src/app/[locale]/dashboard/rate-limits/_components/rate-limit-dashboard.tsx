@@ -3,9 +3,17 @@
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import { getRateLimitStats } from "@/actions/rate-limit-stats";
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
 import type { CurrencyCode } from "@/lib/utils";
 import type { RateLimitEventFilters, RateLimitEventStats } from "@/types/statistics";
+
+// TODO: replace once /api/v1/dashboard/rate-limit-stats is wired through the typed v1 client.
+function callGetRateLimitStats(
+  filters: RateLimitEventFilters
+): Promise<LegacyActionResult<RateLimitEventStats>> {
+  return callLegacyAction("rate-limit-stats", "getRateLimitStats", filters);
+}
+
 import { RateLimitEventsChart } from "../../_components/rate-limit-events-chart";
 import { RateLimitTopUsers } from "../../_components/rate-limit-top-users";
 import { RateLimitTypeBreakdown } from "../../_components/rate-limit-type-breakdown";
@@ -35,11 +43,11 @@ export function RateLimitDashboard(_props: RateLimitDashboardProps) {
     setError(null);
 
     try {
-      const result = await getRateLimitStats(newFilters);
+      const result = await callGetRateLimitStats(newFilters);
 
-      if (result.ok) {
+      if (result.ok && result.data) {
         setStats(result.data);
-      } else {
+      } else if (!result.ok) {
         setError(result.error || "Failed to load statistics");
       }
     } catch (err) {

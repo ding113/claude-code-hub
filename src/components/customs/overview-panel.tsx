@@ -3,10 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Clock, DollarSign, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { OverviewData } from "@/actions/overview";
-import { getOverviewData } from "@/actions/overview";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "@/i18n/routing";
+import { dashboardClient } from "@/lib/api-client/v1/dashboard";
+import { dashboardKeys } from "@/lib/api-client/v1/dashboard/keys";
 import type { CurrencyCode } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { ActiveSessionsList } from "./active-sessions-list";
@@ -14,12 +14,11 @@ import { MetricCard } from "./metric-card";
 
 const REFRESH_INTERVAL = 5000; // 5秒刷新一次
 
-async function fetchOverviewData(): Promise<OverviewData> {
-  const result = await getOverviewData();
-  if (!result.ok) {
-    throw new Error(result.error || "获取概览数据失败");
-  }
-  return result.data;
+interface OverviewMetrics {
+  concurrentSessions: number;
+  todayRequests: number;
+  todayCost: number;
+  avgResponseTime: number;
 }
 
 interface OverviewPanelProps {
@@ -37,9 +36,9 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
   const tc = useTranslations("customs");
   const tu = useTranslations("ui");
 
-  const { data, isLoading } = useQuery<OverviewData, Error>({
-    queryKey: ["overview-data"],
-    queryFn: fetchOverviewData,
+  const { data, isLoading } = useQuery({
+    queryKey: dashboardKeys.overview(),
+    queryFn: () => dashboardClient.overview() as Promise<Record<string, unknown>>,
     refetchInterval: REFRESH_INTERVAL,
     enabled: isAdmin, // 仅当用户是 admin 时才获取数据
   });
@@ -50,11 +49,11 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
     return `${(Number(ms) / 1000).toFixed(1)}s`;
   };
 
-  const metrics = data || {
-    concurrentSessions: 0,
-    todayRequests: 0,
-    todayCost: 0,
-    avgResponseTime: 0,
+  const metrics: OverviewMetrics = {
+    concurrentSessions: typeof data?.concurrentSessions === "number" ? data.concurrentSessions : 0,
+    todayRequests: typeof data?.todayRequests === "number" ? data.todayRequests : 0,
+    todayCost: typeof data?.todayCost === "number" ? data.todayCost : 0,
+    avgResponseTime: typeof data?.avgResponseTime === "number" ? data.avgResponseTime : 0,
   };
 
   // 对于非 admin 用户，不显示概览面板

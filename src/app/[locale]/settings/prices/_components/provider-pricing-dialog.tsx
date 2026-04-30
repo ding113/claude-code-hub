@@ -4,7 +4,6 @@ import { ArrowRightLeft, Loader2, Pin } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { pinModelPricingProviderAsManual } from "@/actions/model-prices";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { usePinModelPricingProvider } from "@/lib/api-client/v1/model-prices/hooks";
 import type { ModelPrice } from "@/types/model-price";
 
 interface ProviderPricingDialogProps {
@@ -43,6 +43,7 @@ export function ProviderPricingDialog({ price, trigger, onSuccess }: ProviderPri
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
   const [pinningKey, setPinningKey] = useState<string | null>(null);
+  const pinMutation = usePinModelPricingProvider(price.modelName);
 
   const pricingEntries = useMemo(() => {
     const pricing = price.priceData.pricing;
@@ -60,22 +61,15 @@ export function ProviderPricingDialog({ price, trigger, onSuccess }: ProviderPri
   const handlePin = async (pricingProviderKey: string) => {
     setPinningKey(pricingProviderKey);
     try {
-      const result = await pinModelPricingProviderAsManual({
-        modelName: price.modelName,
-        pricingProviderKey,
-      });
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-
+      await pinMutation.mutateAsync({ providerType: pricingProviderKey });
       toast.success(t("providerPricing.pinSuccess", { provider: pricingProviderKey }));
       setOpen(false);
       onSuccess?.();
       window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
       console.error("pin provider pricing failed", error);
-      toast.error(t("providerPricing.pinFailed"));
+      const message = error instanceof Error ? error.message : t("providerPricing.pinFailed");
+      toast.error(message || t("providerPricing.pinFailed"));
     } finally {
       setPinningKey(null);
     }

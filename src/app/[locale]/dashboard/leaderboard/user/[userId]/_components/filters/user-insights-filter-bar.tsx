@@ -1,10 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { Filter, Key, Server } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getKeys } from "@/actions/keys";
-import { getProviders } from "@/actions/providers";
 import { useLazyModels } from "@/app/[locale]/dashboard/logs/_hooks/use-lazy-filter-options";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUserKeysList } from "@/lib/api-client/v1/keys/hooks";
+import { useProvidersList } from "@/lib/api-client/v1/providers/hooks";
 import type { TimeRangePreset, UserInsightsFilters } from "./types";
 
 interface UserInsightsFilterBarProps {
@@ -36,24 +35,11 @@ export function UserInsightsFilterBar({
 }: UserInsightsFilterBarProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
 
-  const { data: keysData } = useQuery({
-    queryKey: ["user-insights-keys", userId],
-    queryFn: async () => {
-      const result = await getKeys(userId);
-      if (!result.ok) return [];
-      return result.data;
-    },
-    staleTime: 60_000,
-  });
+  const { data: keysData } = useUserKeysList(userId);
+  const keys = keysData?.items ?? [];
 
-  const { data: providersData } = useQuery({
-    queryKey: ["user-insights-providers"],
-    queryFn: async () => {
-      const result = await getProviders();
-      return result;
-    },
-    staleTime: 60_000,
-  });
+  const { data: providersResponse } = useProvidersList();
+  const providersData = (providersResponse?.items ?? []) as Array<{ id: number; name: string }>;
 
   const { data: models, onOpenChange: onModelsOpenChange } = useLazyModels();
 
@@ -102,7 +88,7 @@ export function UserInsightsFilterBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("allKeys")}</SelectItem>
-            {keysData?.map((key) => (
+            {keys.map((key) => (
               <SelectItem key={key.id} value={String(key.id)}>
                 {key.name}
               </SelectItem>
@@ -126,7 +112,7 @@ export function UserInsightsFilterBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("allProviders")}</SelectItem>
-            {providersData?.map((p) => (
+            {providersData.map((p) => (
               <SelectItem key={p.id} value={String(p.id)}>
                 {p.name}
               </SelectItem>

@@ -4,7 +4,8 @@ import { AlertCircle, Shield, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { saveSystemSettings } from "@/actions/system-config";
+import { ApiError } from "@/lib/api-client/v1/client";
+import { systemClient } from "@/lib/api-client/v1/system/index";
 import { cn } from "@/lib/utils";
 import { SettingsToggleRow } from "../../_components/ui/settings-ui";
 
@@ -19,15 +20,18 @@ export function ClientVersionToggle({ enabled }: ClientVersionToggleProps) {
 
   async function handleToggle(checked: boolean) {
     startTransition(async () => {
-      const result = await saveSystemSettings({
-        enableClientVersionCheck: checked,
-      });
-
-      if (result.ok) {
+      try {
+        await systemClient.updateSettings({ enableClientVersionCheck: checked });
         setIsEnabled(checked);
         toast.success(checked ? t("toggle.enableSuccess") : t("toggle.disableSuccess"));
-      } else {
-        toast.error(result.error || t("toggle.toggleFailed"));
+      } catch (err) {
+        const message =
+          err instanceof ApiError
+            ? err.title
+            : err instanceof Error
+              ? err.message
+              : t("toggle.toggleFailed");
+        toast.error(message || t("toggle.toggleFailed"));
       }
     });
   }

@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { uploadPriceTable } from "@/actions/model-prices";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useRouter } from "@/i18n/routing";
+import { useUploadModelPrices } from "@/lib/api-client/v1/model-prices/hooks";
 import type { PriceUpdateResult } from "@/types/model-price";
 
 interface PageLoadingOverlayProps {
@@ -61,7 +61,8 @@ export function UploadPriceDialog({
   const tCommon = useTranslations("settings.common");
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
-  const [uploading, setUploading] = useState(false);
+  const uploadMutation = useUploadModelPrices();
+  const uploading = uploadMutation.isPending;
   const [result, setResult] = useState<PriceUpdateResult | null>(null);
   const [cloudModelCount, setCloudModelCount] = useState<number | null>(null);
   const [cloudModelCountStatus, setCloudModelCountStatus] = useState<
@@ -135,7 +136,6 @@ export function UploadPriceDialog({
       return;
     }
 
-    setUploading(true);
     setResult(null);
 
     try {
@@ -143,28 +143,21 @@ export function UploadPriceDialog({
       const text = await file.text();
 
       // 上传并处理
-      const response = await uploadPriceTable(text);
+      const data = await uploadMutation.mutateAsync({ jsonContent: text });
 
-      if (!response.ok) {
-        console.error("价格表上传失败:", response.error);
+      if (!data) {
         toast.error(t("dialog.updateFailed"));
         return;
       }
 
-      if (!response.data) {
-        toast.error(t("dialog.updateFailed"));
-        return;
-      }
-
-      setResult(response.data);
-      const totalUpdates = response.data.added.length + response.data.updated.length;
+      setResult(data);
+      const totalUpdates = data.added.length + data.updated.length;
       toast.success(t("dialog.updateSuccess", { count: totalUpdates }));
       window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
       console.error("更新失败:", error);
       toast.error(t("dialog.updateFailed"));
     } finally {
-      setUploading(false);
       // 清除文件输入
       event.target.value = "";
     }

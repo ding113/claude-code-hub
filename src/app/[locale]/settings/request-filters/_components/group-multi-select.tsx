@@ -2,8 +2,7 @@
 
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
-import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,6 +15,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useRequestFilterGroupOptions } from "@/lib/api-client/v1/request-filters/hooks";
 
 interface GroupMultiSelectProps {
   selectedGroupTags: string[];
@@ -30,20 +30,8 @@ export function GroupMultiSelect({
 }: GroupMultiSelectProps) {
   const t = useTranslations("settings.requestFilters.dialog");
   const [open, setOpen] = useState(false);
-  const [groupTags, setGroupTags] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadGroups() {
-      setLoading(true);
-      const result = await getDistinctProviderGroupsAction();
-      if (result.ok) {
-        setGroupTags(result.data);
-      }
-      setLoading(false);
-    }
-    loadGroups();
-  }, []);
+  const { data, isLoading } = useRequestFilterGroupOptions();
+  const groupTags = data?.items ?? [];
 
   const toggleGroup = (groupTag: string) => {
     if (selectedGroupTags.includes(groupTag)) {
@@ -78,7 +66,7 @@ export function GroupMultiSelect({
               </Badge>
             </div>
           )}
-          {loading ? (
+          {isLoading ? (
             <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
           ) : (
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -94,9 +82,9 @@ export function GroupMultiSelect({
         <Command shouldFilter={true} className="bg-transparent">
           <CommandInput placeholder={t("searchGroups")} className="border-border" />
           <CommandList className="max-h-[300px] overflow-y-auto">
-            <CommandEmpty>{loading ? t("loading") : t("noGroupsFound")}</CommandEmpty>
+            <CommandEmpty>{isLoading ? t("loading") : t("noGroupsFound")}</CommandEmpty>
 
-            {!loading && (
+            {!isLoading && (
               <>
                 <CommandGroup>
                   <div className="flex gap-2 p-2">

@@ -4,7 +4,6 @@ import { Loader2, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { deleteSingleModelPrice } from "@/actions/model-prices";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { useDeleteModelPrice } from "@/lib/api-client/v1/model-prices/hooks";
 
 interface DeleteModelDialogProps {
   modelName: string;
@@ -32,28 +32,20 @@ export function DeleteModelDialog({ modelName, trigger, onSuccess }: DeleteModel
   const tCommon = useTranslations("settings.common");
 
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const deleteMutation = useDeleteModelPrice(modelName);
+  const loading = deleteMutation.isPending;
 
   const handleDelete = async () => {
-    setLoading(true);
-
     try {
-      const result = await deleteSingleModelPrice(modelName);
-
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-
+      await deleteMutation.mutateAsync();
       toast.success(t("toast.deleteSuccess"));
       setOpen(false);
       onSuccess?.();
       window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
       console.error("删除失败:", error);
-      toast.error(t("toast.deleteFailed"));
-    } finally {
-      setLoading(false);
+      const message = error instanceof Error ? error.message : t("toast.deleteFailed");
+      toast.error(message || t("toast.deleteFailed"));
     }
   };
 

@@ -4,7 +4,6 @@ import { Loader2, Pencil, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { upsertSingleModelPrice } from "@/actions/model-prices";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUpsertModelPrice } from "@/lib/api-client/v1/model-prices/hooks";
 import type { ModelPrice } from "@/types/model-price";
 
 interface ModelPriceDialogProps {
@@ -43,7 +43,6 @@ export function ModelPriceDialog({ mode, initialData, trigger, onSuccess }: Mode
   const tCommon = useTranslations("settings.common");
 
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   // 表单状态
   const [modelName, setModelName] = useState("");
@@ -89,14 +88,16 @@ export function ModelPriceDialog({ mode, initialData, trigger, onSuccess }: Mode
     }
   }, [open, mode, initialData]);
 
+  const trimmedModelName = modelName.trim();
+  const upsertMutation = useUpsertModelPrice(trimmedModelName);
+  const loading = upsertMutation.isPending;
+
   const handleSubmit = async () => {
     // 验证
-    if (!modelName.trim()) {
+    if (!trimmedModelName) {
       toast.error(t("form.modelNameRequired"));
       return;
     }
-
-    setLoading(true);
 
     try {
       // 将每百万 token 价格转换回每 token 价格
@@ -108,8 +109,7 @@ export function ModelPriceDialog({ mode, initialData, trigger, onSuccess }: Mode
       const outputCostPerImage =
         modelMode === "image_generation" && outputPrice ? parseFloat(outputPrice) : undefined;
 
-      const result = await upsertSingleModelPrice({
-        modelName: modelName.trim(),
+      await upsertMutation.mutateAsync({
         mode: modelMode,
         litellmProvider: provider.trim() || undefined,
         inputCostPerToken,
@@ -117,20 +117,14 @@ export function ModelPriceDialog({ mode, initialData, trigger, onSuccess }: Mode
         outputCostPerImage,
       });
 
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-
       toast.success(mode === "create" ? t("toast.createSuccess") : t("toast.updateSuccess"));
       setOpen(false);
       onSuccess?.();
       window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
       console.error("保存失败:", error);
-      toast.error(t("toast.saveFailed"));
-    } finally {
-      setLoading(false);
+      const message = error instanceof Error ? error.message : t("toast.saveFailed");
+      toast.error(message || t("toast.saveFailed"));
     }
   };
 

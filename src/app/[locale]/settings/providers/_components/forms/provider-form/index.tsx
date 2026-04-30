@@ -4,15 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { getProviderEndpoints } from "@/actions/provider-endpoints";
-import {
-  addProvider,
-  editProvider,
-  removeProvider,
-  undoProviderDelete,
-  undoProviderPatch,
-} from "@/actions/providers";
-import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +16,15 @@ import {
   AlertDialogTitle as AlertTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { callGetProviderEndpoints } from "@/lib/api-client/v1/provider-endpoints/hooks";
+import {
+  callAddProvider,
+  callEditProvider,
+  callRemoveProvider,
+  callUndoProviderDelete,
+  callUndoProviderPatch,
+} from "@/lib/api-client/v1/providers/hooks";
+import { requestFiltersClient } from "@/lib/api-client/v1/request-filters/index";
 import {
   type CustomHeadersValidationErrorCode,
   parseCustomHeadersJsonText,
@@ -115,10 +115,14 @@ function ProviderFormContent({
     queryKey: endpointPoolQueryKey ?? ["provider-endpoints", "unresolved", "provider-form"],
     queryFn: async () => {
       if (resolvedEndpointPoolVendorId == null) return [];
-      return await getProviderEndpoints({
+      const res = await callGetProviderEndpoints<
+        { vendorId: number; providerType: ProviderType },
+        ProviderEndpoint[]
+      >({
         vendorId: resolvedEndpointPoolVendorId,
         providerType: state.routing.providerType,
       });
+      return res.ok && res.data ? res.data : [];
     },
     staleTime: 30_000,
     refetchOnWindowFocus: false,
@@ -394,14 +398,17 @@ function ProviderFormContent({
         if (isEdit && provider) {
           // For edit: only include key if user provided a new one
           const editFormData = trimmedKey ? { ...baseFormData, key: trimmedKey } : baseFormData;
-          const res = await editProvider(provider.id, editFormData);
+          const res = await callEditProvider<
+            { providerId: number } & typeof editFormData,
+            { undoToken: string; operationId: string }
+          >({ providerId: provider.id, ...editFormData });
           if (!res.ok) {
             toast.error(res.error || t("errors.updateFailed"));
             return;
           }
 
-          const undoToken = res.data.undoToken;
-          const operationId = res.data.operationId;
+          const undoToken = res.data?.undoToken ?? "";
+          const operationId = res.data?.operationId ?? "";
 
           toast.success(tBatchEdit("undo.singleEditSuccess"), {
             duration: 10000,
@@ -409,7 +416,10 @@ function ProviderFormContent({
               label: tBatchEdit("undo.button"),
               onClick: async () => {
                 try {
-                  const undoResult = await undoProviderPatch({ undoToken, operationId });
+                  const undoResult = await callUndoProviderPatch<
+                    { undoToken: string; operationId: string },
+                    unknown
+                  >({ undoToken, operationId });
                   if (undoResult.ok) {
                     toast.success(tBatchEdit("undo.singleEditUndone"));
                     await doInvalidate();
@@ -431,7 +441,7 @@ function ProviderFormContent({
         } else {
           // For create: key is required
           const createFormData = { ...baseFormData, key: trimmedKey };
-          const res = await addProvider(createFormData);
+          const res = await callAddProvider<typeof createFormData, unknown>(createFormData);
           if (!res.ok) {
             toast.error(res.error || t("errors.addFailed"));
             return;
@@ -477,14 +487,16 @@ function ProviderFormContent({
     if (!provider) return;
     startTransition(async () => {
       try {
-        const res = await removeProvider(provider.id);
+        const res = await callRemoveProvider<number, { undoToken: string; operationId: string }>(
+          provider.id
+        );
         if (!res.ok) {
           toast.error(res.error || t("errors.deleteFailed"));
           return;
         }
 
-        const undoToken = res.data.undoToken;
-        const operationId = res.data.operationId;
+        const undoToken = res.data?.undoToken ?? "";
+        const operationId = res.data?.operationId ?? "";
 
         toast.success(tBatchEdit("undo.singleDeleteSuccess"), {
           duration: 10000,
@@ -492,7 +504,10 @@ function ProviderFormContent({
             label: tBatchEdit("undo.button"),
             onClick: async () => {
               try {
-                const undoResult = await undoProviderDelete({ undoToken, operationId });
+                const undoResult = await callUndoProviderDelete<
+                  { undoToken: string; operationId: string },
+                  unknown
+                >({ undoToken, operationId });
                 if (undoResult.ok) {
                   toast.success(tBatchEdit("undo.singleDeleteUndone"));
                   await doInvalidate();
@@ -816,13 +831,13 @@ export function ProviderForm({
   const [autoUrlPending, setAutoUrlPending] = useState(false);
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
 
-  // Fetch group suggestions
+  // Fetch group suggestions via /api/v1/request-filters/options/groups
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        const res = await getDistinctProviderGroupsAction();
-        if (res.ok && res.data) {
-          setGroupSuggestions(res.data);
+        const res = await requestFiltersClient.groupOptions();
+        if (Array.isArray(res?.items)) {
+          setGroupSuggestions(res.items);
         }
       } catch (e) {
         console.error("Failed to fetch group suggestions:", e);

@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getMyQuota, type MyUsageQuota } from "@/actions/my-usage";
-import { getServerTimeZone } from "@/actions/system-config";
 import { useRouter } from "@/i18n/routing";
+import { meClient } from "@/lib/api-client/v1/me";
+import { systemClient } from "@/lib/api-client/v1/system";
+import type { MyUsageQuota } from "@/types/my-usage";
 import { CollapsibleQuotaCard } from "./_components/collapsible-quota-card";
 import { ExpirationInfo } from "./_components/expiration-info";
 import { MyUsageHeader } from "./_components/my-usage-header";
@@ -21,15 +22,16 @@ export default function MyUsagePage() {
   const loadInitial = useCallback(() => {
     setIsQuotaLoading(true);
 
-    void getMyQuota()
-      .then((quotaResult) => {
-        if (quotaResult.ok) setQuota(quotaResult.data);
-      })
+    void meClient
+      .quota()
+      .then((data) => setQuota(data as unknown as MyUsageQuota))
+      .catch(() => undefined)
       .finally(() => setIsQuotaLoading(false));
 
-    void getServerTimeZone().then((tzResult) => {
-      if (tzResult.ok) setServerTimeZone(tzResult.data.timeZone);
-    });
+    void systemClient
+      .getTimezone()
+      .then((data) => setServerTimeZone(data.timeZone))
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -42,8 +44,14 @@ export default function MyUsagePage() {
     router.refresh();
   };
 
-  const keyExpiresAt = quota?.expiresAt ?? null;
-  const userExpiresAt = quota?.userExpiresAt ?? null;
+  const toDate = (value: Date | string | null | undefined): Date | null => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+  const keyExpiresAt = toDate(quota?.expiresAt ?? null);
+  const userExpiresAt = toDate(quota?.userExpiresAt ?? null);
 
   return (
     <div className="space-y-6">

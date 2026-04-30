@@ -1,11 +1,10 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, InfoIcon, Loader2, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { getProviderVendors, removeProviderVendor } from "@/actions/provider-endpoints";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,8 +20,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  useDeleteProviderVendor,
+  useProviderVendorsList,
+} from "@/lib/api-client/v1/provider-endpoints/hooks";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { ProviderDisplay, ProviderVendor } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderEndpointsSection } from "./provider-endpoints-table";
@@ -49,12 +51,19 @@ export function ProviderVendorView(props: ProviderVendorViewProps) {
     currencyCode,
   } = props;
 
-  const { data: vendors = [], isLoading: isVendorsLoading } = useQuery({
-    queryKey: ["provider-vendors"],
-    queryFn: getProviderVendors,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
+  const { data: vendorsResponse, isLoading: isVendorsLoading } = useProviderVendorsList();
+  const vendors = useMemo<ProviderVendor[]>(() => {
+    const items = vendorsResponse?.items ?? [];
+    return items.map((vendor) => ({
+      id: vendor.id,
+      websiteDomain: vendor.websiteDomain,
+      displayName: vendor.displayName,
+      websiteUrl: vendor.websiteUrl,
+      faviconUrl: vendor.faviconUrl,
+      createdAt: new Date(vendor.createdAt),
+      updatedAt: new Date(vendor.updatedAt),
+    }));
+  }, [vendorsResponse]);
 
   const vendorById = useMemo(() => {
     return new Map(vendors.map((vendor) => [vendor.id, vendor]));
@@ -224,30 +233,21 @@ function VendorCard({
 function DeleteVendorDialog({ vendor, vendorId }: { vendor?: ProviderVendor; vendorId: number }) {
   const t = useTranslations("settings.providers");
   const tCommon = useTranslations("settings.common");
-  const tErrors = useTranslations("errors");
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"confirm" | "double-confirm">("confirm");
   const queryClient = useQueryClient();
-  const [isDeleting, setIsDeleting] = useState(false);
+  const deleteMutation = useDeleteProviderVendor(vendorId);
+  const isDeleting = deleteMutation.isPending;
 
   const handleDelete = async () => {
-    setIsDeleting(true);
     try {
-      const res = await removeProviderVendor({ vendorId });
-
-      if (res.ok) {
-        toast.success(t("vendorDeleteSuccess"));
-        setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-      } else {
-        toast.error(
-          res.errorCode ? getErrorMessage(tErrors, res.errorCode) : t("vendorDeleteFailed")
-        );
-      }
-    } catch (_err) {
-      toast.error(t("vendorDeleteFailed"));
-    } finally {
-      setIsDeleting(false);
+      await deleteMutation.mutateAsync();
+      toast.success(t("vendorDeleteSuccess"));
+      setOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("vendorDeleteFailed");
+      toast.error(message || t("vendorDeleteFailed"));
     }
   };
 

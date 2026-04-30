@@ -3,8 +3,9 @@
 import { BarChart3 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { getUsageLogsStats } from "@/actions/usage-logs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError } from "@/lib/api-client/v1/client";
+import { usageLogsClient } from "@/lib/api-client/v1/usage-logs/index";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -47,15 +48,17 @@ export function UsageLogsStatsPanel({ filters, currencyCode = "USD" }: UsageLogs
     setError(null);
 
     try {
-      const result = await getUsageLogsStats(filters);
-      if (result.ok && result.data) {
-        setStats(result.data);
-      } else {
-        setError(!result.ok ? result.error : t("logs.error.loadFailed"));
-      }
+      const result = await usageLogsClient.stats(
+        filters as unknown as Parameters<typeof usageLogsClient.stats>[0]
+      );
+      setStats(result as unknown as UsageLogSummary);
     } catch (err) {
       console.error("Failed to load usage logs stats:", err);
-      setError(t("logs.error.loadFailed"));
+      if (err instanceof ApiError) {
+        setError(err.title || t("logs.error.loadFailed"));
+      } else {
+        setError(t("logs.error.loadFailed"));
+      }
     } finally {
       setIsLoading(false);
     }

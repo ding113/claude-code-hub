@@ -4,10 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { getAllSessions } from "@/actions/active-sessions";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "@/i18n/routing";
+import { sessionsClient } from "@/lib/api-client/v1/sessions";
+import { sessionsKeys } from "@/lib/api-client/v1/sessions/keys";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ActiveSessionInfo } from "@/types/session";
 import { ActiveSessionsTable } from "./active-sessions-table";
@@ -36,13 +37,22 @@ export function ActiveSessionsClient() {
   const [inactivePage, setInactivePage] = useState(1);
 
   const { data, isLoading, error, refetch } = useQuery<PaginatedSessionsData, Error>({
-    queryKey: ["all-sessions", activePage, inactivePage],
+    queryKey: sessionsKeys.list({
+      state: "all",
+      activePage,
+      inactivePage,
+      pageSize: PAGE_SIZE,
+    }),
     queryFn: async () => {
-      const result = await getAllSessions(activePage, inactivePage, PAGE_SIZE);
-      if (!result.ok) {
-        throw new Error(result.error || "FETCH_SESSIONS_FAILED");
-      }
-      return result.data;
+      // The v1 sessions list (state=all) is passthrough; the legacy paginated payload
+      // (active / inactive / totals / hasMore flags) is preserved verbatim.
+      const response = await sessionsClient.list({
+        state: "all",
+        activePage,
+        inactivePage,
+        pageSize: PAGE_SIZE,
+      });
+      return response as unknown as PaginatedSessionsData;
     },
     refetchInterval: REFRESH_INTERVAL,
   });

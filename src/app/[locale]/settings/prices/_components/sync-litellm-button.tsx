@@ -1,12 +1,11 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { checkLiteLLMSyncConflicts, syncLiteLLMPrices } from "@/actions/model-prices";
 import { Button } from "@/components/ui/button";
+import { useSyncLitellm, useSyncLitellmCheck } from "@/lib/api-client/v1/model-prices/hooks";
 import type { SyncConflict } from "@/types/model-price";
 import { SyncConflictDialog } from "./sync-conflict-dialog";
 
@@ -15,9 +14,10 @@ import { SyncConflictDialog } from "./sync-conflict-dialog";
  */
 export function SyncLiteLLMButton() {
   const t = useTranslations("settings");
-  const router = useRouter();
-  const [syncing, setSyncing] = useState(false);
-  const [checking, setChecking] = useState(false);
+  const syncMutation = useSyncLitellm();
+  const checkMutation = useSyncLitellmCheck();
+  const syncing = syncMutation.isPending;
+  const checking = checkMutation.isPending;
 
   // 冲突弹窗状态
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
@@ -27,23 +27,17 @@ export function SyncLiteLLMButton() {
    * 执行同步（可选覆盖列表）
    */
   const doSync = async (overwriteManual?: string[]) => {
-    setSyncing(true);
-
     try {
-      const response = await syncLiteLLMPrices(overwriteManual);
+      const data = await syncMutation.mutateAsync(
+        overwriteManual ? { overwriteManual } : undefined
+      );
 
-      if (!response.ok) {
-        console.error("云端价格表同步失败:", response.error);
-        toast.error(t("prices.sync.failed"));
-        return;
-      }
-
-      if (!response.data) {
+      if (!data) {
         toast.error(t("prices.sync.failedNoResult"));
         return;
       }
 
-      const { added, updated, unchanged, failed, skippedConflicts } = response.data;
+      const { added, updated, unchanged, failed, skippedConflicts } = data;
 
       // 优先显示失败信息（更明显）
       if (failed.length > 0) {
@@ -76,14 +70,10 @@ export function SyncLiteLLMButton() {
         toast.warning(t("prices.sync.noModels"));
       }
 
-      // 刷新页面数据
-      router.refresh();
       window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
       console.error("云端价格表同步失败:", error);
       toast.error(t("prices.sync.failed"));
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -91,21 +81,13 @@ export function SyncLiteLLMButton() {
    * 处理同步按钮点击 - 先检查冲突
    */
   const handleSync = async () => {
-    setChecking(true);
-
     try {
       // 先检查是否有冲突
-      const checkResult = await checkLiteLLMSyncConflicts();
+      const checkData = await checkMutation.mutateAsync();
 
-      if (!checkResult.ok) {
-        console.error("云端价格表冲突检查失败:", checkResult.error);
-        toast.error(t("prices.sync.failed"));
-        return;
-      }
-
-      if (checkResult.data?.hasConflicts && checkResult.data.conflicts.length > 0) {
+      if (checkData?.hasConflicts && checkData.conflicts.length > 0) {
         // 有冲突，显示弹窗
-        setConflicts(checkResult.data.conflicts);
+        setConflicts(checkData.conflicts);
         setConflictDialogOpen(true);
       } else {
         // 无冲突，直接同步
@@ -114,8 +96,6 @@ export function SyncLiteLLMButton() {
     } catch (error) {
       console.error("云端价格表冲突检查失败:", error);
       toast.error(t("prices.sync.failed"));
-    } finally {
-      setChecking(false);
     }
   };
 

@@ -4,7 +4,6 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { createErrorRuleAction } from "@/actions/error-rules";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCreateErrorRule } from "@/lib/api-client/v1/error-rules/hooks";
 import { cn } from "@/lib/utils";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import { OverrideSection } from "./override-section";
@@ -31,13 +31,13 @@ import { RegexTester } from "./regex-tester";
 export function AddRuleDialog() {
   const t = useTranslations("settings");
   const [open, setOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [pattern, setPattern] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [enableOverride, setEnableOverride] = useState(false);
   const [overrideResponse, setOverrideResponse] = useState("");
   const [overrideStatusCode, setOverrideStatusCode] = useState<string>("");
+  const { mutateAsync, isPending } = useCreateErrorRule();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,8 +61,8 @@ export function AddRuleDialog() {
     }
 
     // Parse and validate override response JSON (only when override is enabled)
-    let parsedOverrideResponse: ErrorOverrideResponse | undefined;
-    let parsedStatusCode: number | undefined;
+    let parsedOverrideResponse: ErrorOverrideResponse | null = null;
+    let parsedStatusCode: number | null = null;
 
     if (enableOverride) {
       if (overrideResponse.trim()) {
@@ -85,10 +85,8 @@ export function AddRuleDialog() {
       }
     }
 
-    setIsSubmitting(true);
-
     try {
-      const result = await createErrorRuleAction({
+      await mutateAsync({
         pattern: pattern.trim(),
         category: category as
           | "prompt_limit"
@@ -99,27 +97,20 @@ export function AddRuleDialog() {
           | "invalid_request"
           | "cache_limit",
         description: description.trim() || undefined,
-        overrideResponse: parsedOverrideResponse ?? null,
-        overrideStatusCode: parsedStatusCode ?? null,
+        overrideResponse: parsedOverrideResponse,
+        overrideStatusCode: parsedStatusCode,
       });
-
-      if (result.ok) {
-        toast.success(t("errorRules.addSuccess"));
-        setOpen(false);
-        // Reset form
-        setPattern("");
-        setCategory("");
-        setDescription("");
-        setEnableOverride(false);
-        setOverrideResponse("");
-        setOverrideStatusCode("");
-      } else {
-        toast.error(result.error);
-      }
+      toast.success(t("errorRules.addSuccess"));
+      setOpen(false);
+      // Reset form
+      setPattern("");
+      setCategory("");
+      setDescription("");
+      setEnableOverride(false);
+      setOverrideResponse("");
+      setOverrideStatusCode("");
     } catch {
-      toast.error(t("errorRules.addFailed"));
-    } finally {
-      setIsSubmitting(false);
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 
@@ -243,17 +234,13 @@ export function AddRuleDialog() {
               type="button"
               variant="ghost"
               onClick={() => setOpen(false)}
-              disabled={isSubmitting}
+              disabled={isPending}
               className="hover:bg-muted"
             >
               {t("common.cancel")}
             </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isSubmitting ? t("errorRules.dialog.creating") : t("common.create")}
+            <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90">
+              {isPending ? t("errorRules.dialog.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>

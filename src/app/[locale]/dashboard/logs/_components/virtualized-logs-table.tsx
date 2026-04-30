@@ -14,8 +14,22 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import type { ActionResult } from "@/actions/types";
-import { getUsageLogsBatch } from "@/actions/usage-logs";
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
+
+/**
+ * Local mirror of `@/actions/types#ActionResult`. Inlined to keep this client
+ * component free of `@/actions/*` imports while the v1 batch endpoint is in
+ * flight.
+ */
+type ActionResult<T> = LegacyActionResult<T>;
+
+// TODO: replace once /api/v1/usage-logs:batchPaged returns the legacy shape.
+function getUsageLogsBatch(
+  args: Parameters<NonNullable<VirtualizedLogsTableProps["fetchFn"]>>[0]
+): Promise<LegacyActionResult<UsageLogsBatchResult>> {
+  return callLegacyAction("usage-logs", "getUsageLogsBatch", args);
+}
+
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import { Badge } from "@/components/ui/badge";

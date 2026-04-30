@@ -20,9 +20,9 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { getSessionOriginChain } from "@/actions/session-origin-chain";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { sessionsClient } from "@/lib/api-client/v1/sessions/index";
 import { cn } from "@/lib/utils";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
@@ -313,9 +313,11 @@ export function LogicTraceTab({
                 setOriginOpen(open);
                 if (open && originChain === undefined && !originLoading) {
                   setOriginLoading(true);
-                  getSessionOriginChain(sessionId)
-                    .then((result) => {
-                      setOriginChain(result.ok ? result.data : null);
+                  sessionsClient
+                    .originChain(sessionId)
+                    .then((response) => {
+                      const chain = (response as unknown as { chain?: ProviderChainItem[] }).chain;
+                      setOriginChain(chain ?? null);
                     })
                     .catch(() => {
                       setOriginChain(null);

@@ -1,11 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import {
-  getProviderStatisticsAsync,
-  getProviders,
-  getProvidersHealthStatus,
-} from "@/actions/providers";
+import { useProvidersHealth, useProvidersList } from "@/lib/api-client/v1/providers/hooks";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -40,37 +36,26 @@ function ProviderManagerLoaderContent({
   currentUser,
   enableMultiProviderTypes = true,
 }: ProviderManagerLoaderProps) {
+  // Use v1 hooks; merge providers + statistics into the legacy ProviderDisplay shape.
   const {
-    data: providers = [],
+    data: providersResponse,
     isLoading: isProvidersLoading,
     isFetching: isProvidersFetching,
-  } = useQuery<ProviderDisplay[]>({
-    queryKey: ["providers"],
-    queryFn: getProviders,
-    refetchOnWindowFocus: false,
-    staleTime: 30_000,
-  });
+  } = useProvidersList({ include: "statistics" });
+
+  const providers = (providersResponse?.items ?? []) as unknown as ProviderDisplay[];
+  const statistics = (providersResponse?.statistics ?? {}) as ProviderStatisticsMap;
+  const isStatisticsLoading = isProvidersLoading;
 
   const {
     data: healthStatus = {} as ProviderHealthStatus,
     isLoading: isHealthLoading,
     isFetching: isHealthFetching,
-  } = useQuery<ProviderHealthStatus>({
-    queryKey: ["providers-health"],
-    queryFn: getProvidersHealthStatus,
-    refetchOnWindowFocus: false,
-    staleTime: 30_000,
-  });
-
-  // Statistics loaded independently with longer cache
-  const { data: statistics = {} as ProviderStatisticsMap, isLoading: isStatisticsLoading } =
-    useQuery<ProviderStatisticsMap>({
-      queryKey: ["providers-statistics"],
-      queryFn: getProviderStatisticsAsync,
-      refetchOnWindowFocus: false,
-      staleTime: 30_000,
-      refetchInterval: 60_000,
-    });
+  } = useProvidersHealth() as unknown as {
+    data: ProviderHealthStatus;
+    isLoading: boolean;
+    isFetching: boolean;
+  };
 
   const {
     data: systemSettings,

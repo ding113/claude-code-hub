@@ -22,6 +22,14 @@ const requestFiltersActionMocks = vi.hoisted(() => ({
 }));
 vi.mock("@/actions/request-filters", () => requestFiltersActionMocks);
 
+// GroupMultiSelect uses the v1 hook directly; provide a stable stub.
+vi.mock("@/lib/api-client/v1/request-filters/hooks", () => ({
+  useRequestFilterGroupOptions: () => ({
+    data: { items: ["group-a", "group-b"] },
+    isLoading: false,
+  }),
+}));
+
 const sonnerMocks = vi.hoisted(() => ({
   toast: {
     success: vi.fn(),

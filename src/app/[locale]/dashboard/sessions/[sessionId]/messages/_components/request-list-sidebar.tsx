@@ -11,11 +11,12 @@ import {
 } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { getSessionRequests } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError, localizeError } from "@/lib/api-client/v1/client";
+import { sessionsClient } from "@/lib/api-client/v1/sessions";
 import { cn } from "@/lib/utils";
 
 interface RequestItem {
@@ -63,16 +64,27 @@ export function RequestListSidebar({
       setError(null);
 
       try {
-        const result = await getSessionRequests(sessionId, pageNum, pageSize, sortOrder);
-        if (result.ok) {
-          setRequests(result.data.requests);
-          setTotal(result.data.total);
-          setHasMore(result.data.hasMore);
-        } else {
-          setError(result.error || t("requestList.fetchFailed"));
-        }
+        // The v1 sessions/{id}/requests response is passthrough; legacy fields are preserved.
+        const data = (await sessionsClient.requests(sessionId, {
+          page: pageNum,
+          pageSize,
+          order: sortOrder,
+        })) as unknown as {
+          requests: RequestItem[];
+          total: number;
+          hasMore: boolean;
+        };
+        setRequests(data.requests ?? []);
+        setTotal(data.total ?? 0);
+        setHasMore(data.hasMore ?? false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : t("requestList.unknownError"));
+        const message =
+          err instanceof ApiError
+            ? localizeError(err)
+            : err instanceof Error
+              ? err.message
+              : t("requestList.unknownError");
+        setError(message || t("requestList.fetchFailed"));
       } finally {
         setIsLoading(false);
       }

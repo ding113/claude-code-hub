@@ -1,14 +1,13 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { getUserInsightsKeyTrend } from "@/actions/admin-user-insights";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUserInsightsKeyTrend } from "@/lib/api-client/v1/admin-user-insights/hooks";
 import type { DatabaseKeyStatRow } from "@/types/statistics";
 import type { TimeRangePreset } from "./filters/types";
 
@@ -39,18 +38,11 @@ export function UserKeyTrendChart({ userId, timeRange, keyId }: UserKeyTrendChar
   const t = useTranslations("dashboard.leaderboard.userInsights");
   const tStats = useTranslations("dashboard.stats");
 
-  const {
-    data: rawData,
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["user-insights-key-trend", userId, timeRange],
-    queryFn: async () => {
-      const result = await getUserInsightsKeyTrend(userId, timeRange);
-      if (!result.ok) throw new Error(result.error);
-      return result.data as DatabaseKeyStatRow[];
-    },
-  });
+  const { data, isLoading, isError } = useUserInsightsKeyTrend(userId, timeRange);
+  const rawData = useMemo<DatabaseKeyStatRow[]>(
+    () => (data?.items ?? []) as unknown as DatabaseKeyStatRow[],
+    [data]
+  );
 
   const { chartData, keys, chartConfig } = useMemo(() => {
     if (!rawData || rawData.length === 0) {

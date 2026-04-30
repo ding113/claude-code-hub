@@ -3,7 +3,6 @@
 import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Settings, Webhook } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { getNotificationSettingsAction } from "@/actions/notifications";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "@/i18n/routing";
+import { notificationsClient } from "@/lib/api-client/v1/notifications/index";
 import { logger } from "@/lib/logger";
 import { setOnboardingCompleted, shouldShowOnboarding } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
@@ -105,7 +105,8 @@ export function WebhookMigrationDialog() {
       }
 
       try {
-        const settings = await getNotificationSettingsAction();
+        const settings =
+          (await notificationsClient.getSettings()) as unknown as NotificationSettings;
         if (cancelled) {
           return;
         }

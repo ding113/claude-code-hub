@@ -1,10 +1,9 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
-import { getProviderVendors } from "@/actions/provider-endpoints";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useProviderVendorsList } from "@/lib/api-client/v1/provider-endpoints/hooks";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -65,16 +64,24 @@ export function ProviderList({
 }: ProviderListProps) {
   const t = useTranslations("settings.providers");
 
-  const { data: vendors = [] } = useQuery({
-    queryKey: ["provider-vendors"],
-    queryFn: getProviderVendors,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
-
+  const { data: vendorsResponse } = useProviderVendorsList();
   const vendorById = useMemo(() => {
-    return new Map(vendors.map((vendor) => [vendor.id, vendor]));
-  }, [vendors]);
+    const items = vendorsResponse?.items ?? [];
+    return new Map(
+      items.map((vendor) => [
+        vendor.id,
+        {
+          id: vendor.id,
+          websiteDomain: vendor.websiteDomain,
+          displayName: vendor.displayName,
+          websiteUrl: vendor.websiteUrl,
+          faviconUrl: vendor.faviconUrl,
+          createdAt: new Date(vendor.createdAt),
+          updatedAt: new Date(vendor.updatedAt),
+        },
+      ])
+    );
+  }, [vendorsResponse]);
 
   if (providers.length === 0) {
     return (

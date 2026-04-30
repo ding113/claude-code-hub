@@ -1,19 +1,18 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { Globe, Package, Pencil, Plus, RefreshCw, Tags, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  deleteRequestFilterAction,
-  refreshRequestFiltersCache,
-  updateRequestFilterAction,
-} from "@/actions/request-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ApiError, localizeError } from "@/lib/api-client/v1/client";
+import { requestFiltersClient } from "@/lib/api-client/v1/request-filters";
+import { useRefreshRequestFiltersCache } from "@/lib/api-client/v1/request-filters/hooks";
+import { requestFiltersKeys } from "@/lib/api-client/v1/request-filters/keys";
 import { cn } from "@/lib/utils";
 import type { RequestFilter } from "@/repository/request-filters";
 import { FilterDialog } from "./filter-dialog";
@@ -25,41 +24,47 @@ interface Props {
 
 export function FilterTable({ filters, providers }: Props) {
   const t = useTranslations("settings.requestFilters");
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState<RequestFilter | null>(null);
+  const refreshMutation = useRefreshRequestFiltersCache();
 
   const providerMap = useMemo(() => {
     return new Map(providers.map((p) => [p.id, p.name]));
   }, [providers]);
 
+  const surfaceError = (err: unknown, fallback: string) => {
+    const message =
+      err instanceof ApiError ? localizeError(err) : err instanceof Error ? err.message : fallback;
+    toast.error(message || fallback);
+  };
+
   const handleToggle = async (filter: RequestFilter, checked: boolean) => {
-    const res = await updateRequestFilterAction(filter.id, { isEnabled: checked });
-    if (res.ok) {
+    try {
+      await requestFiltersClient.update(filter.id, { isEnabled: checked });
+      await queryClient.invalidateQueries({ queryKey: requestFiltersKeys.all });
       toast.success(checked ? t("enable") : t("disable"));
-      router.refresh();
-    } else {
-      toast.error(res.error);
+    } catch (err) {
+      surfaceError(err, t("editFailed"));
     }
   };
 
   const handleDelete = async (filter: RequestFilter) => {
     if (!confirm(t("confirmDelete", { name: filter.name }))) return;
-    const res = await deleteRequestFilterAction(filter.id);
-    if (res.ok) {
+    try {
+      await requestFiltersClient.remove(filter.id);
+      await queryClient.invalidateQueries({ queryKey: requestFiltersKeys.all });
       toast.success(t("deleteSuccess"));
-      router.refresh();
-    } else {
-      toast.error(res.error);
+    } catch (err) {
+      surfaceError(err, t("editFailed"));
     }
   };
 
   const handleRefresh = async () => {
-    const res = await refreshRequestFiltersCache();
-    if (res.ok) {
-      toast.success(t("refreshSuccess", { count: res.data?.count ?? 0 }));
-      router.refresh();
-    } else {
-      toast.error(res.error);
+    try {
+      const res = await refreshMutation.mutateAsync();
+      toast.success(t("refreshSuccess", { count: res?.count ?? 0 }));
+    } catch {
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 
@@ -89,6 +94,7 @@ export function FilterTable({ filters, providers }: Props) {
             variant="outline"
             size="sm"
             onClick={handleRefresh}
+            disabled={refreshMutation.isPending}
             className="bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
           >
             <RefreshCw className="mr-2 h-4 w-4" />

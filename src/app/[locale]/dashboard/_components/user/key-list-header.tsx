@@ -4,7 +4,6 @@ import { formatInTimeZone } from "date-fns-tz";
 import { CheckCircle, Copy, Eye, EyeOff, ListPlus } from "lucide-react";
 import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
-import { getProxyStatus } from "@/actions/proxy-status";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { dashboardClient } from "@/lib/api-client/v1/dashboard";
+import { dashboardKeys } from "@/lib/api-client/v1/dashboard/keys";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
@@ -24,8 +25,6 @@ import type { ProxyStatusResponse } from "@/types/proxy-status";
 import type { User, UserDisplay } from "@/types/user";
 import { AddKeyForm } from "./forms/add-key-form";
 import { UserActions } from "./user-actions";
-
-const PROXY_STATUS_REFRESH_INTERVAL = 2000;
 
 type UserStatusCode = "disabled" | "expired" | "expiringSoon" | "active";
 
@@ -36,16 +35,7 @@ const USER_STATUS_LABEL_KEYS: Record<UserStatusCode, string> = {
   active: "userStatus.active",
 };
 
-async function fetchProxyStatus(): Promise<ProxyStatusResponse> {
-  const result = await getProxyStatus();
-  if (result.ok) {
-    if (result.data) {
-      return result.data;
-    }
-    throw new Error("Failed to fetch proxy status");
-  }
-  throw new Error(result.error || "Failed to fetch proxy status");
-}
+const PROXY_STATUS_REFRESH_INTERVAL = 2000;
 
 function createFormatRelativeTime(
   t: (key: string, params?: Record<string, number>) => string,
@@ -159,8 +149,8 @@ export function KeyListHeader({
     error: proxyStatusError,
     isLoading: proxyStatusLoading,
   } = useQuery<ProxyStatusResponse, Error>({
-    queryKey: ["proxy-status"],
-    queryFn: fetchProxyStatus,
+    queryKey: dashboardKeys.proxyStatus(),
+    queryFn: async () => (await dashboardClient.proxyStatus()) as unknown as ProxyStatusResponse,
     refetchInterval: PROXY_STATUS_REFRESH_INTERVAL,
     enabled: proxyStatusEnabled,
   });

@@ -1,9 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, BarChart3 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getUserInsightsModelBreakdown } from "@/actions/admin-user-insights";
 import {
   ModelBreakdownColumn,
   type ModelBreakdownItem,
@@ -11,6 +9,7 @@ import {
 } from "@/components/analytics/model-breakdown-column";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUserInsightsModelBreakdown } from "@/lib/api-client/v1/admin-user-insights/hooks";
 import type { CurrencyCode } from "@/lib/utils/currency";
 
 interface UserModelBreakdownProps {
@@ -31,15 +30,11 @@ export function UserModelBreakdown({
   const t = useTranslations("dashboard.leaderboard.userInsights");
   const tStats = useTranslations("myUsage.stats");
 
-  const filters = keyId || providerId ? { keyId, providerId } : undefined;
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["user-insights-model-breakdown", userId, startDate, endDate, keyId, providerId],
-    queryFn: async () => {
-      const result = await getUserInsightsModelBreakdown(userId, startDate, endDate, filters);
-      if (!result.ok) throw new Error(result.error);
-      return result.data;
-    },
+  const { data, isLoading, isError } = useUserInsightsModelBreakdown(userId, {
+    startDate,
+    endDate,
+    keyId,
+    providerId,
   });
 
   const labels: ModelBreakdownLabels = {

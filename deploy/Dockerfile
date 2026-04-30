@@ -24,6 +24,16 @@ ENV DSN="postgres://placeholder:placeholder@localhost:5432/placeholder"
 ENV REDIS_URL="redis://localhost:6379"
 # 标记为 CI 环境，跳过 instrumentation.ts 中的数据库连接
 ENV CI=true
+# 数据库连接池配置（占位符）
+ENV DB_POOL_MAX=10
+ENV DB_POOL_IDLE_TIMEOUT=30
+ENV DB_POOL_CONNECT_TIMEOUT=30
+# 异步消息写入配置（占位符）
+ENV MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS=1000
+ENV MESSAGE_REQUEST_ASYNC_BATCH_SIZE=100
+ENV MESSAGE_REQUEST_ASYNC_MAX_PENDING=10000
+# 管理员令牌（占位符，构建时必需）
+ENV ADMIN_TOKEN=build-placeholder-token
 
 RUN bun run build
 

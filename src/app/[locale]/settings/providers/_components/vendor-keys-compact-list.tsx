@@ -6,13 +6,6 @@ import { CheckCircle, Copy, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getProviderEndpoints } from "@/actions/provider-endpoints";
-import {
-  editProvider,
-  getUnmaskedProviderKey,
-  removeProvider,
-  undoProviderDelete,
-} from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
@@ -43,6 +36,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { callGetProviderEndpoints } from "@/lib/api-client/v1/provider-endpoints/hooks";
+import {
+  callEditProvider,
+  callGetUnmaskedProviderKey,
+  callRemoveProvider,
+  callUndoProviderDelete,
+} from "@/lib/api-client/v1/providers/hooks";
 import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
@@ -133,11 +133,13 @@ export function VendorKeysCompactList(props: {
                       cached ??
                       (await queryClient.fetchQuery<ProviderEndpoint[]>({
                         queryKey,
-                        queryFn: async () =>
-                          await getProviderEndpoints({
-                            vendorId: props.vendorId,
-                            providerType: type,
-                          }),
+                        queryFn: async () => {
+                          const res = await callGetProviderEndpoints<
+                            { vendorId: number; providerType: ProviderType },
+                            ProviderEndpoint[]
+                          >({ vendorId: props.vendorId, providerType: type });
+                          return res.ok && res.data ? res.data : [];
+                        },
                         staleTime: 30_000,
                       })) ??
                       [];
@@ -257,7 +259,10 @@ function VendorKeyRow(props: {
   const createSaveHandler = (fieldName: "priority" | "weight" | "cost_multiplier") => {
     return async (value: number) => {
       try {
-        const res = await editProvider(props.provider.id, { [fieldName]: value });
+        const res = await callEditProvider<
+          { providerId: number } & Record<string, unknown>,
+          unknown
+        >({ providerId: props.provider.id, [fieldName]: value });
         if (res.ok) {
           toast.success(tInline("saveSuccess"));
           queryClient.invalidateQueries({ queryKey: ["providers"] });
@@ -295,7 +300,10 @@ function VendorKeyRow(props: {
 
   const toggleMutation = useMutation({
     mutationFn: async (checked: boolean) => {
-      const res = await editProvider(props.provider.id, { is_enabled: checked });
+      const res = await callEditProvider<{ providerId: number; is_enabled: boolean }, unknown>({
+        providerId: props.provider.id,
+        is_enabled: checked,
+      });
       if (!res.ok) throw new Error(res.error);
     },
     onSuccess: () => {
@@ -310,8 +318,11 @@ function VendorKeyRow(props: {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const res = await removeProvider(props.provider.id);
+      const res = await callRemoveProvider<number, { undoToken: string; operationId: string }>(
+        props.provider.id
+      );
       if (!res.ok) throw new Error(res.error);
+      if (!res.data) throw new Error("missing response data");
       return res.data;
     },
     onSuccess: (data) => {
@@ -327,7 +338,10 @@ function VendorKeyRow(props: {
           label: tBatchEdit("undo.button"),
           onClick: async () => {
             try {
-              const undoResult = await undoProviderDelete({
+              const undoResult = await callUndoProviderDelete<
+                { undoToken: string; operationId: string },
+                unknown
+              >({
                 undoToken: data.undoToken,
                 operationId: data.operationId,
               });
@@ -359,14 +373,14 @@ function VendorKeyRow(props: {
     setUnmaskedKey(null);
     setCopied(false);
     try {
-      const result = await getUnmaskedProviderKey(props.provider.id);
-      if (result.ok) {
-        setUnmaskedKey(result.data.key);
-      } else {
+      const result = await callGetUnmaskedProviderKey<number, { key: string }>(props.provider.id);
+      if (!result.ok) {
         toast.error(tList("getKeyFailed"), {
           description: result.error || tList("unknownError"),
         });
         setKeyDialogOpen(false);
+      } else if (result.data) {
+        setUnmaskedKey(result.data.key);
       }
     } catch {
       toast.error(tList("getKeyFailed"));

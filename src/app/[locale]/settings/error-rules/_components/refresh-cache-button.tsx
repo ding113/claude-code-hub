@@ -2,10 +2,9 @@
 
 import { RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
 import { toast } from "sonner";
-import { refreshCacheAction } from "@/actions/error-rules";
 import { Button } from "@/components/ui/button";
+import { useRefreshErrorRulesCache } from "@/lib/api-client/v1/error-rules/hooks";
 import { cn } from "@/lib/utils";
 
 interface RefreshCacheButtonProps {
@@ -21,24 +20,16 @@ interface RefreshCacheButtonProps {
 
 export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
   const t = useTranslations("settings");
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { mutateAsync, isPending } = useRefreshErrorRulesCache();
 
   const handleRefresh = async () => {
-    setIsRefreshing(true);
-
     try {
-      const result = await refreshCacheAction();
-
-      if (result.ok) {
-        const count = result.data.stats.totalCount;
-        toast.success(t("errorRules.refreshCacheSuccess", { count }));
-      } else {
-        toast.error(result.error);
-      }
+      const result = await mutateAsync();
+      const totalCount =
+        (result as { stats?: { totalCount?: number } } | null | undefined)?.stats?.totalCount ?? 0;
+      toast.success(t("errorRules.refreshCacheSuccess", { count: totalCount }));
     } catch {
-      toast.error(t("errorRules.refreshCacheFailed"));
-    } finally {
-      setIsRefreshing(false);
+      // useApiMutation already surfaces toast errors via localizeError
     }
   };
 
@@ -46,7 +37,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
     <Button
       variant="outline"
       onClick={handleRefresh}
-      disabled={isRefreshing}
+      disabled={isPending}
       className="bg-muted/50 border-border hover:bg-muted hover:border-border"
       title={
         stats
@@ -56,7 +47,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
           : t("errorRules.refreshCache")
       }
     >
-      <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
+      <RefreshCw className={cn("mr-2 h-4 w-4", isPending && "animate-spin")} />
       {t("errorRules.refreshCache")}
       {stats && <span className="ml-2 text-xs text-muted-foreground">({stats.totalCount})</span>}
     </Button>

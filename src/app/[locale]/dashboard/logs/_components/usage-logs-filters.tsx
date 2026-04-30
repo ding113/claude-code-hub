@@ -5,15 +5,25 @@ import { Clock, Download, Network, Server, User } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  downloadUsageLogsExport,
-  getUsageLogsExportStatus,
-  startUsageLogsExport,
-  type UsageLogsExportStatus,
-} from "@/actions/usage-logs";
+import { ApiError } from "@/lib/api-client/v1/client";
+import { usageLogsClient } from "@/lib/api-client/v1/usage-logs/index";
+
+/**
+ * Local mirror of `@/actions/usage-logs#UsageLogsExportStatus`. Inlined to
+ * avoid importing the server-only actions module from this client component.
+ * Replace once the v1 schema exposes a shared status type.
+ */
+interface UsageLogsExportStatus {
+  jobId?: string;
+  status: "queued" | "pending" | "running" | "completed" | "failed";
+  totalRows: number;
+  progressPercent: number;
+  processedRows: number;
+  error?: string;
+}
+
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import { ActiveFiltersDisplay } from "./filters/active-filters-display";
@@ -74,7 +84,6 @@ export function UsageLogsFilters({
   serverTimeZone,
 }: UsageLogsFiltersProps) {
   const t = useTranslations("dashboard");
-  const tErrors = useTranslations("errors");
 
   const [localFilters, setLocalFilters] = useState<UsageLogFilters>(filters);
   const [isExporting, setIsExporting] = useState(false);
@@ -193,19 +202,33 @@ export function UsageLogsFilters({
 
     try {
       const exportFilters = sanitizeFilters(localFilters);
-      const startResult = await startUsageLogsExport(exportFilters);
-      if (exportRunIdRef.current !== runId) {
-        return;
-      }
-
-      if (!startResult.ok) {
+      let jobId: string | null = null;
+      try {
+        const startResult = await usageLogsClient.startExport(
+          exportFilters as unknown as Parameters<typeof usageLogsClient.startExport>[0],
+          { async: true }
+        );
+        if (exportRunIdRef.current !== runId) {
+          return;
+        }
+        if (typeof startResult === "string") {
+          jobId = null;
+        } else if (startResult && typeof startResult === "object" && "jobId" in startResult) {
+          jobId = (startResult as { jobId: string }).jobId;
+        }
+      } catch (err) {
         setExportStatus(null);
-        console.error("Failed to start usage logs export", startResult.error);
+        console.error("Failed to start usage logs export", err);
         toast.error(t("logs.filters.exportError"));
         return;
       }
 
-      const jobId = startResult.data.jobId;
+      if (!jobId) {
+        setExportStatus(null);
+        toast.error(t("logs.filters.exportError"));
+        return;
+      }
+
       const EXPORT_TIMEOUT_MS = 10 * 60 * 1000;
       const deadline = Date.now() + EXPORT_TIMEOUT_MS;
 
@@ -220,46 +243,56 @@ export function UsageLogsFilters({
           return;
         }
 
-        const statusResult = await getUsageLogsExportStatus(jobId);
+        let statusData: UsageLogsExportStatus;
+        try {
+          statusData = (await usageLogsClient.exportStatus(
+            jobId
+          )) as unknown as UsageLogsExportStatus;
+        } catch (err) {
+          if (exportRunIdRef.current !== runId) return;
+          setExportStatus(null);
+          if (err instanceof ApiError) {
+            toast.error(err.title || t("logs.filters.exportError"));
+          } else {
+            toast.error(t("logs.filters.exportError"));
+          }
+          return;
+        }
         if (exportRunIdRef.current !== runId) {
           return;
         }
 
-        if (!statusResult.ok) {
-          setExportStatus(null);
-          toast.error(t("logs.filters.exportError"));
+        setExportStatus(statusData);
+
+        if (statusData.status === "failed") {
+          toast.error(statusData.error || t("logs.filters.exportError"));
           return;
         }
 
-        setExportStatus(statusResult.data);
-
-        if (statusResult.data.status === "failed") {
-          toast.error(statusResult.data.error || t("logs.filters.exportError"));
-          return;
-        }
-
-        if (statusResult.data.status === "completed") {
+        if (statusData.status === "completed") {
           break;
         }
 
         await new Promise((resolve) => window.setTimeout(resolve, 800));
       }
 
-      const downloadResult = await downloadUsageLogsExport(jobId);
+      let csvBody: string;
+      try {
+        csvBody = await usageLogsClient.downloadExport(jobId);
+      } catch (err) {
+        if (exportRunIdRef.current !== runId) return;
+        if (err instanceof ApiError) {
+          toast.error(err.title || t("logs.filters.exportError"));
+        } else {
+          toast.error(t("logs.filters.exportError"));
+        }
+        return;
+      }
       if (exportRunIdRef.current !== runId) {
         return;
       }
 
-      if (!downloadResult.ok) {
-        toast.error(
-          downloadResult.errorCode
-            ? getErrorMessage(tErrors, downloadResult.errorCode, downloadResult.errorParams)
-            : t("logs.filters.exportError")
-        );
-        return;
-      }
-
-      downloadCsv(downloadResult.data);
+      downloadCsv(csvBody);
 
       toast.success(t("logs.filters.exportSuccess"));
     } catch (error) {

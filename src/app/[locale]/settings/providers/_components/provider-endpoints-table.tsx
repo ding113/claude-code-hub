@@ -5,16 +5,6 @@ import { Edit2, Loader2, MoreHorizontal, Play, Plus, RotateCcw, Trash2 } from "l
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  addProviderEndpoint,
-  batchGetEndpointCircuitInfo,
-  editProviderEndpoint,
-  getProviderEndpoints,
-  getProviderEndpointsByVendor,
-  probeProviderEndpoint,
-  removeProviderEndpoint,
-  resetEndpointCircuit,
-} from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +42,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  callAddProviderEndpoint,
+  callBatchGetEndpointCircuitInfo,
+  callEditProviderEndpoint,
+  callGetProviderEndpoints,
+  callGetProviderEndpointsByVendor,
+  callProbeProviderEndpoint,
+  callRemoveProviderEndpoint,
+  callResetEndpointCircuit,
+} from "@/lib/api-client/v1/provider-endpoints/hooks";
 import { useInViewOnce } from "@/lib/hooks/use-in-view-once";
 import {
   getAllProviderTypes,
@@ -107,13 +107,20 @@ export function ProviderEndpointsTable({
       )
     : ["provider-endpoints", vendorId, queryKeySuffix].filter((value) => value != null);
 
-  const { data: rawEndpoints = [], isLoading } = useQuery({
+  const { data: rawEndpoints = [], isLoading } = useQuery<ProviderEndpoint[]>({
     queryKey,
     queryFn: async () => {
       if (providerType) {
-        return await getProviderEndpoints({ vendorId, providerType });
+        const res = await callGetProviderEndpoints<
+          { vendorId: number; providerType: ProviderType },
+          ProviderEndpoint[]
+        >({ vendorId, providerType });
+        return res.ok && res.data ? res.data : [];
       }
-      return await getProviderEndpointsByVendor({ vendorId });
+      const res = await callGetProviderEndpointsByVendor<{ vendorId: number }, ProviderEndpoint[]>({
+        vendorId,
+      });
+      return res.ok && res.data ? res.data : [];
     },
     staleTime: 30_000,
     refetchOnWindowFocus: false,
@@ -158,7 +165,10 @@ export function ProviderEndpointsTable({
 
       const results = await Promise.all(
         chunks.map(async (chunk) => {
-          const res = await batchGetEndpointCircuitInfo({ endpointIds: chunk });
+          const res = await callBatchGetEndpointCircuitInfo<
+            { endpointIds: number[] },
+            Array<{ endpointId: number; circuitState: string }>
+          >({ endpointIds: chunk });
           return res.ok && res.data ? res.data : [];
         })
       );
@@ -248,7 +258,10 @@ function EndpointRow({
 
   const probeMutation = useMutation({
     mutationFn: async () => {
-      const res = await probeProviderEndpoint({ endpointId: endpoint.id });
+      const res = await callProbeProviderEndpoint<
+        { endpointId: number },
+        { result: { ok: boolean; errorMessage?: string } }
+      >({ endpointId: endpoint.id });
       if (!res.ok) throw new Error(res.error);
       return res.data;
     },
@@ -274,7 +287,9 @@ function EndpointRow({
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const res = await removeProviderEndpoint({ endpointId: endpoint.id });
+      const res = await callRemoveProviderEndpoint<{ endpointId: number }, unknown>({
+        endpointId: endpoint.id,
+      });
       if (!res.ok) {
         throw Object.assign(new Error(res.error), { actionResult: res });
       }
@@ -305,7 +320,10 @@ function EndpointRow({
 
   const toggleMutation = useMutation({
     mutationFn: async (nextEnabled: boolean) => {
-      const res = await editProviderEndpoint({
+      const res = await callEditProviderEndpoint<
+        { endpointId: number; isEnabled: boolean },
+        unknown
+      >({
         endpointId: endpoint.id,
         isEnabled: nextEnabled,
       });
@@ -325,7 +343,9 @@ function EndpointRow({
 
   const resetCircuitMutation = useMutation({
     mutationFn: async () => {
-      const res = await resetEndpointCircuit({ endpointId: endpoint.id });
+      const res = await callResetEndpointCircuit<{ endpointId: number }, unknown>({
+        endpointId: endpoint.id,
+      });
       if (!res.ok) throw new Error(res.error);
       return res;
     },
@@ -535,7 +555,17 @@ export function AddEndpointButton({
     const endpointSortOrder = Number.parseInt(formData.get("sortOrder") as string, 10) || 0;
 
     try {
-      const res = await addProviderEndpoint({
+      const res = await callAddProviderEndpoint<
+        {
+          vendorId: number;
+          providerType: ProviderType;
+          url: string;
+          label: string | null;
+          sortOrder: number;
+          isEnabled: boolean;
+        },
+        unknown
+      >({
         vendorId,
         providerType,
         url: endpointUrl,
@@ -705,7 +735,16 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
     const sortOrder = Number.parseInt(formData.get("sortOrder") as string, 10) || 0;
 
     try {
-      const res = await editProviderEndpoint({
+      const res = await callEditProviderEndpoint<
+        {
+          endpointId: number;
+          url: string;
+          label: string | null;
+          sortOrder: number;
+          isEnabled: boolean;
+        },
+        unknown
+      >({
         endpointId: endpoint.id,
         url,
         label: label.trim() || null,

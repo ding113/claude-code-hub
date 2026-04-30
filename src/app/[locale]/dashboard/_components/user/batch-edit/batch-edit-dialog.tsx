@@ -5,8 +5,6 @@ import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { type BatchUpdateKeysParams, batchUpdateKeys } from "@/actions/keys";
-import { type BatchUpdateUsersParams, batchUpdateUsers } from "@/actions/users";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +15,43 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { callBatchUpdateKeys } from "@/lib/api-client/v1/keys/hooks";
+import { callBatchUpdateUsers } from "@/lib/api-client/v1/users/hooks";
+
+/**
+ * Local mirrors of `BatchUpdateUsersParams` / `BatchUpdateKeysParams`. Kept
+ * inline so this client-side dialog never imports the server-only `@/actions/*`
+ * modules. Replace these definitions with shared schemas imported from
+ * `@/lib/api/v1/schemas/*` once `/api/v1/users:batchUpdate` and
+ * `/api/v1/keys:batchUpdate` ship.
+ */
+interface BatchUpdateUsersParams {
+  userIds: number[];
+  updates: {
+    note?: string;
+    tags?: string[];
+    rpm?: number | null;
+    dailyQuota?: number | null;
+    limit5hUsd?: number | null;
+    limit5hResetMode?: "fixed" | "rolling";
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+  };
+}
+
+interface BatchUpdateKeysParams {
+  keyIds: number[];
+  updates: {
+    providerGroup?: string | null;
+    limit5hUsd?: number | null;
+    limitDailyUsd?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+    canLoginWebUi?: boolean;
+    isEnabled?: boolean;
+  };
+}
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -321,7 +356,10 @@ function BatchEditDialogInner({
 
       if (pendingUpdate.userUpdates && pendingUpdate.userIds.length > 0) {
         tasks.push(
-          batchUpdateUsers({ userIds: pendingUpdate.userIds, updates: pendingUpdate.userUpdates })
+          callBatchUpdateUsers<BatchUpdateUsersParams, { updatedCount: number }>({
+            userIds: pendingUpdate.userIds,
+            updates: pendingUpdate.userUpdates,
+          })
             .then((result) => ({ kind: "users" as const, result }))
             .catch((error) => ({ kind: "users" as const, result: { ok: false, error } }))
         );
@@ -329,7 +367,10 @@ function BatchEditDialogInner({
 
       if (pendingUpdate.keyUpdates && pendingUpdate.keyIds.length > 0) {
         tasks.push(
-          batchUpdateKeys({ keyIds: pendingUpdate.keyIds, updates: pendingUpdate.keyUpdates })
+          callBatchUpdateKeys<BatchUpdateKeysParams, { updatedCount: number }>({
+            keyIds: pendingUpdate.keyIds,
+            updates: pendingUpdate.keyUpdates,
+          })
             .then((result) => ({ kind: "keys" as const, result }))
             .catch((error) => ({ kind: "keys" as const, result: { ok: false, error } }))
         );

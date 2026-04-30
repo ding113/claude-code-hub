@@ -4,14 +4,15 @@ import { format } from "date-fns";
 import { BarChart3, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getMyStatsSummary, type MyStatsSummary } from "@/actions/my-usage";
 import { ModelBreakdownColumn } from "@/components/analytics/model-breakdown-column";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { meClient } from "@/lib/api-client/v1/me";
 import { formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
+import type { MyStatsSummary } from "@/types/my-usage";
 import { LogsDateRangePicker } from "../../dashboard/logs/_components/logs-date-range-picker";
 
 interface StatisticsSummaryCardProps {
@@ -36,12 +37,14 @@ export function StatisticsSummaryCard({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadStats = useCallback(async () => {
-    const result = await getMyStatsSummary({
-      startDate: dateRange.startDate,
-      endDate: dateRange.endDate,
-    });
-    if (result.ok) {
-      setStats(result.data);
+    try {
+      const data = (await meClient.statsSummary({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      })) as unknown as MyStatsSummary;
+      setStats(data);
+    } catch {
+      // surface upstream error via existing UI ("noData" fallback)
     }
   }, [dateRange.startDate, dateRange.endDate]);
 

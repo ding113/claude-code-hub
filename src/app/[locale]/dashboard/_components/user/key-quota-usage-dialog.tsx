@@ -4,8 +4,6 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getKeyQuotaUsage, type KeyQuotaItem, type KeyQuotaUsageResult } from "@/actions/key-quota";
-import { type PatchKeyLimitField, patchKeyLimit } from "@/actions/keys";
 import { QuotaProgress } from "@/components/quota/quota-progress";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
 import { Button } from "@/components/ui/button";
@@ -16,9 +14,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { KeyQuotaUsageResponse } from "@/lib/api/v1/schemas/keys";
+import { keysClient } from "@/lib/api-client/v1/keys/index";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils";
 
-const KEY_FIELD_MAP: Record<KeyQuotaItem["type"], PatchKeyLimitField> = {
+type KeyQuotaItem = KeyQuotaUsageResponse["items"][number];
+
+// Backend field name accepted by PATCH /api/v1/keys/{id} for quota updates.
+type KeyLimitField =
+  | "limit5hUsd"
+  | "limitDailyUsd"
+  | "limitWeeklyUsd"
+  | "limitMonthlyUsd"
+  | "limitTotalUsd"
+  | "limitConcurrentSessions";
+
+const KEY_FIELD_MAP: Record<KeyQuotaItem["type"], KeyLimitField> = {
   limit5h: "limit5hUsd",
   limitDaily: "limitDailyUsd",
   limitWeekly: "limitWeeklyUsd",
@@ -54,20 +65,15 @@ export function KeyQuotaUsageDialog({
   const t = useTranslations("dashboard.userManagement.keyQuotaUsageDialog");
   const tEdit = useTranslations("quota.quickEdit");
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<KeyQuotaUsageResult | null>(null);
+  const [data, setData] = useState<KeyQuotaUsageResponse | null>(null);
   const [error, setError] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      const res = await getKeyQuotaUsage(keyId);
-      if (!res.ok) {
-        toast.error(res.error || t("fetchFailed"));
-        setError(true);
-        return;
-      }
-      setData(res.data);
+      const res = await keysClient.quotaUsage(keyId);
+      setData(res);
     } catch (err) {
       console.error("[KeyQuotaUsageDialog] fetch failed", err);
       toast.error(t("fetchFailed"));
@@ -86,7 +92,8 @@ export function KeyQuotaUsageDialog({
     fetchData();
   }, [open, fetchData]);
 
-  const currencyCode = data?.currencyCode ?? propCurrencyCode ?? "USD";
+  const currencyCode =
+    (data?.currencyCode as CurrencyCode | undefined) ?? propCurrencyCode ?? "USD";
 
   const formatValue = (type: KeyQuotaItem["type"], value: number) => {
     if (type === "limitSessions") {
@@ -128,11 +135,7 @@ export function KeyQuotaUsageDialog({
       try {
         const value =
           type === "limitSessions" ? (newLimit == null ? 0 : Math.round(newLimit)) : newLimit;
-        const res = await patchKeyLimit(keyId, field, value);
-        if (!res.ok) {
-          toast.error(res.error || tEdit("saveFailed"));
-          return false;
-        }
+        await keysClient.update(keyId, { [field]: value } as Record<string, unknown>);
         toast.success(tEdit("saveSuccess"));
         await fetchData();
         return true;

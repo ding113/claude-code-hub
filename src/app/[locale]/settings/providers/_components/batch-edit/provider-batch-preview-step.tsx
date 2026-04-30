@@ -20,8 +20,23 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
   anthropic_adaptive_thinking: "fields.adaptiveThinking",
 };
 
-import type { ProviderBatchPreviewRow } from "@/actions/providers";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { ProviderBatchPatchField } from "@/types/provider";
+
+/**
+ * Local mirror of `@/actions/providers#ProviderBatchPreviewRow`. Inlined to
+ * keep this client component free of `@/actions/*` imports. Replace with the
+ * shared schema once `/api/v1/providers:previewBatchPatch` exposes its types.
+ */
+export interface ProviderBatchPreviewRow {
+  providerId: number;
+  providerName: string;
+  field: ProviderBatchPatchField;
+  status: "changed" | "skipped";
+  before: unknown;
+  after: unknown;
+  skipReason?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Props
