@@ -1,5 +1,5 @@
 import type { DashboardProviderVendor } from "@/actions/provider-endpoints";
-import { DASHBOARD_COMPAT_HEADER, HIDDEN_PROVIDER_TYPES } from "@/lib/api/v1/_shared/constants";
+import { DASHBOARD_COMPAT_HEADER } from "@/lib/api/v1/_shared/constants";
 import type { ProviderEndpoint, ProviderVendor } from "@/types/provider";
 import {
   apiDelete,
@@ -19,8 +19,6 @@ const dashboardCompatOptions = {
     [DASHBOARD_COMPAT_HEADER]: "1",
   },
 } as const;
-
-const hiddenProviderTypes = new Set<string>(HIDDEN_PROVIDER_TYPES);
 
 type VendorTypeEndpointStats = {
   vendorId: number;
@@ -70,12 +68,9 @@ export function getProviderEndpoints(input: {
   providerType?: string;
   dashboard?: boolean;
 }) {
-  const providerTypeQuery = hiddenProviderTypes.has(input.providerType ?? "")
-    ? undefined
-    : input.providerType;
   return apiGet<{ items?: ProviderEndpoint[] }>(
     `/api/v1/provider-vendors/${input.vendorId}/endpoints${searchParams({
-      providerType: providerTypeQuery,
+      providerType: input.providerType,
       dashboard: input.dashboard,
     })}`,
     dashboardCompatOptions
@@ -144,58 +139,12 @@ export function batchGetProviderEndpointProbeLogs(input: unknown) {
 }
 
 export function batchGetVendorTypeEndpointStats(input: unknown) {
-  const hiddenInput = parseHiddenVendorEndpointStatsInput(input);
-  if (hiddenInput) {
-    return toActionResult(loadHiddenVendorEndpointStats(hiddenInput));
-  }
-
   return toActionResult(
     apiPost<VendorTypeEndpointStats[]>(
       "/api/v1/provider-vendors/endpoint-stats:batch",
       input,
       dashboardCompatOptions
     )
-  );
-}
-
-function parseHiddenVendorEndpointStatsInput(
-  input: unknown
-): { vendorIds: number[]; providerType: string } | null {
-  if (!input || typeof input !== "object") return null;
-  const value = input as { vendorIds?: unknown; providerType?: unknown };
-  if (typeof value.providerType !== "string" || !hiddenProviderTypes.has(value.providerType)) {
-    return null;
-  }
-  if (!Array.isArray(value.vendorIds)) return null;
-
-  const vendorIds = value.vendorIds.filter(
-    (vendorId): vendorId is number => Number.isInteger(vendorId) && vendorId > 0
-  );
-  return { vendorIds: Array.from(new Set(vendorIds)), providerType: value.providerType };
-}
-
-async function loadHiddenVendorEndpointStats(input: {
-  vendorIds: number[];
-  providerType: string;
-}): Promise<VendorTypeEndpointStats[]> {
-  return Promise.all(
-    input.vendorIds.map(async (vendorId) => {
-      const endpoints = await getProviderEndpoints({
-        vendorId,
-        providerType: input.providerType,
-        dashboard: true,
-      });
-      const activeEndpoints = endpoints.filter((endpoint) => endpoint.deletedAt === null);
-      const enabledEndpoints = activeEndpoints.filter((endpoint) => endpoint.isEnabled === true);
-      return {
-        vendorId,
-        total: activeEndpoints.length,
-        enabled: enabledEndpoints.length,
-        healthy: enabledEndpoints.filter((endpoint) => endpoint.lastProbeOk === true).length,
-        unhealthy: enabledEndpoints.filter((endpoint) => endpoint.lastProbeOk === false).length,
-        unknown: enabledEndpoints.filter((endpoint) => endpoint.lastProbeOk == null).length,
-      };
-    })
   );
 }
 

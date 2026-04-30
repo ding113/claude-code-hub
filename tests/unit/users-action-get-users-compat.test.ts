@@ -205,6 +205,56 @@ describe("getUsers compatibility", () => {
     expect(result.data.users[0]?.keys[0]?.createdAt).toBe("2026-04-30T07:41:10.000Z");
   });
 
+  test("getUsersBatchCore returns null for invalid date transport fields", async () => {
+    const user = makeUser(89, "invalid-date-user");
+    user.expiresAt = new Date("bad-date");
+    user.costResetAt = new Date("also-bad");
+    findUserListBatchMock.mockResolvedValueOnce({
+      users: [user],
+      nextCursor: null,
+      hasMore: false,
+    });
+    findKeyListBatchMock.mockResolvedValueOnce(
+      new Map([
+        [
+          89,
+          [
+            {
+              id: 100,
+              name: "default",
+              key: "sk-test",
+              expiresAt: null,
+              isEnabled: true,
+              createdAt: new Date("bad-key-date"),
+              canLoginWebUi: true,
+              limit5hUsd: null,
+              limit5hResetMode: "rolling",
+              limitDailyUsd: null,
+              dailyResetMode: "fixed",
+              dailyResetTime: "00:00",
+              limitWeeklyUsd: null,
+              limitMonthlyUsd: null,
+              limitTotalUsd: null,
+              limitConcurrentSessions: 0,
+              costResetAt: null,
+              providerGroup: "default",
+            },
+          ],
+        ],
+      ])
+    );
+
+    const { getUsersBatchCore } = await import("@/actions/users");
+
+    const result = await getUsersBatchCore({ limit: 50 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.users[0]?.expiresAt).toBeNull();
+    expect(result.data.users[0]?.costResetAt).toBeNull();
+    expect(result.data.users[0]?.keys[0]?.createdAt).toBeNull();
+  });
+
   test("falls back to legacy query when searchTerm is blank", async () => {
     findUserListBatchMock.mockResolvedValueOnce({
       users: [makeUser(77, "legacy-query-hit")],

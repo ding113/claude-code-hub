@@ -1,5 +1,6 @@
-import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { requireAuth } from "@/lib/api/v1/_shared/auth-middleware";
+import { PUBLIC_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
 import { fromZodError } from "@/lib/api/v1/_shared/error-envelope";
 import { ProblemJsonSchema } from "@/lib/api/v1/schemas/_common";
 import {
@@ -59,6 +60,26 @@ import {
   updateProvider,
 } from "./handlers";
 
+const DashboardCompatProviderTypeRouteSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .openapi({ enum: [...PUBLIC_PROVIDER_TYPE_VALUES] })
+  .describe("Provider type.");
+const ProviderListRouteQuerySchema = ProviderListQuerySchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema.optional(),
+});
+const ProviderUnifiedTestRouteSchema = ProviderUnifiedTestSchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema,
+});
+const ProviderTypeRouteQuerySchema = ProviderTypeQuerySchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema,
+});
+const ProviderFetchUpstreamModelsRouteSchema = ProviderFetchUpstreamModelsSchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema,
+});
+
 export const providersRouter = new OpenAPIHono({
   defaultHook: (result, c) => {
     if (!result.success) {
@@ -114,7 +135,7 @@ providersRouter.openapi(
       "Lists visible providers with optional search. Hidden legacy provider types are omitted.",
     "x-required-access": "admin",
     security,
-    request: { query: ProviderListQuerySchema },
+    request: { query: ProviderListRouteQuerySchema },
     responses: {
       200: {
         description: "Provider list.",
@@ -622,7 +643,7 @@ providersRouter.openapi(
     request: {
       body: {
         required: true,
-        content: { "application/json": { schema: ProviderUnifiedTestSchema } },
+        content: { "application/json": { schema: ProviderUnifiedTestRouteSchema } },
       },
     },
     responses: {
@@ -742,7 +763,7 @@ providersRouter.openapi(
     description: "Returns provider test presets for a supported provider type.",
     "x-required-access": "admin",
     security,
-    request: { query: ProviderTypeQuerySchema },
+    request: { query: ProviderTypeRouteQuerySchema },
     responses: {
       200: {
         description: "Provider test presets.",
@@ -767,7 +788,7 @@ providersRouter.openapi(
     request: {
       body: {
         required: true,
-        content: { "application/json": { schema: ProviderFetchUpstreamModelsSchema } },
+        content: { "application/json": { schema: ProviderFetchUpstreamModelsRouteSchema } },
       },
     },
     responses: {

@@ -4,8 +4,12 @@ import { z } from "zod";
 import type { ActionResult } from "@/actions/types";
 import { hasLegacyRedactedWritePlaceholders } from "@/lib/api/legacy-action-sanitizers";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
+import type { ResolvedAuth } from "@/lib/api/v1/_shared/auth-middleware";
 import { withNoStoreHeaders } from "@/lib/api/v1/_shared/cache-control";
-import { DASHBOARD_COMPAT_HEADER } from "@/lib/api/v1/_shared/constants";
+import {
+  DASHBOARD_COMPAT_HEADER,
+  INTERNAL_PROVIDER_TYPE_VALUES,
+} from "@/lib/api/v1/_shared/constants";
 import {
   createProblemResponse,
   fromZodError,
@@ -40,15 +44,6 @@ import {
   ProviderUpdateSchema,
 } from "@/lib/api/v1/schemas/providers";
 import type { ProviderDisplay } from "@/types/provider";
-
-const INTERNAL_PROVIDER_TYPE_VALUES = [
-  "claude",
-  "claude-auth",
-  "codex",
-  "gemini",
-  "gemini-cli",
-  "openai-compatible",
-] as const;
 
 const InternalProviderTypeSchema = z.enum(INTERNAL_PROVIDER_TYPE_VALUES);
 const InternalProviderListQuerySchema = ProviderListQuerySchema.extend({
@@ -501,7 +496,8 @@ async function loadVisibleProviders(c: Context): Promise<ProviderDisplay[] | Res
 }
 
 function isDashboardCompatRequest(c: Context): boolean {
-  return c.req.header(DASHBOARD_COMPAT_HEADER) === "1";
+  const auth = c.get("auth") as ResolvedAuth | undefined;
+  return c.req.header(DASHBOARD_COMPAT_HEADER) === "1" && auth?.session?.user.role === "admin";
 }
 
 async function findVisibleProvider(

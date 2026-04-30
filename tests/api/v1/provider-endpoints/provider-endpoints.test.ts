@@ -238,6 +238,46 @@ describe("v1 provider endpoint REST endpoints", () => {
         expect.objectContaining({ id: 12, providerType: "claude-auth", label: "legacy" }),
       ]),
     });
+
+    const filteredEndpoints = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/provider-vendors/1/endpoints?providerType=gemini-cli",
+      headers: dashboardCompatHeaders,
+    });
+    expect(filteredEndpoints.response.status).toBe(200);
+    expect(getProviderEndpointsMock).toHaveBeenCalledWith({
+      vendorId: 1,
+      providerType: "gemini-cli",
+    });
+
+    const stats = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/provider-vendors/endpoint-stats:batch",
+      headers: dashboardCompatHeaders,
+      body: { vendorIds: [1], providerType: "claude-auth" },
+    });
+    expect(stats.response.status).toBe(200);
+    expect(batchGetVendorTypeEndpointStatsMock).toHaveBeenCalledWith({
+      vendorIds: [1],
+      providerType: "claude-auth",
+    });
+  });
+
+  test("rejects dashboard compatibility headers without an admin session", async () => {
+    validateAuthTokenMock.mockResolvedValueOnce({
+      ...adminSession,
+      user: { ...adminSession.user, role: "user" },
+    } as AuthSession);
+
+    const response = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/provider-vendors/1/endpoints?providerType=gemini-cli",
+      headers: dashboardCompatHeaders,
+    });
+
+    expect(response.response.status).toBe(403);
+    expect(response.json).toMatchObject({ errorCode: "auth.forbidden" });
+    expect(getProviderEndpointsMock).not.toHaveBeenCalled();
   });
 
   test("reads, updates, and deletes provider vendors", async () => {

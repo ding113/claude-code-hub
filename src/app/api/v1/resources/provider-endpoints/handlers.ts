@@ -2,7 +2,12 @@ import type { Context } from "hono";
 import { z } from "zod";
 import type { ActionResult } from "@/actions/types";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
-import { DASHBOARD_COMPAT_HEADER, HIDDEN_PROVIDER_TYPES } from "@/lib/api/v1/_shared/constants";
+import type { ResolvedAuth } from "@/lib/api/v1/_shared/auth-middleware";
+import {
+  DASHBOARD_COMPAT_HEADER,
+  HIDDEN_PROVIDER_TYPES,
+  INTERNAL_PROVIDER_TYPE_VALUES,
+} from "@/lib/api/v1/_shared/constants";
 import {
   createProblemResponse,
   fromZodError,
@@ -28,15 +33,6 @@ import {
   VendorTypeManualOpenSchema,
   VendorTypeQuerySchema,
 } from "@/lib/api/v1/schemas/provider-endpoints";
-
-const INTERNAL_PROVIDER_TYPE_VALUES = [
-  "claude",
-  "claude-auth",
-  "codex",
-  "gemini",
-  "gemini-cli",
-  "openai-compatible",
-] as const;
 
 const InternalProviderTypeSchema = z.enum(INTERNAL_PROVIDER_TYPE_VALUES);
 const InternalProviderEndpointListQuerySchema = ProviderEndpointListQuerySchema.extend({
@@ -508,5 +504,6 @@ function isHiddenProviderType(providerType: unknown): boolean {
 }
 
 function isDashboardCompatRequest(c: Context): boolean {
-  return c.req.header(DASHBOARD_COMPAT_HEADER) === "1";
+  const auth = c.get("auth") as ResolvedAuth | undefined;
+  return c.req.header(DASHBOARD_COMPAT_HEADER) === "1" && auth?.session?.user.role === "admin";
 }

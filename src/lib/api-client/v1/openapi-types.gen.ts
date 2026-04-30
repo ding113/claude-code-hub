@@ -4236,7 +4236,7 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive provider search text. */
                 q?: string;
-                /** @description Filter by supported provider type. */
+                /** @description Provider type. */
                 providerType?: "claude" | "codex" | "gemini" | "openai-compatible";
                 /** @description Optional response expansion. Supported value: statistics. */
                 include?: "statistics";
@@ -8871,7 +8871,7 @@ export interface operations {
                     /** @description Request timeout in milliseconds. */
                     timeoutMs?: number;
                     /**
-                     * @description Provider type to test.
+                     * @description Provider type.
                      * @enum {string}
                      */
                     providerType: "claude" | "codex" | "gemini" | "openai-compatible";
@@ -24510,7 +24510,7 @@ export interface operations {
     getProviderVendorsByVendoridEndpoints: {
         parameters: {
             query?: {
-                /** @description Provider type filter. */
+                /** @description Provider type. */
                 providerType?: "claude" | "codex" | "gemini" | "openai-compatible";
                 /** @description Return dashboard-oriented endpoints. */
                 dashboard?: boolean | null;

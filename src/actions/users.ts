@@ -951,11 +951,14 @@ function toActionTransportUserDisplay(user: UserDisplay): UserDisplay {
 }
 
 function toActionTransportDate(value: Date | null | undefined): Date | null {
-  return value ? (value.toISOString() as unknown as Date) : null;
+  if (!value) return null;
+  const timestamp = value.getTime();
+  return (Number.isFinite(timestamp) ? value.toISOString() : null) as unknown as Date;
 }
 
 function toRequiredActionTransportDate(value: Date): Date {
-  return value.toISOString() as unknown as Date;
+  const timestamp = value.getTime();
+  return (Number.isFinite(timestamp) ? value.toISOString() : null) as unknown as Date;
 }
 
 /**

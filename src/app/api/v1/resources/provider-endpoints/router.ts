@@ -1,5 +1,6 @@
-import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { requireAuth } from "@/lib/api/v1/_shared/auth-middleware";
+import { PUBLIC_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
 import { fromZodError } from "@/lib/api/v1/_shared/error-envelope";
 import { ProblemJsonSchema } from "@/lib/api/v1/schemas/_common";
 import {
@@ -42,6 +43,32 @@ import {
   updateProviderEndpoint,
   updateProviderVendor,
 } from "./handlers";
+
+const DashboardCompatProviderTypeRouteSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .openapi({ enum: [...PUBLIC_PROVIDER_TYPE_VALUES] })
+  .describe("Provider type.");
+const ProviderEndpointListRouteQuerySchema = ProviderEndpointListQuerySchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema.optional(),
+});
+const ProviderEndpointCreateRouteSchema = ProviderEndpointCreateSchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema,
+});
+const BatchVendorEndpointStatsRouteSchema = BatchVendorEndpointStatsSchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema,
+});
+const VendorTypeRouteQuerySchema = VendorTypeQuerySchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema,
+});
+const VendorTypeManualOpenRouteSchema = VendorTypeManualOpenSchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema,
+});
+const VendorTypeBodyRouteSchema = VendorTypeBodySchema.extend({
+  providerType: DashboardCompatProviderTypeRouteSchema,
+});
 
 export const providerEndpointsRouter = new OpenAPIHono({
   defaultHook: (result, c) => {
@@ -176,7 +203,7 @@ providerEndpointsRouter.openapi(
     description: "Lists endpoints for a vendor, optionally filtered by supported provider type.",
     "x-required-access": "admin",
     security,
-    request: { params: ProviderVendorIdParamSchema, query: ProviderEndpointListQuerySchema },
+    request: { params: ProviderVendorIdParamSchema, query: ProviderEndpointListRouteQuerySchema },
     responses: {
       200: {
         description: "Provider endpoints.",
@@ -202,7 +229,7 @@ providerEndpointsRouter.openapi(
       params: ProviderVendorIdParamSchema,
       body: {
         required: true,
-        content: { "application/json": { schema: ProviderEndpointCreateSchema } },
+        content: { "application/json": { schema: ProviderEndpointCreateRouteSchema } },
       },
     },
     responses: {
@@ -350,7 +377,7 @@ providerEndpointsRouter.openapi(
     request: {
       body: {
         required: true,
-        content: { "application/json": { schema: BatchVendorEndpointStatsSchema } },
+        content: { "application/json": { schema: BatchVendorEndpointStatsRouteSchema } },
       },
     },
     responses: {
@@ -439,7 +466,7 @@ providerEndpointsRouter.openapi(
     description: "Gets circuit breaker state for a vendor and provider type.",
     "x-required-access": "admin",
     security,
-    request: { params: ProviderVendorIdParamSchema, query: VendorTypeQuerySchema },
+    request: { params: ProviderVendorIdParamSchema, query: VendorTypeRouteQuerySchema },
     responses: {
       200: {
         description: "Vendor type circuit state.",
@@ -465,7 +492,7 @@ providerEndpointsRouter.openapi(
       params: ProviderVendorIdParamSchema,
       body: {
         required: true,
-        content: { "application/json": { schema: VendorTypeManualOpenSchema } },
+        content: { "application/json": { schema: VendorTypeManualOpenRouteSchema } },
       },
     },
     responses: { 204: { description: "Vendor type circuit updated." }, ...problemResponses },
@@ -485,7 +512,10 @@ providerEndpointsRouter.openapi(
     security,
     request: {
       params: ProviderVendorIdParamSchema,
-      body: { required: true, content: { "application/json": { schema: VendorTypeBodySchema } } },
+      body: {
+        required: true,
+        content: { "application/json": { schema: VendorTypeBodyRouteSchema } },
+      },
     },
     responses: { 204: { description: "Vendor type circuit reset." }, ...problemResponses },
   }),

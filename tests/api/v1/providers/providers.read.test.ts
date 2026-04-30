@@ -287,7 +287,7 @@ describe("v1 providers read endpoints", () => {
   test("keeps hidden provider types available for dashboard compatibility requests", async () => {
     const hiddenList = await callV1Route({
       method: "GET",
-      pathname: "/api/v1/providers?q=legacy",
+      pathname: "/api/v1/providers?q=legacy&providerType=claude-auth",
       headers: {
         Authorization: "Bearer admin-token",
         [DASHBOARD_COMPAT_HEADER]: "1",
@@ -314,6 +314,26 @@ describe("v1 providers read endpoints", () => {
       2,
       expect.objectContaining({ name: "Legacy renamed", provider_type: "claude-auth" })
     );
+  });
+
+  test("rejects provider dashboard compatibility headers without an admin session", async () => {
+    validateAuthTokenMock.mockResolvedValueOnce({
+      ...adminSession,
+      user: { ...adminSession.user, role: "user" },
+    } as AuthSession);
+
+    const { response, json } = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/providers?providerType=claude-auth",
+      headers: {
+        Authorization: "Bearer admin-token",
+        [DASHBOARD_COMPAT_HEADER]: "1",
+      },
+    });
+
+    expect(response.status).toBe(403);
+    expect(json).toMatchObject({ errorCode: "auth.forbidden" });
+    expect(getProvidersMock).not.toHaveBeenCalled();
   });
 
   test("rejects bearer user API keys for admin routes when API key admin access is disabled", async () => {

@@ -211,37 +211,48 @@ describe("v1 action compatibility client", () => {
     expect(result).toEqual({ ok: true, data: { logs: [] } });
   });
 
-  test("summarizes hidden provider endpoint stats without hitting the public batch schema", async () => {
+  test("passes hidden provider endpoint filters through the dashboard compatibility path", async () => {
     getMock.mockResolvedValue({
-      items: [
-        { id: 1, providerType: "claude-auth", isEnabled: true, deletedAt: null, lastProbeOk: true },
-        {
-          id: 2,
-          providerType: "claude-auth",
-          isEnabled: true,
-          deletedAt: null,
-          lastProbeOk: false,
-        },
-        {
-          id: 3,
-          providerType: "claude-auth",
-          isEnabled: false,
-          deletedAt: null,
-          lastProbeOk: null,
-        },
-        { id: 4, providerType: "claude", isEnabled: true, deletedAt: null, lastProbeOk: true },
-      ],
+      items: [{ id: 1, providerType: "claude-auth" }],
     });
+
+    await expect(
+      providerEndpoints.getProviderEndpoints({
+        vendorId: 2,
+        providerType: "claude-auth",
+        dashboard: true,
+      })
+    ).resolves.toEqual([{ id: 1, providerType: "claude-auth" }]);
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/provider-vendors/2/endpoints?providerType=claude-auth&dashboard=true",
+      { headers: { [DASHBOARD_COMPAT_HEADER]: "1" } }
+    );
+  });
+
+  test("requests hidden provider endpoint stats from the server batch endpoint", async () => {
+    postMock.mockResolvedValue([
+      {
+        vendorId: 2,
+        total: 3,
+        enabled: 2,
+        healthy: 1,
+        unhealthy: 1,
+        unknown: 0,
+      },
+    ]);
 
     const result = await providerEndpoints.batchGetVendorTypeEndpointStats({
       vendorIds: [2, 2],
       providerType: "claude-auth",
     });
 
-    expect(postMock).not.toHaveBeenCalled();
-    expect(getMock).toHaveBeenCalledWith("/api/v1/provider-vendors/2/endpoints?dashboard=true", {
-      headers: { [DASHBOARD_COMPAT_HEADER]: "1" },
-    });
+    expect(getMock).not.toHaveBeenCalled();
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/v1/provider-vendors/endpoint-stats:batch",
+      { vendorIds: [2, 2], providerType: "claude-auth" },
+      { headers: { [DASHBOARD_COMPAT_HEADER]: "1" } }
+    );
     expect(result).toEqual({
       ok: true,
       data: [
