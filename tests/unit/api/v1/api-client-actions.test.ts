@@ -186,6 +186,31 @@ describe("v1 action compatibility client", () => {
     expect(user.keys[0]?.lastUsedAt).toBeInstanceOf(Date);
   });
 
+  test("revives numeric epoch timestamps instead of treating zero as empty", async () => {
+    getMock.mockResolvedValue({
+      items: [
+        {
+          id: 8,
+          name: "epoch user",
+          keys: [{ id: 12, createdAt: 0, lastUsedAt: 0 }],
+          costResetAt: 0,
+          expiresAt: 0,
+        },
+      ],
+      pageInfo: { nextCursor: null, hasMore: false, limit: 50 },
+    });
+
+    const result = await users.getUsersBatchCore({ limit: 50 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [user] = result.data.users;
+    expect(user.expiresAt?.toISOString()).toBe("1970-01-01T00:00:00.000Z");
+    expect(user.costResetAt?.toISOString()).toBe("1970-01-01T00:00:00.000Z");
+    expect(user.keys[0]?.createdAt.toISOString()).toBe("1970-01-01T00:00:00.000Z");
+    expect(user.keys[0]?.lastUsedAt?.toISOString()).toBe("1970-01-01T00:00:00.000Z");
+  });
+
   test("marks dashboard user search as a compatibility request", async () => {
     getMock.mockResolvedValue({ items: [{ id: 1, name: "Admin" }] });
 

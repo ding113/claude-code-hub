@@ -85,7 +85,7 @@ function normalizeUsers(users: UserDisplay[]): UserDisplay[] {
 }
 
 function normalizeDate(value: unknown): Date | null {
-  if (!value) return null;
+  if (value === null || value === undefined || value === "") return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (typeof value !== "string" && typeof value !== "number") return null;
 
