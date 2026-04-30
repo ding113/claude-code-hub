@@ -1,7 +1,8 @@
 import type { Context } from "hono";
+import { z } from "zod";
 import type { ActionResult } from "@/actions/types";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
-import { HIDDEN_PROVIDER_TYPES } from "@/lib/api/v1/_shared/constants";
+import { DASHBOARD_COMPAT_HEADER, HIDDEN_PROVIDER_TYPES } from "@/lib/api/v1/_shared/constants";
 import {
   createProblemResponse,
   fromZodError,
@@ -28,6 +29,35 @@ import {
   VendorTypeQuerySchema,
 } from "@/lib/api/v1/schemas/provider-endpoints";
 
+const INTERNAL_PROVIDER_TYPE_VALUES = [
+  "claude",
+  "claude-auth",
+  "codex",
+  "gemini",
+  "gemini-cli",
+  "openai-compatible",
+] as const;
+
+const InternalProviderTypeSchema = z.enum(INTERNAL_PROVIDER_TYPE_VALUES);
+const InternalProviderEndpointListQuerySchema = ProviderEndpointListQuerySchema.extend({
+  providerType: InternalProviderTypeSchema.optional(),
+});
+const InternalProviderEndpointCreateSchema = ProviderEndpointCreateSchema.extend({
+  providerType: InternalProviderTypeSchema,
+});
+const InternalBatchVendorEndpointStatsSchema = BatchVendorEndpointStatsSchema.extend({
+  providerType: InternalProviderTypeSchema,
+});
+const InternalVendorTypeQuerySchema = VendorTypeQuerySchema.extend({
+  providerType: InternalProviderTypeSchema,
+});
+const InternalVendorTypeManualOpenSchema = VendorTypeManualOpenSchema.extend({
+  providerType: InternalProviderTypeSchema,
+});
+const InternalVendorTypeBodySchema = VendorTypeBodySchema.extend({
+  providerType: InternalProviderTypeSchema,
+});
+
 export async function listProviderVendors(c: Context): Promise<Response> {
   const query = ProviderVendorListQuerySchema.safeParse({ dashboard: c.req.query("dashboard") });
   if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
@@ -38,8 +68,9 @@ export async function listProviderVendors(c: Context): Promise<Response> {
     : actions.getProviderVendors;
   const result = await callAction(c, action, [], c.get("auth"));
   if (!result.ok) return actionError(c, result);
+  const data = isDashboardCompatRequest(c) ? result.data : filterVisibleProviderTypes(result.data);
   return jsonResponse({
-    items: sanitizeProviderEndpointData(filterVisibleProviderTypes(result.data)),
+    items: sanitizeProviderEndpointData(data),
   });
 }
 
@@ -93,7 +124,11 @@ export async function deleteProviderVendor(c: Context): Promise<Response> {
 export async function listProviderEndpoints(c: Context): Promise<Response> {
   const params = parseVendorParams(c);
   if (params instanceof Response) return params;
-  const query = ProviderEndpointListQuerySchema.safeParse({
+  const query = (
+    isDashboardCompatRequest(c)
+      ? InternalProviderEndpointListQuerySchema
+      : ProviderEndpointListQuerySchema
+  ).safeParse({
     providerType: c.req.query("providerType"),
     dashboard: c.req.query("dashboard"),
   });
@@ -114,15 +149,21 @@ export async function listProviderEndpoints(c: Context): Promise<Response> {
         c.get("auth")
       );
   if (!result.ok) return actionError(c, result);
+  const data = isDashboardCompatRequest(c) ? result.data : filterVisibleProviderTypes(result.data);
   return jsonResponse({
-    items: sanitizeProviderEndpointData(filterVisibleProviderTypes(result.data)),
+    items: sanitizeProviderEndpointData(data),
   });
 }
 
 export async function createProviderEndpoint(c: Context): Promise<Response> {
   const params = parseVendorParams(c);
   if (params instanceof Response) return params;
-  const body = await parseHonoJsonBody(c, ProviderEndpointCreateSchema);
+  const body = await parseHonoJsonBody(
+    c,
+    isDashboardCompatRequest(c)
+      ? InternalProviderEndpointCreateSchema
+      : ProviderEndpointCreateSchema
+  );
   if (!body.ok) return body.response;
   const actions = await import("@/actions/provider-endpoints");
   return sanitizedActionJson(
@@ -232,7 +273,12 @@ export async function batchGetProbeLogs(c: Context): Promise<Response> {
 }
 
 export async function batchGetVendorEndpointStats(c: Context): Promise<Response> {
-  const body = await parseHonoJsonBody(c, BatchVendorEndpointStatsSchema);
+  const body = await parseHonoJsonBody(
+    c,
+    isDashboardCompatRequest(c)
+      ? InternalBatchVendorEndpointStatsSchema
+      : BatchVendorEndpointStatsSchema
+  );
   if (!body.ok) return body.response;
   const actions = await import("@/actions/provider-endpoints");
   return sanitizedActionJson(
@@ -294,7 +340,9 @@ export async function resetEndpointCircuit(c: Context): Promise<Response> {
 export async function getVendorCircuit(c: Context): Promise<Response> {
   const params = parseVendorParams(c);
   if (params instanceof Response) return params;
-  const query = VendorTypeQuerySchema.safeParse({ providerType: c.req.query("providerType") });
+  const query = (
+    isDashboardCompatRequest(c) ? InternalVendorTypeQuerySchema : VendorTypeQuerySchema
+  ).safeParse({ providerType: c.req.query("providerType") });
   if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
   const actions = await import("@/actions/provider-endpoints");
   return sanitizedActionJson(
@@ -311,7 +359,10 @@ export async function getVendorCircuit(c: Context): Promise<Response> {
 export async function setVendorCircuitManualOpen(c: Context): Promise<Response> {
   const params = parseVendorParams(c);
   if (params instanceof Response) return params;
-  const body = await parseHonoJsonBody(c, VendorTypeManualOpenSchema);
+  const body = await parseHonoJsonBody(
+    c,
+    isDashboardCompatRequest(c) ? InternalVendorTypeManualOpenSchema : VendorTypeManualOpenSchema
+  );
   if (!body.ok) return body.response;
   const actions = await import("@/actions/provider-endpoints");
   const result = await callAction(
@@ -327,7 +378,10 @@ export async function setVendorCircuitManualOpen(c: Context): Promise<Response> 
 export async function resetVendorCircuit(c: Context): Promise<Response> {
   const params = parseVendorParams(c);
   if (params instanceof Response) return params;
-  const body = await parseHonoJsonBody(c, VendorTypeBodySchema);
+  const body = await parseHonoJsonBody(
+    c,
+    isDashboardCompatRequest(c) ? InternalVendorTypeBodySchema : VendorTypeBodySchema
+  );
   if (!body.ok) return body.response;
   const actions = await import("@/actions/provider-endpoints");
   const result = await callAction(
@@ -356,7 +410,7 @@ function parseEndpointParams(c: Context): { endpointId: number } | Response {
 async function ensureVisibleEndpoint(c: Context, endpointId: number): Promise<Response | null> {
   const { findProviderEndpointById } = await import("@/repository/provider-endpoints");
   const endpoint = await findProviderEndpointById(endpointId);
-  if (!endpoint || isHiddenProviderType(endpoint.providerType)) {
+  if (!endpoint || (!isDashboardCompatRequest(c) && isHiddenProviderType(endpoint.providerType))) {
     return notFound(c, "provider_endpoint.not_found", "Provider endpoint was not found.");
   }
   return null;
@@ -451,4 +505,8 @@ function sanitizeProviderEndpointData<T>(value: T): T {
 
 function isHiddenProviderType(providerType: unknown): boolean {
   return HIDDEN_PROVIDER_TYPES.some((hidden) => hidden === providerType);
+}
+
+function isDashboardCompatRequest(c: Context): boolean {
+  return c.req.header(DASHBOARD_COMPAT_HEADER) === "1";
 }

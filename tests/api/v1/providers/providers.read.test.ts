@@ -1,4 +1,5 @@
 import type { AuthSession } from "@/lib/auth";
+import { DASHBOARD_COMPAT_HEADER } from "@/lib/api/v1/_shared/constants";
 import type { ProviderDisplay } from "@/types/provider";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -281,6 +282,38 @@ describe("v1 providers read endpoints", () => {
     });
     expect(JSON.stringify(json)).not.toContain("claude-auth");
     expect(JSON.stringify(json)).not.toContain("tpm");
+  });
+
+  test("keeps hidden provider types available for dashboard compatibility requests", async () => {
+    const hiddenList = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/providers?q=legacy",
+      headers: {
+        Authorization: "Bearer admin-token",
+        [DASHBOARD_COMPAT_HEADER]: "1",
+      },
+    });
+
+    expect(hiddenList.response.status).toBe(200);
+    expect(hiddenList.json).toMatchObject({
+      items: [{ id: 2, name: "Legacy hidden", providerType: "claude-auth" }],
+    });
+
+    const update = await callV1Route({
+      method: "PATCH",
+      pathname: "/api/v1/providers/2",
+      headers: {
+        Authorization: "Bearer admin-token",
+        [DASHBOARD_COMPAT_HEADER]: "1",
+      },
+      body: { name: "Legacy renamed", provider_type: "claude-auth" },
+    });
+
+    expect(update.response.status).toBe(200);
+    expect(editProviderMock).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ name: "Legacy renamed", provider_type: "claude-auth" })
+    );
   });
 
   test("rejects bearer user API keys for admin routes when API key admin access is disabled", async () => {

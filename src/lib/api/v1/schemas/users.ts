@@ -95,7 +95,7 @@ export const UserListQuerySchema = z.object({
 
 export const UserFilterSearchQuerySchema = z.object({
   q: z.string().trim().optional().describe("Search text."),
-  limit: z.coerce.number().int().min(1).max(100).default(20).describe("Result limit."),
+  limit: z.coerce.number().int().min(1).max(5000).default(20).describe("Result limit."),
 });
 
 export const UserCreateSchema = z.object(UserMutationFieldsSchema).strict();

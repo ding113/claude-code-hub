@@ -77,8 +77,11 @@ export function legacyCursorQueryEntries(value: unknown): [string, string | numb
     : [];
 }
 
-export function apiGet<T = any>(path: string): Promise<T> {
-  return apiClient.get<T>(path);
+export function apiGet<T = any>(
+  path: string,
+  options?: Parameters<typeof apiClient.get>[1]
+): Promise<T> {
+  return options === undefined ? apiClient.get<T>(path) : apiClient.get<T>(path, options);
 }
 
 export function apiPost<T = any>(
@@ -93,33 +96,48 @@ export function apiPut<T = any>(path: string, body?: unknown): Promise<T> {
   return apiClient.put<T>(path, body);
 }
 
-export function apiPatch<T = any>(path: string, body?: unknown): Promise<T> {
-  return apiClient.patch<T>(path, body);
+export function apiPatch<T = any>(
+  path: string,
+  body?: unknown,
+  options?: Parameters<typeof apiClient.patch>[2]
+): Promise<T> {
+  return options === undefined
+    ? apiClient.patch<T>(path, body)
+    : apiClient.patch<T>(path, body, options);
 }
 
 export async function apiPatchWithHeaders<T = any>(
   path: string,
-  body?: unknown
+  body?: unknown,
+  options?: Parameters<typeof apiClient.patch>[2]
 ): Promise<{ body: T; headers: Headers }> {
   let responseHeaders = new Headers();
   const responseBody = await apiClient.patch<T>(path, body, {
+    ...options,
     onResponse: (response) => {
+      options?.onResponse?.(response);
       responseHeaders = response.headers;
     },
   });
   return { body: responseBody, headers: responseHeaders };
 }
 
-export function apiDelete<T = void>(path: string): Promise<T> {
-  return apiClient.delete<T>(path);
+export function apiDelete<T = void>(
+  path: string,
+  options?: Parameters<typeof apiClient.delete>[1]
+): Promise<T> {
+  return options === undefined ? apiClient.delete<T>(path) : apiClient.delete<T>(path, options);
 }
 
 export async function apiDeleteWithHeaders<T = void>(
-  path: string
+  path: string,
+  options?: Parameters<typeof apiClient.delete>[1]
 ): Promise<{ body: T; headers: Headers }> {
   let responseHeaders = new Headers();
   const body = await apiClient.delete<T>(path, {
+    ...options,
     onResponse: (response) => {
+      options?.onResponse?.(response);
       responseHeaders = response.headers;
     },
   });

@@ -155,6 +155,56 @@ describe("getUsers compatibility", () => {
     expect(result[0]?.name).toBe("xiaolunanbei");
   });
 
+  test("getUsersBatchCore returns JSON-safe date fields for v1 API transport", async () => {
+    const user = makeUser(88, "dated-user");
+    user.expiresAt = new Date("2026-05-07T07:41:10.000Z");
+    user.costResetAt = new Date("2026-04-30T00:00:00.000Z");
+    findUserListBatchMock.mockResolvedValueOnce({
+      users: [user],
+      nextCursor: null,
+      hasMore: false,
+    });
+    findKeyListBatchMock.mockResolvedValueOnce(
+      new Map([
+        [
+          88,
+          [
+            {
+              id: 99,
+              name: "default",
+              key: "sk-test",
+              expiresAt: null,
+              isEnabled: true,
+              createdAt: new Date("2026-04-30T07:41:10.000Z"),
+              canLoginWebUi: true,
+              limit5hUsd: null,
+              limit5hResetMode: "rolling",
+              limitDailyUsd: null,
+              dailyResetMode: "fixed",
+              dailyResetTime: "00:00",
+              limitWeeklyUsd: null,
+              limitMonthlyUsd: null,
+              limitTotalUsd: null,
+              limitConcurrentSessions: 0,
+              costResetAt: null,
+              providerGroup: "default",
+            },
+          ],
+        ],
+      ])
+    );
+
+    const { getUsersBatchCore } = await import("@/actions/users");
+
+    const result = await getUsersBatchCore({ limit: 50 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.users[0]?.expiresAt).toBe("2026-05-07T07:41:10.000Z");
+    expect(result.data.users[0]?.costResetAt).toBe("2026-04-30T00:00:00.000Z");
+    expect(result.data.users[0]?.keys[0]?.createdAt).toBe("2026-04-30T07:41:10.000Z");
+  });
+
   test("falls back to legacy query when searchTerm is blank", async () => {
     findUserListBatchMock.mockResolvedValueOnce({
       users: [makeUser(77, "legacy-query-hit")],
