@@ -488,6 +488,21 @@ describe("v1 provider endpoint REST endpoints", () => {
     });
     expect(conflict.response.status).toBe(409);
     expect(conflict.response.headers.get("content-type")).toContain("application/problem+json");
+
+    removeProviderEndpointMock.mockResolvedValueOnce({
+      ok: false,
+      error: "端点仍被启用供应商引用",
+      errorCode: "ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS",
+    });
+    const deleteConflict = await callV1Route({
+      method: "DELETE",
+      pathname: "/api/v1/provider-endpoints/10",
+      headers,
+    });
+    expect(deleteConflict.response.status).toBe(409);
+    expect(deleteConflict.json).toMatchObject({
+      errorCode: "ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS",
+    });
   });
 
   test("gets batch vendor endpoint stats and documents REST paths without legacy types", async () => {

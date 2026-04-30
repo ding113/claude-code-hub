@@ -139,11 +139,15 @@ export function preserveLegacyProviderUpdateInput<
     }
   }
 
-  const customHeaders = next["custom_headers"] ?? next["customHeaders"];
+  if (typeof next.key === "string" && hasLegacyRedactedWritePlaceholders(next.key)) {
+    delete next.key;
+  }
+
+  const customHeaders = next.custom_headers ?? next.customHeaders;
   if (isHeaderRecord(customHeaders) && existing.customHeaders) {
     const restored = restoreRedactedHeaderValues(customHeaders, existing.customHeaders);
-    if (next["custom_headers"] !== undefined) next["custom_headers"] = restored;
-    if (next["customHeaders"] !== undefined) next["customHeaders"] = restored;
+    if (next.custom_headers !== undefined) next.custom_headers = restored;
+    if (next.customHeaders !== undefined) next.customHeaders = restored;
   }
 
   return next as T;

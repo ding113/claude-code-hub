@@ -116,6 +116,7 @@ describe("legacy action response sanitizers", () => {
         proxy_url: "https://REDACTED:REDACTED@proxy.example.com/",
         website_url: "https://REDACTED:REDACTED@example.com/",
         mcp_passthrough_url: "https://REDACTED:REDACTED@mcp.example.com/bridge",
+        key: "sk-a...[REDACTED]...xxxx",
         custom_headers: {
           authorization: "[REDACTED]",
           "X-Trace": "changed",

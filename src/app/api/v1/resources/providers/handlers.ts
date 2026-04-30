@@ -110,6 +110,14 @@ export async function updateProvider(c: Context): Promise<Response> {
       detail: "Redacted placeholders cannot be used for the key field when updating providers.",
     });
   }
+  if (hasUnresolvedRedactedHeaderEcho(body.data.custom_headers, existing.customHeaders)) {
+    return createProblemResponse({
+      status: 422,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "provider.redacted_placeholder_rejected",
+      detail: "Redacted placeholders cannot be used for renamed custom header fields.",
+    });
+  }
 
   const updatePayload = preserveRedactedProviderUpdateFields(body.data, existing);
   const providerActions = await import("@/actions/providers");
@@ -623,6 +631,23 @@ function restoreRedactedHeaderValues(
         ? (existing[name] ?? existingByLowerName.get(name.toLowerCase()) ?? value)
         : value,
     ])
+  );
+}
+
+function hasUnresolvedRedactedHeaderEcho(
+  incoming: Record<string, string> | null | undefined,
+  existing: Record<string, string> | null | undefined
+): boolean {
+  if (!incoming) return false;
+  const redactedExisting = existing ? (redactHeaderRecord(existing) ?? {}) : {};
+  const redactedExistingNames = new Set(
+    Object.entries(redactedExisting)
+      .filter(([, value]) => value === "[REDACTED]")
+      .map(([name]) => name.toLowerCase())
+  );
+
+  return Object.entries(incoming).some(
+    ([name, value]) => value === "[REDACTED]" && !redactedExistingNames.has(name.toLowerCase())
   );
 }
 

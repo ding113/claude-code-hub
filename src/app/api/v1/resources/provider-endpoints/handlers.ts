@@ -384,7 +384,9 @@ function actionError(c: Context, result: Extract<ActionResult<unknown>, { ok: fa
   const status =
     code === "NOT_FOUND" || detail.includes("不存在") || detail.includes("not found")
       ? 404
-      : code === "CONFLICT" || detail.includes("冲突")
+      : code === "CONFLICT" ||
+          code === "ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS" ||
+          detail.includes("冲突")
         ? 409
         : detail.includes("权限")
           ? 403
