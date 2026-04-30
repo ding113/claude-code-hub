@@ -25,6 +25,19 @@ ENV REDIS_URL="redis://localhost:6379"
 # 标记为 CI 环境，跳过 instrumentation.ts 中的数据库连接
 ENV CI=true
 
+# 数据库连接池配置 (构建时需要)
+ENV DB_POOL_MAX="10"
+ENV DB_POOL_IDLE_TIMEOUT="20"
+ENV DB_POOL_CONNECT_TIMEOUT="10"
+
+# 消息写入缓冲区配置 (构建时需要)
+ENV MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS="250"
+ENV MESSAGE_REQUEST_ASYNC_BATCH_SIZE="200"
+ENV MESSAGE_REQUEST_ASYNC_MAX_PENDING="5000"
+
+# 管理员令牌 (构建占位符)
+ENV ADMIN_TOKEN="ci-build-placeholder"
+
 RUN bun run build
 
 # 运行阶段：使用 Node.js（避免 Bun 流式响应内存泄漏 Issue #18488）
