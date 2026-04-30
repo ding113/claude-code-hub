@@ -41,14 +41,15 @@ import {
 import type { ProviderDisplay } from "@/types/provider";
 
 export async function listProviders(c: Context): Promise<Response> {
-  const query = ProviderListQuerySchema.parse({
+  const query = ProviderListQuerySchema.safeParse({
     q: c.req.query("q"),
     providerType: c.req.query("providerType"),
     include: c.req.query("include"),
   });
+  if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
   const providers = await loadVisibleProviders(c);
   if (providers instanceof Response) return providers;
-  return jsonResponse({ items: filterProviders(providers, query).map(sanitizeProvider) });
+  return jsonResponse({ items: filterProviders(providers, query.data).map(sanitizeProvider) });
 }
 
 export async function getProvider(c: Context): Promise<Response> {

@@ -189,7 +189,7 @@ function preserveRedactedWebhookTargetUpdateFields(
 }
 
 function isEmptySecretEcho(value: unknown): boolean {
-  return value === null || value === "";
+  return value === "";
 }
 
 function isRedactedUrlEcho(value: unknown, existing: string | null | undefined): boolean {

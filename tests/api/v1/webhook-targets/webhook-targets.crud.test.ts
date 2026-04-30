@@ -122,7 +122,7 @@ describe("v1 webhook targets CRUD", () => {
       body: {
         name: "Ops 2",
         webhookUrl: "[REDACTED]",
-        dingtalkSecret: null,
+        dingtalkSecret: "",
         customHeaders: {
           authorization: "[REDACTED]",
           "X-Trace": "changed-trace",
@@ -160,7 +160,7 @@ describe("v1 webhook targets CRUD", () => {
       body: {
         name: "Telegram Ops",
         providerType: "telegram",
-        telegramBotToken: null,
+        telegramBotToken: "",
         telegramChatId: "chat-id",
       },
     });
@@ -170,6 +170,24 @@ describe("v1 webhook targets CRUD", () => {
       name: "Telegram Ops",
       providerType: "telegram",
       telegramChatId: "chat-id",
+    });
+  });
+
+  test("passes explicit null secret updates through so stored secrets can be cleared", async () => {
+    const updated = await callV1Route({
+      method: "PATCH",
+      pathname: "/api/v1/webhook-targets/10",
+      headers: { Authorization: "Bearer admin-token" },
+      body: {
+        name: "Ops 2",
+        dingtalkSecret: null,
+      },
+    });
+
+    expect(updated.response.status).toBe(200);
+    expect(updateWebhookTargetActionMock).toHaveBeenCalledWith(10, {
+      name: "Ops 2",
+      dingtalkSecret: null,
     });
   });
 

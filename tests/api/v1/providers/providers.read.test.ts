@@ -316,6 +316,19 @@ describe("v1 providers read endpoints", () => {
     });
   });
 
+  test("returns problem+json for invalid provider list query params", async () => {
+    const { response, json } = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/providers?providerType=bad&include=bad",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("content-type")).toContain("application/problem+json");
+    expect(json).toMatchObject({ errorCode: "request.validation_failed" });
+    expect(getProvidersMock).not.toHaveBeenCalled();
+  });
+
   test("redacts secondary provider secrets from list and detail responses", async () => {
     const list = await callV1Route({
       method: "GET",
