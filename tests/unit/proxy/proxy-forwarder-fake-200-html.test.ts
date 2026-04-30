@@ -244,14 +244,7 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(doForward.mock.calls[1][1].id).toBe(2);
 
     expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledWith(session, [1]);
-    expect(mocks.recordFailure).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ message: "FAKE_200_HTML_BODY" })
-    );
-    const failure1 = mocks.recordFailure.mock.calls[0]?.[1];
-    expect(failure1).toBeInstanceOf(ProxyError);
-    expect((failure1 as ProxyError).getClientSafeMessage()).toContain("HTML document");
-    expect((failure1 as ProxyError).getClientSafeMessage()).toContain("Upstream detail:");
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
@@ -299,17 +292,7 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(doForward.mock.calls[1][1].id).toBe(2);
 
     expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledWith(session, [1]);
-    expect(mocks.recordFailure).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ message: "FAKE_200_JSON_ERROR_NON_EMPTY" })
-    );
-    const failure2 = mocks.recordFailure.mock.calls[0]?.[1];
-    expect(failure2).toBeInstanceOf(ProxyError);
-    expect((failure2 as ProxyError).getClientSafeMessage()).toContain("JSON body");
-    expect((failure2 as ProxyError).getClientSafeMessage()).toContain("`error`");
-    expect((failure2 as ProxyError).getClientSafeMessage()).toContain("upstream blocked");
-    expect((failure2 as ProxyError).upstreamError?.rawBody).toBe(jsonErrorBody);
-    expect((failure2 as ProxyError).upstreamError?.rawBodyTruncated).toBe(false);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
@@ -356,17 +339,7 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(doForward.mock.calls[1][1].id).toBe(2);
 
     expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledWith(session, [1]);
-    expect(mocks.recordFailure).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ message: "FAKE_200_JSON_ERROR_NON_EMPTY" })
-    );
-    const failure3 = mocks.recordFailure.mock.calls[0]?.[1];
-    expect(failure3).toBeInstanceOf(ProxyError);
-    expect((failure3 as ProxyError).getClientSafeMessage()).toContain("JSON body");
-    expect((failure3 as ProxyError).getClientSafeMessage()).toContain("`error`");
-    expect((failure3 as ProxyError).getClientSafeMessage()).toContain("upstream blocked");
-    expect((failure3 as ProxyError).upstreamError?.rawBody).toBe(jsonErrorBody);
-    expect((failure3 as ProxyError).upstreamError?.rawBodyTruncated).toBe(false);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
@@ -408,15 +381,7 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     const response = await ProxyForwarder.send(session);
     expect(await response.text()).toContain("ok");
 
-    expect(mocks.recordFailure).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ message: "FAKE_200_JSON_ERROR_NON_EMPTY" })
-    );
-
-    const failure = mocks.recordFailure.mock.calls[0]?.[1];
-    expect(failure).toBeInstanceOf(ProxyError);
-    expect((failure as ProxyError).statusCode).toBe(429);
-    expect((failure as ProxyError).upstreamError?.statusCodeInferred).toBe(true);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
 
     const chain = session.getProviderChain();
     expect(
@@ -474,14 +439,7 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(doForward.mock.calls[1][1].id).toBe(2);
 
     expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledWith(session, [1]);
-    expect(mocks.recordFailure).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ message: "FAKE_200_HTML_BODY" })
-    );
-
-    const failure = mocks.recordFailure.mock.calls[0]?.[1];
-    expect(failure).toBeInstanceOf(ProxyError);
-    expect((failure as ProxyError).upstreamError?.rawBody).toBe(htmlErrorBody);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
@@ -528,10 +486,7 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(doForward.mock.calls[1][1].id).toBe(2);
 
     expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledWith(session, [1]);
-    expect(mocks.recordFailure).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ reason: "missing_content" })
-    );
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });

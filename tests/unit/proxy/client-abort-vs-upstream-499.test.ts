@@ -4,7 +4,7 @@
  * Validates that isClientAbortError() and categorizeErrorAsync() correctly
  * distinguish between:
  * - Local client disconnection (CCH synthesized 499) -> CLIENT_ABORT
- * - Upstream HTTP 499 response -> PROVIDER_ERROR (triggers fallback/circuit-breaker)
+ * - Upstream HTTP 499 response -> PROVIDER_ERROR (triggers retry/fallback)
  */
 import { describe, expect, it } from "vitest";
 import {

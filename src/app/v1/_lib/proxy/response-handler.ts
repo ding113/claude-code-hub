@@ -461,7 +461,7 @@ type FinalizeDeferredStreamingResult = {
  * - Forwarder 收到 Response 且识别为 SSE 时，会在 session 上挂载 DeferredStreamingFinalization 元信息。
  * - ResponseHandler 在后台读取完整 SSE 内容后，调用本函数：
  *   - 如果内容看起来是上游错误 JSON（假 200），则：
- *     - 计入熔断器失败；
+ *     - 记录本次请求失败，但不累计 provider 熔断；
  *     - 不更新 session 智能绑定（避免把会话粘到坏 provider）；
  *     - 内部状态码改为“推断得到的 4xx/5xx”（未命中则回退 502），
  *       仅影响统计与后续重试选择，不影响本次客户端响应。
@@ -587,30 +587,16 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
   // 未自然结束：不更新 session 绑定（避免把会话粘到不稳定 provider），但要避免把它误记为 200 completed。
   //
-  // 同时，为了让故障转移/熔断能正确工作：
+  // 同时，为了让故障转移能正确工作：
   // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
-  // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
+  // - 非客户端中断：记录为本次请求失败，但不累计 provider 熔断；
+  //   已经建立上游响应流的错误可能只是部分请求/模型异常，不应影响整个供应商。
   if (!streamEndedNormally) {
     await clearSessionBinding();
 
-    if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-      try {
-        // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
-        const { recordFailure } = await import("@/lib/circuit-breaker");
-        await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
-      } catch (cbError) {
-        logger.warn("[ResponseHandler] Failed to record streaming failure in circuit breaker", {
-          providerId: meta.providerId,
-          sessionId: session.sessionId ?? null,
-          error: cbError,
-        });
-      }
-
-      // NOTE: Do NOT call recordEndpointFailure here. Stream aborts are key-level
-      // errors (auth, rate limit, bad key). The endpoint itself delivered HTTP 200
-      // successfully. Only forwarder-level failures (timeout, network error) and
-      // probe failures should penalize the endpoint circuit breaker.
-    }
+    // NOTE: Do NOT call recordFailure or recordEndpointFailure here. Stream aborts
+    // happen after the endpoint has already responded; forwarder-level connection
+    // failures remain the path that can affect provider/endpoint circuit state.
 
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
@@ -640,22 +626,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
     const chainReason = effectiveStatusCode === 404 ? "resource_not_found" : "retry_failed";
 
-    // 计入熔断器：让后续请求能正确触发故障转移/熔断。
-    //
-    // 注意：404 语义在 forwarder 中属于 RESOURCE_NOT_FOUND，不计入熔断器（避免把“资源/模型不存在”当作供应商故障）。
-    if (effectiveStatusCode !== 404 && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-      try {
-        // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
-        const { recordFailure } = await import("@/lib/circuit-breaker");
-        await recordFailure(meta.providerId, new Error(detected.code));
-      } catch (cbError) {
-        logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
-          providerId: meta.providerId,
-          sessionId: session.sessionId ?? null,
-          error: cbError,
-        });
-      }
-    }
+    // 假 200 代表请求已到达上游并拿到响应，可能只是部分请求或模型返回错误。
+    // 这里保留本次失败和供应商切换信息，但不累计 provider 熔断。
 
     // NOTE: Do NOT call recordEndpointFailure here. Fake-200 errors are key-level
     // issues (invalid key, auth failure). The endpoint returned HTTP 200 successfully;
@@ -692,20 +664,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
     const chainReason = effectiveStatusCode === 404 ? "resource_not_found" : "retry_failed";
 
-    // 计入熔断器：让后续请求能正确触发故障转移/熔断。
-    // 注意：与 forwarder 口径保持一致：404 不计入熔断器（资源不存在不是供应商故障）。
-    if (effectiveStatusCode !== 404 && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-      try {
-        const { recordFailure } = await import("@/lib/circuit-breaker");
-        await recordFailure(meta.providerId, new Error(errorMessage));
-      } catch (cbError) {
-        logger.warn("[ResponseHandler] Failed to record non-200 error in circuit breaker", {
-          providerId: meta.providerId,
-          sessionId: session.sessionId ?? null,
-          error: cbError,
-        });
-      }
-    }
+    // 非 200 HTTP 响应说明上游可达；例如 500/502 可能只影响当前请求。
+    // 这里不累计 provider 熔断，避免健康供应商因个别请求被整体排除。
 
     // NOTE: Do NOT call recordEndpointFailure here. Non-200 HTTP errors (401, 429,
     // etc.) are typically key/auth-level errors. The endpoint was reachable and
@@ -963,27 +923,11 @@ export class ProxyResponseHandler {
               });
             }
 
-            // 非200状态码处理：解析错误响应并计入熔断器
+            // 非200状态码处理：解析错误响应并记录到决策链。
             let errorMessageForFinalize: string | undefined;
             if (statusCode >= 400) {
               const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
               errorMessageForFinalize = detected.isError ? detected.code : `HTTP ${statusCode}`;
-
-              // 计入熔断器
-              if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-                try {
-                  const { recordFailure } = await import("@/lib/circuit-breaker");
-                  await recordFailure(provider.id, new Error(errorMessageForFinalize));
-                } catch (cbError) {
-                  logger.warn(
-                    "ResponseHandler: Failed to record non-200 error in circuit breaker (passthrough)",
-                    {
-                      providerId: provider.id,
-                      error: cbError,
-                    }
-                  );
-                }
-              }
 
               // 记录到决策链
               session.addProviderToChain(provider, {
@@ -1358,23 +1302,10 @@ export class ProxyResponseHandler {
           });
         }
 
-        // 非200状态码处理：解析错误响应并计入熔断器
+        // 非200状态码处理：解析错误响应并记录到决策链。
         if (statusCode >= 400) {
           const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
           const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
-
-          // 计入熔断器
-          if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
-            try {
-              const { recordFailure } = await import("@/lib/circuit-breaker");
-              await recordFailure(provider.id, new Error(errorMessageForDb));
-            } catch (cbError) {
-              logger.warn("ResponseHandler: Failed to record non-200 error in circuit breaker", {
-                providerId: provider.id,
-                error: cbError,
-              });
-            }
-          }
 
           // 记录到决策链
           session.addProviderToChain(provider, {

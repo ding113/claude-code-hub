@@ -357,7 +357,7 @@ cch doctor            # 诊断集群与部署状态
 | `API_KEY_AUTH_CACHE_TTL_SECONDS`           | `60`                     | API Key 鉴权缓存 TTL（秒，默认 60，最大 3600）。                              |
 | `SESSION_TTL`                              | `300`                    | Session 缓存时间（秒），影响供应商复用策略。                                 |
 | `ENABLE_SECURE_COOKIES`                    | `true`                   | 仅 HTTPS 场景能设置 Secure Cookie；HTTP 访问（非 localhost）需改为 `false`。 |
-| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | 是否将网络错误计入熔断器；开启后能更激进地阻断异常线路。                     |
+| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `true`                   | 是否将网络错误计入熔断器；开启后只让连接失败、超时这类不可达问题影响供应商熔断。 |
 | `APP_PORT`                                 | `23000`                  | 生产端口，可被容器或进程管理器覆盖。                                         |
 | `APP_URL`                                  | 空                       | 设置后 OpenAPI 文档 `servers` 将展示正确域名/端口。                          |
 | `API_TEST_TIMEOUT_MS`                      | `15000`                  | 供应商 API 测试超时时间（毫秒，范围 5000-120000），跨境网络可适当提高。      |

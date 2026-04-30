@@ -549,8 +549,8 @@ export class ProxyError extends Error {
  * 错误分类：区分供应商错误和系统错误
  */
 export enum ErrorCategory {
-  PROVIDER_ERROR, // 供应商问题（所有 4xx/5xx HTTP 错误）→ 计入熔断器 + 直接切换
-  SYSTEM_ERROR, // 系统/网络问题（fetch 网络异常）→ 不计入熔断器 + 先重试1次
+  PROVIDER_ERROR, // 上游已响应但请求失败（HTTP 4xx/5xx、空响应等）→ 重试/切换，但不累计 provider 熔断
+  SYSTEM_ERROR, // 系统/网络问题（fetch 网络异常）→ 按网络错误配置决定是否累计 provider 熔断
   CLIENT_ABORT, // 客户端主动中断 → 不计入熔断器 + 不重试 + 直接返回
   NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失/额外参数、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
   RESOURCE_NOT_FOUND, // 上游 404 错误 → 不计入熔断器 + 直接切换供应商
@@ -844,7 +844,7 @@ export function isRateLimitError(error: unknown): error is RateLimitError {
  *
  * 设计原则：
  * 1. 结构化错误：携带供应商信息和失败原因
- * 2. 计入熔断器：空响应视为供应商问题
+ * 2. 不累计 provider 熔断：空响应可能只影响当前请求
  * 3. 触发故障切换：尝试其他供应商
  */
 export class EmptyResponseError extends Error {
@@ -912,14 +912,14 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
  *    → 不应重试（重试也会失败）
  *    → 应立即返回错误，提示用户修正输入
  *
- * 3. 供应商问题（ProxyError - 所有 4xx/5xx HTTP 错误）
+ * 3. 上游已响应但请求失败（ProxyError - 所有 4xx/5xx HTTP 错误）
  *    → 说明请求到达供应商并得到响应，但供应商无法正常处理
- *    → 应计入熔断器，连续失败时触发熔断保护
- *    → 应直接切换到其他供应商
+ *    → 不累计 provider 熔断，避免部分模型/部分请求错误影响整个供应商
+ *    → 应按重试策略尝试当前供应商或切换到其他供应商
  *
  * 4. 系统/网络问题（fetch 网络异常）
  *    → 包括：DNS 解析失败、连接被拒绝、连接超时、网络中断等
- *    → 不应计入供应商熔断器（不是供应商服务不可用）
+ *    → 可按 ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS 配置累计 provider 熔断
  *    → 应先重试1次当前供应商（可能是临时网络抖动）
  *
  * 此函数会确保错误规则已加载后再进行检测
@@ -954,9 +954,9 @@ export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory>
     return ErrorCategory.PROVIDER_ERROR; // 其他 HTTP 错误都是供应商问题
   }
 
-  // 优先级 3.2: 空响应错误 - 计入熔断器 + 触发故障切换
+  // 优先级 3.2: 空响应错误 - 触发故障切换，但不累计 provider 熔断
   if (error instanceof EmptyResponseError) {
-    return ErrorCategory.PROVIDER_ERROR; // 空响应视为供应商问题
+    return ErrorCategory.PROVIDER_ERROR; // 空响应视为本次供应商请求失败
   }
 
   // 优先级 4: 其他所有错误都是系统错误

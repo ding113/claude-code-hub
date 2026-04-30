@@ -1783,7 +1783,7 @@ export class ProxyForwarder {
               }
             } else {
               logger.debug(
-                "ProxyForwarder: Network error not counted towards circuit breaker (disabled by default)",
+                "ProxyForwarder: Network error not counted towards circuit breaker (disabled by config)",
                 {
                   providerId: currentProvider.id,
                   providerName: currentProvider.name,
@@ -1866,7 +1866,7 @@ export class ProxyForwarder {
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 6. 供应商错误处理（所有 4xx/5xx HTTP 错误 + 空响应错误，计入熔断器，重试耗尽后切换）
+          // ⭐ 6. 供应商错误处理（所有 4xx/5xx HTTP 错误 + 空响应错误，重试耗尽后切换）
           if (errorCategory === ErrorCategory.PROVIDER_ERROR) {
             // 🆕 空响应错误特殊处理（EmptyResponseError 不是 ProxyError）
             if (isEmptyResponseError(lastError)) {
@@ -1894,7 +1894,7 @@ export class ProxyForwarder {
                 attemptNumber: attemptCount,
                 rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
                 errorMessage: emptyError.message,
-                circuitFailureCount: health.failureCount + 1,
+                circuitFailureCount: health.failureCount,
                 circuitFailureThreshold: config.failureThreshold,
                 statusCode: 520, // Web Server Returned an Unknown Error
                 errorDetails: {
@@ -1927,12 +1927,7 @@ export class ProxyForwarder {
                 continue;
               }
 
-              // 重试耗尽：计入熔断器并切换供应商
-              if (!session.isProbeRequest()) {
-                if (shouldAccountCircuitBreaker) {
-                  await recordFailure(currentProvider.id, lastError);
-                }
-              }
+              // 重试耗尽：空响应说明上游可达但本次响应不可用，不累计 provider 熔断。
 
               ProxyForwarder.markProviderFailed(session, failedProviderIds, currentProvider.id);
               break; // 跳出内层循环，进入供应商切换逻辑
@@ -1942,6 +1937,7 @@ export class ProxyForwarder {
             const proxyError = lastError as ProxyError;
             const statusCode = proxyError.statusCode;
             const willRetry = attemptCount < maxAttemptsPerProvider;
+            const shouldRecordProviderCircuitFailure = statusCode === 524;
 
             if (
               !isMcpRequest &&
@@ -2025,7 +2021,8 @@ export class ProxyForwarder {
               attemptNumber: attemptCount,
               rawCrossProviderFallbackEnabled: rawCrossProviderFallbackEnabled || undefined,
               errorMessage: errorMessage,
-              circuitFailureCount: health.failureCount + 1, // 包含本次失败
+              circuitFailureCount:
+                health.failureCount + (shouldRecordProviderCircuitFailure ? 1 : 0),
               circuitFailureThreshold: config.failureThreshold,
               statusCode: statusCode,
               statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
@@ -2065,7 +2062,8 @@ export class ProxyForwarder {
               continue;
             }
 
-            // ⭐ 重试耗尽：只有非探测请求才计入熔断器
+            // ⭐ 重试耗尽：只有连接/超时类失败才累计 provider 熔断。
+            // HTTP 500/502 等说明上游可达，可能只是部分请求或模型错误，不应影响整个供应商。
             if (session.isProbeRequest()) {
               logger.debug("ProxyForwarder: Probe request error, skipping circuit breaker", {
                 providerId: currentProvider.id,
@@ -2073,7 +2071,7 @@ export class ProxyForwarder {
                 messagesCount: session.getMessagesLength(),
               });
             } else {
-              if (shouldAccountCircuitBreaker) {
+              if (shouldRecordProviderCircuitFailure && shouldAccountCircuitBreaker) {
                 await recordFailure(currentProvider.id, lastError);
               }
             }
@@ -3926,7 +3924,7 @@ export class ProxyForwarder {
       attempts.delete(attempt);
       ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
 
-      if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
+      if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode === 524) {
         await recordFailure(attempt.provider.id, error);
       }
 

@@ -2,7 +2,7 @@
  * Tests for non-200 status code handling in response-handler.ts
  *
  * Verifies that:
- * - Non-200 responses trigger circuit breaker recording
+ * - Non-200 responses do not trigger provider circuit breaker recording
  * - JSON error responses are parsed correctly
  * - Provider chain is updated with error info
  * - Error messages are captured for logging
@@ -267,7 +267,7 @@ describe("Non-200 Status Code Handling", () => {
   });
 
   describe("handleNonStream with non-200 status code", () => {
-    it("should record failure in circuit breaker for 500 status", async () => {
+    it("should not record provider circuit breaker failure for 500 status", async () => {
       const session = createSession({
         provider: mockProvider,
         messageContext: mockMessageContext,
@@ -280,8 +280,6 @@ describe("Non-200 Status Code Handling", () => {
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
         const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
-        await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
-
         session.addProviderToChain(mockProvider, {
           reason: "retry_failed",
           attemptNumber: 1,
@@ -290,10 +288,7 @@ describe("Non-200 Status Code Handling", () => {
         });
       }
 
-      expect(mockRecordFailure).toHaveBeenCalledWith(
-        mockProvider.id,
-        expect.objectContaining({ message: "FAKE_200_JSON_ERROR_NON_EMPTY" })
-      );
+      expect(mockRecordFailure).not.toHaveBeenCalled();
 
       const chain = session.getProviderChain();
       expect(chain.length).toBeGreaterThan(0);
@@ -313,8 +308,6 @@ describe("Non-200 Status Code Handling", () => {
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
         const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
-        await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
-
         session.addProviderToChain(mockProvider, {
           reason: "retry_failed",
           attemptNumber: 1,
@@ -323,10 +316,7 @@ describe("Non-200 Status Code Handling", () => {
         });
       }
 
-      expect(mockRecordFailure).toHaveBeenCalledWith(
-        mockProvider.id,
-        expect.objectContaining({ message: "HTTP 401" })
-      );
+      expect(mockRecordFailure).not.toHaveBeenCalled();
     });
 
     it("should handle 400 status with JSON error", async () => {
@@ -342,8 +332,6 @@ describe("Non-200 Status Code Handling", () => {
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
         const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
-        await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
-
         session.addProviderToChain(mockProvider, {
           reason: "retry_failed",
           attemptNumber: 1,
@@ -352,10 +340,7 @@ describe("Non-200 Status Code Handling", () => {
         });
       }
 
-      expect(mockRecordFailure).toHaveBeenCalledWith(
-        mockProvider.id,
-        expect.objectContaining({ message: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY" })
-      );
+      expect(mockRecordFailure).not.toHaveBeenCalled();
     });
 
     it("should handle 429 rate limit error", async () => {
@@ -371,8 +356,6 @@ describe("Non-200 Status Code Handling", () => {
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
         const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
-        await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
-
         session.addProviderToChain(mockProvider, {
           reason: "retry_failed",
           attemptNumber: 1,
@@ -381,10 +364,7 @@ describe("Non-200 Status Code Handling", () => {
         });
       }
 
-      expect(mockRecordFailure).toHaveBeenCalledWith(
-        mockProvider.id,
-        expect.objectContaining({ message: "FAKE_200_JSON_ERROR_NON_EMPTY" })
-      );
+      expect(mockRecordFailure).not.toHaveBeenCalled();
     });
   });
 
