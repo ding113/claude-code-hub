@@ -225,4 +225,50 @@ describe("resolvePricingForModelRecords", () => {
       input_cost_per_token: 0.000005,
     });
   });
+
+  test("provider detail scoring counts service_tier_pricing", () => {
+    const cloudRecord = makeRecord("gpt-5.5", {
+      mode: "responses",
+      model_family: "gpt",
+      pricing: {
+        fallback: {
+          input_cost_per_token: 0.000005,
+          output_cost_per_token: 0.00003,
+        },
+        openai: {
+          input_cost_per_token: 0.000005,
+          output_cost_per_token: 0.00003,
+          service_tier_pricing: {
+            priority: {
+              input_cost_per_token: 0.0000125,
+              output_cost_per_token: 0.000075,
+              cache_read_input_token_cost: 0.00000125,
+            },
+          },
+        },
+      },
+    });
+
+    const resolved = resolvePricingForModelRecords({
+      provider: {
+        id: 5,
+        name: "OpenAI",
+        url: "https://api.openai.com/v1/responses",
+      } as never,
+      primaryModelName: "gpt-5.5",
+      fallbackModelName: null,
+      primaryRecord: cloudRecord,
+      fallbackRecord: null,
+    });
+
+    expect(resolved).not.toBeNull();
+    expect(resolved?.resolvedPricingProviderKey).toBe("openai");
+    expect(resolved?.priceData.service_tier_pricing).toEqual({
+      priority: {
+        input_cost_per_token: 0.0000125,
+        output_cost_per_token: 0.000075,
+        cache_read_input_token_cost: 0.00000125,
+      },
+    });
+  });
 });

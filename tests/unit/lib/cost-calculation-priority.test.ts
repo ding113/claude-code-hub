@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { calculateRequestCost } from "@/lib/utils/cost-calculation";
+import { calculateRequestCost, matchLongContextPricing } from "@/lib/utils/cost-calculation";
 import type { ModelPriceData } from "@/types/model-price";
 
 function makePriceData(overrides: Partial<ModelPriceData> = {}): ModelPriceData {
@@ -16,6 +16,79 @@ function makePriceData(overrides: Partial<ModelPriceData> = {}): ModelPriceData 
 }
 
 describe("calculateRequestCost priority service tier", () => {
+  test("uses service_tier_pricing.priority before legacy priority fields", () => {
+    const cost = calculateRequestCost(
+      { input_tokens: 2, output_tokens: 3, cache_read_input_tokens: 5 },
+      makePriceData({
+        service_tier_pricing: {
+          priority: {
+            input_cost_per_token: 3,
+            output_cost_per_token: 30,
+            cache_read_input_token_cost: 0.3,
+          },
+        },
+      }),
+      1,
+      false,
+      true
+    );
+
+    expect(Number(cost.toString())).toBe(97.5);
+  });
+
+  test("keeps service_tier_pricing.priority scoped to priority requests", () => {
+    const cost = calculateRequestCost(
+      { input_tokens: 2, output_tokens: 3, cache_read_input_tokens: 5 },
+      makePriceData({
+        service_tier_pricing: {
+          priority: {
+            input_cost_per_token: 3,
+            output_cost_per_token: 30,
+            cache_read_input_token_cost: 0.3,
+          },
+        },
+      }),
+      1,
+      false,
+      false
+    );
+
+    expect(Number(cost.toString())).toBe(32.5);
+  });
+
+  test("allows different models to define different priority tier prices", () => {
+    const usage = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 1 };
+    const gpt55Cost = calculateRequestCost(
+      usage,
+      makePriceData({
+        service_tier_pricing: {
+          priority: {
+            input_cost_per_token: 0.0000125,
+            output_cost_per_token: 0.000075,
+            cache_read_input_token_cost: 0.00000125,
+          },
+        },
+      }),
+      { priorityServiceTierApplied: true }
+    );
+    const gpt54Cost = calculateRequestCost(
+      usage,
+      makePriceData({
+        service_tier_pricing: {
+          priority: {
+            input_cost_per_token: 0.000005,
+            output_cost_per_token: 0.00003,
+            cache_read_input_token_cost: 0.0000005,
+          },
+        },
+      }),
+      { priorityServiceTierApplied: true }
+    );
+
+    expect(gpt55Cost.toNumber()).toBe(0.00008875);
+    expect(gpt54Cost.toNumber()).toBe(0.0000355);
+  });
+
   test("uses priority pricing fields when priority service tier is applied", () => {
     const cost = calculateRequestCost(
       { input_tokens: 2, output_tokens: 3, cache_read_input_tokens: 5 },
@@ -114,5 +187,33 @@ describe("calculateRequestCost priority service tier", () => {
     );
 
     expect(Number(cost.toString())).toBe(1904147);
+  });
+
+  test("uses service_tier_pricing.priority long_context_pricing when matched", () => {
+    const usage = {
+      input_tokens: 101,
+      output_tokens: 2,
+    };
+    const priceData = makePriceData({
+      service_tier_pricing: {
+        priority: {
+          input_cost_per_token: 4,
+          output_cost_per_token: 40,
+          long_context_pricing: {
+            threshold_tokens: 100,
+            input_multiplier: 2,
+            output_multiplier: 2,
+          },
+        },
+      },
+    });
+    const match = matchLongContextPricing(usage, priceData, "priority");
+    const cost = calculateRequestCost(usage, priceData, {
+      priorityServiceTierApplied: true,
+      longContextPricing: match?.pricing ?? null,
+    });
+
+    expect(match).not.toBeNull();
+    expect(Number(cost.toString())).toBe(968);
   });
 });

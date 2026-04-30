@@ -18,6 +18,27 @@ export interface LongContextPricing {
   cache_read_input_token_cost?: number;
 }
 
+export interface ServiceTierPricing {
+  input_cost_per_token?: number;
+  output_cost_per_token?: number;
+  cache_creation_input_token_cost?: number;
+  cache_creation_input_token_cost_above_1hr?: number;
+  cache_read_input_token_cost?: number;
+  input_cost_per_token_above_200k_tokens?: number;
+  output_cost_per_token_above_200k_tokens?: number;
+  cache_creation_input_token_cost_above_200k_tokens?: number;
+  cache_read_input_token_cost_above_200k_tokens?: number;
+  cache_creation_input_token_cost_above_1hr_above_200k_tokens?: number;
+  input_cost_per_token_above_272k_tokens?: number;
+  output_cost_per_token_above_272k_tokens?: number;
+  cache_creation_input_token_cost_above_272k_tokens?: number;
+  cache_read_input_token_cost_above_272k_tokens?: number;
+  cache_creation_input_token_cost_above_1hr_above_272k_tokens?: number;
+  input_cost_per_request?: number;
+  long_context_pricing?: LongContextPricing;
+  [key: string]: unknown;
+}
+
 export interface ModelPriceData {
   // 基础价格信息
   input_cost_per_token?: number;
@@ -72,6 +93,9 @@ export interface ModelPriceData {
 
   // 长上下文价格（例如 GPT-5.4 超过 272K 后的 premium 费率）
   long_context_pricing?: LongContextPricing;
+
+  // 服务等级定价（例如 OpenAI service_tier="priority"）
+  service_tier_pricing?: Record<string, ServiceTierPricing>;
 
   // 模型能力信息
   display_name?: string;
