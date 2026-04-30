@@ -83,7 +83,8 @@ export async function getProviderVendor(c: Context): Promise<Response> {
   if (!result.ok) return actionError(c, result);
   if (!result.data)
     return notFound(c, "provider_vendor.not_found", "Provider vendor was not found.");
-  return jsonResponse(sanitizeProviderEndpointData(result.data));
+  const data = isDashboardCompatRequest(c) ? result.data : filterVisibleProviderTypes(result.data);
+  return jsonResponse(sanitizeProviderEndpointData(data));
 }
 
 export async function updateProviderVendor(c: Context): Promise<Response> {

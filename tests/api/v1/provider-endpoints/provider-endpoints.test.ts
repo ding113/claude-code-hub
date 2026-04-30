@@ -263,6 +263,38 @@ describe("v1 provider endpoint REST endpoints", () => {
     });
   });
 
+  test("filters hidden vendor detail provider types unless dashboard compatibility is verified", async () => {
+    getProviderVendorByIdMock.mockResolvedValueOnce(
+      vendor({ providerTypes: ["claude", "claude-auth", "gemini-cli"] })
+    );
+
+    const visible = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/provider-vendors/1",
+      headers,
+    });
+
+    expect(visible.response.status).toBe(200);
+    expect(visible.json).toMatchObject({ providerTypes: ["claude"] });
+    expect(JSON.stringify(visible.json)).not.toContain("claude-auth");
+    expect(JSON.stringify(visible.json)).not.toContain("gemini-cli");
+
+    getProviderVendorByIdMock.mockResolvedValueOnce(
+      vendor({ providerTypes: ["claude", "claude-auth", "gemini-cli"] })
+    );
+
+    const compat = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/provider-vendors/1",
+      headers: dashboardCompatHeaders,
+    });
+
+    expect(compat.response.status).toBe(200);
+    expect(compat.json).toMatchObject({
+      providerTypes: ["claude", "claude-auth", "gemini-cli"],
+    });
+  });
+
   test("rejects dashboard compatibility headers without an admin session", async () => {
     validateAuthTokenMock.mockResolvedValueOnce({
       ...adminSession,
