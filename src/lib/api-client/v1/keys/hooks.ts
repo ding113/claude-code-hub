@@ -16,6 +16,7 @@ import type {
   KeyUpdateInput,
 } from "@/lib/api/v1/schemas/keys";
 import type { ApiError } from "@/lib/api-client/v1/client";
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
 import { useApiMutation } from "@/lib/hooks/use-api-mutation";
 
 import { keysClient } from "./index";
@@ -100,4 +101,11 @@ export function useResetKeyLimits(id: number) {
     mutationFn: () => keysClient.resetLimits(id),
     invalidates: [keysKeys.all],
   });
+}
+
+// ==================== Legacy bridges ====================
+
+/** TODO: replace once /api/v1/keys:batchUpdate is implemented. */
+export function callBatchUpdateKeys<TArgs, TData>(args: TArgs): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("keys", "batchUpdateKeys", args);
 }

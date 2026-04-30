@@ -18,14 +18,6 @@ import {
 import { useTranslations } from "next-intl";
 import { memo, useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import {
-  editProvider,
-  getUnmaskedProviderKey,
-  removeProvider,
-  resetProviderCircuit,
-  resetProviderTotalUsage,
-  undoProviderDelete,
-} from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
@@ -57,6 +49,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  callEditProvider,
+  callGetUnmaskedProviderKey,
+  callRemoveProvider,
+  callResetProviderCircuit,
+  callResetProviderTotalUsage,
+  callUndoProviderDelete,
+} from "@/lib/api-client/v1/providers/hooks";
 import {
   PROVIDER_GROUP,
   PROVIDER_LIMITS,
@@ -258,8 +258,14 @@ function ProviderRichListItemInner({
     } else {
       startDeleteTransition(async () => {
         try {
-          const res = await removeProvider(provider.id);
-          if (res.ok) {
+          const res = await callRemoveProvider<number, { undoToken: string; operationId: string }>(
+            provider.id
+          );
+          if (!res.ok) {
+            toast.error(tList("deleteFailed"), {
+              description: res.error || tList("unknownError"),
+            });
+          } else if (res.data) {
             const undoToken = res.data.undoToken;
             const operationId = res.data.operationId;
 
@@ -269,7 +275,10 @@ function ProviderRichListItemInner({
                 label: tBatchEdit("undo.button"),
                 onClick: async () => {
                   try {
-                    const undoResult = await undoProviderDelete({ undoToken, operationId });
+                    const undoResult = await callUndoProviderDelete<
+                      { undoToken: string; operationId: string },
+                      unknown
+                    >({ undoToken, operationId });
                     if (undoResult.ok) {
                       toast.success(tBatchEdit("undo.singleDeleteUndone"));
                       await doInvalidate();
@@ -288,10 +297,6 @@ function ProviderRichListItemInner({
             });
 
             doInvalidate();
-          } else {
-            toast.error(tList("deleteFailed"), {
-              description: res.error || tList("unknownError"),
-            });
           }
         } catch (error) {
           console.error("Failed to delete provider:", error);
@@ -307,14 +312,14 @@ function ProviderRichListItemInner({
   const handleShowKey = async () => {
     setShowKeyDialog(true);
     try {
-      const result = await getUnmaskedProviderKey(provider.id);
-      if (result.ok) {
-        setUnmaskedKey(result.data.key);
-      } else {
+      const result = await callGetUnmaskedProviderKey<number, { key: string }>(provider.id);
+      if (!result.ok) {
         toast.error(tList("getKeyFailed"), {
           description: result.error || tList("unknownError"),
         });
         setShowKeyDialog(false);
+      } else if (result.data) {
+        setUnmaskedKey(result.data.key);
       }
     } catch (error) {
       console.error("Failed to get provider key:", error);
@@ -351,7 +356,7 @@ function ProviderRichListItemInner({
   const handleResetCircuit = () => {
     startResetTransition(async () => {
       try {
-        const res = await resetProviderCircuit(provider.id);
+        const res = await callResetProviderCircuit<number, unknown>(provider.id);
         if (res.ok) {
           toast.success(tList("resetCircuitSuccess"), {
             description: tList("resetCircuitSuccessDesc", { name: provider.name }),
@@ -375,7 +380,7 @@ function ProviderRichListItemInner({
   const handleResetTotalUsage = () => {
     startResetUsageTransition(async () => {
       try {
-        const res = await resetProviderTotalUsage(provider.id);
+        const res = await callResetProviderTotalUsage<number, unknown>(provider.id);
         if (res.ok) {
           toast.success(tList("resetUsageSuccess"), {
             description: tList("resetUsageSuccessDesc", { name: provider.name }),
@@ -399,7 +404,8 @@ function ProviderRichListItemInner({
   const handleToggle = () => {
     startToggleTransition(async () => {
       try {
-        const res = await editProvider(provider.id, {
+        const res = await callEditProvider<{ providerId: number; is_enabled: boolean }, unknown>({
+          providerId: provider.id,
           is_enabled: !provider.isEnabled,
         });
         if (res.ok) {
@@ -425,9 +431,10 @@ function ProviderRichListItemInner({
   const createSaveHandler = (fieldName: "priority" | "weight" | "cost_multiplier") => {
     return async (value: number) => {
       try {
-        const res = await editProvider(provider.id, { [fieldName]: value } as Parameters<
-          typeof editProvider
-        >[1]);
+        const res = await callEditProvider<
+          { providerId: number } & Record<string, number>,
+          unknown
+        >({ providerId: provider.id, [fieldName]: value });
         if (res.ok) {
           toast.success(tInline("saveSuccess"));
           doInvalidate();
@@ -451,7 +458,9 @@ function ProviderRichListItemInner({
   const handleSaveGroups = async (groups: string[]): Promise<boolean> => {
     try {
       const groupTag = normalizeProviderGroupTag(groups.join(","));
-      const res = await editProvider(provider.id, { group_tag: groupTag });
+      const res = await callEditProvider<{ providerId: number; group_tag: string | null }, unknown>(
+        { providerId: provider.id, group_tag: groupTag }
+      );
       if (res.ok) {
         toast.success(tInline("saveSuccess"));
         queryClient.invalidateQueries({ queryKey: ["providers"] });
@@ -473,7 +482,15 @@ function ProviderRichListItemInner({
     newGroupPriorities: Record<string, number> | null
   ): Promise<boolean> => {
     try {
-      const res = await editProvider(provider.id, {
+      const res = await callEditProvider<
+        {
+          providerId: number;
+          priority: number;
+          group_priorities: Record<string, number> | null;
+        },
+        unknown
+      >({
+        providerId: provider.id,
         priority: newGlobal,
         group_priorities: newGroupPriorities,
       });

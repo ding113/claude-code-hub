@@ -6,11 +6,19 @@ import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
-  type DashboardProviderVendor,
-  getDashboardProviderEndpoints,
-  getDashboardProviderVendors,
-  probeProviderEndpoint,
-} from "@/actions/provider-endpoints";
+  callGetDashboardProviderEndpoints,
+  callGetDashboardProviderVendors,
+  callProbeProviderEndpoint,
+} from "@/lib/api-client/v1/provider-endpoints/hooks";
+import type { ProviderVendor } from "@/types/provider";
+
+/**
+ * Local mirror of `@/actions/provider-endpoints#DashboardProviderVendor` —
+ * inlined to keep this client component free of the server-only actions
+ * module while the v1 dashboard endpoint is still pending.
+ */
+type DashboardProviderVendor = ProviderVendor & { providerTypes: ProviderType[] };
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,12 +60,13 @@ export function EndpointProbeHistory() {
   const [probing, setProbing] = useState(false);
 
   useEffect(() => {
-    getDashboardProviderVendors()
-      .then((vendors) => {
-        setVendors(vendors);
-        if (vendors.length > 0) {
-          setSelectedVendorId(vendors[0].id);
-          setSelectedType(vendors[0].providerTypes[0] ?? null);
+    callGetDashboardProviderVendors<DashboardProviderVendor[]>()
+      .then((res) => {
+        const items = res.ok && res.data ? res.data : [];
+        setVendors(items);
+        if (items.length > 0) {
+          setSelectedVendorId(items[0].id);
+          setSelectedType(items[0].providerTypes[0] ?? null);
         }
       })
       .catch(console.error);
@@ -72,8 +81,12 @@ export function EndpointProbeHistory() {
 
     setLoadingEndpoints(true);
 
-    getDashboardProviderEndpoints({ vendorId: selectedVendorId, providerType: selectedType })
-      .then((data) => {
+    callGetDashboardProviderEndpoints<
+      { vendorId: number; providerType: ProviderType },
+      ProviderEndpoint[]
+    >({ vendorId: selectedVendorId, providerType: selectedType })
+      .then((res) => {
+        const data = res.ok && res.data ? res.data : [];
         setEndpoints(data);
         setSelectedEndpointId((prev) => {
           if (!prev) {
@@ -119,7 +132,10 @@ export function EndpointProbeHistory() {
 
     setProbing(true);
     try {
-      const result = await probeProviderEndpoint({
+      const result = await callProbeProviderEndpoint<
+        { endpointId: number; timeoutMs: number },
+        unknown
+      >({
         endpointId: selectedEndpointId,
         timeoutMs: 10000,
       });

@@ -5,10 +5,28 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import {
-  type SavePublicStatusSettingsInput,
-  savePublicStatusSettings,
-} from "@/actions/public-status";
+// TODO: replace once /api/v1/public/status/settings PUT request body is wired through the typed v1 client.
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
+
+interface SavePublicStatusSettingsInput {
+  publicStatusWindowHours: number;
+  publicStatusAggregationIntervalMinutes: number;
+  groups: Array<{
+    groupName: string;
+    displayName?: string;
+    publicGroupSlug?: string;
+    explanatoryCopy?: string | null;
+    sortOrder?: number;
+    publicModels: PublicStatusModelConfig[];
+  }>;
+}
+
+function callSavePublicStatusSettings(
+  input: SavePublicStatusSettingsInput
+): Promise<LegacyActionResult<{ publicStatusProjectionWarningCode?: string | null }>> {
+  return callLegacyAction("public-status", "savePublicStatusSettings", input);
+}
+
 import { ModelMultiSelect } from "@/app/[locale]/settings/providers/_components/model-multi-select";
 import { Section } from "@/components/section";
 import { Badge } from "@/components/ui/badge";
@@ -206,7 +224,7 @@ export function PublicStatusSettingsForm({
     };
 
     startTransition(async () => {
-      const result = await savePublicStatusSettings(payload);
+      const result = await callSavePublicStatusSettings(payload);
       if (!result.ok) {
         toast.error(result.error || t("statusPage.form.saveFailed"));
         return;

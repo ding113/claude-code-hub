@@ -262,8 +262,11 @@ describe("client-side action import inventory gate", () => {
   const discovered = scanClientImports();
   const allowSet = new Set(clientActionImportAllowlist.map((e) => pairKey(e.file, e.module)));
 
-  test("scan finds at least one client->action coupling (sanity)", () => {
-    expect(discovered.length).toBeGreaterThan(0);
+  test("strict mode: zero client->action couplings remain", () => {
+    // Wave 4 has migrated every legacy `'use client'` consumer of `@/actions/*`
+    // to a `/api/v1` hook (or to `lib/api-client/v1/legacy-action.ts` for
+    // endpoints still in flight). The gate now guards an empty allowlist.
+    expect(discovered.length).toBe(0);
   });
 
   test("every discovered (file, module) pair is in the allowlist", () => {

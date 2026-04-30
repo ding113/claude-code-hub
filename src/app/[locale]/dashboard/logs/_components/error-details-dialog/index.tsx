@@ -3,8 +3,20 @@
 import { FileText, Gauge, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { hasSessionMessages } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
+
+// TODO: replace once /api/v1/sessions/{sessionId}/messages:has lands.
+function callHasSessionMessages(
+  sessionId: string,
+  requestSequence?: number
+): Promise<LegacyActionResult<boolean>> {
+  return callLegacyAction("active-sessions", "hasSessionMessages", {
+    sessionId,
+    requestSequence,
+  });
+}
+
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -124,11 +136,11 @@ export function ErrorDetailsDialog({
     if (open && sessionId) {
       const requestId = ++messageCheckRequestIdRef.current;
       setCheckingMessages(true);
-      hasSessionMessages(sessionId, requestSequence ?? undefined)
+      callHasSessionMessages(sessionId, requestSequence ?? undefined)
         .then((result) => {
           if (requestId !== messageCheckRequestIdRef.current) return;
           if (result.ok) {
-            setHasMessages(result.data);
+            setHasMessages(Boolean(result.data));
           }
         })
         .catch((err) => {

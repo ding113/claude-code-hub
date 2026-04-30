@@ -6,14 +6,53 @@ import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  applyProviderBatchPatch,
-  batchDeleteProviders,
-  batchResetProviderCircuits,
-  type PreviewProviderBatchPatchResult,
-  previewProviderBatchPatch,
-  undoProviderDelete,
-  undoProviderPatch,
-} from "@/actions/providers";
+  callApplyProviderBatchPatch,
+  callBatchDeleteProviders,
+  callBatchResetProviderCircuits,
+  callPreviewProviderBatchPatch,
+  callUndoProviderDelete,
+  callUndoProviderPatch,
+} from "@/lib/api-client/v1/providers/hooks";
+import type { ProviderBatchPatchField } from "@/types/provider";
+
+/**
+ * Local mirror of `@/actions/providers#PreviewProviderBatchPatchResult` —
+ * inlined here so the client bundle never imports the server-only actions
+ * module. Keep this in sync with the action's return type until the v1
+ * preview endpoint replaces it.
+ */
+interface ProviderBatchPreviewRow {
+  providerId: number;
+  providerName: string;
+  field: ProviderBatchPatchField;
+  status: "changed" | "skipped";
+  before: unknown;
+  after: unknown;
+  skipReason?: string;
+}
+
+interface PreviewProviderBatchPatchResult {
+  previewToken: string;
+  previewRevision: string;
+  previewExpiresAt: string;
+  providerIds: number[];
+  changedFields: ProviderBatchPatchField[];
+  rows: ProviderBatchPreviewRow[];
+  summary: {
+    providerCount: number;
+    fieldCount: number;
+    skipCount: number;
+  };
+}
+
+interface ApplyProviderBatchPatchResult {
+  operationId: string;
+  appliedAt: string;
+  updatedCount: number;
+  undoToken: string;
+  undoExpiresAt: string;
+}
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -186,11 +225,14 @@ function BatchEditDialogContent({
     try {
       const providerIds = Array.from(selectedProviderIds);
       const patch = buildPatchDraftFromFormState(state, dirtyFields);
-      const result = await previewProviderBatchPatch({ providerIds, patch });
+      const result = await callPreviewProviderBatchPatch<
+        { providerIds: number[]; patch: ReturnType<typeof buildPatchDraftFromFormState> },
+        PreviewProviderBatchPatchResult
+      >({ providerIds, patch });
 
-      if (result.ok) {
+      if (result.ok && result.data) {
         setPreviewResult(result.data);
-      } else {
+      } else if (!result.ok) {
         toast.error(t("toast.previewFailed", { error: result.error }));
         setStep("edit");
       }
@@ -216,7 +258,16 @@ function BatchEditDialogContent({
     try {
       const providerIds = Array.from(selectedProviderIds);
       const patch = buildPatchDraftFromFormState(state, dirtyFields);
-      const result = await applyProviderBatchPatch({
+      const result = await callApplyProviderBatchPatch<
+        {
+          previewToken: string;
+          previewRevision: string;
+          providerIds: number[];
+          patch: ReturnType<typeof buildPatchDraftFromFormState>;
+          excludeProviderIds: number[];
+        },
+        ApplyProviderBatchPatchResult
+      >({
         previewToken: previewResult.previewToken,
         previewRevision: previewResult.previewRevision,
         providerIds,
@@ -224,7 +275,9 @@ function BatchEditDialogContent({
         excludeProviderIds: Array.from(excludedProviderIds),
       });
 
-      if (result.ok) {
+      if (!result.ok) {
+        toast.error(t("toast.failed", { error: result.error }));
+      } else if (result.data) {
         await queryClient.invalidateQueries({ queryKey: ["providers"] });
         onOpenChange(false);
         onSuccess?.();
@@ -237,11 +290,14 @@ function BatchEditDialogContent({
             label: t("toast.undo"),
             onClick: async () => {
               try {
-                const undoResult = await undoProviderPatch({ undoToken, operationId });
-                if (undoResult.ok) {
+                const undoResult = await callUndoProviderPatch<
+                  { undoToken: string; operationId: string },
+                  { revertedCount: number }
+                >({ undoToken, operationId });
+                if (undoResult.ok && undoResult.data) {
                   toast.success(t("toast.undoSuccess", { count: undoResult.data.revertedCount }));
                   queryClient.invalidateQueries({ queryKey: ["providers"] });
-                } else {
+                } else if (!undoResult.ok) {
                   toast.error(t("toast.undoFailed", { error: undoResult.error }));
                 }
               } catch (err) {
@@ -251,8 +307,6 @@ function BatchEditDialogContent({
             },
           },
         });
-      } else {
-        toast.error(t("toast.failed", { error: result.error }));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : t("toast.unknownError");
@@ -402,8 +456,16 @@ function BatchConfirmDialog({
       const providerIds = Array.from(selectedProviderIds);
 
       if (mode === "delete") {
-        const result = await batchDeleteProviders({ providerIds });
-        if (result.ok) {
+        const result = await callBatchDeleteProviders<
+          { providerIds: number[] },
+          { deletedCount: number; undoToken: string; operationId: string }
+        >({ providerIds });
+        if (!result.ok) {
+          toast.error(t("toast.failed", { error: result.error }));
+          setIsSubmitting(false);
+          return;
+        }
+        if (result.data) {
           const deletedCount = result.data.deletedCount;
           const undoToken = result.data.undoToken;
           const operationId = result.data.operationId;
@@ -414,13 +476,17 @@ function BatchConfirmDialog({
               label: t("undo.button"),
               onClick: async () => {
                 try {
-                  const undoResult = await undoProviderDelete({ undoToken, operationId });
-                  if (undoResult.ok) {
+                  const undoResult = await callUndoProviderDelete<
+                    { undoToken: string; operationId: string },
+                    { restoredCount: number }
+                  >({ undoToken, operationId });
+                  if (undoResult.ok && undoResult.data) {
                     toast.success(
                       t("undo.batchDeleteUndone", { count: undoResult.data.restoredCount })
                     );
                     await queryClient.invalidateQueries({ queryKey: ["providers"] });
                   } else if (
+                    !undoResult.ok &&
                     undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
                   ) {
                     toast.error(t("undo.expired"));
@@ -433,13 +499,12 @@ function BatchConfirmDialog({
               },
             },
           });
-        } else {
-          toast.error(t("toast.failed", { error: result.error }));
-          setIsSubmitting(false);
-          return;
         }
       } else if (mode === "resetCircuit") {
-        const result = await batchResetProviderCircuits({ providerIds });
+        const result = await callBatchResetProviderCircuits<
+          { providerIds: number[] },
+          { resetCount: number }
+        >({ providerIds });
         if (result.ok) {
           toast.success(t("toast.circuitReset", { count: result.data?.resetCount ?? 0 }));
         } else {

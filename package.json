@@ -39,6 +39,7 @@
     "i18n:audit-messages-no-emoji:fail": "node scripts/audit-messages-no-emoji.js --format=tsv --fail",
     "openapi:generate": "bun --conditions=react-server scripts/generate-v1-types.ts",
     "openapi:check": "bun --conditions=react-server scripts/generate-v1-types.ts --check",
+    "openapi:lint": "bun --conditions=react-server scripts/lint-openapi.ts",
     "test:v1": "vitest run --config tests/configs/v1.config.ts"
   },
   "dependencies": {

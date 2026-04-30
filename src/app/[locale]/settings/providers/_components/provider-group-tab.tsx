@@ -15,14 +15,28 @@ import { useTranslations } from "next-intl";
 import type * as React from "react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import type { ProviderGroupWithCount } from "@/actions/provider-groups";
 import {
-  createProviderGroup,
-  deleteProviderGroup,
-  getProviderGroups,
-  updateProviderGroup,
-} from "@/actions/provider-groups";
-import { editProvider } from "@/actions/providers";
+  callCreateProviderGroup,
+  callDeleteProviderGroup,
+  callGetProviderGroups,
+  callUpdateProviderGroup,
+} from "@/lib/api-client/v1/provider-groups/hooks";
+import { callEditProvider } from "@/lib/api-client/v1/providers/hooks";
+
+/**
+ * Local mirror of `@/actions/provider-groups#ProviderGroupWithCount` —
+ * inlined to keep this client component free of `@/actions/*` imports.
+ */
+interface ProviderGroupWithCount {
+  id: number;
+  name: string;
+  costMultiplier: string | number;
+  description: string | null;
+  providerCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 import type { BatchActionMode } from "@/app/[locale]/settings/providers/_components/batch-edit/provider-batch-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,10 +112,10 @@ export function ProviderGroupTab({
 
   const fetchGroups = useCallback(() => {
     startLoadTransition(async () => {
-      const groupsResult = await getProviderGroups();
-      if (groupsResult.ok) {
+      const groupsResult = await callGetProviderGroups<ProviderGroupWithCount[]>();
+      if (groupsResult.ok && groupsResult.data) {
         setGroups(groupsResult.data);
-      } else {
+      } else if (!groupsResult.ok) {
         toast.error(groupsResult.error);
       }
     });
@@ -172,7 +186,15 @@ export function ProviderGroupTab({
         descriptionNote?: string | null;
       }
     ): Promise<boolean> => {
-      const result = await updateProviderGroup(groupId, patch);
+      const result = await callUpdateProviderGroup<
+        {
+          groupId: number;
+          costMultiplier?: number;
+          description?: string | null;
+          descriptionNote?: string | null;
+        },
+        ProviderGroupWithCount
+      >({ groupId, ...patch });
       if (result.ok) {
         toast.success(t("updateSuccess"));
         fetchGroups();
@@ -214,7 +236,10 @@ export function ProviderGroupTab({
         return;
       }
 
-      const result = await createProviderGroup({
+      const result = await callCreateProviderGroup<
+        { name: string; costMultiplier: number; description?: string },
+        ProviderGroupWithCount
+      >({
         name: trimmedName,
         costMultiplier,
         description: trimmedDescription || undefined,
@@ -241,7 +266,9 @@ export function ProviderGroupTab({
     if (!deleteTarget) return;
 
     startDeleteTransition(async () => {
-      const result = await deleteProviderGroup(deleteTarget.id);
+      const result = await callDeleteProviderGroup<{ groupId: number }, unknown>({
+        groupId: deleteTarget.id,
+      });
       if (result.ok) {
         toast.success(t("deleteSuccess"));
         closeDeleteConfirm();
@@ -352,7 +379,7 @@ export function ProviderGroupTab({
                       <TableCell>
                         {isAdmin ? (
                           <InlineEditPopover
-                            value={group.costMultiplier}
+                            value={Number(group.costMultiplier)}
                             label={t("groupMultiplierLabel")}
                             validator={validateCostMultiplier}
                             onSave={(value) => saveGroupPatch(group.id, { costMultiplier: value })}
@@ -753,7 +780,10 @@ function MemberRow({
     async (value: number) => {
       const existing = (member.groupPriorities ?? null) as Record<string, number> | null;
       const merged: Record<string, number> = { ...(existing ?? {}), [groupName]: value };
-      const result = await editProvider(member.id, { group_priorities: merged });
+      const result = await callEditProvider<
+        { providerId: number; group_priorities: Record<string, number> | null },
+        unknown
+      >({ providerId: member.id, group_priorities: merged });
       if (!result.ok) {
         toast.error(result.error ?? t("savePriorityFailed"));
         return false;

@@ -17,6 +17,7 @@ import type {
   UserUpdateInput,
 } from "@/lib/api/v1/schemas/users";
 import type { ApiError } from "@/lib/api-client/v1/client";
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
 import { useApiMutation } from "@/lib/hooks/use-api-mutation";
 
 import { usersClient } from "./index";
@@ -127,4 +128,45 @@ export function useUserProviderGroupsForFilter(
     queryFn: () => usersClient.availableProviderGroups(userId),
     enabled: Number.isInteger(userId) && userId > 0,
   });
+}
+
+// ==================== Legacy bridges (deferred v1 endpoints) ====================
+// Each helper below wraps a legacy `/api/actions/users/<action>` because the
+// equivalent v1 endpoint has not yet shipped. Replace with the v1 client method
+// when the endpoint lands.
+
+/** TODO: replace once /api/v1/users:list-core lands. */
+export function callGetUsersBatchCore<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("users", "getUsersBatchCore", args);
+}
+
+/** TODO: replace once /api/v1/users:usage-batch lands. */
+export function callGetUsersUsageBatch<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("users", "getUsersUsageBatch", args);
+}
+
+/** TODO: replace once /api/v1/users/tags is exposed via the typed v1 client. */
+export function callGetAllUserTags(): Promise<LegacyActionResult<string[]>> {
+  return callLegacyAction("users", "getAllUserTags", {});
+}
+
+/** TODO: replace once /api/v1/users/key-groups is exposed via the typed v1 client. */
+export function callGetAllUserKeyGroups(): Promise<LegacyActionResult<string[]>> {
+  return callLegacyAction("users", "getAllUserKeyGroups", {});
+}
+
+/** TODO: replace once /api/v1/users:batchUpdate is implemented. */
+export function callBatchUpdateUsers<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("users", "batchUpdateUsers", args);
+}
+
+/** TODO: replace once self-scoped /api/v1/users for non-admins is implemented. */
+export function callGetUsers<TData>(): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("users", "getUsers", {});
 }

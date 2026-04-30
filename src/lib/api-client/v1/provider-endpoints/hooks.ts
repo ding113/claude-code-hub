@@ -16,6 +16,7 @@ import type {
   ProviderVendorUpdateInput,
 } from "@/lib/api/v1/schemas/provider-endpoints";
 import type { ApiError } from "@/lib/api-client/v1/client";
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
 import { useApiMutation } from "@/lib/hooks/use-api-mutation";
 
 import { providerEndpointsClient, providerVendorsClient } from "./index";
@@ -123,4 +124,100 @@ export function useResetProviderEndpointCircuit(id: number) {
     mutationFn: () => providerEndpointsClient.resetCircuit(id),
     invalidates: [providerEndpointsKeys.all],
   });
+}
+
+// ==================== Legacy bridges ====================
+// The legacy server actions still cover several screens that are not yet on
+// the v1 surface (notably `getProviderEndpoints` aggregation, vendor-grouped
+// listings, batch circuit fetches and probe-history pulls). These shims wrap
+// the legacy adapter so client code can switch off `@/actions/*` today; each
+// MUST be replaced when the corresponding v1 endpoint lands.
+
+/** TODO: replace once /api/v1/provider-endpoints aggregated list lands. */
+export function callGetProviderEndpoints<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "getProviderEndpoints", args);
+}
+
+/** TODO: replace once /api/v1/provider-vendors/{id}/endpoints (vendor-grouped) lands. */
+export function callGetProviderEndpointsByVendor<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "getProviderEndpointsByVendor", args);
+}
+
+/** TODO: replace once /api/v1/provider-endpoints:batchCircuitInfo lands. */
+export function callBatchGetEndpointCircuitInfo<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "batchGetEndpointCircuitInfo", args);
+}
+
+/** TODO: replace once /api/v1/provider-vendors/{vendorId}/endpoints (POST) supports the legacy add semantics. */
+export function callAddProviderEndpoint<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "addProviderEndpoint", args);
+}
+
+/** TODO: replace once /api/v1/provider-endpoints/{id} PATCH parity is achieved. */
+export function callEditProviderEndpoint<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "editProviderEndpoint", args);
+}
+
+/** TODO: replace once /api/v1/provider-endpoints/{id}:probe is wired through the typed client. */
+export function callProbeProviderEndpoint<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "probeProviderEndpoint", args);
+}
+
+/** TODO: replace once /api/v1/provider-endpoints/{id} DELETE is wired through the typed client. */
+export function callRemoveProviderEndpoint<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "removeProviderEndpoint", args);
+}
+
+/** TODO: replace once /api/v1/provider-endpoints/{id}/circuit:reset is wired through the typed client. */
+export function callResetEndpointCircuit<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "resetEndpointCircuit", args);
+}
+
+/** TODO: replace once /api/v1/provider-endpoints/{id}/probe-logs is wired through the typed client. */
+export function callGetEndpointProbeHistory<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "getEndpointProbeHistory", args);
+}
+
+/** TODO: replace once /api/v1/provider-vendors:batchTypeStats lands. */
+export function callBatchGetVendorTypeEndpointStats<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "batchGetVendorTypeEndpointStats", args);
+}
+
+/** TODO: replace once /api/v1/dashboard/provider-vendors lands. */
+export function callGetDashboardProviderVendors<TData>(): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "getDashboardProviderVendors", {});
+}
+
+/** TODO: replace once /api/v1/dashboard/provider-endpoints lands. */
+export function callGetDashboardProviderEndpoints<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "getDashboardProviderEndpoints", args);
+}
+
+/** TODO: replace once /api/v1/provider-endpoints/{id}/probe-logs uses the typed v1 client. */
+export function callGetProviderEndpointProbeLogs<TArgs, TData>(
+  args: TArgs
+): Promise<LegacyActionResult<TData>> {
+  return callLegacyAction("provider-endpoints", "getProviderEndpointProbeLogs", args);
 }

@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
-import { simulateDispatchAction } from "@/actions/dispatch-simulator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +31,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+// TODO: replace once /api/v1/dispatch-simulator:simulate is exposed via the typed client.
+import { callLegacyAction } from "@/lib/api-client/v1/legacy-action";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { DispatchSimulatorResult } from "@/types/dispatch-simulator";
 import type { ProviderDisplay } from "@/types/provider";
@@ -83,7 +84,14 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
   const handleSimulate = () => {
     setError(null);
     startTransition(async () => {
-      const response = await simulateDispatchAction({
+      const response = await callLegacyAction<
+        {
+          clientFormat: typeof clientFormat;
+          modelName: string;
+          groupTags: string[];
+        },
+        DispatchSimulatorResult
+      >("dispatch-simulator", "simulateDispatchAction", {
         clientFormat,
         modelName,
         groupTags: selectedGroups,
@@ -95,7 +103,7 @@ export function DispatchSimulatorDialog({ providers }: DispatchSimulatorDialogPr
         return;
       }
 
-      setResult(response.data);
+      setResult(response.data ?? null);
       setOpenSteps(["groupFilter", "priorityTiers"]);
     });
   };

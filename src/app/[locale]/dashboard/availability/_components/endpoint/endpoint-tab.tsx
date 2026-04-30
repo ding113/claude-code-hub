@@ -5,12 +5,19 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  type DashboardProviderVendor,
-  getDashboardProviderEndpoints,
-  getDashboardProviderVendors,
-  getProviderEndpointProbeLogs,
-  probeProviderEndpoint,
-} from "@/actions/provider-endpoints";
+  callGetDashboardProviderEndpoints,
+  callGetDashboardProviderVendors,
+  callGetProviderEndpointProbeLogs,
+  callProbeProviderEndpoint,
+} from "@/lib/api-client/v1/provider-endpoints/hooks";
+import type { ProviderVendor } from "@/types/provider";
+
+/**
+ * Local mirror of `@/actions/provider-endpoints#DashboardProviderVendor` —
+ * inlined to keep the client bundle free of `@/actions/*` imports.
+ */
+type DashboardProviderVendor = ProviderVendor & { providerTypes: ProviderType[] };
+
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -67,7 +74,8 @@ export function EndpointTab() {
     try {
       const currentVendorId = latestSelectionRef.current.vendorId;
       const currentType = latestSelectionRef.current.providerType;
-      const nextVendors = await getDashboardProviderVendors();
+      const vendorsRes = await callGetDashboardProviderVendors<DashboardProviderVendor[]>();
+      const nextVendors = vendorsRes.ok && vendorsRes.data ? vendorsRes.data : [];
 
       if (requestId !== vendorsRequestIdRef.current) {
         return null;
@@ -146,10 +154,14 @@ export function EndpointTab() {
       setLoadingEndpoints(true);
 
       try {
-        const nextEndpoints = await getDashboardProviderEndpoints({
+        const endpointsRes = await callGetDashboardProviderEndpoints<
+          { vendorId: number; providerType: ProviderType },
+          ProviderEndpoint[]
+        >({
           vendorId: params.vendorId,
           providerType: params.providerType,
         });
+        const nextEndpoints = endpointsRes.ok && endpointsRes.data ? endpointsRes.data : [];
 
         if (requestId !== endpointsRequestIdRef.current) {
           return;
@@ -186,7 +198,10 @@ export function EndpointTab() {
     setLoadingLogs(true);
 
     try {
-      const result = await getProviderEndpointProbeLogs({
+      const result = await callGetProviderEndpointProbeLogs<
+        { endpointId: number; limit: number },
+        { logs: ProviderEndpointProbeLog[] }
+      >({
         endpointId,
         limit: 100,
       });
@@ -312,7 +327,7 @@ export function EndpointTab() {
 
     setProbing(true);
     try {
-      const result = await probeProviderEndpoint({
+      const result = await callProbeProviderEndpoint<{ endpointId: number }, unknown>({
         endpointId: endpoint.id,
       });
       if (result.ok) {

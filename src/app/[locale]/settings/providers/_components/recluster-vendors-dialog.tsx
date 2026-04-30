@@ -5,7 +5,6 @@ import { ArrowRight, FolderGit2, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { reclusterProviderVendors } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { callReclusterProviderVendors } from "@/lib/api-client/v1/providers/hooks";
 
 type ReclusterChange = {
   providerId: number;
@@ -88,7 +88,9 @@ export function ReclusterVendorsDialog() {
       // Load preview when dialog opens
       startTransition(async () => {
         try {
-          const result = await reclusterProviderVendors({ confirm: false });
+          const result = await callReclusterProviderVendors<{ confirm: boolean }, ReclusterResult>({
+            confirm: false,
+          });
           if (result.ok) {
             setPreviewData(result.data);
           } else {
@@ -110,7 +112,9 @@ export function ReclusterVendorsDialog() {
   const handleApply = async () => {
     setIsApplying(true);
     try {
-      const result = await reclusterProviderVendors({ confirm: true });
+      const result = await callReclusterProviderVendors<{ confirm: boolean }, ReclusterResult>({
+        confirm: true,
+      });
       if (result.ok) {
         toast.success(t("success", { count: result.data.preview.providersMoved }));
         queryClient.invalidateQueries({ queryKey: ["providers"] });

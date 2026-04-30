@@ -11,12 +11,25 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { modelPricesClient } from "@/lib/api-client/v1/model-prices/index";
 import {
-  type AvailableModelCatalogItem,
-  type AvailableModelCatalogScope,
-  getAvailableModelCatalog,
-} from "@/actions/model-prices";
-import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/actions/providers";
+  callFetchUpstreamModels,
+  callGetUnmaskedProviderKey,
+} from "@/lib/api-client/v1/providers/hooks";
+
+/**
+ * Local mirror of `@/actions/model-prices` catalog types — kept inline so
+ * this client component avoids a server-only import. Matches the shape of
+ * `ModelPriceCatalogItem` returned by `/api/v1/model-prices/catalog`.
+ */
+interface AvailableModelCatalogItem {
+  modelName: string;
+  litellmProvider: string | null;
+  updatedAt: string;
+}
+
+type AvailableModelCatalogScope = "chat" | "all";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -226,14 +239,23 @@ export function ModelMultiSelect({
     try {
       let resolvedKey = apiKey?.trim() || "";
       if ((!resolvedKey || resolvedKey.includes("***")) && providerId) {
-        const keyResult = await getUnmaskedProviderKey(providerId);
+        const keyResult = await callGetUnmaskedProviderKey<number, { key: string }>(providerId);
         if (keyResult.ok && keyResult.data?.key) {
           resolvedKey = keyResult.data.key;
         }
       }
 
       if (providerUrl && resolvedKey) {
-        const upstreamResult = await fetchUpstreamModels({
+        const upstreamResult = await callFetchUpstreamModels<
+          {
+            providerUrl: string;
+            apiKey: string;
+            providerType: ProviderType;
+            proxyUrl?: string | null;
+            proxyFallbackToDirect?: boolean;
+          },
+          { models?: string[] }
+        >({
           providerUrl,
           apiKey: resolvedKey,
           providerType,
@@ -264,11 +286,12 @@ export function ModelMultiSelect({
         }
       }
 
-      const localCatalog = await getAvailableModelCatalog({ scope: catalogScope });
+      const catalogResponse = await modelPricesClient.catalog(catalogScope);
       if (requestId !== requestIdRef.current) {
         return;
       }
-      setAvailableModels(localCatalog.map(buildLocalOption));
+      const catalogItems: AvailableModelCatalogItem[] = catalogResponse.items ?? [];
+      setAvailableModels(catalogItems.map(buildLocalOption));
       setModelSource("fallback");
       setProviderFilter("__all__");
     } finally {

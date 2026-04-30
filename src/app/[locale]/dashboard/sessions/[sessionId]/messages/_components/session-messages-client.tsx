@@ -16,7 +16,47 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getSessionDetails, terminateActiveSession } from "@/actions/active-sessions";
+import { callLegacyAction, type LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
+import { sessionsClient } from "@/lib/api-client/v1/sessions/index";
+
+/**
+ * Local mirror of `@/actions/active-sessions#getSessionDetails` ActionResult
+ * payload. Inlined to avoid importing the server-only actions module.
+ */
+type SessionDetailsData = {
+  snapshots: SessionDetailSnapshots | null;
+  specialSettings: string | null;
+  sessionStats: {
+    userAgent: string | null;
+    requestCount: number;
+    firstRequestAt: Date | null;
+    lastRequestAt: Date | null;
+    totalDurationMs: number;
+    providers: { id: number; name: string }[];
+    models: string[];
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCacheCreationTokens: number;
+    totalCacheReadTokens: number;
+    totalCostUsd: string | null;
+  } | null;
+  currentSequence: number | null;
+  prevSequence: number | null;
+  nextSequence: number | null;
+};
+
+// TODO: replace once /api/v1/sessions/{sessionId}/messages returns the legacy
+// detailed shape (snapshots + specialSettings + sessionStats + sequence info).
+function callGetSessionDetails(
+  sessionId: string,
+  sequence?: number
+): Promise<LegacyActionResult<SessionDetailsData>> {
+  return callLegacyAction("active-sessions", "getSessionDetails", {
+    sessionId,
+    sequence,
+  });
+}
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,18 +118,23 @@ export function SessionMessagesClient() {
   })();
 
   // Data State
+  type SessionStatsShape = {
+    userAgent: string | null;
+    requestCount: number;
+    firstRequestAt: Date | null;
+    lastRequestAt: Date | null;
+    totalDurationMs: number;
+    providers: { id: number; name: string }[];
+    models: string[];
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCacheCreationTokens: number;
+    totalCacheReadTokens: number;
+    totalCostUsd: string | null;
+  };
   const [snapshots, setSnapshots] = useState<SessionDetailSnapshots | null>(null);
-  const [specialSettings, setSpecialSettings] =
-    useState<
-      Extract<
-        Awaited<ReturnType<typeof getSessionDetails>>,
-        { ok: true }
-      >["data"]["specialSettings"]
-    >(null);
-  const [sessionStats, setSessionStats] =
-    useState<
-      Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
-    >(null);
+  const [specialSettings, setSpecialSettings] = useState<string | null>(null);
+  const [sessionStats, setSessionStats] = useState<SessionStatsShape | null>(null);
   const [currentSequence, setCurrentSequence] = useState<number | null>(null);
   const [prevSequence, setPrevSequence] = useState<number | null>(null);
   const [nextSequence, setNextSequence] = useState<number | null>(null);
@@ -140,10 +185,10 @@ export function SessionMessagesClient() {
       setError(null);
 
       try {
-        const result = await getSessionDetails(sessionId, selectedSeq ?? undefined);
+        const result = await callGetSessionDetails(sessionId, selectedSeq ?? undefined);
         if (cancelled) return;
 
-        if (result.ok) {
+        if (result.ok && result.data) {
           setSnapshots(result.data.snapshots);
           setSpecialSettings(result.data.specialSettings);
           setSessionStats(result.data.sessionStats);
@@ -152,7 +197,7 @@ export function SessionMessagesClient() {
           setNextSequence(result.data.nextSequence);
         } else {
           resetDetailsState();
-          setError(result.error || t("status.fetchFailed"));
+          setError((!result.ok ? result.error : null) || t("status.fetchFailed"));
         }
       } catch (err) {
         if (cancelled) return;
@@ -244,12 +289,17 @@ export function SessionMessagesClient() {
   const handleTerminateSession = async () => {
     setIsTerminating(true);
     try {
-      const result = await terminateActiveSession(sessionId);
-      if (result.ok) {
+      let terminated = true;
+      try {
+        await sessionsClient.terminate(sessionId);
+      } catch {
+        terminated = false;
+      }
+      if (terminated) {
         toast.success(t("actions.terminateSuccess"));
         router.push("/dashboard/sessions");
       } else {
-        toast.error(result.error || t("actions.terminateFailed"));
+        toast.error(t("actions.terminateFailed"));
       }
     } catch (_error) {
       toast.error(t("actions.terminateFailed"));

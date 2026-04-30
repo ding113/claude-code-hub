@@ -1,8 +1,50 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActionResult } from "@/actions/types";
-import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
+import type { LegacyActionResult } from "@/lib/api-client/v1/legacy-action";
+import { usageLogsClient } from "@/lib/api-client/v1/usage-logs/index";
+
+/**
+ * Local mirror of `@/actions/types#ActionResult`. Inlined to keep this client
+ * hook free of `@/actions/*` imports.
+ */
+type ActionResult<T> = LegacyActionResult<T>;
+
+async function getModelList(): Promise<ActionResult<string[]>> {
+  try {
+    const filterOptions = await usageLogsClient.filterOptions();
+    return { ok: true, data: filterOptions.models ?? [] };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to load models",
+    };
+  }
+}
+
+async function getStatusCodeList(): Promise<ActionResult<number[]>> {
+  try {
+    const filterOptions = await usageLogsClient.filterOptions();
+    return { ok: true, data: filterOptions.statusCodes ?? [] };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to load status codes",
+    };
+  }
+}
+
+async function getEndpointList(): Promise<ActionResult<string[]>> {
+  try {
+    const filterOptions = await usageLogsClient.filterOptions();
+    return { ok: true, data: filterOptions.endpoints ?? [] };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to load endpoints",
+    };
+  }
+}
 
 /**
  * 惰性加载 Hook 返回类型
@@ -58,9 +100,9 @@ function createLazyFilterHook<T>(
           const result = await fetcher();
           if (!mountedRef.current) return;
 
-          if (result.ok) {
+          if (result.ok && result.data) {
             setData(result.data);
-          } else {
+          } else if (!result.ok) {
             setError(result.error || "Failed to load data");
           }
         } catch (err) {

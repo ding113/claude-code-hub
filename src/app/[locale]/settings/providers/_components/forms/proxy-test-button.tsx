@@ -4,8 +4,8 @@ import { Activity, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { testProviderProxy } from "@/actions/providers";
 import { Button } from "@/components/ui/button";
+import { callProviderProxyTest } from "@/lib/api-client/v1/providers/hooks";
 
 interface ProxyTestButtonProps {
   providerUrl: string;
@@ -51,7 +51,7 @@ export function ProxyTestButton({
     setTestResult(null);
 
     try {
-      const response = await testProviderProxy({
+      const response = await callProviderProxyTest({
         providerUrl: providerUrl.trim(),
         proxyUrl: proxyUrl?.trim() || null,
         proxyFallbackToDirect,

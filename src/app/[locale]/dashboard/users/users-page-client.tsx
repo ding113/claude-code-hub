@@ -4,14 +4,6 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyUsageData } from "@/actions/users";
-import {
-  getAllUserKeyGroups,
-  getAllUserTags,
-  getUsers,
-  getUsersBatchCore,
-  getUsersUsageBatch,
-} from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +15,13 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TagInput } from "@/components/ui/tag-input";
+import {
+  callGetAllUserKeyGroups,
+  callGetAllUserTags,
+  callGetUsers,
+  callGetUsersBatchCore,
+  callGetUsersUsageBatch,
+} from "@/lib/api-client/v1/users/hooks";
 import { clearUsageCache } from "@/lib/dashboard/user-limit-usage-cache";
 import { loadUserUsagePagesSequentially } from "@/lib/dashboard/user-usage-loader";
 import { useDebounce } from "@/lib/hooks/use-debounce";
@@ -39,6 +38,38 @@ import { UserManagementTable } from "../_components/user/user-management-table";
  */
 function splitTags(value?: string | null): string[] {
   return parseProviderGroups(value);
+}
+
+/**
+ * Local mirror of `@/actions/users#KeyUsageData` to keep this client file
+ * decoupled from the server-only actions module while the v1 endpoint is
+ * still being built.
+ */
+interface KeyUsageData {
+  todayUsage: number;
+  todayCallCount: number;
+  todayTokens: number;
+  lastUsedAt: Date | null;
+  lastProviderName: string | null;
+  modelStats: Array<{
+    model: string;
+    callCount: number;
+    totalCost: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+  }>;
+}
+
+interface UsersBatchCorePage {
+  users: UserDisplay[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+interface UsersUsageBatchData {
+  usageByKeyId: Record<number, KeyUsageData>;
 }
 
 interface UsersPageClientProps {
@@ -139,11 +170,26 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     queryKey,
     queryFn: async ({ pageParam }) => {
       if (!isAdmin) {
-        const users = await getUsers();
-        return { users, nextCursor: null, hasMore: false };
+        const result = await callGetUsers<UserDisplay[]>();
+        if (!result.ok) {
+          throw new Error(result.error);
+        }
+        return { users: result.data ?? [], nextCursor: null, hasMore: false };
       }
 
-      const result = await getUsersBatchCore({
+      const result = await callGetUsersBatchCore<
+        {
+          cursor: string | undefined;
+          limit: number;
+          searchTerm: string | undefined;
+          tagFilters: string[] | undefined;
+          keyGroupFilters: string[] | undefined;
+          statusFilter: typeof resolvedStatusFilter;
+          sortBy: typeof sortBy;
+          sortOrder: typeof sortOrder;
+        },
+        UsersBatchCorePage
+      >({
         cursor: pageParam,
         limit: 50,
         searchTerm: resolvedSearchTerm,
@@ -163,22 +209,22 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   });
 
   // Independent tag query - breaks circular dependency
-  const { data: allTags = [] } = useQuery({
+  const { data: allTags = [] } = useQuery<string[]>({
     queryKey: ["userTags"],
     queryFn: async () => {
-      const result = await getAllUserTags();
+      const result = await callGetAllUserTags();
       if (!result.ok) throw new Error(result.error);
-      return result.data;
+      return result.data ?? [];
     },
     enabled: isAdmin,
   });
 
-  const { data: allKeyGroups = [] } = useQuery({
+  const { data: allKeyGroups = [] } = useQuery<string[]>({
     queryKey: ["userKeyGroups"],
     queryFn: async () => {
-      const result = await getAllUserKeyGroups();
+      const result = await callGetAllUserKeyGroups();
       if (!result.ok) throw new Error(result.error);
-      return result.data;
+      return result.data ?? [];
     },
     enabled: isAdmin,
   });
@@ -220,10 +266,10 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       fetchUsagePage: async (userIds) => {
         const result = await queryClient.fetchQuery({
           queryKey: ["users-usage", userIds],
-          queryFn: () => getUsersUsageBatch(userIds),
+          queryFn: () => callGetUsersUsageBatch<number[], UsersUsageBatchData>(userIds),
           staleTime: 60_000,
         });
-        return result.ok ? result.data.usageByKeyId : {};
+        return result.ok && result.data ? result.data.usageByKeyId : {};
       },
       onPageLoaded: (pageUsageByKeyId) => {
         if (latestUsageDatasetKeyRef.current !== requestedDatasetKey) {

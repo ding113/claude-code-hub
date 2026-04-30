@@ -4,14 +4,14 @@ import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Server } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import {
-  batchGetEndpointCircuitInfo,
-  batchGetVendorTypeEndpointStats,
-  getProviderEndpointsByVendor,
-} from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { createAbortError } from "@/lib/abort-utils";
+import {
+  callBatchGetEndpointCircuitInfo,
+  callBatchGetVendorTypeEndpointStats,
+  callGetProviderEndpointsByVendor,
+} from "@/lib/api-client/v1/provider-endpoints/hooks";
 import { cn } from "@/lib/utils";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
 import { type EndpointCircuitState, getEndpointStatusModel } from "./endpoint-status";
@@ -193,7 +193,10 @@ class VendorTypeEndpointStatsBatcher {
           if (vendorIdsToFetch.length === 0) continue;
 
           try {
-            const res = await batchGetVendorTypeEndpointStats({
+            const res = await callBatchGetVendorTypeEndpointStats<
+              { vendorIds: number[]; providerType: ProviderType },
+              VendorTypeEndpointStats[]
+            >({
               vendorIds: vendorIdsToFetch,
               providerType,
             });
@@ -254,7 +257,11 @@ class VendorTypeEndpointStatsBatcher {
                   const { vendorId, deferred } = deferredEntries[currentIndex];
 
                   try {
-                    const endpoints = await getProviderEndpointsByVendor({ vendorId });
+                    const fallbackRes = await callGetProviderEndpointsByVendor<
+                      { vendorId: number },
+                      ProviderEndpoint[]
+                    >({ vendorId });
+                    const endpoints = fallbackRes.ok && fallbackRes.data ? fallbackRes.data : [];
                     const filtered = endpoints.filter(
                       (ep) =>
                         ep.providerType === providerType &&
@@ -319,9 +326,14 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
 
   const count = stats?.enabled ?? 0;
 
-  const { data: allEndpoints = [], isLoading: endpointsLoading } = useQuery({
+  const { data: allEndpoints = [], isLoading: endpointsLoading } = useQuery<ProviderEndpoint[]>({
     queryKey: ["provider-endpoints", vendorId],
-    queryFn: async () => getProviderEndpointsByVendor({ vendorId }),
+    queryFn: async () => {
+      const res = await callGetProviderEndpointsByVendor<{ vendorId: number }, ProviderEndpoint[]>({
+        vendorId,
+      });
+      return res.ok && res.data ? res.data : [];
+    },
     enabled: isOpen || process.env.NODE_ENV === "test",
     staleTime: 1000 * 30,
     refetchOnWindowFocus: false,
@@ -378,7 +390,10 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
 
       const results = await Promise.all(
         chunks.map(async (chunk) => {
-          const res = await batchGetEndpointCircuitInfo({ endpointIds: chunk });
+          const res = await callBatchGetEndpointCircuitInfo<
+            { endpointIds: number[] },
+            Array<{ endpointId: number; circuitState: string }>
+          >({ endpointIds: chunk });
           return res.ok && res.data ? res.data : [];
         })
       );
