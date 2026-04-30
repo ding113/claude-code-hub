@@ -4,13 +4,6 @@ import { Radio } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  type DashboardProviderVendor,
-  getDashboardProviderEndpoints,
-  getDashboardProviderVendors,
-  getProviderEndpointProbeLogs,
-  probeProviderEndpoint,
-} from "@/actions/provider-endpoints";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,6 +13,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  type DashboardProviderVendor,
+  getDashboardProviderEndpoints,
+  getDashboardProviderVendors,
+  getProviderEndpointProbeLogs,
+  probeProviderEndpoint,
+} from "@/lib/api-client/v1/actions/provider-endpoints";
 import { cn } from "@/lib/utils";
 import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderType } from "@/types/provider";
 import { LatencyCurve } from "./latency-curve";

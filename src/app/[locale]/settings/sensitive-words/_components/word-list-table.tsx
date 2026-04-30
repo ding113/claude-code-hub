@@ -5,10 +5,13 @@ import { Pencil, Trash2 } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { deleteSensitiveWordAction, updateSensitiveWordAction } from "@/actions/sensitive-words";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  deleteSensitiveWordAction,
+  updateSensitiveWordAction,
+} from "@/lib/api-client/v1/actions/sensitive-words";
 import type { SensitiveWord } from "@/repository/sensitive-words";
 import { EditWordDialog } from "./edit-word-dialog";
 

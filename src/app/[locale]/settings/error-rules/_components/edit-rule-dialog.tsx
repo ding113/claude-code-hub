@@ -3,7 +3,6 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { updateErrorRuleAction } from "@/actions/error-rules";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { updateErrorRuleAction } from "@/lib/api-client/v1/actions/error-rules";
 import { cn } from "@/lib/utils";
 import type { ErrorOverrideResponse, ErrorRule } from "@/repository/error-rules";
 import { OverrideSection } from "./override-section";

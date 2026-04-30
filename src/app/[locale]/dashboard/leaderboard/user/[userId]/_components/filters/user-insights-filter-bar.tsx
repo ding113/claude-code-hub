@@ -3,8 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Filter, Key, Server } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getKeys } from "@/actions/keys";
-import { getProviders } from "@/actions/providers";
 import { useLazyModels } from "@/app/[locale]/dashboard/logs/_hooks/use-lazy-filter-options";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getKeys } from "@/lib/api-client/v1/actions/keys";
+import { getProviders } from "@/lib/api-client/v1/actions/providers";
 import type { TimeRangePreset, UserInsightsFilters } from "./types";
 
 interface UserInsightsFilterBarProps {

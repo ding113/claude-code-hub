@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getMyQuota, type MyUsageQuota } from "@/actions/my-usage";
-import { getServerTimeZone } from "@/actions/system-config";
 import { useRouter } from "@/i18n/routing";
+import { getMyQuota, type MyUsageQuota } from "@/lib/api-client/v1/actions/my-usage";
+import { getServerTimeZone } from "@/lib/api-client/v1/actions/system-config";
 import { CollapsibleQuotaCard } from "./_components/collapsible-quota-card";
 import { ExpirationInfo } from "./_components/expiration-info";
 import { MyUsageHeader } from "./_components/my-usage-header";

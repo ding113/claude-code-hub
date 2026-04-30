@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Server } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getUserInsightsProviderBreakdown } from "@/actions/admin-user-insights";
 import {
   ModelBreakdownColumn,
   type ModelBreakdownItem,
@@ -11,6 +10,7 @@ import {
 } from "@/components/analytics/model-breakdown-column";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getUserInsightsProviderBreakdown } from "@/lib/api-client/v1/actions/admin-user-insights";
 import type { CurrencyCode } from "@/lib/utils/currency";
 
 interface UserProviderBreakdownProps {

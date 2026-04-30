@@ -90,6 +90,11 @@ const XFF_PICK_SCHEMA = z.union([
   }),
 ]);
 
+const optionalPreprocessed = <T extends z.ZodType>(
+  preprocess: (value: unknown) => unknown,
+  schema: T
+) => z.preprocess(preprocess, schema.optional()).optional();
+
 const CLIENT_PATTERN_SCHEMA = z
   .string()
   .trim()
@@ -98,9 +103,9 @@ const CLIENT_PATTERN_SCHEMA = z
 const CLIENT_PATTERN_ARRAY_SCHEMA = z
   .array(CLIENT_PATTERN_SCHEMA)
   .max(50, "客户端模式数量不能超过50个");
-const OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA = z.preprocess(
+const OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA = optionalPreprocessed(
   (value) => (value === null ? [] : value),
-  CLIENT_PATTERN_ARRAY_SCHEMA.optional()
+  CLIENT_PATTERN_ARRAY_SCHEMA
 );
 const OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA =
   OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA.default([]);
@@ -169,7 +174,7 @@ export const CreateUserSchema = z.object({
     .optional(),
   // User status and expiry management
   isEnabled: z.boolean().optional().default(true),
-  expiresAt: z.preprocess(
+  expiresAt: optionalPreprocessed(
     (val) => {
       // null/undefined/空字符串 -> 视为未设置
       if (val === null || val === undefined || val === "") return undefined;
@@ -192,34 +197,27 @@ export const CreateUserSchema = z.object({
       // 其他类型返回原值，让 z.date() 报错
       return val;
     },
-    z
-      .date()
-      .optional()
-      .superRefine((date, ctx) => {
-        if (!date) {
-          return; // 允许空值
-        }
+    z.date().superRefine((date, ctx) => {
+      const now = new Date();
 
-        const now = new Date();
+      // 检查是否为将来时间
+      if (date <= now) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "过期时间必须是将来时间",
+        });
+      }
 
-        // 检查是否为将来时间
-        if (date <= now) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "过期时间必须是将来时间",
-          });
-        }
-
-        // 限制最大续期时长(10年)
-        const maxExpiry = new Date(now.getTime());
-        maxExpiry.setFullYear(maxExpiry.getFullYear() + 10);
-        if (date > maxExpiry) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "过期时间不能超过10年",
-          });
-        }
-      })
+      // 限制最大续期时长(10年)
+      const maxExpiry = new Date(now.getTime());
+      maxExpiry.setFullYear(maxExpiry.getFullYear() + 10);
+      if (date > maxExpiry) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "过期时间不能超过10年",
+        });
+      }
+    })
   ),
   // Daily quota reset mode
   dailyResetMode: z.enum(["fixed", "rolling"]).optional().default("fixed"),
@@ -297,7 +295,7 @@ export const UpdateUserSchema = z.object({
     .optional(),
   // User status and expiry management
   isEnabled: z.boolean().optional(),
-  expiresAt: z.preprocess(
+  expiresAt: optionalPreprocessed(
     (val) => {
       // 更新语义：
       // - undefined：不更新该字段
@@ -326,7 +324,6 @@ export const UpdateUserSchema = z.object({
     z
       .date()
       .nullable()
-      .optional()
       .superRefine((date, ctx) => {
         if (!date) {
           return; // 允许空值

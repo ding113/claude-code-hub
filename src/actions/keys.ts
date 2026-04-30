@@ -107,7 +107,7 @@ export async function addKey(data: {
   limitConcurrentSessions?: number;
   providerGroup?: string | null;
   cacheTtlPreference?: "inherit" | "5m" | "1h";
-}): Promise<ActionResult<{ generatedKey: string; name: string }>> {
+}): Promise<ActionResult<{ id: number; generatedKey: string; name: string }>> {
   try {
     // NOTE(#400): providerGroup 安全模型（废弃 null 语义）：
     // - Key.providerGroup 必须显式存储（默认 "default"），不再允许 null
@@ -355,7 +355,7 @@ export async function addKey(data: {
     });
 
     // 返回生成的key供前端显示
-    return { ok: true, data: { generatedKey, name: validatedData.name } };
+    return { ok: true, data: { id: createdKey.id, generatedKey, name: validatedData.name } };
   } catch (error) {
     logger.error("添加密钥失败:", error);
     const message = error instanceof Error ? error.message : "添加密钥失败，请稍后重试";

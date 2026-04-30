@@ -4,8 +4,8 @@ import { RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { refreshCacheAction } from "@/actions/sensitive-words";
 import { Button } from "@/components/ui/button";
+import { refreshCacheAction } from "@/lib/api-client/v1/actions/sensitive-words";
 
 interface RefreshCacheButtonProps {
   stats: {

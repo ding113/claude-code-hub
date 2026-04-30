@@ -45,7 +45,8 @@
     "provider": {
       "create": "创建供应商",
       "update": "更新供应商",
-      "delete": "删除供应商"
+      "delete": "删除供应商",
+      "key_reveal": "查看供应商密钥"
     },
     "provider_group": {
       "create": "创建供应商分组",

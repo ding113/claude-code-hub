@@ -24,6 +24,10 @@ export interface KeyEditTranslations {
     providerGroup: {
       label: string;
       placeholder: string;
+      selectHint: string;
+      editHint: string;
+      allGroups: string;
+      noGroupHint: string;
     };
     cacheTtl: {
       label: string;
@@ -151,6 +155,10 @@ export function useKeyTranslations(): KeyEditTranslations {
         providerGroup: {
           label: t("keyEditSection.fields.providerGroup.label"),
           placeholder: t("keyEditSection.fields.providerGroup.placeholder"),
+          selectHint: t("keyEditSection.fields.providerGroup.selectHint"),
+          editHint: t("keyEditSection.fields.providerGroup.editHint"),
+          allGroups: t("keyEditSection.fields.providerGroup.allGroups"),
+          noGroupHint: t("keyEditSection.fields.providerGroup.noGroupHint"),
         },
         cacheTtl: {
           label: t("keyEditSection.fields.cacheTtl.label"),

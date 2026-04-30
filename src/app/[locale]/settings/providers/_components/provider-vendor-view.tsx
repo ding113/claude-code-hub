@@ -5,7 +5,6 @@ import { ExternalLink, InfoIcon, Loader2, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { getProviderVendors, removeProviderVendor } from "@/actions/provider-endpoints";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,10 +20,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  getProviderVendors,
+  removeProviderVendor,
+} from "@/lib/api-client/v1/actions/provider-endpoints";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { ProviderDisplay, ProviderVendor } from "@/types/provider";
 import type { User } from "@/types/user";
+import { invalidateProviderQueries } from "./invalidate-provider-queries";
 import { ProviderEndpointsSection } from "./provider-endpoints-table";
 
 import { VendorKeysCompactList } from "./vendor-keys-compact-list";
@@ -238,7 +242,7 @@ function DeleteVendorDialog({ vendor, vendorId }: { vendor?: ProviderVendor; ven
       if (res.ok) {
         toast.success(t("vendorDeleteSuccess"));
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+        await invalidateProviderQueries(queryClient);
       } else {
         toast.error(
           res.errorCode ? getErrorMessage(tErrors, res.errorCode) : t("vendorDeleteFailed")

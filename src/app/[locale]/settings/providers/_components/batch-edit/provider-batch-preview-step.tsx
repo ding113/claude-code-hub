@@ -20,8 +20,8 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
   anthropic_adaptive_thinking: "fields.adaptiveThinking",
 };
 
-import type { ProviderBatchPreviewRow } from "@/actions/providers";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { ProviderBatchPreviewRow } from "@/lib/api-client/v1/actions/providers";
 
 // ---------------------------------------------------------------------------
 // Props

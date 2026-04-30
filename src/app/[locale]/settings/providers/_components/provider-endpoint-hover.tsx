@@ -4,14 +4,14 @@ import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Server } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { createAbortError } from "@/lib/abort-utils";
 import {
   batchGetEndpointCircuitInfo,
   batchGetVendorTypeEndpointStats,
   getProviderEndpointsByVendor,
-} from "@/actions/provider-endpoints";
-import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { createAbortError } from "@/lib/abort-utils";
+} from "@/lib/api-client/v1/actions/provider-endpoints";
 import { cn } from "@/lib/utils";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
 import { type EndpointCircuitState, getEndpointStatusModel } from "./endpoint-status";

@@ -1,18 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getBindingsForTypeAction, updateBindingsAction } from "@/actions/notification-bindings";
+import {
+  getBindingsForTypeAction,
+  updateBindingsAction,
+} from "@/lib/api-client/v1/actions/notification-bindings";
 import {
   getNotificationSettingsAction,
   updateNotificationSettingsAction,
-} from "@/actions/notifications";
+} from "@/lib/api-client/v1/actions/notifications";
 import {
   createWebhookTargetAction,
   deleteWebhookTargetAction,
   getWebhookTargetsAction,
   testWebhookTargetAction,
   updateWebhookTargetAction,
-} from "@/actions/webhook-targets";
+} from "@/lib/api-client/v1/actions/webhook-targets";
 import {
   type CacheHitRateAlertSettingsWindowMode,
   isCacheHitRateAlertSettingsWindowMode,

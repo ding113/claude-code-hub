@@ -218,7 +218,7 @@ function validateStream(family: ProtocolFamily, body: string): ValidationResult 
 
 function eventCarriesDeliverable(
   family: ProtocolFamily,
-  eventName: string | null,
+  _eventName: string | null,
   json: object
 ): boolean {
   if (family === "anthropic") {

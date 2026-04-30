@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { toast } from "sonner";
-import { getUserStatistics } from "@/actions/statistics";
+import { getUserStatistics } from "@/lib/api-client/v1/actions/statistics";
 import type { CurrencyCode } from "@/lib/utils";
 import type { TimeRange, UserStatisticsData } from "@/types/statistics";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";

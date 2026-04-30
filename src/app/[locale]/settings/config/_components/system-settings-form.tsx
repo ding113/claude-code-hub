@@ -23,7 +23,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { saveSystemSettings } from "@/actions/system-config";
 import { GroupMultiSelect } from "@/app/[locale]/settings/request-filters/_components/group-multi-select";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -40,6 +39,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";

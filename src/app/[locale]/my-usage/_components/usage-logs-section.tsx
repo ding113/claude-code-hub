@@ -3,12 +3,6 @@
 import { ChevronDown, Filter, RefreshCw, ScrollText } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  getMyAvailableEndpoints,
-  getMyAvailableModels,
-  getMyUsageLogsBatchFull,
-  getMyUsageMetadata,
-} from "@/actions/my-usage";
 import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
 import {
   type LogsFetchFn,
@@ -27,6 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  getMyAvailableEndpoints,
+  getMyAvailableModels,
+  getMyUsageLogsBatchFull,
+  getMyUsageMetadata,
+} from "@/lib/api-client/v1/actions/my-usage";
 import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";

@@ -4,7 +4,6 @@ import { ArrowRightLeft, Loader2, Pin } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { pinModelPricingProviderAsManual } from "@/actions/model-prices";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { pinModelPricingProviderAsManual } from "@/lib/api-client/v1/actions/model-prices";
 import type { ModelPrice } from "@/types/model-price";
 
 interface ProviderPricingDialogProps {

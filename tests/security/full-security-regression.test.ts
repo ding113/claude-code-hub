@@ -131,6 +131,7 @@ describe("Full Security Regression Suite", () => {
 
       const created = await store.create({
         keyFingerprint: "sha256:fp-1",
+        credentialType: "user-api-key",
         userId: 101,
         userRole: "user",
       });

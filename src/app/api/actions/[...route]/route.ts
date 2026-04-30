@@ -35,6 +35,19 @@ import * as usageLogActions from "@/actions/usage-logs";
 import * as userActions from "@/actions/users";
 import * as webhookTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
+import {
+  hasLegacyRedactedWritePlaceholders,
+  preserveLegacyNotificationSettingsUpdateInput,
+  preserveLegacyProviderUpdateInput,
+  preserveLegacyWebhookTargetUpdateInput,
+  sanitizeLegacyNotificationBindingResponse,
+  sanitizeLegacyNotificationSettingsResponse,
+  sanitizeLegacyProviderResponse,
+  sanitizeLegacyWebhookTargetResponse,
+} from "@/lib/api/legacy-action-sanitizers";
+import { createProblemJson } from "@/lib/api/v1/_shared/error-envelope";
+import { withManagementSecurityHeaders } from "@/lib/api/v1/_shared/management-security-headers";
+import { getEnvConfig, isLegacyActionsApiEnabled } from "@/lib/config/env.schema";
 import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
 import { PROVIDER_MODEL_REDIRECT_RULE_SCHEMA } from "@/lib/provider-model-redirect-schema";
@@ -69,6 +82,99 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
   description:
     "Authorization: Bearer <token> 方式认证（适合脚本/CLI 调用）。注意：token 与 Cookie 中 auth-token 值一致。",
 });
+
+async function getSanitizedLegacyProviders() {
+  const providers = await providerActions.getProviders();
+  return providers.map(sanitizeLegacyProviderResponse);
+}
+
+async function createLegacyProviderRejectingRedactedPlaceholders(
+  input: Parameters<typeof providerActions.addProvider>[0]
+) {
+  if (hasLegacyRedactedWritePlaceholders(input)) {
+    return { ok: false, error: "脱敏占位符不能用于创建供应商" };
+  }
+  return providerActions.addProvider(input);
+}
+
+async function updateLegacyProviderPreservingRedactedPlaceholders(
+  id: number,
+  input: Parameters<typeof providerActions.editProvider>[1]
+) {
+  const providers = await providerActions.getProviders();
+  const existing = providers.find((provider) => provider.id === id);
+  const updateInput = existing ? preserveLegacyProviderUpdateInput(input, existing) : input;
+  return providerActions.editProvider(id, updateInput);
+}
+
+async function getSanitizedLegacyWebhookTargetsAction() {
+  const result = await webhookTargetActions.getWebhookTargetsAction();
+  if (!result.ok) return result;
+  return {
+    ...result,
+    data: result.data.map(sanitizeLegacyWebhookTargetResponse),
+  };
+}
+
+async function getSanitizedLegacyBindingsForTypeAction(
+  type: Parameters<typeof notificationBindingActions.getBindingsForTypeAction>[0]
+) {
+  const result = await notificationBindingActions.getBindingsForTypeAction(type);
+  if (!result.ok) return result;
+  return {
+    ...result,
+    data: result.data.map(sanitizeLegacyNotificationBindingResponse),
+  };
+}
+
+async function getSanitizedLegacyNotificationSettingsAction() {
+  return sanitizeLegacyNotificationSettingsResponse(
+    await notificationActions.getNotificationSettingsAction()
+  );
+}
+
+async function updateSanitizedLegacyNotificationSettingsAction(
+  input: Parameters<typeof notificationActions.updateNotificationSettingsAction>[0]
+) {
+  const result = await notificationActions.updateNotificationSettingsAction(
+    preserveLegacyNotificationSettingsUpdateInput(input)
+  );
+  if (!result.ok) return result;
+  return {
+    ...result,
+    data: sanitizeLegacyNotificationSettingsResponse(result.data),
+  };
+}
+
+async function createSanitizedLegacyWebhookTargetAction(
+  input: Parameters<typeof webhookTargetActions.createWebhookTargetAction>[0]
+) {
+  if (hasLegacyRedactedWritePlaceholders(input)) {
+    return { ok: false, error: "脱敏占位符不能用于创建推送目标" };
+  }
+  const result = await webhookTargetActions.createWebhookTargetAction(input);
+  if (!result.ok) return result;
+  return {
+    ...result,
+    data: sanitizeLegacyWebhookTargetResponse(result.data),
+  };
+}
+
+async function updateSanitizedLegacyWebhookTargetAction(
+  id: number,
+  input: Parameters<typeof webhookTargetActions.updateWebhookTargetAction>[1]
+) {
+  const existingResult = await webhookTargetActions.getWebhookTargetsAction();
+  if (!existingResult.ok) return existingResult;
+  const existing = existingResult.data.find((target) => target.id === id);
+  const updateInput = existing ? preserveLegacyWebhookTargetUpdateInput(input, existing) : input;
+  const result = await webhookTargetActions.updateWebhookTargetAction(id, updateInput);
+  if (!result.ok) return result;
+  return {
+    ...result,
+    data: sanitizeLegacyWebhookTargetResponse(result.data),
+  };
+}
 
 // ==================== 用户管理 ====================
 
@@ -533,7 +639,7 @@ const ProviderTypeSchema = z.enum([
 const { route: getProvidersRoute, handler: getProvidersHandler } = createActionRoute(
   "providers",
   "getProviders",
-  providerActions.getProviders,
+  getSanitizedLegacyProviders,
   {
     requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.array(
@@ -829,7 +935,7 @@ app.openapi(resetVendorTypeCircuitRoute, resetVendorTypeCircuitHandler);
 const { route: addProviderRoute, handler: addProviderHandler } = createActionRoute(
   "providers",
   "addProvider",
-  providerActions.addProvider,
+  createLegacyProviderRejectingRedactedPlaceholders,
   {
     requestSchema: CreateProviderSchema,
     description: "创建新供应商 (管理员)",
@@ -843,7 +949,7 @@ app.openapi(addProviderRoute, addProviderHandler);
 const { route: editProviderRoute, handler: editProviderHandler } = createActionRoute(
   "providers",
   "editProvider",
-  providerActions.editProvider,
+  updateLegacyProviderPreservingRedactedPlaceholders,
   {
     requestSchema: z.object({
       providerId: z.number().int().positive(),
@@ -1681,7 +1787,7 @@ const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHan
   createActionRoute(
     "notifications",
     "getNotificationSettingsAction",
-    notificationActions.getNotificationSettingsAction,
+    getSanitizedLegacyNotificationSettingsAction,
     {
       requestSchema: z.object({}).describe("无需请求参数"),
       summary: "获取通知设置",
@@ -1706,7 +1812,7 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
   createActionRoute(
     "notifications",
     "updateNotificationSettingsAction",
-    notificationActions.updateNotificationSettingsAction,
+    updateSanitizedLegacyNotificationSettingsAction,
     {
       requestSchema: z.object({
         enabled: z.boolean().optional().describe("通知总开关"),
@@ -1899,12 +2005,17 @@ const WebhookTargetCreateSchema = z.object({
   isEnabled: z.boolean().optional(),
 });
 
-const WebhookTargetUpdateSchema = WebhookTargetCreateSchema.partial();
+const WebhookTargetUpdateSchema = WebhookTargetCreateSchema.extend({
+  webhookUrl: z
+    .union([z.string().trim().url(), z.literal("[REDACTED]")])
+    .optional()
+    .nullable(),
+}).partial();
 
 const { route: getWebhookTargetsRoute, handler: getWebhookTargetsHandler } = createActionRoute(
   "webhook-targets",
   "getWebhookTargetsAction",
-  webhookTargetActions.getWebhookTargetsAction,
+  getSanitizedLegacyWebhookTargetsAction,
   {
     requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.array(WebhookTargetSchema),
@@ -1919,7 +2030,7 @@ app.openapi(getWebhookTargetsRoute, getWebhookTargetsHandler);
 const { route: createWebhookTargetRoute, handler: createWebhookTargetHandler } = createActionRoute(
   "webhook-targets",
   "createWebhookTargetAction",
-  webhookTargetActions.createWebhookTargetAction,
+  createSanitizedLegacyWebhookTargetAction,
   {
     requestSchema: WebhookTargetCreateSchema,
     responseSchema: WebhookTargetSchema,
@@ -1934,7 +2045,7 @@ app.openapi(createWebhookTargetRoute, createWebhookTargetHandler);
 const { route: updateWebhookTargetRoute, handler: updateWebhookTargetHandler } = createActionRoute(
   "webhook-targets",
   "updateWebhookTargetAction",
-  webhookTargetActions.updateWebhookTargetAction,
+  updateSanitizedLegacyWebhookTargetAction,
   {
     requestSchema: z.object({
       id: z.number().int().positive(),
@@ -2012,7 +2123,7 @@ const NotificationBindingInputSchema = z.object({
 const { route: getBindingsRoute, handler: getBindingsHandler } = createActionRoute(
   "notification-bindings",
   "getBindingsForTypeAction",
-  notificationBindingActions.getBindingsForTypeAction,
+  getSanitizedLegacyBindingsForTypeAction,
   {
     requestSchema: z.object({
       type: WebhookNotificationTypeSchema,
@@ -2350,6 +2461,73 @@ app.get("/health", async (c) => {
   }
 });
 
+const legacyHandler = handle(app);
+
+function isLegacyDocsPath(pathname: string): boolean {
+  return ["/api/actions/openapi.json", "/api/actions/docs", "/api/actions/scalar"].includes(
+    pathname
+  );
+}
+
+function createLegacyGoneResponse(request: Request): Response {
+  const pathname = new URL(request.url).pathname;
+  const body = createProblemJson({
+    status: 410,
+    instance: pathname,
+    errorCode: "api.legacy_actions_gone",
+    title: "Legacy actions API is gone",
+    detail: "The /api/actions API is disabled. Use the /api/v1 management API instead.",
+  });
+  return new Response(JSON.stringify(body), {
+    status: 410,
+    headers: {
+      "Content-Type": "application/problem+json",
+      Link: '</api/v1/openapi.json>; rel="successor-version"',
+    },
+  });
+}
+
+function withLegacyDeprecationHeaders(response: Response): Response {
+  const env = getEnvConfig();
+  const headers = new Headers(response.headers);
+  const sunsetDate = parseLegacySunsetDate(env.LEGACY_ACTIONS_SUNSET_DATE);
+  headers.set("Deprecation", `@${Math.floor(getLegacyDeprecationDate().getTime() / 1000)}`);
+  headers.set("Sunset", sunsetDate.toUTCString());
+  headers.set("Link", '</api/v1/openapi.json>; rel="successor-version"');
+  headers.set("Warning", '299 - "The /api/actions API is deprecated; use /api/v1"');
+  return withManagementSecurityHeaders(
+    new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
+  );
+}
+
+function getLegacyDeprecationDate(): Date {
+  return new Date("2026-04-29T00:00:00.000Z");
+}
+
+function parseLegacySunsetDate(value: string): Date {
+  const fallback = new Date("2026-12-31T00:00:00.000Z");
+  const normalizedValue = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00.000Z` : value;
+  const date = new Date(normalizedValue);
+  return Number.isNaN(date.getTime()) ? fallback : date;
+}
+
+async function handleLegacyRequest(request: Request): Promise<Response> {
+  const pathname = new URL(request.url).pathname;
+  const env = getEnvConfig();
+  const docsHidden = env.LEGACY_ACTIONS_DOCS_MODE === "hidden" && isLegacyDocsPath(pathname);
+  const actionExecutionDisabled = !isLegacyActionsApiEnabled() && !isLegacyDocsPath(pathname);
+
+  if (docsHidden || actionExecutionDisabled) {
+    return withLegacyDeprecationHeaders(createLegacyGoneResponse(request));
+  }
+
+  return withLegacyDeprecationHeaders(await legacyHandler(request));
+}
+
 // 导出处理器 (Vercel Edge Functions 格式)
-export const GET = handle(app);
-export const POST = handle(app);
+export const GET = handleLegacyRequest;
+export const POST = handleLegacyRequest;

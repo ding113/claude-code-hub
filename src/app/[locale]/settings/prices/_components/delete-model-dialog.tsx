@@ -4,7 +4,6 @@ import { Loader2, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { deleteSingleModelPrice } from "@/actions/model-prices";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { deleteSingleModelPrice } from "@/lib/api-client/v1/actions/model-prices";
 
 interface DeleteModelDialogProps {
   modelName: string;

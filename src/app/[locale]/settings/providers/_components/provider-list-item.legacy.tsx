@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { getUnmaskedProviderKey, resetProviderCircuit } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
@@ -31,6 +30,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  getUnmaskedProviderKey,
+  resetProviderCircuit,
+} from "@/lib/api-client/v1/actions/providers";
 import { PROVIDER_LIMITS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";

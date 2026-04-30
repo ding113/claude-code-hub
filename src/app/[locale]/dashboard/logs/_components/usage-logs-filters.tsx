@@ -5,14 +5,14 @@ import { Clock, Download, Network, Server, User } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   downloadUsageLogsExport,
   getUsageLogsExportStatus,
   startUsageLogsExport,
   type UsageLogsExportStatus,
-} from "@/actions/usage-logs";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+} from "@/lib/api-client/v1/actions/usage-logs";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";

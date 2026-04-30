@@ -3,8 +3,8 @@
 import { AlertTriangle, ChevronDown, Infinity as InfinityIcon, PieChart } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import type { MyUsageQuota } from "@/actions/my-usage";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { MyUsageQuota } from "@/lib/api-client/v1/actions/my-usage";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { calculateUsagePercent } from "@/lib/utils/limit-helpers";

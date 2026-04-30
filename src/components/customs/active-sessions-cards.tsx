@@ -3,12 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ChevronRight, Clock, Cpu, Key, Loader2, User, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getActiveSessions } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "@/i18n/routing";
+import { getActiveSessions } from "@/lib/api-client/v1/actions/active-sessions";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";

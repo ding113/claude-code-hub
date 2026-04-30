@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { type PatchKeyLimitField, patchKeyLimit } from "@/actions/keys";
 import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { QuotaProgress } from "@/components/quota/quota-progress";
 import { QuotaQuickEditPopover } from "@/components/quota/quota-quick-edit-popover";
@@ -23,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { type PatchKeyLimitField, patchKeyLimit } from "@/lib/api-client/v1/actions/keys";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { getUsageRate, hasKeyQuotaSet, isUserExceeded } from "@/lib/utils/quota-helpers";

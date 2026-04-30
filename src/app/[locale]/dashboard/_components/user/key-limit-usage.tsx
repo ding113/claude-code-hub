@@ -3,8 +3,8 @@
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { getKeyLimitUsage } from "@/actions/keys";
 import { Progress } from "@/components/ui/progress";
+import { getKeyLimitUsage } from "@/lib/api-client/v1/actions/keys";
 import { cn } from "@/lib/utils";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 

@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
-import type { ActionResult } from "@/actions/types";
+import { getMyIpGeoDetails } from "@/lib/api-client/v1/actions/my-usage";
 import type { IpGeoLookupResponse } from "@/types/ip-geo";
 
 export type IpGeoLookupMode = "default" | "my-usage";
@@ -23,21 +23,10 @@ export function useIpGeo(ip: string | null | undefined, options?: UseIpGeoOption
       if (!ip) throw new Error("no ip");
 
       if (mode === "my-usage") {
-        const response = await fetch("/api/actions/my-usage/getMyIpGeoDetails", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ip, lang: locale }),
-        });
-
-        const result = (await response.json()) as ActionResult<IpGeoLookupResponse>;
+        const result = await getMyIpGeoDetails({ ip, lang: locale });
         if (!result.ok) {
           return { status: "error", error: result.error ?? t("error") };
         }
-
-        if (!response.ok) {
-          return { status: "error", error: t("error") };
-        }
-
         return result.data;
       }
 

@@ -1,4 +1,4 @@
-import { getUserAllLimitUsage } from "@/actions/users";
+import { getUserAllLimitUsage } from "@/lib/api-client/v1/actions/users";
 
 export interface LimitUsageData {
   limit5h: { usage: number; limit: number | null };

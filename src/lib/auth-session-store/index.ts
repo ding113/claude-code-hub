@@ -1,6 +1,7 @@
 export interface SessionData {
   sessionId: string;
   keyFingerprint: string;
+  credentialType: "session" | "admin-token" | "user-api-key";
   userId: number;
   userRole: string;
   createdAt: number;

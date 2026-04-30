@@ -4,7 +4,6 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
-import { getAuditLogsBatch } from "@/actions/audit-logs";
 import { IpDetailsDialog } from "@/app/[locale]/dashboard/_components/ip-details-dialog";
 import { IpDisplayTrigger } from "@/app/[locale]/dashboard/_components/ip-display-trigger";
 import {
@@ -22,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
+import { getAuditLogsBatch } from "@/lib/api-client/v1/actions/audit-logs";
 import { cn } from "@/lib/utils";
 import type { AuditCategory, AuditLogRow } from "@/types/audit-log";
 import { AuditLogDetailSheet } from "./audit-log-detail-sheet";
@@ -42,6 +42,12 @@ const CATEGORIES: AuditCategory[] = [
 ];
 
 type StatusFilter = "all" | "success" | "failure";
+type AuditLogsPage = {
+  rows: AuditLogRow[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  limit?: number;
+};
 
 export function AuditLogsView() {
   const t = useTranslations("auditLogs");
@@ -68,18 +74,14 @@ export function AuditLogsView() {
     useInfiniteQuery({
       queryKey: ["audit-logs-batch", filter],
       queryFn: async ({ pageParam }) => {
-        const result = await getAuditLogsBatch({
+        return getAuditLogsBatch({
           filter,
           cursor: pageParam ?? null,
           pageSize: BATCH_SIZE,
-        });
-        if (!result.ok) {
-          throw new Error(result.error);
-        }
-        return result.data;
+        }) as Promise<AuditLogsPage>;
       },
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      initialPageParam: undefined as { createdAt: string; id: number } | undefined,
+      initialPageParam: undefined as string | undefined,
       staleTime: 15000,
       refetchOnWindowFocus: false,
     });

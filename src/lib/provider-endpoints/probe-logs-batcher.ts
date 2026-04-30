@@ -1,5 +1,5 @@
-import { getProviderEndpointProbeLogs } from "@/actions/provider-endpoints";
 import { createAbortError } from "@/lib/abort-utils";
+import { getProviderEndpointProbeLogs } from "@/lib/api-client/v1/actions/provider-endpoints";
 
 export type ProbeLog = {
   ok: boolean;
@@ -127,7 +127,7 @@ async function tryFetchBatchProbeLogsByEndpointIds(
 
   for (const chunk of chunks) {
     try {
-      const res = await fetch("/api/actions/providers/batchGetProviderEndpointProbeLogs", {
+      const res = await fetch("/api/v1/provider-endpoints/probe-logs:batch", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
@@ -148,14 +148,8 @@ async function tryFetchBatchProbeLogsByEndpointIds(
         continue;
       }
 
-      const json = (await res.json()) as { ok?: unknown; data?: unknown };
-      if (json.ok !== true) {
-        didAnyChunkFail = true;
-        for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
-        continue;
-      }
-
-      const normalized = normalizeProbeLogsByEndpointId(json.data);
+      const json = await res.json();
+      const normalized = normalizeProbeLogsByEndpointId(json);
       if (!normalized) {
         didAnyChunkFail = true;
         for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);

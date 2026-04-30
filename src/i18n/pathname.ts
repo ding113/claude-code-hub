@@ -10,7 +10,7 @@ function isLocale(value: string): value is Locale {
 function normalizeFallback(fallback: string): string {
   const candidate = fallback.trim();
 
-  if (!candidate || !candidate.startsWith("/") || candidate.startsWith("//")) {
+  if (!candidate?.startsWith("/") || candidate.startsWith("//")) {
     return DEFAULT_INTERNAL_PATH;
   }
 
@@ -31,7 +31,7 @@ export function normalizePathnameForLocaleNavigation(
   const safeFallback = normalizeFallback(fallback);
   const candidate = pathname?.trim() ?? "";
 
-  if (!candidate || !candidate.startsWith("/") || candidate.startsWith("//")) {
+  if (!candidate?.startsWith("/") || candidate.startsWith("//")) {
     return safeFallback;
   }
 

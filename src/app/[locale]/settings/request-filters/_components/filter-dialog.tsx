@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { createRequestFilterAction, updateRequestFilterAction } from "@/actions/request-filters";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +24,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  createRequestFilterAction,
+  updateRequestFilterAction,
+} from "@/lib/api-client/v1/actions/request-filters";
 import type { FilterOperation } from "@/lib/request-filter-types";
 import { cn } from "@/lib/utils";
 import type {

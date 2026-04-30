@@ -718,6 +718,7 @@
       "noRequests": "暫無請求記錄",
       "fetchFailed": "取得請求列表失敗",
       "unknownError": "未知錯誤",
+      "searchPlaceholder": "搜尋請求...",
       "prev": "上一頁",
       "next": "下一頁",
       "orderAsc": "切換為正序（最早的在前）",

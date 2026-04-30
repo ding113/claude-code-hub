@@ -45,7 +45,8 @@
     "provider": {
       "create": "プロバイダー作成",
       "update": "プロバイダー更新",
-      "delete": "プロバイダー削除"
+      "delete": "プロバイダー削除",
+      "key_reveal": "プロバイダーキー表示"
     },
     "provider_group": {
       "create": "プロバイダーグループ作成",

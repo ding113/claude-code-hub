@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
-import { simulateDispatchAction } from "@/actions/dispatch-simulator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +31,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { simulateDispatchAction } from "@/lib/api-client/v1/actions/dispatch-simulator";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { DispatchSimulatorResult } from "@/types/dispatch-simulator";
 import type { ProviderDisplay } from "@/types/provider";

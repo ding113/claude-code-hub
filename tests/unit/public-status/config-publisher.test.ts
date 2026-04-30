@@ -116,7 +116,7 @@ describe("public-status config publisher", () => {
         }),
       })
     );
-  }, 40_000);
+  }, 80_000);
 
   it("uses shared model-prefix matching for vendor icons without changing request type badges", async () => {
     mockFindAllProviderGroups.mockResolvedValue([

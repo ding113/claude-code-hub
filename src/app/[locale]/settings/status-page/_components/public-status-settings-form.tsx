@@ -5,10 +5,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import {
-  type SavePublicStatusSettingsInput,
-  savePublicStatusSettings,
-} from "@/actions/public-status";
 import { ModelMultiSelect } from "@/app/[locale]/settings/providers/_components/model-multi-select";
 import { Section } from "@/components/section";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +23,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
+import {
+  type SavePublicStatusSettingsInput,
+  savePublicStatusSettings,
+} from "@/lib/api-client/v1/actions/public-status";
 import {
   getProviderTypeTranslationKey,
   getUserFacingProviderTypes,

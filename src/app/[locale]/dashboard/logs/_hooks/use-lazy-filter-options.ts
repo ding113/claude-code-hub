@@ -1,8 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActionResult } from "@/actions/types";
-import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
+import type { ActionResult } from "@/lib/api-client/v1/actions/types";
+import {
+  getEndpointList,
+  getModelList,
+  getStatusCodeList,
+} from "@/lib/api-client/v1/actions/usage-logs";
 
 /**
  * 惰性加载 Hook 返回类型

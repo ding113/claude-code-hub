@@ -27,6 +27,10 @@
     "test:coverage:include-session-id-in-errors": "vitest run --config tests/configs/include-session-id-in-errors.config.ts --coverage",
     "test:coverage:usage-logs-sessionid-search": "vitest run --config tests/configs/usage-logs-sessionid-search.config.ts --coverage",
     "test:ci": "vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml",
+    "test:v1": "vitest run --config tests/configs/v1.config.ts --coverage --reporter=verbose && bun scripts/check-v1-critical-coverage.ts",
+    "openapi:generate": "bun scripts/generate-v1-types.ts",
+    "openapi:check": "bun scripts/generate-v1-types.ts --check",
+    "openapi:lint": "bun scripts/lint-openapi.ts",
     "cui": "npx cui-server --host 0.0.0.0 --port 30000 --token a7564bc8882aa9a2d25d8b4ea6ea1e2e",
     "db:generate": "drizzle-kit generate && node scripts/validate-migrations.js",
     "db:migrate": "drizzle-kit migrate",
@@ -131,6 +135,7 @@
     "bun-types": "^1",
     "drizzle-kit": "^0.31",
     "happy-dom": "^20",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4"
