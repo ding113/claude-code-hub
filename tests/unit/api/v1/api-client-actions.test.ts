@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ApiError } from "@/lib/api-client/v1/errors";
 
@@ -26,6 +27,9 @@ const users = await vi.importActual<typeof import("@/lib/api-client/v1/actions/u
 const providerEndpoints = await vi.importActual<
   typeof import("@/lib/api-client/v1/actions/provider-endpoints")
 >("@/lib/api-client/v1/actions/provider-endpoints");
+const usageLogs = await vi.importActual<typeof import("@/lib/api-client/v1/actions/usage-logs")>(
+  "@/lib/api-client/v1/actions/usage-logs"
+);
 
 describe("v1 action compatibility client", () => {
   beforeEach(() => {
@@ -143,5 +147,51 @@ describe("v1 action compatibility client", () => {
 
     expect(getMock).toHaveBeenCalledWith("/api/v1/provider-endpoints/12/probe-logs?limit=50");
     expect(result).toEqual({ ok: true, data: { logs: [] } });
+  });
+
+  test("decodes opaque usage-log cursors before returning the legacy page shape", async () => {
+    const cursor = { createdAt: "2026-04-28T00:00:00.000Z", id: 42 };
+    const token = Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+    getMock
+      .mockResolvedValueOnce({
+        items: [],
+        pageInfo: { nextCursor: token, hasMore: true, limit: 15 },
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        pageInfo: { nextCursor: null, hasMore: false, limit: 15 },
+      });
+
+    const firstPage = await usageLogs.getUsageLogsBatch({ limit: 15 });
+    expect(firstPage).toEqual({
+      ok: true,
+      data: { logs: [], nextCursor: cursor, hasMore: true },
+    });
+
+    await usageLogs.getUsageLogsBatch({
+      cursor: firstPage.ok ? firstPage.data.nextCursor : null,
+      limit: 15,
+    });
+
+    expect(getMock).toHaveBeenNthCalledWith(1, "/api/v1/usage-logs?limit=15");
+    expect(getMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/usage-logs?cursorCreatedAt=2026-04-28T00%3A00%3A00.000Z&cursorId=42&limit=15"
+    );
+  });
+
+  test("serializes opaque usage-log cursor strings as server cursor components", async () => {
+    const cursor = { createdAt: "2026-04-28T00:00:00.000Z", id: 42 };
+    const token = Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+    getMock.mockResolvedValue({
+      items: [],
+      pageInfo: { nextCursor: null, hasMore: false, limit: 15 },
+    });
+
+    await usageLogs.getUsageLogsBatch({ cursor: token, limit: 15 });
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/usage-logs?cursorCreatedAt=2026-04-28T00%3A00%3A00.000Z&cursorId=42&limit=15"
+    );
   });
 });

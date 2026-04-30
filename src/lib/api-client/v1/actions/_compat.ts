@@ -50,6 +50,33 @@ export function unwrapItems<T>(body: { items?: T[] } | T[]): T[] {
   return Array.isArray(body) ? body : (body.items ?? []);
 }
 
+export interface LegacyCursor {
+  createdAt: string;
+  id: number;
+}
+
+export function normalizeLegacyCursor(value: unknown): LegacyCursor | null {
+  if (!value) return null;
+  if (typeof value === "string") return decodeLegacyCursorToken(value);
+  if (typeof value !== "object") return null;
+
+  const cursor = value as { createdAt?: unknown; id?: unknown };
+  if (typeof cursor.createdAt !== "string") return null;
+
+  const id = typeof cursor.id === "number" ? cursor.id : Number(cursor.id);
+  return Number.isSafeInteger(id) && id > 0 ? { createdAt: cursor.createdAt, id } : null;
+}
+
+export function legacyCursorQueryEntries(value: unknown): [string, string | number][] {
+  const cursor = normalizeLegacyCursor(value);
+  return cursor
+    ? [
+        ["cursorCreatedAt", cursor.createdAt],
+        ["cursorId", cursor.id],
+      ]
+    : [];
+}
+
 export function apiGet<T = any>(path: string): Promise<T> {
   return apiClient.get<T>(path);
 }
@@ -164,4 +191,19 @@ function toActionErrorParams(
       typeof entry[1] === "string" || typeof entry[1] === "number"
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function decodeLegacyCursorToken(token: string): LegacyCursor | null {
+  try {
+    if (typeof globalThis.atob !== "function") return null;
+
+    const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const bytes = Uint8Array.from(globalThis.atob(padded), (char) => char.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+
+    return parsed && typeof parsed === "object" ? normalizeLegacyCursor(parsed) : null;
+  } catch {
+    return null;
+  }
 }

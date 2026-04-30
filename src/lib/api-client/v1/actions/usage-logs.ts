@@ -1,6 +1,14 @@
 import type { UsageLogsExportStatus } from "@/actions/usage-logs";
 import type { UsageLogSummary, UsageLogsBatchResult } from "@/repository/usage-logs";
-import { apiGet, apiPost, searchParams, toActionResult, unwrapItems } from "./_compat";
+import {
+  apiGet,
+  apiPost,
+  legacyCursorQueryEntries,
+  normalizeLegacyCursor,
+  searchParams,
+  toActionResult,
+  unwrapItems,
+} from "./_compat";
 
 export type { UsageLogsExportStatus } from "@/actions/usage-logs";
 
@@ -84,15 +92,9 @@ export function downloadUsageLogsExport(jobId: string) {
 function toQuery(params?: object) {
   return Object.fromEntries(
     Object.entries(params ?? {}).flatMap(([key, value]) => {
+      if (key === "cursor") return legacyCursorQueryEntries(value);
       if (value instanceof Date) return [[key, value.toISOString()]];
       if (["string", "number", "boolean"].includes(typeof value)) return [[key, value]];
-      if (key === "cursor" && value && typeof value === "object") {
-        const cursor = value as { createdAt?: string; id?: string | number };
-        return [
-          ["cursorCreatedAt", cursor.createdAt],
-          ["cursorId", cursor.id],
-        ];
-      }
       return [];
     })
   );
@@ -103,14 +105,14 @@ function toLegacyUsageLogsPage(body: unknown): UsageLogsBatchResult {
     logs?: UsageLogsBatchResult["logs"];
     items?: UsageLogsBatchResult["logs"];
     pageInfo?: {
-      nextCursor?: UsageLogsBatchResult["nextCursor"];
+      nextCursor?: UsageLogsBatchResult["nextCursor"] | string;
       hasMore?: boolean;
       page?: number;
       pageSize?: number;
       total?: number;
       totalPages?: number;
     };
-    nextCursor?: UsageLogsBatchResult["nextCursor"];
+    nextCursor?: UsageLogsBatchResult["nextCursor"] | string;
     hasMore?: boolean;
     total?: number;
     page?: number;
@@ -119,7 +121,7 @@ function toLegacyUsageLogsPage(body: unknown): UsageLogsBatchResult {
   };
   return {
     logs: page.logs ?? page.items ?? [],
-    nextCursor: page.nextCursor ?? page.pageInfo?.nextCursor ?? null,
+    nextCursor: normalizeLegacyCursor(page.nextCursor ?? page.pageInfo?.nextCursor),
     hasMore: page.hasMore ?? page.pageInfo?.hasMore ?? false,
     ...((page.total ?? page.pageInfo?.total !== undefined)
       ? { total: page.total ?? page.pageInfo?.total }
