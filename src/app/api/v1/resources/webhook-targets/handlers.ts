@@ -99,6 +99,14 @@ export async function updateWebhookTarget(c: Context): Promise<Response> {
       detail: "Webhook target was not found.",
     });
   }
+  if (hasUnresolvedRedactedHeaderEcho(body.data.customHeaders, existing.customHeaders)) {
+    return createProblemResponse({
+      status: 422,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "webhook_target.redacted_placeholder_rejected",
+      detail: "Redacted placeholders cannot be used for renamed custom header fields.",
+    });
+  }
   const updatePayload = preserveRedactedWebhookTargetUpdateFields(body.data, existing);
   const result = await callAction(
     c,
@@ -219,6 +227,23 @@ function restoreRedactedHeaderValues(
         ? (existing[name] ?? existingByLowerName.get(name.toLowerCase()) ?? value)
         : value,
     ])
+  );
+}
+
+function hasUnresolvedRedactedHeaderEcho(
+  incoming: Record<string, string> | null | undefined,
+  existing: Record<string, string> | null | undefined
+): boolean {
+  if (!incoming) return false;
+  const redactedExisting = existing ? (redactHeaderRecord(existing) ?? {}) : {};
+  const redactedExistingNames = new Set(
+    Object.entries(redactedExisting)
+      .filter(([, value]) => value === "[REDACTED]")
+      .map(([name]) => name.toLowerCase())
+  );
+
+  return Object.entries(incoming).some(
+    ([name, value]) => value === "[REDACTED]" && !redactedExistingNames.has(name.toLowerCase())
   );
 }
 

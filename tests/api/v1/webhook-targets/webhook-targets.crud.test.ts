@@ -191,6 +191,25 @@ describe("v1 webhook targets CRUD", () => {
     });
   });
 
+  test("rejects redacted placeholders in renamed custom header updates", async () => {
+    const updated = await callV1Route({
+      method: "PATCH",
+      pathname: "/api/v1/webhook-targets/10",
+      headers: { Authorization: "Bearer admin-token" },
+      body: {
+        customHeaders: {
+          "X-Token": "[REDACTED]",
+        },
+      },
+    });
+
+    expect(updated.response.status).toBe(422);
+    expect(updated.json).toMatchObject({
+      errorCode: "webhook_target.redacted_placeholder_rejected",
+    });
+    expect(updateWebhookTargetActionMock).not.toHaveBeenCalled();
+  });
+
   test("creates, updates, deletes, and tests targets with REST semantics", async () => {
     const created = await callV1Route({
       method: "POST",
