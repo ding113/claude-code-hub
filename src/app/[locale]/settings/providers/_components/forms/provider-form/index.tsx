@@ -371,7 +371,7 @@ function ProviderFormContent({
           limit_weekly_usd: state.rateLimit.limitWeeklyUsd,
           limit_monthly_usd: state.rateLimit.limitMonthlyUsd,
           limit_total_usd: state.rateLimit.limitTotalUsd,
-          limit_concurrent_sessions: state.rateLimit.limitConcurrentSessions,
+          limit_concurrent_sessions: state.rateLimit.limitConcurrentSessions ?? undefined,
           circuit_breaker_failure_threshold: state.circuitBreaker.failureThreshold,
           circuit_breaker_open_duration: openDurationMs,
           circuit_breaker_half_open_success_threshold:
@@ -385,10 +385,6 @@ function ProviderFormContent({
           request_timeout_non_streaming_ms: nonStreamingTimeoutMs,
           mcp_passthrough_type: state.mcp.mcpPassthroughType,
           mcp_passthrough_url: state.mcp.mcpPassthroughUrl?.trim() || null,
-          tpm: null,
-          rpm: null,
-          rpd: null,
-          cc: null,
         };
 
         if (isEdit && provider) {
