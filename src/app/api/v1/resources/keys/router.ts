@@ -10,6 +10,7 @@ import {
   KeyListQuerySchema,
   KeyListResponseSchema,
   KeyRenewSchema,
+  KeyRevealResponseSchema,
   KeysBatchUpdateSchema,
   KeyUpdateSchema,
   PatchKeyLimitParamSchema,
@@ -28,6 +29,7 @@ import {
   patchKeyLimit,
   renewKey,
   resetKeyLimits,
+  revealKey,
   updateKey,
 } from "./handlers";
 
@@ -219,6 +221,28 @@ const renewKeyRoute = createRoute({
 
 keysRouter.openAPIRegistry.registerPath(renewKeyRoute);
 keysRouter.post("/keys/:keyId{[0-9]+:renew}", requireAuth("admin"), renewKey);
+
+const revealKeyRoute = createRoute({
+  method: "get",
+  path: "/keys/{keyId}:reveal",
+  tags: ["Keys"],
+  summary: "Reveal key",
+  description:
+    "Returns the unmasked user API key for an admin caller and writes the existing audit log.",
+  "x-required-access": "admin",
+  security,
+  request: { params: KeyIdParamSchema },
+  responses: {
+    200: {
+      description: "Unmasked key.",
+      content: { "application/json": { schema: KeyRevealResponseSchema } },
+    },
+    ...problemResponses,
+  },
+});
+
+keysRouter.openAPIRegistry.registerPath(revealKeyRoute);
+keysRouter.get("/keys/:keyId{[0-9]+:reveal}", requireAuth("admin"), revealKey);
 
 keysRouter.openapi(
   createRoute({

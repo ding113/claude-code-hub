@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN IF NOT EXISTS "bill_non_successful_requests" boolean DEFAULT false NOT NULL;

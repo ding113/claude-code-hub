@@ -43,6 +43,11 @@ export interface SystemSettings {
   // Codex Priority 单独计费口径
   codexPriorityBillingSource: CodexPriorityBillingSource;
 
+  // 非成功请求按 token 用量计费（默认关闭）
+  // 开启后：返回非 2xx 状态（如 499 客户端中断）但上游仍回报了正向 token 用量时按 usage 计费；
+  //         fake-200 上游错误识别仍生效，保证假成功响应不会被错误计费。
+  billNonSuccessfulRequests: boolean;
+
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
   // null 表示使用环境变量 TZ 或默认 UTC
@@ -148,6 +153,9 @@ export interface UpdateSystemSettingsInput {
 
   // Codex Priority 单独计费口径（可选）
   codexPriorityBillingSource?: CodexPriorityBillingSource;
+
+  // 非成功请求按 token 用量计费（可选）
+  billNonSuccessfulRequests?: boolean;
 
   // 系统时区配置（可选）
   timezone?: string | null;

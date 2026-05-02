@@ -59,7 +59,8 @@
     "key": {
       "create": "Create key",
       "update": "Update key",
-      "delete": "Delete key"
+      "delete": "Delete key",
+      "key_reveal": "Reveal user key"
     },
     "notification": {
       "update": "Update notification"

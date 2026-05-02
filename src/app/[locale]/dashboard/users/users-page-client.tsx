@@ -378,7 +378,6 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           hasSearch &&
           (key.name.toLowerCase().includes(normalizedTerm) ||
             key.maskedKey.toLowerCase().includes(normalizedTerm) ||
-            (key.fullKey || "").toLowerCase().includes(normalizedTerm) ||
             (key.providerGroup || "").toLowerCase().includes(normalizedTerm));
 
         const matchesKeyGroup =

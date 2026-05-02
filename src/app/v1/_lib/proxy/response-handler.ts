@@ -1,6 +1,7 @@
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
@@ -378,7 +379,21 @@ function hasBillableInputCostPerRequest(priceData: { input_cost_per_request?: un
   );
 }
 
-async function resolveBillableUsageMetricsForCost(
+function hasPositiveBillableTokens(usage: UsageMetrics | null): boolean {
+  if (!usage) return false;
+  const tokens =
+    (usage.input_tokens ?? 0) +
+    (usage.output_tokens ?? 0) +
+    (usage.cache_creation_input_tokens ?? 0) +
+    (usage.cache_creation_5m_input_tokens ?? 0) +
+    (usage.cache_creation_1h_input_tokens ?? 0) +
+    (usage.cache_read_input_tokens ?? 0) +
+    (usage.input_image_tokens ?? 0) +
+    (usage.output_image_tokens ?? 0);
+  return tokens > 0;
+}
+
+export async function resolveBillableUsageMetricsForCost(
   session: ProxySession,
   provider: Provider | null,
   usageMetrics: UsageMetrics | null,
@@ -390,7 +405,37 @@ async function resolveBillableUsageMetricsForCost(
   }
 
   if (statusCode < 200 || statusCode >= 300) {
-    return null;
+    // 默认行为：非 2xx 不计费，避免对失败/中断的请求重复扣费。
+    // 当 billNonSuccessfulRequests 开关打开时，只要上游已回报正向 token 用量
+    // (典型场景：499 客户端中断但上游已计算 token)，仍按 usage 计费。
+    let allowBillingNonSuccess = false;
+    try {
+      const settings = await getCachedSystemSettings();
+      allowBillingNonSuccess = settings.billNonSuccessfulRequests === true;
+    } catch (error) {
+      logger.warn(
+        "[CostCalculation] Failed to read billNonSuccessfulRequests setting, defaulting to skip",
+        { error: error instanceof Error ? error.message : String(error) }
+      );
+    }
+
+    if (!allowBillingNonSuccess) {
+      return null;
+    }
+
+    if (!hasPositiveBillableTokens(usageMetrics)) {
+      return null;
+    }
+
+    logger.info("[CostCalculation] Billing non-2xx request per system setting", {
+      statusCode,
+      providerId: provider?.id,
+      providerName: provider?.name,
+      originalModel: session.getOriginalModel(),
+      redirectedModel: session.getCurrentModel(),
+    });
+
+    return usageMetrics;
   }
 
   if (responseText !== undefined && responseText !== null) {

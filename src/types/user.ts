@@ -102,7 +102,11 @@ export interface UserKeyDisplay {
   id: number;
   name: string;
   maskedKey: string;
-  fullKey?: string; // 仅管理员可见的完整密钥
+  /**
+   * 当前查看者是否被允许查看 / 复制完整密钥（前端据此显示按钮）。
+   * 实际密钥不再下发到列表 payload，需通过 GET /api/v1/keys/{id}:reveal 获取。
+   */
+  canReveal: boolean;
   canCopy: boolean; // 是否可以复制完整密钥
   expiresAt: string; // 格式化后的日期字符串或"永不过期"
   status: "enabled" | "disabled";

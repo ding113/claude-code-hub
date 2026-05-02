@@ -59,7 +59,8 @@
     "key": {
       "create": "キー作成",
       "update": "キー更新",
-      "delete": "キー削除"
+      "delete": "キー削除",
+      "key_reveal": "ユーザーキーを表示"
     },
     "notification": {
       "update": "通知更新"

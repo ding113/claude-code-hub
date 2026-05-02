@@ -829,6 +829,60 @@ export async function getKeysWithStatistics(
 }
 
 /**
+ * 获取密钥的未脱敏值（仅管理员）
+ * 用于安全展示和复制完整 Key
+ */
+export async function getUnmaskedKey(keyId: number): Promise<ActionResult<{ key: string }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "权限不足：仅管理员可查看完整密钥" };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: "密钥不存在" };
+    }
+
+    // 记录查看行为（不记录密钥内容）
+    logger.info("Admin viewed user key", {
+      userId: session.user.id,
+      keyId,
+      keyName: key.name,
+      keyOwnerId: key.userId,
+    });
+    emitActionAudit({
+      category: "key",
+      action: "key.key_reveal",
+      targetType: "key",
+      targetId: String(key.id),
+      targetName: key.name,
+      after: {
+        id: key.id,
+        name: key.name,
+        userId: key.userId,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
+    return { ok: true, data: { key: key.key } };
+  } catch (error) {
+    logger.error("获取密钥失败:", error);
+    const message = error instanceof Error ? error.message : "获取密钥失败";
+    emitActionAudit({
+      category: "key",
+      action: "key.key_reveal",
+      targetType: "key",
+      targetId: String(keyId),
+      success: false,
+      errorMessage: "KEY_REVEAL_FAILED",
+    });
+    return { ok: false, error: message };
+  }
+}
+
+/**
  * 获取密钥的限额使用情况（实时数据）
  */
 export async function getKeyLimitUsage(keyId: number): Promise<

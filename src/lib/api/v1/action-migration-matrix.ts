@@ -45,7 +45,11 @@ export const ACTION_MIGRATION_MATRIX = [
     module: "keys",
     sourceFile: "keys.ts",
     resource: "keys",
-    endpointFamilies: ["/api/v1/users/{userId}/keys", "/api/v1/keys/{keyId}"],
+    endpointFamilies: [
+      "/api/v1/users/{userId}/keys",
+      "/api/v1/keys/{keyId}",
+      "/api/v1/keys/{keyId}:reveal",
+    ],
     access: "admin",
     exportPolicy: "all-action-exports",
   },
