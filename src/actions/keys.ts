@@ -829,14 +829,16 @@ export async function getKeysWithStatistics(
 }
 
 /**
- * 获取密钥的未脱敏值（仅管理员）
+ * 获取密钥的未脱敏值
+ * - 管理员：可查看任意用户的密钥
+ * - 普通用户：仅可查看自己拥有的密钥（与列表 canReveal/canCopy 契约保持一致）
  * 用于安全展示和复制完整 Key
  */
 export async function getUnmaskedKey(keyId: number): Promise<ActionResult<{ key: string }>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "权限不足：仅管理员可查看完整密钥" };
+    if (!session) {
+      return { ok: false, error: "未登录" };
     }
 
     const key = await findKeyById(keyId);
@@ -844,9 +846,16 @@ export async function getUnmaskedKey(keyId: number): Promise<ActionResult<{ key:
       return { ok: false, error: "密钥不存在" };
     }
 
+    const isAdmin = session.user.role === "admin";
+    const isOwner = session.user.id === key.userId;
+    if (!isAdmin && !isOwner) {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
     // 记录查看行为（不记录密钥内容）
-    logger.info("Admin viewed user key", {
-      userId: session.user.id,
+    logger.info("User viewed key", {
+      viewerId: session.user.id,
+      viewerRole: session.user.role,
       keyId,
       keyName: key.name,
       keyOwnerId: key.userId,

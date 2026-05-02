@@ -71,8 +71,36 @@ describe("getUnmaskedKey action", () => {
     expect(JSON.stringify(emitActionAuditMock.mock.calls)).not.toContain("sk-actual-secret-value");
   });
 
-  it("rejects non-admin callers", async () => {
+  it("returns the unmasked key for the key owner (non-admin)", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 99, role: "user" } });
+    findKeyByIdMock.mockResolvedValueOnce({
+      id: 42,
+      name: "owner-key",
+      key: "sk-owner-secret",
+      userId: 99,
+    });
+
+    const { getUnmaskedKey } = await import("@/actions/keys");
+    const result = await getUnmaskedKey(42);
+
+    expect(result).toEqual({ ok: true, data: { key: "sk-owner-secret" } });
+    expect(emitActionAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "key",
+        action: "key.key_reveal",
+        success: true,
+      })
+    );
+  });
+
+  it("rejects a non-admin caller asking for someone else's key", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 7, role: "user" } });
+    findKeyByIdMock.mockResolvedValueOnce({
+      id: 42,
+      name: "other-user-key",
+      key: "sk-other",
+      userId: 99,
+    });
 
     const { getUnmaskedKey } = await import("@/actions/keys");
     const result = await getUnmaskedKey(42);
@@ -81,7 +109,6 @@ describe("getUnmaskedKey action", () => {
     if (!result.ok) {
       expect(result.error).toContain("权限");
     }
-    expect(findKeyByIdMock).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated callers", async () => {

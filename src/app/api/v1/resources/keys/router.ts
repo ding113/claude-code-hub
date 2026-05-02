@@ -228,8 +228,8 @@ const revealKeyRoute = createRoute({
   tags: ["Keys"],
   summary: "Reveal key",
   description:
-    "Returns the unmasked user API key for an admin caller and writes the existing audit log.",
-  "x-required-access": "admin",
+    "Returns the unmasked user API key for an admin caller or the key owner, and writes the existing audit log. Non-owners receive 403.",
+  "x-required-access": "admin | owner",
   security,
   request: { params: KeyIdParamSchema },
   responses: {
@@ -242,7 +242,9 @@ const revealKeyRoute = createRoute({
 });
 
 keysRouter.openAPIRegistry.registerPath(revealKeyRoute);
-keysRouter.get("/keys/:keyId{[0-9]+:reveal}", requireAuth("admin"), revealKey);
+// Auth tier is "read" so the action's per-request ownership check can
+// apply (admin OR key owner). Non-owners are rejected at the action layer.
+keysRouter.get("/keys/:keyId{[0-9]+:reveal}", requireAuth("read"), revealKey);
 
 keysRouter.openapi(
   createRoute({

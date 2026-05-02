@@ -210,6 +210,14 @@ export function KeyRowItem({
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [isRevealing, setIsRevealing] = useState(false);
 
+  // Drop the cached unmasked key whenever the underlying row identity changes
+  // (e.g. parent reuses the same KeyRowItem instance for a different key).
+  // Without this, the dialog/copy could expose the previous row's key.
+  useEffect(() => {
+    setRevealedKey(null);
+    setFullKeyDialogOpen(false);
+  }, [keyData.id, keyData.maskedKey]);
+
   const fetchUnmaskedKey = async (): Promise<string | null> => {
     if (revealedKey) return revealedKey;
     setIsRevealing(true);

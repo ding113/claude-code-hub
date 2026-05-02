@@ -2,6 +2,7 @@
 import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DataTable, TableColumnTypes } from "@/components/ui/data-table";
@@ -38,6 +39,7 @@ export function KeyList({
   currencyCode = "USD",
 }: KeyListProps) {
   const t = useTranslations("dashboard.keyList");
+  const tCommon = useTranslations("common");
   const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<number>>(new Set());
   const [visibleKeyIds, setVisibleKeyIds] = useState<Set<number>>(new Set());
@@ -51,6 +53,27 @@ export function KeyList({
   useEffect(() => {
     setClipboardAvailable(isClipboardSupported());
   }, []);
+
+  // Drop the reveal cache whenever the underlying key set changes so a removed
+  // / replaced id can't expose its previously cached plaintext on a new row.
+  useEffect(() => {
+    const currentIds = new Set(keys.map((k) => k.id));
+    setRevealedKeys((prev) => {
+      const next: Record<number, string> = {};
+      for (const [idStr, value] of Object.entries(prev)) {
+        const id = Number(idStr);
+        if (currentIds.has(id)) next[id] = value;
+      }
+      return next;
+    });
+    setVisibleKeyIds((prev) => {
+      const next = new Set<number>();
+      for (const id of prev) {
+        if (currentIds.has(id)) next.add(id);
+      }
+      return next;
+    });
+  }, [keys]);
 
   const toggleExpanded = (keyId: number) => {
     setExpandedKeys((prev) => {
@@ -81,9 +104,20 @@ export function KeyList({
     setRevealingKeyId(keyId);
     try {
       const res = await getUnmaskedKey(keyId);
-      if (!res.ok || !res.data?.key) return null;
+      if (!res.ok) {
+        toast.error(res.error || t("copyFailedTooltip"));
+        return null;
+      }
+      if (!res.data?.key) {
+        toast.error(tCommon("copyFailed"));
+        return null;
+      }
       setRevealedKeys((prev) => ({ ...prev, [keyId]: res.data.key }));
       return res.data.key;
+    } catch (error) {
+      console.error("[KeyList] reveal failed", error);
+      toast.error(tCommon("copyFailed"));
+      return null;
     } finally {
       setRevealingKeyId(null);
     }

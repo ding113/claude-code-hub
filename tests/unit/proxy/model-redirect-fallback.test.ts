@@ -244,6 +244,9 @@ describe("Model redirect across provider fallback", () => {
     });
     expect(ModelRedirector.apply(session, providerB)).toBe(false);
     expect(session.request.model).toBe(REQUESTED_MODEL);
+    // resetToOriginal also rewrites request.message.model — guard against
+    // regressions that only reset request.model.
+    expect(session.request.message.model).toBe(REQUESTED_MODEL);
   });
 
   test("Provider B redirects to a model different from Provider A's target", () => {
