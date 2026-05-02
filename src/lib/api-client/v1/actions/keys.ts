@@ -61,3 +61,7 @@ export function renewKeyExpiresAt(keyId: number, data: unknown) {
 export function patchKeyLimit(keyId: number, field: PatchKeyLimitField, value: unknown) {
   return toActionResult(apiPatch(`/api/v1/keys/${keyId}/limits/${field}`, { value }));
 }
+
+export function getUnmaskedKey(keyId: number) {
+  return toActionResult(apiGet<{ key: string }>(`/api/v1/keys/${keyId}:reveal`));
+}

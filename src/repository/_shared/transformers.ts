@@ -250,6 +250,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       dbSettings?.codexPriorityBillingSource === "actual"
         ? dbSettings.codexPriorityBillingSource
         : "requested",
+    billNonSuccessfulRequests: dbSettings?.billNonSuccessfulRequests ?? false,
     timezone: dbSettings?.timezone ?? null,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,

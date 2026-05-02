@@ -640,7 +640,7 @@ export function UserKeyTableRow({
                     id: key.id,
                     name: key.name,
                     maskedKey: key.maskedKey,
-                    fullKey: key.fullKey,
+                    canReveal: key.canReveal,
                     canCopy: key.canCopy,
                     providerGroup: key.providerGroup,
                     todayUsage: key.todayUsage,

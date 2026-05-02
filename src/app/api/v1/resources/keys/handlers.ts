@@ -135,6 +135,20 @@ export async function renewKey(c: Context): Promise<Response> {
   );
 }
 
+export async function revealKey(c: Context): Promise<Response> {
+  const params = parseKeyParams(c);
+  if (params instanceof Response) return params;
+  const actions = await import("@/actions/keys");
+  const result = await callAction(
+    c,
+    actions.getUnmaskedKey,
+    [params.keyId] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  return jsonResponse(result.data, { headers: withNoStoreHeaders() });
+}
+
 export async function resetKeyLimits(c: Context): Promise<Response> {
   const params = parseKeyParams(c);
   if (params instanceof Response) return params;
@@ -206,7 +220,7 @@ function parseUserParams(c: Context): { userId: number } | Response {
 }
 
 function parseKeyParams(c: Context): { keyId: number } | Response {
-  const rawKeyId = (c.req.param("keyId") ?? "").replace(/:(enable|renew)$/, "");
+  const rawKeyId = (c.req.param("keyId") ?? "").replace(/:(enable|renew|reveal)$/, "");
   const params = KeyIdParamSchema.safeParse({ keyId: rawKeyId });
   if (!params.success) return fromZodError(params.error, new URL(c.req.url).pathname);
   return params.data;

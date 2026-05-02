@@ -10,6 +10,7 @@ import {
   KeyListQuerySchema,
   KeyListResponseSchema,
   KeyRenewSchema,
+  KeyRevealResponseSchema,
   KeysBatchUpdateSchema,
   KeyUpdateSchema,
   PatchKeyLimitParamSchema,
@@ -28,6 +29,7 @@ import {
   patchKeyLimit,
   renewKey,
   resetKeyLimits,
+  revealKey,
   updateKey,
 } from "./handlers";
 
@@ -219,6 +221,30 @@ const renewKeyRoute = createRoute({
 
 keysRouter.openAPIRegistry.registerPath(renewKeyRoute);
 keysRouter.post("/keys/:keyId{[0-9]+:renew}", requireAuth("admin"), renewKey);
+
+const revealKeyRoute = createRoute({
+  method: "get",
+  path: "/keys/{keyId}:reveal",
+  tags: ["Keys"],
+  summary: "Reveal key",
+  description:
+    "Returns the unmasked user API key. Admins may reveal any key; regular users may reveal only the keys they own. Non-owners receive 403. Writes the existing audit log on every call.",
+  "x-required-access": "read",
+  security,
+  request: { params: KeyIdParamSchema },
+  responses: {
+    200: {
+      description: "Unmasked key.",
+      content: { "application/json": { schema: KeyRevealResponseSchema } },
+    },
+    ...problemResponses,
+  },
+});
+
+keysRouter.openAPIRegistry.registerPath(revealKeyRoute);
+// Auth tier is "read" so the action's per-request ownership check can
+// apply (admin OR key owner). Non-owners are rejected at the action layer.
+keysRouter.get("/keys/:keyId{[0-9]+:reveal}", requireAuth("read"), revealKey);
 
 keysRouter.openapi(
   createRoute({

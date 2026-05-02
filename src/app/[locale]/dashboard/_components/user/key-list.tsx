@@ -2,6 +2,7 @@
 import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DataTable, TableColumnTypes } from "@/components/ui/data-table";
@@ -15,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Link } from "@/i18n/routing";
+import { getUnmaskedKey } from "@/lib/api-client/v1/actions/keys";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import type { User, UserKeyDisplay } from "@/types/user";
@@ -37,16 +39,41 @@ export function KeyList({
   currencyCode = "USD",
 }: KeyListProps) {
   const t = useTranslations("dashboard.keyList");
+  const tCommon = useTranslations("common");
   const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<number>>(new Set());
   const [visibleKeyIds, setVisibleKeyIds] = useState<Set<number>>(new Set());
   const [clipboardAvailable, setClipboardAvailable] = useState(false);
+  // Cache unmasked keys after they have been revealed (lazy fetch via :reveal endpoint).
+  const [revealedKeys, setRevealedKeys] = useState<Record<number, string>>({});
+  const [revealingKeyId, setRevealingKeyId] = useState<number | null>(null);
   const canDeleteKeys = keys.length > 1;
 
   // 检测 clipboard 是否可用
   useEffect(() => {
     setClipboardAvailable(isClipboardSupported());
   }, []);
+
+  // Drop the reveal cache whenever the underlying key set changes so a removed
+  // / replaced id can't expose its previously cached plaintext on a new row.
+  useEffect(() => {
+    const currentIds = new Set(keys.map((k) => k.id));
+    setRevealedKeys((prev) => {
+      const next: Record<number, string> = {};
+      for (const [idStr, value] of Object.entries(prev)) {
+        const id = Number(idStr);
+        if (currentIds.has(id)) next[id] = value;
+      }
+      return next;
+    });
+    setVisibleKeyIds((prev) => {
+      const next = new Set<number>();
+      for (const id of prev) {
+        if (currentIds.has(id)) next.add(id);
+      }
+      return next;
+    });
+  }, [keys]);
 
   const toggleExpanded = (keyId: number) => {
     setExpandedKeys((prev) => {
@@ -72,14 +99,49 @@ export function KeyList({
     });
   };
 
-  const handleCopyKey = async (key: UserKeyDisplay) => {
-    if (!key.fullKey || !key.canCopy) return;
+  const fetchUnmaskedKey = async (keyId: number): Promise<string | null> => {
+    if (revealedKeys[keyId]) return revealedKeys[keyId];
+    setRevealingKeyId(keyId);
+    try {
+      const res = await getUnmaskedKey(keyId);
+      if (!res.ok) {
+        toast.error(res.error || t("copyFailedTooltip"));
+        return null;
+      }
+      if (!res.data?.key) {
+        toast.error(tCommon("copyFailed"));
+        return null;
+      }
+      setRevealedKeys((prev) => ({ ...prev, [keyId]: res.data.key }));
+      return res.data.key;
+    } catch (error) {
+      console.error("[KeyList] reveal failed", error);
+      toast.error(tCommon("copyFailed"));
+      return null;
+    } finally {
+      setRevealingKeyId(null);
+    }
+  };
 
-    const success = await copyToClipboard(key.fullKey);
+  const handleCopyKey = async (key: UserKeyDisplay) => {
+    if (!key.canCopy) return;
+    const fullKey = await fetchUnmaskedKey(key.id);
+    if (!fullKey) return;
+    const success = await copyToClipboard(fullKey);
     if (success) {
       setCopiedKeyId(key.id);
       setTimeout(() => setCopiedKeyId(null), 2000);
     }
+  };
+
+  const handleToggleVisibility = async (keyId: number) => {
+    if (visibleKeyIds.has(keyId)) {
+      toggleKeyVisibility(keyId);
+      return;
+    }
+    const fullKey = await fetchUnmaskedKey(keyId);
+    if (!fullKey) return;
+    toggleKeyVisibility(keyId);
   };
 
   const columns = [
@@ -179,19 +241,21 @@ export function KeyList({
     TableColumnTypes.text<UserKeyDisplay>("maskedKey", t("columns.key"), {
       render: (_, record: UserKeyDisplay) => {
         const isVisible = visibleKeyIds.has(record.id);
-        const displayKey = isVisible && record.fullKey ? record.fullKey : record.maskedKey || "-";
+        const fullKey = revealedKeys[record.id];
+        const displayKey = isVisible && fullKey ? fullKey : record.maskedKey || "-";
+        const isRevealing = revealingKeyId === record.id;
 
         return (
           <div className="group inline-flex items-center gap-1">
             <div className={`font-mono ${isVisible ? "select-all" : "truncate"}`}>{displayKey}</div>
-            {record.canCopy &&
-              record.fullKey &&
-              (clipboardAvailable ? (
-                // HTTPS 环境：显示复制按钮
+            {record.canReveal &&
+              (clipboardAvailable && record.canCopy ? (
+                // HTTPS 环境：显示复制按钮（按需 fetch 完整 key）
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => handleCopyKey(record)}
+                  disabled={isRevealing}
                   className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
                   title={t("copyKeyTooltip")}
                 >
@@ -202,11 +266,12 @@ export function KeyList({
                   )}
                 </Button>
               ) : (
-                // HTTP 环境：显示显示/隐藏按钮
+                // HTTP 环境（或不允许复制）：显示显示/隐藏按钮（按需 fetch）
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => toggleKeyVisibility(record.id)}
+                  onClick={() => handleToggleVisibility(record.id)}
+                  disabled={isRevealing}
                   className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
                   title={isVisible ? t("hideKeyTooltip") : t("showKeyTooltip")}
                 >

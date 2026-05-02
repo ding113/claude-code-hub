@@ -88,6 +88,11 @@ export const SystemSettingsSchema = z
     currencyDisplay: CurrencyCodeSchema,
     billingModelSource: BillingModelSourceSchema,
     codexPriorityBillingSource: CodexPriorityBillingSourceSchema,
+    billNonSuccessfulRequests: z
+      .boolean()
+      .describe(
+        "Whether non-2xx responses (e.g., 499) that report token usage should be billed normally."
+      ),
     timezone: TimeZoneSchema.nullable().describe(
       "Configured system timezone, or null for default."
     ),

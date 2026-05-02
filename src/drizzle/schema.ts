@@ -736,6 +736,11 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default('requested'),
 
+  // 非成功请求按 token 用量计费（默认关闭）
+  // 关闭：返回 4xx/5xx 时即使上游回报了 token 用量也不计费（当前行为）
+  // 开启：只要上游返回了正向 token 用量，无论响应状态码如何都按用量计费（fake-200 错误检测仍然生效）
+  billNonSuccessfulRequests: boolean('bill_non_successful_requests').notNull().default(false),
+
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
   // null 表示使用环境变量 TZ 或默认 UTC

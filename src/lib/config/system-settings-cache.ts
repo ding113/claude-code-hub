@@ -132,6 +132,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       currencyDisplay: "USD",
       billingModelSource: "original",
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
+      billNonSuccessfulRequests: false,
       timezone: null,
       verboseProviderError: false,
       passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,

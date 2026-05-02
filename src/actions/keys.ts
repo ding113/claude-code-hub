@@ -829,6 +829,69 @@ export async function getKeysWithStatistics(
 }
 
 /**
+ * 获取密钥的未脱敏值
+ * - 管理员：可查看任意用户的密钥
+ * - 普通用户：仅可查看自己拥有的密钥（与列表 canReveal/canCopy 契约保持一致）
+ * 用于安全展示和复制完整 Key
+ */
+export async function getUnmaskedKey(keyId: number): Promise<ActionResult<{ key: string }>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: "密钥不存在" };
+    }
+
+    const isAdmin = session.user.role === "admin";
+    const isOwner = session.user.id === key.userId;
+    if (!isAdmin && !isOwner) {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    // 记录查看行为（不记录密钥内容）
+    logger.info("User viewed key", {
+      viewerId: session.user.id,
+      viewerRole: session.user.role,
+      keyId,
+      keyName: key.name,
+      keyOwnerId: key.userId,
+    });
+    emitActionAudit({
+      category: "key",
+      action: "key.key_reveal",
+      targetType: "key",
+      targetId: String(key.id),
+      targetName: key.name,
+      after: {
+        id: key.id,
+        name: key.name,
+        userId: key.userId,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
+    return { ok: true, data: { key: key.key } };
+  } catch (error) {
+    logger.error("获取密钥失败:", error);
+    const message = error instanceof Error ? error.message : "获取密钥失败";
+    emitActionAudit({
+      category: "key",
+      action: "key.key_reveal",
+      targetType: "key",
+      targetId: String(keyId),
+      success: false,
+      errorMessage: "KEY_REVEAL_FAILED",
+    });
+    return { ok: false, error: message };
+  }
+}
+
+/**
  * 获取密钥的限额使用情况（实时数据）
  */
 export async function getKeyLimitUsage(keyId: number): Promise<

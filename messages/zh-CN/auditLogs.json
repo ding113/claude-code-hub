@@ -59,7 +59,8 @@
     "key": {
       "create": "创建密钥",
       "update": "更新密钥",
-      "delete": "删除密钥"
+      "delete": "删除密钥",
+      "key_reveal": "查看用户密钥"
     },
     "notification": {
       "update": "更新通知"

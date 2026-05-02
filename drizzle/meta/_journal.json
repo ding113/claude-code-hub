@@ -715,6 +715,13 @@
       "when": 1777362451735,
       "tag": "0101_worthless_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1777739658761,
+      "tag": "0102_useful_lionheart",
+      "breakpoints": true
     }
   ]
 }

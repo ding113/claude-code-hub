@@ -182,7 +182,7 @@ const userKeyListItemSchema = z.object({
   id: z.number().describe("密钥 ID"),
   name: z.string().describe("密钥名称"),
   maskedKey: z.string().describe("脱敏后的密钥"),
-  fullKey: z.string().optional().describe("完整密钥（有权限时返回）"),
+  canReveal: z.boolean().describe("是否允许查看完整密钥（需通过 /api/v1/keys/{id}:reveal 拉取）"),
   canCopy: z.boolean().describe("是否允许复制完整密钥"),
   expiresAt: z.string().describe("过期时间展示值"),
   status: z.enum(["enabled", "disabled"]).describe("密钥状态"),

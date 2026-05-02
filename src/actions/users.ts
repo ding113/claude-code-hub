@@ -417,7 +417,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
               id: key.id,
               name: key.name,
               maskedKey: maskKey(key.key),
-              fullKey: canUserManageKey ? key.key : undefined,
+              canReveal: canUserManageKey,
               canCopy: canUserManageKey,
               expiresAt: key.expiresAt
                 ? key.expiresAt.toISOString().split("T")[0]
@@ -740,7 +740,7 @@ export async function getUsersBatch(
               id: key.id,
               name: key.name,
               maskedKey: maskKey(key.key),
-              fullKey: canUserManageKey ? key.key : undefined,
+              canReveal: canUserManageKey,
               canCopy: canUserManageKey,
               expiresAt: key.expiresAt
                 ? key.expiresAt.toISOString().split("T")[0]
@@ -887,7 +887,7 @@ export async function getUsersBatchCore(
           id: key.id,
           name: key.name,
           maskedKey: maskKey(key.key),
-          fullKey: canUserManageKey ? key.key : undefined,
+          canReveal: canUserManageKey,
           canCopy: canUserManageKey,
           expiresAt: key.expiresAt ? key.expiresAt.toISOString().split("T")[0] : t("neverExpires"),
           status: key.isEnabled ? "enabled" : ("disabled" as const),

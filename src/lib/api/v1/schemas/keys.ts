@@ -129,6 +129,10 @@ export const KeyListResponseSchema = z.object({
   items: z.array(z.unknown()).describe("Keys for the user."),
 });
 
+export const KeyRevealResponseSchema = z.object({
+  key: z.string().describe("Unmasked key value. Returned only to admin callers."),
+});
+
 export type KeyCreateInput = z.infer<typeof KeyCreateSchema>;
 export type KeyUpdateInput = z.infer<typeof KeyUpdateSchema>;
 export type KeyRenewInput = z.infer<typeof KeyRenewSchema>;
