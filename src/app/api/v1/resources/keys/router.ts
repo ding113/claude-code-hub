@@ -228,8 +228,8 @@ const revealKeyRoute = createRoute({
   tags: ["Keys"],
   summary: "Reveal key",
   description:
-    "Returns the unmasked user API key for an admin caller or the key owner, and writes the existing audit log. Non-owners receive 403.",
-  "x-required-access": "admin | owner",
+    "Returns the unmasked user API key. Admins may reveal any key; regular users may reveal only the keys they own. Non-owners receive 403. Writes the existing audit log on every call.",
+  "x-required-access": "read",
   security,
   request: { params: KeyIdParamSchema },
   responses: {
