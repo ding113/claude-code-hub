@@ -224,7 +224,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1000);
@@ -250,7 +250,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1011);
@@ -273,7 +273,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1011);
@@ -296,7 +296,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1011);
@@ -323,7 +323,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     // caused tungstenite to surface "Connection reset without closing
     // handshake".
     const bigInput = "x".repeat(4 * 1024 * 1024);
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: bigInput }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: bigInput }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1000);
@@ -356,8 +356,8 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     // present, drain() pops the second after closeClient() initiates the
     // close handshake but before ws.on("close") fires, hitting the upstream
     // a second time and burning provider quota.
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "first" }));
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "second" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "first" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "second" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1000);
@@ -392,7 +392,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     );
     await client.opened;
     client.ws.send(Buffer.from("not a text frame"), { binary: true });
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "queued" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "queued" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1003);
@@ -440,7 +440,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
         "server WebSocket did not accept the overflow test connection"
       );
       await client.opened;
-      client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "first" }));
+      client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "first" }));
       await withTimeout(
         firstRequestStarted.promise,
         3000,
@@ -448,7 +448,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
       );
       for (let i = 0; i < 70; i += 1) {
         client.ws.send(
-          JSON.stringify({ type: "response.create", model: "gpt-5", input: `queued-${i}` })
+          JSON.stringify({ type: "response.create", model: "gpt-5.4", input: `queued-${i}` })
         );
       }
 

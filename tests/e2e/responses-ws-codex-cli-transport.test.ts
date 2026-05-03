@@ -52,7 +52,7 @@ type CodexInvocation = {
 const shouldRunCodexE2e = process.env.CCH_CODEX_E2E === "1";
 const run = shouldRunCodexE2e ? describe : describe.skip;
 const providerName = "local-cch-ws-e2e";
-const model = process.env.CCH_CODEX_E2E_MODEL || "gpt-5";
+const model = process.env.CCH_CODEX_E2E_MODEL || "gpt-5.4";
 const responseText = "E2E_TRANSPORT_OK";
 const defaultFeatures = "responses_websockets,responses_websockets_v2";
 

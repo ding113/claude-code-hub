@@ -95,7 +95,7 @@ describe("executeProviderTest", () => {
     const assistantText = `pong-${"x".repeat(7000)}`;
     const responseBody = mockJsonResponse({
       id: "resp_test",
-      model: "gpt-5-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -114,7 +114,7 @@ describe("executeProviderTest", () => {
       providerUrl: "https://api.example.com",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5-codex",
+      model: "gpt-5.4",
     });
 
     expect(result.success).toBe(true);
@@ -148,7 +148,7 @@ describe("executeProviderTest", () => {
   test("codex full-path baseUrl 不应重复拼接 /v1/responses", async () => {
     mockJsonResponse({
       id: "resp_test",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -162,7 +162,7 @@ describe("executeProviderTest", () => {
       providerUrl: "https://relay.example.com/openai/v1/responses",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
     });
 
     expect(result.success).toBe(true);
@@ -175,7 +175,7 @@ describe("executeProviderTest", () => {
   ])("codex bare /openai base preserves absolute versioned request url: %s", async (providerUrl) => {
     mockJsonResponse({
       id: "resp_test",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -189,7 +189,7 @@ describe("executeProviderTest", () => {
       providerUrl,
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
     });
 
     expect(result.success).toBe(true);
@@ -328,7 +328,7 @@ describe("executeProviderTest", () => {
   test("无版本 endpoint 根路径在 provider testing 中应与 runtime URL 语义一致", async () => {
     mockJsonResponse({
       id: "resp_test",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -342,7 +342,7 @@ describe("executeProviderTest", () => {
       providerUrl: "https://relay.example.com/openai/responses",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
     });
 
     expect(result.success).toBe(true);
@@ -352,7 +352,7 @@ describe("executeProviderTest", () => {
   test("非标准相似路径在 provider testing 中不应被错误折叠", async () => {
     mockJsonResponse({
       id: "resp_test",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -366,7 +366,7 @@ describe("executeProviderTest", () => {
       providerUrl: "https://relay.example.com/openai/responses-archive",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
     });
 
     expect(result.success).toBe(true);
@@ -437,7 +437,7 @@ describe("executeProviderTest", () => {
     });
     const okBody = JSON.stringify({
       id: "resp_test",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -461,7 +461,7 @@ describe("executeProviderTest", () => {
       providerUrl: "https://api.gptclubapi.xyz/openai",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       preset: "cx_codex_basic",
     });
 
@@ -481,7 +481,7 @@ describe("executeProviderTest", () => {
     });
     const okBody = JSON.stringify({
       id: "resp_test",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -505,7 +505,7 @@ describe("executeProviderTest", () => {
       providerUrl: "https://api.gptclubapi.xyz/openai",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -530,7 +530,7 @@ describe("executeProviderTest", () => {
     });
     const okBody = JSON.stringify({
       id: "resp_test",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -561,7 +561,7 @@ describe("executeProviderTest", () => {
       providerUrl: "https://api.gptclubapi.xyz/openai",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -683,7 +683,7 @@ describe("executeProviderTest", () => {
     });
     const okBody = JSON.stringify({
       id: "resp_test",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       output: [
         {
           type: "message",
@@ -708,7 +708,7 @@ describe("executeProviderTest", () => {
         providerUrl: "https://api.gptclubapi.xyz/openai",
         apiKey: "sk-test-codex",
         providerType: "codex",
-        model: "gpt-5.3-codex",
+        model: "gpt-5.4",
         preset: "cx_codex_basic",
       });
 
@@ -740,7 +740,7 @@ describe("executeProviderTest", () => {
       providerUrl: "https://api.gptclubapi.xyz/openai",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
       preset: "cx_codex_basic",
     });
 
@@ -752,13 +752,13 @@ describe("executeProviderTest", () => {
 
   test("codex 新版 SSE 事件流应正确提取 output_text delta，避免误判为内容不匹配", async () => {
     const responseBody = `event: response.created
-data: {"type":"response.created","response":{"model":"gpt-5.3-codex","usage":null},"sequence_number":0}
+data: {"type":"response.created","response":{"model":"gpt-5.4","usage":null},"sequence_number":0}
 
 event: response.output_text.delta
 data: {"type":"response.output_text.delta","delta":"pong","item_id":"msg_123","output_index":0,"sequence_number":1}
 
 event: response.completed
-data: {"type":"response.completed","response":{"model":"gpt-5.3-codex","usage":{"input_tokens":39,"output_tokens":5,"total_tokens":44}},"sequence_number":2}
+data: {"type":"response.completed","response":{"model":"gpt-5.4","usage":{"input_tokens":39,"output_tokens":5,"total_tokens":44}},"sequence_number":2}
 `;
 
     mockSseResponse(responseBody);
@@ -767,13 +767,13 @@ data: {"type":"response.completed","response":{"model":"gpt-5.3-codex","usage":{
       providerUrl: "https://sub.fkcodex.com",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
     });
 
     expect(result.success).toBe(true);
     expect(result.subStatus).toBe("success");
     expect(result.content).toBe("pong");
-    expect(result.model).toBe("gpt-5.3-codex");
+    expect(result.model).toBe("gpt-5.4");
     expect(result.usage).toEqual({
       inputTokens: 39,
       outputTokens: 5,
@@ -785,7 +785,7 @@ data: {"type":"response.completed","response":{"model":"gpt-5.3-codex","usage":{
 data: {"type":"response.output_text.done","text":"pong","item_id":"msg_123","output_index":0,"content_index":0,"sequence_number":1}
 
 event: response.completed
-data: {"type":"response.completed","response":{"model":"gpt-5.3-codex","usage":{"input_tokens":39,"output_tokens":5,"total_tokens":44},"output":[{"type":"message","content":[{"type":"output_text","text":"pong"}]}]},"sequence_number":2}
+data: {"type":"response.completed","response":{"model":"gpt-5.4","usage":{"input_tokens":39,"output_tokens":5,"total_tokens":44},"output":[{"type":"message","content":[{"type":"output_text","text":"pong"}]}]},"sequence_number":2}
 `;
 
     mockSseResponse(responseBody);
@@ -794,12 +794,12 @@ data: {"type":"response.completed","response":{"model":"gpt-5.3-codex","usage":{
       providerUrl: "https://sub.fkcodex.com",
       apiKey: "sk-test-codex",
       providerType: "codex",
-      model: "gpt-5.3-codex",
+      model: "gpt-5.4",
     });
 
     expect(result.success).toBe(true);
     expect(result.content).toBe("pong");
-    expect(result.model).toBe("gpt-5.3-codex");
+    expect(result.model).toBe("gpt-5.4");
   });
 
   test("内容校验应优先使用解析后的文本，不能被原始 JSON 字段名误判为成功", async () => {

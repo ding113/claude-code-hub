@@ -241,13 +241,13 @@ describe("v1 providers read endpoints", () => {
           id: "cc_base",
           description: "Codex",
           defaultSuccessContains: "Hello",
-          defaultModel: "gpt-5.3-codex",
+          defaultModel: "gpt-5.4",
         },
       ],
     });
     fetchUpstreamModelsMock.mockResolvedValue({
       ok: true,
-      data: { models: ["gpt-5.3-codex"], source: "upstream" },
+      data: { models: ["gpt-5.4"], source: "upstream" },
     });
     getModelSuggestionsByProviderGroupMock.mockResolvedValue({
       ok: true,

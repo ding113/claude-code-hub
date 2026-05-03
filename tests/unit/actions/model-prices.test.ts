@@ -136,7 +136,7 @@ describe("Model Price Actions", () => {
 
   describe("upsertSingleModelPrice", () => {
     it("should create a new model price for admin", async () => {
-      const mockResult = makeMockPrice("gpt-5.2-codex", {
+      const mockResult = makeMockPrice("gpt-5.4", {
         mode: "chat",
         input_cost_per_token: 0.000015,
         output_cost_per_token: 0.00006,
@@ -145,7 +145,7 @@ describe("Model Price Actions", () => {
 
       const { upsertSingleModelPrice } = await import("@/actions/model-prices");
       const result = await upsertSingleModelPrice({
-        modelName: "gpt-5.2-codex",
+        modelName: "gpt-5.4",
         mode: "chat",
         litellmProvider: "openai",
         inputCostPerToken: 0.000015,
@@ -153,9 +153,9 @@ describe("Model Price Actions", () => {
       });
 
       expect(result.ok).toBe(true);
-      expect(result.data?.modelName).toBe("gpt-5.2-codex");
+      expect(result.data?.modelName).toBe("gpt-5.4");
       expect(upsertModelPriceMock).toHaveBeenCalledWith(
-        "gpt-5.2-codex",
+        "gpt-5.4",
         expect.objectContaining({
           mode: "chat",
           litellm_provider: "openai",
@@ -309,10 +309,10 @@ describe("Model Price Actions", () => {
       deleteModelPriceByNameMock.mockResolvedValue(undefined);
 
       const { deleteSingleModelPrice } = await import("@/actions/model-prices");
-      const result = await deleteSingleModelPrice("gpt-5.2-codex");
+      const result = await deleteSingleModelPrice("gpt-5.4");
 
       expect(result.ok).toBe(true);
-      expect(deleteModelPriceByNameMock).toHaveBeenCalledWith("gpt-5.2-codex");
+      expect(deleteModelPriceByNameMock).toHaveBeenCalledWith("gpt-5.4");
     });
 
     it("should reject empty model name", async () => {

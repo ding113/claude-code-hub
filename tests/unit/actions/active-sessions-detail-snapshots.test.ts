@@ -103,7 +103,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     findMessageRequestAuditBySessionIdAndSequenceMock.mockResolvedValue(null);
 
     getSessionRequestCountMock.mockResolvedValue(1);
-    getSessionRequestBodyMock.mockResolvedValue({ model: "gpt-5.2", input: "hi" });
+    getSessionRequestBodyMock.mockResolvedValue({ model: "gpt-5.4", input: "hi" });
     getSessionMessagesMock.mockResolvedValue([{ role: "user", content: "hi" }]);
     getSessionResponseMock.mockResolvedValue('{"ok":true}');
     getSessionRequestHeadersMock.mockResolvedValue({ "content-type": "application/json" });
@@ -132,7 +132,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.data.requestBody).toEqual({ model: "gpt-5.2", input: "hi" });
+    expect(result.data.requestBody).toEqual({ model: "gpt-5.4", input: "hi" });
     expect(result.data.messages).toEqual([{ role: "user", content: "hi" }]);
     expect(result.data.response).toBe('{"ok":true}');
     expect(result.data.requestHeaders).toEqual({ "content-type": "application/json" });
@@ -152,7 +152,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
       request: {
         before: null,
         after: {
-          body: { model: "gpt-5.2", input: "hi" },
+          body: { model: "gpt-5.4", input: "hi" },
           messages: [{ role: "user", content: "hi" }],
           headers: { "content-type": "application/json" },
           meta: {
@@ -179,7 +179,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
   test("builds before-after snapshots from new snapshot getters", async () => {
     getSessionRequestPhaseSnapshotMock
       .mockResolvedValueOnce({
-        body: { model: "gpt-5.2", messages: [{ role: "user", content: "before body" }] },
+        body: { model: "gpt-5.4", messages: [{ role: "user", content: "before body" }] },
         messages: [{ role: "user", content: "before messages" }],
         headers: { "x-before": "1" },
         meta: {
@@ -190,7 +190,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
       })
       .mockResolvedValueOnce({
         body: JSON.stringify({
-          model: "gpt-5.2",
+          model: "gpt-5.4",
           messages: [{ role: "user", content: "after body messages" }],
         }),
         messages: null,
@@ -229,7 +229,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
       defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
       request: {
         before: {
-          body: { model: "gpt-5.2", messages: [{ role: "user", content: "before body" }] },
+          body: { model: "gpt-5.4", messages: [{ role: "user", content: "before body" }] },
           messages: [{ role: "user", content: "before messages" }],
           headers: { "x-before": "1" },
           meta: {
@@ -240,7 +240,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
         },
         after: {
           body: {
-            model: "gpt-5.2",
+            model: "gpt-5.4",
             messages: [{ role: "user", content: "after body messages" }],
           },
           messages: [{ role: "user", content: "after body messages" }],
@@ -276,7 +276,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
   test("returns null after request messages when processed body has no messages field", async () => {
     getSessionRequestPhaseSnapshotMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
       body: JSON.stringify({
-        model: "gpt-5.2",
+        model: "gpt-5.4",
         input: [{ role: "user", content: "no messages field here" }],
       }),
       messages: null,
@@ -297,7 +297,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
 
     expect(result.data.snapshots.request.after).toEqual({
       body: {
-        model: "gpt-5.2",
+        model: "gpt-5.4",
         input: [{ role: "user", content: "no messages field here" }],
       },
       messages: null,
@@ -314,7 +314,7 @@ describe("getSessionDetails - additive detail snapshots contract", () => {
     getSessionRequestCountMock.mockResolvedValue(3);
     findAdjacentRequestSequencesMock.mockResolvedValue({ prevSequence: 2, nextSequence: null });
     getSessionRequestPhaseSnapshotMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      body: JSON.stringify({ model: "gpt-5.2", messages: [] }),
+      body: JSON.stringify({ model: "gpt-5.4", messages: [] }),
       messages: null,
       headers: { "x-after": "3" },
       meta: {
