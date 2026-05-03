@@ -77,18 +77,59 @@ describe("nodeStreamToWebStreamSafe", () => {
     await reader.cancel(new Error("client gone"));
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
+    // Wait for the destroy "close" event to fire so the cleanup once-listener
+    // can run and remove the swallowing error handler.
+    await new Promise((resolve) => setImmediate(resolve));
     // Wrapper-registered data/end/close listeners are detached. A swallowing
     // error listener is intentionally attached just before destroy(reason) so
-    // Node's emit("error", reason) does not become an uncaughtException.
+    // Node's emit("error", reason) does not become an uncaughtException;
+    // the close-listener cleanup removes it once destroy completes.
     expect(node.listenerCount("data")).toBe(0);
     expect(node.listenerCount("end")).toBe(0);
     expect(node.listenerCount("close")).toBe(0);
+    expect(node.listenerCount("error")).toBe(0);
 
     // Late events from the (now-destroyed) source must not reach the controller —
     // because listeners were detached, emitting these is a no-op for our wrapper.
     // (We assert no throw escapes; the reader is already closed.)
     expect(() => node.emit("data", Buffer.from("late"))).not.toThrow();
     expect(() => node.emit("close")).not.toThrow();
+  });
+
+  it("does not leak an error listener when cancel() is called without a reason", async () => {
+    const node = new Readable({
+      read() {
+        // no-op
+      },
+    });
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+    // No reason -> destroy() will not re-emit "error", so the swallow listener
+    // must be cleaned up via the close-listener fallback.
+    await reader.cancel();
+
+    // Wait one tick so the destroy "close" event fires and removes swallow
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(node.listenerCount("error")).toBe(0);
+    expect(node.listenerCount("close")).toBe(0);
+  });
+
+  it("is a no-op when cancel() is called twice", async () => {
+    const node = new Readable({
+      read() {
+        // no-op
+      },
+    });
+    const destroySpy = vi.spyOn(node, "destroy");
+
+    const web = nodeStreamToWebStreamSafe(node, 1, "test");
+    const reader = web.getReader();
+    await reader.cancel("first");
+    // Second cancel should be a no-op — no extra destroy, no extra swallow listener
+    await reader.cancel("second");
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
   it("does not call destroy() twice when cancel() is invoked on an already-destroyed source", async () => {

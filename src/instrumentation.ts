@@ -58,8 +58,30 @@ function registerCrashDiagnostics(): void {
     return undefined;
   };
 
+  // pino 在生产环境是同步直写 stdout（无 transport），但 dev 用 pino-pretty
+  // worker 是异步的；fatal 路径下 process.exit() 可能抢在 worker 写出之前。
+  // 用一行 JSON 直接同步写 stderr 作为兜底，确保至少日志层面留下痕迹。
+  const writeFatalStderr = (trigger: string, err: Error, reportPath?: string): void => {
+    try {
+      const line = JSON.stringify({
+        time: new Date().toISOString(),
+        level: "fatal",
+        msg: `[Lifecycle] ${trigger}`,
+        pid: process.pid,
+        error: err.message,
+        errorName: err.name,
+        stack: err.stack,
+        reportPath,
+      });
+      process.stderr.write(`${line}\n`);
+    } catch {
+      // ignore: 兜底写失败时已无更上游
+    }
+  };
+
   process.on("uncaughtException", (err: Error) => {
     const reportPath = writeReport("uncaughtException", err);
+    writeFatalStderr("uncaughtException", err, reportPath);
     logger.fatal("[Lifecycle] uncaughtException", {
       error: err.message,
       errorName: err.name,
@@ -70,14 +92,21 @@ function registerCrashDiagnostics(): void {
     process.exit(1);
   });
 
+  // Node 20 默认 --unhandled-rejections=throw：未注册处理器时直接 fail-fast。
+  // 注册了处理器就会变成 "继续运行"，相当于回归到旧行为。我们仍要求 fail-fast，
+  // 否则一个未捕获的 promise 会让进程留在未定义状态、绕过 supervisor 重启。
+  // 因此：写诊断报告 + 同步落盘日志 + 主动 exit(1) 复现默认语义。
   process.on("unhandledRejection", (reason: unknown) => {
     const err = reason instanceof Error ? reason : new Error(String(reason));
-    logger.error("[Lifecycle] unhandledRejection", {
+    const reportPath = writeReport("unhandledRejection", err);
+    writeFatalStderr("unhandledRejection", err, reportPath);
+    logger.fatal("[Lifecycle] unhandledRejection", {
       error: err.message,
       errorName: err.name,
       stack: err.stack,
+      reportPath,
     });
-    // 不退出：保留与当前 Node 默认（warning 级别）一致的行为，避免引发回归
+    process.exit(1);
   });
 }
 

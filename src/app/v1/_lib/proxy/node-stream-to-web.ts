@@ -113,21 +113,30 @@ export function nodeStreamToWebStreamSafe(
     },
 
     cancel(reason) {
+      // 重复 cancel 应是 no-op：避免重复 detach、重复注册 swallow 监听
+      if (settled) return;
       settled = true;
       detach(nodeStream);
-      if (!nodeStream.destroyed) {
-        // destroy(reason) 会 re-emit "error"，而我们已经 detach 了错误监听。
-        // 留一个 no-op 监听吞掉它，避免 native EventEmitter 触发 uncaughtException。
-        nodeStream.once("error", () => {
-          // ignore: web 流已 cancel，下游没有 reader 关心了
-        });
-        try {
-          nodeStream.destroy(
-            reason instanceof Error ? reason : reason ? new Error(String(reason)) : undefined
-          );
-        } catch {
-          // ignore
-        }
+      if (nodeStream.destroyed) return;
+
+      // destroy(reason) 在 reason 为 Error 时会 re-emit "error"，而我们已经
+      // detach 了错误监听。注册一次 swallow 监听吞掉它，避免触发 uncaughtException。
+      // 但 destroy() 不带 reason / 带非 Error reason 时 不会 emit error，此时
+      // once("error") 会成为常驻泄露 —— 用 once("close") 兜底清理。
+      const swallow = () => {
+        // ignore: web 流已 cancel，下游没有 reader 关心了
+      };
+      nodeStream.once("error", swallow);
+      nodeStream.once("close", () => {
+        nodeStream.removeListener("error", swallow);
+      });
+
+      try {
+        nodeStream.destroy(
+          reason instanceof Error ? reason : reason ? new Error(String(reason)) : undefined
+        );
+      } catch {
+        // ignore
       }
     },
   });

@@ -4798,11 +4798,13 @@ export class ProxyForwarder {
     rawBody.on("error", (err) => {
       const code = (err as NodeJS.ErrnoException).code;
       // 客户端/上游断连是高频路径事件，降级为 debug 以减少噪音
+      // 集合需与下方 streamPipeline 回调中的 isExpectedDisconnect 保持一致
       const isExpectedDisconnect =
         code === "ECONNRESET" ||
         code === "UND_ERR_SOCKET" ||
         code === "UND_ERR_ABORTED" ||
-        code === "ABORT_ERR";
+        code === "ABORT_ERR" ||
+        code === "ERR_STREAM_PREMATURE_CLOSE";
       const log = isExpectedDisconnect ? logger.debug : logger.warn;
       log("ProxyForwarder: undici body stream error (caught early)", {
         providerId,
