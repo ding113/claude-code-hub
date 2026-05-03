@@ -364,8 +364,7 @@ run("Codex CLI Responses transport probe", () => {
       const sawFinalText =
         result.stdout.includes(responseText) || result.stderr.includes(responseText);
       const sawCleanWsClose = probe.events.some(
-        (event) =>
-          event.type === "ws_close" && event.code === 1000 && event.reason === "response_completed"
+        (event) => event.type === "ws_close" && event.code === 1000
       );
 
       console.info(

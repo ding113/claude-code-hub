@@ -128,17 +128,20 @@ async function handleWebSocketConnection(ws, req) {
   // (and provider concurrency / breaker counters) keep running for minutes.
   let currentInternalReq = null;
 
-  const finalize = () => {
-    if (closed) return;
-    closed = true;
-    if (currentInternalReq) {
-      try {
-        currentInternalReq.destroy();
-      } catch {
-        // ignore
+  const abortCurrentInternalReq = () => {
+    if (!currentInternalReq) return;
+    const reqToDestroy = currentInternalReq;
+    currentInternalReq = null;
+    try {
+      if (!reqToDestroy.destroyed) {
+        reqToDestroy.destroy();
       }
-      currentInternalReq = null;
+    } catch {
+      // ignore
     }
+  };
+
+  const dropPendingFrames = () => {
     if (pending.length > 0) {
       log("warn", "ws_pending_dropped_on_close", {
         droppedFrames: pending.length,
@@ -149,6 +152,13 @@ async function handleWebSocketConnection(ws, req) {
     pendingBytes = 0;
   };
 
+  const finalize = () => {
+    if (closed) return;
+    closed = true;
+    abortCurrentInternalReq();
+    dropPendingFrames();
+  };
+
   // Synchronously mark the connection closed so any pipelined frame in
   // `pending` is dropped *before* drain() can dispatch another upstream
   // request. Without this the gap between ws.close() and the async
@@ -156,20 +166,19 @@ async function handleWebSocketConnection(ws, req) {
   // and run `forwardToInternalHttp` against the upstream — work the client
   // can never receive (safeSend would fail) but the provider would still bill.
   const requestClose = (code, reason) => {
-    if (closed || (ws && ws.readyState >= 2) /* CLOSING | CLOSED */) {
+    if (closed) {
+      abortCurrentInternalReq();
+      dropPendingFrames();
+      return;
+    }
+    if (ws && ws.readyState >= 2) {
       // Already closing/closed; just make sure local state matches.
-      if (!closed) finalize();
+      finalize();
       return;
     }
     closed = true;
-    if (pending.length > 0) {
-      log("warn", "ws_pending_dropped_on_close", {
-        droppedFrames: pending.length,
-        droppedBytes: pendingBytes,
-      });
-    }
-    pending.length = 0;
-    pendingBytes = 0;
+    abortCurrentInternalReq();
+    dropPendingFrames();
     log("info", "ws_client_close_initiated", { code, reason });
     try {
       ws.close(code, reason);

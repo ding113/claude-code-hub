@@ -19,6 +19,7 @@ type ServerHarness = {
   server: http.Server;
   wss: WebSocketServer;
   setSseHandler: (handler: (req: http.IncomingMessage, res: http.ServerResponse) => void) => void;
+  nextServerConnection: () => Promise<{ close: Promise<void> }>;
   close: () => Promise<void>;
 };
 
@@ -32,6 +33,10 @@ let originalEnv: {
   PORT: string | undefined;
   HOSTNAME: string | undefined;
   NODE_ENV: string | undefined;
+} = {
+  PORT: process.env.PORT,
+  HOSTNAME: process.env.HOSTNAME,
+  NODE_ENV: process.env.NODE_ENV,
 };
 
 function restoreEnvVar(name: "PORT" | "HOSTNAME" | "NODE_ENV", value: string | undefined) {
@@ -39,6 +44,30 @@ function restoreEnvVar(name: "PORT" | "HOSTNAME" | "NODE_ENV", value: string | u
     delete process.env[name];
   } else {
     process.env[name] = value;
+  }
+}
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -60,6 +89,7 @@ async function pickFreePort(): Promise<number> {
 
 async function startHarness(port: number): Promise<ServerHarness> {
   let sseHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => void) | null = null;
+  const connectionWaiters: Array<(signal: { close: Promise<void> }) => void> = [];
 
   const server = http.createServer((req, res) => {
     if (req.method === "POST" && req.url === "/v1/responses") {
@@ -87,6 +117,10 @@ async function startHarness(port: number): Promise<ServerHarness> {
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      const closeSignal = deferred<void>();
+      ws.once("close", () => closeSignal.resolve());
+      const waiter = connectionWaiters.shift();
+      if (waiter) waiter({ close: closeSignal.promise });
       serverModule.handleWebSocketConnection(ws as unknown as WebSocket, req).catch((err) => {
         process.stderr.write(
           `[server-ws-close-handshake] handleWebSocketConnection failed: ${
@@ -111,6 +145,10 @@ async function startHarness(port: number): Promise<ServerHarness> {
     setSseHandler: (handler) => {
       sseHandler = handler;
     },
+    nextServerConnection: () =>
+      new Promise((resolve) => {
+        connectionWaiters.push(resolve);
+      }),
     close: () =>
       new Promise<void>((resolve) => {
         wss.close(() => {
@@ -345,7 +383,13 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
       res.end();
     });
 
+    const serverConnectionPromise = harness.nextServerConnection();
     const client = connectClient(harness.port);
+    const serverConnection = await withTimeout(
+      serverConnectionPromise,
+      3000,
+      "server WebSocket did not accept the binary-close test connection"
+    );
     await client.opened;
     client.ws.send(Buffer.from("not a text frame"), { binary: true });
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "queued" }));
@@ -353,41 +397,79 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     const close = await client.closeEvent;
     expect(close.code).toBe(1003);
     expect(close.reason).toBe("binary_not_supported");
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await withTimeout(
+      serverConnection.close,
+      3000,
+      "server WebSocket did not close after binary protocol close"
+    );
     expect(upstreamCalls).toBe(0);
   });
 
-  it("clears the pending queue synchronously on overflow close", async () => {
+  it("aborts the in-flight request and clears the pending queue on overflow close", async () => {
     if (!harness) throw new Error("harness not initialized");
     let upstreamCalls = 0;
+    let firstResponse: http.ServerResponse | null = null;
+    const firstRequestStarted = deferred<void>();
+    const firstResponseClosed = deferred<void>();
     harness.setSseHandler((_req, res) => {
       upstreamCalls += 1;
       res.statusCode = 200;
       res.setHeader("content-type", "text/event-stream");
-      setTimeout(() => {
-        res.write(
-          `data: ${JSON.stringify({
-            type: "response.completed",
-            response: { id: `r_${upstreamCalls}` },
-          })}\n\n`
-        );
-        res.end();
-      }, 100);
+      if (upstreamCalls === 1) {
+        firstResponse = res;
+        res.on("close", () => firstResponseClosed.resolve());
+        res.write(":\n\n");
+        firstRequestStarted.resolve();
+        return;
+      }
+      res.write(
+        `data: ${JSON.stringify({
+          type: "response.completed",
+          response: { id: `unexpected_${upstreamCalls}` },
+        })}\n\n`
+      );
+      res.end();
     });
 
-    const client = connectClient(harness.port);
-    await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "first" }));
-    for (let i = 0; i < 70; i += 1) {
-      client.ws.send(
-        JSON.stringify({ type: "response.create", model: "gpt-5", input: `queued-${i}` })
+    try {
+      const serverConnectionPromise = harness.nextServerConnection();
+      const client = connectClient(harness.port);
+      const serverConnection = await withTimeout(
+        serverConnectionPromise,
+        3000,
+        "server WebSocket did not accept the overflow test connection"
       );
-    }
+      await client.opened;
+      client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "first" }));
+      await withTimeout(
+        firstRequestStarted.promise,
+        3000,
+        "first upstream request did not start before overflow test"
+      );
+      for (let i = 0; i < 70; i += 1) {
+        client.ws.send(
+          JSON.stringify({ type: "response.create", model: "gpt-5", input: `queued-${i}` })
+        );
+      }
 
-    const close = await client.closeEvent;
-    expect(close.code).toBe(1008);
-    expect(close.reason).toBe("too_many_requests");
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(upstreamCalls).toBe(1);
+      const close = await client.closeEvent;
+      expect(close.code).toBe(1008);
+      expect(close.reason).toBe("too_many_requests");
+      await withTimeout(
+        serverConnection.close,
+        3000,
+        "server WebSocket did not close after overflow protocol close"
+      );
+      await withTimeout(
+        firstResponseClosed.promise,
+        3000,
+        "overflow close did not abort the in-flight internal request"
+      );
+      expect(upstreamCalls).toBe(1);
+    } finally {
+      if (firstResponse && !firstResponse.destroyed && !firstResponse.writableEnded) {
+        firstResponse.end();
+      }
+    }
   });
 });
