@@ -246,7 +246,13 @@ function resolveCodexInvocation(): CodexInvocation {
   }
 
   if (process.platform === "win32") {
-    const cmdPath = execFileSync("where.exe", ["codex.cmd"], { encoding: "utf8" })
+    let whereOutput = "";
+    try {
+      whereOutput = execFileSync("where.exe", ["codex.cmd"], { encoding: "utf8" });
+    } catch {
+      throw new Error("Cannot find codex.cmd on PATH. Install Codex CLI or set CCH_CODEX_E2E_BIN.");
+    }
+    const cmdPath = whereOutput
       .split(/\r?\n/)
       .map((line) => line.trim())
       .find(Boolean);
