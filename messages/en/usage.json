@@ -622,7 +622,7 @@
         "steps": [
           "Restart Droid",
           "Enter the /model command",
-          "Select GPT-5-Codex [cch] or Sonnet 4.5 [cch]",
+          "Select GPT-5.4 [cch] or Sonnet 4.5 [cch]",
           "Start using!"
         ]
       }

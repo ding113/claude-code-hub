@@ -342,11 +342,21 @@ function runCodex(port: number, invocation: CodexInvocation): Promise<CodexResul
   });
 }
 
+function isResponsesPath(path: string | undefined) {
+  if (!path) return false;
+  try {
+    return new URL(path, "http://probe.local").pathname === "/v1/responses";
+  } catch {
+    return path.split("?")[0] === "/v1/responses";
+  }
+}
+
 function observedTransport(events: ProbeEvent[]) {
-  const sawWsCreateFrame = events.some(
-    (event) => event.type === "ws_message" && event.frameType === "response.create"
+  const sawResponsesWs = events.some(
+    (event) =>
+      (event.type === "ws_connection" || event.type === "ws_upgrade") && isResponsesPath(event.path)
   );
-  if (sawWsCreateFrame) return "websocket";
+  if (sawResponsesWs) return "websocket";
   if (events.some((event) => event.type === "http_responses")) return "http";
   return "none";
 }

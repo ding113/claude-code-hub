@@ -618,7 +618,7 @@
         "steps": [
           "重啟 Droid",
           "輸入 /model 命令",
-          "選擇 GPT-5-Codex [cch] 或 Sonnet 4.5 [cch]",
+          "選擇 GPT-5.4 [cch] 或 Sonnet 4.5 [cch]",
           "開始使用！"
         ]
       }

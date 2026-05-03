@@ -622,7 +622,7 @@
         "steps": [
           "Droid を再起動",
           "/model コマンドを入力",
-          "GPT-5-Codex [cch] または Sonnet 4.5 [cch] を選択",
+          "GPT-5.4 [cch] または Sonnet 4.5 [cch] を選択",
           "使用開始!"
         ]
       }
