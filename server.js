@@ -27,11 +27,11 @@ const { randomUUID } = require("node:crypto");
 const { parse } = require("node:url");
 
 function isNextDevMode(nodeEnv) {
-  return nodeEnv === "development";
+  return nodeEnv !== "production";
 }
 
-// `bun run start`/Docker/CI 应该服务已构建产物；只有专用开发入口显式启用
-// Next dev compiler。
+// 保留既有本地语义：只有显式 production 才服务已构建产物；Docker/K8s
+// 镜像会显式设置 NODE_ENV=production 和 PORT=3000。
 const dev = isNextDevMode(process.env.NODE_ENV);
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || (dev ? "13500" : "3000"), 10);

@@ -220,6 +220,9 @@ async function startProbeServer(): Promise<ProbeServer> {
         previousResponseId,
         isBinary,
       });
+      if (frameType !== "response.create") {
+        return;
+      }
       responseSeq += 1;
       const includeOutput = generate !== false;
       for (const event of responseEvents(`resp_cch_ws_e2e_${responseSeq}`, includeOutput)) {
@@ -507,6 +510,12 @@ function observedTransport(events: ProbeEvent[]) {
   if (sawResponsesWs) return "websocket";
   if (events.some((event) => event.type === "http_responses")) return "http";
   return "none";
+}
+
+type ProbeWsMessageEvent = Extract<ProbeEvent, { type: "ws_message" }>;
+
+function isResponseCreateWsMessage(event: ProbeEvent): event is ProbeWsMessageEvent {
+  return event.type === "ws_message" && event.frameType === "response.create";
 }
 
 type ServerJsModule = {
@@ -1397,8 +1406,9 @@ run("Codex CLI Responses transport probe", () => {
       const sawFinalText =
         result.stdout.includes(responseText) || result.stderr.includes(responseText);
       const wsMessages = probe.events.filter((event) => event.type === "ws_message");
+      const wsResponseCreates = probe.events.filter(isResponseCreateWsMessage);
       const wsConnections = probe.events.filter((event) => event.type === "ws_connection");
-      const sawWarmup = wsMessages.some((event) => event.generate === false);
+      const sawWarmup = wsResponseCreates.some((event) => event.generate === false);
 
       console.info(
         JSON.stringify({
@@ -1433,10 +1443,10 @@ run("Codex CLI Responses transport probe", () => {
         expect(transport).toBe(expectedTransport);
       }
       if (transport === "websocket") {
-        expect(wsMessages.length).toBeGreaterThan(0);
-        if (sawWarmup && wsMessages.length >= 2) {
+        expect(wsResponseCreates.length).toBeGreaterThan(0);
+        if (sawWarmup && wsResponseCreates.length >= 2) {
           expect(wsConnections).toHaveLength(1);
-          expect(wsMessages[1]?.previousResponseId).toBeTruthy();
+          expect(wsResponseCreates[1]?.previousResponseId).toBeTruthy();
         }
       }
     } finally {

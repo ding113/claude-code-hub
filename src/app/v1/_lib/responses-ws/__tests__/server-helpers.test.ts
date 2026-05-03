@@ -35,10 +35,11 @@ describe("server.js sanitizedRequestPath", () => {
 });
 
 describe("server.js isNextDevMode", () => {
-  it("only enables the Next dev compiler for explicit development mode", () => {
+  it("preserves the existing non-production dev-mode default", () => {
     expect(isNextDevMode("development")).toBe(true);
-    expect(isNextDevMode(undefined)).toBe(false);
-    expect(isNextDevMode("test")).toBe(false);
+    expect(isNextDevMode(undefined)).toBe(true);
+    expect(isNextDevMode("test")).toBe(true);
+    expect(isNextDevMode("staging")).toBe(true);
     expect(isNextDevMode("production")).toBe(false);
   });
 });
