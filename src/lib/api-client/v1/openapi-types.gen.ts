@@ -4398,14 +4398,25 @@ export interface operations {
                             anthropicAdaptiveThinking?: unknown;
                             /** @description Gemini Google Search preference. */
                             geminiGoogleSearchPreference: string | null;
-                            /** @description Optional today's total cost in USD. */
+                            /** @description Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'. */
                             todayTotalCostUsd?: string;
-                            /** @description Optional today's call count. */
+                            /** @description Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0. */
                             todayCallCount?: number;
-                            /** @description Optional last call time. */
+                            /** @description Deprecated. Mirrors statistics.lastCallTime when include=statistics is requested; otherwise null. */
                             lastCallTime?: string | null;
-                            /** @description Optional last call model. */
+                            /** @description Deprecated. Mirrors statistics.lastCallModel when include=statistics is requested; otherwise null. */
                             lastCallModel?: string | null;
+                            /** @description Today statistics. Present only when include=statistics is requested. */
+                            statistics?: {
+                                /** @description Today's total cost in USD. */
+                                todayCost: string;
+                                /** @description Today's call count. */
+                                todayCalls: number;
+                                /** @description Last call timestamp. */
+                                lastCallTime: string | null;
+                                /** @description Last call model name. */
+                                lastCallModel: string | null;
+                            };
                             /** @description Provider creation date string. */
                             createdAt: string;
                             /** @description Provider update date string. */
@@ -4842,14 +4853,25 @@ export interface operations {
                         anthropicAdaptiveThinking?: unknown;
                         /** @description Gemini Google Search preference. */
                         geminiGoogleSearchPreference: string | null;
-                        /** @description Optional today's total cost in USD. */
+                        /** @description Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'. */
                         todayTotalCostUsd?: string;
-                        /** @description Optional today's call count. */
+                        /** @description Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0. */
                         todayCallCount?: number;
-                        /** @description Optional last call time. */
+                        /** @description Deprecated. Mirrors statistics.lastCallTime when include=statistics is requested; otherwise null. */
                         lastCallTime?: string | null;
-                        /** @description Optional last call model. */
+                        /** @description Deprecated. Mirrors statistics.lastCallModel when include=statistics is requested; otherwise null. */
                         lastCallModel?: string | null;
+                        /** @description Today statistics. Present only when include=statistics is requested. */
+                        statistics?: {
+                            /** @description Today's total cost in USD. */
+                            todayCost: string;
+                            /** @description Today's call count. */
+                            todayCalls: number;
+                            /** @description Last call timestamp. */
+                            lastCallTime: string | null;
+                            /** @description Last call model name. */
+                            lastCallModel: string | null;
+                        };
                         /** @description Provider creation date string. */
                         createdAt: string;
                         /** @description Provider update date string. */
@@ -5148,14 +5170,25 @@ export interface operations {
                         anthropicAdaptiveThinking?: unknown;
                         /** @description Gemini Google Search preference. */
                         geminiGoogleSearchPreference: string | null;
-                        /** @description Optional today's total cost in USD. */
+                        /** @description Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'. */
                         todayTotalCostUsd?: string;
-                        /** @description Optional today's call count. */
+                        /** @description Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0. */
                         todayCallCount?: number;
-                        /** @description Optional last call time. */
+                        /** @description Deprecated. Mirrors statistics.lastCallTime when include=statistics is requested; otherwise null. */
                         lastCallTime?: string | null;
-                        /** @description Optional last call model. */
+                        /** @description Deprecated. Mirrors statistics.lastCallModel when include=statistics is requested; otherwise null. */
                         lastCallModel?: string | null;
+                        /** @description Today statistics. Present only when include=statistics is requested. */
+                        statistics?: {
+                            /** @description Today's total cost in USD. */
+                            todayCost: string;
+                            /** @description Today's call count. */
+                            todayCalls: number;
+                            /** @description Last call timestamp. */
+                            lastCallTime: string | null;
+                            /** @description Last call model name. */
+                            lastCallModel: string | null;
+                        };
                         /** @description Provider creation date string. */
                         createdAt: string;
                         /** @description Provider update date string. */
@@ -5773,14 +5806,25 @@ export interface operations {
                         anthropicAdaptiveThinking?: unknown;
                         /** @description Gemini Google Search preference. */
                         geminiGoogleSearchPreference: string | null;
-                        /** @description Optional today's total cost in USD. */
+                        /** @description Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'. */
                         todayTotalCostUsd?: string;
-                        /** @description Optional today's call count. */
+                        /** @description Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0. */
                         todayCallCount?: number;
-                        /** @description Optional last call time. */
+                        /** @description Deprecated. Mirrors statistics.lastCallTime when include=statistics is requested; otherwise null. */
                         lastCallTime?: string | null;
-                        /** @description Optional last call model. */
+                        /** @description Deprecated. Mirrors statistics.lastCallModel when include=statistics is requested; otherwise null. */
                         lastCallModel?: string | null;
+                        /** @description Today statistics. Present only when include=statistics is requested. */
+                        statistics?: {
+                            /** @description Today's total cost in USD. */
+                            todayCost: string;
+                            /** @description Today's call count. */
+                            todayCalls: number;
+                            /** @description Last call timestamp. */
+                            lastCallTime: string | null;
+                            /** @description Last call model name. */
+                            lastCallModel: string | null;
+                        };
                         /** @description Provider creation date string. */
                         createdAt: string;
                         /** @description Provider update date string. */

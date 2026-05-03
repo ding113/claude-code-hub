@@ -43,7 +43,7 @@ import {
   type ProviderUpdateInput,
   ProviderUpdateSchema,
 } from "@/lib/api/v1/schemas/providers";
-import type { ProviderDisplay } from "@/types/provider";
+import type { ProviderDisplay, ProviderStatistics, ProviderStatisticsMap } from "@/types/provider";
 
 const InternalProviderTypeSchema = z.enum(INTERNAL_PROVIDER_TYPE_VALUES);
 const InternalProviderListQuerySchema = ProviderListQuerySchema.extend({
@@ -76,7 +76,25 @@ export async function listProviders(c: Context): Promise<Response> {
   if (!query.success) return fromZodError(query.error, new URL(c.req.url).pathname);
   const providers = await loadVisibleProviders(c);
   if (providers instanceof Response) return providers;
-  return jsonResponse({ items: filterProviders(providers, query.data).map(sanitizeProvider) });
+
+  let statisticsMap: ProviderStatisticsMap | undefined;
+  if (query.data.include === "statistics") {
+    const providerActions = await import("@/actions/providers");
+    const statsResult = await callAction(
+      c,
+      providerActions.getProviderStatisticsAsync,
+      [] as never[],
+      c.get("auth")
+    );
+    if (!statsResult.ok) return actionError(c, statsResult);
+    statisticsMap = statsResult.data;
+  }
+
+  return jsonResponse({
+    items: filterProviders(providers, query.data).map((p) =>
+      sanitizeProvider(p, statisticsMap?.[p.id])
+    ),
+  });
 }
 
 export async function getProvider(c: Context): Promise<Response> {
@@ -560,7 +578,10 @@ function filterProviders(
   });
 }
 
-function sanitizeProvider(provider: ProviderDisplay): ProviderSummaryResponse {
+function sanitizeProvider(
+  provider: ProviderDisplay,
+  statistics?: ProviderStatistics
+): ProviderSummaryResponse {
   return {
     id: provider.id,
     name: provider.name,
@@ -618,12 +639,13 @@ function sanitizeProvider(provider: ProviderDisplay): ProviderSummaryResponse {
     anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
     anthropicAdaptiveThinking: provider.anthropicAdaptiveThinking,
     geminiGoogleSearchPreference: provider.geminiGoogleSearchPreference,
-    todayTotalCostUsd: provider.todayTotalCostUsd,
-    todayCallCount: provider.todayCallCount,
-    lastCallTime: provider.lastCallTime,
-    lastCallModel: provider.lastCallModel,
+    todayTotalCostUsd: statistics?.todayCost ?? provider.todayTotalCostUsd,
+    todayCallCount: statistics?.todayCalls ?? provider.todayCallCount,
+    lastCallTime: statistics?.lastCallTime ?? provider.lastCallTime,
+    lastCallModel: statistics?.lastCallModel ?? provider.lastCallModel,
     createdAt: provider.createdAt,
     updatedAt: provider.updatedAt,
+    ...(statistics ? { statistics } : {}),
   };
 }
 
