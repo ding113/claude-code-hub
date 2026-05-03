@@ -259,4 +259,41 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     expect(close.code).toBe(1000);
     expect(close.reason).toBe("response_completed");
   }, 20000);
+
+  it("drops queued frames once a terminal close is initiated (no extra upstream calls)", async () => {
+    if (!harness) throw new Error("harness not initialized");
+    let upstreamCalls = 0;
+    harness.setSseHandler((_req, res) => {
+      upstreamCalls += 1;
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream");
+      // Stagger the response so the second frame, if not dropped, has time
+      // to be dequeued and dispatched while we're closing the first.
+      setTimeout(() => {
+        res.write(
+          `data: ${JSON.stringify({
+            type: "response.completed",
+            response: { id: `r_${upstreamCalls}` },
+          })}\n\n`
+        );
+        res.end();
+      }, 20);
+    });
+
+    const client = connectClient(harness.port);
+    await client.opened;
+    // Pipeline two frames before the first response completes. With the race
+    // present, drain() pops the second after closeClient() initiates the
+    // close handshake but before ws.on("close") fires, hitting the upstream
+    // a second time and burning provider quota.
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "first" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "second" }));
+
+    const close = await client.closeEvent;
+    expect(close.code).toBe(1000);
+    expect(close.reason).toBe("response_completed");
+    // Exactly one upstream call must have happened — the second frame is
+    // dropped synchronously when we initiate the close.
+    expect(upstreamCalls).toBe(1);
+  });
 });

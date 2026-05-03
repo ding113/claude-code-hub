@@ -99,20 +99,6 @@ function emitErrorEvent(ws, code, message) {
   });
 }
 
-// Initiate a WebSocket closing handshake on the client connection. Codex /
-// tungstenite-style clients treat a missing close frame as
-// "Connection reset without closing handshake" — this helper centralizes the
-// close so every request-response cycle ends with a proper close frame.
-function closeClient(ws, code, reason) {
-  if (!ws || ws.readyState >= 2 /* CLOSING | CLOSED */) return;
-  log("info", "ws_client_close_initiated", { code, reason });
-  try {
-    ws.close(code, reason);
-  } catch (err) {
-    log("warn", "ws_client_close_failed", { error: String(err) });
-  }
-}
-
 function sanitizedRequestPath(rawUrl) {
   if (typeof rawUrl !== "string" || rawUrl.length === 0) {
     return "/";
@@ -161,6 +147,35 @@ async function handleWebSocketConnection(ws, req) {
     }
     pending.length = 0;
     pendingBytes = 0;
+  };
+
+  // Synchronously mark the connection closed so any pipelined frame in
+  // `pending` is dropped *before* drain() can dispatch another upstream
+  // request. Without this the gap between ws.close() and the async
+  // ws.on("close") event is wide enough for `drain()` to pop the next frame
+  // and run `forwardToInternalHttp` against the upstream — work the client
+  // can never receive (safeSend would fail) but the provider would still bill.
+  const requestClose = (code, reason) => {
+    if (closed || (ws && ws.readyState >= 2) /* CLOSING | CLOSED */) {
+      // Already closing/closed; just make sure local state matches.
+      if (!closed) finalize();
+      return;
+    }
+    closed = true;
+    if (pending.length > 0) {
+      log("warn", "ws_pending_dropped_on_close", {
+        droppedFrames: pending.length,
+        droppedBytes: pendingBytes,
+      });
+    }
+    pending.length = 0;
+    pendingBytes = 0;
+    log("info", "ws_client_close_initiated", { code, reason });
+    try {
+      ws.close(code, reason);
+    } catch (err) {
+      log("warn", "ws_client_close_failed", { error: String(err) });
+    }
   };
 
   ws.on("close", finalize);
@@ -224,9 +239,15 @@ async function handleWebSocketConnection(ws, req) {
       hasPreviousResponseId: typeof body.previous_response_id === "string",
     });
 
-    await forwardToInternalHttp(ws, req, body, (clientReq) => {
-      currentInternalReq = clientReq;
-    });
+    await forwardToInternalHttp(
+      ws,
+      req,
+      body,
+      (clientReq) => {
+        currentInternalReq = clientReq;
+      },
+      requestClose
+    );
     if (!closed) {
       currentInternalReq = null;
     }
@@ -302,7 +323,22 @@ async function handleWebSocketConnection(ws, req) {
   });
 }
 
-async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq) {
+async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq, requestClose) {
+  // requestClose(code, reason) initiates the WebSocket closing handshake AND
+  // synchronously marks the client connection closed so the caller's pending
+  // queue stops dispatching follow-up frames against the upstream. Tests that
+  // exercise this function in isolation can pass a no-op fallback.
+  const initiateClose =
+    typeof requestClose === "function"
+      ? requestClose
+      : (code, reason) => {
+          log("info", "ws_client_close_initiated", { code, reason });
+          try {
+            ws.close(code, reason);
+          } catch (err) {
+            log("warn", "ws_client_close_failed", { error: String(err) });
+          }
+        };
   const internalHeaders = {};
   for (const [k, v] of Object.entries(originalReq.headers)) {
     const lower = k.toLowerCase();
@@ -390,14 +426,14 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
                     ? parsed.error
                     : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
               });
-              closeClient(ws, 1011, `http_${res.statusCode}`);
+              initiateClose(1011, `http_${res.statusCode}`);
             } else {
               safeSend(ws, {
                 type: "response.completed",
                 response: parsed,
               });
               log("info", "ws_terminal_event_sent", { type: "response.completed", source: "json" });
-              closeClient(ws, 1000, "response_completed");
+              initiateClose(1000, "response_completed");
             }
             resolve();
           });
@@ -407,7 +443,7 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
               "internal_response_error",
               String(err && err.message ? err.message : err)
             );
-            closeClient(ws, 1011, "internal_response_error");
+            initiateClose(1011, "internal_response_error");
             resolve();
           });
           return;
@@ -481,14 +517,13 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
               "stream_ended_without_terminal",
               "Upstream stream ended before emitting a terminal response event"
             );
-            closeClient(ws, 1011, "stream_ended_without_terminal");
+            initiateClose(1011, "stream_ended_without_terminal");
           } else {
             // Use 1000 for normal terminal types and the synthesized [DONE]
             // path; reserve 1011 for the explicit upstream "error" terminal
             // so the client distinguishes a clean response from a failure.
             const isErrorTerminal = terminalEventType === "error";
-            closeClient(
-              ws,
+            initiateClose(
               isErrorTerminal ? 1011 : 1000,
               isErrorTerminal ? "upstream_error" : "response_completed"
             );
@@ -501,7 +536,7 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
             "internal_response_error",
             String(err && err.message ? err.message : err)
           );
-          closeClient(ws, 1011, "internal_response_error");
+          initiateClose(1011, "internal_response_error");
           resolve();
         });
       }
@@ -518,7 +553,7 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq)
           "internal_request_error",
           String(err && err.message ? err.message : err)
         );
-        closeClient(ws, 1011, "internal_request_error");
+        initiateClose(1011, "internal_request_error");
       }
       resolve();
     });
@@ -635,7 +670,6 @@ module.exports = {
   sanitizedRequestPath,
   handleWebSocketConnection,
   forwardToInternalHttp,
-  closeClient,
   WS_MAX_PAYLOAD_BYTES,
   MAX_PENDING_BYTES,
 };
