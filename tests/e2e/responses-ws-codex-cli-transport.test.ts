@@ -762,6 +762,7 @@ function assertNoResetWithoutClosingHandshake(result: CodexResult) {
 async function startCchEdgeHarness(port: number, serverModule: ServerJsModule) {
   const events: CchEdgeEvent[] = [];
   const sockets = new Set<WebSocket>();
+  const arrivedInternalRequests: CchRequestContext[] = [];
   const internalRequestWaiters: Array<(context: CchRequestContext) => void> = [];
   let responseHandler: ((context: CchRequestContext) => void | Promise<void>) | null = null;
 
@@ -821,7 +822,11 @@ async function startCchEdgeHarness(port: number, serverModule: ServerJsModule) {
             : null,
       });
       const waiter = internalRequestWaiters.shift();
-      if (waiter) waiter(context);
+      if (waiter) {
+        waiter(context);
+      } else {
+        arrivedInternalRequests.push(context);
+      }
 
       if (!responseHandler) {
         res.statusCode = 503;
@@ -883,12 +888,17 @@ async function startCchEdgeHarness(port: number, serverModule: ServerJsModule) {
     port,
     events,
     setResponseHandler: (handler) => {
+      arrivedInternalRequests.length = 0;
+      internalRequestWaiters.length = 0;
       responseHandler = handler;
     },
-    nextInternalRequest: () =>
-      new Promise<CchRequestContext>((resolve) => {
+    nextInternalRequest: () => {
+      const arrived = arrivedInternalRequests.shift();
+      if (arrived) return Promise.resolve(arrived);
+      return new Promise<CchRequestContext>((resolve) => {
         internalRequestWaiters.push(resolve);
-      }),
+      });
+    },
     close: async () => {
       for (const socket of sockets) {
         if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
@@ -1382,6 +1392,7 @@ run("Codex CLI Responses transport probe", () => {
 
 faultRun("Codex CLI through CCH WebSocket fault injection", () => {
   let invocation: CodexInvocation;
+  let cchFaultServerPath: string | null = null;
 
   beforeAll(async () => {
     invocation = resolveCodexInvocation();
@@ -1392,20 +1403,27 @@ faultRun("Codex CLI through CCH WebSocket fault injection", () => {
     process.env.NODE_ENV = "test";
     process.env.CCH_RESPONSES_WS_INTERNAL_SECRET = `cch-ws-fault-secret-${port}`;
 
-    const serverPath = requireFromHere.resolve("../../server.js");
-    delete requireFromHere.cache[serverPath];
+    cchFaultServerPath = requireFromHere.resolve("../../server.js");
+    delete requireFromHere.cache[cchFaultServerPath];
     const serverModule = requireFromHere("../../server.js") as ServerJsModule;
     cchFaultHarness = await startCchEdgeHarness(port, serverModule);
   });
 
   afterAll(async () => {
-    if (cchFaultHarness) {
-      await cchFaultHarness.close();
+    try {
+      if (cchFaultHarness) {
+        await cchFaultHarness.close();
+      }
+    } finally {
       cchFaultHarness = null;
-    }
-    if (cchFaultEnv) {
-      restoreEnv(cchFaultEnv);
-      cchFaultEnv = null;
+      if (cchFaultServerPath) {
+        delete requireFromHere.cache[cchFaultServerPath];
+        cchFaultServerPath = null;
+      }
+      if (cchFaultEnv) {
+        restoreEnv(cchFaultEnv);
+        cchFaultEnv = null;
+      }
     }
   });
 
