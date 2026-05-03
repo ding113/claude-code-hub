@@ -1408,7 +1408,6 @@ run("Codex CLI Responses transport probe", () => {
       const transport = observedTransport(probe.events);
       const sawFinalText =
         result.stdout.includes(responseText) || result.stderr.includes(responseText);
-      const wsMessages = probe.events.filter((event) => event.type === "ws_message");
       const wsResponseCreates = probe.events.filter(isResponseCreateWsMessage);
       const wsConnections = probe.events.filter((event) => event.type === "ws_connection");
       const sawWarmup = wsResponseCreates.some((event) => event.generate === false);
