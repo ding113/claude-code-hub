@@ -175,7 +175,7 @@
     "modelNamePlaceholder": "例: gpt-5.4",
     "modelNameRequired": "モデルIDは必須です",
     "displayName": "表示名 (任意)",
-    "displayNamePlaceholder": "例: GPT-5.3 Codex",
+    "displayNamePlaceholder": "例: GPT-5.4 Codex",
     "type": "タイプ",
     "provider": "プロバイダー",
     "providerPlaceholder": "例: openai",

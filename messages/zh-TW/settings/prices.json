@@ -175,7 +175,7 @@
     "modelNamePlaceholder": "例如：gpt-5.4",
     "modelNameRequired": "模型 ID 為必填",
     "displayName": "顯示名稱（選填）",
-    "displayNamePlaceholder": "例如：GPT-5.3 Codex",
+    "displayNamePlaceholder": "例如：GPT-5.4 Codex",
     "type": "類型",
     "provider": "供應商",
     "providerPlaceholder": "例如：openai",

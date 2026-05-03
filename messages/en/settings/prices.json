@@ -175,7 +175,7 @@
     "modelNamePlaceholder": "e.g., gpt-5.4",
     "modelNameRequired": "Model ID is required",
     "displayName": "Display Name (Optional)",
-    "displayNamePlaceholder": "e.g., GPT-5.3 Codex",
+    "displayNamePlaceholder": "e.g., GPT-5.4 Codex",
     "type": "Type",
     "provider": "Provider",
     "providerPlaceholder": "e.g., openai",
