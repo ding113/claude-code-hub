@@ -26,7 +26,13 @@ const http = require("node:http");
 const { randomUUID } = require("node:crypto");
 const { parse } = require("node:url");
 
-const dev = process.env.NODE_ENV !== "production";
+function isNextDevMode(nodeEnv) {
+  return nodeEnv === "development";
+}
+
+// `bun run start`/Docker/CI 应该服务已构建产物；只有专用开发入口显式启用
+// Next dev compiler。
+const dev = isNextDevMode(process.env.NODE_ENV);
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || (dev ? "13500" : "3000"), 10);
 
@@ -686,6 +692,7 @@ async function main() {
 // Exposed for tests; not part of the long-lived server entrypoint.
 module.exports = {
   sanitizedRequestPath,
+  isNextDevMode,
   handleWebSocketConnection,
   forwardToInternalHttp,
   WS_MAX_PAYLOAD_BYTES,
