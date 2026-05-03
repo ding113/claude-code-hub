@@ -82,7 +82,6 @@ const MAX_BUFFERED_QUEUE_BYTES = 8 * 1024 * 1024; // 8 MiB
 // leak backstop if a process-level close notification is missed.
 const PERSISTENT_SESSION_IDLE_TIMEOUT_MS = 65 * 60 * 1000;
 const DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES = 512;
-let persistentSessionMaxEntries = DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES;
 
 // HTTP statuses on the upgrade handshake that we treat as a definitive
 // "this endpoint does not speak WebSocket" signal and cache as unsupported.
@@ -119,7 +118,24 @@ type PersistentWsEntry = {
   idleTimer: ReturnType<typeof setTimeout> | null;
 };
 
-const persistentSessions = new Map<string, PersistentWsEntry>();
+type PersistentWsState = {
+  sessions: Map<string, PersistentWsEntry>;
+  maxEntries: number;
+};
+
+declare global {
+  // Keep retained upstream WS state stable across Next.js dev/test module
+  // reloads. server.js calls the latest cleanup hook, so the hook must still
+  // see sessions created by an older module instance.
+  // eslint-disable-next-line no-var
+  var __cchResponsesWsPersistentState: PersistentWsState | undefined;
+}
+
+const persistentState = (globalThis.__cchResponsesWsPersistentState ??= {
+  sessions: new Map<string, PersistentWsEntry>(),
+  maxEntries: DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES,
+});
+const persistentSessions = persistentState.sessions;
 
 function toWsUrl(httpUrl: string): string {
   const url = new URL(httpUrl);
@@ -239,12 +255,13 @@ function armPersistentIdleTimer(entry: PersistentWsEntry): void {
 }
 
 function prunePersistentSessions(): void {
-  if (persistentSessions.size < persistentSessionMaxEntries) return;
+  const maxEntries = persistentState.maxEntries;
+  if (persistentSessions.size < maxEntries) return;
 
   const idleEntries = [...persistentSessions.values()]
     .filter((entry) => !entry.active)
     .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
-  const overflow = persistentSessions.size - persistentSessionMaxEntries + 1;
+  const overflow = persistentSessions.size - maxEntries + 1;
   for (const entry of idleEntries.slice(0, overflow)) {
     logger.warn("[ResponsesWsAdapter] pruning idle upstream WS session", {
       sessionId: entry.sessionId,
@@ -259,10 +276,10 @@ function registerPersistentSession(
   ws: WebSocketType
 ): PersistentWsEntry | null {
   prunePersistentSessions();
-  if (persistentSessions.size >= persistentSessionMaxEntries) {
+  if (persistentSessions.size >= persistentState.maxEntries) {
     logger.warn("[ResponsesWsAdapter] upstream WS session cap reached; not retaining session", {
       sessionId,
-      maxEntries: persistentSessionMaxEntries,
+      maxEntries: persistentState.maxEntries,
     });
     return null;
   }
@@ -300,12 +317,12 @@ export function clearResponsesWsSessionsForTests(): void {
     closePersistentEntry(entry, 1000);
   }
   persistentSessions.clear();
-  persistentSessionMaxEntries = DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES;
+  persistentState.maxEntries = DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES;
 }
 
 export function setResponsesWsSessionMaxEntriesForTests(maxEntries: number): void {
   const normalized = Math.floor(maxEntries);
-  persistentSessionMaxEntries = Number.isFinite(normalized) ? Math.max(0, normalized) : 0;
+  persistentState.maxEntries = Number.isFinite(normalized) ? Math.max(0, normalized) : 0;
 }
 
 export function getResponsesWsSessionCountForTests(): number {

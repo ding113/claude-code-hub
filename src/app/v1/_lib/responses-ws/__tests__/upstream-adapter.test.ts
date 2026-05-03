@@ -545,6 +545,47 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(upstreamCloseCode).toBe(1000);
   });
 
+  it("global cleanup hook closes retained upstream WS sessions from shared state", async () => {
+    let upstreamCloseCode: number | null = null;
+    let resolveClosed: (() => void) | null = null;
+    const closed = new Promise<void>((resolve) => {
+      resolveClosed = resolve;
+    });
+    server = await startMockServer((socket) => {
+      socket.on("close", (code) => {
+        upstreamCloseCode = code;
+        resolveClosed?.();
+      });
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_1" } }));
+      });
+    });
+
+    const sessionId = "client-ws-session-global-cleanup";
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId,
+      body: { model: "gpt-5.4", input: "hi" },
+    });
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+    await collectSseBody(result.response);
+
+    const globalState = globalThis as unknown as {
+      __cchCleanupResponsesWsSession?: (sessionId: string) => void;
+      __cchResponsesWsPersistentState?: { sessions: Map<string, unknown> };
+    };
+    expect(globalState.__cchResponsesWsPersistentState?.sessions.has(sessionId)).toBe(true);
+
+    globalState.__cchCleanupResponsesWsSession?.(sessionId);
+    await closed;
+
+    expect(upstreamCloseCode).toBe(1000);
+    expect(globalState.__cchResponsesWsPersistentState?.sessions.has(sessionId)).toBe(false);
+  });
+
   it("does not close an active retained session when a concurrent same-session request opens a fresh upstream WS", async () => {
     let connectionCount = 0;
     let firstUpstreamClosed = false;
