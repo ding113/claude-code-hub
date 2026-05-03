@@ -5,7 +5,7 @@ import http from "node:http";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import WebSocket, { WebSocketServer } from "ws";
+import WebSocket, { type RawData, WebSocketServer } from "ws";
 
 /**
  * Opt-in Codex CLI transport probe for `/v1/responses`.
@@ -498,6 +498,21 @@ type EnvSnapshot = {
   PORT: string | undefined;
   HOSTNAME: string | undefined;
   NODE_ENV: string | undefined;
+  CCH_RESPONSES_WS_INTERNAL_SECRET: string | undefined;
+};
+
+type WsClientMessage = Record<string, unknown> | string;
+
+type RawWsClient = {
+  ws: WebSocket;
+  opened: Promise<void>;
+  closeEvent: Promise<{ code: number; reason: string }>;
+  messages: WsClientMessage[];
+  nextMessage: (
+    predicate: (message: WsClientMessage) => boolean,
+    timeoutMs: number,
+    message: string
+  ) => Promise<WsClientMessage>;
 };
 
 let cchFaultHarness: CchEdgeHarness | null = null;
@@ -555,6 +570,22 @@ function restoreEnvVar(name: keyof EnvSnapshot, value: string | undefined) {
   }
 }
 
+function captureEnv(): EnvSnapshot {
+  return {
+    PORT: process.env.PORT,
+    HOSTNAME: process.env.HOSTNAME,
+    NODE_ENV: process.env.NODE_ENV,
+    CCH_RESPONSES_WS_INTERNAL_SECRET: process.env.CCH_RESPONSES_WS_INTERNAL_SECRET,
+  };
+}
+
+function restoreEnv(snapshot: EnvSnapshot) {
+  restoreEnvVar("PORT", snapshot.PORT);
+  restoreEnvVar("HOSTNAME", snapshot.HOSTNAME);
+  restoreEnvVar("NODE_ENV", snapshot.NODE_ENV);
+  restoreEnvVar("CCH_RESPONSES_WS_INTERNAL_SECRET", snapshot.CCH_RESPONSES_WS_INTERNAL_SECRET);
+}
+
 function parseJsonObject(text: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(text);
@@ -571,6 +602,104 @@ function eventChunk(event: unknown): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
+function crlfEventChunk(event: unknown): string {
+  return `event: ${(event as { type?: string }).type || "message"}\r\ndata: ${JSON.stringify(event)}\r\n\r\n`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseWsPayload(raw: RawData): WsClientMessage {
+  const text = Array.isArray(raw)
+    ? Buffer.concat(raw).toString("utf8")
+    : Buffer.from(raw).toString("utf8");
+  try {
+    const parsed = JSON.parse(text);
+    return isRecord(parsed) ? parsed : text;
+  } catch {
+    return text;
+  }
+}
+
+function wsMessageType(message: WsClientMessage): string | null {
+  return isRecord(message) && typeof message.type === "string" ? message.type : null;
+}
+
+function wsResponseId(message: WsClientMessage): string | null {
+  if (!isRecord(message) || !isRecord(message.response)) return null;
+  return typeof message.response.id === "string" ? message.response.id : null;
+}
+
+function wsErrorCode(message: WsClientMessage): string | null {
+  if (!isRecord(message) || !isRecord(message.error)) return null;
+  return typeof message.error.code === "string" ? message.error.code : null;
+}
+
+function completedResponse(responseId: string) {
+  return (message: WsClientMessage) =>
+    wsMessageType(message) === "response.completed" && wsResponseId(message) === responseId;
+}
+
+function errorEvent(code: string) {
+  return (message: WsClientMessage) =>
+    wsMessageType(message) === "error" && wsErrorCode(message) === code;
+}
+
+function connectRawWsClient(
+  port: number,
+  options: { path?: string; headers?: Record<string, string> } = {}
+): RawWsClient {
+  const messages: WsClientMessage[] = [];
+  const waiters: Array<{
+    predicate: (message: WsClientMessage) => boolean;
+    resolve: (message: WsClientMessage) => void;
+  }> = [];
+  const ws = new WebSocket(`ws://127.0.0.1:${port}${options.path ?? "/v1/responses"}`, {
+    headers: options.headers,
+  });
+
+  const opened = new Promise<void>((resolve, reject) => {
+    ws.once("open", () => resolve());
+    ws.once("error", reject);
+  });
+  const closeEvent = new Promise<{ code: number; reason: string }>((resolve) => {
+    ws.once("close", (code, reason) => resolve({ code, reason: reason.toString("utf8") }));
+  });
+
+  ws.on("message", (raw) => {
+    const parsed = parseWsPayload(raw);
+    messages.push(parsed);
+    for (let i = waiters.length - 1; i >= 0; i -= 1) {
+      const waiter = waiters[i]!;
+      if (waiter.predicate(parsed)) {
+        waiters.splice(i, 1);
+        waiter.resolve(parsed);
+      }
+    }
+  });
+
+  return {
+    ws,
+    opened,
+    closeEvent,
+    messages,
+    nextMessage: (predicate, timeoutMs, message) => {
+      const existing = messages.find(predicate);
+      if (existing) return Promise.resolve(existing);
+      return withTimeout(
+        new Promise<WsClientMessage>((resolve) => waiters.push({ predicate, resolve })),
+        timeoutMs,
+        message
+      );
+    },
+  };
+}
+
+function sendResponseCreate(client: RawWsClient, body: Record<string, unknown>) {
+  client.ws.send(JSON.stringify({ type: "response.create", ...body }));
+}
+
 async function writeFragmentedSse(res: http.ServerResponse, events: unknown[], delayMs: number) {
   res.statusCode = 200;
   res.setHeader("content-type", "text/event-stream");
@@ -584,6 +713,37 @@ async function writeFragmentedSse(res: http.ServerResponse, events: unknown[], d
     await sleep(delayMs);
   }
   res.end();
+}
+
+async function startIsolatedCchEdgeHarness(secret?: string) {
+  const port = await pickFreePort();
+  const env = captureEnv();
+  process.env.PORT = String(port);
+  process.env.HOSTNAME = "127.0.0.1";
+  process.env.NODE_ENV = "test";
+  process.env.CCH_RESPONSES_WS_INTERNAL_SECRET = secret ?? `cch-ws-e2e-secret-${port}`;
+
+  const serverPath = requireFromHere.resolve("../../server.js");
+  delete requireFromHere.cache[serverPath];
+  try {
+    const serverModule = requireFromHere("../../server.js") as ServerJsModule;
+    const harness = await startCchEdgeHarness(port, serverModule);
+    return {
+      harness,
+      close: async () => {
+        try {
+          await harness.close();
+        } finally {
+          delete requireFromHere.cache[serverPath];
+          restoreEnv(env);
+        }
+      },
+    };
+  } catch (err) {
+    delete requireFromHere.cache[serverPath];
+    restoreEnv(env);
+    throw err;
+  }
 }
 
 function retryDisabledConfig() {
@@ -762,6 +922,403 @@ function cchWsCloses(events: CchEdgeEvent[]) {
   );
 }
 
+describe("CCH Responses WebSocket edge E2E", () => {
+  test("serializes pipelined response.create frames and keeps the socket reusable", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      let activeRequests = 0;
+      let maxActiveRequests = 0;
+      harness.setResponseHandler(async ({ res, body }) => {
+        activeRequests += 1;
+        maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+        const input = typeof body.input === "string" ? body.input : "unknown";
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.write(eventChunk({ type: "response.created", response: { id: `resp_${input}` } }));
+        if (input === "first") await sleep(75);
+        res.write(
+          eventChunk({
+            type: "response.completed",
+            response: responseEnvelope(`resp_${input}`, true),
+          })
+        );
+        res.end();
+        activeRequests -= 1;
+      });
+
+      const client = connectRawWsClient(harness.port);
+      await client.opened;
+      sendResponseCreate(client, { model, input: "first" });
+      sendResponseCreate(client, { model, input: "second", previous_response_id: "resp_first" });
+
+      await client.nextMessage(completedResponse("resp_first"), 3000, "first turn did not finish");
+      expect(client.ws.readyState).toBe(WebSocket.OPEN);
+      await client.nextMessage(
+        completedResponse("resp_second"),
+        3000,
+        "second turn did not finish"
+      );
+
+      const internalRequests = cchInternalRequests(harness.events);
+      expect(internalRequests).toHaveLength(2);
+      expect(new Set(internalRequests.map((event) => event.sessionId)).size).toBe(1);
+      expect(internalRequests[1]?.previousResponseId).toBe("resp_first");
+      expect(maxActiveRequests).toBe(1);
+      client.ws.close(1000, "test_done");
+      await client.closeEvent;
+    } finally {
+      await close();
+    }
+  });
+
+  test("turns non-SSE JSON success and error responses into visible WS events", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      harness.setResponseHandler(({ res, body }) => {
+        res.setHeader("content-type", "application/json");
+        if (body.input === "json-error") {
+          res.statusCode = 429;
+          res.end(
+            JSON.stringify({
+              error: { code: "rate_limit_exceeded", message: "synthetic rate limit" },
+            })
+          );
+          return;
+        }
+        res.statusCode = 200;
+        res.end(JSON.stringify(responseEnvelope("resp_json_ok", true)));
+      });
+
+      const client = connectRawWsClient(harness.port);
+      await client.opened;
+      sendResponseCreate(client, { model, input: "json-ok" });
+      await client.nextMessage(
+        completedResponse("resp_json_ok"),
+        3000,
+        "JSON success was not translated to response.completed"
+      );
+
+      sendResponseCreate(client, { model, input: "json-error" });
+      const error = await client.nextMessage(
+        errorEvent("rate_limit_exceeded"),
+        3000,
+        "JSON error was not translated to an error event"
+      );
+      expect(isRecord(error) ? error.status : null).toBe(429);
+      expect(client.ws.readyState).toBe(WebSocket.OPEN);
+      client.ws.close(1000, "test_done");
+      await client.closeEvent;
+    } finally {
+      await close();
+    }
+  });
+
+  test("handles CRLF fragmented SSE and [DONE] without poisoning the connection", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      harness.setResponseHandler(async ({ res, body }) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.setHeader("cache-control", "no-cache, no-transform");
+        if (body.input === "done-only") {
+          res.write("data: [DONE]\r\n\r\n");
+          res.end();
+          return;
+        }
+        for (const event of responseEvents("resp_crlf_fragmented", true)) {
+          const chunk = crlfEventChunk(event);
+          res.write(chunk.slice(0, 7));
+          await sleep(2);
+          res.write(chunk.slice(7));
+        }
+        res.end();
+      });
+
+      const client = connectRawWsClient(harness.port);
+      await client.opened;
+      sendResponseCreate(client, { model, input: "crlf-fragmented" });
+      await client.nextMessage(
+        completedResponse("resp_crlf_fragmented"),
+        3000,
+        "CRLF fragmented SSE did not complete"
+      );
+
+      sendResponseCreate(client, { model, input: "done-only" });
+      const doneOnly = await client.nextMessage(
+        (message) =>
+          wsMessageType(message) === "response.completed" &&
+          isRecord(message) &&
+          message.response === null,
+        3000,
+        "[DONE] fallback did not synthesize response.completed"
+      );
+      expect(doneOnly).toMatchObject({ type: "response.completed", response: null });
+      expect(client.ws.readyState).toBe(WebSocket.OPEN);
+      client.ws.close(1000, "test_done");
+      await client.closeEvent;
+    } finally {
+      await close();
+    }
+  });
+
+  test("sends a diagnostic error and close handshake when SSE ends without a terminal event", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      harness.setResponseHandler(({ res }) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.write(eventChunk({ type: "response.created", response: { id: "resp_no_terminal" } }));
+        res.end();
+      });
+
+      const client = connectRawWsClient(harness.port);
+      await client.opened;
+      sendResponseCreate(client, { model, input: "no-terminal" });
+      await client.nextMessage(
+        errorEvent("stream_ended_without_terminal"),
+        3000,
+        "missing terminal event did not surface as error"
+      );
+      const closeEvent = await client.closeEvent;
+      expect(closeEvent).toEqual({ code: 1011, reason: "stream_ended_without_terminal" });
+    } finally {
+      await close();
+    }
+  });
+
+  test("sends an error frame before closing when the internal response hard-drops", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      harness.setResponseHandler(({ res }) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.write(eventChunk({ type: "response.created", response: { id: "resp_hard_drop" } }));
+        setTimeout(() => res.socket?.destroy(), 10);
+      });
+
+      const client = connectRawWsClient(harness.port);
+      await client.opened;
+      sendResponseCreate(client, { model, input: "hard-drop" });
+      await client.nextMessage(
+        (message) =>
+          wsMessageType(message) === "error" &&
+          ["internal_response_aborted", "internal_response_closed"].includes(
+            wsErrorCode(message) ?? ""
+          ),
+        3000,
+        "hard-dropped response did not surface as a diagnostic error"
+      );
+      const closeEvent = await client.closeEvent;
+      expect(closeEvent.code).toBe(1011);
+      expect(["internal_response_aborted", "internal_response_closed"]).toContain(
+        closeEvent.reason
+      );
+    } finally {
+      await close();
+    }
+  });
+
+  test("aborts the in-flight internal request and drops queued frames when a client vanishes", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      const firstResponseClosed = deferred<void>();
+      harness.setResponseHandler(({ res }) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.write(":\n\n");
+        res.once("close", () => firstResponseClosed.resolve());
+      });
+
+      const client = connectRawWsClient(harness.port);
+      await client.opened;
+      sendResponseCreate(client, { model, input: "in-flight" });
+      await withTimeout(
+        harness.nextInternalRequest(),
+        3000,
+        "first internal request did not start"
+      );
+      for (let i = 0; i < 8; i += 1) {
+        sendResponseCreate(client, { model, input: `queued-${i}` });
+      }
+      client.ws.terminate();
+
+      await withTimeout(
+        firstResponseClosed.promise,
+        3000,
+        "client disappearance did not close the in-flight internal response"
+      );
+      await client.closeEvent;
+      expect(cchInternalRequests(harness.events)).toHaveLength(1);
+    } finally {
+      await close();
+    }
+  });
+
+  test("strips forged x-cch headers and injects only trusted tunnel markers", async () => {
+    const secret = "trusted-cch-ws-e2e-secret";
+    const { harness, close } = await startIsolatedCchEdgeHarness(secret);
+    try {
+      harness.setResponseHandler(({ req, res, sessionId }) => {
+        expect(req.headers["x-cch-client-transport"]).toBe("websocket");
+        expect(req.headers["x-cch-responses-ws-forward"]).toBe("1");
+        expect(req.headers["x-cch-internal-secret"]).toBe(secret);
+        expect(sessionId).not.toBe("forged-session");
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.write(
+          eventChunk({
+            type: "response.completed",
+            response: responseEnvelope("resp_header_strip", true),
+          })
+        );
+        res.end();
+      });
+
+      const client = connectRawWsClient(harness.port, {
+        headers: {
+          "x-cch-client-transport": "http",
+          "x-cch-internal-secret": "forged-secret",
+          "x-cch-responses-ws-forward": "forged-forward",
+          "x-cch-responses-ws-session": "forged-session",
+        },
+      });
+      await client.opened;
+      sendResponseCreate(client, { model, input: "headers" });
+      await client.nextMessage(
+        completedResponse("resp_header_strip"),
+        3000,
+        "trusted tunnel header test did not complete"
+      );
+      client.ws.close(1000, "test_done");
+      await client.closeEvent;
+    } finally {
+      await close();
+    }
+  });
+
+  test("keeps large requests under the payload cap and removes transport-only fields", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      const largeInput = "x".repeat(512 * 1024);
+      harness.setResponseHandler(({ body, res }) => {
+        expect(body.model).toBe(model);
+        expect(body.stream).toBe(true);
+        expect(body.background).toBeUndefined();
+        expect(typeof body.input === "string" ? body.input.length : 0).toBe(largeInput.length);
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.write(
+          eventChunk({
+            type: "response.completed",
+            response: responseEnvelope("resp_large_payload", true),
+          })
+        );
+        res.end();
+      });
+
+      const client = connectRawWsClient(harness.port, {
+        path: `/v1/responses?model=${encodeURIComponent(model)}&api_key=should_not_matter`,
+      });
+      await client.opened;
+      sendResponseCreate(client, { input: largeInput, background: true });
+      await client.nextMessage(
+        completedResponse("resp_large_payload"),
+        5000,
+        "large request did not complete"
+      );
+      client.ws.close(1000, "test_done");
+      await client.closeEvent;
+    } finally {
+      await close();
+    }
+  });
+
+  test("reports recoverable client protocol mistakes without poisoning later turns", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      harness.setResponseHandler(({ res }) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.write(
+          eventChunk({
+            type: "response.completed",
+            response: responseEnvelope("resp_after_bad_frame", true),
+          })
+        );
+        res.end();
+      });
+
+      const client = connectRawWsClient(harness.port);
+      await client.opened;
+      client.ws.send("{not-json");
+      await client.nextMessage(errorEvent("invalid_json"), 3000, "invalid JSON was not reported");
+      client.ws.send(JSON.stringify({ type: "session.update" }));
+      await client.nextMessage(
+        errorEvent("unsupported_event_type"),
+        3000,
+        "unsupported event type was not reported"
+      );
+      sendResponseCreate(client, { model, input: "after-bad-frame" });
+      await client.nextMessage(
+        completedResponse("resp_after_bad_frame"),
+        3000,
+        "valid turn after recoverable protocol mistakes did not complete"
+      );
+      client.ws.close(1000, "test_done");
+      await client.closeEvent;
+    } finally {
+      await close();
+    }
+  });
+
+  test("closes with policy diagnostics on binary frames and queue overflow", async () => {
+    const { harness, close } = await startIsolatedCchEdgeHarness();
+    try {
+      harness.setResponseHandler(({ res }) => {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream");
+        res.write(":\n\n");
+      });
+
+      const binaryClient = connectRawWsClient(harness.port);
+      await binaryClient.opened;
+      binaryClient.ws.send(Buffer.from("binary"), { binary: true });
+      await binaryClient.nextMessage(
+        errorEvent("invalid_frame_type"),
+        3000,
+        "binary frame was not reported"
+      );
+      expect(await binaryClient.closeEvent).toEqual({
+        code: 1003,
+        reason: "binary_not_supported",
+      });
+
+      const overflowClient = connectRawWsClient(harness.port);
+      await overflowClient.opened;
+      sendResponseCreate(overflowClient, { model, input: "first" });
+      await withTimeout(
+        harness.nextInternalRequest(),
+        3000,
+        "overflow baseline request did not start"
+      );
+      for (let i = 0; i < 70; i += 1) {
+        sendResponseCreate(overflowClient, { model, input: `overflow-${i}` });
+      }
+      await overflowClient.nextMessage(
+        errorEvent("too_many_requests"),
+        3000,
+        "queue overflow was not reported"
+      );
+      expect(await overflowClient.closeEvent).toEqual({
+        code: 1008,
+        reason: "too_many_requests",
+      });
+    } finally {
+      await close();
+    }
+  });
+});
+
 run("Codex CLI Responses transport probe", () => {
   test("records whether Codex reaches /v1/responses over HTTP or WebSocket", async () => {
     const expectedTransport = (process.env.CCH_CODEX_E2E_EXPECT_TRANSPORT || "any").toLowerCase();
@@ -829,14 +1386,11 @@ faultRun("Codex CLI through CCH WebSocket fault injection", () => {
   beforeAll(async () => {
     invocation = resolveCodexInvocation();
     const port = await pickFreePort();
-    cchFaultEnv = {
-      PORT: process.env.PORT,
-      HOSTNAME: process.env.HOSTNAME,
-      NODE_ENV: process.env.NODE_ENV,
-    };
+    cchFaultEnv = captureEnv();
     process.env.PORT = String(port);
     process.env.HOSTNAME = "127.0.0.1";
     process.env.NODE_ENV = "test";
+    process.env.CCH_RESPONSES_WS_INTERNAL_SECRET = `cch-ws-fault-secret-${port}`;
 
     const serverPath = requireFromHere.resolve("../../server.js");
     delete requireFromHere.cache[serverPath];
@@ -850,9 +1404,7 @@ faultRun("Codex CLI through CCH WebSocket fault injection", () => {
       cchFaultHarness = null;
     }
     if (cchFaultEnv) {
-      restoreEnvVar("PORT", cchFaultEnv.PORT);
-      restoreEnvVar("HOSTNAME", cchFaultEnv.HOSTNAME);
-      restoreEnvVar("NODE_ENV", cchFaultEnv.NODE_ENV);
+      restoreEnv(cchFaultEnv);
       cchFaultEnv = null;
     }
   });
