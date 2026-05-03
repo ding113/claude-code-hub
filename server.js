@@ -191,11 +191,7 @@ async function handleWebSocketConnection(ws, req) {
 
     if (typeof raw !== "string") {
       emitErrorEvent(ws, "invalid_frame_type", "Only text WebSocket frames are supported");
-      try {
-        ws.close(1003, "binary_not_supported");
-      } catch {
-        // ignore
-      }
+      requestClose(1003, "binary_not_supported");
       return;
     }
 
@@ -270,11 +266,7 @@ async function handleWebSocketConnection(ws, req) {
             error: String(err && err.message ? err.message : err),
           });
           emitErrorEvent(ws, "internal_error", "Failed to process queued request");
-          try {
-            ws.close(1011, "internal_error");
-          } catch {
-            // ignore
-          }
+          requestClose(1011, "internal_error");
         });
       }
     }
@@ -284,11 +276,7 @@ async function handleWebSocketConnection(ws, req) {
     if (closed) return;
     if (isBinary) {
       emitErrorEvent(ws, "invalid_frame_type", "Only text WebSocket frames are supported");
-      try {
-        ws.close(1003, "binary_not_supported");
-      } catch {
-        // ignore
-      }
+      requestClose(1003, "binary_not_supported");
       return;
     }
     const text = data.toString("utf8");
@@ -300,11 +288,7 @@ async function handleWebSocketConnection(ws, req) {
         attemptedFrameSize: size,
       });
       emitErrorEvent(ws, "too_many_requests", "Pending frame limit exceeded");
-      try {
-        ws.close(1008, "too_many_requests");
-      } catch {
-        // ignore
-      }
+      requestClose(1008, "too_many_requests");
       return;
     }
     pending.push(text);
@@ -314,11 +298,7 @@ async function handleWebSocketConnection(ws, req) {
         error: String(err && err.message ? err.message : err),
       });
       emitErrorEvent(ws, "internal_error", "Failed to process request");
-      try {
-        ws.close(1011, "internal_error");
-      } catch {
-        // ignore
-      }
+      requestClose(1011, "internal_error");
     });
   });
 }

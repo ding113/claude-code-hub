@@ -28,6 +28,19 @@ type ServerJsModule = {
 
 let serverModule: ServerJsModule;
 let harness: ServerHarness | null = null;
+let originalEnv: {
+  PORT: string | undefined;
+  HOSTNAME: string | undefined;
+  NODE_ENV: string | undefined;
+};
+
+function restoreEnvVar(name: "PORT" | "HOSTNAME" | "NODE_ENV", value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
 
 async function pickFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -74,7 +87,18 @@ async function startHarness(port: number): Promise<ServerHarness> {
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
-      void serverModule.handleWebSocketConnection(ws as unknown as WebSocket, req);
+      serverModule.handleWebSocketConnection(ws as unknown as WebSocket, req).catch((err) => {
+        process.stderr.write(
+          `[server-ws-close-handshake] handleWebSocketConnection failed: ${
+            err instanceof Error ? err.stack || err.message : String(err)
+          }\n`
+        );
+        try {
+          ws.close(1011, "internal_error");
+        } catch {
+          ws.terminate();
+        }
+      });
     });
   });
 
@@ -119,6 +143,11 @@ function connectClient(port: number) {
 describe("server.js WebSocket close-handshake (issue #1150)", () => {
   beforeAll(async () => {
     const port = await pickFreePort();
+    originalEnv = {
+      PORT: process.env.PORT,
+      HOSTNAME: process.env.HOSTNAME,
+      NODE_ENV: process.env.NODE_ENV,
+    };
     process.env.PORT = String(port);
     process.env.HOSTNAME = "127.0.0.1";
     process.env.NODE_ENV = "test";
@@ -133,6 +162,9 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
       await harness.close();
       harness = null;
     }
+    restoreEnvVar("PORT", originalEnv.PORT);
+    restoreEnvVar("HOSTNAME", originalEnv.HOSTNAME);
+    restoreEnvVar("NODE_ENV", originalEnv.NODE_ENV);
   });
 
   it("sends close(1000) after delivering response.completed", async () => {
@@ -294,6 +326,68 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     expect(close.reason).toBe("response_completed");
     // Exactly one upstream call must have happened — the second frame is
     // dropped synchronously when we initiate the close.
+    expect(upstreamCalls).toBe(1);
+  });
+
+  it("drops any pipelined frame after a binary protocol close", async () => {
+    if (!harness) throw new Error("harness not initialized");
+    let upstreamCalls = 0;
+    harness.setSseHandler((_req, res) => {
+      upstreamCalls += 1;
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream");
+      res.write(
+        `data: ${JSON.stringify({
+          type: "response.completed",
+          response: { id: "should_not_run" },
+        })}\n\n`
+      );
+      res.end();
+    });
+
+    const client = connectClient(harness.port);
+    await client.opened;
+    client.ws.send(Buffer.from("not a text frame"), { binary: true });
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "queued" }));
+
+    const close = await client.closeEvent;
+    expect(close.code).toBe(1003);
+    expect(close.reason).toBe("binary_not_supported");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(upstreamCalls).toBe(0);
+  });
+
+  it("clears the pending queue synchronously on overflow close", async () => {
+    if (!harness) throw new Error("harness not initialized");
+    let upstreamCalls = 0;
+    harness.setSseHandler((_req, res) => {
+      upstreamCalls += 1;
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream");
+      setTimeout(() => {
+        res.write(
+          `data: ${JSON.stringify({
+            type: "response.completed",
+            response: { id: `r_${upstreamCalls}` },
+          })}\n\n`
+        );
+        res.end();
+      }, 100);
+    });
+
+    const client = connectClient(harness.port);
+    await client.opened;
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5", input: "first" }));
+    for (let i = 0; i < 70; i += 1) {
+      client.ws.send(
+        JSON.stringify({ type: "response.create", model: "gpt-5", input: `queued-${i}` })
+      );
+    }
+
+    const close = await client.closeEvent;
+    expect(close.code).toBe(1008);
+    expect(close.reason).toBe("too_many_requests");
+    await new Promise((resolve) => setTimeout(resolve, 150));
     expect(upstreamCalls).toBe(1);
   });
 });
