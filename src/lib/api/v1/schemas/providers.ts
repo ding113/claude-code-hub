@@ -123,10 +123,25 @@ export const ProviderSummarySchema = z
       .string()
       .nullable()
       .describe("Gemini Google Search preference."),
-    todayTotalCostUsd: z.string().optional().describe("Optional today's total cost in USD."),
-    todayCallCount: z.number().int().optional().describe("Optional today's call count."),
-    lastCallTime: NullableStringSchema.optional().describe("Optional last call time."),
-    lastCallModel: NullableStringSchema.optional().describe("Optional last call model."),
+    todayTotalCostUsd: z
+      .string()
+      .optional()
+      .describe(
+        "Deprecated. Mirrors statistics.todayCost when include=statistics is requested; otherwise defaults to '0'."
+      ),
+    todayCallCount: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "Deprecated. Mirrors statistics.todayCalls when include=statistics is requested; otherwise defaults to 0."
+      ),
+    lastCallTime: NullableStringSchema.optional().describe(
+      "Deprecated. Mirrors statistics.lastCallTime when include=statistics is requested; otherwise null."
+    ),
+    lastCallModel: NullableStringSchema.optional().describe(
+      "Deprecated. Mirrors statistics.lastCallModel when include=statistics is requested; otherwise null."
+    ),
     statistics: z
       .object({
         todayCost: z.string().describe("Today's total cost in USD."),

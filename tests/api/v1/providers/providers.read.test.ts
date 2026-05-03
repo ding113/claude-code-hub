@@ -280,12 +280,6 @@ describe("v1 providers read endpoints", () => {
         lastCallTime: "2026-05-03T10:00:00.000Z",
         lastCallModel: "claude-sonnet-4-6",
       },
-      3: {
-        todayCost: "0.50",
-        todayCalls: 1,
-        lastCallTime: null,
-        lastCallModel: null,
-      },
     });
 
     const { response, json } = await callV1Route({
@@ -295,19 +289,34 @@ describe("v1 providers read endpoints", () => {
     });
 
     expect(response.status).toBe(200);
-    const items = (json as { items: Array<{ id: number; statistics?: unknown }> }).items;
-    expect(items.find((i) => i.id === 1)?.statistics).toEqual({
+    const items = (
+      json as {
+        items: Array<{
+          id: number;
+          statistics?: unknown;
+          todayTotalCostUsd?: string;
+          todayCallCount?: number;
+          lastCallTime?: string | null;
+          lastCallModel?: string | null;
+        }>;
+      }
+    ).items;
+
+    const matched = items.find((i) => i.id === 1);
+    expect(matched?.statistics).toEqual({
       todayCost: "12.34",
       todayCalls: 5,
       lastCallTime: "2026-05-03T10:00:00.000Z",
       lastCallModel: "claude-sonnet-4-6",
     });
-    expect(items.find((i) => i.id === 3)?.statistics).toEqual({
-      todayCost: "0.50",
-      todayCalls: 1,
-      lastCallTime: null,
-      lastCallModel: null,
-    });
+    expect(matched?.todayTotalCostUsd).toBe("12.34");
+    expect(matched?.todayCallCount).toBe(5);
+    expect(matched?.lastCallTime).toBe("2026-05-03T10:00:00.000Z");
+    expect(matched?.lastCallModel).toBe("claude-sonnet-4-6");
+
+    const unmatched = items.find((i) => i.id === 3);
+    expect(unmatched).not.toHaveProperty("statistics");
+
     expect(getProviderStatisticsAsyncMock).toHaveBeenCalledTimes(1);
   });
 
