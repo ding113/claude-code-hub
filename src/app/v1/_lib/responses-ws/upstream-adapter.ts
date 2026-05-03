@@ -352,11 +352,14 @@ export async function tryResponsesWebsocketUpstream(options: {
   if (sessionId) {
     const existing = persistentSessions.get(sessionId) ?? null;
     if (existing) {
-      if (
-        existing.fingerprint === fingerprint &&
-        !existing.active &&
-        !isWsClosingOrClosed(existing.ws)
-      ) {
+      if (existing.active && !isWsClosingOrClosed(existing.ws)) {
+        logger.warn(
+          "[ResponsesWsAdapter] active upstream WS session is busy; opening a fresh one",
+          {
+            sessionId,
+          }
+        );
+      } else if (existing.fingerprint === fingerprint && !isWsClosingOrClosed(existing.ws)) {
         persistentEntry = existing;
         persistentEntry.active = true;
         persistentEntry.lastUsedAt = Date.now();
@@ -619,10 +622,16 @@ export async function tryResponsesWebsocketUpstream(options: {
 
   const finishRequest = (options?: { closeCode?: number; forgetSession?: boolean }) => {
     cleanupRequestListeners();
+    let closeDetachedEntry = false;
     if (persistentEntry) {
       persistentEntry.active = false;
       persistentEntry.lastUsedAt = Date.now();
-      if (!isWsClosingOrClosed(persistentEntry.ws)) {
+      const retainedForReuse = sessionId
+        ? persistentSessions.get(sessionId) === persistentEntry
+        : false;
+      if (!retainedForReuse) {
+        closeDetachedEntry = !options?.closeCode;
+      } else if (!isWsClosingOrClosed(persistentEntry.ws)) {
         armPersistentIdleTimer(persistentEntry);
       }
     }
@@ -631,6 +640,8 @@ export async function tryResponsesWebsocketUpstream(options: {
     }
     if (options?.closeCode) {
       closeAndForget(options.closeCode);
+    } else if (closeDetachedEntry) {
+      closeWs(ws, 1000);
     }
   };
 

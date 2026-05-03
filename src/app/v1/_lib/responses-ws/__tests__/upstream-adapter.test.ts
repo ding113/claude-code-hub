@@ -545,6 +545,88 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(upstreamCloseCode).toBe(1000);
   });
 
+  it("does not close an active retained session when a concurrent same-session request opens a fresh upstream WS", async () => {
+    let connectionCount = 0;
+    let firstUpstreamClosed = false;
+    let firstUpstreamCloseCode: number | null = null;
+    let resolveFirstClosed: (() => void) | null = null;
+    const firstClosed = new Promise<void>((resolve) => {
+      resolveFirstClosed = resolve;
+    });
+    let releaseFirstTerminal!: () => void;
+    const firstTerminalReleased = new Promise<void>((resolve) => {
+      releaseFirstTerminal = resolve;
+    });
+
+    server = await startMockServer((socket) => {
+      connectionCount += 1;
+      const connectionIndex = connectionCount;
+      socket.on("close", (code) => {
+        if (connectionIndex === 1) {
+          firstUpstreamClosed = true;
+          firstUpstreamCloseCode = code;
+          resolveFirstClosed?.();
+        }
+      });
+      socket.on("message", () => {
+        if (connectionIndex === 1) {
+          socket.send(
+            JSON.stringify({ type: "response.created", response: { id: "resp_active" } })
+          );
+          firstTerminalReleased.then(() => {
+            if (socket.readyState === 1) {
+              socket.send(
+                JSON.stringify({ type: "response.completed", response: { id: "resp_active" } })
+              );
+            }
+          });
+          return;
+        }
+
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_fresh" } }));
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_fresh" } }));
+      });
+    });
+
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "client-ws-session-active-race",
+    };
+
+    const first = await tryResponsesWebsocketUpstream({
+      ...common,
+      body: { model: "gpt-5.4", input: "first" },
+    });
+    expect("response" in first).toBe(true);
+    if (!("response" in first)) return;
+    expect(first.reused).toBe(false);
+
+    const second = await tryResponsesWebsocketUpstream({
+      ...common,
+      body: { model: "gpt-5.4", input: "second" },
+    });
+    expect("response" in second).toBe(true);
+    if (!("response" in second)) return;
+    expect(second.reused).toBe(false);
+
+    expect(await collectSseBody(second.response)).toContain("resp_fresh");
+    expect(connectionCount).toBe(2);
+    expect(firstUpstreamClosed).toBe(false);
+    expect(getResponsesWsSessionCountForTests()).toBe(1);
+
+    releaseFirstTerminal();
+    expect(await collectSseBody(first.response)).toContain("resp_active");
+
+    await withTimeout(
+      firstClosed,
+      1_000,
+      "detached active upstream WS did not close after terminal"
+    );
+    expect(firstUpstreamCloseCode).toBe(1000);
+  });
+
   it("resolves and closes upstream when aborted before the first WS event", async () => {
     let resolveMessageReceived: (() => void) | null = null;
     const messageReceived = new Promise<void>((resolve) => {
