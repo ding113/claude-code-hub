@@ -298,6 +298,42 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     expect(errorEvent?.error.code).toBe("stream_ended_without_terminal");
   });
 
+  it("sends close(1011) when the internal HTTP response is destroyed mid-stream", async () => {
+    if (!harness) throw new Error("harness not initialized");
+    harness.setSseHandler((_req, res) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream");
+      res.write(
+        `data: ${JSON.stringify({ type: "response.created", response: { id: "r_destroy" } })}\n\n`
+      );
+      setTimeout(() => {
+        res.socket?.destroy();
+      }, 10);
+    });
+
+    const client = connectClient(harness.port);
+    await client.opened;
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
+
+    const close = await client.closeEvent;
+    expect(close.code).toBe(1011);
+    expect([
+      "internal_response_aborted",
+      "internal_response_closed",
+      "internal_response_error",
+    ]).toContain(close.reason);
+    const errorEvent = client.messages.find(
+      (m): m is { type: string; error: { code: string } } =>
+        typeof m === "object" && m !== null && (m as { type?: unknown }).type === "error"
+    );
+    expect(errorEvent).toBeTruthy();
+    expect([
+      "internal_response_aborted",
+      "internal_response_closed",
+      "internal_response_error",
+    ]).toContain(errorEvent?.error.code);
+  });
+
   it("forwards a non-stream HTTP error without closing the persistent client socket", async () => {
     if (!harness) throw new Error("harness not initialized");
     harness.setSseHandler((_req, res) => {

@@ -81,7 +81,8 @@ const MAX_BUFFERED_QUEUE_BYTES = 8 * 1024 * 1024; // 8 MiB
 // server.js calls cleanup immediately on client WS close; this timer is only a
 // leak backstop if a process-level close notification is missed.
 const PERSISTENT_SESSION_IDLE_TIMEOUT_MS = 65 * 60 * 1000;
-const PERSISTENT_SESSION_MAX_ENTRIES = 512;
+const DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES = 512;
+let persistentSessionMaxEntries = DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES;
 
 // HTTP statuses on the upgrade handshake that we treat as a definitive
 // "this endpoint does not speak WebSocket" signal and cache as unsupported.
@@ -238,12 +239,12 @@ function armPersistentIdleTimer(entry: PersistentWsEntry): void {
 }
 
 function prunePersistentSessions(): void {
-  if (persistentSessions.size < PERSISTENT_SESSION_MAX_ENTRIES) return;
+  if (persistentSessions.size < persistentSessionMaxEntries) return;
 
   const idleEntries = [...persistentSessions.values()]
     .filter((entry) => !entry.active)
     .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
-  const overflow = persistentSessions.size - PERSISTENT_SESSION_MAX_ENTRIES + 1;
+  const overflow = persistentSessions.size - persistentSessionMaxEntries + 1;
   for (const entry of idleEntries.slice(0, overflow)) {
     logger.warn("[ResponsesWsAdapter] pruning idle upstream WS session", {
       sessionId: entry.sessionId,
@@ -256,8 +257,16 @@ function registerPersistentSession(
   sessionId: string,
   fingerprint: string,
   ws: WebSocketType
-): PersistentWsEntry {
+): PersistentWsEntry | null {
   prunePersistentSessions();
+  if (persistentSessions.size >= persistentSessionMaxEntries) {
+    logger.warn("[ResponsesWsAdapter] upstream WS session cap reached; not retaining session", {
+      sessionId,
+      maxEntries: persistentSessionMaxEntries,
+    });
+    return null;
+  }
+
   const entry: PersistentWsEntry = {
     sessionId,
     fingerprint,
@@ -291,6 +300,16 @@ export function clearResponsesWsSessionsForTests(): void {
     closePersistentEntry(entry, 1000);
   }
   persistentSessions.clear();
+  persistentSessionMaxEntries = DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES;
+}
+
+export function setResponsesWsSessionMaxEntriesForTests(maxEntries: number): void {
+  const normalized = Math.floor(maxEntries);
+  persistentSessionMaxEntries = Number.isFinite(normalized) ? Math.max(0, normalized) : 0;
+}
+
+export function getResponsesWsSessionCountForTests(): number {
+  return persistentSessions.size;
 }
 
 globalThis.__cchCleanupResponsesWsSession = cleanupResponsesWsSession;
@@ -576,6 +595,13 @@ export async function tryResponsesWebsocketUpstream(options: {
     }
   };
 
+  const resolveMessageWaiter = () => {
+    if (!queueResolver) return;
+    const resolve = queueResolver;
+    queueResolver = null;
+    resolve(null);
+  };
+
   const cleanupRequestListeners = () => {
     ws.off("message", onMessage);
     ws.off("error", onError);
@@ -609,6 +635,16 @@ export async function tryResponsesWebsocketUpstream(options: {
   };
 
   function onAbort() {
+    socketClosed = true;
+    if (!firstEventSeen) {
+      finishOpen({
+        ok: false,
+        reason: "ws_error_pre_first_event",
+        message: "aborted before first upstream WebSocket event",
+        cacheableAsUnsupported: false,
+      });
+    }
+    resolveMessageWaiter();
     finishRequest({ closeCode: 1000, forgetSession: true });
   }
 
@@ -622,6 +658,9 @@ export async function tryResponsesWebsocketUpstream(options: {
 
   if (options.abortSignal) {
     options.abortSignal.addEventListener("abort", onAbort, { once: true });
+    if (options.abortSignal.aborted) {
+      onAbort();
+    }
   }
 
   // Bound the wait for the first event so a silent upstream cannot pin a
@@ -708,7 +747,7 @@ export async function tryResponsesWebsocketUpstream(options: {
 
       const completeTerminal = () => {
         controller.close();
-        if (sessionId && !terminalEventShouldClosePersistent) {
+        if (sessionId && persistentEntry && !terminalEventShouldClosePersistent) {
           finishRequest();
         } else {
           finishRequest({ closeCode: 1000, forgetSession: true });

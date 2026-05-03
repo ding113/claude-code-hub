@@ -5,6 +5,8 @@ import type { Provider } from "@/types/provider";
 import {
   clearResponsesWsSessionsForTests,
   cleanupResponsesWsSession,
+  getResponsesWsSessionCountForTests,
+  setResponsesWsSessionMaxEntriesForTests,
   tryResponsesWebsocketUpstream,
 } from "../upstream-adapter";
 import {
@@ -68,6 +70,20 @@ async function collectSseBody(response: Response): Promise<string> {
   }
   out += decoder.decode();
   return out;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 describe("tryResponsesWebsocketUpstream", () => {
@@ -527,6 +543,107 @@ describe("tryResponsesWebsocketUpstream", () => {
     await closed;
 
     expect(upstreamCloseCode).toBe(1000);
+  });
+
+  it("resolves and closes upstream when aborted before the first WS event", async () => {
+    let resolveMessageReceived: (() => void) | null = null;
+    const messageReceived = new Promise<void>((resolve) => {
+      resolveMessageReceived = resolve;
+    });
+    let upstreamCloseCode: number | null = null;
+    let resolveClosed: (() => void) | null = null;
+    const upstreamClosed = new Promise<void>((resolve) => {
+      resolveClosed = resolve;
+    });
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        resolveMessageReceived?.();
+      });
+      socket.on("close", (code) => {
+        upstreamCloseCode = code;
+        resolveClosed?.();
+      });
+    });
+
+    const abortController = new AbortController();
+    const resultPromise = tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "client-ws-session-aborted-before-first-event",
+      abortSignal: abortController.signal,
+      body: { model: "gpt-5.4", input: "hi" },
+    });
+
+    await withTimeout(messageReceived, 1_000, "upstream did not receive the WS request frame");
+    abortController.abort();
+
+    const result = await withTimeout(
+      resultPromise,
+      1_000,
+      "upstream WS attempt hung after abort before first event"
+    );
+    await withTimeout(upstreamClosed, 1_000, "upstream WS did not close after abort");
+
+    expect("failed" in result).toBe(true);
+    if (!("failed" in result)) return;
+    expect(result.reason).toBe("ws_error_pre_first_event");
+    expect(result.message).toContain("aborted before first upstream WebSocket event");
+    expect(result.cacheableAsUnsupported).toBe(false);
+    expect(upstreamCloseCode).toBe(1000);
+  });
+
+  it("keeps the persistent session map bounded when every retained session is active", async () => {
+    setResponsesWsSessionMaxEntriesForTests(1);
+    let connectionCount = 0;
+    let secondUpstreamCloseCode: number | null = null;
+    let resolveSecondClosed: (() => void) | null = null;
+    const secondClosed = new Promise<void>((resolve) => {
+      resolveSecondClosed = resolve;
+    });
+    server = await startMockServer((socket) => {
+      connectionCount += 1;
+      const connectionIndex = connectionCount;
+      socket.on("close", (code) => {
+        if (connectionIndex === 2) {
+          secondUpstreamCloseCode = code;
+          resolveSecondClosed?.();
+        }
+      });
+      socket.on("message", () => {
+        const responseId = `resp_cap_${connectionIndex}`;
+        socket.send(JSON.stringify({ type: "response.created", response: { id: responseId } }));
+        if (connectionIndex > 1) {
+          socket.send(JSON.stringify({ type: "response.completed", response: { id: responseId } }));
+        }
+      });
+    });
+
+    const first = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "client-ws-session-cap-active-1",
+      body: { model: "gpt-5.4", input: "first" },
+    });
+    expect("response" in first).toBe(true);
+    if (!("response" in first)) return;
+    expect(getResponsesWsSessionCountForTests()).toBe(1);
+
+    const second = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "client-ws-session-cap-active-2",
+      body: { model: "gpt-5.4", input: "second" },
+    });
+    expect("response" in second).toBe(true);
+    if (!("response" in second)) return;
+    await collectSseBody(second.response);
+    await withTimeout(secondClosed, 1_000, "unretained upstream WS did not close after terminal");
+
+    expect(getResponsesWsSessionCountForTests()).toBe(1);
+    expect(secondUpstreamCloseCode).toBe(1000);
   });
 
   it("classifies HTTP 426 / 404 / 501 upgrade failures as cacheable-unsupported", async () => {

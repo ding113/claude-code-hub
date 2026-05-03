@@ -1,9 +1,10 @@
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import http from "node:http";
 import { dirname, join } from "node:path";
 import process from "node:process";
-import { describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import WebSocket, { WebSocketServer } from "ws";
 
 /**
@@ -19,6 +20,10 @@ import WebSocket, { WebSocketServer } from "ws";
  * assertion is. Use `websocket` when validating a Codex build that should speak
  * Responses WebSocket; use `any` to record the actual transport without making
  * the test version-sensitive.
+ *
+ * Fault-injection probes are also opt-in:
+ *   PowerShell:
+ *     $env:CCH_CODEX_E2E="1"; $env:CCH_CODEX_E2E_FAULTS="1"; npx vitest run --config tests/configs/e2e.config.ts tests/e2e/responses-ws-codex-cli-transport.test.ts
  */
 
 type ProbeEvent =
@@ -44,6 +49,19 @@ type CodexResult = {
   stderr: string;
 };
 
+type CodexRunOptions = {
+  prompt?: string;
+  timeoutMs?: number;
+  extraConfig?: string[];
+};
+
+type RunningCodexProcess = {
+  child: ReturnType<typeof spawn>;
+  result: Promise<CodexResult>;
+  stdout: () => string;
+  stderr: () => string;
+};
+
 type ProbeServer = {
   port: number;
   events: ProbeEvent[];
@@ -58,10 +76,13 @@ type CodexInvocation = {
 
 const shouldRunCodexE2e = process.env.CCH_CODEX_E2E === "1";
 const run = shouldRunCodexE2e ? describe : describe.skip;
+const shouldRunFaultE2e = shouldRunCodexE2e && process.env.CCH_CODEX_E2E_FAULTS === "1";
+const faultRun = shouldRunFaultE2e ? describe : describe.skip;
 const providerName = "local-cch-ws-e2e";
 const model = process.env.CCH_CODEX_E2E_MODEL || "gpt-5.4";
 const responseText = "E2E_TRANSPORT_OK";
 const defaultFeatures = "responses_websockets,responses_websockets_v2";
+const requireFromHere = createRequire(import.meta.url);
 
 function responseEnvelope(responseId: string, includeOutput: boolean) {
   return {
@@ -317,7 +338,11 @@ function featureArgs() {
   return features.flatMap((feature) => ["--enable", feature]);
 }
 
-function runCodex(port: number, invocation: CodexInvocation): Promise<CodexResult> {
+function spawnCodex(
+  port: number,
+  invocation: CodexInvocation,
+  options: CodexRunOptions = {}
+): RunningCodexProcess {
   const baseUrl = `http://127.0.0.1:${port}/v1`;
   const args = [
     ...invocation.argsPrefix,
@@ -348,37 +373,38 @@ function runCodex(port: number, invocation: CodexInvocation): Promise<CodexResul
     `model_providers.${providerName}.supports_websockets=true`,
     "-c",
     `model_providers.${providerName}.requires_openai_auth=true`,
+    ...(options.extraConfig ?? []).flatMap((config) => ["-c", config]),
     "-C",
     process.cwd(),
-    `Reply exactly ${responseText} and do not run tools.`,
+    options.prompt ?? `Reply exactly ${responseText} and do not run tools.`,
   ];
 
-  return new Promise((resolve) => {
-    const child = spawn(invocation.command, args, {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY || "sk-cch-ws-e2e-placeholder",
-        NO_COLOR: "1",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
+  const child = spawn(invocation.command, args, {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY || "sk-cch-ws-e2e-placeholder",
+      NO_COLOR: "1",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
 
-    let stdout = "";
-    let stderr = "";
+  let stdout = "";
+  let stderr = "";
+  const result = new Promise<CodexResult>((resolve) => {
     let settled = false;
-    const finish = (result: CodexResult) => {
+    const finish = (finished: CodexResult) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      resolve(result);
+      resolve(finished);
     };
     const timeout = setTimeout(() => {
       stderr += "codex exec timed out";
       child.kill();
       finish({ code: -2, stdout, stderr });
-    }, 60_000);
+    }, options.timeoutMs ?? 60_000);
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString("utf8");
@@ -392,6 +418,21 @@ function runCodex(port: number, invocation: CodexInvocation): Promise<CodexResul
     });
     child.on("close", (code) => finish({ code, stdout, stderr }));
   });
+
+  return {
+    child,
+    result,
+    stdout: () => stdout,
+    stderr: () => stderr,
+  };
+}
+
+function runCodex(
+  port: number,
+  invocation: CodexInvocation,
+  options: CodexRunOptions = {}
+): Promise<CodexResult> {
+  return spawnCodex(port, invocation, options).result;
 }
 
 function isResponsesPath(path: string | undefined) {
@@ -411,6 +452,314 @@ function observedTransport(events: ProbeEvent[]) {
   if (sawResponsesWs) return "websocket";
   if (events.some((event) => event.type === "http_responses")) return "http";
   return "none";
+}
+
+type ServerJsModule = {
+  handleWebSocketConnection: (ws: WebSocket, req: http.IncomingMessage) => Promise<void>;
+};
+
+type CchEdgeEvent =
+  | { type: "server_started"; port: number }
+  | { type: "http_models" }
+  | { type: "ws_upgrade"; path: string }
+  | { type: "ws_connection"; path: string | undefined }
+  | { type: "ws_close"; code: number; reason: string }
+  | {
+      type: "internal_http_responses";
+      bytes: number;
+      generate: boolean | null;
+      previousResponseId: string | null;
+      sessionId: string | null;
+      clientTransport: string | null;
+    }
+  | { type: "internal_response_close"; sessionId: string | null }
+  | { type: "internal_request_aborted"; sessionId: string | null }
+  | { type: "handler_error"; message: string };
+
+type CchRequestContext = {
+  req: http.IncomingMessage;
+  res: http.ServerResponse;
+  bodyText: string;
+  body: Record<string, unknown>;
+  sessionId: string | null;
+  responseClosed: Promise<void>;
+  requestAborted: Promise<void>;
+};
+
+type CchEdgeHarness = {
+  port: number;
+  events: CchEdgeEvent[];
+  setResponseHandler: (handler: (context: CchRequestContext) => void | Promise<void>) => void;
+  nextInternalRequest: () => Promise<CchRequestContext>;
+  close: () => Promise<void>;
+};
+
+type EnvSnapshot = {
+  PORT: string | undefined;
+  HOSTNAME: string | undefined;
+  NODE_ENV: string | undefined;
+};
+
+let cchFaultHarness: CchEdgeHarness | null = null;
+let cchFaultEnv: EnvSnapshot | null = null;
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function pickFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = http.createServer();
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      if (!address || typeof address !== "object") {
+        probe.close();
+        reject(new Error("failed to allocate local port"));
+        return;
+      }
+      const port = address.port;
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+function restoreEnvVar(name: keyof EnvSnapshot, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
+function parseJsonObject(text: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function eventChunk(event: unknown): string {
+  return `data: ${JSON.stringify(event)}\n\n`;
+}
+
+async function writeFragmentedSse(res: http.ServerResponse, events: unknown[], delayMs: number) {
+  res.statusCode = 200;
+  res.setHeader("content-type", "text/event-stream");
+  res.setHeader("cache-control", "no-cache, no-transform");
+  for (const event of events) {
+    const chunk = eventChunk(event);
+    const splitAt = Math.max(1, Math.floor(chunk.length / 2));
+    res.write(chunk.slice(0, splitAt));
+    await sleep(delayMs);
+    res.write(chunk.slice(splitAt));
+    await sleep(delayMs);
+  }
+  res.end();
+}
+
+function retryDisabledConfig() {
+  return [
+    `model_providers.${providerName}.request_max_retries=0`,
+    `model_providers.${providerName}.stream_max_retries=0`,
+  ];
+}
+
+function assertNoResetWithoutClosingHandshake(result: CodexResult) {
+  const combined = `${result.stdout}\n${result.stderr}`;
+  expect(combined).not.toContain("Connection reset without closing handshake");
+  expect(combined).not.toContain("reset without closing handshake");
+}
+
+async function startCchEdgeHarness(port: number, serverModule: ServerJsModule) {
+  const events: CchEdgeEvent[] = [];
+  const sockets = new Set<WebSocket>();
+  const internalRequestWaiters: Array<(context: CchRequestContext) => void> = [];
+  let responseHandler: ((context: CchRequestContext) => void | Promise<void>) | null = null;
+
+  const record = (event: CchEdgeEvent) => {
+    events.push(event);
+  };
+
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url || "/", "http://127.0.0.1");
+    if (req.method === "GET" && url.pathname === "/v1/models") {
+      record({ type: "http_models" });
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({
+          object: "list",
+          data: [{ id: model, object: "model", owned_by: "cch-ws-fault-e2e" }],
+        })
+      );
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/v1/responses") {
+      const sessionHeader = req.headers["x-cch-responses-ws-session"];
+      const sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader || null;
+      const responseClosed = deferred<void>();
+      const requestAborted = deferred<void>();
+      res.once("close", () => {
+        record({ type: "internal_response_close", sessionId });
+        responseClosed.resolve();
+      });
+      req.once("aborted", () => {
+        record({ type: "internal_request_aborted", sessionId });
+        requestAborted.resolve();
+      });
+
+      const bodyText = await readBody(req);
+      const body = parseJsonObject(bodyText);
+      const context: CchRequestContext = {
+        req,
+        res,
+        bodyText,
+        body,
+        sessionId,
+        responseClosed: responseClosed.promise,
+        requestAborted: requestAborted.promise,
+      };
+      record({
+        type: "internal_http_responses",
+        bytes: Buffer.byteLength(bodyText, "utf8"),
+        generate: typeof body.generate === "boolean" ? body.generate : null,
+        previousResponseId:
+          typeof body.previous_response_id === "string" ? body.previous_response_id : null,
+        sessionId,
+        clientTransport:
+          typeof req.headers["x-cch-client-transport"] === "string"
+            ? req.headers["x-cch-client-transport"]
+            : null,
+      });
+      const waiter = internalRequestWaiters.shift();
+      if (waiter) waiter(context);
+
+      if (!responseHandler) {
+        res.statusCode = 503;
+        res.end("no response handler configured");
+        return;
+      }
+
+      try {
+        await responseHandler(context);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        record({ type: "handler_error", message });
+        if (!res.headersSent) res.statusCode = 500;
+        if (!res.writableEnded) res.end(message);
+      }
+      return;
+    }
+
+    res.statusCode = 404;
+    res.end("not found");
+  });
+
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 * 1024 });
+  server.on("upgrade", (req, socket, head) => {
+    const url = new URL(req.url || "/", "http://127.0.0.1");
+    record({ type: "ws_upgrade", path: url.pathname });
+    if (url.pathname !== "/v1/responses") {
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      sockets.add(ws);
+      record({ type: "ws_connection", path: req.url });
+      ws.once("close", (code, reason) => {
+        sockets.delete(ws);
+        record({ type: "ws_close", code, reason: reason.toString("utf8") });
+      });
+      serverModule.handleWebSocketConnection(ws, req).catch((err) => {
+        record({
+          type: "handler_error",
+          message: err instanceof Error ? err.message : String(err),
+        });
+        try {
+          ws.close(1011, "internal_error");
+        } catch {
+          ws.terminate();
+        }
+      });
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", resolve);
+  });
+  record({ type: "server_started", port });
+
+  return {
+    port,
+    events,
+    setResponseHandler: (handler) => {
+      responseHandler = handler;
+    },
+    nextInternalRequest: () =>
+      new Promise<CchRequestContext>((resolve) => {
+        internalRequestWaiters.push(resolve);
+      }),
+    close: async () => {
+      for (const socket of sockets) {
+        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+          socket.close(1000, "test_done");
+        }
+      }
+      const forceClose = setTimeout(() => {
+        for (const socket of sockets) socket.terminate();
+      }, 250);
+      await new Promise<void>((resolve) =>
+        wss.close(() => {
+          clearTimeout(forceClose);
+          resolve();
+        })
+      );
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  } satisfies CchEdgeHarness;
+}
+
+function cchInternalRequests(events: CchEdgeEvent[]) {
+  return events.filter(
+    (event): event is Extract<CchEdgeEvent, { type: "internal_http_responses" }> =>
+      event.type === "internal_http_responses"
+  );
+}
+
+function cchWsCloses(events: CchEdgeEvent[]) {
+  return events.filter(
+    (event): event is Extract<CchEdgeEvent, { type: "ws_close" }> => event.type === "ws_close"
+  );
 }
 
 run("Codex CLI Responses transport probe", () => {
@@ -472,4 +821,169 @@ run("Codex CLI Responses transport probe", () => {
       await probe.close();
     }
   }, 70_000);
+});
+
+faultRun("Codex CLI through CCH WebSocket fault injection", () => {
+  let invocation: CodexInvocation;
+
+  beforeAll(async () => {
+    invocation = resolveCodexInvocation();
+    const port = await pickFreePort();
+    cchFaultEnv = {
+      PORT: process.env.PORT,
+      HOSTNAME: process.env.HOSTNAME,
+      NODE_ENV: process.env.NODE_ENV,
+    };
+    process.env.PORT = String(port);
+    process.env.HOSTNAME = "127.0.0.1";
+    process.env.NODE_ENV = "test";
+
+    const serverPath = requireFromHere.resolve("../../server.js");
+    delete requireFromHere.cache[serverPath];
+    const serverModule = requireFromHere("../../server.js") as ServerJsModule;
+    cchFaultHarness = await startCchEdgeHarness(port, serverModule);
+  });
+
+  afterAll(async () => {
+    if (cchFaultHarness) {
+      await cchFaultHarness.close();
+      cchFaultHarness = null;
+    }
+    if (cchFaultEnv) {
+      restoreEnvVar("PORT", cchFaultEnv.PORT);
+      restoreEnvVar("HOSTNAME", cchFaultEnv.HOSTNAME);
+      restoreEnvVar("NODE_ENV", cchFaultEnv.NODE_ENV);
+      cchFaultEnv = null;
+    }
+  });
+
+  test("survives fragmented and delayed upstream SSE chunks through the CCH tunnel", async () => {
+    if (!cchFaultHarness) throw new Error("CCH fault harness is not initialized");
+    cchFaultHarness.events.length = 0;
+    let responseSeq = 0;
+    cchFaultHarness.setResponseHandler(async ({ res, body }) => {
+      responseSeq += 1;
+      const includeOutput = body.generate !== false;
+      await writeFragmentedSse(
+        res,
+        responseEvents(`resp_cch_fault_fragmented_${responseSeq}`, includeOutput),
+        8
+      );
+    });
+
+    const result = await runCodex(cchFaultHarness.port, invocation, { timeoutMs: 90_000 });
+    const internalRequests = cchInternalRequests(cchFaultHarness.events);
+    const sawFinalText =
+      result.stdout.includes(responseText) || result.stderr.includes(responseText);
+    const sawWarmup = internalRequests.some((event) => event.generate === false);
+    const generatedAfterWarmup = internalRequests.find((event) => event.generate !== false);
+
+    console.info(
+      JSON.stringify({
+        probe: "codex_cch_ws_fragmented_delayed_sse",
+        exitCode: result.code,
+        internalRequests,
+        wsCloses: cchWsCloses(cchFaultHarness.events),
+      })
+    );
+
+    expect(result.code).toBe(0);
+    expect(sawFinalText).toBe(true);
+    assertNoResetWithoutClosingHandshake(result);
+    expect(internalRequests.some((event) => event.clientTransport === "websocket")).toBe(true);
+    if (sawWarmup) {
+      expect(generatedAfterWarmup?.previousResponseId).toBeTruthy();
+    }
+  }, 90_000);
+
+  test("surfaces abrupt upstream response destruction to Codex without reset noise", async () => {
+    if (!cchFaultHarness) throw new Error("CCH fault harness is not initialized");
+    cchFaultHarness.events.length = 0;
+    cchFaultHarness.setResponseHandler(({ res }) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream");
+      res.write(
+        eventChunk({
+          type: "response.created",
+          response: { id: "resp_cch_fault_destroyed" },
+        })
+      );
+      setTimeout(() => {
+        res.socket?.destroy();
+      }, 10);
+    });
+
+    const result = await runCodex(cchFaultHarness.port, invocation, {
+      timeoutMs: 90_000,
+      extraConfig: retryDisabledConfig(),
+    });
+    const closes = cchWsCloses(cchFaultHarness.events);
+
+    console.info(
+      JSON.stringify({
+        probe: "codex_cch_ws_upstream_hard_disconnect",
+        exitCode: result.code,
+        internalRequests: cchInternalRequests(cchFaultHarness.events),
+        wsCloses: closes,
+        stderrTail: result.stderr.slice(-1200),
+      })
+    );
+
+    expect(result.code).not.toBe(0);
+    assertNoResetWithoutClosingHandshake(result);
+    expect(closes.length).toBeGreaterThan(0);
+    expect(cchFaultHarness.events.some((event) => event.type === "internal_response_close")).toBe(
+      true
+    );
+  }, 90_000);
+
+  test("aborts the internal response when the real Codex client process disappears", async () => {
+    if (!cchFaultHarness) throw new Error("CCH fault harness is not initialized");
+    cchFaultHarness.events.length = 0;
+    cchFaultHarness.setResponseHandler(({ res }) => {
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream");
+      res.write(":\n\n");
+    });
+
+    const internalRequestPromise = cchFaultHarness.nextInternalRequest();
+    const running = spawnCodex(cchFaultHarness.port, invocation, {
+      timeoutMs: 60_000,
+      extraConfig: retryDisabledConfig(),
+      prompt: `Reply exactly ${responseText} after waiting for the stream.`,
+    });
+    const internalRequest = await withTimeout(
+      internalRequestPromise,
+      15_000,
+      "Codex did not open an internal CCH tunnel request before client-drop simulation"
+    );
+    await sleep(50);
+    running.child.kill();
+
+    await withTimeout(
+      internalRequest.responseClosed,
+      15_000,
+      "CCH did not abort the in-flight internal response after client process exit"
+    );
+    const result = await running.result;
+
+    console.info(
+      JSON.stringify({
+        probe: "codex_cch_ws_client_process_disappears",
+        exitCode: result.code,
+        internalRequest: {
+          generate:
+            typeof internalRequest.body.generate === "boolean"
+              ? internalRequest.body.generate
+              : null,
+          sessionId: internalRequest.sessionId,
+        },
+        wsCloses: cchWsCloses(cchFaultHarness.events),
+      })
+    );
+
+    expect(result.code).not.toBe(0);
+    expect(cchInternalRequests(cchFaultHarness.events).length).toBeGreaterThan(0);
+    expect(cchWsCloses(cchFaultHarness.events).length).toBeGreaterThan(0);
+  }, 90_000);
 });

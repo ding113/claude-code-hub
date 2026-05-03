@@ -426,6 +426,13 @@ async function forwardToInternalHttp(
       (res) => {
         const contentType = (res.headers["content-type"] || "").toLowerCase();
         const isSse = contentType.includes("text/event-stream");
+        let responseSettled = false;
+        const settleResponse = () => {
+          if (responseSettled) return false;
+          responseSettled = true;
+          resolve();
+          return true;
+        };
 
         if (!isSse) {
           // Upstream returned non-stream JSON (e.g. error response). Collect
@@ -433,6 +440,7 @@ async function forwardToInternalHttp(
           const chunks = [];
           res.on("data", (c) => chunks.push(c));
           res.on("end", () => {
+            if (responseSettled) return;
             const text = Buffer.concat(chunks).toString("utf8");
             let parsed;
             try {
@@ -462,16 +470,27 @@ async function forwardToInternalHttp(
               });
               log("info", "ws_terminal_event_sent", { type: "response.completed", source: "json" });
             }
-            resolve();
+            settleResponse();
           });
           res.on("error", (err) => {
+            if (responseSettled) return;
             emitErrorEvent(
               ws,
               "internal_response_error",
               String(err && err.message ? err.message : err)
             );
             initiateClose(1011, "internal_response_error");
-            resolve();
+            settleResponse();
+          });
+          res.on("close", () => {
+            if (responseSettled) return;
+            emitErrorEvent(
+              ws,
+              "internal_response_closed",
+              "Internal response closed before a complete JSON body was received"
+            );
+            initiateClose(1011, "internal_response_closed");
+            settleResponse();
           });
           return;
         }
@@ -483,6 +502,14 @@ async function forwardToInternalHttp(
         let sawTerminal = false;
         let terminalEventType = null;
         const EVENT_DELIMITER = /\r?\n\r?\n/;
+        const failIfUnsettled = (code, message, closeReason) => {
+          if (responseSettled) return;
+          if (!sawTerminal) {
+            emitErrorEvent(ws, code, message);
+            initiateClose(1011, closeReason);
+          }
+          settleResponse();
+        };
 
         const flushEvents = () => {
           const parts = buffer.split(EVENT_DELIMITER);
@@ -529,10 +556,12 @@ async function forwardToInternalHttp(
 
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
+          if (responseSettled) return;
           buffer += chunk;
           flushEvents();
         });
         res.on("end", () => {
+          if (responseSettled) return;
           // Flush any remaining buffered event
           if (buffer.trim().length > 0) {
             buffer += "\n\n";
@@ -552,16 +581,28 @@ async function forwardToInternalHttp(
             // errors initiate a close handshake.
             log("info", "ws_turn_completed", { terminalEventType });
           }
-          resolve();
+          settleResponse();
         });
         res.on("error", (err) => {
-          emitErrorEvent(
-            ws,
+          failIfUnsettled(
             "internal_response_error",
-            String(err && err.message ? err.message : err)
+            String(err && err.message ? err.message : err),
+            "internal_response_error"
           );
-          initiateClose(1011, "internal_response_error");
-          resolve();
+        });
+        res.on("aborted", () => {
+          failIfUnsettled(
+            "internal_response_aborted",
+            "Internal response aborted before emitting a terminal response event",
+            "internal_response_aborted"
+          );
+        });
+        res.on("close", () => {
+          failIfUnsettled(
+            "internal_response_closed",
+            "Internal response closed before emitting a terminal response event",
+            "internal_response_closed"
+          );
         });
       }
     );
