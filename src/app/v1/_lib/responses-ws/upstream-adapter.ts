@@ -193,6 +193,17 @@ export async function tryResponsesWebsocketUpstream(options: {
     openPromiseResolve(result);
   };
 
+  // Idempotent close helper. Centralizes the try/catch wrapping so every exit
+  // path can call closeUpstream() without leaking an upstream socket. Calling
+  // close() on an already-CLOSING/CLOSED ws is a no-op in `ws`.
+  const closeUpstream = (code: number) => {
+    try {
+      ws.close(code);
+    } catch {
+      // ignore
+    }
+  };
+
   ws.on("open", () => {
     try {
       ws.send(JSON.stringify(frame));
@@ -204,11 +215,7 @@ export async function tryResponsesWebsocketUpstream(options: {
         // Local send failure (closed underlying socket, etc.) is transient.
         cacheableAsUnsupported: false,
       });
-      try {
-        ws.close(1011);
-      } catch {
-        // ignore
-      }
+      closeUpstream(1011);
     }
   });
 
@@ -226,11 +233,7 @@ export async function tryResponsesWebsocketUpstream(options: {
         // are cacheable. 401/403/5xx/etc. are auth or transient state.
         cacheableAsUnsupported: cacheable,
       });
-      try {
-        ws.close(1011);
-      } catch {
-        // ignore
-      }
+      closeUpstream(1011);
     }
   );
 
@@ -242,6 +245,13 @@ export async function tryResponsesWebsocketUpstream(options: {
   // The downstream pipeline must see this as an error rather than a clean
   // end-of-stream so it doesn't treat a half-streamed response as success.
   let midStreamError: { code: string; message?: string } | null = null;
+  // Hoisted twin of `sawTerminalEvent` (which is scoped inside the SSE
+  // ReadableStream's start()). The `ws.on("close")` handler runs in this
+  // outer scope and would otherwise have no way to tell whether a terminal
+  // event was already forwarded — without this flag a clean post-terminal
+  // close (e.g. our own `closeUpstream(1000)`) would be misclassified as a
+  // mid-stream error.
+  let terminalEventSeen = false;
   let firstEventTimer: ReturnType<typeof setTimeout> | null = null;
 
   ws.on("message", (data: Buffer | string) => {
@@ -273,11 +283,7 @@ export async function tryResponsesWebsocketUpstream(options: {
         message: `buffered upstream payload exceeded ${MAX_BUFFERED_QUEUE_BYTES} bytes`,
       };
       closed = true;
-      try {
-        ws.close(1011);
-      } catch {
-        // ignore
-      }
+      closeUpstream(1011);
       return;
     }
     messageQueue.push(text);
@@ -312,7 +318,7 @@ export async function tryResponsesWebsocketUpstream(options: {
     }
   });
 
-  ws.on("close", () => {
+  ws.on("close", (code: number, reason: Buffer | string) => {
     closed = true;
     if (!firstEventSeen) {
       finishOpen({
@@ -324,6 +330,26 @@ export async function tryResponsesWebsocketUpstream(options: {
         // re-probe on the next request.
         cacheableAsUnsupported: false,
       });
+    } else if (!midStreamError && !terminalEventSeen) {
+      // Upstream closed after the first event but before a terminal event.
+      // Record this as an error so the synthesized error frame downstream
+      // carries the actual close code instead of a generic message — and so
+      // the forwarder doesn't bill the truncated stream as a clean success.
+      // We must also gate on `terminalEventSeen` because our own clean
+      // closeUpstream(1000) after a terminal event triggers this same
+      // handler — without the flag we'd inject a spurious error frame after
+      // a successful response.
+      const reasonText = reason?.length
+        ? typeof reason === "string"
+          ? reason
+          : reason.toString("utf8")
+        : "";
+      midStreamError = {
+        code: "upstream_ws_closed_mid_stream",
+        message: `upstream WebSocket closed (code=${code ?? "unknown"})${
+          reasonText ? `: ${reasonText}` : ""
+        }`,
+      };
     }
     if (queueResolver) {
       const resolve = queueResolver;
@@ -336,11 +362,7 @@ export async function tryResponsesWebsocketUpstream(options: {
     options.abortSignal.addEventListener(
       "abort",
       () => {
-        try {
-          ws.close(1000);
-        } catch {
-          // ignore
-        }
+        closeUpstream(1000);
       },
       { once: true }
     );
@@ -359,11 +381,7 @@ export async function tryResponsesWebsocketUpstream(options: {
       // next request should re-probe rather than skip the WS path.
       cacheableAsUnsupported: false,
     });
-    try {
-      ws.close(1011);
-    } catch {
-      // ignore
-    }
+    closeUpstream(1011);
   }, FIRST_EVENT_TIMEOUT_MS);
 
   const openResult = await openPromise;
@@ -403,6 +421,9 @@ export async function tryResponsesWebsocketUpstream(options: {
           const parsed = JSON.parse(text);
           if (parsed && typeof parsed.type === "string" && TERMINAL_EVENT_TYPES.has(parsed.type)) {
             sawTerminalEvent = true;
+            // Hoisted twin so the outer `ws.on("close")` handler can tell
+            // a clean post-terminal close apart from a real mid-stream drop.
+            terminalEventSeen = true;
             return true;
           }
         } catch {
@@ -426,11 +447,7 @@ export async function tryResponsesWebsocketUpstream(options: {
         if (msg === undefined) break;
         if (processText(msg)) {
           controller.close();
-          try {
-            ws.close(1000);
-          } catch {
-            // ignore
-          }
+          closeUpstream(1000);
           return;
         }
       }
@@ -446,11 +463,7 @@ export async function tryResponsesWebsocketUpstream(options: {
         if (next === null) break;
         if (processText(next)) {
           controller.close();
-          try {
-            ws.close(1000);
-          } catch {
-            // ignore
-          }
+          closeUpstream(1000);
           return;
         }
       }
@@ -462,6 +475,7 @@ export async function tryResponsesWebsocketUpstream(options: {
         if (msg === undefined) break;
         if (processText(msg)) {
           controller.close();
+          closeUpstream(1000);
           return;
         }
       }
@@ -483,13 +497,13 @@ export async function tryResponsesWebsocketUpstream(options: {
       }
 
       controller.close();
+      // Belt-and-suspenders: ensure the upstream socket is closed even if the
+      // earlier paths above didn't run (e.g. closed=true before we entered
+      // the loop). Idempotent.
+      closeUpstream(sawTerminalEvent ? 1000 : 1011);
     },
     cancel() {
-      try {
-        ws.close(1000);
-      } catch {
-        // ignore
-      }
+      closeUpstream(1000);
     },
   });
 

@@ -398,6 +398,80 @@ describe("tryResponsesWebsocketUpstream", () => {
     // The mid-stream failure must surface as an error event so the downstream
     // pipeline does not mistake the truncated stream for a clean success.
     expect(body).toContain('"type":"error"');
-    expect(body).toContain("upstream_ws_mid_stream_error");
+    // Either the network-level error path (`upstream_ws_mid_stream_error`)
+    // or the close-without-error path (`upstream_ws_closed_mid_stream`) is
+    // acceptable here — terminate() may surface as one or the other depending
+    // on platform timing.
+    expect(
+      body.includes("upstream_ws_mid_stream_error") ||
+        body.includes("upstream_ws_closed_mid_stream")
+    ).toBe(true);
+  });
+
+  it("synthesizes a mid-stream error when upstream closes cleanly without a terminal event", async () => {
+    // Some upstreams (or transient infra failures) close the WS with code 1000
+    // mid-stream — no `error` event is fired, only `close`. The adapter must
+    // still surface this as an error frame so a truncated response is never
+    // billed as a clean success.
+    server = await startMockServer((socket) => {
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_2" } }));
+        setTimeout(() => {
+          try {
+            socket.close(1000, "early_close");
+          } catch {
+            // ignore
+          }
+        }, 5);
+      });
+    });
+
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      body: { model: "gpt-5", input: "hi" },
+    });
+
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+    const body = await collectSseBody(result.response);
+    expect(body).toContain('"type":"response.created"');
+    expect(body).toContain('"type":"error"');
+    expect(body).toContain("upstream_ws_closed_mid_stream");
+    expect(body).toContain("code=1000");
+  });
+
+  it("closes the upstream WS after delivering a terminal event", async () => {
+    let upstreamCloseCode: number | null = null;
+    let upstreamClosedResolve: (() => void) | null = null;
+    const upstreamClosed = new Promise<void>((resolve) => {
+      upstreamClosedResolve = resolve;
+    });
+    server = await startMockServer((socket) => {
+      socket.on("close", (code) => {
+        upstreamCloseCode = code;
+        upstreamClosedResolve?.();
+      });
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_3" } }));
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_3" } }));
+      });
+    });
+
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      body: { model: "gpt-5", input: "hi" },
+    });
+
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+    await collectSseBody(result.response);
+    await upstreamClosed;
+    // 1000 == normal closure. The adapter must initiate a close handshake to
+    // release the upstream socket once the terminal event is forwarded.
+    expect(upstreamCloseCode).toBe(1000);
   });
 });
