@@ -213,6 +213,45 @@ bash scripts/deploy-k8s.sh --replicas 3 --hpa-min 3 --hpa-max 10 -y
 默认模板保留 `replicas=2`,但 `AUTO_MIGRATE` 入口 `src/instrumentation.ts` 会先获取 PostgreSQL advisory lock,
 因此首次多副本启动时迁移会串行执行。如果你更关心首启速度,也可以先用 `--replicas 1` 部署,确认健康后再扩容。
 
+### Codex `/v1/responses` WebSocket 反代
+
+`/v1/responses` 端点对 Codex 客户端会走 **WebSocket 升级**(其余路径仍是 HTTP)。
+反代必须显式放行 Upgrade/Connection 头并放宽 idle timeout,否则会出现
+`stream disconnected before completion: WebSocket protocol error: Connection reset
+without closing handshake`(直连 CCH 正常,经反代失败时多半是这一项)。
+
+**Nginx**
+
+```nginx
+location /v1/responses {
+  proxy_pass         http://cch_upstream;
+  proxy_http_version 1.1;
+  proxy_set_header   Upgrade    $http_upgrade;
+  proxy_set_header   Connection "upgrade";
+  proxy_set_header   Host       $host;
+  proxy_read_timeout 600s;     # Codex 长 reasoning 流式响应时间
+  proxy_send_timeout 600s;
+  proxy_buffering    off;      # 关闭缓冲,SSE / WS 才能实时
+}
+```
+
+**ingress-nginx (Kubernetes)**
+
+`deploy/k8s/ingress/ingress.yaml` 已经默认带这两条注解;若你自定义 Ingress
+要保留:
+
+```yaml
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+```
+
+**Cloudflare / 其它 CDN**
+
+WebSocket 必须在 CDN 控制台显式开启;同时 `cache-everything` 一类规则会绕过
+WS,务必把 `/v1/responses` 排除在缓存规则之外。
+
 ### 客户端 IP 透传
 
 - 默认 k8s 部署保持 `main -> ghcr.io/ding113/claude-code-hub:latest`；只有显式传
