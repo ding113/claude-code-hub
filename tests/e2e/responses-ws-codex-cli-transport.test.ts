@@ -522,6 +522,8 @@ type ServerJsModule = {
   handleWebSocketConnection: (ws: WebSocket, req: http.IncomingMessage) => Promise<void>;
 };
 
+type ServerJsModuleLoader = (port: number) => ServerJsModule;
+
 type CchEdgeEvent =
   | { type: "server_started"; port: number }
   | { type: "http_models" }
@@ -608,22 +610,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   } finally {
     if (timer) clearTimeout(timer);
   }
-}
-
-async function pickFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = http.createServer();
-    probe.listen(0, "127.0.0.1", () => {
-      const address = probe.address();
-      if (!address || typeof address !== "object") {
-        probe.close();
-        reject(new Error("failed to allocate local port"));
-        return;
-      }
-      const port = address.port;
-      probe.close(() => resolve(port));
-    });
-  });
 }
 
 function restoreEnvVar(name: keyof EnvSnapshot, value: string | undefined) {
@@ -780,18 +766,18 @@ async function writeFragmentedSse(res: http.ServerResponse, events: unknown[], d
 }
 
 async function startIsolatedCchEdgeHarness(secret?: string) {
-  const port = await pickFreePort();
   const env = captureEnv();
-  process.env.PORT = String(port);
-  process.env.HOSTNAME = "127.0.0.1";
-  process.env.NODE_ENV = "test";
-  process.env.CCH_RESPONSES_WS_INTERNAL_SECRET = secret ?? `cch-ws-e2e-secret-${port}`;
-
   const serverPath = requireFromHere.resolve("../../server.js");
-  delete requireFromHere.cache[serverPath];
   try {
-    const serverModule = requireFromHere("../../server.js") as ServerJsModule;
-    const harness = await startCchEdgeHarness(port, serverModule);
+    const harness = await startCchEdgeHarness((port) => {
+      process.env.PORT = String(port);
+      process.env.HOSTNAME = "127.0.0.1";
+      process.env.NODE_ENV = "test";
+      process.env.CCH_RESPONSES_WS_INTERNAL_SECRET = secret ?? `cch-ws-e2e-secret-${port}`;
+
+      delete requireFromHere.cache[serverPath];
+      return requireFromHere("../../server.js") as ServerJsModule;
+    });
     return {
       harness,
       close: async () => {
@@ -823,12 +809,13 @@ function assertNoResetWithoutClosingHandshake(result: CodexResult) {
   expect(combined).not.toContain("reset without closing handshake");
 }
 
-async function startCchEdgeHarness(port: number, serverModule: ServerJsModule) {
+async function startCchEdgeHarness(loadServerModule: ServerJsModuleLoader) {
   const events: CchEdgeEvent[] = [];
   const sockets = new Set<WebSocket>();
   const arrivedInternalRequests: CchRequestContext[] = [];
   const internalRequestWaiters: Array<(context: CchRequestContext) => void> = [];
   let responseHandler: ((context: CchRequestContext) => void | Promise<void>) | null = null;
+  let serverModule: ServerJsModule | null = null;
 
   const record = (event: CchEdgeEvent) => {
     events.push(event);
@@ -922,6 +909,10 @@ async function startCchEdgeHarness(port: number, serverModule: ServerJsModule) {
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      if (!serverModule) {
+        ws.close(1011, "server_module_not_ready");
+        return;
+      }
       sockets.add(ws);
       record({ type: "ws_connection", path: req.url });
       ws.once("close", (code, reason) => {
@@ -944,8 +935,20 @@ async function startCchEdgeHarness(port: number, serverModule: ServerJsModule) {
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, "127.0.0.1", resolve);
+    server.listen(0, "127.0.0.1", resolve);
   });
+  const address = server.address();
+  if (!address || typeof address !== "object") {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    throw new Error("failed to allocate local port");
+  }
+  const port = address.port;
+  try {
+    serverModule = loadServerModule(port);
+  } catch (err) {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    throw err;
+  }
   record({ type: "server_started", port });
 
   return {
@@ -1461,17 +1464,17 @@ faultRun("Codex CLI through CCH WebSocket fault injection", () => {
 
   beforeAll(async () => {
     invocation = resolveCodexInvocation();
-    const port = await pickFreePort();
     cchFaultEnv = captureEnv();
-    process.env.PORT = String(port);
-    process.env.HOSTNAME = "127.0.0.1";
-    process.env.NODE_ENV = "test";
-    process.env.CCH_RESPONSES_WS_INTERNAL_SECRET = `cch-ws-fault-secret-${port}`;
-
     cchFaultServerPath = requireFromHere.resolve("../../server.js");
-    delete requireFromHere.cache[cchFaultServerPath];
-    const serverModule = requireFromHere("../../server.js") as ServerJsModule;
-    cchFaultHarness = await startCchEdgeHarness(port, serverModule);
+    cchFaultHarness = await startCchEdgeHarness((port) => {
+      process.env.PORT = String(port);
+      process.env.HOSTNAME = "127.0.0.1";
+      process.env.NODE_ENV = "test";
+      process.env.CCH_RESPONSES_WS_INTERNAL_SECRET = `cch-ws-fault-secret-${port}`;
+
+      delete requireFromHere.cache[cchFaultServerPath!];
+      return requireFromHere("../../server.js") as ServerJsModule;
+    });
   });
 
   afterAll(async () => {
