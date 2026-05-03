@@ -1,10 +1,11 @@
 /**
  * server.js WebSocket close-handshake regression for issue #1150.
  *
- * Verifies that after the SSE→WS bridge delivers a terminal event (or runs
- * into an error), the client WebSocket receives a proper close frame instead
- * of being abruptly torn down — which clients like Codex (tungstenite-rs)
- * surface as "Connection reset without closing handshake".
+ * Verifies that normal terminal events keep the persistent client WebSocket
+ * usable for the next response.create, while fatal protocol/transport paths
+ * still receive a proper close frame instead of being abruptly torn down —
+ * which clients like Codex (tungstenite-rs) surface as
+ * "Connection reset without closing handshake".
  */
 
 import { createRequire } from "node:module";
@@ -69,6 +70,33 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+async function waitForMessageCount(
+  messages: unknown[],
+  count: number,
+  timeoutMs: number,
+  message: string
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let timer: ReturnType<typeof setInterval>;
+    const timeout = setTimeout(() => {
+      clearInterval(timer);
+      reject(new Error(message));
+    }, timeoutMs);
+    timer = setInterval(() => {
+      if (messages.length >= count) {
+        clearTimeout(timeout);
+        clearInterval(timer);
+        resolve();
+      }
+    }, 5);
+    if (messages.length >= count) {
+      clearTimeout(timeout);
+      clearInterval(timer);
+      resolve();
+    }
+  });
 }
 
 async function pickFreePort(): Promise<number> {
@@ -205,7 +233,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     restoreEnvVar("NODE_ENV", originalEnv.NODE_ENV);
   });
 
-  it("sends close(1000) after delivering response.completed", async () => {
+  it("keeps the client WebSocket open after delivering response.completed", async () => {
     if (!harness) throw new Error("harness not initialized");
     harness.setSseHandler((_req, res) => {
       res.statusCode = 200;
@@ -226,9 +254,16 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     await client.opened;
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
 
+    await waitForMessageCount(
+      client.messages,
+      2,
+      3000,
+      "response.completed was not forwarded to the client"
+    );
+    expect(client.ws.readyState).toBe(WebSocket.OPEN);
+    client.ws.close(1000, "test_done");
     const close = await client.closeEvent;
     expect(close.code).toBe(1000);
-    expect(close.reason).toBe("response_completed");
     const types = client.messages
       .filter((m): m is { type: string } => typeof m === "object" && m !== null)
       .map((m) => m.type);
@@ -263,7 +298,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     expect(errorEvent?.error.code).toBe("stream_ended_without_terminal");
   });
 
-  it("sends close(1011) when the upstream returns a non-stream HTTP error", async () => {
+  it("forwards a non-stream HTTP error without closing the persistent client socket", async () => {
     if (!harness) throw new Error("harness not initialized");
     harness.setSseHandler((_req, res) => {
       res.statusCode = 502;
@@ -275,12 +310,19 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     await client.opened;
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
 
-    const close = await client.closeEvent;
-    expect(close.code).toBe(1011);
-    expect(close.reason).toBe("http_502");
+    await waitForMessageCount(client.messages, 1, 3000, "HTTP error was not forwarded");
+    expect(client.ws.readyState).toBe(WebSocket.OPEN);
+    const errorEvent = client.messages.find(
+      (m): m is { type: string; status: number; error: { code: string } } =>
+        typeof m === "object" && m !== null && (m as { type?: unknown }).type === "error"
+    );
+    expect(errorEvent?.status).toBe(502);
+    expect(errorEvent?.error.code).toBe("bad_gateway");
+    client.ws.close(1000, "test_done");
+    await client.closeEvent;
   });
 
-  it("sends close(1011) labelled upstream_error when terminal type is 'error'", async () => {
+  it("forwards terminal type 'error' without closing the persistent client socket", async () => {
     if (!harness) throw new Error("harness not initialized");
     harness.setSseHandler((_req, res) => {
       res.statusCode = 200;
@@ -298,9 +340,10 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     await client.opened;
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
 
-    const close = await client.closeEvent;
-    expect(close.code).toBe(1011);
-    expect(close.reason).toBe("upstream_error");
+    await waitForMessageCount(client.messages, 1, 3000, "terminal error was not forwarded");
+    expect(client.ws.readyState).toBe(WebSocket.OPEN);
+    client.ws.close(1000, "test_done");
+    await client.closeEvent;
   });
 
   it("accepts response.create bodies up to 4 MiB without a maxPayload teardown", async () => {
@@ -325,25 +368,28 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     const bigInput = "x".repeat(4 * 1024 * 1024);
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: bigInput }));
 
+    await waitForMessageCount(client.messages, 1, 3000, "large response was not forwarded");
+    expect(client.ws.readyState).toBe(WebSocket.OPEN);
+    client.ws.close(1000, "test_done");
     const close = await client.closeEvent;
     expect(close.code).toBe(1000);
-    expect(close.reason).toBe("response_completed");
   }, 20000);
 
-  it("drops queued frames once a terminal close is initiated (no extra upstream calls)", async () => {
+  it("processes queued response.create frames sequentially after a terminal event", async () => {
     if (!harness) throw new Error("harness not initialized");
     let upstreamCalls = 0;
     harness.setSseHandler((_req, res) => {
       upstreamCalls += 1;
+      const callNo = upstreamCalls;
       res.statusCode = 200;
       res.setHeader("content-type", "text/event-stream");
-      // Stagger the response so the second frame, if not dropped, has time
-      // to be dequeued and dispatched while we're closing the first.
+      // Stagger the response so the second frame remains queued until the
+      // first turn's terminal event has been fully forwarded.
       setTimeout(() => {
         res.write(
           `data: ${JSON.stringify({
             type: "response.completed",
-            response: { id: `r_${upstreamCalls}` },
+            response: { id: `r_${callNo}` },
           })}\n\n`
         );
         res.end();
@@ -352,19 +398,18 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    // Pipeline two frames before the first response completes. With the race
-    // present, drain() pops the second after closeClient() initiates the
-    // close handshake but before ws.on("close") fires, hitting the upstream
-    // a second time and burning provider quota.
+    // Pipeline two frames before the first response completes. A compliant
+    // Responses WS bridge keeps the client socket open and drains them
+    // sequentially.
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "first" }));
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "second" }));
 
+    await waitForMessageCount(client.messages, 2, 3000, "both queued responses were not forwarded");
+    expect(client.ws.readyState).toBe(WebSocket.OPEN);
+    client.ws.close(1000, "test_done");
     const close = await client.closeEvent;
     expect(close.code).toBe(1000);
-    expect(close.reason).toBe("response_completed");
-    // Exactly one upstream call must have happened — the second frame is
-    // dropped synchronously when we initiate the close.
-    expect(upstreamCalls).toBe(1);
+    expect(upstreamCalls).toBe(2);
   });
 
   it("drops any pipelined frame after a binary protocol close", async () => {

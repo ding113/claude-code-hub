@@ -50,7 +50,11 @@ import type {
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor, resolveAnthropicAuthHeaders } from "../headers";
-import { evaluateResponsesWsEligibility } from "../responses-ws/eligibility";
+import {
+  evaluateResponsesWsEligibility,
+  getResponsesWsSessionId,
+} from "../responses-ws/eligibility";
+import { RESERVED_INTERNAL_HEADERS } from "../responses-ws/internal-secret";
 import { markResponsesWsUnsupported } from "../responses-ws/unsupported-cache";
 import { tryResponsesWebsocketUpstream } from "../responses-ws/upstream-adapter";
 import { buildProxyUrl } from "../url";
@@ -130,7 +134,12 @@ function decodeRequestBodyAsJson(body: BodyInit | undefined): Record<string, unk
   }
 }
 
-const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
+const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = [
+  "content-length",
+  "connection",
+  "transfer-encoding",
+  ...RESERVED_INTERNAL_HEADERS,
+];
 
 // 把 provider 上配置的静态自定义请求头合并到 overrides 中。
 // 入参 overrides 直接被原地修改。鉴权头（authorization / x-api-key / x-goog-api-key）会在调用方
@@ -2843,7 +2852,7 @@ export class ProxyForwarder {
       const responsesWsEndpointId = endpointAudit?.endpointId ?? null;
       try {
         const wsEligibility = await evaluateResponsesWsEligibility({
-          headers: processedHeaders,
+          headers: session.headers,
           provider,
           endpointId: responsesWsEndpointId,
         });
@@ -2862,6 +2871,8 @@ export class ProxyForwarder {
               upstreamUrl: proxyUrl,
               upstreamHeaders: processedHeaders,
               body: requestBodyJson,
+              sessionId: getResponsesWsSessionId(session.headers),
+              endpointId: responsesWsEndpointId,
               abortSignal: combinedSignal,
             });
 

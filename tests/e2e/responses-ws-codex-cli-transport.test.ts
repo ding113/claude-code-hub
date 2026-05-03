@@ -4,7 +4,7 @@ import http from "node:http";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { describe, expect, test } from "vitest";
-import { WebSocketServer } from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 
 /**
  * Opt-in Codex CLI transport probe for `/v1/responses`.
@@ -28,7 +28,14 @@ type ProbeEvent =
   | { type: "http_unknown"; method: string | undefined; path: string }
   | { type: "ws_upgrade"; path: string }
   | { type: "ws_connection"; path: string | undefined }
-  | { type: "ws_message"; bytes: number; frameType: string | null; isBinary: boolean }
+  | {
+      type: "ws_message";
+      bytes: number;
+      frameType: string | null;
+      generate: boolean | null;
+      previousResponseId: string | null;
+      isBinary: boolean;
+    }
   | { type: "ws_close"; code: number; reason: string };
 
 type CodexResult = {
@@ -56,34 +63,43 @@ const model = process.env.CCH_CODEX_E2E_MODEL || "gpt-5.4";
 const responseText = "E2E_TRANSPORT_OK";
 const defaultFeatures = "responses_websockets,responses_websockets_v2";
 
-function responseEnvelope() {
+function responseEnvelope(responseId: string, includeOutput: boolean) {
   return {
-    id: "resp_cch_ws_e2e",
+    id: responseId,
     object: "response",
     created_at: Math.floor(Date.now() / 1000),
     model,
     status: "completed",
-    output: [
-      {
-        id: "msg_cch_ws_e2e",
-        type: "message",
-        status: "completed",
-        role: "assistant",
-        content: [{ type: "output_text", text: responseText }],
-      },
-    ],
+    output: includeOutput
+      ? [
+          {
+            id: `msg_${responseId}`,
+            type: "message",
+            status: "completed",
+            role: "assistant",
+            content: [{ type: "output_text", text: responseText }],
+          },
+        ]
+      : [],
     usage: {
       input_tokens: 8,
-      output_tokens: 4,
-      total_tokens: 12,
+      output_tokens: includeOutput ? 4 : 0,
+      total_tokens: includeOutput ? 12 : 8,
     },
   };
 }
 
-function responseEvents() {
-  const response = responseEnvelope();
-  const item = response.output[0];
-  const content = item.content[0];
+function responseEvents(responseId: string, includeOutput: boolean) {
+  const response = responseEnvelope(responseId, includeOutput);
+  if (!includeOutput) {
+    return [
+      { type: "response.created", response: { ...response, output: [] } },
+      { type: "response.completed", response },
+    ];
+  }
+
+  const item = response.output[0]!;
+  const content = item.content[0]!;
   return [
     { type: "response.created", response: { ...response, output: [] } },
     { type: "response.output_item.added", output_index: 0, item },
@@ -108,7 +124,7 @@ function writeSse(res: http.ServerResponse) {
   res.statusCode = 200;
   res.setHeader("content-type", "text/event-stream");
   res.setHeader("cache-control", "no-cache, no-transform");
-  for (const event of responseEvents()) {
+  for (const event of responseEvents("resp_cch_ws_e2e_http", true)) {
     res.write(`event: ${event.type}\n`);
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   }
@@ -156,13 +172,22 @@ async function startProbeServer(): Promise<ProbeServer> {
   });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 * 1024 });
+  const sockets = new Set<import("ws").WebSocket>();
+  let responseSeq = 0;
   wss.on("connection", (ws, req) => {
+    sockets.add(ws);
     record({ type: "ws_connection", path: req.url });
     ws.on("message", (raw, isBinary) => {
       const text = isBinary ? raw.toString("base64") : raw.toString("utf8");
       let frameType: string | null = null;
+      let generate: boolean | null = null;
+      let previousResponseId: string | null = null;
       try {
-        frameType = JSON.parse(text).type || null;
+        const frame = JSON.parse(text);
+        frameType = frame.type || null;
+        generate = typeof frame.generate === "boolean" ? frame.generate : null;
+        previousResponseId =
+          typeof frame.previous_response_id === "string" ? frame.previous_response_id : null;
       } catch {
         frameType = "invalid_json";
       }
@@ -170,14 +195,18 @@ async function startProbeServer(): Promise<ProbeServer> {
         type: "ws_message",
         bytes: Buffer.byteLength(text, "utf8"),
         frameType,
+        generate,
+        previousResponseId,
         isBinary,
       });
-      for (const event of responseEvents()) {
+      responseSeq += 1;
+      const includeOutput = generate !== false;
+      for (const event of responseEvents(`resp_cch_ws_e2e_${responseSeq}`, includeOutput)) {
         ws.send(JSON.stringify(event));
       }
-      ws.close(1000, "response_completed");
     });
     ws.on("close", (code, reason) => {
+      sockets.delete(ws);
       record({ type: "ws_close", code, reason: reason.toString("utf8") });
     });
   });
@@ -206,7 +235,22 @@ async function startProbeServer(): Promise<ProbeServer> {
     port: address.port,
     events,
     close: async () => {
-      await new Promise<void>((resolve) => wss.close(() => resolve()));
+      for (const socket of sockets) {
+        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+          socket.close(1000, "test_done");
+        }
+      }
+      const forceClose = setTimeout(() => {
+        for (const socket of sockets) {
+          socket.terminate();
+        }
+      }, 250);
+      await new Promise<void>((resolve) =>
+        wss.close(() => {
+          clearTimeout(forceClose);
+          resolve();
+        })
+      );
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
@@ -301,6 +345,8 @@ function runCodex(port: number, invocation: CodexInvocation): Promise<CodexResul
     "-c",
     `model_providers.${providerName}.wire_api="responses"`,
     "-c",
+    `model_providers.${providerName}.supports_websockets=true`,
+    "-c",
     `model_providers.${providerName}.requires_openai_auth=true`,
     "-C",
     process.cwd(),
@@ -379,9 +425,9 @@ run("Codex CLI Responses transport probe", () => {
       const transport = observedTransport(probe.events);
       const sawFinalText =
         result.stdout.includes(responseText) || result.stderr.includes(responseText);
-      const sawCleanWsClose = probe.events.some(
-        (event) => event.type === "ws_close" && event.code === 1000
-      );
+      const wsMessages = probe.events.filter((event) => event.type === "ws_message");
+      const wsConnections = probe.events.filter((event) => event.type === "ws_connection");
+      const sawWarmup = wsMessages.some((event) => event.generate === false);
 
       console.info(
         JSON.stringify({
@@ -412,11 +458,15 @@ run("Codex CLI Responses transport probe", () => {
         );
       }
 
-      if (transport === "websocket") {
-        expect(sawCleanWsClose).toBe(true);
-      }
       if (expectedTransport !== "any") {
         expect(transport).toBe(expectedTransport);
+      }
+      if (transport === "websocket") {
+        expect(wsMessages.length).toBeGreaterThan(0);
+        if (sawWarmup && wsMessages.length >= 2) {
+          expect(wsConnections).toHaveLength(1);
+          expect(wsMessages[1]?.previousResponseId).toBeTruthy();
+        }
       }
     } finally {
       await probe.close();

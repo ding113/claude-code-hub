@@ -3,11 +3,13 @@ import type { Provider } from "@/types/provider";
 import {
   CLIENT_TRANSPORT_HEADER,
   evaluateResponsesWsEligibility,
+  getResponsesWsSessionId,
   isWebsocketClientRequest,
 } from "../eligibility";
 import {
   ensureInternalSecret,
   INTERNAL_SECRET_HEADER,
+  RESPONSES_WS_SESSION_HEADER,
   WS_FORWARD_FLAG_HEADER,
 } from "../internal-secret";
 import { clearResponsesWsUnsupportedCache, markResponsesWsUnsupported } from "../unsupported-cache";
@@ -242,5 +244,22 @@ describe("evaluateResponsesWsEligibility", () => {
       isWebsocketClient: true,
       eligible: true,
     });
+  });
+});
+
+describe("getResponsesWsSessionId", () => {
+  it("extracts a bounded trusted session marker from Headers or plain records", () => {
+    const h = new Headers({ [RESPONSES_WS_SESSION_HEADER]: " ws-session_1.2-3 " });
+    expect(getResponsesWsSessionId(h)).toBe("ws-session_1.2-3");
+    expect(getResponsesWsSessionId({ "X-Cch-Responses-Ws-Session": "abc.DEF-123" })).toBe(
+      "abc.DEF-123"
+    );
+  });
+
+  it("rejects empty, overlong, or unsafe session marker values", () => {
+    expect(getResponsesWsSessionId(new Headers())).toBeNull();
+    expect(getResponsesWsSessionId({ [RESPONSES_WS_SESSION_HEADER]: " " })).toBeNull();
+    expect(getResponsesWsSessionId({ [RESPONSES_WS_SESSION_HEADER]: "x".repeat(129) })).toBeNull();
+    expect(getResponsesWsSessionId({ [RESPONSES_WS_SESSION_HEADER]: "abc/def" })).toBeNull();
   });
 });

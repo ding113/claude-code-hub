@@ -7,10 +7,11 @@
 //
 // Architecture: this server is a thin tunnel. For each client WebSocket frame,
 // we build an equivalent HTTP POST against the same app's /v1/responses
-// endpoint (with an x-cch-client-transport header) so that auth, provider
-// selection, guard pipeline, forwarder, circuit breakers, observability, and
-// all existing TypeScript business logic run exactly once. Upstream WebSocket
-// attempts live inside that TypeScript pipeline (forwarder), not here.
+// endpoint (with x-cch-client-transport and x-cch-responses-ws-session headers)
+// so that auth, provider selection, guard pipeline, forwarder, circuit
+// breakers, observability, and all existing TypeScript business logic run
+// exactly once. Upstream WebSocket attempts and per-client upstream reuse live
+// inside that TypeScript pipeline (forwarder), not here.
 //
 // Compatibility:
 // - Non-WebSocket clients: unaffected. HTTP still flows through Next.js.
@@ -39,6 +40,7 @@ const INTERNAL_TUNNEL_HOST =
 const WS_PATH = "/v1/responses";
 const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
 const WS_FORWARD_FLAG_HEADER = "x-cch-responses-ws-forward";
+const WS_SESSION_HEADER = "x-cch-responses-ws-session";
 const INTERNAL_SECRET_HEADER = "x-cch-internal-secret";
 const INTERNAL_SECRET_ENV = "CCH_RESPONSES_WS_INTERNAL_SECRET";
 
@@ -119,6 +121,7 @@ function sanitizedRequestPath(rawUrl) {
 async function handleWebSocketConnection(ws, req) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const queryModel = url.searchParams.get("model");
+  const responsesWsSessionId = randomUUID();
   let inFlight = false;
   const pending = [];
   let pendingBytes = 0;
@@ -141,6 +144,18 @@ async function handleWebSocketConnection(ws, req) {
     }
   };
 
+  const cleanupUpstreamWsSession = () => {
+    const cleanup = globalThis.__cchCleanupResponsesWsSession;
+    if (typeof cleanup !== "function") return;
+    try {
+      cleanup(responsesWsSessionId);
+    } catch (err) {
+      log("warn", "ws_upstream_session_cleanup_failed", {
+        error: String(err && err.message ? err.message : err),
+      });
+    }
+  };
+
   const dropPendingFrames = () => {
     if (pending.length > 0) {
       log("warn", "ws_pending_dropped_on_close", {
@@ -157,6 +172,7 @@ async function handleWebSocketConnection(ws, req) {
     closed = true;
     abortCurrentInternalReq();
     dropPendingFrames();
+    cleanupUpstreamWsSession();
   };
 
   // Synchronously mark the connection closed so any pipelined frame in
@@ -179,6 +195,7 @@ async function handleWebSocketConnection(ws, req) {
     closed = true;
     abortCurrentInternalReq();
     dropPendingFrames();
+    cleanupUpstreamWsSession();
     log("info", "ws_client_close_initiated", { code, reason });
     try {
       ws.close(code, reason);
@@ -248,6 +265,7 @@ async function handleWebSocketConnection(ws, req) {
       ws,
       req,
       body,
+      responsesWsSessionId,
       (clientReq) => {
         currentInternalReq = clientReq;
       },
@@ -312,7 +330,14 @@ async function handleWebSocketConnection(ws, req) {
   });
 }
 
-async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq, requestClose) {
+async function forwardToInternalHttp(
+  ws,
+  originalReq,
+  body,
+  responsesWsSessionId,
+  registerInternalReq,
+  requestClose
+) {
   // requestClose(code, reason) initiates the WebSocket closing handshake AND
   // synchronously marks the client connection closed so the caller's pending
   // queue stops dispatching follow-up frames against the upstream. Tests that
@@ -362,6 +387,9 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq,
   internalHeaders["content-type"] = "application/json";
   internalHeaders[CLIENT_TRANSPORT_HEADER] = "websocket";
   internalHeaders[WS_FORWARD_FLAG_HEADER] = "1";
+  if (typeof responsesWsSessionId === "string" && responsesWsSessionId.length > 0) {
+    internalHeaders[WS_SESSION_HEADER] = responsesWsSessionId;
+  }
   // Per-process loopback secret. Read from process.env so it can be picked
   // up by any code path that needs to verify (the TS forwarder reads the
   // same env var via `internal-secret.ts`). The secret is generated at
@@ -410,19 +438,23 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq,
             if (isHttpError) {
               safeSend(ws, {
                 type: "error",
+                status: res.statusCode,
                 error:
                   typeof parsed === "object" && parsed && parsed.error
                     ? parsed.error
                     : { code: `http_${res.statusCode}`, message: text.slice(0, 512) },
               });
-              initiateClose(1011, `http_${res.statusCode}`);
+              log("info", "ws_terminal_event_sent", {
+                type: "error",
+                source: "json",
+                status: res.statusCode,
+              });
             } else {
               safeSend(ws, {
                 type: "response.completed",
                 response: parsed,
               });
               log("info", "ws_terminal_event_sent", { type: "response.completed", source: "json" });
-              initiateClose(1000, "response_completed");
             }
             resolve();
           });
@@ -508,14 +540,11 @@ async function forwardToInternalHttp(ws, originalReq, body, registerInternalReq,
             );
             initiateClose(1011, "stream_ended_without_terminal");
           } else {
-            // Use 1000 for normal terminal types and the synthesized [DONE]
-            // path; reserve 1011 for the explicit upstream "error" terminal
-            // so the client distinguishes a clean response from a failure.
-            const isErrorTerminal = terminalEventType === "error";
-            initiateClose(
-              isErrorTerminal ? 1011 : 1000,
-              isErrorTerminal ? "upstream_error" : "response_completed"
-            );
+            // OpenAI Responses WebSocket mode is persistent: after a terminal
+            // event, the same client connection can send the next
+            // response.create. Do not close here; only fatal transport/protocol
+            // errors initiate a close handshake.
+            log("info", "ws_turn_completed", { terminalEventType });
           }
           resolve();
         });

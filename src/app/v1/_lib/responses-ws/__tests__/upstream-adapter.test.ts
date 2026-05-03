@@ -2,7 +2,16 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import type { Provider } from "@/types/provider";
-import { tryResponsesWebsocketUpstream } from "../upstream-adapter";
+import {
+  clearResponsesWsSessionsForTests,
+  cleanupResponsesWsSession,
+  tryResponsesWebsocketUpstream,
+} from "../upstream-adapter";
+import {
+  INTERNAL_SECRET_HEADER,
+  RESPONSES_WS_SESSION_HEADER,
+  WS_FORWARD_FLAG_HEADER,
+} from "../internal-secret";
 
 type ServerHandle = {
   wss: WebSocketServer;
@@ -65,6 +74,7 @@ describe("tryResponsesWebsocketUpstream", () => {
   let server: ServerHandle | null = null;
 
   afterEach(async () => {
+    clearResponsesWsSessionsForTests();
     if (server) {
       await server.close();
       server = null;
@@ -213,6 +223,10 @@ describe("tryResponsesWebsocketUpstream", () => {
       "transfer-encoding": "chunked",
       accept: "application/json",
       "content-type": "application/json",
+      "x-cch-client-transport": "websocket",
+      [WS_FORWARD_FLAG_HEADER]: "1",
+      [RESPONSES_WS_SESSION_HEADER]: "client-session-1",
+      [INTERNAL_SECRET_HEADER]: "loopback-secret-should-stay-local",
       // Custom header should pass through:
       "x-cch-tenant": "tenant-a",
     };
@@ -230,6 +244,10 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     expect(receivedHeaders.authorization).toBe("Bearer sk-mock");
     expect(receivedHeaders["x-cch-tenant"]).toBe("tenant-a");
+    expect(receivedHeaders["x-cch-client-transport"]).toBeUndefined();
+    expect(receivedHeaders[WS_FORWARD_FLAG_HEADER]).toBeUndefined();
+    expect(receivedHeaders[RESPONSES_WS_SESSION_HEADER]).toBeUndefined();
+    expect(receivedHeaders[INTERNAL_SECRET_HEADER]).toBeUndefined();
     // The host the upstream observed must come from the actual TCP target,
     // never the value we passed in the plain Record (which we filter):
     expect(receivedHeaders.host).not.toBe("evil.example.com");
@@ -317,6 +335,198 @@ describe("tryResponsesWebsocketUpstream", () => {
     expect(second.prompt_cache_key).toBe("tenantA:s1");
     // input was passed through untouched
     expect(Array.isArray(second.input)).toBe(true);
+  });
+
+  it("reuses one upstream WS when the client WebSocket session id is stable", async () => {
+    const receivedFrames: Array<Record<string, unknown>> = [];
+    let connectionCount = 0;
+    server = await startMockServer((socket) => {
+      connectionCount += 1;
+      let turn = 0;
+      socket.on("message", (data) => {
+        const frame = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+        receivedFrames.push(frame);
+        const responseId = `resp_${++turn}`;
+        socket.send(JSON.stringify({ type: "response.created", response: { id: responseId } }));
+        socket.send(
+          JSON.stringify({
+            type: "response.completed",
+            response: { id: responseId },
+          })
+        );
+      });
+    });
+
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "client-ws-session-1",
+    };
+
+    const turn1 = await tryResponsesWebsocketUpstream({
+      ...common,
+      body: { model: "gpt-5.4", store: false, input: "first" },
+    });
+    expect("response" in turn1).toBe(true);
+    if (!("response" in turn1)) return;
+    expect(turn1.reused).toBe(false);
+    await collectSseBody(turn1.response);
+
+    const turn2 = await tryResponsesWebsocketUpstream({
+      ...common,
+      body: {
+        model: "gpt-5.4",
+        store: false,
+        previous_response_id: "resp_1",
+        input: [{ type: "function_call_output", call_id: "call_1", output: "ok" }],
+      },
+    });
+    expect("response" in turn2).toBe(true);
+    if (!("response" in turn2)) return;
+    expect(turn2.reused).toBe(true);
+    await collectSseBody(turn2.response);
+
+    expect(connectionCount).toBe(1);
+    expect(receivedFrames).toHaveLength(2);
+    expect(receivedFrames[0]?.generate).toBeUndefined();
+    expect(receivedFrames[1]?.previous_response_id).toBe("resp_1");
+  });
+
+  it("keeps generate=false warmup on the same upstream WS for the generated turn", async () => {
+    const receivedFrames: Array<Record<string, unknown>> = [];
+    let connectionCount = 0;
+    server = await startMockServer((socket) => {
+      connectionCount += 1;
+      socket.on("message", (data) => {
+        const frame = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+        receivedFrames.push(frame);
+        const responseId = receivedFrames.length === 1 ? "resp_warmup" : "resp_generated";
+        socket.send(JSON.stringify({ type: "response.created", response: { id: responseId } }));
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: responseId } }));
+      });
+    });
+
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "client-ws-session-generate-false",
+    };
+
+    const warmup = await tryResponsesWebsocketUpstream({
+      ...common,
+      body: {
+        model: "gpt-5.4",
+        store: false,
+        generate: false,
+        input: "warm up",
+      },
+    });
+    expect("response" in warmup).toBe(true);
+    if (!("response" in warmup)) return;
+    await collectSseBody(warmup.response);
+
+    const generated = await tryResponsesWebsocketUpstream({
+      ...common,
+      body: {
+        model: "gpt-5.4",
+        store: false,
+        previous_response_id: "resp_warmup",
+        input: "continue",
+      },
+    });
+    expect("response" in generated).toBe(true);
+    if (!("response" in generated)) return;
+    expect(generated.reused).toBe(true);
+    await collectSseBody(generated.response);
+
+    expect(connectionCount).toBe(1);
+    expect(receivedFrames[0]).toMatchObject({ generate: false, store: false });
+    expect(receivedFrames[1]).toMatchObject({ previous_response_id: "resp_warmup" });
+  });
+
+  it("forgets the upstream WS after websocket_connection_limit_reached", async () => {
+    let connectionCount = 0;
+    server = await startMockServer((socket) => {
+      connectionCount += 1;
+      socket.on("message", () => {
+        if (connectionCount === 1) {
+          socket.send(
+            JSON.stringify({
+              type: "error",
+              status: 400,
+              error: {
+                type: "invalid_request_error",
+                code: "websocket_connection_limit_reached",
+                message: "Responses websocket connection limit reached (60 minutes).",
+              },
+            })
+          );
+          return;
+        }
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_new" } }));
+      });
+    });
+
+    const common = {
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "client-ws-session-limit",
+    };
+
+    const first = await tryResponsesWebsocketUpstream({
+      ...common,
+      body: { model: "gpt-5.4", input: "first" },
+    });
+    expect("response" in first).toBe(true);
+    if (!("response" in first)) return;
+    expect(await collectSseBody(first.response)).toContain("websocket_connection_limit_reached");
+
+    const second = await tryResponsesWebsocketUpstream({
+      ...common,
+      body: { model: "gpt-5.4", input: "after reconnect" },
+    });
+    expect("response" in second).toBe(true);
+    if (!("response" in second)) return;
+    expect(second.reused).toBe(false);
+    await collectSseBody(second.response);
+
+    expect(connectionCount).toBe(2);
+  });
+
+  it("cleanupResponsesWsSession closes the retained upstream WS for a client disconnect", async () => {
+    let upstreamCloseCode: number | null = null;
+    let resolveClosed: (() => void) | null = null;
+    const closed = new Promise<void>((resolve) => {
+      resolveClosed = resolve;
+    });
+    server = await startMockServer((socket) => {
+      socket.on("close", (code) => {
+        upstreamCloseCode = code;
+        resolveClosed?.();
+      });
+      socket.on("message", () => {
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_1" } }));
+      });
+    });
+
+    const result = await tryResponsesWebsocketUpstream({
+      provider: codexProvider(),
+      upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+      upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+      sessionId: "client-ws-session-cleanup",
+      body: { model: "gpt-5.4", input: "hi" },
+    });
+    expect("response" in result).toBe(true);
+    if (!("response" in result)) return;
+    await collectSseBody(result.response);
+
+    cleanupResponsesWsSession("client-ws-session-cleanup");
+    await closed;
+
+    expect(upstreamCloseCode).toBe(1000);
   });
 
   it("classifies HTTP 426 / 404 / 501 upgrade failures as cacheable-unsupported", async () => {
