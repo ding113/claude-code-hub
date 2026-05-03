@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import http from "node:http";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import process from "node:process";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
@@ -285,12 +285,57 @@ function nodeInvocationForCodexScript(scriptPath: string, display = scriptPath):
   };
 }
 
-function nodeInvocationForWindowsCmd(cmdPath: string): CodexInvocation {
-  const scriptPath = join(dirname(cmdPath), "node_modules", "@openai", "codex", "bin", "codex.js");
-  if (!existsSync(scriptPath)) {
-    throw new Error(`Cannot locate Codex CLI JS entrypoint next to ${cmdPath}: ${scriptPath}`);
+function isPathLikeCommand(command: string) {
+  return isAbsolute(command) || command.includes("/") || command.includes("\\");
+}
+
+function locateWindowsCmdOnPath(cmdName: string) {
+  try {
+    return (
+      execFileSync("where.exe", [cmdName], { encoding: "utf8" })
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find(Boolean) ?? null
+    );
+  } catch {
+    return null;
   }
-  const bundledNode = join(dirname(cmdPath), "node.exe");
+}
+
+function resolveWindowsCmdPath(
+  cmdPath: string,
+  lookupOnPath: (cmdName: string) => string | null = locateWindowsCmdOnPath
+) {
+  const trimmed = cmdPath.trim();
+  if (!trimmed) {
+    throw new Error("Codex CLI .cmd path is empty.");
+  }
+  if (isPathLikeCommand(trimmed) || existsSync(trimmed)) {
+    return trimmed;
+  }
+  const resolved = lookupOnPath(trimmed);
+  if (!resolved) {
+    throw new Error(`Cannot resolve Codex CLI .cmd on PATH: ${cmdPath}`);
+  }
+  return resolved;
+}
+
+function nodeInvocationForWindowsCmd(cmdPath: string): CodexInvocation {
+  const resolvedCmdPath = resolveWindowsCmdPath(cmdPath);
+  const scriptPath = join(
+    dirname(resolvedCmdPath),
+    "node_modules",
+    "@openai",
+    "codex",
+    "bin",
+    "codex.js"
+  );
+  if (!existsSync(scriptPath)) {
+    throw new Error(
+      `Cannot locate Codex CLI JS entrypoint next to ${resolvedCmdPath}: ${scriptPath}`
+    );
+  }
+  const bundledNode = join(dirname(resolvedCmdPath), "node.exe");
   return {
     command: existsSync(bundledNode) ? bundledNode : process.execPath,
     argsPrefix: [scriptPath],
@@ -311,16 +356,7 @@ function resolveCodexInvocation(): CodexInvocation {
   }
 
   if (process.platform === "win32") {
-    let whereOutput = "";
-    try {
-      whereOutput = execFileSync("where.exe", ["codex.cmd"], { encoding: "utf8" });
-    } catch {
-      throw new Error("Cannot find codex.cmd on PATH. Install Codex CLI or set CCH_CODEX_E2E_BIN.");
-    }
-    const cmdPath = whereOutput
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean);
+    const cmdPath = locateWindowsCmdOnPath("codex.cmd");
     if (!cmdPath) {
       throw new Error("Cannot find codex.cmd on PATH. Install Codex CLI or set CCH_CODEX_E2E_BIN.");
     }
@@ -329,6 +365,25 @@ function resolveCodexInvocation(): CodexInvocation {
 
   return { command: "codex", argsPrefix: [], display: "codex" };
 }
+
+describe("Codex CLI invocation helpers", () => {
+  test("resolves PATH-only Windows .cmd shims before deriving sibling paths", () => {
+    const resolved = resolveWindowsCmdPath("codex.cmd", (cmdName) =>
+      cmdName === "codex.cmd" ? "C:/Program Files/nodejs/codex.cmd" : null
+    );
+
+    expect(dirname(resolved)).toBe("C:/Program Files/nodejs");
+  });
+
+  test("keeps explicit Windows .cmd filesystem paths without PATH lookup", () => {
+    const explicitPath = "C:/tools/codex.cmd";
+    const resolved = resolveWindowsCmdPath(explicitPath, () => {
+      throw new Error("PATH lookup should not be used for explicit paths");
+    });
+
+    expect(resolved).toBe(explicitPath);
+  });
+});
 
 function featureArgs() {
   const features = (process.env.CCH_CODEX_E2E_FEATURES ?? defaultFeatures)
