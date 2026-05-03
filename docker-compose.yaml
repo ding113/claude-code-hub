@@ -70,6 +70,10 @@ services:
       TZ: Asia/Shanghai
     ports:
       - "${APP_PORT:-23000}:3000"
+    volumes:
+      # Node 诊断报告（report.*.json）持久化到宿主机，便于事后排查 SIGSEGV 等
+      # native 崩溃。配合 Dockerfile 中 --report-* 启动参数生效（issue #1147）
+      - ./data/reports:/app/reports
     restart: unless-stopped
     healthcheck:
       test:

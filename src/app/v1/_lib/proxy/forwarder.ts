@@ -1,5 +1,6 @@
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
+import { pipeline as streamPipeline } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
 import { request as undiciRequest } from "undici";
@@ -74,6 +75,7 @@ import {
   sanitizeUrl,
 } from "./errors";
 import { ModelRedirector } from "./model-redirector";
+import { nodeStreamToWebStreamSafe } from "./node-stream-to-web";
 import {
   cloneOpenAIImageRequestMetadata,
   sanitizeGenerationsRequestForProvider,
@@ -4794,11 +4796,21 @@ export class ProxyForwarder {
     // 必须在任何其他操作之前设置，否则 ECONNRESET 等错误会导致 uncaughtException
     const rawBody = undiciRes.body as Readable;
     rawBody.on("error", (err) => {
-      logger.warn("ProxyForwarder: undici body stream error (caught early)", {
+      const code = (err as NodeJS.ErrnoException).code;
+      // 客户端/上游断连是高频路径事件，降级为 debug 以减少噪音
+      // 集合需与下方 streamPipeline 回调中的 isExpectedDisconnect 保持一致
+      const isExpectedDisconnect =
+        code === "ECONNRESET" ||
+        code === "UND_ERR_SOCKET" ||
+        code === "UND_ERR_ABORTED" ||
+        code === "ABORT_ERR" ||
+        code === "ERR_STREAM_PREMATURE_CLOSE";
+      const log = isExpectedDisconnect ? logger.debug : logger.warn;
+      log("ProxyForwarder: undici body stream error (caught early)", {
         providerId,
         providerName,
         error: err.message,
-        errorCode: (err as NodeJS.ErrnoException).code,
+        errorCode: code,
       });
     });
 
@@ -4862,28 +4874,47 @@ export class ProxyForwarder {
         finishFlush: zlibConstants.Z_SYNC_FLUSH,
       });
 
-      // 捕获 Gunzip 错误但不抛出（容错处理）
+      // 捕获 Gunzip 错误：使用 destroy(err) 而非 end()，避免与下游 cancel() 调用
+      // destroy(reason) 之间出现状态竞争，导致 native zlib 段错误（issue #1147）
       gunzip.on("error", (err) => {
-        logger.warn("ProxyForwarder: Gunzip decompression error (ignored)", {
+        logger.warn("ProxyForwarder: Gunzip decompression error", {
           providerId,
           providerName,
           error: err.message,
-          note: "Partial data may be returned, but no crash",
+          note: "Stream destroyed; partial data may already have been forwarded",
         });
-        // 尝试结束流，避免挂起
-        try {
-          gunzip.end();
-        } catch {
-          // ignore
+        if (!gunzip.destroyed) {
+          try {
+            gunzip.destroy(err);
+          } catch {
+            // ignore
+          }
         }
       });
 
-      // 将 undici body (Node Readable) pipe 到 Gunzip
-      // 注意：使用前面已添加错误处理器的 rawBody
-      rawBody.pipe(gunzip);
+      // 使用 stream.pipeline() 替代 .pipe()，确保任一端出错时双向 destroy
+      // 原子完成，消除 .pipe() 在错误路径上残留的清理竞争窗口
+      streamPipeline(rawBody, gunzip, (err) => {
+        if (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          const isExpectedDisconnect =
+            code === "ECONNRESET" ||
+            code === "UND_ERR_SOCKET" ||
+            code === "UND_ERR_ABORTED" ||
+            code === "ABORT_ERR" ||
+            code === "ERR_STREAM_PREMATURE_CLOSE";
+          const log = isExpectedDisconnect ? logger.debug : logger.warn;
+          log("ProxyForwarder: rawBody->gunzip pipeline ended with error", {
+            providerId,
+            providerName,
+            error: err.message,
+            errorCode: code,
+          });
+        }
+      });
 
       // 将 Gunzip 流转换为 Web 流（容错版本）
-      bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
+      bodyStream = nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
 
       // 移除 content-encoding 和 content-length（避免下游再解压或使用错误长度）
       responseHeaders.delete("content-encoding");
@@ -4896,7 +4927,7 @@ export class ProxyForwarder {
         contentEncoding: encoding || "(none)",
       });
       // 注意：使用前面已添加错误处理器的 rawBody
-      bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(rawBody, providerId, providerName);
+      bodyStream = nodeStreamToWebStreamSafe(rawBody, providerId, providerName);
     }
 
     logger.debug("ProxyForwarder: undici.request completed, returning wrapped response", {
@@ -4911,93 +4942,6 @@ export class ProxyForwarder {
       // 未知/非标准状态码不应兜底为 OK（避免误导客户端日志与调试）
       statusText: STATUS_CODES[undiciRes.statusCode] ?? "",
       headers: responseHeaders,
-    });
-  }
-
-  /**
-   * 将 Node.js Readable 流转换为 Web ReadableStream（容错版本）
-   *
-   * 关键特性：吞掉上游流的错误事件，避免 "terminated" 错误冒泡到调用者
-   */
-  private static nodeStreamToWebStreamSafe(
-    nodeStream: Readable,
-    providerId: number,
-    providerName: string
-  ): ReadableStream<Uint8Array> {
-    let chunkCount = 0;
-    let totalBytes = 0;
-
-    return new ReadableStream<Uint8Array>({
-      start(controller) {
-        logger.debug("ProxyForwarder: Starting Node-to-Web stream conversion", {
-          providerId,
-          providerName,
-        });
-
-        nodeStream.on("data", (chunk: Buffer | Uint8Array) => {
-          chunkCount++;
-          totalBytes += chunk.length;
-          try {
-            const buf = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
-            controller.enqueue(buf);
-          } catch {
-            // 如果 controller 已关闭，忽略
-          }
-        });
-
-        nodeStream.on("end", () => {
-          logger.debug("ProxyForwarder: Node stream ended normally", {
-            providerId,
-            providerName,
-            chunkCount,
-            totalBytes,
-          });
-          try {
-            controller.close();
-          } catch {
-            // 如果已关闭，忽略
-          }
-        });
-
-        nodeStream.on("close", () => {
-          logger.debug("ProxyForwarder: Node stream closed", {
-            providerId,
-            providerName,
-            chunkCount,
-            totalBytes,
-          });
-          try {
-            controller.close();
-          } catch {
-            // 如果已关闭，忽略
-          }
-        });
-
-        // ⭐ 关键：将上游流错误传播到下游 reader，确保 ResponseHandler 能检测到截断
-        nodeStream.on("error", (err) => {
-          logger.warn("ProxyForwarder: Upstream stream error (signaling downstream)", {
-            providerId,
-            providerName,
-            error: err.message,
-            errorName: err.name,
-          });
-          try {
-            controller.error(err);
-          } catch {
-            // 如果已关闭或已出错，忽略
-          }
-        });
-      },
-
-      cancel(reason) {
-        try {
-          nodeStream.destroy(
-            reason instanceof Error ? reason : reason ? new Error(String(reason)) : undefined
-          );
-        } catch {
-          // ignore
-        }
-      },
     });
   }
 }
