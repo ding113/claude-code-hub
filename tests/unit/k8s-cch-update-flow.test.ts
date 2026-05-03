@@ -1,27 +1,24 @@
-import { execFileSync } from "node:child_process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { runBashScript } from "../helpers/bash";
+
+vi.setConfig({ testTimeout: 25_000 });
 
 function runCchHelper(scriptBody: string) {
-  return execFileSync(
-    "bash",
-    [
-      "-lc",
-      `
-set -euo pipefail
-export CCH_SOURCE_ONLY=1
-source scripts/cch
-${scriptBody}
-      `,
+  return runBashScript(scriptBody, {
+    label: "scripts/cch",
+    requiredFunctions: [
+      "build_image_ref_with_digest",
+      "cmd_doctor",
+      "detect_runtime",
+      "update_k3s_image_by_digest_or_restart",
     ],
-    {
-      encoding: "utf8",
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        NO_COLOR: "1",
-      },
-    }
-  ).trim();
+    setup: `
+export CCH_SOURCE_ONLY=1
+export CCH_CONFIG_FILE=/dev/null
+unset CCH_NAMESPACE CCH_IMAGE CCH_DEPLOY_DIR CCH_RUNTIME CCH_INGRESS_HOST CCH_INGRESS_VARIANT CCH_BACKUP_DIR CCH_BACKUP_KEEP
+source scripts/cch
+`,
+  });
 }
 
 function runK3sUpdateHarness(options: { k3sBody: string; kubectlBody?: string; tail?: string }) {

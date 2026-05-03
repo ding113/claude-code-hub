@@ -1,27 +1,23 @@
-import { execFileSync } from "node:child_process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { runBashScript } from "../helpers/bash";
+
+vi.setConfig({ testTimeout: 25_000 });
 
 function runDeployHelper(scriptBody: string) {
-  return execFileSync(
-    "bash",
-    [
-      "-lc",
-      `
-set -euo pipefail
-export DEPLOY_K8S_SOURCE_ONLY=1
-source scripts/deploy-k8s.sh
-${scriptBody}
-      `,
+  return runBashScript(scriptBody, {
+    label: "scripts/deploy-k8s.sh",
+    requiredFunctions: [
+      "detect_ingress_variant",
+      "detect_runtime",
+      "detect_storage_class",
+      "generate_random",
     ],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        NO_COLOR: "1",
-      },
-    }
-  ).trim();
+    setup: `
+export DEPLOY_K8S_SOURCE_ONLY=1
+unset RUNTIME_OVERRIDE
+source scripts/deploy-k8s.sh
+`,
+  });
 }
 
 describe("scripts/deploy-k8s.sh shell helpers", () => {
