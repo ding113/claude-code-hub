@@ -4,6 +4,7 @@ import type { ProviderDisplay } from "@/types/provider";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const getProvidersMock = vi.hoisted(() => vi.fn());
+const getProviderStatisticsAsyncMock = vi.hoisted(() => vi.fn());
 const getUnmaskedProviderKeyMock = vi.hoisted(() => vi.fn());
 const getProvidersHealthStatusMock = vi.hoisted(() => vi.fn());
 const resetProviderCircuitMock = vi.hoisted(() => vi.fn());
@@ -37,6 +38,7 @@ const validateAuthTokenMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/actions/providers", () => ({
   getProviders: getProvidersMock,
+  getProviderStatisticsAsync: getProviderStatisticsAsyncMock,
   getUnmaskedProviderKey: getUnmaskedProviderKeyMock,
   getProvidersHealthStatus: getProvidersHealthStatusMock,
   resetProviderCircuit: resetProviderCircuitMock,
@@ -172,6 +174,7 @@ describe("v1 providers read endpoints", () => {
         url: "https://openai.example.com",
       }),
     ]);
+    getProviderStatisticsAsyncMock.mockResolvedValue({});
     getUnmaskedProviderKeyMock.mockResolvedValue({ ok: true, data: { key: "sk-real-secret" } });
     getProvidersHealthStatusMock.mockResolvedValue({
       1: { circuitState: "closed", failureCount: 0 },
@@ -267,6 +270,59 @@ describe("v1 providers read endpoints", () => {
       ok: true,
       data: { undoToken: "undo-2", operationId: "op-2" },
     });
+  });
+
+  test("returns nested statistics map when include=statistics is requested", async () => {
+    getProviderStatisticsAsyncMock.mockResolvedValue({
+      1: {
+        todayCost: "12.34",
+        todayCalls: 5,
+        lastCallTime: "2026-05-03T10:00:00.000Z",
+        lastCallModel: "claude-sonnet-4-6",
+      },
+      3: {
+        todayCost: "0.50",
+        todayCalls: 1,
+        lastCallTime: null,
+        lastCallModel: null,
+      },
+    });
+
+    const { response, json } = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/providers?include=statistics",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    expect(response.status).toBe(200);
+    const items = (json as { items: Array<{ id: number; statistics?: unknown }> }).items;
+    expect(items.find((i) => i.id === 1)?.statistics).toEqual({
+      todayCost: "12.34",
+      todayCalls: 5,
+      lastCallTime: "2026-05-03T10:00:00.000Z",
+      lastCallModel: "claude-sonnet-4-6",
+    });
+    expect(items.find((i) => i.id === 3)?.statistics).toEqual({
+      todayCost: "0.50",
+      todayCalls: 1,
+      lastCallTime: null,
+      lastCallModel: null,
+    });
+    expect(getProviderStatisticsAsyncMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("omits statistics field when include is absent", async () => {
+    const { json } = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/providers",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    const items = (json as { items: Array<{ id: number; statistics?: unknown }> }).items;
+    for (const item of items) {
+      expect(item).not.toHaveProperty("statistics");
+    }
+    expect(getProviderStatisticsAsyncMock).not.toHaveBeenCalled();
   });
 
   test("searches providers and filters hidden provider types", async () => {

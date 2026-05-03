@@ -4406,6 +4406,17 @@ export interface operations {
                             lastCallTime?: string | null;
                             /** @description Optional last call model. */
                             lastCallModel?: string | null;
+                            /** @description Today statistics. Present only when include=statistics is requested. */
+                            statistics?: {
+                                /** @description Today's total cost in USD. */
+                                todayCost: string;
+                                /** @description Today's call count. */
+                                todayCalls: number;
+                                /** @description Last call timestamp. */
+                                lastCallTime: string | null;
+                                /** @description Last call model name. */
+                                lastCallModel: string | null;
+                            };
                             /** @description Provider creation date string. */
                             createdAt: string;
                             /** @description Provider update date string. */
@@ -4850,6 +4861,17 @@ export interface operations {
                         lastCallTime?: string | null;
                         /** @description Optional last call model. */
                         lastCallModel?: string | null;
+                        /** @description Today statistics. Present only when include=statistics is requested. */
+                        statistics?: {
+                            /** @description Today's total cost in USD. */
+                            todayCost: string;
+                            /** @description Today's call count. */
+                            todayCalls: number;
+                            /** @description Last call timestamp. */
+                            lastCallTime: string | null;
+                            /** @description Last call model name. */
+                            lastCallModel: string | null;
+                        };
                         /** @description Provider creation date string. */
                         createdAt: string;
                         /** @description Provider update date string. */
@@ -5156,6 +5178,17 @@ export interface operations {
                         lastCallTime?: string | null;
                         /** @description Optional last call model. */
                         lastCallModel?: string | null;
+                        /** @description Today statistics. Present only when include=statistics is requested. */
+                        statistics?: {
+                            /** @description Today's total cost in USD. */
+                            todayCost: string;
+                            /** @description Today's call count. */
+                            todayCalls: number;
+                            /** @description Last call timestamp. */
+                            lastCallTime: string | null;
+                            /** @description Last call model name. */
+                            lastCallModel: string | null;
+                        };
                         /** @description Provider creation date string. */
                         createdAt: string;
                         /** @description Provider update date string. */
@@ -5781,6 +5814,17 @@ export interface operations {
                         lastCallTime?: string | null;
                         /** @description Optional last call model. */
                         lastCallModel?: string | null;
+                        /** @description Today statistics. Present only when include=statistics is requested. */
+                        statistics?: {
+                            /** @description Today's total cost in USD. */
+                            todayCost: string;
+                            /** @description Today's call count. */
+                            todayCalls: number;
+                            /** @description Last call timestamp. */
+                            lastCallTime: string | null;
+                            /** @description Last call model name. */
+                            lastCallModel: string | null;
+                        };
                         /** @description Provider creation date string. */
                         createdAt: string;
                         /** @description Provider update date string. */

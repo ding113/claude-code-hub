@@ -127,6 +127,15 @@ export const ProviderSummarySchema = z
     todayCallCount: z.number().int().optional().describe("Optional today's call count."),
     lastCallTime: NullableStringSchema.optional().describe("Optional last call time."),
     lastCallModel: NullableStringSchema.optional().describe("Optional last call model."),
+    statistics: z
+      .object({
+        todayCost: z.string().describe("Today's total cost in USD."),
+        todayCalls: z.number().int().describe("Today's call count."),
+        lastCallTime: NullableStringSchema.describe("Last call timestamp."),
+        lastCallModel: NullableStringSchema.describe("Last call model name."),
+      })
+      .optional()
+      .describe("Today statistics. Present only when include=statistics is requested."),
     createdAt: z.string().describe("Provider creation date string."),
     updatedAt: z.string().describe("Provider update date string."),
   })
