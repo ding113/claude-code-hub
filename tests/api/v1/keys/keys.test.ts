@@ -14,6 +14,7 @@ const toggleKeyEnabledMock = vi.hoisted(() => vi.fn());
 const renewKeyExpiresAtMock = vi.hoisted(() => vi.fn());
 const patchKeyLimitMock = vi.hoisted(() => vi.fn());
 const batchUpdateKeysMock = vi.hoisted(() => vi.fn());
+const getUnmaskedKeyMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth")>();
@@ -32,6 +33,7 @@ vi.mock("@/actions/keys", () => ({
   renewKeyExpiresAt: renewKeyExpiresAtMock,
   patchKeyLimit: patchKeyLimitMock,
   batchUpdateKeys: batchUpdateKeysMock,
+  getUnmaskedKey: getUnmaskedKeyMock,
 }));
 
 vi.mock("@/actions/key-quota", () => ({
@@ -86,6 +88,7 @@ describe("v1 key endpoints", () => {
       ok: true,
       data: { requestedCount: 1, updatedCount: 1, updatedIds: [10] },
     });
+    getUnmaskedKeyMock.mockResolvedValue({ ok: true, data: { key: "sk-revealed" } });
   });
 
   test("lists and creates user keys", async () => {
@@ -266,6 +269,19 @@ describe("v1 key endpoints", () => {
     expect(removeKeyMock).toHaveBeenCalledWith(10);
   });
 
+  test("reveals unmasked key value with no-store headers", async () => {
+    const revealed = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/keys/10:reveal",
+      headers,
+    });
+    expect(revealed.response.status).toBe(200);
+    expect(revealed.json).toEqual({ key: "sk-revealed" });
+    expect(revealed.response.headers.get("Cache-Control")).toContain("no-store");
+    expect(revealed.response.headers.get("Pragma")).toBe("no-cache");
+    expect(getUnmaskedKeyMock).toHaveBeenCalledWith(10);
+  });
+
   test("reads and mutates key limit quota endpoints", async () => {
     const limitUsage = await callV1Route({
       method: "GET",
@@ -375,6 +391,7 @@ describe("v1 key endpoints", () => {
     expect(doc.paths).toHaveProperty("/api/v1/keys/{keyId}");
     expect(doc.paths).toHaveProperty("/api/v1/keys/{keyId}:enable");
     expect(doc.paths).toHaveProperty("/api/v1/keys/{keyId}:renew");
+    expect(doc.paths).toHaveProperty("/api/v1/keys/{keyId}:reveal");
     expect(doc.paths).toHaveProperty("/api/v1/keys/{keyId}/limits:reset");
     expect(doc.paths).toHaveProperty("/api/v1/keys/{keyId}/limit-usage");
     expect(doc.paths).toHaveProperty("/api/v1/keys/{keyId}/quota");
