@@ -111,69 +111,10 @@ keysRouter.openapi(
   createUserKey as never
 );
 
-keysRouter.openapi(
-  createRoute({
-    method: "get",
-    path: "/keys/{keyId}",
-    middleware: requireAuth("admin"),
-    tags: ["Keys"],
-    summary: "Get key",
-    description: "Gets one key view through the existing key limit usage guard.",
-    "x-required-access": "admin",
-    security,
-    request: { params: KeyIdParamSchema },
-    responses: {
-      200: {
-        description: "Key detail.",
-        content: { "application/json": { schema: GenericKeyResponseSchema } },
-      },
-      ...problemResponses,
-    },
-  }),
-  getKey as never
-);
-
-keysRouter.openapi(
-  createRoute({
-    method: "patch",
-    path: "/keys/{keyId}",
-    middleware: requireAuth("admin"),
-    tags: ["Keys"],
-    summary: "Update key",
-    description: "Updates one key.",
-    "x-required-access": "admin",
-    security,
-    request: {
-      params: KeyIdParamSchema,
-      body: { required: true, content: { "application/json": { schema: KeyUpdateSchema } } },
-    },
-    responses: {
-      200: {
-        description: "Update result.",
-        content: { "application/json": { schema: GenericKeyResponseSchema } },
-      },
-      ...problemResponses,
-    },
-  }),
-  updateKey as never
-);
-
-keysRouter.openapi(
-  createRoute({
-    method: "delete",
-    path: "/keys/{keyId}",
-    middleware: requireAuth("admin"),
-    tags: ["Keys"],
-    summary: "Delete key",
-    description: "Deletes one key.",
-    "x-required-access": "admin",
-    security,
-    request: { params: KeyIdParamSchema },
-    responses: { 204: { description: "Key deleted." }, ...problemResponses },
-  }),
-  deleteKey as never
-);
-
+// Custom-method routes (`/keys/{id}:reveal` etc.) must register before the
+// generic `/keys/{keyId}` CRUD routes — Hono's RegExpRouter resolves
+// overlapping matches in registration order, and the generic GET would
+// otherwise capture `keyId="155:reveal"` and fail Zod coercion as NaN.
 const enableKeyRoute = createRoute({
   method: "post",
   path: "/keys/{keyId}:enable",
@@ -245,6 +186,69 @@ keysRouter.openAPIRegistry.registerPath(revealKeyRoute);
 // Auth tier is "read" so the action's per-request ownership check can
 // apply (admin OR key owner). Non-owners are rejected at the action layer.
 keysRouter.get("/keys/:keyId{[0-9]+:reveal}", requireAuth("read"), revealKey);
+
+keysRouter.openapi(
+  createRoute({
+    method: "get",
+    path: "/keys/{keyId}",
+    middleware: requireAuth("admin"),
+    tags: ["Keys"],
+    summary: "Get key",
+    description: "Gets one key view through the existing key limit usage guard.",
+    "x-required-access": "admin",
+    security,
+    request: { params: KeyIdParamSchema },
+    responses: {
+      200: {
+        description: "Key detail.",
+        content: { "application/json": { schema: GenericKeyResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  getKey as never
+);
+
+keysRouter.openapi(
+  createRoute({
+    method: "patch",
+    path: "/keys/{keyId}",
+    middleware: requireAuth("admin"),
+    tags: ["Keys"],
+    summary: "Update key",
+    description: "Updates one key.",
+    "x-required-access": "admin",
+    security,
+    request: {
+      params: KeyIdParamSchema,
+      body: { required: true, content: { "application/json": { schema: KeyUpdateSchema } } },
+    },
+    responses: {
+      200: {
+        description: "Update result.",
+        content: { "application/json": { schema: GenericKeyResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  updateKey as never
+);
+
+keysRouter.openapi(
+  createRoute({
+    method: "delete",
+    path: "/keys/{keyId}",
+    middleware: requireAuth("admin"),
+    tags: ["Keys"],
+    summary: "Delete key",
+    description: "Deletes one key.",
+    "x-required-access": "admin",
+    security,
+    request: { params: KeyIdParamSchema },
+    responses: { 204: { description: "Key deleted." }, ...problemResponses },
+  }),
+  deleteKey as never
+);
 
 keysRouter.openapi(
   createRoute({
