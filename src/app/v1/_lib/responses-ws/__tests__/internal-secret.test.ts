@@ -4,6 +4,7 @@ import {
   getInternalSecret,
   INTERNAL_SECRET_HEADER,
   RESERVED_INTERNAL_HEADERS,
+  RESPONSES_WS_SESSION_HEADER,
   verifyInternalRequest,
   WS_FORWARD_FLAG_HEADER,
 } from "../internal-secret";
@@ -97,6 +98,7 @@ describe("internal-secret", () => {
   it("RESERVED_INTERNAL_HEADERS lists the secret + forward flag + transport markers", () => {
     expect(RESERVED_INTERNAL_HEADERS).toContain(INTERNAL_SECRET_HEADER);
     expect(RESERVED_INTERNAL_HEADERS).toContain(WS_FORWARD_FLAG_HEADER);
+    expect(RESERVED_INTERNAL_HEADERS).toContain(RESPONSES_WS_SESSION_HEADER);
     expect(RESERVED_INTERNAL_HEADERS).toContain("x-cch-client-transport");
   });
 });

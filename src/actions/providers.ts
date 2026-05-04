@@ -4309,7 +4309,7 @@ export async function testProviderOpenAIChatCompletions(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/chat/completions",
-    defaultModel: "gpt-5.3-codex",
+    defaultModel: "gpt-5.4",
     headers: (apiKey, context) => {
       void context;
       return {
@@ -4343,7 +4343,7 @@ export async function testProviderOpenAIResponses(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/responses",
-    defaultModel: "gpt-5.3-codex",
+    defaultModel: "gpt-5.4",
     headers: (apiKey, context) => {
       void context;
       return {

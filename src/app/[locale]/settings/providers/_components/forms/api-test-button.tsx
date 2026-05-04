@@ -33,7 +33,7 @@ const API_TEST_UI_CONFIG = {
 const DEFAULT_MODELS: Record<ProviderType, string> = {
   claude: "claude-haiku-4-5-20251001",
   "claude-auth": "claude-haiku-4-5-20251001",
-  codex: "gpt-5.3-codex",
+  codex: "gpt-5.4",
   "openai-compatible": "gpt-4.1-mini",
   gemini: "gemini-2.5-flash",
   "gemini-cli": "gemini-2.5-flash",

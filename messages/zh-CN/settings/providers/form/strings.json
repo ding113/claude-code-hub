@@ -105,7 +105,7 @@
   "modelWhitelistSelectAll": "全选 ({count})",
   "modelWhitelistClear": "清空",
   "modelWhitelistManualAdd": "手动添加模型",
-  "modelWhitelistManualPlaceholder": "输入模型名称（如 gpt-5-turbo）",
+  "modelWhitelistManualPlaceholder": "输入模型名称（如 gpt-5.4）",
   "modelWhitelistManualDesc": "支持添加任意模型名称（不限于价格表中的模型）",
   "modelWhitelistAllowAll": "允许所有 {type} 模型",
   "modelWhitelistAllowAllClause": "允许所有 Claude 模型",

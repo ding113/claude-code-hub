@@ -44,7 +44,7 @@ export const CLAUDE_TEST_BODY: ClaudeTestBody = {
 };
 
 export const CODEX_TEST_BODY: CodexTestBody = {
-  model: "gpt-5.3-codex",
+  model: "gpt-5.4",
   instructions:
     "You are Codex, based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer.",
   input: [
@@ -110,7 +110,7 @@ export const GEMINI_TEST_HEADERS = {
 export const DEFAULT_MODELS: Record<ProviderType, string> = {
   claude: "claude-haiku-4-5-20251001",
   "claude-auth": "claude-haiku-4-5-20251001",
-  codex: "gpt-5.3-codex",
+  codex: "gpt-5.4",
   "openai-compatible": "gpt-4.1-mini",
   gemini: "gemini-2.5-flash",
   "gemini-cli": "gemini-2.5-flash",

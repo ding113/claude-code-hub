@@ -15,7 +15,7 @@
 
 import { isOpenaiResponsesWebsocketEnabled } from "@/lib/config/system-settings-cache";
 import type { Provider } from "@/types/provider";
-import { verifyInternalRequest } from "./internal-secret";
+import { RESPONSES_WS_SESSION_HEADER, verifyInternalRequest } from "./internal-secret";
 import { isResponsesWsUnsupported } from "./unsupported-cache";
 
 export const CLIENT_TRANSPORT_HEADER = "x-cch-client-transport";
@@ -61,6 +61,25 @@ export function isWebsocketClientRequest(headers: Headers | Record<string, strin
   }
   if (typeof value !== "string" || value.toLowerCase() !== "websocket") return false;
   return verifyInternalRequest(headers);
+}
+
+export function getResponsesWsSessionId(headers: Headers | Record<string, string>): string | null {
+  let value: string | null | undefined;
+  if (headers instanceof Headers) {
+    value = headers.get(RESPONSES_WS_SESSION_HEADER);
+  } else {
+    for (const [k, v] of Object.entries(headers)) {
+      if (k.toLowerCase() === RESPONSES_WS_SESSION_HEADER) {
+        value = v;
+        break;
+      }
+    }
+  }
+
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 128) return null;
+  return /^[\w.-]+$/.test(trimmed) ? trimmed : null;
 }
 
 export async function evaluateResponsesWsEligibility(options: {

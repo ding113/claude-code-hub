@@ -7,23 +7,31 @@
  * prompt_cache_key extraction, usage aggregation, finalization) treats the
  * response exactly like an HTTP Responses SSE stream.
  *
- * On handshake rejection, close-before-first-event, or other fallback-safe
- * errors, returns null so the caller can fall back to the HTTP path. No
- * circuit-breaker accounting happens here — the fallback is purely informational.
- *
- * Scope: this adapter only handles the pre-flight connection attempt. It does
- * NOT re-use connections across requests (first pass); each call opens and
- * closes its own WebSocket. A future revision can add per-socket pooling and
- * previous_response_id delta frames.
+ * When the request came from one client WebSocket connection, server.js passes
+ * a per-client `x-cch-responses-ws-session` marker. We reuse one upstream
+ * WebSocket for that marker so Codex's `store=false` + `previous_response_id`
+ * continuation can hit the upstream connection-local cache, matching OpenAI's
+ * WebSocket mode semantics.
  */
 
+import { createHash } from "node:crypto";
 import type WebSocketType from "ws";
 import { logger } from "@/lib/logger";
 import type { Provider } from "@/types/provider";
+import { RESERVED_INTERNAL_HEADERS } from "./internal-secret";
+
+declare global {
+  // server.js is CommonJS and cannot import this TS module directly. The
+  // adapter registers a tiny cleanup hook on globalThis so the custom server
+  // can close the matching upstream WS as soon as the client WS disconnects.
+  // eslint-disable-next-line no-var
+  var __cchCleanupResponsesWsSession: ((sessionId: string) => void) | undefined;
+}
 
 export interface UpstreamWsOutcome {
   response: Response;
   connected: boolean;
+  reused: boolean;
 }
 
 export type UpstreamWsFallbackReason =
@@ -69,6 +77,12 @@ const FIRST_EVENT_TIMEOUT_MS = 20_000;
 // than spilling into the heap unboundedly.
 const MAX_BUFFERED_QUEUE_BYTES = 8 * 1024 * 1024; // 8 MiB
 
+// Keep idle upstream sessions long enough for normal Codex interactive use.
+// server.js calls cleanup immediately on client WS close; this timer is only a
+// leak backstop if a process-level close notification is missed.
+const PERSISTENT_SESSION_IDLE_TIMEOUT_MS = 65 * 60 * 1000;
+const DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES = 512;
+
 // HTTP statuses on the upgrade handshake that we treat as a definitive
 // "this endpoint does not speak WebSocket" signal and cache as unsupported.
 // 401 / 403 are NOT in this list because they reflect auth state, not
@@ -91,7 +105,37 @@ const FORBIDDEN_UPSTREAM_WS_HEADERS = new Set([
   "transfer-encoding",
   "accept",
   "content-type",
+  ...RESERVED_INTERNAL_HEADERS,
 ]);
+
+type PersistentWsEntry = {
+  sessionId: string;
+  fingerprint: string;
+  ws: WebSocketType;
+  active: boolean;
+  createdAt: number;
+  lastUsedAt: number;
+  idleTimer: ReturnType<typeof setTimeout> | null;
+};
+
+type PersistentWsState = {
+  sessions: Map<string, PersistentWsEntry>;
+  maxEntries: number;
+};
+
+declare global {
+  // Keep retained upstream WS state stable across Next.js dev/test module
+  // reloads. server.js calls the latest cleanup hook, so the hook must still
+  // see sessions created by an older module instance.
+  // eslint-disable-next-line no-var
+  var __cchResponsesWsPersistentState: PersistentWsState | undefined;
+}
+
+const persistentState = (globalThis.__cchResponsesWsPersistentState ??= {
+  sessions: new Map<string, PersistentWsEntry>(),
+  maxEntries: DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES,
+});
+const persistentSessions = persistentState.sessions;
 
 function toWsUrl(httpUrl: string): string {
   const url = new URL(httpUrl);
@@ -120,6 +164,28 @@ function buildUpstreamWsHeaders(source: Headers | Record<string, string>): Recor
   return out;
 }
 
+function buildConnectionFingerprint(options: {
+  provider: Provider;
+  endpointId?: number | null;
+  upstreamUrl: string;
+  headers: Record<string, string>;
+}): string {
+  const normalizedHeaders = Object.entries(options.headers)
+    .map(([key, value]) => [key.toLowerCase(), value] as const)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        providerId: options.provider.id,
+        endpointId: options.endpointId ?? null,
+        upstreamUrl: options.upstreamUrl,
+        headers: normalizedHeaders,
+      })
+    )
+    .digest("hex");
+}
+
 async function loadWsModule(): Promise<typeof WebSocketType | null> {
   try {
     const mod = await import("ws");
@@ -132,11 +198,146 @@ async function loadWsModule(): Promise<typeof WebSocketType | null> {
   }
 }
 
+function isWsOpen(ws: WebSocketType): boolean {
+  return ws.readyState === 1;
+}
+
+function isWsClosingOrClosed(ws: WebSocketType): boolean {
+  return ws.readyState >= 2;
+}
+
+function closeWs(ws: WebSocketType, code: number): void {
+  try {
+    ws.close(code);
+  } catch {
+    // ignore
+  }
+}
+
+function terminateWs(ws: WebSocketType): void {
+  try {
+    ws.terminate?.();
+  } catch {
+    // ignore
+  }
+}
+
+function forgetPersistentSession(sessionId: string, ws?: WebSocketType): void {
+  const entry = persistentSessions.get(sessionId);
+  if (!entry) return;
+  if (ws && entry.ws !== ws) return;
+  if (entry.idleTimer) {
+    clearTimeout(entry.idleTimer);
+    entry.idleTimer = null;
+  }
+  persistentSessions.delete(sessionId);
+}
+
+function closePersistentEntry(entry: PersistentWsEntry, code: number): void {
+  forgetPersistentSession(entry.sessionId, entry.ws);
+  closeWs(entry.ws, code);
+}
+
+function armPersistentIdleTimer(entry: PersistentWsEntry): void {
+  if (entry.idleTimer) clearTimeout(entry.idleTimer);
+  entry.idleTimer = setTimeout(() => {
+    const current = persistentSessions.get(entry.sessionId);
+    if (current !== entry || current.active) return;
+    logger.info("[ResponsesWsAdapter] closing idle upstream WS session", {
+      sessionId: entry.sessionId,
+      idleMs: Date.now() - entry.lastUsedAt,
+    });
+    closePersistentEntry(entry, 1000);
+  }, PERSISTENT_SESSION_IDLE_TIMEOUT_MS);
+  if (typeof entry.idleTimer === "object" && "unref" in entry.idleTimer) {
+    entry.idleTimer.unref();
+  }
+}
+
+function prunePersistentSessions(): void {
+  const maxEntries = persistentState.maxEntries;
+  if (persistentSessions.size < maxEntries) return;
+
+  const idleEntries = [...persistentSessions.values()]
+    .filter((entry) => !entry.active)
+    .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+  const overflow = persistentSessions.size - maxEntries + 1;
+  for (const entry of idleEntries.slice(0, overflow)) {
+    logger.warn("[ResponsesWsAdapter] pruning idle upstream WS session", {
+      sessionId: entry.sessionId,
+    });
+    closePersistentEntry(entry, 1000);
+  }
+}
+
+function registerPersistentSession(
+  sessionId: string,
+  fingerprint: string,
+  ws: WebSocketType
+): PersistentWsEntry | null {
+  prunePersistentSessions();
+  if (persistentSessions.size >= persistentState.maxEntries) {
+    logger.warn("[ResponsesWsAdapter] upstream WS session cap reached; not retaining session", {
+      sessionId,
+      maxEntries: persistentState.maxEntries,
+    });
+    return null;
+  }
+
+  const entry: PersistentWsEntry = {
+    sessionId,
+    fingerprint,
+    ws,
+    active: true,
+    createdAt: Date.now(),
+    lastUsedAt: Date.now(),
+    idleTimer: null,
+  };
+
+  ws.on("close", () => {
+    forgetPersistentSession(sessionId, ws);
+  });
+  ws.on("error", () => {
+    forgetPersistentSession(sessionId, ws);
+  });
+
+  persistentSessions.set(sessionId, entry);
+  return entry;
+}
+
+export function cleanupResponsesWsSession(sessionId: string): void {
+  const entry = persistentSessions.get(sessionId);
+  if (!entry) return;
+  logger.info("[ResponsesWsAdapter] cleaning upstream WS session", { sessionId });
+  closePersistentEntry(entry, 1000);
+}
+
+export function clearResponsesWsSessionsForTests(): void {
+  for (const entry of persistentSessions.values()) {
+    closePersistentEntry(entry, 1000);
+  }
+  persistentSessions.clear();
+  persistentState.maxEntries = DEFAULT_PERSISTENT_SESSION_MAX_ENTRIES;
+}
+
+export function setResponsesWsSessionMaxEntriesForTests(maxEntries: number): void {
+  const normalized = Math.floor(maxEntries);
+  persistentState.maxEntries = Number.isFinite(normalized) ? Math.max(0, normalized) : 0;
+}
+
+export function getResponsesWsSessionCountForTests(): number {
+  return persistentSessions.size;
+}
+
+globalThis.__cchCleanupResponsesWsSession = cleanupResponsesWsSession;
+
 export async function tryResponsesWebsocketUpstream(options: {
   provider: Provider;
   upstreamUrl: string;
   upstreamHeaders: Headers | Record<string, string>;
   body: Record<string, unknown>;
+  sessionId?: string | null;
+  endpointId?: number | null;
   abortSignal?: AbortSignal;
 }): Promise<UpstreamWsResult> {
   const WsCtor = (await loadWsModule()) as
@@ -148,27 +349,72 @@ export async function tryResponsesWebsocketUpstream(options: {
 
   const wssUrl = toWsUrl(options.upstreamUrl);
   const headers = buildUpstreamWsHeaders(options.upstreamHeaders);
+  const sessionId = options.sessionId ?? null;
+  const fingerprint = buildConnectionFingerprint({
+    provider: options.provider,
+    endpointId: options.endpointId,
+    upstreamUrl: wssUrl,
+    headers,
+  });
 
   const frame = {
     type: "response.create",
     ...stripTransportOnlyFields(options.body),
   };
 
+  let persistentEntry: PersistentWsEntry | null = null;
+  let reused = false;
+  let canRetainFreshSession = Boolean(sessionId);
   let ws: WebSocketType;
-  try {
-    ws = new (WsCtor as unknown as new (url: string, opts?: unknown) => WebSocketType)(wssUrl, {
-      headers,
-      handshakeTimeout: HANDSHAKE_TIMEOUT_MS,
-    });
-  } catch (err) {
-    return {
-      failed: true,
-      reason: "ws_upgrade_rejected",
-      message: String(err && (err as Error).message ? (err as Error).message : err),
-      // Constructor throws are typically URL parsing / TLS configuration —
-      // not a server-side protocol negative signal — so don't cache.
-      cacheableAsUnsupported: false,
-    };
+
+  if (sessionId) {
+    const existing = persistentSessions.get(sessionId) ?? null;
+    if (existing) {
+      if (existing.active && !isWsClosingOrClosed(existing.ws)) {
+        logger.warn(
+          "[ResponsesWsAdapter] active upstream WS session is busy; opening a fresh one",
+          {
+            sessionId,
+          }
+        );
+        // Keep the active retained entry addressable by cleanupResponsesWsSession().
+        // The concurrent fresh socket is request-scoped and must close after its
+        // terminal event instead of replacing the in-flight session in the map.
+        canRetainFreshSession = false;
+      } else if (existing.fingerprint === fingerprint && !isWsClosingOrClosed(existing.ws)) {
+        persistentEntry = existing;
+        persistentEntry.active = true;
+        persistentEntry.lastUsedAt = Date.now();
+        if (persistentEntry.idleTimer) {
+          clearTimeout(persistentEntry.idleTimer);
+          persistentEntry.idleTimer = null;
+        }
+        ws = existing.ws;
+        reused = true;
+      } else {
+        closePersistentEntry(existing, 1000);
+      }
+    }
+  }
+
+  if (!reused) {
+    try {
+      ws = new (WsCtor as unknown as new (url: string, opts?: unknown) => WebSocketType)(wssUrl, {
+        headers,
+        handshakeTimeout: HANDSHAKE_TIMEOUT_MS,
+      });
+    } catch (err) {
+      return {
+        failed: true,
+        reason: "ws_upgrade_rejected",
+        message: String(err && (err as Error).message ? (err as Error).message : err),
+        // Constructor throws are typically URL parsing / TLS configuration —
+        // not a server-side protocol negative signal — so don't cache.
+        cacheableAsUnsupported: false,
+      };
+    }
+  } else {
+    ws = persistentEntry!.ws;
   }
 
   type OpenResult =
@@ -193,53 +439,14 @@ export async function tryResponsesWebsocketUpstream(options: {
     openPromiseResolve(result);
   };
 
-  // Idempotent close helper. Centralizes the try/catch wrapping so every exit
-  // path can call closeUpstream() without leaking an upstream socket. Calling
-  // close() on an already-CLOSING/CLOSED ws is a no-op in `ws`.
-  const closeUpstream = (code: number) => {
-    try {
-      ws.close(code);
-    } catch {
-      // ignore
-    }
+  const closeAndForget = (code: number) => {
+    if (sessionId) forgetPersistentSession(sessionId, ws);
+    closeWs(ws, code);
   };
-
-  ws.on("open", () => {
-    try {
-      ws.send(JSON.stringify(frame));
-    } catch (err) {
-      finishOpen({
-        ok: false,
-        reason: "ws_error_pre_first_event",
-        message: String(err && (err as Error).message ? (err as Error).message : err),
-        // Local send failure (closed underlying socket, etc.) is transient.
-        cacheableAsUnsupported: false,
-      });
-      closeUpstream(1011);
-    }
-  });
-
-  ws.on(
-    "unexpected-response",
-    (_req: unknown, res: { statusCode?: number; statusMessage?: string }) => {
-      const status = typeof res.statusCode === "number" ? res.statusCode : undefined;
-      const cacheable =
-        typeof status === "number" && PROTOCOL_UNSUPPORTED_HTTP_STATUSES.has(status);
-      finishOpen({
-        ok: false,
-        reason: "ws_upgrade_rejected",
-        message: `HTTP ${status ?? "?"} ${res.statusMessage ?? ""}`.trim(),
-        // Only definitive protocol negatives (4xx/501 on the upgrade path)
-        // are cacheable. 401/403/5xx/etc. are auth or transient state.
-        cacheableAsUnsupported: cacheable,
-      });
-      closeUpstream(1011);
-    }
-  );
 
   const messageQueue: string[] = [];
   let queueResolver: ((value: string | null) => void) | null = null;
-  let closed = false;
+  let socketClosed = isWsClosingOrClosed(ws);
   let queuedBytes = 0;
   // Marks an upstream failure observed AFTER the first event was emitted.
   // The downstream pipeline must see this as an error rather than a clean
@@ -249,12 +456,68 @@ export async function tryResponsesWebsocketUpstream(options: {
   // ReadableStream's start()). The `ws.on("close")` handler runs in this
   // outer scope and would otherwise have no way to tell whether a terminal
   // event was already forwarded — without this flag a clean post-terminal
-  // close (e.g. our own `closeUpstream(1000)`) would be misclassified as a
-  // mid-stream error.
+  // close would be misclassified as a mid-stream error.
   let terminalEventSeen = false;
+  let terminalEventShouldClosePersistent = false;
   let firstEventTimer: ReturnType<typeof setTimeout> | null = null;
 
-  ws.on("message", (data: Buffer | string) => {
+  const sendFrame = () => {
+    if (!isWsOpen(ws)) {
+      finishOpen({
+        ok: false,
+        reason: "ws_error_pre_first_event",
+        message: "websocket is not open",
+        cacheableAsUnsupported: false,
+      });
+      closeAndForget(1011);
+      return;
+    }
+
+    try {
+      ws.send(JSON.stringify(frame), (err?: Error) => {
+        if (!err) return;
+        finishOpen({
+          ok: false,
+          reason: "ws_error_pre_first_event",
+          message: String(err.message ? err.message : err),
+          // Local send failure (closed underlying socket, etc.) is transient.
+          cacheableAsUnsupported: false,
+        });
+        closeAndForget(1011);
+      });
+    } catch (err) {
+      finishOpen({
+        ok: false,
+        reason: "ws_error_pre_first_event",
+        message: String(err && (err as Error).message ? (err as Error).message : err),
+        cacheableAsUnsupported: false,
+      });
+      closeAndForget(1011);
+    }
+  };
+
+  const onOpen = () => {
+    sendFrame();
+  };
+
+  const onUnexpectedResponse = (
+    _req: unknown,
+    res: { statusCode?: number; statusMessage?: string }
+  ) => {
+    const status = typeof res.statusCode === "number" ? res.statusCode : undefined;
+    const cacheable = typeof status === "number" && PROTOCOL_UNSUPPORTED_HTTP_STATUSES.has(status);
+    finishOpen({
+      ok: false,
+      reason: "ws_upgrade_rejected",
+      message: `HTTP ${status ?? "?"} ${res.statusMessage ?? ""}`.trim(),
+      // Only definitive protocol negatives (4xx/501 on the upgrade path)
+      // are cacheable. 401/403/5xx/etc. are auth or transient state.
+      cacheableAsUnsupported: cacheable,
+    });
+    closeAndForget(1011);
+  };
+
+  const onMessage = (data: Buffer | string) => {
     const text = typeof data === "string" ? data : data.toString("utf8");
     const size = Buffer.byteLength(text, "utf8");
     if (!firstEventSeen) {
@@ -282,18 +545,19 @@ export async function tryResponsesWebsocketUpstream(options: {
         code: "upstream_ws_queue_overflow",
         message: `buffered upstream payload exceeded ${MAX_BUFFERED_QUEUE_BYTES} bytes`,
       };
-      closed = true;
-      closeUpstream(1011);
+      socketClosed = true;
+      closeAndForget(1011);
       return;
     }
     messageQueue.push(text);
     queuedBytes += size;
-  });
+  };
 
-  ws.on("error", (err: Error) => {
+  const onError = (err: Error) => {
     logger.warn("[ResponsesWsAdapter] upstream ws error", {
       error: String(err?.message ? err.message : err),
       firstEventSeen,
+      reused,
     });
     if (!firstEventSeen) {
       finishOpen({
@@ -310,16 +574,18 @@ export async function tryResponsesWebsocketUpstream(options: {
         message: String(err?.message ? err.message : err),
       };
     }
-    closed = true;
+    socketClosed = true;
+    if (sessionId) forgetPersistentSession(sessionId, ws);
     if (queueResolver) {
       const resolve = queueResolver;
       queueResolver = null;
       resolve(null);
     }
-  });
+  };
 
-  ws.on("close", (code: number, reason: Buffer | string) => {
-    closed = true;
+  const onClose = (code: number, reason: Buffer | string) => {
+    socketClosed = true;
+    if (sessionId) forgetPersistentSession(sessionId, ws);
     if (!firstEventSeen) {
       finishOpen({
         ok: false,
@@ -335,10 +601,6 @@ export async function tryResponsesWebsocketUpstream(options: {
       // Record this as an error so the synthesized error frame downstream
       // carries the actual close code instead of a generic message — and so
       // the forwarder doesn't bill the truncated stream as a clean success.
-      // We must also gate on `terminalEventSeen` because our own clean
-      // closeUpstream(1000) after a terminal event triggers this same
-      // handler — without the flag we'd inject a spurious error frame after
-      // a successful response.
       const reasonText = reason?.length
         ? typeof reason === "string"
           ? reason
@@ -356,16 +618,82 @@ export async function tryResponsesWebsocketUpstream(options: {
       queueResolver = null;
       resolve(null);
     }
-  });
+  };
+
+  const resolveMessageWaiter = () => {
+    if (!queueResolver) return;
+    const resolve = queueResolver;
+    queueResolver = null;
+    resolve(null);
+  };
+
+  const cleanupRequestListeners = () => {
+    ws.off("message", onMessage);
+    ws.off("error", onError);
+    ws.off("close", onClose);
+    ws.off("open", onOpen);
+    ws.off("unexpected-response", onUnexpectedResponse);
+    if (options.abortSignal) {
+      options.abortSignal.removeEventListener("abort", onAbort);
+    }
+    if (firstEventTimer) {
+      clearTimeout(firstEventTimer);
+      firstEventTimer = null;
+    }
+  };
+
+  const finishRequest = (options?: { closeCode?: number; forgetSession?: boolean }) => {
+    cleanupRequestListeners();
+    let closeDetachedEntry = false;
+    if (persistentEntry) {
+      persistentEntry.active = false;
+      persistentEntry.lastUsedAt = Date.now();
+      const retainedForReuse = sessionId
+        ? persistentSessions.get(sessionId) === persistentEntry
+        : false;
+      if (!retainedForReuse) {
+        closeDetachedEntry = !options?.closeCode;
+      } else if (!isWsClosingOrClosed(persistentEntry.ws)) {
+        armPersistentIdleTimer(persistentEntry);
+      }
+    }
+    if (options?.forgetSession && sessionId) {
+      forgetPersistentSession(sessionId, ws);
+    }
+    if (options?.closeCode) {
+      closeAndForget(options.closeCode);
+    } else if (closeDetachedEntry) {
+      closeWs(ws, 1000);
+    }
+  };
+
+  function onAbort() {
+    socketClosed = true;
+    if (!firstEventSeen) {
+      finishOpen({
+        ok: false,
+        reason: "ws_error_pre_first_event",
+        message: "aborted before first upstream WebSocket event",
+        cacheableAsUnsupported: false,
+      });
+    }
+    resolveMessageWaiter();
+    finishRequest({ closeCode: 1000, forgetSession: true });
+  }
+
+  ws.on("message", onMessage);
+  ws.on("error", onError);
+  ws.on("close", onClose);
+  if (!reused) {
+    ws.on("open", onOpen);
+    ws.on("unexpected-response", onUnexpectedResponse);
+  }
 
   if (options.abortSignal) {
-    options.abortSignal.addEventListener(
-      "abort",
-      () => {
-        closeUpstream(1000);
-      },
-      { once: true }
-    );
+    options.abortSignal.addEventListener("abort", onAbort, { once: true });
+    if (options.abortSignal.aborted) {
+      onAbort();
+    }
   }
 
   // Bound the wait for the first event so a silent upstream cannot pin a
@@ -381,8 +709,12 @@ export async function tryResponsesWebsocketUpstream(options: {
       // next request should re-probe rather than skip the WS path.
       cacheableAsUnsupported: false,
     });
-    closeUpstream(1011);
+    closeAndForget(1011);
   }, FIRST_EVENT_TIMEOUT_MS);
+
+  if (reused) {
+    sendFrame();
+  }
 
   const openResult = await openPromise;
   if (firstEventTimer) {
@@ -390,17 +722,19 @@ export async function tryResponsesWebsocketUpstream(options: {
     firstEventTimer = null;
   }
   if (!openResult.ok) {
-    try {
-      ws.terminate?.();
-    } catch {
-      // ignore
-    }
+    cleanupRequestListeners();
+    if (sessionId) forgetPersistentSession(sessionId, ws);
+    terminateWs(ws);
     return {
       failed: true,
       reason: openResult.reason,
       message: openResult.message,
       cacheableAsUnsupported: openResult.cacheableAsUnsupported,
     };
+  }
+
+  if (sessionId && canRetainFreshSession && !persistentEntry && !socketClosed) {
+    persistentEntry = registerPersistentSession(sessionId, fingerprint, ws);
   }
 
   // Upstream WS is open and at least one event was received. Build an SSE
@@ -424,6 +758,9 @@ export async function tryResponsesWebsocketUpstream(options: {
             // Hoisted twin so the outer `ws.on("close")` handler can tell
             // a clean post-terminal close apart from a real mid-stream drop.
             terminalEventSeen = true;
+            terminalEventShouldClosePersistent =
+              parsed.type === "error" ||
+              parsed.error?.code === "websocket_connection_limit_reached";
             return true;
           }
         } catch {
@@ -441,18 +778,26 @@ export async function tryResponsesWebsocketUpstream(options: {
         return msg;
       };
 
+      const completeTerminal = () => {
+        controller.close();
+        if (sessionId && persistentEntry && !terminalEventShouldClosePersistent) {
+          finishRequest();
+        } else {
+          finishRequest({ closeCode: 1000, forgetSession: true });
+        }
+      };
+
       // Drain queued first-event(s)
       while (messageQueue.length > 0) {
         const msg = popMessage();
         if (msg === undefined) break;
         if (processText(msg)) {
-          controller.close();
-          closeUpstream(1000);
+          completeTerminal();
           return;
         }
       }
 
-      while (!closed) {
+      while (!socketClosed) {
         const next = await new Promise<string | null>((resolve) => {
           if (messageQueue.length > 0) {
             resolve(popMessage() ?? null);
@@ -462,20 +807,18 @@ export async function tryResponsesWebsocketUpstream(options: {
         });
         if (next === null) break;
         if (processText(next)) {
-          controller.close();
-          closeUpstream(1000);
+          completeTerminal();
           return;
         }
       }
 
       // Drain any messages enqueued after the loop's last `await` resolved
-      // with `null` (race between shift() and `closed` becoming true).
+      // with `null` (race between shift() and `socketClosed` becoming true).
       while (messageQueue.length > 0) {
         const msg = popMessage();
         if (msg === undefined) break;
         if (processText(msg)) {
-          controller.close();
-          closeUpstream(1000);
+          completeTerminal();
           return;
         }
       }
@@ -497,13 +840,10 @@ export async function tryResponsesWebsocketUpstream(options: {
       }
 
       controller.close();
-      // Belt-and-suspenders: ensure the upstream socket is closed even if the
-      // earlier paths above didn't run (e.g. closed=true before we entered
-      // the loop). Idempotent.
-      closeUpstream(sawTerminalEvent ? 1000 : 1011);
+      finishRequest({ closeCode: sawTerminalEvent ? 1000 : 1011, forgetSession: true });
     },
     cancel() {
-      closeUpstream(1000);
+      finishRequest({ closeCode: 1000, forgetSession: true });
     },
   });
 
@@ -517,5 +857,6 @@ export async function tryResponsesWebsocketUpstream(options: {
       },
     }),
     connected: true,
+    reused,
   };
 }
