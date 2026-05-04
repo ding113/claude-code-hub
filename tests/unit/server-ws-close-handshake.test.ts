@@ -20,7 +20,10 @@ type ServerHarness = {
   server: http.Server;
   wss: WebSocketServer;
   setSseHandler: (handler: (req: http.IncomingMessage, res: http.ServerResponse) => void) => void;
-  nextServerConnection: () => Promise<{ close: Promise<void> }>;
+  nextServerConnection: () => Promise<{
+    close: Promise<void>;
+    waitForMessageCount: (count: number) => Promise<void>;
+  }>;
   close: () => Promise<void>;
 };
 
@@ -117,7 +120,12 @@ async function pickFreePort(): Promise<number> {
 
 async function startHarness(port: number): Promise<ServerHarness> {
   let sseHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => void) | null = null;
-  const connectionWaiters: Array<(signal: { close: Promise<void> }) => void> = [];
+  const connectionWaiters: Array<
+    (signal: {
+      close: Promise<void>;
+      waitForMessageCount: (count: number) => Promise<void>;
+    }) => void
+  > = [];
 
   const server = http.createServer((req, res) => {
     if (req.method === "POST" && req.url === "/v1/responses") {
@@ -146,9 +154,34 @@ async function startHarness(port: number): Promise<ServerHarness> {
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
       const closeSignal = deferred<void>();
+      const messageWaiters: Array<{ count: number; resolve: () => void }> = [];
+      let messageCount = 0;
+      const notifyMessageWaiters = () => {
+        for (let i = messageWaiters.length - 1; i >= 0; i -= 1) {
+          const waiter = messageWaiters[i]!;
+          if (messageCount >= waiter.count) {
+            messageWaiters.splice(i, 1);
+            waiter.resolve();
+          }
+        }
+      };
+      ws.on("message", () => {
+        messageCount += 1;
+        notifyMessageWaiters();
+      });
       ws.once("close", () => closeSignal.resolve());
       const waiter = connectionWaiters.shift();
-      if (waiter) waiter({ close: closeSignal.promise });
+      if (waiter) {
+        waiter({
+          close: closeSignal.promise,
+          waitForMessageCount: (count) => {
+            if (messageCount >= count) return Promise.resolve();
+            return new Promise<void>((resolve) => {
+              messageWaiters.push({ count, resolve });
+            });
+          },
+        });
+      }
       serverModule.handleWebSocketConnection(ws as unknown as WebSocket, req).catch((err) => {
         process.stderr.write(
           `[server-ws-close-handshake] handleWebSocketConnection failed: ${
@@ -466,6 +499,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
       "server WebSocket did not accept the binary-close test connection"
     );
     await client.opened;
+    const queuedFrameObserved = serverConnection.waitForMessageCount(2);
     client.ws.send(Buffer.from("not a text frame"), { binary: true });
     client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "queued" }));
 
@@ -476,6 +510,11 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
       serverConnection.close,
       3000,
       "server WebSocket did not close after binary protocol close"
+    );
+    await withTimeout(
+      queuedFrameObserved,
+      3000,
+      "server WebSocket did not observe the queued text frame after binary close"
     );
     expect(upstreamCalls).toBe(0);
   });
