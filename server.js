@@ -590,13 +590,6 @@ async function forwardToInternalHttp(
             "internal_response_error"
           );
         });
-        res.on("aborted", () => {
-          failIfUnsettled(
-            "internal_response_aborted",
-            "Internal response aborted before emitting a terminal response event",
-            "internal_response_aborted"
-          );
-        });
         res.on("close", () => {
           failIfUnsettled(
             "internal_response_closed",

@@ -317,21 +317,15 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1011);
-    expect([
-      "internal_response_aborted",
-      "internal_response_closed",
-      "internal_response_error",
-    ]).toContain(close.reason);
+    expect(["internal_response_closed", "internal_response_error"]).toContain(close.reason);
     const errorEvent = client.messages.find(
       (m): m is { type: string; error: { code: string } } =>
         typeof m === "object" && m !== null && (m as { type?: unknown }).type === "error"
     );
     expect(errorEvent).toBeTruthy();
-    expect([
-      "internal_response_aborted",
-      "internal_response_closed",
-      "internal_response_error",
-    ]).toContain(errorEvent?.error.code);
+    expect(["internal_response_closed", "internal_response_error"]).toContain(
+      errorEvent?.error.code
+    );
   });
 
   it("forwards a non-stream HTTP error without closing the persistent client socket", async () => {

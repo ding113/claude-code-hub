@@ -659,13 +659,118 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     releaseFirstTerminal();
     expect(await collectSseBody(first.response)).toContain("resp_active");
+    expect(firstUpstreamClosed).toBe(false);
 
+    cleanupResponsesWsSession(common.sessionId);
     await withTimeout(
       firstClosed,
       1_000,
-      "detached active upstream WS did not close after terminal"
+      "retained active upstream WS did not close after cleanup"
     );
     expect(firstUpstreamCloseCode).toBe(1000);
+  });
+
+  it("keeps the busy retained session addressable for cleanup while a fresh same-session request runs", async () => {
+    let connectionCount = 0;
+    const socketRefs: {
+      first: import("ws").WebSocket | null;
+      second: import("ws").WebSocket | null;
+    } = {
+      first: null,
+      second: null,
+    };
+    let firstUpstreamCloseCode: number | null = null;
+    let secondUpstreamCloseCode: number | null = null;
+    let resolveFirstClosed: (() => void) | null = null;
+    let resolveSecondClosed: (() => void) | null = null;
+    const firstClosed = new Promise<void>((resolve) => {
+      resolveFirstClosed = resolve;
+    });
+    const secondClosed = new Promise<void>((resolve) => {
+      resolveSecondClosed = resolve;
+    });
+
+    server = await startMockServer((socket) => {
+      connectionCount += 1;
+      const connectionIndex = connectionCount;
+      if (connectionIndex === 1) {
+        socketRefs.first = socket;
+      } else if (connectionIndex === 2) {
+        socketRefs.second = socket;
+      }
+      socket.on("close", (code) => {
+        if (connectionIndex === 1) {
+          firstUpstreamCloseCode = code;
+          resolveFirstClosed?.();
+        } else if (connectionIndex === 2) {
+          secondUpstreamCloseCode = code;
+          resolveSecondClosed?.();
+        }
+      });
+      socket.on("message", () => {
+        if (connectionIndex === 1) {
+          socket.send(
+            JSON.stringify({ type: "response.created", response: { id: "resp_busy_active" } })
+          );
+          return;
+        }
+
+        socket.send(
+          JSON.stringify({ type: "response.created", response: { id: "resp_busy_fresh" } })
+        );
+        socket.send(
+          JSON.stringify({ type: "response.completed", response: { id: "resp_busy_fresh" } })
+        );
+      });
+    });
+
+    try {
+      const sessionId = "client-ws-session-busy-cleanup";
+      const common = {
+        provider: codexProvider(),
+        upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
+        upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
+        sessionId,
+      };
+
+      const first = await tryResponsesWebsocketUpstream({
+        ...common,
+        body: { model: "gpt-5.4", input: "first" },
+      });
+      expect("response" in first).toBe(true);
+      if (!("response" in first)) return;
+
+      const second = await tryResponsesWebsocketUpstream({
+        ...common,
+        body: { model: "gpt-5.4", input: "second" },
+      });
+      expect("response" in second).toBe(true);
+      if (!("response" in second)) return;
+
+      expect(await collectSseBody(second.response)).toContain("resp_busy_fresh");
+      await withTimeout(
+        secondClosed,
+        1_000,
+        "busy-session fresh upstream WS did not close after terminal"
+      );
+      expect(secondUpstreamCloseCode).toBe(1000);
+      expect(getResponsesWsSessionCountForTests()).toBe(1);
+
+      cleanupResponsesWsSession(sessionId);
+      await withTimeout(
+        firstClosed,
+        1_000,
+        "cleanup hook did not close the original busy upstream WS session"
+      );
+      expect(firstUpstreamCloseCode).toBe(1000);
+
+      const firstBody = await collectSseBody(first.response);
+      expect(firstBody).toContain("resp_busy_active");
+      expect(firstBody).toContain('"type":"error"');
+    } finally {
+      if (socketRefs.first?.readyState === 1) socketRefs.first.close(1000);
+      if (socketRefs.second?.readyState === 1) socketRefs.second.close(1000);
+    }
   });
 
   it("resolves and closes upstream when aborted before the first WS event", async () => {

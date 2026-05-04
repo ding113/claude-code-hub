@@ -1179,7 +1179,7 @@ describe("CCH Responses WebSocket edge E2E", () => {
       await client.nextMessage(
         (message) =>
           wsMessageType(message) === "error" &&
-          ["internal_response_aborted", "internal_response_closed"].includes(
+          ["internal_response_closed", "internal_response_error"].includes(
             wsErrorCode(message) ?? ""
           ),
         3000,
@@ -1187,9 +1187,7 @@ describe("CCH Responses WebSocket edge E2E", () => {
       );
       const closeEvent = await client.closeEvent;
       expect(closeEvent.code).toBe(1011);
-      expect(["internal_response_aborted", "internal_response_closed"]).toContain(
-        closeEvent.reason
-      );
+      expect(["internal_response_closed", "internal_response_error"]).toContain(closeEvent.reason);
     } finally {
       await close();
     }

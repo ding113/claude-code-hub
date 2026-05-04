@@ -364,6 +364,7 @@ export async function tryResponsesWebsocketUpstream(options: {
 
   let persistentEntry: PersistentWsEntry | null = null;
   let reused = false;
+  let canRetainFreshSession = Boolean(sessionId);
   let ws: WebSocketType;
 
   if (sessionId) {
@@ -376,6 +377,10 @@ export async function tryResponsesWebsocketUpstream(options: {
             sessionId,
           }
         );
+        // Keep the active retained entry addressable by cleanupResponsesWsSession().
+        // The concurrent fresh socket is request-scoped and must close after its
+        // terminal event instead of replacing the in-flight session in the map.
+        canRetainFreshSession = false;
       } else if (existing.fingerprint === fingerprint && !isWsClosingOrClosed(existing.ws)) {
         persistentEntry = existing;
         persistentEntry.active = true;
@@ -728,7 +733,7 @@ export async function tryResponsesWebsocketUpstream(options: {
     };
   }
 
-  if (sessionId && !persistentEntry && !socketClosed) {
+  if (sessionId && canRetainFreshSession && !persistentEntry && !socketClosed) {
     persistentEntry = registerPersistentSession(sessionId, fingerprint, ws);
   }
 
