@@ -165,23 +165,7 @@ async function startHarness(port: number): Promise<ServerHarness> {
           }
         }
       };
-      ws.on("message", () => {
-        messageCount += 1;
-        notifyMessageWaiters();
-      });
       ws.once("close", () => closeSignal.resolve());
-      const waiter = connectionWaiters.shift();
-      if (waiter) {
-        waiter({
-          close: closeSignal.promise,
-          waitForMessageCount: (count) => {
-            if (messageCount >= count) return Promise.resolve();
-            return new Promise<void>((resolve) => {
-              messageWaiters.push({ count, resolve });
-            });
-          },
-        });
-      }
       serverModule.handleWebSocketConnection(ws as unknown as WebSocket, req).catch((err) => {
         process.stderr.write(
           `[server-ws-close-handshake] handleWebSocketConnection failed: ${
@@ -194,6 +178,24 @@ async function startHarness(port: number): Promise<ServerHarness> {
           ws.terminate();
         }
       });
+      // Register after the bridge handler so waitForMessageCount() resolves only
+      // after the production message listener has accepted or rejected the frame.
+      ws.on("message", () => {
+        messageCount += 1;
+        notifyMessageWaiters();
+      });
+      const waiter = connectionWaiters.shift();
+      if (waiter) {
+        waiter({
+          close: closeSignal.promise,
+          waitForMessageCount: (count) => {
+            if (messageCount >= count) return Promise.resolve();
+            return new Promise<void>((resolve) => {
+              messageWaiters.push({ count, resolve });
+            });
+          },
+        });
+      }
     });
   });
 
