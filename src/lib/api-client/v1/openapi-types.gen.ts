@@ -32605,7 +32605,7 @@ export interface operations {
                     /** @description Key name. */
                     name: string;
                     /** @description Expiration date or null. */
-                    expiresAt?: string | unknown;
+                    expiresAt?: string | null;
                     /** @description Whether the key is enabled. */
                     isEnabled?: boolean;
                     /** @description Whether this key can login to the Web UI. */
@@ -33193,7 +33193,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        /** @description Unmasked key value. Returned only to admin callers. */
+                        /** @description Unmasked key value. Returned to admin callers and to the key owner; non-owners receive 403. */
                         key: string;
                     };
                 };
@@ -33712,7 +33712,7 @@ export interface operations {
                     /** @description Key name. */
                     name: string;
                     /** @description Expiration date or null. */
-                    expiresAt?: string | unknown;
+                    expiresAt?: string | null;
                     /** @description Whether the key is enabled. */
                     isEnabled?: boolean;
                     /** @description Whether this key can login to the Web UI. */

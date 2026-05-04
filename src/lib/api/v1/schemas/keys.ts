@@ -17,7 +17,7 @@ export const KeyListQuerySchema = z.object({
 
 const KeyMutationFields = {
   name: z.string().trim().min(1).max(64).describe("Key name."),
-  expiresAt: z.union([z.string(), z.null()]).optional().describe("Expiration date or null."),
+  expiresAt: z.string().nullable().optional().describe("Expiration date or null."),
   isEnabled: z.boolean().optional().describe("Whether the key is enabled."),
   canLoginWebUi: z.boolean().optional().describe("Whether this key can login to the Web UI."),
   limit5hUsd: z.number().min(0).max(10_000).nullable().optional().describe("Five-hour USD quota."),
@@ -130,7 +130,11 @@ export const KeyListResponseSchema = z.object({
 });
 
 export const KeyRevealResponseSchema = z.object({
-  key: z.string().describe("Unmasked key value. Returned only to admin callers."),
+  key: z
+    .string()
+    .describe(
+      "Unmasked key value. Returned to admin callers and to the key owner; non-owners receive 403."
+    ),
 });
 
 export type KeyCreateInput = z.infer<typeof KeyCreateSchema>;
