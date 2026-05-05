@@ -185,7 +185,7 @@ export function testProviderGemini(data: unknown) {
 }
 
 export function testProviderUnified(data: unknown) {
-  return apiPost("/api/v1/providers/test:unified", data, dashboardCompatOptions);
+  return toActionResult(apiPost("/api/v1/providers/test:unified", data, dashboardCompatOptions));
 }
 
 export function getProviderTestPresets(providerType: string) {
