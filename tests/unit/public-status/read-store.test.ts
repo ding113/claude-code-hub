@@ -1,9 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
 } from "@/lib/public-status/redis-contract";
 import { readPublicStatusPayload } from "@/lib/public-status/read-store";
+
+const mockReadPublicStatusHourlyRollups = vi.hoisted(() => vi.fn());
+const mockReadCurrentHourPublicStatusSummary = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/public-status/hourly-rollups", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/public-status/hourly-rollups")>(
+    "@/lib/public-status/hourly-rollups"
+  );
+  return {
+    ...actual,
+    readPublicStatusHourlyRollups: mockReadPublicStatusHourlyRollups,
+    readCurrentHourPublicStatusSummary: mockReadCurrentHourPublicStatusSummary,
+  };
+});
 
 function createRedisReader(entries: Record<string, unknown>) {
   return {
@@ -16,6 +30,11 @@ function createRedisReader(entries: Record<string, unknown>) {
 }
 
 describe("readPublicStatusPayload", () => {
+  beforeEach(() => {
+    mockReadPublicStatusHourlyRollups.mockResolvedValue([]);
+    mockReadCurrentHourPublicStatusSummary.mockResolvedValue([]);
+  });
+
   it("returns no-data immediately when no public groups are configured", async () => {
     const triggerRebuildHint = vi.fn();
 
@@ -94,6 +113,115 @@ describe("readPublicStatusPayload", () => {
       freshUntil: "2026-04-21T10:00:00.000Z",
     });
     expect(triggerRebuildHint).toHaveBeenCalledWith("stale-generation");
+  });
+
+  it("serves DB hourly rollups and merges current-hour Redis summary before legacy snapshot fallback", async () => {
+    const triggerRebuildHint = vi.fn();
+    const redis = createRedisReader({});
+    mockReadPublicStatusHourlyRollups.mockResolvedValue([
+      {
+        bucketStart: new Date("2026-04-21T08:00:00.000Z"),
+        bucketEnd: new Date("2026-04-21T09:00:00.000Z"),
+        configVersion: "cfg-1",
+        sourceGroupName: "openai",
+        publicGroupSlug: "openai",
+        publicModelKey: "gpt-4.1",
+        label: "GPT-4.1",
+        vendorIconKey: "openai",
+        requestTypeBadge: "openaiCompatible",
+        state: "operational",
+        successCount: 9,
+        failureCount: 1,
+        sampleCount: 10,
+        availabilityPct: 90,
+        ttfbMs: 120,
+        tps: 5,
+        generatedAt: new Date("2026-04-21T09:00:00.000Z"),
+      },
+    ]);
+    mockReadCurrentHourPublicStatusSummary.mockResolvedValue([
+      {
+        bucketStart: new Date("2026-04-21T10:00:00.000Z"),
+        bucketEnd: new Date("2026-04-21T11:00:00.000Z"),
+        configVersion: "cfg-1",
+        sourceGroupName: "openai",
+        publicGroupSlug: "openai",
+        publicModelKey: "gpt-4.1",
+        label: "GPT-4.1",
+        vendorIconKey: "openai",
+        requestTypeBadge: "openaiCompatible",
+        state: "failed",
+        successCount: 0,
+        failureCount: 2,
+        sampleCount: 2,
+        availabilityPct: 0,
+        ttfbMs: null,
+        tps: null,
+        generatedAt: new Date("2026-04-21T10:10:00.000Z"),
+      },
+    ]);
+
+    const payload = await readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 3,
+      nowIso: "2026-04-21T10:15:00.000Z",
+      configVersion: "cfg-1",
+      configSnapshot: {
+        configVersion: "cfg-1",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        siteTitle: "Status",
+        siteDescription: "Status",
+        timeZone: null,
+        defaultIntervalMinutes: 5,
+        defaultRangeHours: 24,
+        groups: [
+          {
+            slug: "openai",
+            sourceGroupName: "openai",
+            displayName: "OpenAI",
+            sortOrder: 1,
+            description: null,
+            models: [
+              {
+                publicModelKey: "gpt-4.1",
+                label: "GPT-4.1",
+                vendorIconKey: "openai",
+                requestTypeBadge: "openaiCompatible",
+              },
+            ],
+          },
+        ],
+      },
+      hasConfiguredGroups: true,
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(payload.rebuildState).toBe("fresh");
+    expect(payload.groups[0]?.models[0]?.latestState).toBe("failed");
+    expect(payload.groups[0]?.models[0]?.timeline).toHaveLength(3);
+    expect(payload.groups[0]?.models[0]?.timeline[0]).toMatchObject({
+      bucketStart: "2026-04-21T08:00:00.000Z",
+      sampleCount: 10,
+    });
+    expect(payload.groups[0]?.models[0]?.timeline[2]).toMatchObject({
+      bucketStart: "2026-04-21T10:00:00.000Z",
+      sampleCount: 2,
+      state: "failed",
+    });
+    expect(redis.get).not.toHaveBeenCalledWith(
+      buildPublicStatusManifestKey({
+        configVersion: "cfg-1",
+        intervalMinutes: 5,
+        rangeHours: 3,
+      })
+    );
+    expect(mockReadPublicStatusHourlyRollups).toHaveBeenCalledWith({
+      start: new Date("2026-04-21T08:00:00.000Z"),
+      end: new Date("2026-04-21T10:00:00.000Z"),
+      configVersion: "cfg-1",
+    });
+    expect(triggerRebuildHint).not.toHaveBeenCalled();
   });
 
   it("returns rebuilding when the manifest exists but the snapshot payload is missing", async () => {

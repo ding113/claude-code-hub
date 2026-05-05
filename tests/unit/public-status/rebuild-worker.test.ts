@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
   buildPublicStatusRebuildHintKey,
 } from "@/lib/public-status/redis-contract";
@@ -13,8 +12,11 @@ const mockRedisEval = vi.hoisted(() => vi.fn());
 const mockRedisPttl = vi.hoisted(() => vi.fn());
 const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockQueryPublicStatusRequests = vi.hoisted(() => vi.fn());
-const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
 const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
+const mockBuildAndPersistPublicStatusHourlyRollup = vi.hoisted(() => vi.fn());
+const mockBuildPublicStatusHourlyRollupsFromRequests = vi.hoisted(() => vi.fn());
+const mockWriteCurrentHourPublicStatusSummary = vi.hoisted(() => vi.fn());
+const mockCleanupPublicStatusHourlyRollups = vi.hoisted(() => vi.fn());
 
 async function importAggregationModule() {
   vi.resetModules();
@@ -96,7 +98,19 @@ async function importRebuildWorkerModule() {
   vi.doMock("@/lib/public-status/aggregation", () => ({
     getConfiguredPublicStatusGroups: (snapshot: { groups: unknown[] }) => snapshot.groups,
     queryPublicStatusRequests: mockQueryPublicStatusRequests,
-    buildPublicStatusPayloadFromRequests: mockBuildPublicStatusPayloadFromRequests,
+  }));
+  vi.doMock("@/lib/public-status/hourly-rollups", () => ({
+    PUBLIC_STATUS_ROLLUP_RETENTION_DAYS: 30,
+    alignHourStartUtc: (input: string | Date) => {
+      const date = input instanceof Date ? input : new Date(input);
+      return new Date(
+        Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours())
+      );
+    },
+    buildAndPersistPublicStatusHourlyRollup: mockBuildAndPersistPublicStatusHourlyRollup,
+    buildPublicStatusHourlyRollupsFromRequests: mockBuildPublicStatusHourlyRollupsFromRequests,
+    cleanupPublicStatusHourlyRollups: mockCleanupPublicStatusHourlyRollups,
+    writeCurrentHourPublicStatusSummary: mockWriteCurrentHourPublicStatusSummary,
   }));
 
   return importPublicStatusModule<{
@@ -158,6 +172,10 @@ describe("public-status rebuild worker", () => {
     mockRedisGet.mockResolvedValue(null);
     mockRedisEval.mockResolvedValue(1);
     mockRedisPttl.mockResolvedValue(-1);
+    mockBuildAndPersistPublicStatusHourlyRollup.mockResolvedValue([]);
+    mockBuildPublicStatusHourlyRollupsFromRequests.mockReturnValue([]);
+    mockWriteCurrentHourPublicStatusSummary.mockResolvedValue(true);
+    mockCleanupPublicStatusHourlyRollups.mockResolvedValue(undefined);
     mockPublishCurrentPublicStatusConfigProjection.mockResolvedValue({
       configVersion: "cfg-1",
       key: "public-status:v1:config:cfg-1",
@@ -394,7 +412,7 @@ describe("public-status rebuild worker", () => {
     ]);
   });
 
-  it("publishes snapshot and manifest records for a rebuilt generation", async () => {
+  it("persists finalized hourly rollups and publishes only short-lived runtime manifest records", async () => {
     const mod = await importRebuildWorkerModule();
 
     mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue({
@@ -423,12 +441,6 @@ describe("public-status rebuild worker", () => {
       ],
     });
     mockQueryPublicStatusRequests.mockResolvedValue([]);
-    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
-      generatedAt: "2026-04-21T10:00:00.000Z",
-      coveredFrom: "2026-04-20T10:00:00.000Z",
-      coveredTo: "2026-04-21T10:00:00.000Z",
-      groups: [],
-    });
     mockRedisSet.mockReset();
     mockRedisSet.mockResolvedValueOnce("OK");
 
@@ -459,18 +471,47 @@ describe("public-status rebuild worker", () => {
       expect.stringContaining("public-status:v1:rebuild-lock:"),
       expect.any(String)
     );
-    expect(mockRedisDel).toHaveBeenCalled();
-
-    const snapshotKey = buildPublicStatusCurrentSnapshotKey({
-      intervalMinutes: 5,
-      rangeHours: 24,
-      generation: manifestValue.lastCompleteGeneration,
+    expect(mockBuildAndPersistPublicStatusHourlyRollup).toHaveBeenCalledTimes(30 * 24);
+    expect(mockBuildAndPersistPublicStatusHourlyRollup).toHaveBeenCalledWith({
+      configVersion: "cfg-1",
+      hourStart: new Date("2026-03-22T10:00:00.000Z"),
+      groups: expect.any(Array),
     });
+    expect(mockBuildAndPersistPublicStatusHourlyRollup).toHaveBeenLastCalledWith({
+      configVersion: "cfg-1",
+      hourStart: new Date("2026-04-21T09:00:00.000Z"),
+      groups: expect.any(Array),
+    });
+    expect(mockQueryPublicStatusRequests).toHaveBeenCalledWith({
+      groups: expect.any(Array),
+      coveredFrom: new Date("2026-04-21T10:00:00.000Z"),
+      coveredTo: new Date("2026-04-21T10:02:00.000Z"),
+    });
+    expect(mockBuildPublicStatusHourlyRollupsFromRequests).toHaveBeenCalled();
+    expect(mockWriteCurrentHourPublicStatusSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configVersion: "cfg-1",
+        rows: [],
+      })
+    );
+    expect(mockCleanupPublicStatusHourlyRollups).toHaveBeenCalledWith({
+      now: new Date("2026-04-21T10:02:00.000Z"),
+    });
+    expect(mockRedisSet.mock.calls).not.toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([expect.stringContaining("public-status:v1:series:")]),
+      ])
+    );
+    expect(mockRedisSet.mock.calls).not.toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([expect.stringContaining("public-status:v1:snapshot:")]),
+      ])
+    );
     expect(mockRedisSet).toHaveBeenCalledWith(
-      snapshotKey,
+      versionedManifestKey,
       expect.any(String),
       "EX",
-      60 * 60 * 24 * 30
+      60 * 60 * 2
     );
   });
 
@@ -505,12 +546,6 @@ describe("public-status rebuild worker", () => {
         ],
       });
     mockQueryPublicStatusRequests.mockResolvedValue([]);
-    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
-      generatedAt: "2026-04-21T10:00:00.000Z",
-      coveredFrom: "2026-04-20T10:00:00.000Z",
-      coveredTo: "2026-04-21T10:00:00.000Z",
-      groups: [],
-    });
     mockRedisSet.mockReset();
     mockRedisSet.mockResolvedValueOnce("OK");
 

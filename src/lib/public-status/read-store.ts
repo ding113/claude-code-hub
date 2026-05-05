@@ -1,4 +1,15 @@
 import { getRedisClient } from "@/lib/redis";
+import { getConfiguredPublicStatusGroups } from "./aggregation";
+import type {
+  InternalPublicStatusConfigSnapshot,
+  PublicStatusConfigSnapshot,
+} from "./config-snapshot";
+import {
+  alignHourStartUtc,
+  buildPublicStatusPayloadFromHourlyRollups,
+  readCurrentHourPublicStatusSummary,
+  readPublicStatusHourlyRollups,
+} from "./hourly-rollups";
 import type {
   PublicStatusGroupSnapshot,
   PublicStatusModelSnapshot,
@@ -183,6 +194,7 @@ export async function readPublicStatusPayload(input: {
   rangeHours: number;
   nowIso: string;
   configVersion?: string;
+  configSnapshot?: PublicStatusConfigSnapshot | InternalPublicStatusConfigSnapshot | null;
   hasConfiguredGroups?: boolean;
   redis?: RedisReader | null;
   triggerRebuildHint: (reason: string) => Promise<void> | void;
@@ -192,6 +204,48 @@ export async function readPublicStatusPayload(input: {
   }
 
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (input.configSnapshot && input.configSnapshot.groups.length > 0) {
+    const groups = getConfiguredPublicStatusGroups({
+      ...input.configSnapshot,
+      groups: input.configSnapshot.groups.map((group) => ({
+        ...group,
+        sourceGroupName: "sourceGroupName" in group ? group.sourceGroupName : group.slug,
+      })),
+    });
+    const now = new Date(input.nowIso);
+    const currentHourStart = alignHourStartUtc(now);
+    const historyStart = new Date(
+      currentHourStart.getTime() - (input.rangeHours - 1) * 60 * 60 * 1000
+    );
+    const [historyRows, currentRows] = await Promise.all([
+      readPublicStatusHourlyRollups({
+        start: historyStart,
+        end: currentHourStart,
+        configVersion: input.configVersion,
+      }),
+      input.configVersion
+        ? readCurrentHourPublicStatusSummary({
+            redis,
+            configVersion: input.configVersion,
+            hourStart: currentHourStart,
+          })
+        : Promise.resolve([]),
+    ]);
+    const rows = [...historyRows, ...currentRows];
+    if (rows.length > 0) {
+      return buildPublicStatusPayloadFromHourlyRollups({
+        groups,
+        rows,
+        rangeHours: input.rangeHours,
+        now,
+        configVersion: input.configVersion,
+        intervalMinutes: input.intervalMinutes,
+      });
+    }
+
+    await input.triggerRebuildHint("rollup-missing");
+  }
+
   if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
     await input.triggerRebuildHint("redis-unavailable");
     return buildRebuildingPayload();

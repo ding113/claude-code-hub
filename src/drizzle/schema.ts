@@ -8,6 +8,7 @@ import {
   integer,
   bigint,
   numeric,
+  doublePrecision,
   jsonb,
   index,
   uniqueIndex,
@@ -618,6 +619,45 @@ export const messageRequest = pgTable('message_request', {
   messageRequestClientIpCreatedAtIdx: index('idx_message_request_client_ip_created_at')
     .on(table.clientIp, table.createdAt.desc())
     .where(sql`${table.deletedAt} IS NULL AND ${table.clientIp} IS NOT NULL`),
+}));
+
+export const publicStatusHourlyRollups = pgTable('public_status_hourly_rollups', {
+  id: serial('id').primaryKey(),
+  bucketStart: timestamp('bucket_start', { withTimezone: true }).notNull(),
+  bucketEnd: timestamp('bucket_end', { withTimezone: true }).notNull(),
+  configVersion: varchar('config_version', { length: 128 }).notNull(),
+  sourceGroupName: varchar('source_group_name', { length: 200 }).notNull(),
+  publicGroupSlug: varchar('public_group_slug', { length: 120 }).notNull(),
+  publicModelKey: varchar('public_model_key', { length: 200 }).notNull(),
+  label: varchar('label', { length: 200 }).notNull(),
+  vendorIconKey: varchar('vendor_icon_key', { length: 100 }).notNull(),
+  requestTypeBadge: varchar('request_type_badge', { length: 100 }).notNull(),
+  state: varchar('state', { length: 20 }).notNull().$type<'operational' | 'failed' | 'no_data'>(),
+  successCount: integer('success_count').notNull().default(0),
+  failureCount: integer('failure_count').notNull().default(0),
+  sampleCount: integer('sample_count').notNull().default(0),
+  availabilityPct: doublePrecision('availability_pct'),
+  ttfbMs: doublePrecision('ttfb_ms'),
+  tps: doublePrecision('tps'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  publicStatusHourlyRollupsUniq: uniqueIndex('uniq_public_status_hourly_rollup').on(
+    table.bucketStart,
+    table.publicGroupSlug,
+    table.publicModelKey,
+    table.requestTypeBadge
+  ),
+  publicStatusHourlyRollupsBucketIdx: index('idx_public_status_hourly_rollups_bucket').on(
+    table.bucketStart
+  ),
+  publicStatusHourlyRollupsConfigBucketIdx: index(
+    'idx_public_status_hourly_rollups_config_bucket'
+  ).on(table.configVersion, table.bucketStart),
+  publicStatusHourlyRollupsGroupModelIdx: index(
+    'idx_public_status_hourly_rollups_group_model'
+  ).on(table.publicGroupSlug, table.publicModelKey),
 }));
 
 // Model Prices table

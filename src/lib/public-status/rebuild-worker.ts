@@ -1,19 +1,20 @@
 import { getRedisClient } from "@/lib/redis";
-import {
-  buildPublicStatusPayloadFromRequests,
-  getConfiguredPublicStatusGroups,
-  queryPublicStatusRequests,
-} from "./aggregation";
+import { getConfiguredPublicStatusGroups, queryPublicStatusRequests } from "./aggregation";
 import { publishCurrentPublicStatusConfigProjection } from "./config-publisher";
 import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import {
+  alignHourStartUtc,
+  buildAndPersistPublicStatusHourlyRollup,
+  buildPublicStatusHourlyRollupsFromRequests,
+  cleanupPublicStatusHourlyRollups,
+  PUBLIC_STATUS_ROLLUP_RETENTION_DAYS,
+  writeCurrentHourPublicStatusSummary,
+} from "./hourly-rollups";
+import {
   alignBucketStartUtc,
   buildGenerationFingerprint,
-  buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
   buildPublicStatusRebuildLockKey,
-  buildPublicStatusSeriesChunkKey,
-  buildPublicStatusTempKey,
 } from "./redis-contract";
 
 interface PublicStatusRebuildResult {
@@ -23,8 +24,9 @@ interface PublicStatusRebuildResult {
 
 const inFlightRebuilds = new Map<string, Promise<PublicStatusRebuildResult>>();
 const REBUILD_LOCK_TTL_MS = 60_000;
-const TEMP_PROJECTION_TTL_SECONDS = 300;
-const GENERATION_PROJECTION_TTL_SECONDS = 60 * 60 * 24 * 30;
+const RUNTIME_MANIFEST_TTL_SECONDS = 60 * 60 * 2;
+const ROLLUP_WRITE_BATCH_SIZE = 6;
+const ROLLUP_HISTORY_HOURS = PUBLIC_STATUS_ROLLUP_RETENTION_DAYS * 24;
 
 interface RedisHintWriter {
   get?(key: string): Promise<string | null> | string | null;
@@ -33,15 +35,6 @@ interface RedisHintWriter {
   del?(...keys: string[]): Promise<unknown> | unknown;
   eval?(script: string, numKeys: number, ...args: string[]): Promise<unknown> | unknown;
   status?: string;
-}
-
-async function setWithTtl(
-  redis: RedisHintWriter,
-  key: string,
-  value: string,
-  ttlSeconds: number
-): Promise<void> {
-  await redis.set(key, value, "EX", ttlSeconds);
 }
 
 function getReadyRedisClient(redis?: RedisHintWriter | null): RedisHintWriter | null {
@@ -84,6 +77,14 @@ function shouldPromoteCurrentManifest(
   return true;
 }
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
 async function publishPublicStatusProjection(input: {
   redis: RedisHintWriter;
   configVersion: string;
@@ -93,19 +94,7 @@ async function publishPublicStatusProjection(input: {
   generatedAt: string;
   coveredFrom: string;
   coveredTo: string;
-  groups: unknown;
 }): Promise<void> {
-  const snapshotKey = buildPublicStatusCurrentSnapshotKey({
-    intervalMinutes: input.intervalMinutes,
-    rangeHours: input.rangeHours,
-    generation: input.sourceGeneration,
-  });
-  const seriesKey = buildPublicStatusSeriesChunkKey({
-    intervalMinutes: input.intervalMinutes,
-    generation: input.sourceGeneration,
-    bucketStartIso: input.coveredFrom,
-    bucketEndIso: input.coveredTo,
-  });
   const currentManifestKey = buildPublicStatusManifestKey({
     configVersion: "current",
     intervalMinutes: input.intervalMinutes,
@@ -117,26 +106,6 @@ async function publishPublicStatusProjection(input: {
     rangeHours: input.rangeHours,
   });
 
-  const nonce = `${input.sourceGeneration}-${Date.now()}`;
-  const snapshotTempKey = buildPublicStatusTempKey(snapshotKey, nonce);
-  const seriesTempKey = buildPublicStatusTempKey(seriesKey, nonce);
-
-  const snapshotRecord = {
-    rebuildState: "fresh" as const,
-    sourceGeneration: input.sourceGeneration,
-    generatedAt: input.generatedAt,
-    freshUntil: new Date(
-      Date.parse(input.generatedAt) + input.intervalMinutes * 60 * 1000
-    ).toISOString(),
-    groups: input.groups,
-  };
-  const seriesRecord = {
-    sourceGeneration: input.sourceGeneration,
-    generatedAt: input.generatedAt,
-    coveredFrom: input.coveredFrom,
-    coveredTo: input.coveredTo,
-    groups: input.groups,
-  };
   const manifestRecord = {
     configVersion: input.configVersion,
     intervalMinutes: input.intervalMinutes,
@@ -146,40 +115,18 @@ async function publishPublicStatusProjection(input: {
     coveredFrom: input.coveredFrom,
     coveredTo: input.coveredTo,
     generatedAt: input.generatedAt,
-    freshUntil: snapshotRecord.freshUntil,
+    freshUntil: new Date(
+      Date.parse(input.generatedAt) + input.intervalMinutes * 60 * 1000
+    ).toISOString(),
     rebuildState: "idle" as const,
     lastCompleteGeneration: input.sourceGeneration,
   };
 
-  await setWithTtl(
-    input.redis,
-    snapshotTempKey,
-    JSON.stringify(snapshotRecord),
-    TEMP_PROJECTION_TTL_SECONDS
-  );
-  await setWithTtl(
-    input.redis,
-    seriesTempKey,
-    JSON.stringify(seriesRecord),
-    TEMP_PROJECTION_TTL_SECONDS
-  );
-  await setWithTtl(
-    input.redis,
-    snapshotKey,
-    JSON.stringify(snapshotRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
-  );
-  await setWithTtl(
-    input.redis,
-    seriesKey,
-    JSON.stringify(seriesRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
-  );
-  await setWithTtl(
-    input.redis,
+  await input.redis.set(
     versionedManifestKey,
     JSON.stringify(manifestRecord),
-    GENERATION_PROJECTION_TTL_SECONDS
+    "EX",
+    RUNTIME_MANIFEST_TTL_SECONDS
   );
   if (typeof input.redis.get === "function") {
     let existingCurrentManifest: { configVersion?: string; coveredTo?: string } | null = null;
@@ -193,13 +140,20 @@ async function publishPublicStatusProjection(input: {
     }
 
     if (shouldPromoteCurrentManifest(existingCurrentManifest, manifestRecord)) {
-      await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
+      await input.redis.set(
+        currentManifestKey,
+        JSON.stringify(manifestRecord),
+        "EX",
+        RUNTIME_MANIFEST_TTL_SECONDS
+      );
     }
   } else {
-    await input.redis.set(currentManifestKey, JSON.stringify(manifestRecord));
-  }
-  if (input.redis.del) {
-    await input.redis.del(snapshotTempKey, seriesTempKey);
+    await input.redis.set(
+      currentManifestKey,
+      JSON.stringify(manifestRecord),
+      "EX",
+      RUNTIME_MANIFEST_TTL_SECONDS
+    );
   }
 }
 
@@ -319,13 +273,16 @@ export async function rebuildPublicStatusProjection(input: {
 
   const now = input.now ?? new Date();
   const coveredTo = alignBucketStartUtc(now.toISOString(), input.intervalMinutes);
-  const coveredFrom = new Date(
+  const manifestCoveredFrom = new Date(
     Date.parse(coveredTo) - input.rangeHours * 60 * 60 * 1000
+  ).toISOString();
+  const rollupCoveredFrom = new Date(
+    Date.parse(coveredTo) - ROLLUP_HISTORY_HOURS * 60 * 60 * 1000
   ).toISOString();
   const sourceGeneration = buildGenerationFingerprint({
     configVersion: configSnapshot.configVersion,
     intervalMinutes: input.intervalMinutes,
-    coveredFromIso: coveredFrom,
+    coveredFromIso: manifestCoveredFrom,
     coveredToIso: coveredTo,
   });
 
@@ -348,18 +305,45 @@ export async function rebuildPublicStatusProjection(input: {
       }
 
       try {
-        const requests = await queryPublicStatusRequests({
+        const finalizedHourStarts: Date[] = [];
+        for (
+          let cursorMs = Date.parse(rollupCoveredFrom);
+          cursorMs < Date.parse(coveredTo);
+          cursorMs += 60 * 60 * 1000
+        ) {
+          finalizedHourStarts.push(new Date(cursorMs));
+        }
+        for (const hourStartBatch of chunkArray(finalizedHourStarts, ROLLUP_WRITE_BATCH_SIZE)) {
+          await Promise.all(
+            hourStartBatch.map((hourStart) =>
+              buildAndPersistPublicStatusHourlyRollup({
+                configVersion: configSnapshot.configVersion,
+                hourStart,
+                groups,
+              })
+            )
+          );
+        }
+
+        const currentHourStart = alignHourStartUtc(now);
+        const currentHourRequests = await queryPublicStatusRequests({
           groups,
-          coveredFrom: new Date(coveredFrom),
-          coveredTo: new Date(coveredTo),
+          coveredFrom: currentHourStart,
+          coveredTo: now,
         });
-        const aggregation = buildPublicStatusPayloadFromRequests({
-          rangeHours: input.rangeHours,
-          intervalMinutes: input.intervalMinutes,
-          now: new Date(coveredTo),
+        const currentHourRollups = buildPublicStatusHourlyRollupsFromRequests({
+          configVersion: configSnapshot.configVersion,
+          hourStart: currentHourStart,
           groups,
-          requests,
+          requests: currentHourRequests,
         });
+        await writeCurrentHourPublicStatusSummary({
+          redis,
+          configVersion: configSnapshot.configVersion,
+          hourStart: currentHourStart,
+          rows: currentHourRollups,
+        });
+        await cleanupPublicStatusHourlyRollups({ now });
 
         await publishPublicStatusProjection({
           redis,
@@ -367,10 +351,9 @@ export async function rebuildPublicStatusProjection(input: {
           intervalMinutes: input.intervalMinutes,
           rangeHours: input.rangeHours,
           sourceGeneration,
-          generatedAt: aggregation.generatedAt,
-          coveredFrom: aggregation.coveredFrom,
-          coveredTo: aggregation.coveredTo,
-          groups: aggregation.groups,
+          generatedAt: now.toISOString(),
+          coveredFrom: manifestCoveredFrom,
+          coveredTo,
         });
 
         return { sourceGeneration };

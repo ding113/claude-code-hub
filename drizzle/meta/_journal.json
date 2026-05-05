@@ -722,6 +722,13 @@
       "when": 1777739658761,
       "tag": "0102_useful_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1777968803451,
+      "tag": "0103_public_status_hourly_rollups",
+      "breakpoints": true
     }
   ]
 }
