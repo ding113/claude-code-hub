@@ -110,13 +110,60 @@ describe("public-status hourly rollups", () => {
       configVersion: "cfg-1",
       publicGroupSlug: "openai",
       publicModelKey: "gpt-4.1",
-      state: "operational",
+      state: "degraded",
       successCount: 1,
       failureCount: 1,
       sampleCount: 2,
       availabilityPct: 50,
       ttfbMs: 200,
       tps: 50,
+    });
+  });
+
+  it("keeps degraded state for low-success hourly buckets", async () => {
+    const mod = await import("@/lib/public-status/hourly-rollups");
+
+    const rows = mod.buildPublicStatusHourlyRollupsFromRequests({
+      configVersion: "cfg-1",
+      hourStart: "2026-04-21T10:00:00.000Z",
+      groups: [buildGroup()],
+      requests: [
+        {
+          id: 1,
+          createdAt: "2026-04-21T10:10:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 11,
+              name: "provider",
+              groupTag: "openai",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+        {
+          id: 2,
+          createdAt: "2026-04-21T10:20:00.000Z",
+          originalModel: "gpt-4.1",
+          providerChain: [
+            {
+              id: 12,
+              name: "provider",
+              groupTag: "openai",
+              reason: "retry_failed",
+              statusCode: 500,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(rows[0]).toMatchObject({
+      state: "degraded",
+      availabilityPct: 50,
+      successCount: 1,
+      failureCount: 1,
     });
   });
 
@@ -138,11 +185,11 @@ describe("public-status hourly rollups", () => {
           label: "GPT-4.1",
           vendorIconKey: "openai",
           requestTypeBadge: "openaiCompatible",
-          state: "operational",
+          state: "degraded",
           successCount: 4,
-          failureCount: 0,
-          sampleCount: 4,
-          availabilityPct: 100,
+          failureCount: 1,
+          sampleCount: 5,
+          availabilityPct: 80,
           ttfbMs: 120,
           tps: 8,
           generatedAt: new Date("2026-04-21T11:00:00.000Z"),
@@ -172,14 +219,15 @@ describe("public-status hourly rollups", () => {
     expect(payload.rebuildState).toBe("fresh");
     expect(payload.groups[0]?.models[0]).toMatchObject({
       latestState: "failed",
-      availabilityPct: 80,
+      availabilityPct: 66.67,
       latestTtfbMs: 120,
       latestTps: 8,
     });
     expect(payload.groups[0]?.models[0]?.timeline).toEqual([
       expect.objectContaining({
         bucketStart: "2026-04-21T10:00:00.000Z",
-        sampleCount: 4,
+        sampleCount: 5,
+        state: "degraded",
       }),
       expect.objectContaining({
         bucketStart: "2026-04-21T11:00:00.000Z",

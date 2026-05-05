@@ -1,4 +1,4 @@
-import { and, asc, gte, lt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { publicStatusHourlyRollups } from "@/drizzle/schema";
 import {
@@ -22,6 +22,7 @@ import { buildGenerationFingerprint } from "./redis-contract";
 
 export const PUBLIC_STATUS_ROLLUP_RETENTION_DAYS = 30;
 export const PUBLIC_STATUS_CURRENT_HOUR_CACHE_TTL_SECONDS = 10 * 60;
+export const PUBLIC_STATUS_DEGRADED_AVAILABILITY_THRESHOLD = 99.9;
 
 export interface PublicStatusHourlyRollupRow {
   bucketStart: Date;
@@ -33,7 +34,7 @@ export interface PublicStatusHourlyRollupRow {
   label: string;
   vendorIconKey: string;
   requestTypeBadge: string;
-  state: "operational" | "failed" | "no_data";
+  state: "operational" | "degraded" | "failed" | "no_data";
   successCount: number;
   failureCount: number;
   sampleCount: number;
@@ -56,16 +57,12 @@ function median(values: number[]): number | null {
 
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) {
-    const left = sorted[middle - 1];
-    const right = sorted[middle];
-    if (typeof left !== "number" || typeof right !== "number") {
-      return null;
-    }
-    return Number(((left + right) / 2).toFixed(4));
-  }
+  const result =
+    sorted.length % 2 === 0
+      ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+      : sorted[middle];
 
-  return sorted[middle] ?? null;
+  return result === undefined ? null : Number(result.toFixed(4));
 }
 
 function normalizeFiniteNumber(value: unknown): number | null {
@@ -104,6 +101,21 @@ export function buildPublicStatusCurrentHourSummaryKey(input: {
     encodeURIComponent(input.configVersion),
     alignHourStartUtc(input.hourStart).toISOString(),
   ].join(":");
+}
+
+function deriveRollupState(input: {
+  sampleCount: number;
+  availabilityPct: number | null;
+}): PublicStatusHourlyRollupRow["state"] {
+  if (input.sampleCount === 0 || input.availabilityPct === null) {
+    return "no_data";
+  }
+  if (input.availabilityPct === 0) {
+    return "failed";
+  }
+  return input.availabilityPct >= PUBLIC_STATUS_DEGRADED_AVAILABILITY_THRESHOLD
+    ? "operational"
+    : "degraded";
 }
 
 export function buildPublicStatusHourlyRollupsFromRequests(input: {
@@ -257,6 +269,8 @@ export function buildPublicStatusHourlyRollupsFromRequests(input: {
         tpsValues: [],
       };
       const sampleCount = bucket.successCount + bucket.failureCount;
+      const availabilityPct =
+        sampleCount === 0 ? null : Number(((bucket.successCount / sampleCount) * 100).toFixed(2));
       return {
         bucketStart,
         bucketEnd,
@@ -267,12 +281,11 @@ export function buildPublicStatusHourlyRollupsFromRequests(input: {
         label: model.label,
         vendorIconKey: model.vendorIconKey,
         requestTypeBadge: model.requestTypeBadge,
-        state: sampleCount === 0 ? "no_data" : bucket.successCount > 0 ? "operational" : "failed",
+        state: deriveRollupState({ sampleCount, availabilityPct }),
         successCount: bucket.successCount,
         failureCount: bucket.failureCount,
         sampleCount,
-        availabilityPct:
-          sampleCount === 0 ? null : Number(((bucket.successCount / sampleCount) * 100).toFixed(2)),
+        availabilityPct,
         ttfbMs: median(bucket.ttfbValues),
         tps: median(bucket.tpsValues),
         generatedAt,
@@ -348,7 +361,7 @@ export async function readPublicStatusHourlyRollups(input: {
     lt(publicStatusHourlyRollups.bucketStart, input.end),
   ];
   if (input.configVersion) {
-    conditions.push(sql`${publicStatusHourlyRollups.configVersion} = ${input.configVersion}`);
+    conditions.push(eq(publicStatusHourlyRollups.configVersion, input.configVersion));
   }
 
   const rows = await db
@@ -387,7 +400,9 @@ export async function cleanupPublicStatusHourlyRollups(
 ): Promise<void> {
   const now = input.now ?? new Date();
   const retentionDays = input.retentionDays ?? PUBLIC_STATUS_ROLLUP_RETENTION_DAYS;
-  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(now.getTime());
+  cutoff.setUTCDate(cutoff.getUTCDate() - retentionDays);
+  cutoff.setUTCHours(0, 0, 0, 0);
 
   await db
     .delete(publicStatusHourlyRollups)
@@ -503,7 +518,7 @@ export function buildPublicStatusPayloadFromHourlyRollups(input: {
           ) ?? null;
         rowSlots.push(row);
         rawStates.push(
-          row && row.sampleCount > 0 ? (row.successCount > 0 ? "operational" : "failed") : null
+          row && row.sampleCount > 0 ? (row.state === "failed" ? "failed" : "operational") : null
         );
       }
 
@@ -529,11 +544,13 @@ export function buildPublicStatusPayloadFromHourlyRollups(input: {
 
         const sampleCount = row?.sampleCount ?? 0;
         const state: PublicStatusTimelineState =
-          filledTimeline[index] === "operational"
-            ? "operational"
-            : filledTimeline[index] === "failed"
-              ? "failed"
-              : "no_data";
+          row && sampleCount > 0
+            ? row.state
+            : filledTimeline[index] === "operational"
+              ? "operational"
+              : filledTimeline[index] === "failed"
+                ? "failed"
+                : "no_data";
 
         return {
           bucketStart: bucketStart.toISOString(),
@@ -555,17 +572,20 @@ export function buildPublicStatusPayloadFromHourlyRollups(input: {
       });
 
       const latestStateRaw = [...filledTimeline].reverse().find((state) => state !== null) ?? null;
+      const latestRowState =
+        [...rowSlots].reverse().find((row) => row && row.sampleCount > 0)?.state ?? null;
       return {
         publicModelKey: model.publicModelKey,
         label: model.label,
         vendorIconKey: model.vendorIconKey,
         requestTypeBadge: model.requestTypeBadge,
         latestState:
-          latestStateRaw === "operational"
+          latestRowState ??
+          (latestStateRaw === "operational"
             ? "operational"
             : latestStateRaw === "failed"
               ? "failed"
-              : "no_data",
+              : "no_data"),
         availabilityPct:
           totalSamples === 0 ? null : Number(((totalSuccess / totalSamples) * 100).toFixed(2)),
         latestTtfbMs,
@@ -613,7 +633,10 @@ function parseSerializedRollupRow(input: unknown): PublicStatusHourlyRollupRow[]
     typeof value.label !== "string" ||
     typeof value.vendorIconKey !== "string" ||
     typeof value.requestTypeBadge !== "string" ||
-    (value.state !== "operational" && value.state !== "failed" && value.state !== "no_data") ||
+    (value.state !== "operational" &&
+      value.state !== "degraded" &&
+      value.state !== "failed" &&
+      value.state !== "no_data") ||
     typeof value.successCount !== "number" ||
     typeof value.failureCount !== "number" ||
     typeof value.sampleCount !== "number" ||

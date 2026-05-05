@@ -4,10 +4,11 @@ import { publishCurrentPublicStatusConfigProjection } from "./config-publisher";
 import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import {
   alignHourStartUtc,
-  buildAndPersistPublicStatusHourlyRollup,
   buildPublicStatusHourlyRollupsFromRequests,
   cleanupPublicStatusHourlyRollups,
   PUBLIC_STATUS_ROLLUP_RETENTION_DAYS,
+  readPublicStatusHourlyRollups,
+  upsertPublicStatusHourlyRollups,
   writeCurrentHourPublicStatusSummary,
 } from "./hourly-rollups";
 import {
@@ -25,7 +26,9 @@ interface PublicStatusRebuildResult {
 const inFlightRebuilds = new Map<string, Promise<PublicStatusRebuildResult>>();
 const REBUILD_LOCK_TTL_MS = 60_000;
 const RUNTIME_MANIFEST_TTL_SECONDS = 60 * 60 * 2;
-const ROLLUP_WRITE_BATCH_SIZE = 6;
+const ROLLUP_QUERY_CHUNK_HOURS = 24;
+const ROLLUP_RECENT_FINALIZED_HOURS = 2;
+const ROLLUP_WRITE_BATCH_SIZE = 500;
 const ROLLUP_HISTORY_HOURS = PUBLIC_STATUS_ROLLUP_RETENTION_DAYS * 24;
 
 interface RedisHintWriter {
@@ -83,6 +86,86 @@ function chunkArray<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
+}
+
+function buildHourlyStarts(input: { coveredFrom: string; coveredTo: string }): Date[] {
+  const starts: Date[] = [];
+  const coveredFromMs = alignHourStartUtc(input.coveredFrom).getTime();
+  const coveredToMs = alignHourStartUtc(input.coveredTo).getTime();
+  for (let cursorMs = coveredFromMs; cursorMs < coveredToMs; cursorMs += 60 * 60 * 1000) {
+    starts.push(new Date(cursorMs));
+  }
+  return starts;
+}
+
+function buildRollupIdentity(input: {
+  bucketStart: Date;
+  publicGroupSlug: string;
+  publicModelKey: string;
+  requestTypeBadge: string;
+}): string {
+  return [
+    input.bucketStart.toISOString(),
+    input.publicGroupSlug,
+    input.publicModelKey,
+    input.requestTypeBadge,
+  ].join("\u0000");
+}
+
+async function findHoursNeedingRollupRefresh(input: {
+  configVersion: string;
+  coveredFrom: Date;
+  coveredTo: Date;
+  groups: ReturnType<typeof getConfiguredPublicStatusGroups>;
+  recentFinalizedHours?: number;
+}): Promise<Date[]> {
+  const allHourStarts = buildHourlyStarts({
+    coveredFrom: input.coveredFrom.toISOString(),
+    coveredTo: input.coveredTo.toISOString(),
+  });
+  if (allHourStarts.length === 0) {
+    return [];
+  }
+
+  const existingRows = await readPublicStatusHourlyRollups({
+    start: input.coveredFrom,
+    end: input.coveredTo,
+    configVersion: input.configVersion,
+  });
+  const existingKeys = new Set(
+    existingRows.map((row) =>
+      buildRollupIdentity({
+        bucketStart: row.bucketStart,
+        publicGroupSlug: row.publicGroupSlug,
+        publicModelKey: row.publicModelKey,
+        requestTypeBadge: row.requestTypeBadge,
+      })
+    )
+  );
+  const recentStartIndex = Math.max(
+    0,
+    allHourStarts.length - (input.recentFinalizedHours ?? ROLLUP_RECENT_FINALIZED_HOURS)
+  );
+
+  return allHourStarts.filter((hourStart, index) => {
+    if (index >= recentStartIndex) {
+      return true;
+    }
+
+    return input.groups.some((group) =>
+      group.models.some(
+        (model) =>
+          !existingKeys.has(
+            buildRollupIdentity({
+              bucketStart: hourStart,
+              publicGroupSlug: group.publicGroupSlug,
+              publicModelKey: model.publicModelKey,
+              requestTypeBadge: model.requestTypeBadge,
+            })
+          )
+      )
+    );
+  });
 }
 
 async function publishPublicStatusProjection(input: {
@@ -273,12 +356,13 @@ export async function rebuildPublicStatusProjection(input: {
 
   const now = input.now ?? new Date();
   const coveredTo = alignBucketStartUtc(now.toISOString(), input.intervalMinutes);
+  const currentHourStart = alignHourStartUtc(now);
   const manifestCoveredFrom = new Date(
     Date.parse(coveredTo) - input.rangeHours * 60 * 60 * 1000
   ).toISOString();
   const rollupCoveredFrom = new Date(
-    Date.parse(coveredTo) - ROLLUP_HISTORY_HOURS * 60 * 60 * 1000
-  ).toISOString();
+    currentHourStart.getTime() - ROLLUP_HISTORY_HOURS * 60 * 60 * 1000
+  );
   const sourceGeneration = buildGenerationFingerprint({
     configVersion: configSnapshot.configVersion,
     intervalMinutes: input.intervalMinutes,
@@ -305,27 +389,38 @@ export async function rebuildPublicStatusProjection(input: {
       }
 
       try {
-        const finalizedHourStarts: Date[] = [];
-        for (
-          let cursorMs = Date.parse(rollupCoveredFrom);
-          cursorMs < Date.parse(coveredTo);
-          cursorMs += 60 * 60 * 1000
-        ) {
-          finalizedHourStarts.push(new Date(cursorMs));
-        }
-        for (const hourStartBatch of chunkArray(finalizedHourStarts, ROLLUP_WRITE_BATCH_SIZE)) {
-          await Promise.all(
-            hourStartBatch.map((hourStart) =>
-              buildAndPersistPublicStatusHourlyRollup({
-                configVersion: configSnapshot.configVersion,
-                hourStart,
-                groups,
-              })
-            )
+        const finalizedHourStarts = await findHoursNeedingRollupRefresh({
+          configVersion: configSnapshot.configVersion,
+          coveredFrom: rollupCoveredFrom,
+          coveredTo: currentHourStart,
+          groups,
+        });
+        for (const hourStartBatch of chunkArray(finalizedHourStarts, ROLLUP_QUERY_CHUNK_HOURS)) {
+          const chunkStart = hourStartBatch[0];
+          const chunkEndStart = hourStartBatch.at(-1);
+          if (!chunkStart || !chunkEndStart) {
+            continue;
+          }
+
+          const chunkEnd = new Date(chunkEndStart.getTime() + 60 * 60 * 1000);
+          const requests = await queryPublicStatusRequests({
+            groups,
+            coveredFrom: chunkStart,
+            coveredTo: chunkEnd,
+          });
+          const rollups = hourStartBatch.flatMap((hourStart) =>
+            buildPublicStatusHourlyRollupsFromRequests({
+              configVersion: configSnapshot.configVersion,
+              hourStart,
+              groups,
+              requests,
+            })
           );
+          for (const rollupBatch of chunkArray(rollups, ROLLUP_WRITE_BATCH_SIZE)) {
+            await upsertPublicStatusHourlyRollups(rollupBatch);
+          }
         }
 
-        const currentHourStart = alignHourStartUtc(now);
         const currentHourRequests = await queryPublicStatusRequests({
           groups,
           coveredFrom: currentHourStart,
