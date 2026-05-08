@@ -123,7 +123,12 @@ export default proxyHandler;
 export { matchesPublicPath };
 
 export const config = {
-  // Pattern lives in `src/proxy.matcher.ts` so it can be exercised by a
-  // regression test without importing the full proxy handler.
-  matcher: [proxyMatcherPattern],
+  // Pattern originally from `src/proxy.matcher.ts` but inlined here because
+  // Next.js requires matcher patterns to be statically analyzable strings.
+  // Match all request paths except for:
+  // - api (API routes - own auth via cookie session, no proxy needed)
+  // - v1 / v1beta (API proxy routes - own auth via Bearer token)
+  // - _next/static, _next/image (static files)
+  // - favicon.ico (favicon file)
+  matcher: ["/((?!api|v1|_next/static|_next/image|favicon.ico).*)"],
 };
