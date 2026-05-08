@@ -22,12 +22,7 @@ export interface FakeStreamingWhitelistEntry {
 
 // Default whitelist used when system_settings has no persisted value (legacy
 // upgrade path). A persisted empty array is preserved as explicit opt-out.
-export const DEFAULT_FAKE_STREAMING_WHITELIST: ReadonlyArray<FakeStreamingWhitelistEntry> = [
-  { model: "gpt-image-2", groupTags: [] },
-  { model: "gpt-image-1.5", groupTags: [] },
-  { model: "gemini-3.1-flash-image-preview", groupTags: [] },
-  { model: "gemini-3-pro-image-preview", groupTags: [] },
-];
+export const DEFAULT_FAKE_STREAMING_WHITELIST: ReadonlyArray<FakeStreamingWhitelistEntry> = [];
 
 export interface SystemSettings {
   id: number;

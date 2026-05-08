@@ -146,22 +146,6 @@ async function submitForm() {
   });
 }
 
-function findRemoveButtons(): HTMLButtonElement[] {
-  return Array.from(
-    document.querySelectorAll<HTMLButtonElement>('button[data-testid^="fake-streaming-remove-"]')
-  );
-}
-
-function findAddButton(): HTMLButtonElement | null {
-  return document.querySelector<HTMLButtonElement>('button[data-testid="fake-streaming-add"]');
-}
-
-function findModelInputs(): HTMLInputElement[] {
-  return Array.from(
-    document.querySelectorAll<HTMLInputElement>('input[data-testid^="fake-streaming-model-"]')
-  );
-}
-
 describe("SystemSettingsForm fake streaming whitelist", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
@@ -185,55 +169,23 @@ describe("SystemSettingsForm fake streaming whitelist", () => {
     unmount();
   });
 
-  test("user can add a new model entry and saves it for all groups", async () => {
+  test("editor UI is no longer rendered", () => {
     const { unmount } = render(<SystemSettingsForm initialSettings={baseSettings} />);
 
-    const addBtn = findAddButton();
-    if (!addBtn) throw new Error("未找到 fake-streaming 添加按钮");
-
-    act(() => {
-      addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const inputs = findModelInputs();
-    expect(inputs.length).toBe(3);
-    const newRow = inputs[2];
-
-    act(() => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(newRow, "custom-model-x");
-      newRow.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-
-    await submitForm();
-
-    expect(systemConfigActionMocks.saveSystemSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        fakeStreamingWhitelist: [
-          { model: "gpt-image-2", groupTags: [] },
-          { model: "gemini-3.1-flash-image-preview", groupTags: [] },
-          { model: "custom-model-x", groupTags: [] },
-        ],
-      })
-    );
+    expect(document.querySelector('button[data-testid="fake-streaming-add"]')).toBeNull();
+    expect(document.querySelector('button[data-testid^="fake-streaming-remove-"]')).toBeNull();
+    expect(document.querySelector('input[data-testid^="fake-streaming-model-"]')).toBeNull();
 
     unmount();
   });
 
-  test("user can remove a model entry and the empty whitelist is preserved as opt-out", async () => {
-    const singleEntry = {
+  test("preserves an explicitly empty initial whitelist as opt-out", async () => {
+    const emptyInitial = {
       ...baseSettings,
-      fakeStreamingWhitelist: [{ model: "gpt-image-2", groupTags: [] }],
+      fakeStreamingWhitelist: [],
     } satisfies typeof baseSettings;
 
-    const { unmount } = render(<SystemSettingsForm initialSettings={singleEntry} />);
-
-    const removeBtns = findRemoveButtons();
-    expect(removeBtns.length).toBe(1);
-
-    act(() => {
-      removeBtns[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    const { unmount } = render(<SystemSettingsForm initialSettings={emptyInitial} />);
 
     await submitForm();
 
@@ -247,18 +199,15 @@ describe("SystemSettingsForm fake streaming whitelist", () => {
   });
 
   test("trims whitespace and drops empty model entries before submitting", async () => {
-    const { unmount } = render(<SystemSettingsForm initialSettings={baseSettings} />);
+    const initial = {
+      ...baseSettings,
+      fakeStreamingWhitelist: [
+        { model: "  custom-image-model  ", groupTags: [] },
+        { model: "   ", groupTags: [] },
+      ],
+    } satisfies typeof baseSettings;
 
-    const inputs = findModelInputs();
-    expect(inputs.length).toBe(2);
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-
-    act(() => {
-      setter?.call(inputs[0], "  custom-image-model  ");
-      inputs[0].dispatchEvent(new Event("input", { bubbles: true }));
-      setter?.call(inputs[1], "   ");
-      inputs[1].dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    const { unmount } = render(<SystemSettingsForm initialSettings={initial} />);
 
     await submitForm();
 
