@@ -324,47 +324,79 @@ function resolveCacheTtlPreference(
   return normalize(keyPref) ?? normalize(providerPref) ?? null;
 }
 
-function applyCacheTtlOverrideToMessage(
+function applyTtlToContentBlocks(
+  blocks: unknown[],
+  ttl: CacheTtlResolved
+): { blocks: unknown[]; applied: boolean } {
+  let applied = false;
+  const next = blocks.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const itemObj = item as Record<string, unknown>;
+    const cacheControl = itemObj.cache_control;
+    if (!cacheControl || typeof cacheControl !== "object") return item;
+    const ccObj = cacheControl as Record<string, unknown>;
+    if (ccObj.type !== "ephemeral") return item;
+    applied = true;
+    return {
+      ...itemObj,
+      cache_control: {
+        ...ccObj,
+        ttl: ttl === "1h" ? "1h" : "5m",
+      },
+    };
+  });
+  return { blocks: next, applied };
+}
+
+export function applyCacheTtlOverrideToMessage(
   message: Record<string, unknown>,
   ttl: CacheTtlResolved
 ): boolean {
   let applied = false;
-  const messages = (message as Record<string, unknown>).messages;
 
-  if (!Array.isArray(messages)) {
-    return applied;
+  // 顶层 system 字段:可能是 string(忽略)或内容块数组
+  // 仅在确有命中时回写,避免 .map() 额外分配的新数组替换原引用
+  const system = message.system;
+  if (Array.isArray(system)) {
+    const result = applyTtlToContentBlocks(system, ttl);
+    if (result.applied) {
+      message.system = result.blocks;
+      applied = true;
+    }
   }
 
-  for (const msg of messages) {
-    if (!msg || typeof msg !== "object") continue;
-    const msgObj = msg as Record<string, unknown>;
-    const content = msgObj.content;
-
-    if (!Array.isArray(content)) continue;
-
-    msgObj.content = content.map((item) => {
-      if (!item || typeof item !== "object") return item;
-      const itemObj = item as Record<string, unknown>;
-      const cacheControl = itemObj.cache_control;
-
-      if (cacheControl && typeof cacheControl === "object") {
-        const ccObj = cacheControl as Record<string, unknown>;
-        if (ccObj.type === "ephemeral") {
-          applied = true;
-          return {
-            ...itemObj,
-            cache_control: {
-              ...ccObj,
-              ttl: ttl === "1h" ? "1h" : "5m",
-            },
-          };
-        }
+  // messages[].content[]
+  const messages = message.messages;
+  if (Array.isArray(messages)) {
+    for (const msg of messages) {
+      if (!msg || typeof msg !== "object") continue;
+      const msgObj = msg as Record<string, unknown>;
+      const content = msgObj.content;
+      if (!Array.isArray(content)) continue;
+      const result = applyTtlToContentBlocks(content, ttl);
+      if (result.applied) {
+        msgObj.content = result.blocks;
+        applied = true;
       }
-      return item;
-    });
+    }
   }
 
   return applied;
+}
+
+export function mergeAnthropicCacheTtlBetaFlag(existing: string | null | undefined): string {
+  const betaFlags = new Set(
+    (existing ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+  betaFlags.add("extended-cache-ttl-2025-04-11");
+  // 确保包含基础的 prompt-caching 标记
+  if (betaFlags.size === 1) {
+    betaFlags.add("prompt-caching-2024-07-31");
+  }
+  return Array.from(betaFlags).join(", ");
 }
 
 function clampRetryAttempts(value: number): number {
@@ -4639,19 +4671,9 @@ export class ProxyForwarder {
 
     // 针对 1h 缓存 TTL，补充 Anthropic beta header（避免客户端遗漏）
     if (session.getCacheTtlResolved && session.getCacheTtlResolved() === "1h") {
-      const existingBeta = session.headers.get("anthropic-beta") || "";
-      const betaFlags = new Set(
-        existingBeta
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
+      overrides["anthropic-beta"] = mergeAnthropicCacheTtlBetaFlag(
+        session.headers.get("anthropic-beta")
       );
-      betaFlags.add("extended-cache-ttl-2025-04-11");
-      // 确保包含基础的 prompt-caching 标记
-      if (betaFlags.size === 1) {
-        betaFlags.add("prompt-caching-2024-07-31");
-      }
-      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
