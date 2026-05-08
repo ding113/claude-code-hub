@@ -631,6 +631,14 @@ function isResponsesWsUpgrade(req) {
 }
 
 async function main() {
+  // Surface the build-time Next config via the env var Next's own standalone
+  // template uses. See server-lib/standalone-config.js for the full rationale.
+  if (!dev) {
+    // eslint-disable-next-line global-require
+    const { applyStandaloneNextConfig } = require("./server-lib/standalone-config");
+    applyStandaloneNextConfig({ rootDir: __dirname, env: process.env, log });
+  }
+
   // Import Next programmatically. We require it lazily so that the server can
   // still report a clean error if Next is not installed (unlikely but possible
   // in a misconfigured deployment).
