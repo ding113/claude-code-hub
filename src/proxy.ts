@@ -6,6 +6,7 @@ import { routing } from "@/i18n/routing";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { proxyMatcherPattern } from "@/proxy.matcher";
 
 // Public paths that don't require authentication
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
@@ -122,19 +123,7 @@ export default proxyHandler;
 export { matchesPublicPath };
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes - handled separately)
-     * - v1 / v1beta (API proxy routes - own auth via Bearer token; matching
-     *   them here also forces Next.js to clone the request body via
-     *   getCloneableBody → cloneBodyStream, which clamps proxied bodies to
-     *   experimental.proxyClientMaxBodySize for no benefit since we no-op
-     *   immediately for these paths)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/((?!api|v1|_next/static|_next/image|favicon.ico).*)",
-  ],
+  // Pattern lives in `src/proxy.matcher.ts` so it can be exercised by a
+  // regression test without importing the full proxy handler.
+  matcher: [proxyMatcherPattern],
 };
