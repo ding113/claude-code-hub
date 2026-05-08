@@ -91,19 +91,23 @@ describe("applyCacheTtlOverrideToMessage", () => {
     expect(msgs[0].content[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
   });
 
-  it("returns false and mutates nothing when there are no ephemeral breakpoints", () => {
+  it("returns false and preserves reference identity when there are no ephemeral breakpoints", () => {
+    const originalSystem = [{ type: "text", text: "no cache" }];
+    const originalMessageContent = [{ type: "text", text: "no cache here either" }];
     const message: Record<string, unknown> = {
-      system: [{ type: "text", text: "no cache" }],
-      messages: [{ role: "user", content: [{ type: "text", text: "no cache here either" }] }],
+      system: originalSystem,
+      messages: [{ role: "user", content: originalMessageContent }],
     };
 
     const applied = applyCacheTtlOverrideToMessage(message, "1h");
 
     expect(applied).toBe(false);
-    expect(message.system).toEqual([{ type: "text", text: "no cache" }]);
-    expect(message.messages).toEqual([
-      { role: "user", content: [{ type: "text", text: "no cache here either" }] },
-    ]);
+    // Reference identity should be preserved on the no-op path so downstream
+    // consumers that diff by reference (e.g. dirty-checking) don't see false positives.
+    expect(message.system).toBe(originalSystem);
+    expect((message.messages as Array<{ content: unknown }>)[0].content).toBe(
+      originalMessageContent
+    );
   });
 
   it("downgrades existing 1h ttl to 5m when override resolves to 5m", () => {
@@ -224,6 +228,20 @@ describe("mergeAnthropicCacheTtlBetaFlag", () => {
     const merged = mergeAnthropicCacheTtlBetaFlag(
       "extended-cache-ttl-2025-04-11, prompt-caching-2024-07-31"
     );
+    const flags = merged.split(",").map((s) => s.trim());
+    expect(flags).toEqual(
+      expect.arrayContaining(["extended-cache-ttl-2025-04-11", "prompt-caching-2024-07-31"])
+    );
+    expect(flags).toHaveLength(2);
+  });
+
+  it("preserves the size===1 backfill quirk when client only sent extended-cache-ttl-2025-04-11", () => {
+    // Document existing behavior: when the client sends only the extended-cache-ttl
+    // beta flag, after our `add()` (no-op) the set still has size 1, so the helper
+    // backfills `prompt-caching-2024-07-31` even though the client did not include it.
+    // This mirrors the inlined logic that pre-dated this refactor; preserved here so a
+    // future refactor that changes the contract has to update the test deliberately.
+    const merged = mergeAnthropicCacheTtlBetaFlag("extended-cache-ttl-2025-04-11");
     const flags = merged.split(",").map((s) => s.trim());
     expect(flags).toEqual(
       expect.arrayContaining(["extended-cache-ttl-2025-04-11", "prompt-caching-2024-07-31"])

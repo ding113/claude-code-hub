@@ -355,11 +355,14 @@ export function applyCacheTtlOverrideToMessage(
   let applied = false;
 
   // 顶层 system 字段:可能是 string(忽略)或内容块数组
+  // 仅在确有命中时回写,避免 .map() 额外分配的新数组替换原引用
   const system = message.system;
   if (Array.isArray(system)) {
     const result = applyTtlToContentBlocks(system, ttl);
-    message.system = result.blocks;
-    applied = applied || result.applied;
+    if (result.applied) {
+      message.system = result.blocks;
+      applied = true;
+    }
   }
 
   // messages[].content[]
@@ -371,8 +374,10 @@ export function applyCacheTtlOverrideToMessage(
       const content = msgObj.content;
       if (!Array.isArray(content)) continue;
       const result = applyTtlToContentBlocks(content, ttl);
-      msgObj.content = result.blocks;
-      applied = applied || result.applied;
+      if (result.applied) {
+        msgObj.content = result.blocks;
+        applied = true;
+      }
     }
   }
 
