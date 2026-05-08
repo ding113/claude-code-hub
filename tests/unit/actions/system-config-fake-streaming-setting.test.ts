@@ -60,12 +60,7 @@ vi.mock("@/lib/utils/timezone", () => ({
   isValidIANATimezone: vi.fn(() => true),
 }));
 
-const DEFAULT_FAKE_STREAMING_MODELS = [
-  { model: "gpt-image-2", groupTags: [] },
-  { model: "gpt-image-1.5", groupTags: [] },
-  { model: "gemini-3.1-flash-image-preview", groupTags: [] },
-  { model: "gemini-3-pro-image-preview", groupTags: [] },
-];
+const DEFAULT_FAKE_STREAMING_MODELS: { model: string; groupTags: string[] }[] = [];
 
 function createSettings(overrides: Record<string, unknown> = {}) {
   return {
@@ -131,7 +126,7 @@ describe("fake streaming whitelist system setting", () => {
   });
 
   describe("transformer defaults", () => {
-    test("defaults missing fake streaming config to requested image models", async () => {
+    test("defaults missing fake streaming config to the empty default", async () => {
       const { toSystemSettings } = await import("@/repository/_shared/transformers");
 
       const fromUndefined = toSystemSettings(undefined);
@@ -180,7 +175,7 @@ describe("fake streaming whitelist system setting", () => {
       expect(result.fakeStreamingWhitelist).toEqual(persisted);
     });
 
-    test("repository fallback (table missing) defaults to image models", async () => {
+    test("repository fallback (table missing) defaults to the empty default", async () => {
       vi.resetModules();
       vi.doUnmock("@/repository/system-config");
       vi.doMock("@/drizzle/db", () => ({
