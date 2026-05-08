@@ -23,6 +23,7 @@
 "use strict";
 
 const http = require("node:http");
+const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { parse } = require("node:url");
 
@@ -631,6 +632,31 @@ function isResponsesWsUpgrade(req) {
 }
 
 async function main() {
+  // In a standalone build there is no `next.config.{js,ts,mjs}` next to the
+  // server entry, so the programmatic `next()` factory's `loadConfig()` would
+  // fall back to defaults and silently drop overrides such as
+  // `experimental.proxyClientMaxBodySize` and `experimental.serverActions.bodySizeLimit`.
+  // Concretely this clamps proxied request bodies to the 10MB
+  // DEFAULT_BODY_CLONE_SIZE_LIMIT in next/dist/server/body-streams.js whenever
+  // a path is matched by `src/proxy.ts`. Mirror what Next's own standalone
+  // template does (next/dist/build/utils.ts → writeStandaloneDirectory) by
+  // surfacing the build-time config via the same env var the runtime checks.
+  if (!dev && !process.env.__NEXT_PRIVATE_STANDALONE_CONFIG) {
+    try {
+      // eslint-disable-next-line global-require
+      const requiredServerFiles = require(
+        path.join(__dirname, ".next", "required-server-files.json")
+      );
+      process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(
+        requiredServerFiles.config
+      );
+    } catch (err) {
+      log("warn", "standalone_config_load_failed", {
+        error: String(err && err.message ? err.message : err),
+      });
+    }
+  }
+
   // Import Next programmatically. We require it lazily so that the server can
   // still report a clean error if Next is not installed (unlikely but possible
   // in a misconfigured deployment).
