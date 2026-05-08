@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { proxyMatcherPattern } from "@/proxy.matcher";
 
@@ -12,10 +14,18 @@ describe("proxy matcher", () => {
       "/v1/chat/completions",
       "/v1/responses",
       "/v1/models",
-      "/v1beta/messages", // covered by the `v1` prefix in the negative lookahead
+      "/v1", // bare segment also a valid proxy entry
+      "/v1beta/messages",
+      "/v1beta",
       "/v1beta/v1/foo",
     ])("does not match %s", (pathname) => {
       expect(matcher.test(pathname)).toBe(false);
+    });
+  });
+
+  describe("look-alike paths that must NOT be excluded (regression: a bare `v1` prefix would over-match, e.g. `/v10`)", () => {
+    it.each(["/v10/foo", "/v1foo", "/v1beta-extra", "/version"])("matches %s", (pathname) => {
+      expect(matcher.test(pathname)).toBe(true);
     });
   });
 
@@ -43,5 +53,17 @@ describe("proxy matcher", () => {
     ])("matches %s", (pathname) => {
       expect(matcher.test(pathname)).toBe(true);
     });
+  });
+
+  // Drift guard: Next.js's build-time static analyzer requires `config.matcher`
+  // entries to be string literals, so `src/proxy.ts` cannot import the pattern
+  // from `proxy.matcher.ts`. Instead it inlines a copy. This test fails if the
+  // two ever drift — preventing a silent regression where the proxy starts
+  // using a different matcher than the one this test file exercises.
+  it("inlined matcher in src/proxy.ts stays in sync with src/proxy.matcher.ts", () => {
+    const proxyTs = fs.readFileSync(path.join(__dirname, "../../src/proxy.ts"), "utf8");
+    const m = proxyTs.match(/matcher:\s*\[\s*"([^"]+)"\s*\]/);
+    expect(m, 'could not locate `matcher: ["..."]` literal in src/proxy.ts').not.toBeNull();
+    expect(m?.[1]).toBe(proxyMatcherPattern);
   });
 });

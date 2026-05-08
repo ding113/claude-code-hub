@@ -6,7 +6,6 @@ import { routing } from "@/i18n/routing";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
-import { proxyMatcherPattern } from "@/proxy.matcher";
 
 // Public paths that don't require authentication
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
@@ -123,12 +122,9 @@ export default proxyHandler;
 export { matchesPublicPath };
 
 export const config = {
-  // Pattern originally from `src/proxy.matcher.ts` but inlined here because
-  // Next.js requires matcher patterns to be statically analyzable strings.
-  // Match all request paths except for:
-  // - api (API routes - own auth via cookie session, no proxy needed)
-  // - v1 / v1beta (API proxy routes - own auth via Bearer token)
-  // - _next/static, _next/image (static files)
-  // - favicon.ico (favicon file)
-  matcher: ["/((?!api|v1|_next/static|_next/image|favicon.ico).*)"],
+  // KEEP IN SYNC with `src/proxy.matcher.ts` — must be a string literal here
+  // so Next.js's build-time static analyzer can collect it. The unit test
+  // `tests/unit/proxy-matcher.test.ts` asserts the two stay in sync. See the
+  // matcher module for the full per-segment rationale.
+  matcher: ["/((?!api|v1(?:/|$)|v1beta(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
 };

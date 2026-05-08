@@ -35,11 +35,15 @@ const serverDst = path.join(dstDir, "server.js");
 fs.copyFileSync(serverSrc, serverDst);
 console.log(`[copy-custom-server] Copied ${serverSrc} -> ${serverDst}`);
 
+// server.js requires from server-lib/, so missing it would yield a standalone
+// artifact that crashes on startup. Fail the build instead of warning.
 const libSrc = path.resolve(cwd, "server-lib");
-if (fs.existsSync(libSrc)) {
-  const libDst = path.join(dstDir, "server-lib");
-  fs.cpSync(libSrc, libDst, { recursive: true });
-  console.log(`[copy-custom-server] Copied ${libSrc} -> ${libDst}`);
-} else {
-  console.warn(`[copy-custom-server] server-lib/ not found at ${libSrc}; skipping`);
+if (!fs.existsSync(libSrc)) {
+  console.error(
+    `[copy-custom-server] server-lib/ not found at ${libSrc}; refusing to produce a broken standalone artifact`
+  );
+  process.exit(1);
 }
+const libDst = path.join(dstDir, "server-lib");
+fs.cpSync(libSrc, libDst, { recursive: true });
+console.log(`[copy-custom-server] Copied ${libSrc} -> ${libDst}`);
