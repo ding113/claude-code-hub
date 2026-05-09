@@ -87,6 +87,7 @@ import {
   syncOpenAIImageMultipartFromLogicalBody,
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
+import { ensureOpenAIChatStreamUsageOption } from "./openai-chat-usage-options";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
@@ -2693,6 +2694,12 @@ export class ProxyForwarder {
           if (requestPath === "/v1/images/generations") {
             sanitizeGenerationsRequestForProvider(messageToSend, provider);
           }
+
+          ensureOpenAIChatStreamUsageOption(
+            messageToSend,
+            provider.providerType,
+            requestPath
+          );
 
           const validation = await validateOpenAIImageRequest({
             pathname: requestPath,
