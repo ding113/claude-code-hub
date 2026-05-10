@@ -1,8 +1,27 @@
 import TOML from "@iarna/toml";
 import type { ModelPriceData } from "@/types/model-price";
 
-export const CLOUD_PRICE_TABLE_URL = "https://claude-code-hub.app/config/prices-base.toml";
+export const CLOUD_PRICE_TABLE_URL = "https://docs.claude-code-hub.app/config/prices-base.toml";
 const FETCH_TIMEOUT_MS = 10000;
+const LEGACY_CLOUD_PRICE_TABLE_HOST = "claude-code-hub.app";
+
+function isAllowedPriceTableRedirect(expectedUrl: URL, finalUrl: URL): boolean {
+  if (
+    finalUrl.protocol === expectedUrl.protocol &&
+    finalUrl.host === expectedUrl.host &&
+    finalUrl.pathname === expectedUrl.pathname
+  ) {
+    return true;
+  }
+
+  return (
+    expectedUrl.protocol === "https:" &&
+    finalUrl.protocol === "https:" &&
+    expectedUrl.host === LEGACY_CLOUD_PRICE_TABLE_HOST &&
+    finalUrl.host === new URL(CLOUD_PRICE_TABLE_URL).host &&
+    finalUrl.pathname === expectedUrl.pathname
+  );
+}
 
 export type CloudPriceTable = {
   metadata?: Record<string, unknown>;
@@ -76,11 +95,7 @@ export async function fetchCloudPriceTableToml(
     if (expectedUrl && typeof response.url === "string" && response.url) {
       try {
         const finalUrl = new URL(response.url);
-        if (
-          finalUrl.protocol !== expectedUrl.protocol ||
-          finalUrl.host !== expectedUrl.host ||
-          finalUrl.pathname !== expectedUrl.pathname
-        ) {
+        if (!isAllowedPriceTableRedirect(expectedUrl, finalUrl)) {
           return { ok: false, error: "云端价格表拉取失败：重定向到非预期地址" };
         }
       } catch {

@@ -179,6 +179,23 @@ describe("fetchCloudPriceTableToml", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("allows the legacy cloud price table URL to redirect to the docs host", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        url: "https://docs.claude-code-hub.app/config/prices-base.toml",
+        text: async () => "toml content",
+      }))
+    );
+
+    const result = await fetchCloudPriceTableToml(
+      "https://claude-code-hub.app/config/prices-base.toml"
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it("returns ok=false when response url redirects to unexpected pathname", async () => {
     vi.stubGlobal(
       "fetch",
