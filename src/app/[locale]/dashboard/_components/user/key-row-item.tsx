@@ -213,6 +213,7 @@ export function KeyRowItem({
   // Drop the cached unmasked key whenever the underlying row identity changes
   // (e.g. parent reuses the same KeyRowItem instance for a different key).
   // Without this, the dialog/copy could expose the previous row's key.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when row identity changes
   useEffect(() => {
     setRevealedKey(null);
     setFullKeyDialogOpen(false);

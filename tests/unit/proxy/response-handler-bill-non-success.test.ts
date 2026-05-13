@@ -75,7 +75,6 @@ describe("resolveBillableUsageMetricsForCost — bill-non-success toggle", () =>
 
     const session = makeSession();
     const result = await resolveBillableUsageMetricsForCost(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal session for test
       session as any,
       null,
       { input_tokens: 100, output_tokens: 50 },
@@ -90,13 +89,7 @@ describe("resolveBillableUsageMetricsForCost — bill-non-success toggle", () =>
 
     const session = makeSession();
     const usage = { input_tokens: 100, output_tokens: 50 };
-    const result = await resolveBillableUsageMetricsForCost(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal session for test
-      session as any,
-      null,
-      usage,
-      499
-    );
+    const result = await resolveBillableUsageMetricsForCost(session as any, null, usage, 499);
 
     expect(result).toEqual(usage);
   });
@@ -105,13 +98,7 @@ describe("resolveBillableUsageMetricsForCost — bill-non-success toggle", () =>
     mockGetCachedSystemSettings.mockResolvedValue({ billNonSuccessfulRequests: true });
 
     const session = makeSession();
-    const result = await resolveBillableUsageMetricsForCost(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal session for test
-      session as any,
-      null,
-      null,
-      499
-    );
+    const result = await resolveBillableUsageMetricsForCost(session as any, null, null, 499);
 
     expect(result).toBeNull();
   });
@@ -121,7 +108,6 @@ describe("resolveBillableUsageMetricsForCost — bill-non-success toggle", () =>
 
     const session = makeSession();
     const result = await resolveBillableUsageMetricsForCost(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal session for test
       session as any,
       null,
       { input_tokens: 0, output_tokens: 0 },
@@ -140,13 +126,7 @@ describe("resolveBillableUsageMetricsForCost — bill-non-success toggle", () =>
       output_tokens: 0,
       cache_read_input_tokens: 200,
     };
-    const result = await resolveBillableUsageMetricsForCost(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal session for test
-      session as any,
-      null,
-      usage,
-      499
-    );
+    const result = await resolveBillableUsageMetricsForCost(session as any, null, usage, 499);
 
     expect(result).toEqual(usage);
   });
@@ -162,7 +142,6 @@ describe("resolveBillableUsageMetricsForCost — bill-non-success toggle", () =>
 
     const session = makeSession();
     const result = await resolveBillableUsageMetricsForCost(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal session for test
       session as any,
       null,
       { input_tokens: 100, output_tokens: 50 },
@@ -178,7 +157,6 @@ describe("resolveBillableUsageMetricsForCost — bill-non-success toggle", () =>
 
     const session = makeSession();
     const result = await resolveBillableUsageMetricsForCost(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal session for test
       session as any,
       null,
       { input_tokens: 100, output_tokens: 50 },

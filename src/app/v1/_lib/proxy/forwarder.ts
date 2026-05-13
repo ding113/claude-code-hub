@@ -80,6 +80,7 @@ import {
 } from "./errors";
 import { ModelRedirector } from "./model-redirector";
 import { nodeStreamToWebStreamSafe } from "./node-stream-to-web";
+import { ensureOpenAIChatStreamUsageOption } from "./openai-chat-usage-options";
 import {
   cloneOpenAIImageRequestMetadata,
   sanitizeGenerationsRequestForProvider,
@@ -87,7 +88,6 @@ import {
   syncOpenAIImageMultipartFromLogicalBody,
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
-import { ensureOpenAIChatStreamUsageOption } from "./openai-chat-usage-options";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
@@ -2695,11 +2695,7 @@ export class ProxyForwarder {
             sanitizeGenerationsRequestForProvider(messageToSend, provider);
           }
 
-          ensureOpenAIChatStreamUsageOption(
-            messageToSend,
-            provider.providerType,
-            requestPath
-          );
+          ensureOpenAIChatStreamUsageOption(messageToSend, provider.providerType, requestPath);
 
           const validation = await validateOpenAIImageRequest({
             pathname: requestPath,
