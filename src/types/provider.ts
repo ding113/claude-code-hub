@@ -300,6 +300,9 @@ export type GeminiGoogleSearchPreference = "inherit" | "enabled" | "disabled";
 // MCP 透传类型枚举
 export type McpPassthroughType = "none" | "minimax" | "glm" | "custom";
 
+// 静态自定义请求头：键值都为字符串；持久化为 jsonb
+export type ProviderCustomHeaders = Record<string, string>;
+
 export interface Provider {
   id: number;
   name: string;
@@ -373,6 +376,9 @@ export interface Provider {
   // 代理配置（支持 HTTP/HTTPS/SOCKS5）
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
+
+  // 静态自定义请求头：会被合并到出站请求，但不能覆盖鉴权头
+  customHeaders: ProviderCustomHeaders | null;
 
   // 超时配置（毫秒）
   firstByteTimeoutStreamingMs: number;
@@ -474,6 +480,8 @@ export interface ProviderDisplay {
   // 代理配置
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
+  // 静态自定义请求头
+  customHeaders: ProviderCustomHeaders | null;
   // 超时配置（毫秒）
   firstByteTimeoutStreamingMs: number;
   streamingIdleTimeoutMs: number;
@@ -572,6 +580,9 @@ export interface CreateProviderData {
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
 
+  // 静态自定义请求头
+  custom_headers?: ProviderCustomHeaders | null;
+
   // 超时配置（毫秒）
   first_byte_timeout_streaming_ms?: number;
   streaming_idle_timeout_ms?: number;
@@ -652,6 +663,9 @@ export interface UpdateProviderData {
   // 代理配置（支持 HTTP/HTTPS/SOCKS5）
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+
+  // 静态自定义请求头
+  custom_headers?: ProviderCustomHeaders | null;
 
   // 超时配置（毫秒）
   first_byte_timeout_streaming_ms?: number;

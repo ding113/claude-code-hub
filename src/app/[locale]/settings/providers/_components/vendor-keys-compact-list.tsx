@@ -6,13 +6,6 @@ import { CheckCircle, Copy, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getProviderEndpoints } from "@/actions/provider-endpoints";
-import {
-  editProvider,
-  getUnmaskedProviderKey,
-  removeProvider,
-  undoProviderDelete,
-} from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
@@ -43,6 +36,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getProviderEndpoints } from "@/lib/api-client/v1/actions/provider-endpoints";
+import {
+  editProvider,
+  getUnmaskedProviderKey,
+  removeProvider,
+  undoProviderDelete,
+} from "@/lib/api-client/v1/actions/providers";
 import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";

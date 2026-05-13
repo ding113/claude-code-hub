@@ -172,10 +172,10 @@
   "deleteConfirm": "Удалить модель {name}? Это действие необратимо.",
   "form": {
     "modelName": "ID модели",
-    "modelNamePlaceholder": "например: gpt-5.3-codex",
+    "modelNamePlaceholder": "например: gpt-5.4",
     "modelNameRequired": "ID модели обязателен",
     "displayName": "Отображаемое имя (необязательно)",
-    "displayNamePlaceholder": "например: GPT-5.3 Codex",
+    "displayNamePlaceholder": "например: GPT-5.4 Codex",
     "type": "Тип",
     "provider": "Поставщик",
     "providerPlaceholder": "например: openai",

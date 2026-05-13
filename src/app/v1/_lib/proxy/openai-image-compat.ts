@@ -912,10 +912,12 @@ export function syncOpenAIImageMultipartFromLogicalBody(
     if (PRIMARY_IMAGE_FILE_FIELDS.has(part.name)) return true;
     return Object.hasOwn(logicalBody, part.name);
   });
+  const filePartNames = new Set(fileParts.map((part) => part.name));
   const nextTextParts: MultipartTextPart[] = [];
 
   for (const [key, value] of Object.entries(logicalBody)) {
     if (value === undefined || value === null) continue;
+    if (filePartNames.has(key)) continue;
 
     if (Array.isArray(value)) {
       for (const item of value) {

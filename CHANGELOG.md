@@ -25,6 +25,26 @@
 
 ---
 
+## v0.7.0 (2026-04-28)
+
+### 新增
+
+- 新增 `/api/v1/*` REST 管理 API、OpenAPI JSON、Scalar 和 Swagger 文档入口，覆盖管理台资源的标准 RESTful 调用路径 (#1123)
+- 新增 `openapi:generate`、`openapi:check`、`openapi:lint` 和 `test:v1` 验证命令，减少 OpenAPI 文档、生成类型与实现漂移
+- 新增 `ENABLE_API_KEY_ADMIN_ACCESS`，允许部署方显式放开 admin 用户 API Key 对管理端 REST API 的调用权限
+
+### 优化
+
+- 旧 `/api/actions/*` Server Action API 增加 `Deprecation`、`Sunset` 和 successor `Link` 响应头，并可通过 `ENABLE_LEGACY_ACTIONS_API=false` 返回 `410 Gone`
+- 明文供应商 Key 查询改走 no-store 响应，并写入持久审计日志
+
+### 迁移提示
+
+- 新集成应优先使用 `/api/v1/openapi.json` 生成客户端；旧 `/api/actions/*` 将保留到下一个 breaking major 版本
+- Cookie 认证的 `/api/v1` 写操作需要先获取 `GET /api/v1/auth/csrf` 返回的 CSRF token
+
+---
+
 ## v0.6.8 (2026-04-13)
 
 ### 新增

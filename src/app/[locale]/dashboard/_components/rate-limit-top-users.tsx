@@ -3,7 +3,6 @@
 import { ArrowUpDown } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
-import { searchUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -14,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { searchUsers } from "@/lib/api-client/v1/actions/users";
 
 export interface RateLimitTopUsersProps {
   data: Record<number, number>;

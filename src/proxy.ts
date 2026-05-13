@@ -122,14 +122,9 @@ export default proxyHandler;
 export { matchesPublicPath };
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes - handled separately)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
+  // KEEP IN SYNC with `src/proxy.matcher.ts` — must be a string literal here
+  // so Next.js's build-time static analyzer can collect it. The unit test
+  // `tests/unit/proxy-matcher.test.ts` asserts the two stay in sync. See the
+  // matcher module for the full per-segment rationale.
+  matcher: ["/((?!api|v1(?:/|$)|v1beta(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
 };

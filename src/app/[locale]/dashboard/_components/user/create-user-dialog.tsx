@@ -7,8 +7,6 @@ import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { addKey } from "@/actions/keys";
-import { createUserOnly, removeUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { addKey } from "@/lib/api-client/v1/actions/keys";
+import { createUserOnly, removeUser } from "@/lib/api-client/v1/actions/users";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { KeyFormSchema, UpdateUserSchema } from "@/lib/validation/schemas";

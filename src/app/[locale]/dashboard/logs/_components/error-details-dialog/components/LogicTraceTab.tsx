@@ -20,9 +20,9 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { getSessionOriginChain } from "@/actions/session-origin-chain";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { getSessionOriginChain } from "@/lib/api-client/v1/actions/session-origin-chain";
 import { cn } from "@/lib/utils";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";

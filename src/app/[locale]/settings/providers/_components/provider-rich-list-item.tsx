@@ -18,14 +18,6 @@ import {
 import { useTranslations } from "next-intl";
 import { memo, useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import {
-  editProvider,
-  getUnmaskedProviderKey,
-  removeProvider,
-  resetProviderCircuit,
-  resetProviderTotalUsage,
-  undoProviderDelete,
-} from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
@@ -57,6 +49,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  editProvider,
+  getUnmaskedProviderKey,
+  removeProvider,
+  resetProviderCircuit,
+  resetProviderTotalUsage,
+  undoProviderDelete,
+} from "@/lib/api-client/v1/actions/providers";
 import {
   PROVIDER_GROUP,
   PROVIDER_LIMITS,

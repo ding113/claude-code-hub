@@ -13,7 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CUSTOM_HEADERS_PLACEHOLDER } from "@/lib/custom-headers";
 import type {
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
@@ -102,6 +104,26 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                 />
               </ToggleRow>
 
+              {/* Static Custom Request Headers - persistent provider config (not exposed in batch mode) */}
+              {!isBatch && (
+                <SmartInputWrapper
+                  label={t("sections.routing.customHeaders.label")}
+                  description={t("sections.routing.customHeaders.desc")}
+                >
+                  <Textarea
+                    id={isEdit ? "edit-custom-headers" : "custom-headers"}
+                    value={state.routing.customHeadersText}
+                    onChange={(e) =>
+                      dispatch({ type: "SET_CUSTOM_HEADERS_TEXT", payload: e.target.value })
+                    }
+                    placeholder={CUSTOM_HEADERS_PLACEHOLDER}
+                    disabled={state.ui.isPending}
+                    rows={3}
+                    spellCheck={false}
+                  />
+                </SmartInputWrapper>
+              )}
+
               {/* Cache TTL */}
               <SmartInputWrapper
                 label={t("sections.routing.cacheTtl.label")}
@@ -118,7 +140,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                   disabled={state.ui.isPending}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="inherit" />
+                    <SelectValue placeholder={t("sections.routing.cacheTtl.options.inherit")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="inherit">
@@ -162,7 +184,11 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                           disabled={state.ui.isPending}
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="inherit" />
+                            <SelectValue
+                              placeholder={t(
+                                "sections.routing.codexOverrides.reasoningEffort.options.inherit"
+                              )}
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             {["inherit", "minimal", "low", "medium", "high", "xhigh", "none"].map(
@@ -204,7 +230,11 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                     disabled={state.ui.isPending}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="inherit" />
+                      <SelectValue
+                        placeholder={t(
+                          "sections.routing.codexOverrides.reasoningSummary.options.inherit"
+                        )}
+                      />
                     </SelectTrigger>
                     <SelectContent>
                       {["inherit", "auto", "detailed"].map((val) => (
@@ -228,7 +258,11 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                     disabled={state.ui.isPending}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="inherit" />
+                      <SelectValue
+                        placeholder={t(
+                          "sections.routing.codexOverrides.textVerbosity.options.inherit"
+                        )}
+                      />
                     </SelectTrigger>
                     <SelectContent>
                       {["inherit", "low", "medium", "high"].map((val) => (
@@ -254,7 +288,11 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                     disabled={state.ui.isPending}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="inherit" />
+                      <SelectValue
+                        placeholder={t(
+                          "sections.routing.codexOverrides.parallelToolCalls.options.inherit"
+                        )}
+                      />
                     </SelectTrigger>
                     <SelectContent>
                       {["inherit", "true", "false"].map((val) => (

@@ -4,8 +4,8 @@ import { RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { refreshCacheAction } from "@/actions/error-rules";
 import { Button } from "@/components/ui/button";
+import { refreshCacheAction } from "@/lib/api-client/v1/actions/error-rules";
 import { cn } from "@/lib/utils";
 
 interface RefreshCacheButtonProps {

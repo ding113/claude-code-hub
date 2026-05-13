@@ -8,6 +8,7 @@ import {
   createActionRoutes,
   createParamSchema,
 } from "@/lib/api/action-adapter-openapi";
+import { logger } from "@/lib/logger";
 
 /**
  * 说明：
@@ -167,6 +168,122 @@ describe("Action Adapter：createActionRoute（单元测试）", () => {
     expect(action).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true, data: "ok" });
+  });
+
+  test("legacy provider schema 仍接受旧 provider type", async () => {
+    const route = await import("@/app/api/actions/[...route]/route");
+    const response = await route.GET(
+      new Request("http://localhost/api/actions/openapi.json", { method: "GET" })
+    );
+    const document = await response.json();
+    const providerEndpointsSchema =
+      document.paths["/api/actions/providers/getProviderEndpoints"].post.requestBody.content[
+        "application/json"
+      ].schema;
+
+    expect(providerEndpointsSchema.properties.providerType.enum).toEqual(
+      expect.arrayContaining(["claude-auth", "gemini-cli"])
+    );
+  });
+
+  test("debug 日志不记录管理面请求体中的密钥和 URL 凭据", async () => {
+    const debugSpy = vi.spyOn(logger, "debug").mockImplementation(() => undefined);
+    const action = vi.fn(async () => ({ ok: true, data: "ok" }));
+    const { handler } = createActionRoute("providers", "addProvider", action as any, {
+      requiresAuth: false,
+      requestSchema: z.object({ key: z.string() }),
+    });
+
+    const response = (await handler(
+      createMockContext({
+        body: {
+          key: "sk-provider-secret",
+          url: "https://main-user:main-pass@api.example.com/v1",
+          providerUrl: "https://provider-user:provider-pass@provider.example.com/v1",
+          websiteUrl: "https://web-user:web-pass@example.com",
+          webhookUrl: "https://token:secret@example.com/webhook",
+          proxyUrl: "https://proxy-user:proxy-pass@proxy.example.com",
+          proxy_url: "https://snake-proxy-user:snake-proxy-pass@proxy.example.com",
+          website_url: "https://snake-web-user:snake-web-pass@example.com",
+          mcp_passthrough_url: "https://snake-mcp-user:snake-mcp-pass@mcp.example.com/bridge",
+          custom_headers: {
+            Authorization: "Bearer snake-upstream-secret",
+            "X-Trace": "snake-trace-id",
+          },
+          customHeaders: {
+            Authorization: "Bearer upstream-secret",
+            "X-Trace": "trace-id",
+          },
+          input: {
+            telegramBotToken: "telegram-secret-token",
+            url: "https://nested-main:nested-main-pass@nested-api.example.com/v1",
+            providerUrl: "https://nested-provider:nested-provider-pass@nested-provider.example.com",
+            websiteUrl: "https://nested-web:nested-web-pass@nested-web.example.com",
+            proxyUrl: "https://nested-user:nested-pass@proxy.example.com",
+            webhookUrl: "https://nested-token:nested-secret@example.com/webhook",
+            customHeaders: {
+              "X-Webhook-Secret": "shared-secret",
+              "X-Trace": "nested-trace",
+            },
+          },
+          circuitBreakerWebhook: "https://alert-token:alert-secret@example.com/notify",
+        },
+      }) as any
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(debugSpy).toHaveBeenCalledWith("[ActionAPI] Calling providers.addProvider", {
+      body: expect.objectContaining({
+        key: "[REDACTED]",
+        url: "https://REDACTED:REDACTED@api.example.com/v1",
+        providerUrl: "https://REDACTED:REDACTED@provider.example.com/v1",
+        websiteUrl: "https://REDACTED:REDACTED@example.com/",
+        webhookUrl: "[REDACTED]",
+        proxyUrl: "https://REDACTED:REDACTED@proxy.example.com/",
+        proxy_url: "https://REDACTED:REDACTED@proxy.example.com/",
+        website_url: "https://REDACTED:REDACTED@example.com/",
+        mcp_passthrough_url: "https://REDACTED:REDACTED@mcp.example.com/bridge",
+        custom_headers: {
+          Authorization: "[REDACTED]",
+          "X-Trace": "snake-trace-id",
+        },
+        customHeaders: {
+          Authorization: "[REDACTED]",
+          "X-Trace": "trace-id",
+        },
+        input: {
+          telegramBotToken: "[REDACTED]",
+          url: "https://REDACTED:REDACTED@nested-api.example.com/v1",
+          providerUrl: "https://REDACTED:REDACTED@nested-provider.example.com/",
+          websiteUrl: "https://REDACTED:REDACTED@nested-web.example.com/",
+          proxyUrl: "https://REDACTED:REDACTED@proxy.example.com/",
+          webhookUrl: "[REDACTED]",
+          customHeaders: {
+            "X-Webhook-Secret": "[REDACTED]",
+            "X-Trace": "nested-trace",
+          },
+        },
+        circuitBreakerWebhook: "[REDACTED]",
+      }),
+    });
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("sk-provider-secret");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("upstream-secret");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("main-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("provider-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("web-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("proxy-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("snake-proxy-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("snake-web-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("snake-mcp-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("snake-upstream-secret");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("telegram-secret-token");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("nested-main-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("nested-provider-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("nested-web-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("nested-pass");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("shared-secret");
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain("alert-secret");
+    debugSpy.mockRestore();
   });
 });
 

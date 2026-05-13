@@ -3,7 +3,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { removeKey } from "@/actions/keys";
 import { Button } from "@/components/ui/button";
 import {
   DialogClose,
@@ -12,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { removeKey } from "@/lib/api-client/v1/actions/keys";
 
 interface DeleteKeyConfirmProps {
   keyData?: {

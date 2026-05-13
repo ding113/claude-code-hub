@@ -13,6 +13,17 @@ export interface ResponseFixerConfig {
   maxFixSize: number;
 }
 
+// Fake streaming whitelist entry: pairs an exact client-requested model name
+// with optional provider group tags. Empty groupTags means "all groups".
+export interface FakeStreamingWhitelistEntry {
+  model: string;
+  groupTags: string[];
+}
+
+// Default whitelist used when system_settings has no persisted value (legacy
+// upgrade path). A persisted empty array is preserved as explicit opt-out.
+export const DEFAULT_FAKE_STREAMING_WHITELIST: ReadonlyArray<FakeStreamingWhitelistEntry> = [];
+
 export interface SystemSettings {
   id: number;
   siteTitle: string;
@@ -26,6 +37,11 @@ export interface SystemSettings {
 
   // Codex Priority 单独计费口径
   codexPriorityBillingSource: CodexPriorityBillingSource;
+
+  // 非成功请求按 token 用量计费（默认关闭）
+  // 开启后：返回非 2xx 状态（如 499 客户端中断）但上游仍回报了正向 token 用量时按 usage 计费；
+  //         fake-200 上游错误识别仍生效，保证假成功响应不会被错误计费。
+  billNonSuccessfulRequests: boolean;
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -49,6 +65,11 @@ export interface SystemSettings {
 
   // 启用 HTTP/2 连接供应商
   enableHttp2: boolean;
+
+  // 启用 OpenAI Responses WebSocket 支持（仅 Codex 类型供应商生效）
+  // 目标：让客户端以 WebSocket 连接 /v1/responses 时，CCH 与上游也以 WS 建连；
+  // 上游不支持时优雅降级为 HTTP，客户端 WebSocket 保持打开。
+  enableOpenaiResponsesWebsocket: boolean;
 
   // 高并发模式（默认关闭）
   // 目标：关闭部分 Redis 调试快照与实时观测写入，降低高并发下的 CPU 与 IO 开销
@@ -78,6 +99,9 @@ export interface SystemSettings {
   // 非对话端点跨供应商 fallback（默认开启）
   // 当前仅作用于 count_tokens / compact 这两个 raw endpoint
   allowNonConversationEndpointProviderFallback: boolean;
+
+  // Fake 流式输出白名单（缺省时使用 DEFAULT_FAKE_STREAMING_WHITELIST，持久化空数组表示显式禁用）
+  fakeStreamingWhitelist: FakeStreamingWhitelistEntry[];
 
   // Codex Session ID 补全（默认开启）
   // 目标：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
@@ -125,6 +149,9 @@ export interface UpdateSystemSettingsInput {
   // Codex Priority 单独计费口径（可选）
   codexPriorityBillingSource?: CodexPriorityBillingSource;
 
+  // 非成功请求按 token 用量计费（可选）
+  billNonSuccessfulRequests?: boolean;
+
   // 系统时区配置（可选）
   timezone?: string | null;
 
@@ -146,6 +173,9 @@ export interface UpdateSystemSettingsInput {
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2?: boolean;
 
+  // 启用 OpenAI Responses WebSocket 支持（可选，仅 Codex 类型供应商生效）
+  enableOpenaiResponsesWebsocket?: boolean;
+
   // 高并发模式（可选）
   enableHighConcurrencyMode?: boolean;
 
@@ -166,6 +196,9 @@ export interface UpdateSystemSettingsInput {
 
   // 非对话端点跨供应商 fallback（可选）
   allowNonConversationEndpointProviderFallback?: boolean;
+
+  // Fake 流式输出白名单（可选）
+  fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
 
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion?: boolean;

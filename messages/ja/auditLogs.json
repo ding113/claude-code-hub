@@ -45,7 +45,8 @@
     "provider": {
       "create": "プロバイダー作成",
       "update": "プロバイダー更新",
-      "delete": "プロバイダー削除"
+      "delete": "プロバイダー削除",
+      "key_reveal": "プロバイダーキー表示"
     },
     "provider_group": {
       "create": "プロバイダーグループ作成",
@@ -58,7 +59,8 @@
     "key": {
       "create": "キー作成",
       "update": "キー更新",
-      "delete": "キー削除"
+      "delete": "キー削除",
+      "key_reveal": "ユーザーキーを表示"
     },
     "notification": {
       "update": "通知更新"

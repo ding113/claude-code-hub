@@ -5,11 +5,14 @@ import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { deleteErrorRuleAction, updateErrorRuleAction } from "@/actions/error-rules";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  deleteErrorRuleAction,
+  updateErrorRuleAction,
+} from "@/lib/api-client/v1/actions/error-rules";
 import { cn } from "@/lib/utils";
 import type { ErrorRule } from "@/repository/error-rules";
 import { EditRuleDialog } from "./edit-rule-dialog";

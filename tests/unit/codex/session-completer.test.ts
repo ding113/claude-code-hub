@@ -22,7 +22,7 @@ vi.mock("@/lib/redis", () => ({
 
 function makeCodexRequestBody(overrides?: Record<string, unknown>): Record<string, unknown> {
   return {
-    model: "gpt-5-codex",
+    model: "gpt-5.4",
     input: [
       {
         type: "message",

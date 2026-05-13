@@ -46,7 +46,7 @@ vi.mock("@/app/[locale]/dashboard/leaderboard/_components/leaderboard-table", ()
 }));
 
 vi.mock("@/components/ui/tag-input", () => ({
-  TagInput: ({ ["data-testid"]: testId }: { "data-testid"?: string }) => (
+  TagInput: ({ "data-testid": testId }: { "data-testid"?: string }) => (
     <div data-testid={testId ?? "leaderboard-tag-input"} />
   ),
 }));

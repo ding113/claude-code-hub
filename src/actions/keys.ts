@@ -107,7 +107,7 @@ export async function addKey(data: {
   limitConcurrentSessions?: number;
   providerGroup?: string | null;
   cacheTtlPreference?: "inherit" | "5m" | "1h";
-}): Promise<ActionResult<{ generatedKey: string; name: string }>> {
+}): Promise<ActionResult<{ id: number; generatedKey: string; name: string }>> {
   try {
     // NOTE(#400): providerGroup 安全模型（废弃 null 语义）：
     // - Key.providerGroup 必须显式存储（默认 "default"），不再允许 null
@@ -355,7 +355,7 @@ export async function addKey(data: {
     });
 
     // 返回生成的key供前端显示
-    return { ok: true, data: { generatedKey, name: validatedData.name } };
+    return { ok: true, data: { id: createdKey.id, generatedKey, name: validatedData.name } };
   } catch (error) {
     logger.error("添加密钥失败:", error);
     const message = error instanceof Error ? error.message : "添加密钥失败，请稍后重试";
@@ -825,6 +825,69 @@ export async function getKeysWithStatistics(
   } catch (error) {
     logger.error("获取密钥统计失败:", error);
     return { ok: false, error: "获取密钥统计失败" };
+  }
+}
+
+/**
+ * 获取密钥的未脱敏值
+ * - 管理员：可查看任意用户的密钥
+ * - 普通用户：仅可查看自己拥有的密钥（与列表 canReveal/canCopy 契约保持一致）
+ * 用于安全展示和复制完整 Key
+ */
+export async function getUnmaskedKey(keyId: number): Promise<ActionResult<{ key: string }>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: "密钥不存在" };
+    }
+
+    const isAdmin = session.user.role === "admin";
+    const isOwner = session.user.id === key.userId;
+    if (!isAdmin && !isOwner) {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    // 记录查看行为（不记录密钥内容）
+    logger.info("User viewed key", {
+      viewerId: session.user.id,
+      viewerRole: session.user.role,
+      keyId,
+      keyName: key.name,
+      keyOwnerId: key.userId,
+    });
+    emitActionAudit({
+      category: "key",
+      action: "key.key_reveal",
+      targetType: "key",
+      targetId: String(key.id),
+      targetName: key.name,
+      after: {
+        id: key.id,
+        name: key.name,
+        userId: key.userId,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
+
+    return { ok: true, data: { key: key.key } };
+  } catch (error) {
+    logger.error("获取密钥失败:", error);
+    const message = error instanceof Error ? error.message : "获取密钥失败";
+    emitActionAudit({
+      category: "key",
+      action: "key.key_reveal",
+      targetType: "key",
+      targetId: String(keyId),
+      success: false,
+      errorMessage: "KEY_REVEAL_FAILED",
+    });
+    return { ok: false, error: message };
   }
 }
 

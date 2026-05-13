@@ -18,6 +18,10 @@ const clearProviderStateMock = vi.fn();
 const terminateProviderSessionsBatchMock = vi.fn();
 
 const revalidatePathMock = vi.fn();
+const emitActionAuditMock = vi.fn();
+const loggerTraceMock = vi.fn();
+const loggerDebugMock = vi.fn();
+const loggerWarnMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -60,12 +64,16 @@ vi.mock("@/lib/session-manager", () => ({
 
 vi.mock("@/lib/logger", () => ({
   logger: {
-    trace: vi.fn(),
-    debug: vi.fn(),
+    trace: loggerTraceMock,
+    debug: loggerDebugMock,
     info: vi.fn(),
-    warn: vi.fn(),
+    warn: loggerWarnMock,
     error: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/audit/emit", () => ({
+  emitActionAudit: emitActionAuditMock,
 }));
 
 vi.mock("next/cache", () => ({
@@ -464,6 +472,33 @@ describe("Provider Actions - Async Optimization", () => {
   });
 
   describe("addProvider", () => {
+    it("redacts URL credentials from provider action logs and audit metadata", async () => {
+      const { addProvider } = await import("@/actions/providers");
+
+      const result = await addProvider({
+        name: "p2",
+        url: "https://main-user:main-pass@api.example.com",
+        key: "sk-test-2",
+        proxy_url: "https://proxy-user:proxy-pass@proxy.example.com",
+        website_url: "https://web-user:web-pass@example.com",
+        tpm: null,
+        rpm: null,
+        rpd: null,
+        cc: null,
+      });
+
+      expect(result.ok).toBe(true);
+      const traceCalls = JSON.stringify(loggerTraceMock.mock.calls);
+      const warnCalls = JSON.stringify(loggerWarnMock.mock.calls);
+      const auditCalls = JSON.stringify(emitActionAuditMock.mock.calls);
+      expect(traceCalls).toContain("https://REDACTED:REDACTED@api.example.com/");
+      expect(traceCalls).toContain("https://REDACTED:REDACTED@proxy.example.com/");
+      expect(warnCalls).not.toContain("web-pass");
+      expect(auditCalls).not.toContain("main-pass");
+      expect(traceCalls).not.toContain("main-pass");
+      expect(traceCalls).not.toContain("proxy-pass");
+    });
+
     it("should not call revalidatePath", async () => {
       const { addProvider } = await import("@/actions/providers");
       const result = await addProvider({
@@ -604,6 +639,36 @@ describe("Provider Actions - Async Optimization", () => {
       expect(result.ok).toBe(true);
       expect(revalidatePathMock).not.toHaveBeenCalled();
       expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "removeProvider");
+    });
+  });
+
+  describe("getUnmaskedProviderKey", () => {
+    it("emits a durable audit event without persisting the raw provider key", async () => {
+      findProviderByIdMock.mockResolvedValueOnce({
+        id: 7,
+        name: "secure-provider",
+        key: "sk-real-provider-secret",
+      });
+
+      const { getUnmaskedProviderKey } = await import("@/actions/providers");
+      const result = await getUnmaskedProviderKey(7);
+
+      expect(result).toEqual({ ok: true, data: { key: "sk-real-provider-secret" } });
+      expect(emitActionAuditMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: "provider",
+          action: "provider.key_reveal",
+          targetType: "provider",
+          targetId: "7",
+          targetName: "secure-provider",
+          after: { id: 7, name: "secure-provider" },
+          success: true,
+          redactExtraKeys: ["key"],
+        })
+      );
+      expect(JSON.stringify(emitActionAuditMock.mock.calls)).not.toContain(
+        "sk-real-provider-secret"
+      );
     });
   });
 });

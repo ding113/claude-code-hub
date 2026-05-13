@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useTransition } from "react";
 import { toast } from "sonner";
-import type { ActionResult } from "@/actions/types";
+import type { ActionResult } from "@/lib/api-client/v1/actions/types";
 import { isNetworkError } from "@/lib/utils/error-detection";
 import { getSafeErrorToastMessage } from "@/lib/utils/user-visible-error";
 

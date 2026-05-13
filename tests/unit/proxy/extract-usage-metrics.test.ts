@@ -822,4 +822,96 @@ describe("extractUsageMetrics", () => {
       expect(result.usageMetrics?.output_tokens).toBe(57);
     });
   });
+
+  describe("openai-compatible cached_tokens subset normalization", () => {
+    it("should subtract Chat Completions cached_tokens from input_tokens (non-stream)", () => {
+      const response = JSON.stringify({
+        usage: {
+          prompt_tokens: 2006,
+          completion_tokens: 300,
+          total_tokens: 2306,
+          prompt_tokens_details: {
+            cached_tokens: 1920,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(86);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(1920);
+      expect(result.usageMetrics?.output_tokens).toBe(300);
+    });
+
+    it("should subtract Responses input_tokens_details.cached_tokens from input_tokens (non-stream)", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 2322,
+          output_tokens: 1158,
+          input_tokens_details: {
+            cached_tokens: 2176,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(146);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(2176);
+      expect(result.usageMetrics?.output_tokens).toBe(1158);
+    });
+
+    it("should subtract cached_tokens from input_tokens in SSE final usage chunk", () => {
+      const sse = [
+        'data: {"id":"chatcmpl-2","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"}}]}',
+        "",
+        'data: {"id":"chatcmpl-2","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":2006,"completion_tokens":300,"total_tokens":2306,"prompt_tokens_details":{"cached_tokens":1920}}}',
+        "",
+        "data: [DONE]",
+      ].join("\n");
+
+      const result = parseUsageFromResponseText(sse, "openai-compatible");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(86);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(1920);
+      expect(result.usageMetrics?.output_tokens).toBe(300);
+    });
+
+    it("should clamp input_tokens at zero when cached_tokens exceed prompt_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          prompt_tokens: 1500,
+          completion_tokens: 100,
+          prompt_tokens_details: {
+            cached_tokens: 2000,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics?.input_tokens).toBe(0);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(2000);
+      expect(result.usageMetrics?.output_tokens).toBe(100);
+    });
+
+    it("should leave Claude usage with disjoint cache_read_input_tokens unchanged", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 700,
+          output_tokens: 200,
+          cache_read_input_tokens: 300,
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "claude");
+
+      expect(result.usageMetrics?.input_tokens).toBe(700);
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
+      expect(result.usageMetrics?.output_tokens).toBe(200);
+    });
+  });
 });

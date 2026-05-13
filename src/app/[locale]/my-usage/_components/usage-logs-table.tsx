@@ -5,13 +5,13 @@ import { ArrowUp, Loader2 } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import type { MyUsageLogEntry } from "@/actions/my-usage";
 import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
+import type { MyUsageLogEntry } from "@/lib/api-client/v1/actions/my-usage";
 import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 

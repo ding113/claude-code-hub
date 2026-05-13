@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "fake_streaming_whitelist" jsonb;

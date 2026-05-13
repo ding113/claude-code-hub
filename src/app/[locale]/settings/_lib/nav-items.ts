@@ -85,7 +85,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     iconName: "file-text",
   },
   {
-    href: "/api/actions/scalar",
+    href: "/api/v1/scalar",
     labelKey: "nav.apiDocs",
     label: "API Docs",
     external: true,

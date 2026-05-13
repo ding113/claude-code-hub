@@ -35,6 +35,7 @@ export function getCachedSystemSettingsOnlyCache(): SystemSettings | null {
 const DEFAULT_SETTINGS: Pick<
   SystemSettings,
   | "enableHttp2"
+  | "enableOpenaiResponsesWebsocket"
   | "enableHighConcurrencyMode"
   | "interceptAnthropicWarmupRequests"
   | "codexPriorityBillingSource"
@@ -43,6 +44,7 @@ const DEFAULT_SETTINGS: Pick<
   | "enableBillingHeaderRectifier"
   | "enableResponseInputRectifier"
   | "allowNonConversationEndpointProviderFallback"
+  | "fakeStreamingWhitelist"
   | "enableCodexSessionIdCompletion"
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
@@ -52,6 +54,7 @@ const DEFAULT_SETTINGS: Pick<
   | "publicStatusAggregationIntervalMinutes"
 > = {
   enableHttp2: false,
+  enableOpenaiResponsesWebsocket: true,
   enableHighConcurrencyMode: false,
   interceptAnthropicWarmupRequests: false,
   codexPriorityBillingSource: "requested",
@@ -61,6 +64,9 @@ const DEFAULT_SETTINGS: Pick<
   enableResponseInputRectifier: true,
   // 安全敏感开关：冷缓存 / DB 读取失败时 fail-closed，避免意外重新开启跨供应商 raw fallback。
   allowNonConversationEndpointProviderFallback: false,
+  // Fake streaming 在 DB 完全不可达时 fail-closed（空白名单 → 走原有直传路径），
+  // 避免在不确定状态下劫持流式。Transformer / createFallbackSettings 仍走 4 个默认模型。
+  fakeStreamingWhitelist: [],
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
@@ -126,6 +132,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       currencyDisplay: "USD",
       billingModelSource: "original",
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
+      billNonSuccessfulRequests: false,
       timezone: null,
       verboseProviderError: false,
       passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,
@@ -135,6 +142,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       cleanupBatchSize: 10000,
       enableClientVersionCheck: false,
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
+      enableOpenaiResponsesWebsocket: DEFAULT_SETTINGS.enableOpenaiResponsesWebsocket,
       enableHighConcurrencyMode: DEFAULT_SETTINGS.enableHighConcurrencyMode,
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
@@ -143,6 +151,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableResponseInputRectifier: DEFAULT_SETTINGS.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
         DEFAULT_SETTINGS.allowNonConversationEndpointProviderFallback,
+      fakeStreamingWhitelist: DEFAULT_SETTINGS.fakeStreamingWhitelist,
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: DEFAULT_SETTINGS.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
@@ -172,6 +181,17 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 export async function isHttp2Enabled(): Promise<boolean> {
   const settings = await getCachedSystemSettings();
   return settings.enableHttp2;
+}
+
+/**
+ * Get only the OpenAI Responses WebSocket enabled setting.
+ * Only effective for Codex-type providers.
+ *
+ * @returns Whether OpenAI Responses WebSocket support is enabled globally.
+ */
+export async function isOpenaiResponsesWebsocketEnabled(): Promise<boolean> {
+  const settings = await getCachedSystemSettings();
+  return settings.enableOpenaiResponsesWebsocket;
 }
 
 /**

@@ -3,8 +3,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { addKey } from "@/actions/keys";
-import { getAvailableProviderGroups } from "@/actions/providers";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { NumberField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
@@ -17,6 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { addKey } from "@/lib/api-client/v1/actions/keys";
+import { getAvailableProviderGroups } from "@/lib/api-client/v1/actions/providers";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
@@ -231,7 +231,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           }
         >
           <SelectTrigger>
-            <SelectValue placeholder="inherit" />
+            <SelectValue placeholder={t("cacheTtl.options.inherit")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="inherit">{t("cacheTtl.options.inherit")}</SelectItem>

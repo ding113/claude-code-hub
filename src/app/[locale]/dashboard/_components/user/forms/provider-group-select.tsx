@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { getProviderGroupsWithCount } from "@/actions/providers";
 import { TagInputField } from "@/components/form/form-field";
 import type { TagInputSuggestion } from "@/components/ui/tag-input";
+import { getProviderGroupsWithCount } from "@/lib/api-client/v1/actions/providers";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 

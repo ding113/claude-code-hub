@@ -286,6 +286,10 @@ export const providers = pgTable('providers', {
   proxyUrl: varchar('proxy_url', { length: 512 }),
   proxyFallbackToDirect: boolean('proxy_fallback_to_direct').default(false),
 
+  // 静态自定义请求头（如 Cloudflare AI Gateway 的 cf-aig-authorization）
+  // null = 不附加；记录值会被合并到出站请求，但绝不能覆盖鉴权头或 final request filter
+  customHeaders: jsonb('custom_headers').$type<Record<string, string> | null>(),
+
   // 超时配置（毫秒）
   // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
   // 参考：https://github.com/nodejs/undici/discussions/1313
@@ -732,6 +736,11 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default('requested'),
 
+  // 非成功请求按 token 用量计费（默认关闭）
+  // 关闭：返回 4xx/5xx 时即使上游回报了 token 用量也不计费（当前行为）
+  // 开启：只要上游返回了正向 token 用量，无论响应状态码如何都按用量计费（fake-200 错误检测仍然生效）
+  billNonSuccessfulRequests: boolean('bill_non_successful_requests').notNull().default(false),
+
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
   // null 表示使用环境变量 TZ 或默认 UTC
@@ -756,6 +765,13 @@ export const systemSettings = pgTable('system_settings', {
 
   // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
   enableHttp2: boolean('enable_http2').notNull().default(false),
+
+  // 启用 OpenAI Responses WebSocket 支持（默认开启，仅对 Codex 类型供应商生效）
+  // 开启后：当客户端以 WebSocket 建连至 /v1/responses 时，CCH 会尝试与上游建立 WS 连接；
+  // 若上游不支持或握手失败，优雅降级为普通 HTTP Responses 请求，客户端 WebSocket 保持打开。
+  enableOpenaiResponsesWebsocket: boolean('enable_openai_responses_websocket')
+    .notNull()
+    .default(true),
 
   // 高并发模式（默认关闭）
   // 开启后：关闭部分 Redis 调试快照与实时观测写入，降低高并发下的 CPU 与 IO 开销
@@ -798,6 +814,12 @@ export const systemSettings = pgTable('system_settings', {
   )
     .notNull()
     .default(true),
+
+  // Fake 流式输出白名单（缺省 NULL → transformer 落 DEFAULT_FAKE_STREAMING_WHITELIST；
+  // 显式 [] → 表示禁用 fake streaming）
+  fakeStreamingWhitelist: jsonb('fake_streaming_whitelist').$type<
+    Array<{ model: string; groupTags: string[] }>
+  >(),
 
   // Codex Session ID 补全（默认开启）
   // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识

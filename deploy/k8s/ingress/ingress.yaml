@@ -5,8 +5,8 @@ metadata:
   namespace: {{NAMESPACE}}
   annotations:
     # 流式响应需要的长超时和禁用缓冲 (nginx-ingress)
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3700"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3700"
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
     # 客户端 IP 透传依赖 ingress controller 级 forwarded-header / real-ip 配置。

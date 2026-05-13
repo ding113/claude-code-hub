@@ -2,7 +2,6 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { removeUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
   DialogClose,
@@ -11,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { removeUser } from "@/lib/api-client/v1/actions/users";
 
 interface DeleteUserConfirmProps {
   user?: {

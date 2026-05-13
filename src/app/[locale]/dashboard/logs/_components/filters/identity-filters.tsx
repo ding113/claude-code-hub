@@ -4,8 +4,6 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getKeys } from "@/actions/keys";
-import { searchUsersForFilter } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -24,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getKeys } from "@/lib/api-client/v1/actions/keys";
+import { searchUsersForFilter } from "@/lib/api-client/v1/actions/users";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { Key } from "@/types/key";
 import type { UsageLogFilters } from "./types";

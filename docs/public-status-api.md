@@ -13,7 +13,7 @@ OpenAPI 与在线文档入口：
 
 - 原始 OpenAPI JSON：`/api/actions/openapi.json`
 - Swagger UI：`/api/actions/docs`
-- Scalar UI：`/api/actions/scalar`
+- Scalar UI：`/api/v1/scalar`
 
 ## `GET /api/public-status`
 

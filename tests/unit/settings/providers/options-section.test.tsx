@@ -118,6 +118,7 @@ function createMockState(
       geminiGoogleSearchPreference: "inherit",
       activeTimeStart: null,
       activeTimeEnd: null,
+      customHeadersText: "",
       ...overrides.routing,
     },
     rateLimit: {
@@ -531,6 +532,77 @@ describe("OptionsSection", () => {
       });
 
       expect(getBodyText()).toContain("batchNotes.codexOnly");
+
+      unmount();
+    });
+  });
+
+  describe("custom headers textarea", () => {
+    it("renders the textarea with id custom-headers in create mode", () => {
+      const { container, unmount } = renderSection();
+
+      const textarea = container.querySelector("textarea#custom-headers");
+      expect(textarea).toBeTruthy();
+
+      unmount();
+    });
+
+    it("renders the textarea with id edit-custom-headers in edit mode", () => {
+      const { container, unmount } = renderSection({ mode: "edit" });
+
+      const textarea = container.querySelector("textarea#edit-custom-headers");
+      expect(textarea).toBeTruthy();
+
+      unmount();
+    });
+
+    it("does NOT render the textarea in batch mode", () => {
+      const { container, unmount } = renderSection({ mode: "batch" });
+
+      const textarea = container.querySelector(
+        "textarea#custom-headers, textarea#edit-custom-headers"
+      );
+      expect(textarea).toBeNull();
+
+      unmount();
+    });
+
+    it("dispatches SET_CUSTOM_HEADERS_TEXT on input", () => {
+      const { container, unmount } = renderSection();
+
+      const textarea = container.querySelector(
+        "textarea#custom-headers"
+      ) as HTMLTextAreaElement | null;
+      expect(textarea).toBeTruthy();
+      if (textarea) {
+        const setValue = Object.getOwnPropertyDescriptor(
+          HTMLTextAreaElement.prototype,
+          "value"
+        )?.set;
+        act(() => {
+          setValue?.call(textarea, '{"x-foo": "bar"}');
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+      }
+
+      expect(mockDispatch).toHaveBeenCalledWith({
+        type: "SET_CUSTOM_HEADERS_TEXT",
+        payload: '{"x-foo": "bar"}',
+      });
+
+      unmount();
+    });
+
+    it("prefills textarea value from state.routing.customHeadersText", () => {
+      const seed = '{\n  "cf-aig-authorization": "Bearer test"\n}';
+      const { container, unmount } = renderSection({
+        state: createMockState({ routing: { customHeadersText: seed } }),
+      });
+
+      const textarea = container.querySelector(
+        "textarea#custom-headers"
+      ) as HTMLTextAreaElement | null;
+      expect(textarea?.value).toBe(seed);
 
       unmount();
     });

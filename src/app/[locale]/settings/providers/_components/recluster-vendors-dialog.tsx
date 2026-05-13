@@ -5,7 +5,6 @@ import { ArrowRight, FolderGit2, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { reclusterProviderVendors } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { reclusterProviderVendors } from "@/lib/api-client/v1/actions/providers";
 
 type ReclusterChange = {
   providerId: number;

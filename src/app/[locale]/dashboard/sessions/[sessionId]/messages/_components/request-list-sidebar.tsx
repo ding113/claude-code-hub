@@ -11,11 +11,11 @@ import {
 } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { getSessionRequests } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getSessionRequests } from "@/lib/api-client/v1/actions/active-sessions";
 import { cn } from "@/lib/utils";
 
 interface RequestItem {
@@ -165,7 +165,7 @@ export function RequestListSidebar({
           <div className="relative flex-1">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
             <Input
-              placeholder="Search..."
+              placeholder={t("requestList.searchPlaceholder")}
               className="h-7 text-xs pl-7 bg-muted/20 border-muted-foreground/20"
               disabled
             />

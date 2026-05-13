@@ -45,6 +45,7 @@ const baseSettings = {
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
   allowNonConversationEndpointProviderFallback: true,
+  fakeStreamingWhitelist: [],
   responseFixerConfig: {
     fixEncoding: true,
     fixSseFormat: true,
@@ -78,6 +79,7 @@ const baseSettings = {
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
   | "allowNonConversationEndpointProviderFallback"
+  | "fakeStreamingWhitelist"
   | "responseFixerConfig"
   | "quotaDbRefreshIntervalSeconds"
   | "quotaLeasePercent5h"

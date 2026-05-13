@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { FlaskConical, Globe, Link2, Plug, Zap } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { parseCustomHeadersJsonText } from "@/lib/custom-headers";
 import { extractBaseUrl } from "@/lib/utils/validation";
 import type { McpPassthroughType } from "@/types/provider";
 import { ApiTestButton } from "../../api-test-button";
@@ -22,6 +24,14 @@ export function TestingSection() {
   const { state, dispatch, mode, provider, enableMultiProviderTypes } = useProviderForm();
   const isEdit = mode === "edit";
   const isBatch = mode === "batch";
+
+  // Forward parsed custom headers from form state to ApiTestButton; on parse failure
+  // (user is mid-typing), pass null so the button's own textarea handles correction.
+  const customHeadersForTestButton = useMemo<Record<string, string> | null>(() => {
+    const result = parseCustomHeadersJsonText(state.routing.customHeadersText);
+    if (!result.ok) return null;
+    return result.value;
+  }, [state.routing.customHeadersText]);
 
   return (
     <motion.div
@@ -67,6 +77,7 @@ export function TestingSection() {
                 providerId={isEdit ? provider?.id : undefined}
                 providerType={state.routing.providerType}
                 allowedModels={state.routing.allowedModels}
+                customHeaders={customHeadersForTestButton}
                 enableMultiProviderTypes={enableMultiProviderTypes}
                 disabled={state.ui.isPending || !state.basic.url.trim()}
               />
@@ -164,6 +175,7 @@ export function TestingSection() {
                     placeholder={t("sections.mcpPassthrough.urlPlaceholder")}
                     disabled={state.ui.isPending}
                     className="pr-10 font-mono text-sm"
+                    autoComplete="off"
                   />
                   <Link2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 </div>

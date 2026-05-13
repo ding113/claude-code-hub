@@ -5,8 +5,6 @@ import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { type BatchUpdateKeysParams, batchUpdateKeys } from "@/actions/keys";
-import { type BatchUpdateUsersParams, batchUpdateUsers } from "@/actions/users";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +25,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { type BatchUpdateKeysParams, batchUpdateKeys } from "@/lib/api-client/v1/actions/keys";
+import { type BatchUpdateUsersParams, batchUpdateUsers } from "@/lib/api-client/v1/actions/users";
 import { BatchKeySection, type BatchKeySectionState } from "./batch-key-section";
 import { BatchUserSection, type BatchUserSectionState } from "./batch-user-section";
 

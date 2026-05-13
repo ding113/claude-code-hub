@@ -82,7 +82,7 @@
   "modelWhitelistLoading": "読み込み中...",
   "modelWhitelistManualAdd": "モデルを手動追加",
   "modelWhitelistManualDesc": "価格表に限定せず、任意のモデル名を追加できます",
-  "modelWhitelistManualPlaceholder": "モデル名を入力 (例: gpt-5-turbo)",
+  "modelWhitelistManualPlaceholder": "モデル名を入力 (例: gpt-5.4)",
   "modelWhitelistNotFound": "モデルが見つかりません",
   "modelWhitelistSearchPlaceholder": "モデル名を検索...",
   "modelWhitelistSelectAll": "すべて選択 ({count})",

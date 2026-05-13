@@ -27,7 +27,20 @@ const nextConfig: NextConfig = {
   // Next.js 依赖追踪无法正确追踪动态导入和类型导入的传递依赖
   // 参考: https://nextjs.org/docs/app/api-reference/config/next-config-js/output
   outputFileTracingIncludes: {
-    "/**": ["./node_modules/undici/**/*", "./node_modules/fetch-socks/**/*"],
+    "/**": [
+      "./node_modules/undici/**/*",
+      "./node_modules/fetch-socks/**/*",
+      // 自定义 Node 服务器（server.js）只用到 `ws` 与 next 的入口；
+      // 让 Next 的依赖追踪决定从 next 包里收纳什么文件，避免把 next 整个
+      // node_modules 都拖进 standalone 产物（约数十 MB）。仅显式追加：
+      //  - ws：standalone 默认追踪基于 import 静态分析，server.js 是 CJS
+      //    根入口，未被 Next 编译，必须手工列出。
+      //  - next/dist：自定义 server 通过 require("next") 进入；保留 dist
+      //    子树确保 programmatic API 可用。
+      "./node_modules/ws/**/*",
+      "./node_modules/next/dist/**/*",
+      "./node_modules/next/package.json",
+    ],
   },
 
   // 文件上传大小限制（用于数据库备份导入）

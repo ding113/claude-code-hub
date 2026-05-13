@@ -488,23 +488,21 @@ export function KeyEditSection({
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"}
+                  {translations.fields.providerGroup.editHint}
                 </p>
               </>
             ) : (
               // 创建模式：多选
               <TagInputField
                 label={translations.fields.providerGroup.label}
-                placeholder={translations.fields.providerGroup.placeholder || "选择分组"}
+                placeholder={translations.fields.providerGroup.placeholder}
                 value={keyData.providerGroup || PROVIDER_GROUP.DEFAULT}
                 onChange={handleUserProviderGroupChange}
                 suggestions={userGroups}
                 maxTags={userGroups.length + 1}
                 maxTagLength={50}
                 validateTag={() => true}
-                description={
-                  translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"
-                }
+                description={translations.fields.providerGroup.selectHint}
               />
             )}
           </div>
@@ -524,12 +522,12 @@ export function KeyEditSection({
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              {translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"}
+              {translations.fields.providerGroup.editHint}
             </p>
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">
-            {translations.fields.providerGroup.noGroupHint || "您没有分组限制，可以访问所有供应商"}
+            {translations.fields.providerGroup.noGroupHint}
           </div>
         )}
 

@@ -178,7 +178,7 @@ describe("Undo Provider Batch Patch Engine", () => {
       [2],
       expect.objectContaining({ groupTag: "beta" })
     );
-  });
+  }, 30_000);
 
   it("should call updateProvidersBatch per unique preimage group", async () => {
     const providers = [

@@ -3,7 +3,6 @@
 import { Eye } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { getSessionMessages } from "@/actions/active-sessions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { getSessionMessages } from "@/lib/api-client/v1/actions/active-sessions";
 
 interface SessionMessagesDialogProps {
   sessionId: string;

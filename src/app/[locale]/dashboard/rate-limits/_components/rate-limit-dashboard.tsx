@@ -3,7 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import { getRateLimitStats } from "@/actions/rate-limit-stats";
+import { getRateLimitStats } from "@/lib/api-client/v1/actions/rate-limit-stats";
 import type { CurrencyCode } from "@/lib/utils";
 import type { RateLimitEventFilters, RateLimitEventStats } from "@/types/statistics";
 import { RateLimitEventsChart } from "../../_components/rate-limit-events-chart";

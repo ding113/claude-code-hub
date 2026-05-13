@@ -69,10 +69,16 @@ describe("RedisSessionStore", () => {
     const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
 
     const store = new RedisSessionStore();
-    const created = await store.create({ keyFingerprint: "fp-1", userId: 101, userRole: "user" });
+    const created = await store.create({
+      keyFingerprint: "fp-1",
+      credentialType: "user-api-key",
+      userId: 101,
+      userRole: "user",
+    });
 
     expect(created.sessionId).toMatch(/^sid_[0-9a-f-]{36}$/i);
     expect(created.keyFingerprint).toBe("fp-1");
+    expect(created.credentialType).toBe("user-api-key");
     expect(created.userId).toBe(101);
     expect(created.userRole).toBe("user");
     expect(created.createdAt).toBe(new Date("2026-02-18T10:00:00.000Z").getTime());
@@ -85,6 +91,7 @@ describe("RedisSessionStore", () => {
     const session = {
       sessionId: "6b5097ff-a11e-4425-aad0-f57f7d2206fc",
       keyFingerprint: "fp-existing",
+      credentialType: "admin-token",
       userId: 7,
       userRole: "admin",
       createdAt: 1_700_000_000_000,
@@ -96,6 +103,76 @@ describe("RedisSessionStore", () => {
     const found = await store.read(session.sessionId);
 
     expect(found).toEqual(session);
+  });
+
+  it("read() preserves browser session credential provenance", async () => {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    const session = {
+      sessionId: "browser-admin-session",
+      keyFingerprint: "fp-browser",
+      credentialType: "session",
+      userId: 7,
+      userRole: "admin",
+      createdAt: 1_700_000_000_000,
+      expiresAt: 1_700_000_360_000,
+    };
+    redis.store.set(`cch:session:${session.sessionId}`, JSON.stringify(session));
+
+    const store = new RedisSessionStore();
+    const found = await store.read(session.sessionId);
+
+    expect(found).toEqual(session);
+  });
+
+  it("read() classifies legacy admin opaque sessions without credentialType as admin-token", async () => {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    const legacyAdminSession = {
+      sessionId: "legacy-admin-session",
+      keyFingerprint: "fp-admin",
+      userId: -1,
+      userRole: "admin",
+      createdAt: 1_700_000_000_000,
+      expiresAt: 1_700_000_360_000,
+    };
+    redis.store.set(
+      `cch:session:${legacyAdminSession.sessionId}`,
+      JSON.stringify(legacyAdminSession)
+    );
+
+    const store = new RedisSessionStore();
+    const found = await store.read(legacyAdminSession.sessionId);
+
+    expect(found).toMatchObject({
+      ...legacyAdminSession,
+      credentialType: "admin-token",
+    });
+  });
+
+  it("read() classifies legacy opaque browser sessions without credentialType as session", async () => {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    const legacyUserSession = {
+      sessionId: "legacy-user-session",
+      keyFingerprint: "fp-user",
+      userId: 12,
+      userRole: "admin",
+      createdAt: 1_700_000_000_000,
+      expiresAt: 1_700_000_360_000,
+    };
+    redis.store.set(
+      `cch:session:${legacyUserSession.sessionId}`,
+      JSON.stringify(legacyUserSession)
+    );
+
+    const store = new RedisSessionStore();
+    const found = await store.read(legacyUserSession.sessionId);
+
+    expect(found).toMatchObject({
+      ...legacyUserSession,
+      credentialType: "session",
+    });
   });
 
   it("read() returns null for non-existent session", async () => {
@@ -137,6 +214,7 @@ describe("RedisSessionStore", () => {
     const oldSession = {
       sessionId: "e7f7bf87-c3b9-4525-ac0c-c2cf7cd5006b",
       keyFingerprint: "fp-rotate",
+      credentialType: "user-api-key" as const,
       userId: 18,
       userRole: "user",
       createdAt: Date.now() - 10_000,
@@ -150,6 +228,7 @@ describe("RedisSessionStore", () => {
     expect(rotated).not.toBeNull();
     expect(rotated?.sessionId).not.toBe(oldSession.sessionId);
     expect(rotated?.keyFingerprint).toBe(oldSession.keyFingerprint);
+    expect(rotated?.credentialType).toBe(oldSession.credentialType);
     expect(rotated?.userId).toBe(oldSession.userId);
     expect(rotated?.userRole).toBe(oldSession.userRole);
     expect(redis.store.has(`cch:session:${oldSession.sessionId}`)).toBe(false);
@@ -161,7 +240,7 @@ describe("RedisSessionStore", () => {
 
     const store = new RedisSessionStore();
     const created = await store.create(
-      { keyFingerprint: "fp-ttl", userId: 9, userRole: "user" },
+      { keyFingerprint: "fp-ttl", credentialType: "user-api-key", userId: 9, userRole: "user" },
       120
     );
 
@@ -177,7 +256,12 @@ describe("RedisSessionStore", () => {
     const store = new RedisSessionStore();
 
     await expect(
-      store.create({ keyFingerprint: "fp-fail", userId: 3, userRole: "user" })
+      store.create({
+        keyFingerprint: "fp-fail",
+        credentialType: "user-api-key",
+        userId: 3,
+        userRole: "user",
+      })
     ).rejects.toThrow("redis setex failed");
     expect(loggerMock.error).toHaveBeenCalled();
   });
@@ -189,7 +273,12 @@ describe("RedisSessionStore", () => {
     const store = new RedisSessionStore();
 
     await expect(
-      store.create({ keyFingerprint: "fp-noredis", userId: 4, userRole: "user" })
+      store.create({
+        keyFingerprint: "fp-noredis",
+        credentialType: "user-api-key",
+        userId: 4,
+        userRole: "user",
+      })
     ).rejects.toThrow("Redis not ready");
   });
 
@@ -199,6 +288,7 @@ describe("RedisSessionStore", () => {
     const oldSession = {
       sessionId: "2a036ab4-902a-4f31-a782-ec18344e17b9",
       keyFingerprint: "fp-failure",
+      credentialType: "user-api-key" as const,
       userId: 3,
       userRole: "user",
       createdAt: Date.now(),
@@ -221,6 +311,7 @@ describe("RedisSessionStore", () => {
     const oldSession = {
       sessionId: "aaa-old-session",
       keyFingerprint: "fp-revoke-fail",
+      credentialType: "user-api-key" as const,
       userId: 5,
       userRole: "user",
       createdAt: Date.now() - 10_000,
@@ -234,6 +325,7 @@ describe("RedisSessionStore", () => {
 
     expect(rotated).not.toBeNull();
     expect(rotated?.keyFingerprint).toBe(oldSession.keyFingerprint);
+    expect(rotated?.credentialType).toBe(oldSession.credentialType);
     expect(loggerMock.warn).toHaveBeenCalled();
   });
 
@@ -243,6 +335,7 @@ describe("RedisSessionStore", () => {
     const expiredSession = {
       sessionId: "bbb-expired-session",
       keyFingerprint: "fp-expired",
+      credentialType: "user-api-key" as const,
       userId: 6,
       userRole: "user",
       createdAt: Date.now() - 120_000,
