@@ -55,7 +55,7 @@
     "@langfuse/client": "^5",
     "@langfuse/otel": "^5",
     "@langfuse/tracing": "^5",
-    "@lobehub/icons": "^5",
+    "@lobehub/icons": "^2",
     "@opentelemetry/sdk-node": "^0.217",
     "@radix-ui/react-alert-dialog": "^1",
     "@radix-ui/react-avatar": "^1",
