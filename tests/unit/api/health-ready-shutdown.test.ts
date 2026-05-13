@@ -15,10 +15,6 @@ describe.sequential("readiness probe respects shutdown flag", () => {
   });
 
   it("returns 503 unhealthy when shutting down without calling component checks", async () => {
-    const checkDatabase = vi.fn(async () => ({ status: "up" as const, latencyMs: 1 }));
-    const checkRedis = vi.fn(async () => ({ status: "up" as const, latencyMs: 1 }));
-    const checkProxy = vi.fn(async () => ({ status: "up" as const, latencyMs: 1 }));
-
     vi.doMock("@/drizzle/db", () => ({ db: { execute: vi.fn() } }));
     vi.doMock("@/lib/redis/client", () => ({ getRedisClient: vi.fn(() => null) }));
 
@@ -63,11 +59,6 @@ describe.sequential("readiness probe respects shutdown flag", () => {
     expect(callCountAfter).toBe(callCountBefore);
 
     __resetShutdownStateForTests();
-
-    // Unused mocks to keep TS happy
-    void checkDatabase;
-    void checkRedis;
-    void checkProxy;
   });
 
   it("handleReadinessRequest returns HTTP 503 when shutting down", async () => {

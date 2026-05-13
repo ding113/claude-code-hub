@@ -55,19 +55,21 @@ describe.sequential("shutdownLangfuse", () => {
     };
 
     vi.doMock("@langfuse/otel", () => ({
-      LangfuseSpanProcessor: function () {
-        return fakeSpanProcessor;
+      LangfuseSpanProcessor: class {
+        constructor() {
+          Object.assign(this, fakeSpanProcessor);
+        }
       },
     }));
     vi.doMock("@opentelemetry/sdk-node", () => ({
-      NodeSDK: function () {
-        return fakeSdk;
+      NodeSDK: class {
+        constructor() {
+          Object.assign(this, fakeSdk);
+        }
       },
     }));
     vi.doMock("@opentelemetry/sdk-trace-base", () => ({
-      TraceIdRatioBasedSampler: function () {
-        return {};
-      },
+      TraceIdRatioBasedSampler: class {},
     }));
 
     vi.stubEnv("LANGFUSE_PUBLIC_KEY", "pk-test");
@@ -102,13 +104,17 @@ describe.sequential("shutdownLangfuse", () => {
     };
 
     vi.doMock("@langfuse/otel", () => ({
-      LangfuseSpanProcessor: function () {
-        return fakeSpanProcessor;
+      LangfuseSpanProcessor: class {
+        constructor() {
+          Object.assign(this, fakeSpanProcessor);
+        }
       },
     }));
     vi.doMock("@opentelemetry/sdk-node", () => ({
-      NodeSDK: function () {
-        return fakeSdk;
+      NodeSDK: class {
+        constructor() {
+          Object.assign(this, fakeSdk);
+        }
       },
     }));
 

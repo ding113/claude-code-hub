@@ -749,9 +749,21 @@ async function main() {
 function registerOrchestratedShutdown(server, wss) {
   let shuttingDown = false;
 
-  const drainMs = Number(process.env.SHUTDOWN_DRAIN_MS) || 15000;
-  const cleanupMs = Number(process.env.SHUTDOWN_CLEANUP_MS) || 10000;
-  const hardExitMs = Number(process.env.SHUTDOWN_HARD_EXIT_MS) || 25000;
+  // Positive integer parser: `Number("0") || default` would silently coerce an
+  // intentional 0 back to the default. Mirrors the parser in
+  // src/lib/langfuse/index.ts so operator overrides behave consistently.
+  const parsePosInt = (raw, fallback) => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+
+  // Defaults: drain + cleanup = 25s, with a 3s gap before the hard-exit
+  // watchdog. Without the gap, when both phases hit their cap the watchdog
+  // (registered at T=0) fires at the same instant as `process.exit(0)` and
+  // wins by ordering, falsely logging the shutdown as failed.
+  const drainMs = parsePosInt(process.env.SHUTDOWN_DRAIN_MS, 15000);
+  const cleanupMs = parsePosInt(process.env.SHUTDOWN_CLEANUP_MS, 10000);
+  const hardExitMs = parsePosInt(process.env.SHUTDOWN_HARD_EXIT_MS, 28000);
 
   const orchestratedShutdown = async (signal) => {
     if (shuttingDown) return;
@@ -805,6 +817,8 @@ function registerOrchestratedShutdown(server, wss) {
 
     // 4. Bounded drain — server.close() resolves only after every in-flight
     //    connection completes; we cap it so a stuck client can't hold us forever.
+    //    Clearing the timer on natural close avoids a misleading
+    //    "shutdown_drain_timeout" warning during the subsequent cleanup phase.
     await Promise.race([
       closeServer,
       new Promise((resolve) => {
@@ -813,6 +827,7 @@ function registerOrchestratedShutdown(server, wss) {
           resolve();
         }, drainMs);
         if (typeof t.unref === "function") t.unref();
+        closeServer.finally(() => clearTimeout(t));
       }),
     ]);
 
