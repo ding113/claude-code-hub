@@ -54,9 +54,12 @@ describe.sequential("registerOrchestratedShutdown", () => {
     const closeServer = vi.fn((cb: (err?: Error) => void) => {
       setTimeout(() => cb(), 5);
     });
-    const closeWss = vi.fn();
+    const closeWss = vi.fn((cb: (err?: Error) => void) => {
+      setTimeout(() => cb(), 5);
+    });
+    const wsClient = { close: vi.fn() };
     const server = { close: closeServer };
-    const wss = { close: closeWss };
+    const wss = { close: closeWss, clients: new Set([wsClient]) };
 
     const markShuttingDown = vi.fn();
     const isShuttingDown = vi.fn(() => true);
@@ -82,6 +85,7 @@ describe.sequential("registerOrchestratedShutdown", () => {
     expect(markShuttingDown).toHaveBeenCalledTimes(1);
     expect(closeServer).toHaveBeenCalledTimes(1);
     expect(closeWss).toHaveBeenCalledTimes(1);
+    expect(wsClient.close).toHaveBeenCalledWith(1001, "server_shutdown");
     expect(runApplicationCleanup).toHaveBeenCalledWith(
       "SIGTERM",
       expect.objectContaining({ totalTimeoutMs: 500 })
@@ -176,6 +180,64 @@ describe.sequential("registerOrchestratedShutdown", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     expect(closeServer).toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it("hard-exit watchdog fires process.exit(1) when the whole sequence hangs", async () => {
+    process.env.SHUTDOWN_DRAIN_MS = "10000";
+    process.env.SHUTDOWN_CLEANUP_MS = "10000";
+    process.env.SHUTDOWN_HARD_EXIT_MS = "100";
+
+    // Both server.close() and runApplicationCleanup never resolve — only the
+    // watchdog can rescue the process.
+    const closeServer = vi.fn((_cb: (err?: Error) => void) => {
+      // never calls back
+    });
+    const server = { close: closeServer };
+
+    (globalThis as unknown as { __CCH_LIFECYCLE__?: unknown }).__CCH_LIFECYCLE__ = {
+      markShuttingDown: vi.fn(),
+      isShuttingDown: vi.fn(() => true),
+      runApplicationCleanup: vi.fn(() => new Promise(() => {})),
+    };
+
+    const exitSpy = vi.fn() as unknown as typeof process.exit;
+    process.exit = exitSpy;
+
+    const { registerOrchestratedShutdown } = loadServerModule();
+    registerOrchestratedShutdown(server, null);
+
+    process.emit("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("still calls process.exit(0) when runApplicationCleanup throws", async () => {
+    process.env.SHUTDOWN_DRAIN_MS = "50";
+    process.env.SHUTDOWN_CLEANUP_MS = "50";
+    process.env.SHUTDOWN_HARD_EXIT_MS = "5000";
+
+    const closeServer = vi.fn((cb: (err?: Error) => void) => setTimeout(cb, 1));
+    const server = { close: closeServer };
+
+    const runApplicationCleanup = vi.fn(() => Promise.reject(new Error("simulated cleanup throw")));
+    (globalThis as unknown as { __CCH_LIFECYCLE__?: unknown }).__CCH_LIFECYCLE__ = {
+      markShuttingDown: vi.fn(),
+      isShuttingDown: vi.fn(() => true),
+      runApplicationCleanup,
+    };
+
+    const exitSpy = vi.fn() as unknown as typeof process.exit;
+    process.exit = exitSpy;
+
+    const { registerOrchestratedShutdown } = loadServerModule();
+    registerOrchestratedShutdown(server, null);
+
+    process.emit("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(runApplicationCleanup).toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 });

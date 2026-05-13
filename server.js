@@ -765,6 +765,18 @@ function registerOrchestratedShutdown(server, wss) {
   const cleanupMs = parsePosInt(process.env.SHUTDOWN_CLEANUP_MS, 10000);
   const hardExitMs = parsePosInt(process.env.SHUTDOWN_HARD_EXIT_MS, 28000);
 
+  // Surface operator misconfig at startup-of-shutdown rather than as a confusing
+  // "exit code 1 even though everything looked fine". The watchdog must outlive
+  // drain + cleanup or it races them.
+  if (drainMs + cleanupMs >= hardExitMs) {
+    log("warn", "shutdown_timeout_misconfiguration", {
+      drainMs,
+      cleanupMs,
+      hardExitMs,
+      message: "drainMs + cleanupMs should be less than hardExitMs to avoid false watchdog triggers",
+    });
+  }
+
   const orchestratedShutdown = async (signal) => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -787,7 +799,9 @@ function registerOrchestratedShutdown(server, wss) {
       log("warn", "shutdown_mark_failed", { error: String(err && err.message ? err.message : err) });
     }
 
-    // 2 + 3. Stop accepting new connections.
+    // 2 + 3. Stop accepting new connections. Both `server.close()` and
+    // `wss.close()` are awaited via the same Promise.race so a long-lived
+    // upgraded WS stream doesn't slip past the drain gate.
     const closeServer = new Promise((resolve) => {
       try {
         server.close((err) => {
@@ -805,29 +819,63 @@ function registerOrchestratedShutdown(server, wss) {
         resolve();
       }
     });
+
+    let closeWss = Promise.resolve();
     if (wss && typeof wss.close === "function") {
+      // Tell every connected client to close (RFC 6455 code 1001 = going away).
+      // Clients that honor it shorten the drain window for us; ones that don't
+      // get caught by the drainMs cap below.
       try {
-        wss.close();
+        if (wss.clients && typeof wss.clients.forEach === "function") {
+          wss.clients.forEach((client) => {
+            try {
+              if (client && typeof client.close === "function") {
+                client.close(1001, "server_shutdown");
+              }
+            } catch {
+              // ignore per-client close errors — drain handles laggards
+            }
+          });
+        }
       } catch (err) {
-        log("warn", "shutdown_wss_close_error", {
+        log("warn", "shutdown_wss_clients_close_error", {
           error: String(err && err.message ? err.message : err),
         });
       }
+
+      closeWss = new Promise((resolve) => {
+        try {
+          wss.close((err) => {
+            if (err) {
+              log("warn", "shutdown_wss_close_error", {
+                error: String(err && err.message ? err.message : err),
+              });
+            }
+            resolve();
+          });
+        } catch (err) {
+          log("warn", "shutdown_wss_close_threw", {
+            error: String(err && err.message ? err.message : err),
+          });
+          resolve();
+        }
+      });
     }
 
-    // 4. Bounded drain — server.close() resolves only after every in-flight
-    //    connection completes; we cap it so a stuck client can't hold us forever.
-    //    Clearing the timer on natural close avoids a misleading
-    //    "shutdown_drain_timeout" warning during the subsequent cleanup phase.
+    // 4. Bounded drain — wait for HTTP and WebSocket connections to finish,
+    //    but cap so a stuck client can't hold us forever. Clearing the timer
+    //    on natural close avoids a misleading "shutdown_drain_timeout"
+    //    warning during the subsequent cleanup phase.
+    const closeBoth = Promise.all([closeServer, closeWss]);
     await Promise.race([
-      closeServer,
+      closeBoth,
       new Promise((resolve) => {
         const t = setTimeout(() => {
           log("warn", "shutdown_drain_timeout", { drainMs });
           resolve();
         }, drainMs);
         if (typeof t.unref === "function") t.unref();
-        closeServer.finally(() => clearTimeout(t));
+        closeBoth.finally(() => clearTimeout(t));
       }),
     ]);
 
