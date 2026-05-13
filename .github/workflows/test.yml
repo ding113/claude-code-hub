@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -28,7 +28,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -71,7 +71,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -133,7 +133,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -141,7 +141,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -207,7 +207,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -215,7 +215,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -232,7 +232,7 @@ jobs:
         run: bun run db:migrate
 
       - name: Cache Next.js build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('package.json', '.bun-version') }}-${{ hashFiles('src/**/*.js', 'src/**/*.jsx', 'src/**/*.ts', 'src/**/*.tsx', 'next.config.*', 'tsconfig.json', 'postcss.config.*') }}
@@ -290,7 +290,7 @@ jobs:
 
       - name: Create summary
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const summary = `## 🧪 测试结果

@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Run Claude Code for Oncall Triage
         uses: anthropics/claude-code-action@v1
