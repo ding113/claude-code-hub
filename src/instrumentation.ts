@@ -3,7 +3,7 @@
  * 在服务器启动时自动执行数据库迁移
  */
 
-import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
+import { startCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
 import { CHANNEL_API_KEYS_UPDATED, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
 import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
@@ -276,125 +276,11 @@ export async function register() {
 
     if (!instrumentationState.__CCH_SHUTDOWN_HOOKS_REGISTERED__) {
       instrumentationState.__CCH_SHUTDOWN_HOOKS_REGISTERED__ = true;
-
-      const shutdownHandler = async (signal: string) => {
-        if (instrumentationState.__CCH_SHUTDOWN_IN_PROGRESS__) {
-          return;
-        }
-        instrumentationState.__CCH_SHUTDOWN_IN_PROGRESS__ = true;
-
-        const startedAt = instrumentationState.__CCH_PROCESS_STARTED_AT__;
-        const uptimeSeconds =
-          startedAt !== undefined ? Math.round((Date.now() - startedAt) / 1000) : null;
-        logger.info("[Lifecycle] Process exiting", {
-          pid: process.pid,
-          signal,
-          uptimeSeconds,
-        });
-        logger.info(`[Instrumentation] Received ${signal}, cleaning up...`);
-
-        try {
-          stopCacheCleanup();
-          instrumentationState.__CCH_CACHE_CLEANUP_STARTED__ = false;
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop cache cleanup", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          instrumentationState.__CCH_API_KEY_VF_SYNC_CLEANUP__?.();
-          instrumentationState.__CCH_API_KEY_VF_SYNC_STARTED__ = false;
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to cleanup API key vacuum filter sync", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          const { stopEndpointProbeScheduler } = await import(
-            "@/lib/provider-endpoints/probe-scheduler"
-          );
-          stopEndpointProbeScheduler();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop endpoint probe scheduler", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          const { stopPublicStatusRebuildScheduler } = await import(
-            "@/lib/public-status/scheduler"
-          );
-          await stopPublicStatusRebuildScheduler();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop public status rebuild scheduler", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          const { stopEndpointProbeLogCleanup } = await import(
-            "@/lib/provider-endpoints/probe-log-cleanup"
-          );
-          stopEndpointProbeLogCleanup();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop endpoint probe log cleanup", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          const { closeRedis } = await import("@/lib/redis");
-          await closeRedis();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to close Redis connection", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        // Flush Langfuse pending spans
-        try {
-          const { shutdownLangfuse } = await import("@/lib/langfuse");
-          await shutdownLangfuse();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to shutdown Langfuse", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        // 尽力将 message_request 的异步批量更新刷入数据库（避免终止时丢失尾部日志）
-        try {
-          const { stopMessageRequestWriteBuffer } = await import(
-            "@/repository/message-write-buffer"
-          );
-          await stopMessageRequestWriteBuffer();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop message request write buffer", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          if (instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__) {
-            clearInterval(instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__);
-            instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__ = undefined;
-            instrumentationState.__CCH_CLOUD_PRICE_SYNC_STARTED__ = false;
-          }
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop cloud price sync scheduler", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      };
-
-      process.once("SIGTERM", () => {
-        void shutdownHandler("SIGTERM");
-      });
-
-      process.once("SIGINT", () => {
-        void shutdownHandler("SIGINT");
-      });
+      // SIGTERM/SIGINT 注册移到 server.js，因为它持有 HTTP server 句柄、可以先
+      // server.close() 再让 application cleanup 跑。这里只把 cleanup 函数集
+      // 挂到 globalThis 让 server.js 桥接调用。
+      const { bindLifecycleGlobals } = await import("@/lib/lifecycle/shutdown");
+      bindLifecycleGlobals();
     }
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)

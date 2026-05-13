@@ -68,25 +68,62 @@ export async function initLangfuse(): Promise<void> {
   }
 }
 
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 3000;
+
+function getShutdownTimeoutMs(): number {
+  const raw = process.env.LANGFUSE_SHUTDOWN_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SHUTDOWN_TIMEOUT_MS;
+}
+
+async function withTimeout(p: Promise<unknown>, ms: number, label: string): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      logger.warn(`[Langfuse] ${label} timed out`, { ms });
+      resolve();
+    }, ms);
+  });
+  try {
+    await Promise.race([
+      p.then(
+        () => undefined,
+        (error) => {
+          logger.warn(`[Langfuse] ${label} failed`, {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      ),
+      timeout,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /**
  * Flush pending spans and shut down the SDK.
  * Called during graceful shutdown (SIGTERM/SIGINT).
+ *
+ * forceFlush 是无超时的网络刷盘——曾在生产观察到耗时 3 分钟，远超 K8s 默认 30s
+ * grace period。这里用 Promise.race + setTimeout 强制上限，超时只记日志不抛错，
+ * 让关闭流程继续往下走。
  */
 export async function shutdownLangfuse(): Promise<void> {
   if (!initialized || !spanProcessor) {
     return;
   }
 
-  try {
-    await spanProcessor.forceFlush();
-    if (sdk) {
-      await sdk.shutdown();
-    }
-    initialized = false;
-    logger.info("[Langfuse] Shutdown complete");
-  } catch (error) {
-    logger.warn("[Langfuse] Shutdown error", {
-      error: error instanceof Error ? error.message : String(error),
-    });
+  const timeoutMs = getShutdownTimeoutMs();
+  const localProcessor = spanProcessor;
+  const localSdk = sdk;
+  initialized = false;
+  spanProcessor = null;
+  sdk = null;
+
+  await withTimeout(localProcessor.forceFlush(), timeoutMs, "forceFlush");
+  if (localSdk) {
+    await withTimeout(localSdk.shutdown(), timeoutMs, "sdk.shutdown");
   }
+  logger.info("[Langfuse] Shutdown complete");
 }

@@ -693,8 +693,9 @@ async function main() {
     }
   });
 
+  let wss = null;
   if (WebSocketServer) {
-    const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES });
+    wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES });
 
     server.on("upgrade", (req, socket, head) => {
       if (!isResponsesWsUpgrade(req)) {
@@ -729,6 +730,129 @@ async function main() {
       wsEnabled: !!WebSocketServer,
     });
   });
+
+  registerOrchestratedShutdown(server, wss);
+}
+
+// Graceful shutdown orchestration. Lives here (not in instrumentation.ts) because
+// only this process owns the `server` handle returned by http.createServer().
+//
+// Sequence (bounded by SHUTDOWN_HARD_EXIT_MS as the final safety net):
+//   1. Mark shutdown flag    -> /api/health/ready returns 503 -> Service drains
+//   2. server.close()        -> stop accepting; in-flight HTTP finishes
+//   3. wss.close()           -> reject new WS upgrades
+//   4. Wait for drain        -> bounded by SHUTDOWN_DRAIN_MS
+//   5. runApplicationCleanup -> Redis / Langfuse / msg buffer / schedulers; bounded
+//      by SHUTDOWN_CLEANUP_MS. Inside cleanup, asyncTaskManager.cleanupAll() runs
+//      LAST so streaming responses had a chance to finish during step 4.
+//   6. process.exit(0)
+function registerOrchestratedShutdown(server, wss) {
+  let shuttingDown = false;
+
+  // Positive integer parser: `Number("0") || default` would silently coerce an
+  // intentional 0 back to the default. Mirrors the parser in
+  // src/lib/langfuse/index.ts so operator overrides behave consistently.
+  const parsePosInt = (raw, fallback) => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+
+  // Defaults: drain + cleanup = 25s, with a 3s gap before the hard-exit
+  // watchdog. Without the gap, when both phases hit their cap the watchdog
+  // (registered at T=0) fires at the same instant as `process.exit(0)` and
+  // wins by ordering, falsely logging the shutdown as failed.
+  const drainMs = parsePosInt(process.env.SHUTDOWN_DRAIN_MS, 15000);
+  const cleanupMs = parsePosInt(process.env.SHUTDOWN_CLEANUP_MS, 10000);
+  const hardExitMs = parsePosInt(process.env.SHUTDOWN_HARD_EXIT_MS, 28000);
+
+  const orchestratedShutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log("info", "shutdown_received", { signal, drainMs, cleanupMs, hardExitMs });
+
+    // Final safety: even if every step below hangs, this terminates the process.
+    // .unref() so the timer itself doesn't keep the event loop alive.
+    const hardExit = setTimeout(() => {
+      log("error", "shutdown_hard_exit_watchdog", { hardExitMs });
+      process.exit(1);
+    }, hardExitMs);
+    if (typeof hardExit.unref === "function") hardExit.unref();
+
+    // 1. Flip readiness BEFORE closing the listener so probes already in flight
+    //    see 503 and the Service starts removing this pod from endpoints.
+    const lifecycle = globalThis.__CCH_LIFECYCLE__;
+    try {
+      lifecycle?.markShuttingDown?.();
+    } catch (err) {
+      log("warn", "shutdown_mark_failed", { error: String(err && err.message ? err.message : err) });
+    }
+
+    // 2 + 3. Stop accepting new connections.
+    const closeServer = new Promise((resolve) => {
+      try {
+        server.close((err) => {
+          if (err) {
+            log("warn", "shutdown_server_close_error", {
+              error: String(err && err.message ? err.message : err),
+            });
+          }
+          resolve();
+        });
+      } catch (err) {
+        log("warn", "shutdown_server_close_threw", {
+          error: String(err && err.message ? err.message : err),
+        });
+        resolve();
+      }
+    });
+    if (wss && typeof wss.close === "function") {
+      try {
+        wss.close();
+      } catch (err) {
+        log("warn", "shutdown_wss_close_error", {
+          error: String(err && err.message ? err.message : err),
+        });
+      }
+    }
+
+    // 4. Bounded drain — server.close() resolves only after every in-flight
+    //    connection completes; we cap it so a stuck client can't hold us forever.
+    //    Clearing the timer on natural close avoids a misleading
+    //    "shutdown_drain_timeout" warning during the subsequent cleanup phase.
+    await Promise.race([
+      closeServer,
+      new Promise((resolve) => {
+        const t = setTimeout(() => {
+          log("warn", "shutdown_drain_timeout", { drainMs });
+          resolve();
+        }, drainMs);
+        if (typeof t.unref === "function") t.unref();
+        closeServer.finally(() => clearTimeout(t));
+      }),
+    ]);
+
+    // 5. Application-level cleanup.
+    try {
+      if (typeof lifecycle?.runApplicationCleanup === "function") {
+        await lifecycle.runApplicationCleanup(signal, { totalTimeoutMs: cleanupMs });
+      } else {
+        log("warn", "shutdown_cleanup_unavailable", {
+          reason: "lifecycle_globals_not_bound",
+        });
+      }
+    } catch (err) {
+      log("warn", "shutdown_cleanup_error", {
+        error: String(err && err.message ? err.message : err),
+      });
+    }
+
+    log("info", "shutdown_complete", { signal });
+    clearTimeout(hardExit);
+    process.exit(0);
+  };
+
+  process.once("SIGTERM", () => void orchestratedShutdown("SIGTERM"));
+  process.once("SIGINT", () => void orchestratedShutdown("SIGINT"));
 }
 
 // Exposed for tests; not part of the long-lived server entrypoint.
@@ -737,6 +861,7 @@ module.exports = {
   isNextDevMode,
   handleWebSocketConnection,
   forwardToInternalHttp,
+  registerOrchestratedShutdown,
   WS_MAX_PAYLOAD_BYTES,
   MAX_PENDING_BYTES,
 };
