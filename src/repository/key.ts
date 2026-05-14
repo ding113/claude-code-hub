@@ -541,13 +541,35 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
   return active;
 }
 
-// 验证 API Key 并返回用户信息
-export async function validateApiKeyAndGetUser(
-  keyString: string
-): Promise<{ user: User; key: Key } | null> {
+/**
+ * Failure reasons surfaced by {@link resolveApiKeyAuthOutcome}.
+ *
+ * - `not_found`: key string does not exist (or matches a soft-deleted row, or
+ *   the owning user was soft-deleted). Treated as a potential brute-force
+ *   signal by the proxy auth guard.
+ * - `key_disabled` / `key_expired`: the key exists and the requester proved
+ *   knowledge of it, but the key itself is no longer valid. These are NOT
+ *   brute-force signals — they should return a specific error to the caller
+ *   without incrementing the auth-failure rate limiter.
+ */
+export type ApiKeyAuthFailureReason = "not_found" | "key_disabled" | "key_expired";
+
+export type ApiKeyAuthOutcome =
+  | { ok: true; user: User; key: Key }
+  | { ok: false; reason: ApiKeyAuthFailureReason };
+
+/**
+ * Look up an API key and report a specific outcome so callers can distinguish
+ * "key never existed" from "key exists but disabled/expired". User-level
+ * status (disabled / expired) is intentionally NOT folded into this result —
+ * the caller inspects `user.isEnabled` / `user.expiresAt` directly so it can
+ * apply consistent semantics across the proxy and UI auth paths.
+ */
+export async function resolveApiKeyAuthOutcome(keyString: string): Promise<ApiKeyAuthOutcome> {
   const vfSaysMissing = apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true;
 
   // 默认鉴权链路：Vacuum Filter -> Redis -> DB
+  // Redis 缓存只保存活跃 key，命中即代表 ok=true。
   const cachedKey = await getCachedActiveKey(keyString);
   if (cachedKey) {
     // 多实例一致性：若 Vacuum Filter 判定缺失但 Redis 命中，说明本机 filter 可能滞后。
@@ -558,7 +580,7 @@ export async function validateApiKeyAndGetUser(
 
     const cachedUser = await getCachedUser(cachedKey.userId);
     if (cachedUser) {
-      return { user: cachedUser, key: cachedKey };
+      return { ok: true, user: cachedUser, key: cachedKey };
     }
 
     // user 缓存 miss：仅补齐 user（相较 join 更轻量）
@@ -596,20 +618,22 @@ export async function validateApiKeyAndGetUser(
     if (!userRow) {
       // join 语义：用户被删除则 key 无效；顺带清理 key 缓存避免重复 miss
       invalidateCachedKey(keyString).catch(() => {});
-      return null;
+      return { ok: false, reason: "not_found" };
     }
 
     const user = toUser(userRow);
     cacheUser(user).catch(() => {});
-    return { user, key: cachedKey };
+    return { ok: true, user, key: cachedKey };
   }
 
-  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
+  // Vacuum Filter 负向短路：肯定不存在则直接返回 not_found，避免打 DB
   // 注意：此处必须放在 Redis 读取之后，避免多实例环境中新建 key 的短暂误拒绝窗口。
   if (vfSaysMissing) {
-    return null;
+    return { ok: false, reason: "not_found" };
   }
 
+  // 注意：此处放宽 WHERE 条件，不再过滤 isEnabled / expiresAt，由后续逻辑分类失败原因。
+  // 用户软删除仍直接折叠成 not_found（用户不存在的语义与 key 不存在等价）。
   const result = await db
     .select({
       // Key fields
@@ -663,21 +687,32 @@ export async function validateApiKeyAndGetUser(
     })
     .from(keys)
     .innerJoin(users, eq(keys.userId, users.id))
-    .where(
-      and(
-        eq(keys.key, keyString),
-        isNull(keys.deletedAt),
-        eq(keys.isEnabled, true),
-        or(isNull(keys.expiresAt), gt(keys.expiresAt, new Date())),
-        isNull(users.deletedAt)
-      )
-    );
+    .where(and(eq(keys.key, keyString), isNull(keys.deletedAt), isNull(users.deletedAt)));
 
   if (result.length === 0) {
-    return null;
+    return { ok: false, reason: "not_found" };
   }
 
-  const row = result[0];
+  // `keys.key` is not unique, so multiple rows can match a single key string.
+  // Picking `result[0]` would be non-deterministic and could mis-classify an
+  // active duplicate as `key_disabled` if a disabled row sorted first. Prefer
+  // the most favourable status across all matching rows: ok > expired > disabled.
+  const now = Date.now();
+  const activeRow = result.find(
+    (candidate) =>
+      candidate.keyIsEnabled === true &&
+      (!candidate.keyExpiresAt || candidate.keyExpiresAt.getTime() > now)
+  );
+
+  if (!activeRow) {
+    const expiredRow = result.find((candidate) => candidate.keyIsEnabled === true);
+    if (expiredRow) {
+      return { ok: false, reason: "key_expired" };
+    }
+    return { ok: false, reason: "key_disabled" };
+  }
+
+  const row = activeRow;
 
   const user: User = toUser({
     id: row.userId,
@@ -733,7 +768,20 @@ export async function validateApiKeyAndGetUser(
 
   // 最佳努力：写入 Redis 缓存（不影响正确性）
   cacheAuthResult(keyString, { user, key }).catch(() => {});
-  return { user, key };
+  return { ok: true, user, key };
+}
+
+/**
+ * Backwards-compatible wrapper around {@link resolveApiKeyAuthOutcome}: returns
+ * `null` on any lookup failure. Callers that need to distinguish failure
+ * reasons (e.g. the proxy auth guard) should call `resolveApiKeyAuthOutcome`
+ * directly.
+ */
+export async function validateApiKeyAndGetUser(
+  keyString: string
+): Promise<{ user: User; key: Key } | null> {
+  const outcome = await resolveApiKeyAuthOutcome(keyString);
+  return outcome.ok ? { user: outcome.user, key: outcome.key } : null;
 }
 
 /**

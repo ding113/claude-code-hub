@@ -3,9 +3,10 @@ import { request as undiciRequest } from "undici";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
+import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import { validateApiKeyAndGetUser } from "@/repository/key";
+import { resolveApiKeyAuthOutcome } from "@/repository/key";
 import { findAllProviders } from "@/repository/provider";
 import type {
   AnthropicModelsResponse,
@@ -60,12 +61,52 @@ async function authenticateRequest(c: Context): Promise<{
     throw c.json({ error: { message: "未提供认证凭据", type: "authentication_error" } }, 401);
   }
 
-  const authResult = await validateApiKeyAndGetUser(apiKey);
-  if (!authResult) {
-    throw c.json({ error: { message: "API 密钥无效", type: "invalid_api_key" } }, 401);
+  const outcome = await resolveApiKeyAuthOutcome(apiKey);
+  if (!outcome.ok) {
+    // Exhaustive switch: see auth-guard.ts for rationale. Adding a new
+    // ApiKeyAuthFailureReason will produce a TypeScript error on the
+    // exhaustiveness fallthrough until this branch is handled explicitly.
+    const { getLocale } = await import("next-intl/server");
+    const locale = await getLocale();
+    switch (outcome.reason) {
+      case "key_disabled":
+        throw c.json(
+          {
+            error: {
+              message: await getErrorMessageServer(locale, ERROR_CODES.PROXY_API_KEY_DISABLED),
+              type: "key_disabled",
+            },
+          },
+          401
+        );
+      case "key_expired":
+        throw c.json(
+          {
+            error: {
+              message: await getErrorMessageServer(locale, ERROR_CODES.PROXY_API_KEY_EXPIRED),
+              type: "key_expired",
+            },
+          },
+          401
+        );
+      case "not_found":
+        throw c.json(
+          {
+            error: {
+              message: await getErrorMessageServer(locale, ERROR_CODES.PROXY_INVALID_API_KEY),
+              type: "invalid_api_key",
+            },
+          },
+          401
+        );
+      default: {
+        const _exhaustive: never = outcome.reason;
+        throw new Error(`Unhandled auth outcome reason: ${JSON.stringify(_exhaustive)}`);
+      }
+    }
   }
 
-  const { user, key } = authResult;
+  const { user, key } = outcome;
 
   if (!user.isEnabled) {
     throw c.json({ error: { message: "用户账户已被禁用", type: "user_disabled" } }, 401);

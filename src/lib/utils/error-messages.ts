@@ -64,6 +64,10 @@ export const AUTH_ERRORS = {
   PERMISSION_DENIED: "PERMISSION_DENIED",
   TOKEN_REQUIRED: "TOKEN_REQUIRED",
   INVALID_TOKEN: "INVALID_TOKEN",
+  // Proxy-side API key auth outcomes — surfaced to /v1/* and /v1/models clients.
+  PROXY_INVALID_API_KEY: "PROXY_INVALID_API_KEY",
+  PROXY_API_KEY_DISABLED: "PROXY_API_KEY_DISABLED",
+  PROXY_API_KEY_EXPIRED: "PROXY_API_KEY_EXPIRED",
 } as const;
 
 // Server Error Codes

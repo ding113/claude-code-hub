@@ -8,6 +8,27 @@ import {
 
 export const DEFAULT_PUBLIC_STATUS_SITE_DESCRIPTION = "Request-derived public status";
 
+/**
+ * TTL (seconds) applied to *versioned* config snapshot keys written by this
+ * module — i.e. `public-status:v1:config:<version>` and the internal variant.
+ *
+ * 30 days matches `GENERATION_PROJECTION_TTL_SECONDS` in `rebuild-worker.ts`,
+ * which already governs the manifest / series / snapshot keys for this
+ * feature. These keys accumulate forever otherwise, since every config
+ * publication mints a new version (provider/group/system-settings changes).
+ *
+ * The three *current-pointer* keys
+ * (`buildPublicStatusConfigSnapshotKey()` with no argument,
+ * `buildPublicStatusInternalConfigSnapshotKey()` with no argument, and
+ * `buildPublicStatusConfigVersionPointerKey()`) are intentionally written
+ * WITHOUT a TTL — they always reference the latest config and are
+ * overwritten atomically on every publish, so they never accumulate. Giving
+ * them a TTL would dark out the public status page on any deployment that
+ * goes longer than the TTL without publishing (e.g. an idle staging env or
+ * a stable production whose config does not change for a month).
+ */
+export const PUBLIC_STATUS_CONFIG_TTL_SECONDS = 60 * 60 * 24 * 30;
+
 export interface PublicStatusModelSnapshot {
   publicModelKey: string;
   label: string;
@@ -67,6 +88,10 @@ interface BuildPublicStatusConfigSnapshotInput {
 }
 
 interface RedisWriter {
+  // ioredis supports both bare `set(key, value)` and the EX-variant
+  // `set(key, value, "EX", seconds)`. Widening the type here lets us pass
+  // an explicit TTL on every write — see PUBLIC_STATUS_CONFIG_TTL_SECONDS.
+  set(key: string, value: string, mode: "EX", seconds: number): Promise<unknown> | unknown;
   set(key: string, value: string): Promise<unknown> | unknown;
   get?(key: string): Promise<string | null> | string | null;
   eval?(script: string, numKeys: number, ...args: string[]): Promise<unknown> | unknown;
@@ -205,8 +230,11 @@ export async function publishPublicStatusConfigSnapshot(input: {
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis) {
-    await redis.set(key, JSON.stringify(snapshot));
+    // Versioned snapshot key: TTL'd so old versions get cleaned up.
+    await redis.set(key, JSON.stringify(snapshot), "EX", PUBLIC_STATUS_CONFIG_TTL_SECONDS);
     if (input.setCurrentPointer !== false) {
+      // Current-pointer key: no TTL. It is overwritten on every publish and
+      // is the only entry-point the read path uses — see TTL constant above.
       await redis.set(
         buildPublicStatusConfigSnapshotKey(),
         JSON.stringify({ key, configVersion: snapshot.configVersion })
@@ -242,8 +270,10 @@ export async function publishInternalPublicStatusConfigSnapshot(input: {
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis) {
-    await redis.set(key, JSON.stringify(input.snapshot));
+    // Versioned snapshot key: TTL'd so old versions get cleaned up.
+    await redis.set(key, JSON.stringify(input.snapshot), "EX", PUBLIC_STATUS_CONFIG_TTL_SECONDS);
     if (input.setCurrentPointer !== false) {
+      // Current-pointer key: no TTL — see TTL constant rationale above.
       await redis.set(
         buildPublicStatusInternalConfigSnapshotKey(),
         JSON.stringify({ key, configVersion: input.snapshot.configVersion })
@@ -268,6 +298,10 @@ export async function publishCurrentPublicStatusConfigPointers(input: {
   }
 
   const pointerKey = buildPublicStatusConfigVersionPointerKey();
+  // This is a current-pointer key: do NOT apply a TTL. It is overwritten on
+  // every successful publish; an idle deployment with no config change for
+  // longer than any TTL we would pick would otherwise lose the pointer and
+  // dark out the public status page.
   if (typeof redis.eval === "function") {
     const luaScript = `
       local current = redis.call('GET', KEYS[1])

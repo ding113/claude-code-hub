@@ -30,6 +30,9 @@
   "PERMISSION_DENIED": "アクセス権限がありません",
   "TOKEN_REQUIRED": "認証トークンが必要です",
   "INVALID_TOKEN": "無効な認証トークン",
+  "PROXY_INVALID_API_KEY": "API キーが無効です。指定されたキーは存在しないか、削除されています。",
+  "PROXY_API_KEY_DISABLED": "この API キーは無効化されています。管理者に再有効化を依頼するか、別のキーをご使用ください。",
+  "PROXY_API_KEY_EXPIRED": "この API キーは期限切れです。管理者に更新を依頼するか、新しいキーへ切り替えてください。",
 
   "INTERNAL_ERROR": "内部サーバーエラー、後でもう一度お試しください",
   "DATABASE_ERROR": "データベースエラー",

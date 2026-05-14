@@ -5,6 +5,7 @@ import "server-only";
  * 提供所有数据访问接口的统一入口
  */
 
+export type { ApiKeyAuthFailureReason, ApiKeyAuthOutcome } from "./key";
 // Key related exports
 export {
   countActiveKeysByUser,
@@ -18,6 +19,7 @@ export {
   findKeysWithStatisticsBatch,
   findKeyUsageToday,
   findKeyUsageTodayBatch,
+  resolveApiKeyAuthOutcome,
   updateKey,
   validateApiKeyAndGetUser,
 } from "./key";

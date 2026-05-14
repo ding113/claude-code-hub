@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const validateApiKeyAndGetUser = vi.hoisted(() => vi.fn());
+const resolveApiKeyAuthOutcome = vi.hoisted(() => vi.fn());
 const policyCheck = vi.hoisted(() => vi.fn());
 const policyRecordSuccess = vi.hoisted(() => vi.fn());
 const policyRecordFailure = vi.hoisted(() => vi.fn());
 
 vi.mock("@/repository/key", () => ({
-  validateApiKeyAndGetUser,
+  resolveApiKeyAuthOutcome,
 }));
 
 vi.mock("@/repository/user", () => ({
@@ -29,6 +29,23 @@ vi.mock("@/lib/security/login-abuse-policy", () => ({
   },
 }));
 
+// The auth guard now looks up the request locale to localize 401 messages
+// (see ERROR_CODES.PROXY_*). Mock both helpers so unit tests can run outside
+// a Next.js request context.
+vi.mock("next-intl/server", () => ({
+  getLocale: vi.fn().mockResolvedValue("en"),
+}));
+
+vi.mock("@/lib/utils/error-messages", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/utils/error-messages")>(
+    "@/lib/utils/error-messages"
+  );
+  return {
+    ...actual,
+    getErrorMessageServer: vi.fn(async (_locale: string, code: string) => code),
+  };
+});
+
 function makeSession(ip: string, apiKey: string) {
   return {
     headers: new Headers({
@@ -47,7 +64,7 @@ function makeSession(ip: string, apiKey: string) {
 describe("ProxyAuthenticator pre-auth candidate key lockout", () => {
   beforeEach(() => {
     vi.resetModules();
-    validateApiKeyAndGetUser.mockReset();
+    resolveApiKeyAuthOutcome.mockReset();
     policyCheck.mockReset();
     policyRecordSuccess.mockReset();
     policyRecordFailure.mockReset();
@@ -65,14 +82,15 @@ describe("ProxyAuthenticator pre-auth candidate key lockout", () => {
     const response = await ProxyAuthenticator.ensure(session as never);
 
     expect(response?.status).toBe(429);
-    expect(validateApiKeyAndGetUser).not.toHaveBeenCalled();
+    expect(resolveApiKeyAuthOutcome).not.toHaveBeenCalled();
     expect(policyCheck).toHaveBeenCalledWith("198.51.100.77", "sk-shared");
     expect(session.clientIp).toBe("198.51.100.77");
   });
 
   it("resets both IP and key scopes on successful authentication", async () => {
     policyCheck.mockReturnValue({ allowed: true });
-    validateApiKeyAndGetUser.mockResolvedValue({
+    resolveApiKeyAuthOutcome.mockResolvedValue({
+      ok: true,
       user: { id: 1, name: "alice", isEnabled: true, expiresAt: null },
       key: { name: "primary-key" },
     });
@@ -86,9 +104,9 @@ describe("ProxyAuthenticator pre-auth candidate key lockout", () => {
     expect(policyRecordFailure).not.toHaveBeenCalled();
   });
 
-  it("records failures against both IP and candidate key", async () => {
+  it("records failures against both IP and candidate key for unknown keys", async () => {
     policyCheck.mockReturnValue({ allowed: true });
-    validateApiKeyAndGetUser.mockResolvedValue(null);
+    resolveApiKeyAuthOutcome.mockResolvedValue({ ok: false, reason: "not_found" });
 
     const { ProxyAuthenticator } = await import("@/app/v1/_lib/proxy/auth-guard");
     const session = makeSession("203.0.113.11", "sk-invalid");
