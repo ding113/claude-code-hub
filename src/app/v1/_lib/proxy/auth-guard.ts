@@ -2,11 +2,20 @@ import { extractApiKeyFromHeaders as sharedExtractApiKeyFromHeaders } from "@/li
 import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
+import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { resolveApiKeyAuthOutcome } from "@/repository/key";
 import { markUserExpired } from "@/repository/user";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { ProxyResponses } from "./responses";
 import type { AuthFailureKind, AuthState, ProxySession } from "./session";
+
+async function getRequestLocale(): Promise<string> {
+  // Match the rate-limit-guard pattern: read next-intl's request locale
+  // (Accept-Language or cookie) lazily inside the guard so the proxy hot
+  // path does not pay the import cost on every cold start.
+  const { getLocale } = await import("next-intl/server");
+  return await getLocale();
+}
 
 /**
  * Build an auth failure AuthState. The factory exists so every call site is
@@ -199,6 +208,7 @@ export class ProxyAuthenticator {
       // repository layer will trigger a compile error in assertNever below
       // until this guard is updated, preventing a new variant from silently
       // falling into the wrong branch.
+      const locale = await getRequestLocale();
       switch (outcome.reason) {
         case "not_found":
           logger.debug("[ProxyAuthenticator] API key validation failed: not found", {
@@ -212,7 +222,7 @@ export class ProxyAuthenticator {
             failureKind: "credentials",
             errorResponse: ProxyResponses.buildError(
               401,
-              "API 密钥无效。提供的密钥不存在或已被删除。",
+              await getErrorMessageServer(locale, ERROR_CODES.PROXY_INVALID_API_KEY),
               "invalid_api_key"
             ),
           });
@@ -226,7 +236,7 @@ export class ProxyAuthenticator {
             failureKind: "account_state",
             errorResponse: ProxyResponses.buildError(
               401,
-              "API 密钥已被禁用。请联系管理员重新启用，或使用其他可用密钥。",
+              await getErrorMessageServer(locale, ERROR_CODES.PROXY_API_KEY_DISABLED),
               "key_disabled"
             ),
           });
@@ -240,7 +250,7 @@ export class ProxyAuthenticator {
             failureKind: "account_state",
             errorResponse: ProxyResponses.buildError(
               401,
-              "API 密钥已过期。请联系管理员续期或更换密钥。",
+              await getErrorMessageServer(locale, ERROR_CODES.PROXY_API_KEY_EXPIRED),
               "key_expired"
             ),
           });

@@ -30,6 +30,9 @@
   "PERMISSION_DENIED": "權限不足",
   "TOKEN_REQUIRED": "需要提供認證令牌",
   "INVALID_TOKEN": "無效的認證令牌",
+  "PROXY_INVALID_API_KEY": "API 金鑰無效。提供的金鑰不存在或已被刪除。",
+  "PROXY_API_KEY_DISABLED": "API 金鑰已被停用。請聯絡管理員重新啟用，或使用其他可用金鑰。",
+  "PROXY_API_KEY_EXPIRED": "API 金鑰已過期。請聯絡管理員續期或更換金鑰。",
 
   "INTERNAL_ERROR": "系統內部錯誤，請稍後重試",
   "DATABASE_ERROR": "資料庫錯誤",

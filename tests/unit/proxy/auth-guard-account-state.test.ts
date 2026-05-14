@@ -41,6 +41,24 @@ vi.mock("@/lib/security/login-abuse-policy", () => ({
   },
 }));
 
+// Bypass next-intl's request-context lookup so the proxy guard can run
+// outside a real Next.js request. The mocked helper returns the i18n code
+// itself so message assertions can pin on the key, not on translation
+// content (which lives in messages/<locale>/errors.json).
+vi.mock("next-intl/server", () => ({
+  getLocale: vi.fn().mockResolvedValue("en"),
+}));
+
+vi.mock("@/lib/utils/error-messages", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/utils/error-messages")>(
+    "@/lib/utils/error-messages"
+  );
+  return {
+    ...actual,
+    getErrorMessageServer: vi.fn(async (_locale: string, code: string) => code),
+  };
+});
+
 function makeSession(ip: string, apiKey: string) {
   return {
     headers: new Headers({
@@ -88,7 +106,9 @@ describe("ProxyAuthenticator account-state failures", () => {
     const error = await readErrorBody(response as Response);
     expect(error.type).toBe("key_disabled");
     expect(error.code).toBe("key_disabled");
-    expect(error.message).toMatch(/已被禁用/);
+    // Message is the i18n key (mocked); the actual localized text lives in
+    // messages/<locale>/errors.json under this key.
+    expect(error.message).toBe("PROXY_API_KEY_DISABLED");
 
     expect(policyRecordFailure).not.toHaveBeenCalled();
     expect(policyRecordSuccess).not.toHaveBeenCalled();
@@ -106,7 +126,7 @@ describe("ProxyAuthenticator account-state failures", () => {
     const error = await readErrorBody(response as Response);
     expect(error.type).toBe("key_expired");
     expect(error.code).toBe("key_expired");
-    expect(error.message).toMatch(/已过期/);
+    expect(error.message).toBe("PROXY_API_KEY_EXPIRED");
 
     expect(policyRecordFailure).not.toHaveBeenCalled();
   });
@@ -164,7 +184,7 @@ describe("ProxyAuthenticator account-state failures", () => {
 
     const error = await readErrorBody(response as Response);
     expect(error.type).toBe("invalid_api_key");
-    expect(error.message).toMatch(/不存在|已被删除/);
+    expect(error.message).toBe("PROXY_INVALID_API_KEY");
 
     expect(policyRecordFailure).toHaveBeenCalledWith("203.0.113.24", "sk-doesnotexist");
   });

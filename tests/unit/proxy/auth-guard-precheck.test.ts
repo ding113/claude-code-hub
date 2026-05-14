@@ -29,6 +29,23 @@ vi.mock("@/lib/security/login-abuse-policy", () => ({
   },
 }));
 
+// The auth guard now looks up the request locale to localize 401 messages
+// (see ERROR_CODES.PROXY_*). Mock both helpers so unit tests can run outside
+// a Next.js request context.
+vi.mock("next-intl/server", () => ({
+  getLocale: vi.fn().mockResolvedValue("en"),
+}));
+
+vi.mock("@/lib/utils/error-messages", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/utils/error-messages")>(
+    "@/lib/utils/error-messages"
+  );
+  return {
+    ...actual,
+    getErrorMessageServer: vi.fn(async (_locale: string, code: string) => code),
+  };
+});
+
 function makeSession(ip: string, apiKey: string) {
   return {
     headers: new Headers({
