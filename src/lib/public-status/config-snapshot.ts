@@ -8,6 +8,21 @@ import {
 
 export const DEFAULT_PUBLIC_STATUS_SITE_DESCRIPTION = "Request-derived public status";
 
+/**
+ * TTL (seconds) applied to every Redis key written by this module.
+ *
+ * 30 days matches `GENERATION_PROJECTION_TTL_SECONDS` in `rebuild-worker.ts`,
+ * which already governs the manifest / series / snapshot keys for this
+ * feature. Versioned config snapshot keys
+ * (`public-status:v1:config:<version>` and the internal variant) are written
+ * once per config publication; without a TTL they accumulate indefinitely as
+ * provider/group/system-settings changes mint new config versions. Each
+ * publish refreshes the TTL on the "current" pointer keys, so as long as
+ * configurations are published at least every 30 days the live pointers
+ * never expire while stale versioned snapshots get cleaned up naturally.
+ */
+export const PUBLIC_STATUS_CONFIG_TTL_SECONDS = 60 * 60 * 24 * 30;
+
 export interface PublicStatusModelSnapshot {
   publicModelKey: string;
   label: string;
@@ -67,6 +82,10 @@ interface BuildPublicStatusConfigSnapshotInput {
 }
 
 interface RedisWriter {
+  // ioredis supports both bare `set(key, value)` and the EX-variant
+  // `set(key, value, "EX", seconds)`. Widening the type here lets us pass
+  // an explicit TTL on every write — see PUBLIC_STATUS_CONFIG_TTL_SECONDS.
+  set(key: string, value: string, mode: "EX", seconds: number): Promise<unknown> | unknown;
   set(key: string, value: string): Promise<unknown> | unknown;
   get?(key: string): Promise<string | null> | string | null;
   eval?(script: string, numKeys: number, ...args: string[]): Promise<unknown> | unknown;
@@ -205,11 +224,13 @@ export async function publishPublicStatusConfigSnapshot(input: {
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis) {
-    await redis.set(key, JSON.stringify(snapshot));
+    await redis.set(key, JSON.stringify(snapshot), "EX", PUBLIC_STATUS_CONFIG_TTL_SECONDS);
     if (input.setCurrentPointer !== false) {
       await redis.set(
         buildPublicStatusConfigSnapshotKey(),
-        JSON.stringify({ key, configVersion: snapshot.configVersion })
+        JSON.stringify({ key, configVersion: snapshot.configVersion }),
+        "EX",
+        PUBLIC_STATUS_CONFIG_TTL_SECONDS
       );
     }
   }
@@ -242,11 +263,13 @@ export async function publishInternalPublicStatusConfigSnapshot(input: {
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis) {
-    await redis.set(key, JSON.stringify(input.snapshot));
+    await redis.set(key, JSON.stringify(input.snapshot), "EX", PUBLIC_STATUS_CONFIG_TTL_SECONDS);
     if (input.setCurrentPointer !== false) {
       await redis.set(
         buildPublicStatusInternalConfigSnapshotKey(),
-        JSON.stringify({ key, configVersion: input.snapshot.configVersion })
+        JSON.stringify({ key, configVersion: input.snapshot.configVersion }),
+        "EX",
+        PUBLIC_STATUS_CONFIG_TTL_SECONDS
       );
     }
   }
@@ -269,15 +292,23 @@ export async function publishCurrentPublicStatusConfigPointers(input: {
 
   const pointerKey = buildPublicStatusConfigVersionPointerKey();
   if (typeof redis.eval === "function") {
+    // SET ... EX <ttl> applies the TTL atomically with the write, refreshing
+    // the expiration on every successful publish.
     const luaScript = `
       local current = redis.call('GET', KEYS[1])
       if (not current) or current <= ARGV[1] then
-        redis.call('SET', KEYS[1], ARGV[1])
+        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
         return 1
       end
       return 0
     `;
-    const result = await redis.eval(luaScript, 1, pointerKey, input.configVersion);
+    const result = await redis.eval(
+      luaScript,
+      1,
+      pointerKey,
+      input.configVersion,
+      String(PUBLIC_STATUS_CONFIG_TTL_SECONDS)
+    );
     return result === 1;
   }
 
@@ -289,7 +320,7 @@ export async function publishCurrentPublicStatusConfigPointers(input: {
     return false;
   }
 
-  await redis.set(pointerKey, input.configVersion);
+  await redis.set(pointerKey, input.configVersion, "EX", PUBLIC_STATUS_CONFIG_TTL_SECONDS);
   return true;
 }
 
