@@ -25,6 +25,11 @@ vi.mock("@/repository/key", () => {
       user: { id: 1, providerGroup: null, isEnabled: true, expiresAt: null },
       key: { providerGroup: null, name: "test-key" },
     })),
+    resolveApiKeyAuthOutcome: vi.fn(async () => ({
+      ok: true,
+      user: { id: 1, providerGroup: null, isEnabled: true, expiresAt: null },
+      key: { providerGroup: null, name: "test-key" },
+    })),
   };
 });
 

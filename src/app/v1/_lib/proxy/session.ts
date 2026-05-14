@@ -30,12 +30,31 @@ import {
   parseOpenAIImageMultipartMetadata,
 } from "./openai-image-compat";
 
+/**
+ * Classification of an auth failure, used to decide whether to record the
+ * failure against the brute-force rate limiter.
+ *
+ * - `credentials`: the request did not present a valid key (missing,
+ *   malformed, multiple conflicting keys, or the key does not match any
+ *   record). These look like brute-force probes — record the failure.
+ * - `account_state`: the credentials matched a real record but the
+ *   key/user is disabled, expired, or otherwise administratively rejected.
+ *   Recording these as failures would lock out legitimate operators whose
+ *   keys were disabled by an admin.
+ */
+export type AuthFailureKind = "credentials" | "account_state";
+
 export interface AuthState {
   user: User | null;
   key: Key | null;
   apiKey: string | null;
   success: boolean;
   errorResponse?: Response; // 认证失败时的详细错误响应
+  /**
+   * Set when `success` is false. Determines whether the proxy auth guard
+   * records the failure against the IP/key rate-limiter.
+   */
+  failureKind?: AuthFailureKind;
 }
 
 export interface MessageContext {

@@ -7,6 +7,7 @@ vi.mock("@/lib/proxy-agent", () => ({
 
 vi.mock("@/repository/key", () => ({
   validateApiKeyAndGetUser: vi.fn(),
+  resolveApiKeyAuthOutcome: vi.fn(),
 }));
 
 vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({

@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import { validateApiKeyAndGetUser } from "@/repository/key";
+import { resolveApiKeyAuthOutcome } from "@/repository/key";
 import { findAllProviders } from "@/repository/provider";
 import type {
   AnthropicModelsResponse,
@@ -60,12 +60,19 @@ async function authenticateRequest(c: Context): Promise<{
     throw c.json({ error: { message: "未提供认证凭据", type: "authentication_error" } }, 401);
   }
 
-  const authResult = await validateApiKeyAndGetUser(apiKey);
-  if (!authResult) {
+  const outcome = await resolveApiKeyAuthOutcome(apiKey);
+  if (!outcome.ok) {
+    if (outcome.reason === "key_disabled") {
+      throw c.json({ error: { message: "API 密钥已被禁用", type: "key_disabled" } }, 401);
+    }
+    if (outcome.reason === "key_expired") {
+      throw c.json({ error: { message: "API 密钥已过期", type: "key_expired" } }, 401);
+    }
+    // not_found
     throw c.json({ error: { message: "API 密钥无效", type: "invalid_api_key" } }, 401);
   }
 
-  const { user, key } = authResult;
+  const { user, key } = outcome;
 
   if (!user.isEnabled) {
     throw c.json({ error: { message: "用户账户已被禁用", type: "user_disabled" } }, 401);

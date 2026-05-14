@@ -2,7 +2,7 @@ import { extractApiKeyFromHeaders as sharedExtractApiKeyFromHeaders } from "@/li
 import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
-import { validateApiKeyAndGetUser } from "@/repository/key";
+import { resolveApiKeyAuthOutcome } from "@/repository/key";
 import { markUserExpired } from "@/repository/user";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { ProxyResponses } from "./responses";
@@ -73,8 +73,13 @@ export class ProxyAuthenticator {
       return null;
     }
 
-    // Record failure for rate limiting
-    proxyAuthPolicy.recordFailure(clientIp, authState.apiKey ?? candidateApiKey ?? undefined);
+    // Only `credentials` failures should feed the brute-force rate limiter.
+    // `account_state` failures (key/user disabled or expired) match a real
+    // record, so recording them would let an admin lock themselves out by
+    // simply disabling a key and watching the owner retry.
+    if (authState.failureKind !== "account_state") {
+      proxyAuthPolicy.recordFailure(clientIp, authState.apiKey ?? candidateApiKey ?? undefined);
+    }
 
     // 返回详细的错误信息，帮助用户快速定位问题
     return authState.errorResponse ?? ProxyResponses.buildError(401, "认证失败");
@@ -133,6 +138,7 @@ export class ProxyAuthenticator {
         key: null,
         apiKey: null,
         success: false,
+        failureKind: "credentials",
         errorResponse: ProxyResponses.buildError(
           401,
           "未提供认证凭据。请在 Authorization 头部、x-api-key 头部或 x-goog-api-key 头部中包含 API 密钥。",
@@ -153,6 +159,7 @@ export class ProxyAuthenticator {
         key: null,
         apiKey: null,
         success: false,
+        failureKind: "credentials",
         errorResponse: ProxyResponses.buildError(
           401,
           "提供了多个冲突的 API 密钥。请仅使用一种认证方式。",
@@ -162,29 +169,68 @@ export class ProxyAuthenticator {
     }
 
     const apiKey = firstKey;
-    const authResult = await validateApiKeyAndGetUser(apiKey);
+    const outcome = await resolveApiKeyAuthOutcome(apiKey);
 
-    if (!authResult) {
-      logger.debug("[ProxyAuthenticator] API key validation failed", {
+    if (!outcome.ok) {
+      if (outcome.reason === "not_found") {
+        logger.debug("[ProxyAuthenticator] API key validation failed: not found", {
+          apiKeyLength: apiKey.length,
+          fromHeader:
+            !!headers.authHeader || !!headers.apiKeyHeader || !!headers.geminiApiKeyHeader,
+          fromQuery: !!headers.geminiApiKeyQuery,
+        });
+        return {
+          user: null,
+          key: null,
+          apiKey,
+          success: false,
+          failureKind: "credentials",
+          errorResponse: ProxyResponses.buildError(
+            401,
+            "API 密钥无效。提供的密钥不存在或已被删除。",
+            "invalid_api_key"
+          ),
+        };
+      }
+
+      if (outcome.reason === "key_disabled") {
+        logger.warn("[ProxyAuthenticator] API key is disabled", {
+          apiKeyLength: apiKey.length,
+        });
+        return {
+          user: null,
+          key: null,
+          apiKey,
+          success: false,
+          failureKind: "account_state",
+          errorResponse: ProxyResponses.buildError(
+            401,
+            "API 密钥已被禁用。请联系管理员重新启用，或使用其他可用密钥。",
+            "key_disabled"
+          ),
+        };
+      }
+
+      // outcome.reason === "key_expired"
+      logger.warn("[ProxyAuthenticator] API key has expired", {
         apiKeyLength: apiKey.length,
-        fromHeader: !!headers.authHeader || !!headers.apiKeyHeader || !!headers.geminiApiKeyHeader,
-        fromQuery: !!headers.geminiApiKeyQuery,
       });
       return {
         user: null,
         key: null,
         apiKey,
         success: false,
+        failureKind: "account_state",
         errorResponse: ProxyResponses.buildError(
           401,
-          "API 密钥无效。提供的密钥不存在、已被删除、已被禁用或已过期。",
-          "invalid_api_key"
+          "API 密钥已过期。请联系管理员续期或更换密钥。",
+          "key_expired"
         ),
       };
     }
 
     // Check user status and expiration
-    const { user } = authResult;
+    const { user } = outcome;
 
     // 1. Check if user is disabled
     if (!user.isEnabled) {
@@ -197,6 +243,7 @@ export class ProxyAuthenticator {
         key: null,
         apiKey,
         success: false,
+        failureKind: "account_state",
         errorResponse: ProxyResponses.buildError(
           401,
           "用户账户已被禁用。请联系管理员。",
@@ -224,6 +271,7 @@ export class ProxyAuthenticator {
         key: null,
         apiKey,
         success: false,
+        failureKind: "account_state",
         errorResponse: ProxyResponses.buildError(
           401,
           `用户账户已于 ${user.expiresAt.toISOString().split("T")[0]} 过期。请续费订阅。`,
@@ -233,12 +281,12 @@ export class ProxyAuthenticator {
     }
 
     logger.debug("[ProxyAuthenticator] Authentication successful", {
-      userId: authResult.user.id,
-      userName: authResult.user.name,
-      keyName: authResult.key.name,
+      userId: outcome.user.id,
+      userName: outcome.user.name,
+      keyName: outcome.key.name,
     });
 
-    return { user: authResult.user, key: authResult.key, apiKey, success: true };
+    return { user: outcome.user, key: outcome.key, apiKey, success: true };
   }
 
   private static extractKeyFromAuthorization(authHeader?: string): string | null {
