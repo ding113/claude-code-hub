@@ -43,17 +43,21 @@ function findCteBoundary(
   queryText: string,
   cteName: string
 ): { cteStart: number; boundaryStart: number } | null {
+  if (queryText.length === 0 || cteName.length > 100 || !/^[a-z_][a-z0-9_]*$/i.test(cteName)) {
+    return null;
+  }
+
   const escapedName = cteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`(?:^|\\bwith\\s+|,\\s*)("?${escapedName}"?)\\s+as\\s*\\(`).exec(
+  const match = new RegExp(`(^|\\bwith\\s+|,\\s*)("?${escapedName}"?)\\s+as\\s*\\(`).exec(
     queryText
   );
 
-  if (!match?.[1]) {
+  if (!match?.[2]) {
     return null;
   }
 
   return {
-    cteStart: match.index + match[0].indexOf(match[1]),
+    cteStart: match.index + match[1].length,
     boundaryStart: match.index,
   };
 }
