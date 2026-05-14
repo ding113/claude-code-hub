@@ -39,15 +39,34 @@ function normalizeSql(sqlObject: unknown): string {
   return sqlToString(sqlObject).replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function extractFinalizedRequestsSql(queryText: string): string {
-  const start = queryText.indexOf("finalized_requests as");
-  const end = queryText.indexOf("provider_bucket_stats as");
+function findCteBoundary(
+  queryText: string,
+  cteName: string
+): { cteStart: number; boundaryStart: number } | null {
+  const escapedName = cteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`(?:^|\\bwith\\s+|,\\s*)("?${escapedName}"?)\\s+as\\s*\\(`).exec(
+    queryText
+  );
 
-  if (start === -1 || end === -1 || end <= start) {
+  if (!match?.[1]) {
+    return null;
+  }
+
+  return {
+    cteStart: match.index + match[0].indexOf(match[1]),
+    boundaryStart: match.index,
+  };
+}
+
+function extractFinalizedRequestsSql(queryText: string): string {
+  const start = findCteBoundary(queryText, "finalized_requests");
+  const end = findCteBoundary(queryText, "provider_bucket_stats");
+
+  if (!start || !end || end.boundaryStart <= start.cteStart) {
     throw new Error("Could not locate finalized_requests CTE in query text");
   }
 
-  return queryText.slice(start, end);
+  return queryText.slice(start.cteStart, end.boundaryStart);
 }
 
 describe("availability-service", () => {
