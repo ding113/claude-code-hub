@@ -149,7 +149,10 @@ describe("v1 API key admin access flag", () => {
     expect(redisReadMock).toHaveBeenCalledWith("sid_legacy_browser_admin");
   });
 
-  test("rejects legacy raw API-key cookies on admin routes when API key admin access is disabled", async () => {
+  test("allows legacy raw API-key cookies on admin routes (cookie source = session)", async () => {
+    // Legacy/dual modes store the raw API key in the auth cookie. A cookie that passes
+    // validateAuthToken arrived via the login flow, so it is treated as a session credential
+    // rather than a programmatic API key call — avoiding admin lockout during migration.
     vi.resetModules();
     vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
     vi.stubEnv("SESSION_TOKEN_MODE", "legacy");
@@ -161,6 +164,29 @@ describe("v1 API key admin access flag", () => {
     });
     const { resolveAuth } = await import("@/lib/api/v1/_shared/auth-middleware");
     const got = await resolveAuth(createCookieAuthContext("db-admin-key"), "admin");
+
+    expect(got).not.toBeInstanceOf(Response);
+    expect(got).toMatchObject({ credentialType: "session", source: "cookie" });
+    expect(validateAuthTokenMock).toHaveBeenCalledWith("db-admin-key", {
+      allowReadOnlyAccess: false,
+    });
+    expect(redisReadMock).not.toHaveBeenCalled();
+  });
+
+  test("still rejects legacy raw API-key bearer headers on admin routes when API key admin access is disabled", async () => {
+    // The fix only relaxes cookie-sourced legacy tokens. Header-sourced legacy keys remain
+    // classified as user-api-key and continue to require ENABLE_API_KEY_ADMIN_ACCESS.
+    vi.resetModules();
+    vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
+    vi.stubEnv("SESSION_TOKEN_MODE", "legacy");
+    validateAuthTokenMock.mockResolvedValue(adminSession);
+
+    vi.doMock("@/lib/auth", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/auth")>();
+      return { ...actual, validateAuthToken: validateAuthTokenMock };
+    });
+    const { resolveAuth } = await import("@/lib/api/v1/_shared/auth-middleware");
+    const got = await resolveAuth(createBearerAuthContext("db-admin-key"), "admin");
     const body = got instanceof Response ? await got.json() : null;
 
     expect(got).toBeInstanceOf(Response);

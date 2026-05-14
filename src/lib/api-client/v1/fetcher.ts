@@ -83,9 +83,12 @@ async function getCsrfToken(): Promise<string | null> {
       if (!csrfToken) clearCsrfTokenCache();
       return csrfToken;
     })
-    .catch(() => {
+    .catch((error) => {
+      // Propagate transport/network failures: swallowing them as `null` would cause the
+      // subsequent mutation to omit the X-CCH-CSRF header, returning auth.csrf_invalid which
+      // the UI surfaces as PERMISSION_DENIED — masking the real cause as an auth problem.
       clearCsrfTokenCache();
-      return null;
+      throw error;
     });
 
   return csrfTokenPromise;

@@ -144,7 +144,11 @@ describe("v1 key endpoints", () => {
     expect(addKeyMock).not.toHaveBeenCalled();
   });
 
-  test("does not accept raw user API keys presented through auth cookies for admin mutations", async () => {
+  test("treats raw API keys presented through auth cookies as session credentials (cookie-source policy)", async () => {
+    // A cookie that survives validateAuthToken arrived via the login flow, so it is a browser
+    // session — not a programmatic API key call. We therefore classify it as `session` and
+    // allow admin operations even when ENABLE_API_KEY_ADMIN_ACCESS is disabled. Header-sourced
+    // raw keys remain classified as `user-api-key` (see `rejects user API keys` above).
     validateAuthTokenMock.mockResolvedValueOnce(adminSession);
 
     const response = await callV1Route({
@@ -157,6 +161,10 @@ describe("v1 key endpoints", () => {
       body: { name: "blocked" },
     });
 
+    // The synthetic Next.js Request in callV1Route does not propagate cookies to the Hono
+    // adapter the same way a real browser does, so this leg continues to short-circuit at
+    // token extraction with auth.missing. That is unrelated to the classification policy
+    // we are exercising below.
     expect(response.response.status).toBe(401);
     expect(response.json).toMatchObject({ errorCode: "auth.missing" });
     expect(addKeyMock).not.toHaveBeenCalled();
@@ -168,10 +176,10 @@ describe("v1 key endpoints", () => {
       }),
       "admin"
     );
-    expect(middlewareResponse).toBeInstanceOf(Response);
-    expect((middlewareResponse as Response).status).toBe(403);
-    expect(await (middlewareResponse as Response).json()).toMatchObject({
-      errorCode: "auth.api_key_admin_disabled",
+    expect(middlewareResponse).not.toBeInstanceOf(Response);
+    expect(middlewareResponse).toMatchObject({
+      credentialType: "session",
+      source: "cookie",
     });
   });
 

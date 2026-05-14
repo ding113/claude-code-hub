@@ -162,6 +162,11 @@ async function classifyCredential(
   if (tokenKind === "opaque") {
     return classifyOpaqueSessionCredential(token);
   }
+  // Legacy/dual modes store the raw API key inside the auth cookie. A cookie that survives
+  // validateAuthToken came through the login flow, so it is a browser session — not a
+  // programmatic API key call. The ENABLE_API_KEY_ADMIN_ACCESS gate is meant to fence off
+  // header-based key usage, not to lock admins out of the management UI during migration.
+  if (source === "cookie") return "session";
   return "user-api-key";
 }
 

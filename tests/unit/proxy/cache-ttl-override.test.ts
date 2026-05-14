@@ -214,14 +214,17 @@ describe("mergeAnthropicCacheTtlBetaFlag", () => {
     expect(mergeAnthropicCacheTtlBetaFlag("")).toBe(mergeAnthropicCacheTtlBetaFlag(null));
   });
 
-  it("appends extended-cache-ttl to existing beta and skips prompt-caching backfill", () => {
+  it("always backfills prompt-caching dependency, even when client sent unrelated betas", () => {
+    // Regression: previously the helper only backfilled `prompt-caching-2024-07-31` when the
+    // set size landed on exactly 1 after adding extended-cache-ttl. If the client had sent any
+    // other beta flag (e.g. `messages-2023-12-15`), prompt-caching was silently dropped and
+    // the upstream rejected the request for a missing dependency. Now we add it unconditionally.
     const merged = mergeAnthropicCacheTtlBetaFlag("messages-2023-12-15");
     const flags = merged.split(",").map((s) => s.trim());
     expect(flags).toContain("messages-2023-12-15");
     expect(flags).toContain("extended-cache-ttl-2025-04-11");
-    // size > 1 path: prompt-caching-2024-07-31 should NOT be auto-added
-    expect(flags).not.toContain("prompt-caching-2024-07-31");
-    expect(flags).toHaveLength(2);
+    expect(flags).toContain("prompt-caching-2024-07-31");
+    expect(flags).toHaveLength(3);
   });
 
   it("dedupes when extended-cache-ttl is already present", () => {
@@ -235,12 +238,7 @@ describe("mergeAnthropicCacheTtlBetaFlag", () => {
     expect(flags).toHaveLength(2);
   });
 
-  it("preserves the size===1 backfill quirk when client only sent extended-cache-ttl-2025-04-11", () => {
-    // Document existing behavior: when the client sends only the extended-cache-ttl
-    // beta flag, after our `add()` (no-op) the set still has size 1, so the helper
-    // backfills `prompt-caching-2024-07-31` even though the client did not include it.
-    // This mirrors the inlined logic that pre-dated this refactor; preserved here so a
-    // future refactor that changes the contract has to update the test deliberately.
+  it("backfills prompt-caching when client only sent extended-cache-ttl-2025-04-11", () => {
     const merged = mergeAnthropicCacheTtlBetaFlag("extended-cache-ttl-2025-04-11");
     const flags = merged.split(",").map((s) => s.trim());
     expect(flags).toEqual(
@@ -254,6 +252,7 @@ describe("mergeAnthropicCacheTtlBetaFlag", () => {
     const flags = merged.split(",").map((s) => s.trim());
     expect(flags).toContain("messages-2023-12-15");
     expect(flags).toContain("extended-cache-ttl-2025-04-11");
-    expect(flags).toHaveLength(2);
+    expect(flags).toContain("prompt-caching-2024-07-31");
+    expect(flags).toHaveLength(3);
   });
 });

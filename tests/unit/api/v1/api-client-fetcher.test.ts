@@ -98,6 +98,42 @@ describe("v1 api fetcher", () => {
     expect(retryHeaders.get("X-CCH-CSRF")).toBe("csrf-next");
   });
 
+  test("propagates network failures from CSRF endpoint instead of masking them as PERMISSION_DENIED", async () => {
+    // Regression: previously `.catch(() => null)` swallowed transport failures, so the
+    // mutation continued without the X-CCH-CSRF header and the server replied with
+    // auth.csrf_invalid → the UI then surfaced this as PERMISSION_DENIED, hiding the real
+    // cause (network failure). The fetcher now rethrows so callers see the underlying error.
+    const networkError = new TypeError("Failed to fetch");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/api/v1/auth/csrf")) {
+        throw networkError;
+      }
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiFetch("/api/v1/test", { method: "POST", body: { name: "x" } })).rejects.toBe(
+      networkError
+    );
+
+    // CSRF token cache must also be cleared so the next attempt re-fetches.
+    const fetchMock2 = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ csrfToken: "csrf-recovered" }))
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock2);
+
+    await expect(
+      apiFetch("/api/v1/test", { method: "POST", body: { name: "x" } })
+    ).resolves.toEqual({ ok: true });
+    expect(fetchMock2).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/auth/csrf",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
   test("refreshes cached CSRF tokens before the server window expires", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-29T00:00:00.000Z"));

@@ -142,6 +142,15 @@ const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = [
   ...RESERVED_INTERNAL_HEADERS,
 ];
 
+// Reserved names that must never be written into `overrides` from provider custom headers.
+// HeaderProcessor.process() applies overrides AFTER the blacklist filter, so any name landing in
+// overrides bypasses the transport-layer blacklist. Without this guard a dirty provider record
+// could rewrite the upstream Host (sending credentials to an attacker-chosen target) or inject
+// hop-by-hop headers that break request framing.
+const PROVIDER_CUSTOM_HEADER_RESERVED_NAMES: ReadonlySet<string> = new Set(
+  ["host", ...OUTBOUND_TRANSPORT_HEADER_BLACKLIST].map((n) => n.toLowerCase())
+);
+
 // 把 provider 上配置的静态自定义请求头合并到 overrides 中。
 // 入参 overrides 直接被原地修改。鉴权头（authorization / x-api-key / x-goog-api-key）会在调用方
 // 之后再写入，从而保证鉴权始终覆盖自定义头；这里额外做一次防御性的剥离，避免历史脏数据通过 DB 旁路注入。
@@ -152,7 +161,9 @@ function applyProviderCustomHeaders(
   if (!customHeaders) return;
   for (const [name, value] of Object.entries(customHeaders)) {
     if (typeof value !== "string") continue;
-    if (PROTECTED_AUTH_HEADER_NAMES.has(name.toLowerCase())) continue;
+    const lower = name.toLowerCase();
+    if (PROTECTED_AUTH_HEADER_NAMES.has(lower)) continue;
+    if (PROVIDER_CUSTOM_HEADER_RESERVED_NAMES.has(lower)) continue;
     overrides[name] = value;
   }
 }
@@ -393,10 +404,8 @@ export function mergeAnthropicCacheTtlBetaFlag(existing: string | null | undefin
       .filter(Boolean)
   );
   betaFlags.add("extended-cache-ttl-2025-04-11");
-  // 确保包含基础的 prompt-caching 标记
-  if (betaFlags.size === 1) {
-    betaFlags.add("prompt-caching-2024-07-31");
-  }
+  // extended-cache-ttl 依赖 prompt-caching；无条件补齐避免客户端只带其它 beta 时漏掉依赖
+  betaFlags.add("prompt-caching-2024-07-31");
   return Array.from(betaFlags).join(", ");
 }
 

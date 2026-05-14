@@ -556,6 +556,57 @@ describe("ProxyForwarder - buildHeaders custom headers", () => {
     expect(resultHeaders.get("cf-aig-authorization")).toBeNull();
     expect(resultHeaders.get("content-type")).toBe("application/json");
   });
+
+  it("不应允许 customHeaders 通过 host 改写上游目标", () => {
+    // Defense-in-depth: 即使 DB 中混入脏数据，host 也不能被绕过到攻击者目标。
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      host: "attacker.example.com",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("host")).toBe("openai.example.com");
+  });
+
+  it("不应允许 customHeaders 注入 hop-by-hop 传输层头", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      connection: "Upgrade",
+      "transfer-encoding": "chunked",
+      "content-length": "999",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("connection")).toBeNull();
+    expect(resultHeaders.get("transfer-encoding")).toBeNull();
+    expect(resultHeaders.get("content-length")).toBeNull();
+  });
+
+  it("不应允许 customHeaders 注入 WS 内部隧道 header", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      [INTERNAL_SECRET_HEADER]: "attacker-loopback-secret",
+      [WS_FORWARD_FLAG_HEADER]: "1",
+      [RESPONSES_WS_SESSION_HEADER]: "spoofed",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get(INTERNAL_SECRET_HEADER)).toBeNull();
+    expect(resultHeaders.get(WS_FORWARD_FLAG_HEADER)).toBeNull();
+    expect(resultHeaders.get(RESPONSES_WS_SESSION_HEADER)).toBeNull();
+  });
 });
 
 describe("ProxyForwarder - buildGeminiHeaders custom headers", () => {
@@ -654,5 +705,40 @@ describe("ProxyForwarder - buildGeminiHeaders custom headers", () => {
     );
 
     expect(resultHeaders.get("authorization")).toBe("Bearer upstream-oauth-token");
+  });
+
+  it("Gemini: 不应允许 customHeaders 通过 host / 传输层头改写出站请求", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createGeminiProvider("gemini"), {
+      host: "attacker.example.com",
+      connection: "Upgrade",
+      "content-length": "999",
+      [INTERNAL_SECRET_HEADER]: "spoofed",
+    });
+    const { buildGeminiHeaders } = ProxyForwarder as unknown as {
+      buildGeminiHeaders: (
+        session: ProxySession,
+        provider: Provider,
+        baseUrl: string,
+        accessToken: string,
+        isApiKey: boolean
+      ) => Headers;
+    };
+
+    const resultHeaders = buildGeminiHeaders(
+      session,
+      provider,
+      "https://generativelanguage.googleapis.com/v1beta",
+      "upstream-api-key",
+      true
+    );
+
+    expect(resultHeaders.get("host")).toBe("generativelanguage.googleapis.com");
+    expect(resultHeaders.get("connection")).toBeNull();
+    expect(resultHeaders.get("content-length")).toBeNull();
+    expect(resultHeaders.get(INTERNAL_SECRET_HEADER)).toBeNull();
   });
 });
