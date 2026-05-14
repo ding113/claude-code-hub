@@ -316,6 +316,13 @@ describe("availability-service", () => {
     expect(finalizedRequestsSql).toContain(`"status_code" is not null`);
     expect(finalizedRequestsSql).toContain(`"blocked_by" is not null`);
     expect(finalizedRequestsSql).toContain(`"provider_chain" -> -1 ->> 'reason'`);
+    // The provider_chain branch must wrap jsonb operations in a CASE so the
+    // dashboard query does not crash on a non-array historical row
+    // (PostgreSQL does not guarantee AND short-circuit).
+    expect(finalizedRequestsSql).toContain("case");
+    expect(finalizedRequestsSql).toContain(
+      `jsonb_typeof("message_request"."provider_chain") <> 'array'`
+    );
     expect(queryText).toContain("group by");
     expect(queryText).toContain("percentile_cont(0.95)");
     expect(queryText).toContain("row_number() over");

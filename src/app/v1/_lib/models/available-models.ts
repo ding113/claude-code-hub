@@ -62,14 +62,21 @@ async function authenticateRequest(c: Context): Promise<{
 
   const outcome = await resolveApiKeyAuthOutcome(apiKey);
   if (!outcome.ok) {
-    if (outcome.reason === "key_disabled") {
-      throw c.json({ error: { message: "API 密钥已被禁用", type: "key_disabled" } }, 401);
+    // Exhaustive switch: see auth-guard.ts for rationale. Adding a new
+    // ApiKeyAuthFailureReason will produce a TypeScript error on the
+    // exhaustiveness fallthrough until this branch is handled explicitly.
+    switch (outcome.reason) {
+      case "key_disabled":
+        throw c.json({ error: { message: "API 密钥已被禁用", type: "key_disabled" } }, 401);
+      case "key_expired":
+        throw c.json({ error: { message: "API 密钥已过期", type: "key_expired" } }, 401);
+      case "not_found":
+        throw c.json({ error: { message: "API 密钥无效", type: "invalid_api_key" } }, 401);
+      default: {
+        const _exhaustive: never = outcome.reason;
+        throw new Error(`Unhandled auth outcome reason: ${JSON.stringify(_exhaustive)}`);
+      }
     }
-    if (outcome.reason === "key_expired") {
-      throw c.json({ error: { message: "API 密钥已过期", type: "key_expired" } }, 401);
-    }
-    // not_found
-    throw c.json({ error: { message: "API 密钥无效", type: "invalid_api_key" } }, 401);
   }
 
   const { user, key } = outcome;

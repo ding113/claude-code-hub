@@ -693,15 +693,26 @@ export async function resolveApiKeyAuthOutcome(keyString: string): Promise<ApiKe
     return { ok: false, reason: "not_found" };
   }
 
-  const row = result[0];
+  // `keys.key` is not unique, so multiple rows can match a single key string.
+  // Picking `result[0]` would be non-deterministic and could mis-classify an
+  // active duplicate as `key_disabled` if a disabled row sorted first. Prefer
+  // the most favourable status across all matching rows: ok > expired > disabled.
+  const now = Date.now();
+  const activeRow = result.find(
+    (candidate) =>
+      candidate.keyIsEnabled === true &&
+      (!candidate.keyExpiresAt || candidate.keyExpiresAt.getTime() > now)
+  );
 
-  // 区分失败原因：先 disabled，再 expired，再 ok。
-  if (row.keyIsEnabled !== true) {
+  if (!activeRow) {
+    const expiredRow = result.find((candidate) => candidate.keyIsEnabled === true);
+    if (expiredRow) {
+      return { ok: false, reason: "key_expired" };
+    }
     return { ok: false, reason: "key_disabled" };
   }
-  if (row.keyExpiresAt && row.keyExpiresAt.getTime() <= Date.now()) {
-    return { ok: false, reason: "key_expired" };
-  }
+
+  const row = activeRow;
 
   const user: User = toUser({
     id: row.userId,

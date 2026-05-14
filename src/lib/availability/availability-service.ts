@@ -45,6 +45,29 @@ const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE = 400;
 const FINALIZED_REQUEST_OUTCOME_ALIAS = "successRateOutcome" as const;
 const FINALIZED_REQUEST_OUTCOME_SQL = sql.raw(`"${FINALIZED_REQUEST_OUTCOME_ALIAS}"`);
 const COUNTABLE_REQUEST_OUTCOME_SQL = sql`${FINALIZED_REQUEST_OUTCOME_SQL} IN ('success', 'failure')`;
+
+/**
+ * Provider-chain `reason` values that, when present on the last chain entry,
+ * indicate the message-request has reached a terminal state.
+ *
+ * Mirrors the list inside `fn_is_message_request_finalized` (drizzle/0095_*.sql)
+ * and `fn_compute_message_request_success_rate_outcome` — keep in sync.
+ */
+const FINALIZED_PROVIDER_CHAIN_REASONS = [
+  "request_success",
+  "retry_success",
+  "retry_failed",
+  "system_error",
+  "resource_not_found",
+  "client_error_non_retryable",
+  "concurrent_limit_failed",
+  "hedge_winner",
+  "hedge_loser_cancelled",
+  "client_abort",
+] as const;
+const FINALIZED_PROVIDER_CHAIN_REASONS_SQL = sql.raw(
+  FINALIZED_PROVIDER_CHAIN_REASONS.map((reason) => `'${reason}'`).join(", ")
+);
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
@@ -83,28 +106,39 @@ export class AvailabilityQueryValidationError extends Error {
 function buildAvailabilityFinalizedCondition() {
   // The `IS NOT NULL` checks below are individually SARGable. Listing
   // status_code first encourages the planner to scan the partial index.
+  //
+  // The provider_chain branch wraps each jsonb-array operation in a CASE
+  // because PostgreSQL does NOT guarantee left-to-right short-circuit of
+  // AND / OR (see PG docs on Logical Operators). Without CASE, an
+  // observed-rare-but-legal historical row where `provider_chain` is a
+  // non-array jsonb value (object, scalar, or json null) would make
+  // `jsonb_array_length(...)` raise `cannot get array length of a non-array`
+  // and crash the dashboard query.
+  //
+  // The `?` JSONB key-existence operator on the last line is correct under
+  // the `pg` driver Drizzle uses today (parameterized via `$N`). If we ever
+  // swap drivers (e.g. `postgres.js`) bare `?` may be reinterpreted as a
+  // positional placeholder; either change the driver or use
+  // `jsonb_exists(..., 'statusCode')` at that point.
   return sql`(
     ${messageRequest.statusCode} IS NOT NULL
     OR ${messageRequest.blockedBy} IS NOT NULL
     OR COALESCE(${messageRequest.errorMessage}, '') <> ''
     OR (
-      ${messageRequest.providerChain} IS NOT NULL
-      AND jsonb_typeof(${messageRequest.providerChain}) = 'array'
-      AND jsonb_array_length(${messageRequest.providerChain}) > 0
-      AND jsonb_typeof(${messageRequest.providerChain} -> -1) = 'object'
-      AND (
-        (${messageRequest.providerChain} -> -1 ->> 'reason') IN (
-          'request_success', 'retry_success', 'retry_failed', 'system_error',
-          'resource_not_found', 'client_error_non_retryable',
-          'concurrent_limit_failed', 'hedge_winner', 'hedge_loser_cancelled',
-          'client_abort'
+      CASE
+        WHEN ${messageRequest.providerChain} IS NULL THEN FALSE
+        WHEN jsonb_typeof(${messageRequest.providerChain}) <> 'array' THEN FALSE
+        WHEN jsonb_array_length(${messageRequest.providerChain}) = 0 THEN FALSE
+        WHEN jsonb_typeof(${messageRequest.providerChain} -> -1) <> 'object' THEN FALSE
+        ELSE (
+          (${messageRequest.providerChain} -> -1 ->> 'reason') IN (${FINALIZED_PROVIDER_CHAIN_REASONS_SQL})
+          OR (
+            (${messageRequest.providerChain} -> -1 ? 'statusCode')
+            AND jsonb_typeof(${messageRequest.providerChain} -> -1 -> 'statusCode') = 'number'
+          )
+          OR COALESCE(${messageRequest.providerChain} -> -1 ->> 'errorMessage', '') <> ''
         )
-        OR (
-          (${messageRequest.providerChain} -> -1 ? 'statusCode')
-          AND jsonb_typeof(${messageRequest.providerChain} -> -1 -> 'statusCode') = 'number'
-        )
-        OR COALESCE(${messageRequest.providerChain} -> -1 ->> 'errorMessage', '') <> ''
-      )
+      END
     )
   )`;
 }

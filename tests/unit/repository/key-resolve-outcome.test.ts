@@ -170,11 +170,23 @@ function activeRow(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe("repository/key resolveApiKeyAuthOutcome", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     selectMock.mockClear();
     fromMock.mockClear();
     innerJoinMock.mockClear();
     whereMock.mockReset();
+
+    // vitest config sets `mockReset: true` globally, which strips the
+    // mockResolvedValue implementation off the hoisted cache mocks between
+    // tests. Re-apply it here so success-path tests don't trip on
+    // `cacheAuthResult(...).catch(...)` when the returned promise is gone.
+    const cache = await import("@/lib/security/api-key-auth-cache");
+    vi.mocked(cache.getCachedActiveKey).mockResolvedValue(null);
+    vi.mocked(cache.getCachedUser).mockResolvedValue(null);
+    vi.mocked(cache.cacheActiveKey).mockResolvedValue(undefined);
+    vi.mocked(cache.cacheAuthResult).mockResolvedValue(undefined);
+    vi.mocked(cache.cacheUser).mockResolvedValue(undefined);
+    vi.mocked(cache.invalidateCachedKey).mockResolvedValue(undefined);
   });
 
   it("returns ok=true with hydrated user/key when the row is fully active", async () => {
@@ -235,5 +247,55 @@ describe("repository/key resolveApiKeyAuthOutcome", () => {
     const result = await validateApiKeyAndGetUser("sk-disabled");
 
     expect(result).toBeNull();
+  });
+
+  // `keys.key` has no unique constraint, so multiple non-deleted rows may
+  // share a key string. The classifier MUST prefer an active row to avoid
+  // mis-rejecting a valid credential as disabled/expired.
+  describe("deterministic classification across duplicate rows", () => {
+    it("returns ok=true when at least one duplicate row is active", async () => {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      whereMock.mockResolvedValueOnce([
+        // A disabled duplicate sorted before an active one — pre-fix this
+        // would have returned key_disabled and locked the owner out.
+        activeRow({ keyId: 10, keyIsEnabled: false }),
+        activeRow({ keyId: 11, keyIsEnabled: true, keyExpiresAt: null }),
+        activeRow({ keyId: 12, keyIsEnabled: true, keyExpiresAt: yesterday }),
+      ]);
+
+      const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+      const outcome = await resolveApiKeyAuthOutcome("sk-dup-mixed");
+
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.key.id).toBe(11);
+      }
+    });
+
+    it("returns key_expired when no row is active but at least one is enabled", async () => {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      whereMock.mockResolvedValueOnce([
+        activeRow({ keyId: 20, keyIsEnabled: false }),
+        activeRow({ keyId: 21, keyIsEnabled: true, keyExpiresAt: yesterday }),
+      ]);
+
+      const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+      const outcome = await resolveApiKeyAuthOutcome("sk-dup-expired");
+
+      expect(outcome).toEqual({ ok: false, reason: "key_expired" });
+    });
+
+    it("returns key_disabled when every duplicate row is disabled", async () => {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      whereMock.mockResolvedValueOnce([
+        activeRow({ keyId: 30, keyIsEnabled: false }),
+        activeRow({ keyId: 31, keyIsEnabled: false, keyExpiresAt: yesterday }),
+      ]);
+
+      const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+      const outcome = await resolveApiKeyAuthOutcome("sk-dup-disabled");
+
+      expect(outcome).toEqual({ ok: false, reason: "key_disabled" });
+    });
   });
 });
