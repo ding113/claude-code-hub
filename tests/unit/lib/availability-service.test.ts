@@ -43,6 +43,7 @@ function findCteBoundary(
   queryText: string,
   cteName: string
 ): { cteStart: number; boundaryStart: number } | null {
+  // cteName 先经长度/格式校验，再生成 escapedName 参与受控测试正则构造。
   if (queryText.length === 0 || cteName.length > 100 || !/^[a-z_][a-z0-9_]*$/i.test(cteName)) {
     return null;
   }
@@ -66,8 +67,14 @@ function extractFinalizedRequestsSql(queryText: string): string {
   const start = findCteBoundary(queryText, "finalized_requests");
   const end = findCteBoundary(queryText, "provider_bucket_stats");
 
-  if (!start || !end || end.boundaryStart <= start.cteStart) {
-    throw new Error("Could not locate finalized_requests CTE in query text");
+  if (!start) {
+    throw new Error("finalized_requests CTE not found in query text");
+  }
+  if (!end) {
+    throw new Error("provider_bucket_stats CTE not found in query text");
+  }
+  if (end.boundaryStart <= start.cteStart) {
+    throw new Error("finalized_requests CTE appears after provider_bucket_stats CTE");
   }
 
   return queryText.slice(start.cteStart, end.boundaryStart);
