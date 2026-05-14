@@ -62,18 +62,50 @@ export class AvailabilityQueryValidationError extends Error {
 }
 
 /**
- * 当前版本把“已终态”收敛为 `statusCode` 已落库。
+ * "Finalized request" predicate used in the availability CTE WHERE clause.
  *
- * 已知限制：在当前异步写入/丢 patch 的极端场景，或未来新增了 `durationMs` / `errorMessage`
- * 已落库、但 `statusCode` 仍为空且已稳定结束的写路径时，这些记录会被当前可用性统计排除。
- * 届时应引入独立的 finalized 谓词，而不是直接放宽为 `durationMs IS NOT NULL`。
+ * SEMANTICALLY EQUIVALENT to `fn_is_message_request_finalized(blocked_by,
+ * status_code, provider_chain, error_message)` defined in drizzle/0095_*.sql
+ * (re-affirmed in 0097_*.sql / 0098_*.sql). It is intentionally inlined here
+ * because PostgreSQL does NOT inline PL/pgSQL functions, which means calling
+ * the function in the WHERE clause makes the predicate opaque to the
+ * planner. That hides the dominant `status_code IS NOT NULL` branch and
+ * prevents the planner from using the partial index
+ * `idx_message_request_provider_created_at_finalized_active`
+ * (predicate: `status_code IS NOT NULL AND deleted_at IS NULL`), which
+ * collapses the dashboard query into a sequential scan.
+ *
+ * KEEP IN SYNC with `fn_is_message_request_finalized` in
+ * drizzle/0095_young_lily_hollister.sql; the trigger and the row-level
+ * outcome function still call the SQL function (per-row write path, not
+ * latency critical), so the canonical definition stays in PL/pgSQL.
  */
 function buildAvailabilityFinalizedCondition() {
-  return sql`fn_is_message_request_finalized(
-    ${messageRequest.blockedBy},
-    ${messageRequest.statusCode},
-    ${messageRequest.providerChain},
-    ${messageRequest.errorMessage}
+  // The `IS NOT NULL` checks below are individually SARGable. Listing
+  // status_code first encourages the planner to scan the partial index.
+  return sql`(
+    ${messageRequest.statusCode} IS NOT NULL
+    OR ${messageRequest.blockedBy} IS NOT NULL
+    OR COALESCE(${messageRequest.errorMessage}, '') <> ''
+    OR (
+      ${messageRequest.providerChain} IS NOT NULL
+      AND jsonb_typeof(${messageRequest.providerChain}) = 'array'
+      AND jsonb_array_length(${messageRequest.providerChain}) > 0
+      AND jsonb_typeof(${messageRequest.providerChain} -> -1) = 'object'
+      AND (
+        (${messageRequest.providerChain} -> -1 ->> 'reason') IN (
+          'request_success', 'retry_success', 'retry_failed', 'system_error',
+          'resource_not_found', 'client_error_non_retryable',
+          'concurrent_limit_failed', 'hedge_winner', 'hedge_loser_cancelled',
+          'client_abort'
+        )
+        OR (
+          (${messageRequest.providerChain} -> -1 ? 'statusCode')
+          AND jsonb_typeof(${messageRequest.providerChain} -> -1 -> 'statusCode') = 'number'
+        )
+        OR COALESCE(${messageRequest.providerChain} -> -1 ->> 'errorMessage', '') <> ''
+      )
+    )
   )`;
 }
 

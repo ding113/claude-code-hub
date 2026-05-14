@@ -309,7 +309,13 @@ describe("availability-service", () => {
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
-    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    // The "finalized" predicate is inlined as a SARGable expression (not a
+    // function call) so the planner can use the partial index on
+    // status_code IS NOT NULL.
+    expect(finalizedRequestsSql).not.toContain("fn_is_message_request_finalized");
+    expect(finalizedRequestsSql).toContain(`"status_code" is not null`);
+    expect(finalizedRequestsSql).toContain(`"blocked_by" is not null`);
+    expect(finalizedRequestsSql).toContain(`"provider_chain" -> -1 ->> 'reason'`);
     expect(queryText).toContain("group by");
     expect(queryText).toContain("percentile_cont(0.95)");
     expect(queryText).toContain("row_number() over");
@@ -482,7 +488,13 @@ describe("availability-service", () => {
     const finalizedRequestsSql = extractFinalizedRequestsSql(
       normalizeSql(executeMock.mock.calls[0]?.[0])
     );
-    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    // The "finalized" predicate is inlined as a SARGable expression (not a
+    // function call) so the planner can use the partial index on
+    // status_code IS NOT NULL.
+    expect(finalizedRequestsSql).not.toContain("fn_is_message_request_finalized");
+    expect(finalizedRequestsSql).toContain(`"status_code" is not null`);
+    expect(finalizedRequestsSql).toContain(`"blocked_by" is not null`);
+    expect(finalizedRequestsSql).toContain(`"provider_chain" -> -1 ->> 'reason'`);
   });
 
   it("queryProviderAvailability 会保留 Gemini passthrough 终态(statusCode!=null 且 durationMs=null)", async () => {
@@ -548,7 +560,13 @@ describe("availability-service", () => {
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
 
-    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    // The "finalized" predicate is inlined as a SARGable expression (not a
+    // function call) so the planner can use the partial index on
+    // status_code IS NOT NULL.
+    expect(finalizedRequestsSql).not.toContain("fn_is_message_request_finalized");
+    expect(finalizedRequestsSql).toContain(`"status_code" is not null`);
+    expect(finalizedRequestsSql).toContain(`"blocked_by" is not null`);
+    expect(finalizedRequestsSql).toContain(`"provider_chain" -> -1 ->> 'reason'`);
     expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
     expect(queryText).toContain(`"successrateoutcome" = 'failure'`);
   });
@@ -717,7 +735,11 @@ describe("availability-service", () => {
     ]);
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
-    expect(queryText).toContain("fn_is_message_request_finalized");
+    // Inlined finalized predicate (planner-transparent; see
+    // buildAvailabilityFinalizedCondition in availability-service.ts).
+    expect(queryText).not.toContain("fn_is_message_request_finalized");
+    expect(queryText).toContain(`"status_code" is not null`);
+    expect(queryText).toContain(`"blocked_by" is not null`);
     expect(queryText).toContain(">= now() - (15 * interval '1 minute')");
     expect(queryText).toContain("<= now()");
     expect(queryText).toContain("count(*) filter");
