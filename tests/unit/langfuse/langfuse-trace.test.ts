@@ -25,11 +25,11 @@ const mockEventObs: any = {
   end: mockEventEnd,
 };
 
-const mockSetTraceIO = vi.fn();
+const mockUpdateTrace = vi.fn();
 
 const mockRootSpan = {
   startObservation: vi.fn(),
-  setTraceIO: mockSetTraceIO,
+  updateTrace: mockUpdateTrace,
   end: mockSpanEnd,
 };
 
@@ -537,7 +537,7 @@ describe("traceProxyRequest", () => {
       (c: unknown[]) => c[0] === "llm-call"
     );
     expect(llmCall[1].output).toEqual(expectedOutput);
-    expect(mockRootSpan.setTraceIO).toHaveBeenCalledWith(
+    expect(mockRootSpan.updateTrace).toHaveBeenCalledWith(
       expect.objectContaining({
         output: expectedOutput,
       })
@@ -575,7 +575,7 @@ describe("traceProxyRequest", () => {
       (c: unknown[]) => c[0] === "llm-call"
     );
     expect(llmCall[1].output).toEqual(expectedOutput);
-    expect(mockRootSpan.setTraceIO).toHaveBeenCalledWith(
+    expect(mockRootSpan.updateTrace).toHaveBeenCalledWith(
       expect.objectContaining({
         output: expectedOutput,
       })
@@ -602,7 +602,7 @@ describe("traceProxyRequest", () => {
     );
   });
 
-  test("should set trace-level input/output via setTraceIO with actual bodies", async () => {
+  test("should set trace-level input/output via updateTrace with actual bodies", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
     const responseBody = { result: "ok" };
 
@@ -616,7 +616,7 @@ describe("traceProxyRequest", () => {
       costUsd: "0.05",
     });
 
-    expect(mockSetTraceIO).toHaveBeenCalledWith({
+    expect(mockUpdateTrace).toHaveBeenCalledWith({
       input: expect.objectContaining({
         model: "claude-sonnet-4-20250514",
         messages: expect.any(Array),
@@ -882,8 +882,8 @@ describe("traceProxyRequest", () => {
     const rootCall = mockStartObservation.mock.calls[0];
     expect(rootCall[1].input).toEqual(JSON.parse(forwardedBody));
 
-    // setTraceIO should also use forwarded body
-    expect(mockSetTraceIO).toHaveBeenCalledWith({
+    // updateTrace should also use forwarded body
+    expect(mockUpdateTrace).toHaveBeenCalledWith({
       input: JSON.parse(forwardedBody),
       output: { ok: true },
     });

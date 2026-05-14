@@ -408,7 +408,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
     );
 
     // Explicitly set trace-level input/output (propagateAttributes does not support these)
-    rootSpan.setTraceIO({
+    rootSpan.updateTrace({
       input: actualRequestBody,
       output: actualResponseBody,
     });
