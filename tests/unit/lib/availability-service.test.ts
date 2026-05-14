@@ -309,7 +309,7 @@ describe("availability-service", () => {
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
-    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    expect(finalizedRequestsSql).toContain('"status_code" is not null');
     expect(queryText).toContain("group by");
     expect(queryText).toContain("percentile_cont(0.95)");
     expect(queryText).toContain("row_number() over");
@@ -482,7 +482,7 @@ describe("availability-service", () => {
     const finalizedRequestsSql = extractFinalizedRequestsSql(
       normalizeSql(executeMock.mock.calls[0]?.[0])
     );
-    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    expect(finalizedRequestsSql).toContain('"status_code" is not null');
   });
 
   it("queryProviderAvailability 会保留 Gemini passthrough 终态(statusCode!=null 且 durationMs=null)", async () => {
@@ -515,6 +515,7 @@ describe("availability-service", () => {
     const finalizedRequestsSql = extractFinalizedRequestsSql(
       normalizeSql(executeMock.mock.calls[0]?.[0])
     );
+    expect(finalizedRequestsSql).toContain('"status_code" is not null');
     expect(finalizedRequestsSql).not.toMatch(/where .*duration_?ms.*is not null/);
   });
 
@@ -548,7 +549,7 @@ describe("availability-service", () => {
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     const finalizedRequestsSql = extractFinalizedRequestsSql(queryText);
 
-    expect(finalizedRequestsSql).toContain("fn_is_message_request_finalized");
+    expect(finalizedRequestsSql).toContain('"status_code" is not null');
     expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
     expect(queryText).toContain(`"successrateoutcome" = 'failure'`);
   });
@@ -717,7 +718,7 @@ describe("availability-service", () => {
     ]);
 
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
-    expect(queryText).toContain("fn_is_message_request_finalized");
+    expect(queryText).toContain('"status_code" is not null');
     expect(queryText).toContain(">= now() - (15 * interval '1 minute')");
     expect(queryText).toContain("<= now()");
     expect(queryText).toContain("count(*) filter");

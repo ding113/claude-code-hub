@@ -4,7 +4,7 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
-import { and, eq, inArray, isNull, type SQLWrapper, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, type SQLWrapper, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
 import type {
@@ -62,19 +62,12 @@ export class AvailabilityQueryValidationError extends Error {
 }
 
 /**
- * 当前版本把“已终态”收敛为 `statusCode` 已落库。
- *
- * 已知限制：在当前异步写入/丢 patch 的极端场景，或未来新增了 `durationMs` / `errorMessage`
- * 已落库、但 `statusCode` 仍为空且已稳定结束的写路径时，这些记录会被当前可用性统计排除。
- * 届时应引入独立的 finalized 谓词，而不是直接放宽为 `durationMs IS NOT NULL`。
+ * 可用性监控用 `statusCode IS NOT NULL` 作为终态边界。
+ * 请求过程中的中间状态可能已经有 providerChain/errorMessage 片段，但仍不能算入可用性，
+ * 否则会把 requesting 中的请求误判为失败。success-rate outcome 仅用于终态记录的分类。
  */
 function buildAvailabilityFinalizedCondition() {
-  return sql`fn_is_message_request_finalized(
-    ${messageRequest.blockedBy},
-    ${messageRequest.statusCode},
-    ${messageRequest.providerChain},
-    ${messageRequest.errorMessage}
-  )`;
+  return isNotNull(messageRequest.statusCode);
 }
 
 function assertValidDate(date: Date, fieldName: string): Date {
