@@ -78,7 +78,7 @@
     "@tanstack/react-virtual": "^3",
     "@tanstack/virtual-core": "^3",
     "agentation": "^3",
-    "antd": "^6",
+    "antd": "~6.3",
     "bull": "^4",
     "class-variance-authority": "^0.7",
     "clsx": "^2",
