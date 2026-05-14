@@ -9,17 +9,23 @@ import {
 export const DEFAULT_PUBLIC_STATUS_SITE_DESCRIPTION = "Request-derived public status";
 
 /**
- * TTL (seconds) applied to every Redis key written by this module.
+ * TTL (seconds) applied to *versioned* config snapshot keys written by this
+ * module — i.e. `public-status:v1:config:<version>` and the internal variant.
  *
  * 30 days matches `GENERATION_PROJECTION_TTL_SECONDS` in `rebuild-worker.ts`,
  * which already governs the manifest / series / snapshot keys for this
- * feature. Versioned config snapshot keys
- * (`public-status:v1:config:<version>` and the internal variant) are written
- * once per config publication; without a TTL they accumulate indefinitely as
- * provider/group/system-settings changes mint new config versions. Each
- * publish refreshes the TTL on the "current" pointer keys, so as long as
- * configurations are published at least every 30 days the live pointers
- * never expire while stale versioned snapshots get cleaned up naturally.
+ * feature. These keys accumulate forever otherwise, since every config
+ * publication mints a new version (provider/group/system-settings changes).
+ *
+ * The three *current-pointer* keys
+ * (`buildPublicStatusConfigSnapshotKey()` with no argument,
+ * `buildPublicStatusInternalConfigSnapshotKey()` with no argument, and
+ * `buildPublicStatusConfigVersionPointerKey()`) are intentionally written
+ * WITHOUT a TTL — they always reference the latest config and are
+ * overwritten atomically on every publish, so they never accumulate. Giving
+ * them a TTL would dark out the public status page on any deployment that
+ * goes longer than the TTL without publishing (e.g. an idle staging env or
+ * a stable production whose config does not change for a month).
  */
 export const PUBLIC_STATUS_CONFIG_TTL_SECONDS = 60 * 60 * 24 * 30;
 
@@ -224,13 +230,14 @@ export async function publishPublicStatusConfigSnapshot(input: {
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis) {
+    // Versioned snapshot key: TTL'd so old versions get cleaned up.
     await redis.set(key, JSON.stringify(snapshot), "EX", PUBLIC_STATUS_CONFIG_TTL_SECONDS);
     if (input.setCurrentPointer !== false) {
+      // Current-pointer key: no TTL. It is overwritten on every publish and
+      // is the only entry-point the read path uses — see TTL constant above.
       await redis.set(
         buildPublicStatusConfigSnapshotKey(),
-        JSON.stringify({ key, configVersion: snapshot.configVersion }),
-        "EX",
-        PUBLIC_STATUS_CONFIG_TTL_SECONDS
+        JSON.stringify({ key, configVersion: snapshot.configVersion })
       );
     }
   }
@@ -263,13 +270,13 @@ export async function publishInternalPublicStatusConfigSnapshot(input: {
   const redis = input.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis) {
+    // Versioned snapshot key: TTL'd so old versions get cleaned up.
     await redis.set(key, JSON.stringify(input.snapshot), "EX", PUBLIC_STATUS_CONFIG_TTL_SECONDS);
     if (input.setCurrentPointer !== false) {
+      // Current-pointer key: no TTL — see TTL constant rationale above.
       await redis.set(
         buildPublicStatusInternalConfigSnapshotKey(),
-        JSON.stringify({ key, configVersion: input.snapshot.configVersion }),
-        "EX",
-        PUBLIC_STATUS_CONFIG_TTL_SECONDS
+        JSON.stringify({ key, configVersion: input.snapshot.configVersion })
       );
     }
   }
@@ -291,24 +298,20 @@ export async function publishCurrentPublicStatusConfigPointers(input: {
   }
 
   const pointerKey = buildPublicStatusConfigVersionPointerKey();
+  // This is a current-pointer key: do NOT apply a TTL. It is overwritten on
+  // every successful publish; an idle deployment with no config change for
+  // longer than any TTL we would pick would otherwise lose the pointer and
+  // dark out the public status page.
   if (typeof redis.eval === "function") {
-    // SET ... EX <ttl> applies the TTL atomically with the write, refreshing
-    // the expiration on every successful publish.
     const luaScript = `
       local current = redis.call('GET', KEYS[1])
       if (not current) or current <= ARGV[1] then
-        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+        redis.call('SET', KEYS[1], ARGV[1])
         return 1
       end
       return 0
     `;
-    const result = await redis.eval(
-      luaScript,
-      1,
-      pointerKey,
-      input.configVersion,
-      String(PUBLIC_STATUS_CONFIG_TTL_SECONDS)
-    );
+    const result = await redis.eval(luaScript, 1, pointerKey, input.configVersion);
     return result === 1;
   }
 
@@ -320,7 +323,7 @@ export async function publishCurrentPublicStatusConfigPointers(input: {
     return false;
   }
 
-  await redis.set(pointerKey, input.configVersion, "EX", PUBLIC_STATUS_CONFIG_TTL_SECONDS);
+  await redis.set(pointerKey, input.configVersion);
   return true;
 }
 

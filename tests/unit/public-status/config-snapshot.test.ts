@@ -189,8 +189,15 @@ describe("public-status config snapshot", () => {
   // Regression: before this guard, every config publish wrote Redis keys
   // without TTL, so versioned snapshot keys accumulated forever as
   // provider/group/system-settings changes minted new config versions.
-  describe("Redis writes apply PUBLIC_STATUS_CONFIG_TTL_SECONDS", () => {
-    it("publishPublicStatusConfigSnapshot writes both the versioned key and the current pointer with TTL", async () => {
+  describe("Redis TTL strategy: only versioned snapshot keys get a TTL", () => {
+    // Versioned keys (`public-status:v1:config:<version>` and the internal
+    // variant) accumulate forever as configs are republished and MUST expire.
+    // The three "current pointer" keys are overwritten on every publish, so
+    // they MUST NOT carry a TTL — otherwise an idle deployment that goes
+    // longer than the TTL without a config change would lose its pointer and
+    // the public status page would silently go dark.
+
+    it("publishPublicStatusConfigSnapshot TTLs the versioned key but leaves the pointer untouched", async () => {
       const mod = await importPublicStatusModule<ConfigSnapshotModule>(
         "@/lib/public-status/config-snapshot"
       );
@@ -215,13 +222,18 @@ describe("public-status config snapshot", () => {
       });
 
       expect(redis.set).toHaveBeenCalledTimes(2);
-      for (const call of redis.set.mock.calls) {
-        expect(call[2]).toBe("EX");
-        expect(call[3]).toBe(ttl);
-      }
+      // First call: versioned key — MUST have EX TTL.
+      const [versionedKey, , versionedMode, versionedTtl] = redis.set.mock.calls[0];
+      expect(versionedKey).toMatch(/:config:cfg-2$/);
+      expect(versionedMode).toBe("EX");
+      expect(versionedTtl).toBe(ttl);
+      // Second call: current pointer key — MUST be bare set with no TTL.
+      const pointerCall = redis.set.mock.calls[1];
+      expect(pointerCall).toHaveLength(2);
+      expect(pointerCall[0]).toMatch(/:config:current$/);
     });
 
-    it("publishInternalPublicStatusConfigSnapshot writes both the versioned key and the current pointer with TTL", async () => {
+    it("publishInternalPublicStatusConfigSnapshot TTLs the versioned key but leaves the pointer untouched", async () => {
       const mod = await importPublicStatusModule<ConfigSnapshotModule>(
         "@/lib/public-status/config-snapshot"
       );
@@ -244,17 +256,19 @@ describe("public-status config snapshot", () => {
       });
 
       expect(redis.set).toHaveBeenCalledTimes(2);
-      for (const call of redis.set.mock.calls) {
-        expect(call[2]).toBe("EX");
-        expect(call[3]).toBe(ttl);
-      }
+      const [versionedKey, , versionedMode, versionedTtl] = redis.set.mock.calls[0];
+      expect(versionedKey).toMatch(/:config-internal:cfg-3$/);
+      expect(versionedMode).toBe("EX");
+      expect(versionedTtl).toBe(ttl);
+      const pointerCall = redis.set.mock.calls[1];
+      expect(pointerCall).toHaveLength(2);
+      expect(pointerCall[0]).toMatch(/:config-internal:current$/);
     });
 
-    it("publishCurrentPublicStatusConfigPointers (eval path) passes the TTL through Lua ARGV", async () => {
+    it("publishCurrentPublicStatusConfigPointers (eval path) writes the pointer without TTL", async () => {
       const mod = await importPublicStatusModule<ConfigSnapshotModule>(
         "@/lib/public-status/config-snapshot"
       );
-      const ttl = mod.PUBLIC_STATUS_CONFIG_TTL_SECONDS;
 
       const evalMock = vi.fn().mockResolvedValue(1);
       const redis = {
@@ -269,19 +283,17 @@ describe("public-status config snapshot", () => {
       expect(evalMock).toHaveBeenCalledTimes(1);
       const evalArgs = evalMock.mock.calls[0];
       const luaScript = evalArgs[0] as string;
-      // Lua MUST apply EX <ttl> atomically with the SET so the pointer
-      // refreshes its expiration on every successful publish.
-      expect(luaScript).toMatch(/SET.+'EX'.+ARGV\[2\]/);
-      // ARGV: [configVersion, ttlSeconds] — both passed as strings.
+      // Pointer Lua MUST NOT apply an EX TTL — see TTL strategy above.
+      expect(luaScript).not.toMatch(/EX/);
+      // ARGV: [configVersion] only.
       expect(evalArgs[3]).toBe("cfg-99");
-      expect(evalArgs[4]).toBe(String(ttl));
+      expect(evalArgs[4]).toBeUndefined();
     });
 
-    it("publishCurrentPublicStatusConfigPointers (non-eval fallback) applies TTL on the bare set", async () => {
+    it("publishCurrentPublicStatusConfigPointers (non-eval fallback) writes the pointer without TTL", async () => {
       const mod = await importPublicStatusModule<ConfigSnapshotModule>(
         "@/lib/public-status/config-snapshot"
       );
-      const ttl = mod.PUBLIC_STATUS_CONFIG_TTL_SECONDS;
 
       const redis: {
         set: ReturnType<typeof vi.fn>;
@@ -297,8 +309,9 @@ describe("public-status config snapshot", () => {
 
       expect(redis.set).toHaveBeenCalledTimes(1);
       const setArgs = redis.set.mock.calls[0];
-      expect(setArgs[2]).toBe("EX");
-      expect(setArgs[3]).toBe(ttl);
+      // Bare two-arg set — no EX, no TTL.
+      expect(setArgs).toHaveLength(2);
+      expect(setArgs[1]).toBe("cfg-100");
     });
   });
 });
