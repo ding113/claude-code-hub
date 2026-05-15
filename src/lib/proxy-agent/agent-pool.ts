@@ -60,6 +60,12 @@ interface RetiredAgent extends CachedAgent {
   retireReason: string;
 }
 
+interface PendingAgentCreation {
+  promise: Promise<GetAgentResult>;
+  endpointKey: string;
+  startedAtEvictionSequence: number;
+}
+
 /**
  * Agent Pool Statistics
  */
@@ -216,9 +222,12 @@ export class AgentPoolImpl implements AgentPool {
     evictedAgents: 0,
   };
   /** Pending agent creation promises to prevent race conditions */
-  private pendingCreations: Map<string, Promise<GetAgentResult>> = new Map();
+  private pendingCreations: Map<string, PendingAgentCreation> = new Map();
   /** Monotonic counter for generating unique dispatcher ids per creation */
   private dispatcherIdCounter = 0;
+  /** 端点驱逐版本，用来拒绝驱逐期间才完成的 dispatcher 创建。 */
+  private endpointEvictionEpochs: Map<string, number> = new Map();
+  private endpointEvictionSequence = 0;
   /**
    * Pending destroy/close promises (best-effort).
    *
@@ -277,28 +286,32 @@ export class AgentPoolImpl implements AgentPool {
     // Check if there's a pending creation for this key (race condition prevention)
     const pending = this.pendingCreations.get(cacheKey);
     if (pending) {
-      // Wait for the pending creation and return its result
-      const result = await pending;
-      // ⚠️ 关键：等待 pending 创建的调用者也必须计入 activeRequests。
-      // 创建者在 createAgentWithCache 里把 activeRequests 初始化为 1（只代表它自己），
-      // 这里的每个等待者都要再 +1，否则一旦创建者完成并减到 0，cleanup/LRU 会在其它
-      // 仍在飞行中的请求头上把共享 agent 驱逐掉，又会把 STREAM_PROCESSING_ERROR 带回来。
-      const currentCached = this.cache.get(cacheKey);
-      if (currentCached && currentCached.id === result.dispatcherId) {
-        currentCached.activeRequests++;
-        currentCached.lastUsedAt = Date.now();
+      if (!this.isPendingCreationCurrent(pending)) {
+        this.pendingCreations.delete(cacheKey);
       } else {
-        const retired = this.retiredAgents.get(result.dispatcherId);
-        if (retired && retired.cacheKey === cacheKey) {
-          retired.activeRequests++;
-          retired.lastUsedAt = Date.now();
+        // Wait for the pending creation and return its result
+        const result = await pending.promise;
+        // ⚠️ 关键：等待 pending 创建的调用者也必须计入 activeRequests。
+        // 创建者在 createAgentWithCache 里把 activeRequests 初始化为 1（只代表它自己），
+        // 这里的每个等待者都要再 +1，否则一旦创建者完成并减到 0，cleanup/LRU 会在其它
+        // 仍在飞行中的请求头上把共享 agent 驱逐掉，又会把 STREAM_PROCESSING_ERROR 带回来。
+        const currentCached = this.cache.get(cacheKey);
+        if (currentCached && currentCached.id === result.dispatcherId) {
+          currentCached.activeRequests++;
+          currentCached.lastUsedAt = Date.now();
+        } else {
+          const retired = this.retiredAgents.get(result.dispatcherId);
+          if (retired && retired.cacheKey === cacheKey) {
+            retired.activeRequests++;
+            retired.lastUsedAt = Date.now();
+          }
         }
+        // Count as cache hit - we're reusing the pending result, not creating a new agent
+        // Note: Don't decrement cacheMisses here since we never incremented it for this request
+        this.stats.totalRequests++;
+        this.stats.cacheHits++;
+        return { ...result, isNew: false };
       }
-      // Count as cache hit - we're reusing the pending result, not creating a new agent
-      // Note: Don't decrement cacheMisses here since we never incremented it for this request
-      this.stats.totalRequests++;
-      this.stats.cacheHits++;
-      return { ...result, isNew: false };
     }
 
     this.ensureCapacityForNewAgent(cacheKey);
@@ -308,14 +321,27 @@ export class AgentPoolImpl implements AgentPool {
     this.stats.cacheMisses++;
 
     // Create the agent creation promise and store it
-    const creationPromise = this.createAgentWithCache(params, cacheKey);
-    this.pendingCreations.set(cacheKey, creationPromise);
+    const endpointKey = new URL(params.endpointUrl).origin;
+    const startedAtEvictionSequence = this.endpointEvictionSequence;
+    const creationPromise = this.createAgentWithCache(
+      params,
+      cacheKey,
+      endpointKey,
+      startedAtEvictionSequence
+    );
+    this.pendingCreations.set(cacheKey, {
+      promise: creationPromise,
+      endpointKey,
+      startedAtEvictionSequence,
+    });
 
     try {
       return await creationPromise;
     } finally {
       // Clean up pending creation
-      this.pendingCreations.delete(cacheKey);
+      if (this.pendingCreations.get(cacheKey)?.promise === creationPromise) {
+        this.pendingCreations.delete(cacheKey);
+      }
     }
   }
 
@@ -325,7 +351,9 @@ export class AgentPoolImpl implements AgentPool {
    */
   private async createAgentWithCache(
     params: GetAgentParams,
-    cacheKey: string
+    cacheKey: string,
+    endpointKey: string,
+    creationStartedAtEvictionSequence: number
   ): Promise<GetAgentResult> {
     // Create new agent
     const agent = await this.createAgent(params);
@@ -334,13 +362,17 @@ export class AgentPoolImpl implements AgentPool {
       throw new Error("AgentPool is shutting down");
     }
 
-    const url = new URL(params.endpointUrl);
+    if ((this.endpointEvictionEpochs.get(endpointKey) ?? 0) > creationStartedAtEvictionSequence) {
+      void this.closeAgent(agent, cacheKey);
+      throw new Error(`AgentPool endpoint was evicted during creation: ${endpointKey}`);
+    }
+
     const dispatcherId = `disp-${++this.dispatcherIdCounter}`;
 
     const newCached: CachedAgent = {
       id: dispatcherId,
       agent,
-      endpointKey: url.origin,
+      endpointKey,
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
       requestCount: 1,
@@ -395,11 +427,11 @@ export class AgentPoolImpl implements AgentPool {
     const retired = this.retiredAgents.get(dispatcherId);
     if (retired && retired.cacheKey === cacheKey) {
       retired.healthy = false;
-      retired.retiredBy = "unhealthy";
-      retired.retireReason = reason;
       logger.warn("AgentPool: Retired agent marked as unhealthy", {
         cacheKey,
         dispatcherId,
+        retiredBy: retired.retiredBy,
+        retireReason: retired.retireReason,
         reason,
       });
       return;
@@ -414,6 +446,7 @@ export class AgentPoolImpl implements AgentPool {
   }
 
   async evictEndpoint(endpointKey: string): Promise<void> {
+    this.endpointEvictionEpochs.set(endpointKey, ++this.endpointEvictionSequence);
     const keysToEvict: string[] = [];
 
     for (const [key, cached] of this.cache.entries()) {
@@ -425,6 +458,13 @@ export class AgentPoolImpl implements AgentPool {
     for (const key of keysToEvict) {
       this.evictByKey(key, "endpoint", "endpoint eviction");
     }
+  }
+
+  private isPendingCreationCurrent(pending: PendingAgentCreation): boolean {
+    return (
+      (this.endpointEvictionEpochs.get(pending.endpointKey) ?? 0) <=
+      pending.startedAtEvictionSequence
+    );
   }
 
   getPoolStats(): AgentPoolStats {
@@ -529,6 +569,7 @@ export class AgentPoolImpl implements AgentPool {
     this.cache.clear();
     this.retiredAgents.clear();
     this.pendingCreations.clear();
+    this.endpointEvictionEpochs.clear();
 
     logger.info("AgentPool: Shutdown complete");
   }

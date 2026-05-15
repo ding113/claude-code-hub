@@ -3038,18 +3038,40 @@ export class ProxyForwarder {
       // ⭐ SSL 证书错误检测：标记 Agent 为不健康，下次请求将创建新 Agent
       const sslErrorCacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
       const sslErrorDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
-      if (isSSLCertificateError(err) && sslErrorCacheKey && sslErrorDispatcherId) {
-        const pool = getGlobalAgentPool();
-        pool.markUnhealthy(sslErrorCacheKey, err.message, sslErrorDispatcherId);
-        logger.warn("ProxyForwarder: SSL certificate error detected, marked agent as unhealthy", {
-          providerId: provider.id,
-          providerName: provider.name,
-          cacheKey: sslErrorCacheKey,
-          dispatcherId: sslErrorDispatcherId,
-          connectionType: proxyConfig ? "proxy" : "direct",
-          errorMessage: err.message,
-          errorCode: err.code,
-        });
+      if (isSSLCertificateError(err)) {
+        if (sslErrorCacheKey && sslErrorDispatcherId) {
+          const pool = getGlobalAgentPool();
+          pool.markUnhealthy(sslErrorCacheKey, err.message, sslErrorDispatcherId);
+          logger.warn("ProxyForwarder: SSL certificate error detected, marked agent as unhealthy", {
+            providerId: provider.id,
+            providerName: provider.name,
+            cacheKey: sslErrorCacheKey,
+            dispatcherId: sslErrorDispatcherId,
+            connectionType: proxyConfig ? "proxy" : "direct",
+            errorMessage: err.message,
+            errorCode: err.code,
+          });
+        } else if (sslErrorCacheKey) {
+          logger.warn(
+            "ProxyForwarder: SSL certificate error detected but dispatcherId is missing",
+            {
+              providerId: provider.id,
+              providerName: provider.name,
+              cacheKey: sslErrorCacheKey,
+              connectionType: proxyConfig ? "proxy" : "direct",
+              errorMessage: err.message,
+              errorCode: err.code,
+            }
+          );
+        } else {
+          logger.warn("ProxyForwarder: SSL certificate error detected without pooled agent", {
+            providerId: provider.id,
+            providerName: provider.name,
+            connectionType: proxyConfig ? "proxy" : "direct",
+            errorMessage: err.message,
+            errorCode: err.code,
+          });
+        }
       }
 
       // ⭐ 超时错误检测（优先级：response > client）

@@ -491,6 +491,107 @@ describe("AgentPool", () => {
       expect(h1Destroy).toHaveBeenCalledTimes(1);
       expect(h2Destroy).toHaveBeenCalledTimes(1);
     });
+
+    it("should close a dispatcher created after endpoint eviction instead of caching it", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+      const lateAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      const freshAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      let resolveCreate!: (agent: unknown) => void;
+      const createPromise = new Promise<unknown>((resolve) => {
+        resolveCreate = resolve;
+      });
+      const createSpy = vi.spyOn(pool as any, "createAgent");
+      createSpy.mockImplementationOnce(() => createPromise);
+      let getPromise: Promise<unknown> | null = null;
+
+      try {
+        getPromise = pool.getAgent(params);
+        await Promise.resolve();
+        expect(createSpy).toHaveBeenCalled();
+
+        await pool.evictEndpoint("https://api.anthropic.com");
+
+        createSpy.mockResolvedValueOnce(freshAgent);
+        const freshResult = await pool.getAgent(params);
+        expect(freshResult.agent).toBe(freshAgent);
+        expect(freshResult.isNew).toBe(true);
+
+        resolveCreate(lateAgent);
+
+        await expect(getPromise).rejects.toThrow("AgentPool endpoint was evicted during creation");
+        expect(lateAgent.destroy).toHaveBeenCalledTimes(1);
+        expect(lateAgent.close).not.toHaveBeenCalled();
+        expect(pool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            activeRequests: 1,
+            cacheSize: 1,
+            pendingCreations: 0,
+          })
+        );
+        pool.releaseAgent(freshResult.cacheKey, freshResult.dispatcherId);
+      } finally {
+        resolveCreate(lateAgent);
+        await getPromise?.catch(() => undefined);
+        createSpy.mockRestore();
+      }
+    });
+
+    it("should preserve retirement metadata when a retired dispatcher is later marked unhealthy", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+      try {
+        const result = await pool.getAgent({
+          endpointUrl: "https://api.anthropic.com/v1/messages",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const agent = result.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const destroy = vi.fn().mockResolvedValue(undefined);
+        agent.destroy = destroy;
+
+        await pool.evictEndpoint("https://api.anthropic.com");
+        pool.markUnhealthy(result.cacheKey, "late SSL failure", result.dispatcherId);
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Retired agent marked as unhealthy",
+          expect.objectContaining({
+            cacheKey: result.cacheKey,
+            dispatcherId: result.dispatcherId,
+            reason: "late SSL failure",
+            retiredBy: "endpoint",
+            retireReason: "endpoint eviction",
+          })
+        );
+
+        vi.advanceTimersByTime(6 * 60 * 60 * 1000 + 1);
+        const cleaned = await pool.cleanup();
+
+        expect(cleaned).toBe(1);
+        expect(destroy).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Force closing long-retired active agent",
+          expect.objectContaining({
+            cacheKey: result.cacheKey,
+            dispatcherId: result.dispatcherId,
+            retiredBy: "endpoint",
+          })
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
   });
 
   describe("expiration cleanup", () => {
