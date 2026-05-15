@@ -18,4 +18,8 @@ export interface SessionStore {
   rotate(oldSessionId: string): Promise<SessionData | null>;
 }
 
-export const DEFAULT_SESSION_TTL = 604800;
+export const DEFAULT_AUTH_SESSION_TTL_SECONDS = 604_800;
+/**
+ * @deprecated 仅为兼容旧调用保留；新代码请使用 DEFAULT_AUTH_SESSION_TTL_SECONDS。
+ */
+export const DEFAULT_SESSION_TTL = DEFAULT_AUTH_SESSION_TTL_SECONDS;

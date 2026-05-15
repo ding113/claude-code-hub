@@ -115,6 +115,12 @@ export const EnvSchema = z.object({
   LEGACY_ACTIONS_SUNSET_DATE: z.string().default("2026-12-31"),
   ENABLE_API_KEY_ADMIN_ACCESS: z.string().default("false").transform(booleanTransform),
   SESSION_TOKEN_MODE: z.enum(["legacy", "dual", "opaque"]).default("opaque"),
+  AUTH_SESSION_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60, "AUTH_SESSION_TTL_SECONDS 不能小于 60")
+    .max(31_536_000, "AUTH_SESSION_TTL_SECONDS 不能大于 31536000")
+    .default(604_800),
   SESSION_TTL: z.coerce.number().default(300),
   // 会话消息存储控制
   // - false (默认)：存储请求/响应体但对 message 内容脱敏 [REDACTED]

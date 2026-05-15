@@ -198,6 +198,32 @@ describe("v1 API key admin access flag", () => {
     expect(redisReadMock).not.toHaveBeenCalled();
   });
 
+  test("does not classify signed admin tokens as admin-token credentials in legacy mode", async () => {
+    vi.resetModules();
+    vi.stubEnv("ADMIN_TOKEN", "legacy-mode-admin-secret");
+    vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");
+    vi.stubEnv("SESSION_TOKEN_MODE", "legacy");
+    validateAuthTokenMock.mockResolvedValue(adminSession);
+
+    vi.doMock("@/lib/auth", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/auth")>();
+      return { ...actual, validateAuthToken: validateAuthTokenMock };
+    });
+
+    const { createSignedAdminAuthToken } = await import("@/lib/auth");
+    const signedToken = await createSignedAdminAuthToken();
+    const { resolveAuth } = await import("@/lib/api/v1/_shared/auth-middleware");
+    const got = await resolveAuth(createBearerAuthContext(signedToken), "admin");
+    const body = got instanceof Response ? await got.json() : null;
+
+    expect(got).toBeInstanceOf(Response);
+    expect((got as Response).status).toBe(403);
+    expect(body).toMatchObject({ errorCode: "auth.api_key_admin_disabled" });
+    expect(validateAuthTokenMock).toHaveBeenCalledWith(signedToken, {
+      allowReadOnlyAccess: false,
+    });
+  });
+
   test("rejects opaque user API key bearer tokens at the v1 route layer when admin access is disabled", async () => {
     vi.resetModules();
     vi.stubEnv("ENABLE_API_KEY_ADMIN_ACCESS", "false");

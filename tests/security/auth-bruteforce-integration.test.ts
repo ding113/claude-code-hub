@@ -18,6 +18,8 @@ vi.mock("@/lib/auth", () => ({
   setAuthCookie: mockSetAuthCookie,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
   getSessionTokenMode: mockGetSessionTokenMode,
+  createSignedAdminAuthToken: vi.fn().mockResolvedValue("cch_admin_session_v1.payload.signature"),
+  toKeyFingerprint: vi.fn().mockResolvedValue("sha256:mock"),
   withNoStoreHeaders: <T>(res: T): T => {
     (res as Response).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     (res as Response).headers.set("Pragma", "no-cache");

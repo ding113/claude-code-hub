@@ -150,7 +150,11 @@ async function classifyCredential(
 ): Promise<ResolvedAuth["credentialType"]> {
   if (source === "none") return "none";
 
-  const [{ detectSessionTokenKind }, { config }, { constantTimeEqual }] = await Promise.all([
+  const [
+    { detectSessionTokenKind, getSessionTokenMode, isSignedAdminAuthToken },
+    { config },
+    { constantTimeEqual },
+  ] = await Promise.all([
     import("@/lib/auth"),
     import("@/lib/config/config"),
     import("@/lib/security/constant-time-compare"),
@@ -158,6 +162,9 @@ async function classifyCredential(
 
   const adminToken = config.auth.adminToken;
   if (adminToken && constantTimeEqual(token, adminToken)) return "admin-token";
+  if (getSessionTokenMode() !== "legacy" && (await isSignedAdminAuthToken(token))) {
+    return "admin-token";
+  }
   const tokenKind = detectSessionTokenKind(token);
   if (tokenKind === "opaque") {
     return classifyOpaqueSessionCredential(token);

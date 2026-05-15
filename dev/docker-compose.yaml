@@ -56,6 +56,7 @@ services:
       REDIS_URL: redis://redis:6379
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
       ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
+      AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-604800}
       SESSION_TTL: ${SESSION_TTL:-300}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-cch-dev-admin}
       TZ: Asia/Shanghai
@@ -67,4 +68,3 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
-

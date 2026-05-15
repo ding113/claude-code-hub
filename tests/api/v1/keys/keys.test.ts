@@ -183,6 +183,35 @@ describe("v1 key endpoints", () => {
     });
   });
 
+  test("classifies signed admin auth tokens as admin-token credentials", async () => {
+    const { createSignedAdminAuthToken } = await import("@/lib/auth");
+    const signedAdminToken = await createSignedAdminAuthToken();
+
+    validateAuthTokenMock.mockResolvedValue(adminSession);
+    const bearerResponse = await resolveAuth(
+      createCookieAuthContext({ Authorization: `Bearer ${signedAdminToken}` }),
+      "admin"
+    );
+    expect(bearerResponse).not.toBeInstanceOf(Response);
+    expect(bearerResponse).toMatchObject({
+      credentialType: "admin-token",
+      source: "bearer",
+    });
+
+    const cookieResponse = await resolveAuth(
+      createCookieAuthContext({
+        Cookie: `auth-token=${encodeURIComponent(signedAdminToken)}`,
+        [CSRF_HEADER]: createCsrfToken({ authToken: signedAdminToken, userId: 1 }),
+      }),
+      "admin"
+    );
+    expect(cookieResponse).not.toBeInstanceOf(Response);
+    expect(cookieResponse).toMatchObject({
+      credentialType: "admin-token",
+      source: "cookie",
+    });
+  });
+
   test("rejects non-admin sessions for key management", async () => {
     validateAuthTokenMock.mockResolvedValueOnce(userSession);
 

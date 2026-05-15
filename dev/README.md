@@ -47,3 +47,4 @@
 - `POSTGRES_PORT=35432 REDIS_PORT=36379 make db`
 - `APP_PORT=24000 make app`
 - `DB_PASSWORD=postgres make dev`
+- `AUTH_SESSION_TTL_SECONDS=86400 make app`（覆盖 Web UI 登录态 TTL；`SESSION_TTL` 只影响代理请求上下文缓存）

@@ -38,6 +38,8 @@ OS_TYPE=""
 IMAGE_TAG="latest"
 BRANCH_NAME="main"
 APP_PORT="23000"
+AUTH_SESSION_TTL_SECONDS="604800"
+SESSION_TTL="300"
 UPDATE_MODE=false
 FORCE_NEW=false
 
@@ -418,6 +420,21 @@ load_existing_env() {
             APP_PORT="$existing_port"
         fi
     fi
+
+    # 读取会话 TTL，升级时保留用户已有配置
+    local existing_auth_session_ttl
+    existing_auth_session_ttl=$(grep '^AUTH_SESSION_TTL_SECONDS=' "$env_file" | head -1 | cut -d'=' -f2-)
+    if [[ -n "$existing_auth_session_ttl" ]]; then
+        AUTH_SESSION_TTL_SECONDS="$existing_auth_session_ttl"
+        log_info "Preserved existing auth session TTL"
+    fi
+
+    local existing_session_ttl
+    existing_session_ttl=$(grep '^SESSION_TTL=' "$env_file" | head -1 | cut -d'=' -f2-)
+    if [[ -n "$existing_session_ttl" ]]; then
+        SESSION_TTL="$existing_session_ttl"
+        log_info "Preserved existing proxy session TTL"
+    fi
 }
 
 create_deployment_dir() {
@@ -517,6 +534,7 @@ services:
       REDIS_URL: redis://claude-code-hub-redis-${SUFFIX}:6379
       AUTO_MIGRATE: \${AUTO_MIGRATE:-true}
       ENABLE_RATE_LIMIT: \${ENABLE_RATE_LIMIT:-true}
+      AUTH_SESSION_TTL_SECONDS: \${AUTH_SESSION_TTL_SECONDS:-604800}
       SESSION_TTL: \${SESSION_TTL:-300}
       TZ: Asia/Shanghai
 EOF
@@ -657,7 +675,8 @@ AUTO_MIGRATE=true
 ENABLE_RATE_LIMIT=true
 
 # Session Configuration
-SESSION_TTL=300
+AUTH_SESSION_TTL_SECONDS=${AUTH_SESSION_TTL_SECONDS}
+SESSION_TTL=${SESSION_TTL}
 STORE_SESSION_MESSAGES=false
 STORE_SESSION_RESPONSE_BODY=true
 
@@ -676,7 +695,7 @@ EOF
 
     # Restore user custom variables from backup (variables not managed by this script)
     if [[ -n "$backup_file" ]] && [[ -f "$backup_file" ]]; then
-        local managed_keys="ADMIN_TOKEN|DB_USER|DB_PASSWORD|DB_NAME|APP_PORT|APP_URL|AUTO_MIGRATE|ENABLE_RATE_LIMIT|SESSION_TTL|STORE_SESSION_MESSAGES|STORE_SESSION_RESPONSE_BODY|ENABLE_SECURE_COOKIES|ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS|ENABLE_ENDPOINT_CIRCUIT_BREAKER|NODE_ENV|TZ|LOG_LEVEL"
+        local managed_keys="ADMIN_TOKEN|DB_USER|DB_PASSWORD|DB_NAME|APP_PORT|APP_URL|AUTO_MIGRATE|ENABLE_RATE_LIMIT|AUTH_SESSION_TTL_SECONDS|SESSION_TTL|STORE_SESSION_MESSAGES|STORE_SESSION_RESPONSE_BODY|ENABLE_SECURE_COOKIES|ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS|ENABLE_ENDPOINT_CIRCUIT_BREAKER|NODE_ENV|TZ|LOG_LEVEL"
         local custom_vars
         custom_vars=$(grep -v '^\s*#' "$backup_file" | grep -v '^\s*$' | grep -vE "^($managed_keys)=" || true)
         if [[ -n "$custom_vars" ]]; then

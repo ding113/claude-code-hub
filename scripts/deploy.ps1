@@ -43,6 +43,8 @@ $script:DEPLOY_DIR = "C:\ProgramData\claude-code-hub"
 $script:IMAGE_TAG = "latest"
 $script:BRANCH_NAME = "main"
 $script:APP_PORT = "23000"
+$script:AUTH_SESSION_TTL_SECONDS = "604800"
+$script:SESSION_TTL = "300"
 $script:ENABLE_CADDY = $false
 $script:DOMAIN_ARG = ""
 $script:UPDATE_MODE = $false
@@ -333,6 +335,19 @@ function Import-ExistingEnv {
             $script:APP_PORT = ($portLine.Line -split '=', 2)[1]
         }
     }
+
+    # 读取会话 TTL，升级时保留用户已有配置
+    $authSessionTtlLine = Select-String -Path $envFile -Pattern '^AUTH_SESSION_TTL_SECONDS=' | Select-Object -First 1
+    if ($authSessionTtlLine) {
+        $script:AUTH_SESSION_TTL_SECONDS = ($authSessionTtlLine.Line -split '=', 2)[1]
+        Write-ColorOutput "Preserved existing auth session TTL" -Type Info
+    }
+
+    $sessionTtlLine = Select-String -Path $envFile -Pattern '^SESSION_TTL=' | Select-Object -First 1
+    if ($sessionTtlLine) {
+        $script:SESSION_TTL = ($sessionTtlLine.Line -split '=', 2)[1]
+        Write-ColorOutput "Preserved existing proxy session TTL" -Type Info
+    }
 }
 
 function New-DeploymentDirectory {
@@ -427,6 +442,7 @@ services:
       REDIS_URL: redis://claude-code-hub-redis-${SUFFIX}:6379
       AUTO_MIGRATE: `${AUTO_MIGRATE:-true}
       ENABLE_RATE_LIMIT: `${ENABLE_RATE_LIMIT:-true}
+      AUTH_SESSION_TTL_SECONDS: `${AUTH_SESSION_TTL_SECONDS:-604800}
       SESSION_TTL: `${SESSION_TTL:-300}
       TZ: Asia/Shanghai
 $appPortsSection
@@ -573,7 +589,8 @@ AUTO_MIGRATE=true
 ENABLE_RATE_LIMIT=true
 
 # Session Configuration
-SESSION_TTL=300
+AUTH_SESSION_TTL_SECONDS=$($script:AUTH_SESSION_TTL_SECONDS)
+SESSION_TTL=$($script:SESSION_TTL)
 STORE_SESSION_MESSAGES=false
 STORE_SESSION_RESPONSE_BODY=true
 
@@ -598,7 +615,7 @@ LOG_LEVEL=info
             $managedKeys = @(
                 "ADMIN_TOKEN", "DB_USER", "DB_PASSWORD", "DB_NAME",
                 "APP_PORT", "APP_URL", "AUTO_MIGRATE", "ENABLE_RATE_LIMIT",
-                "SESSION_TTL", "STORE_SESSION_MESSAGES", "STORE_SESSION_RESPONSE_BODY",
+                "AUTH_SESSION_TTL_SECONDS", "SESSION_TTL", "STORE_SESSION_MESSAGES", "STORE_SESSION_RESPONSE_BODY",
                 "ENABLE_SECURE_COOKIES", "ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS",
                 "ENABLE_ENDPOINT_CIRCUIT_BREAKER", "NODE_ENV", "TZ", "LOG_LEVEL"
             )
