@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
   buildPublicStatusRebuildHintKey,
 } from "@/lib/public-status/redis-contract";
@@ -13,8 +12,12 @@ const mockRedisEval = vi.hoisted(() => vi.fn());
 const mockRedisPttl = vi.hoisted(() => vi.fn());
 const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
 const mockQueryPublicStatusRequests = vi.hoisted(() => vi.fn());
-const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
 const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
+const mockBuildPublicStatusHourlyRollupsFromRequests = vi.hoisted(() => vi.fn());
+const mockReadPublicStatusHourlyRollups = vi.hoisted(() => vi.fn());
+const mockUpsertPublicStatusHourlyRollups = vi.hoisted(() => vi.fn());
+const mockWriteCurrentHourPublicStatusSummary = vi.hoisted(() => vi.fn());
+const mockCleanupPublicStatusHourlyRollups = vi.hoisted(() => vi.fn());
 
 async function importAggregationModule() {
   vi.resetModules();
@@ -96,7 +99,20 @@ async function importRebuildWorkerModule() {
   vi.doMock("@/lib/public-status/aggregation", () => ({
     getConfiguredPublicStatusGroups: (snapshot: { groups: unknown[] }) => snapshot.groups,
     queryPublicStatusRequests: mockQueryPublicStatusRequests,
-    buildPublicStatusPayloadFromRequests: mockBuildPublicStatusPayloadFromRequests,
+  }));
+  vi.doMock("@/lib/public-status/hourly-rollups", () => ({
+    PUBLIC_STATUS_ROLLUP_RETENTION_DAYS: 30,
+    alignHourStartUtc: (input: string | Date) => {
+      const date = input instanceof Date ? input : new Date(input);
+      return new Date(
+        Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours())
+      );
+    },
+    buildPublicStatusHourlyRollupsFromRequests: mockBuildPublicStatusHourlyRollupsFromRequests,
+    cleanupPublicStatusHourlyRollups: mockCleanupPublicStatusHourlyRollups,
+    readPublicStatusHourlyRollups: mockReadPublicStatusHourlyRollups,
+    upsertPublicStatusHourlyRollups: mockUpsertPublicStatusHourlyRollups,
+    writeCurrentHourPublicStatusSummary: mockWriteCurrentHourPublicStatusSummary,
   }));
 
   return importPublicStatusModule<{
@@ -158,6 +174,11 @@ describe("public-status rebuild worker", () => {
     mockRedisGet.mockResolvedValue(null);
     mockRedisEval.mockResolvedValue(1);
     mockRedisPttl.mockResolvedValue(-1);
+    mockBuildPublicStatusHourlyRollupsFromRequests.mockReturnValue([]);
+    mockReadPublicStatusHourlyRollups.mockResolvedValue([]);
+    mockUpsertPublicStatusHourlyRollups.mockResolvedValue(undefined);
+    mockWriteCurrentHourPublicStatusSummary.mockResolvedValue(true);
+    mockCleanupPublicStatusHourlyRollups.mockResolvedValue(undefined);
     mockPublishCurrentPublicStatusConfigProjection.mockResolvedValue({
       configVersion: "cfg-1",
       key: "public-status:v1:config:cfg-1",
@@ -394,7 +415,7 @@ describe("public-status rebuild worker", () => {
     ]);
   });
 
-  it("publishes snapshot and manifest records for a rebuilt generation", async () => {
+  it("persists finalized hourly rollups and publishes only short-lived runtime manifest records", async () => {
     const mod = await importRebuildWorkerModule();
 
     mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue({
@@ -423,12 +444,6 @@ describe("public-status rebuild worker", () => {
       ],
     });
     mockQueryPublicStatusRequests.mockResolvedValue([]);
-    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
-      generatedAt: "2026-04-21T10:00:00.000Z",
-      coveredFrom: "2026-04-20T10:00:00.000Z",
-      coveredTo: "2026-04-21T10:00:00.000Z",
-      groups: [],
-    });
     mockRedisSet.mockReset();
     mockRedisSet.mockResolvedValueOnce("OK");
 
@@ -459,18 +474,65 @@ describe("public-status rebuild worker", () => {
       expect.stringContaining("public-status:v1:rebuild-lock:"),
       expect.any(String)
     );
-    expect(mockRedisDel).toHaveBeenCalled();
-
-    const snapshotKey = buildPublicStatusCurrentSnapshotKey({
-      intervalMinutes: 5,
-      rangeHours: 24,
-      generation: manifestValue.lastCompleteGeneration,
+    expect(mockReadPublicStatusHourlyRollups).toHaveBeenCalledWith({
+      start: new Date("2026-03-22T10:00:00.000Z"),
+      end: new Date("2026-04-21T10:00:00.000Z"),
+      configVersion: "cfg-1",
     });
+    expect(mockQueryPublicStatusRequests).toHaveBeenCalledTimes(31);
+    expect(mockQueryPublicStatusRequests).toHaveBeenNthCalledWith(1, {
+      groups: expect.any(Array),
+      coveredFrom: new Date("2026-03-22T10:00:00.000Z"),
+      coveredTo: new Date("2026-03-23T10:00:00.000Z"),
+    });
+    expect(mockQueryPublicStatusRequests).toHaveBeenNthCalledWith(30, {
+      groups: expect.any(Array),
+      coveredFrom: new Date("2026-04-20T10:00:00.000Z"),
+      coveredTo: new Date("2026-04-21T10:00:00.000Z"),
+    });
+    expect(mockBuildPublicStatusHourlyRollupsFromRequests).toHaveBeenCalledTimes(30 * 24 + 1);
+    expect(mockBuildPublicStatusHourlyRollupsFromRequests).toHaveBeenCalledWith({
+      configVersion: "cfg-1",
+      hourStart: new Date("2026-03-22T10:00:00.000Z"),
+      groups: expect.any(Array),
+      requests: [],
+    });
+    expect(mockBuildPublicStatusHourlyRollupsFromRequests).toHaveBeenNthCalledWith(30 * 24, {
+      configVersion: "cfg-1",
+      hourStart: new Date("2026-04-21T09:00:00.000Z"),
+      groups: expect.any(Array),
+      requests: [],
+    });
+    expect(mockUpsertPublicStatusHourlyRollups).not.toHaveBeenCalled();
+    expect(mockQueryPublicStatusRequests).toHaveBeenLastCalledWith({
+      groups: expect.any(Array),
+      coveredFrom: new Date("2026-04-21T10:00:00.000Z"),
+      coveredTo: new Date("2026-04-21T10:02:00.000Z"),
+    });
+    expect(mockWriteCurrentHourPublicStatusSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configVersion: "cfg-1",
+        rows: [],
+      })
+    );
+    expect(mockCleanupPublicStatusHourlyRollups).toHaveBeenCalledWith({
+      now: new Date("2026-04-21T10:02:00.000Z"),
+    });
+    expect(mockRedisSet.mock.calls).not.toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([expect.stringContaining("public-status:v1:series:")]),
+      ])
+    );
+    expect(mockRedisSet.mock.calls).not.toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([expect.stringContaining("public-status:v1:snapshot:")]),
+      ])
+    );
     expect(mockRedisSet).toHaveBeenCalledWith(
-      snapshotKey,
+      versionedManifestKey,
       expect.any(String),
       "EX",
-      60 * 60 * 24 * 30
+      60 * 60 * 2
     );
   });
 
@@ -505,12 +567,6 @@ describe("public-status rebuild worker", () => {
         ],
       });
     mockQueryPublicStatusRequests.mockResolvedValue([]);
-    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
-      generatedAt: "2026-04-21T10:00:00.000Z",
-      coveredFrom: "2026-04-20T10:00:00.000Z",
-      coveredTo: "2026-04-21T10:00:00.000Z",
-      groups: [],
-    });
     mockRedisSet.mockReset();
     mockRedisSet.mockResolvedValueOnce("OK");
 
@@ -523,6 +579,102 @@ describe("public-status rebuild worker", () => {
     expect(result.status).toBe("updated");
     expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledWith({
       reason: "rebuild-bootstrap",
+    });
+  });
+
+  it("refreshes missing and recent finalized hours on aligned UTC hour boundaries", async () => {
+    const mod = await importRebuildWorkerModule();
+
+    mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      siteTitle: "Claude Code Hub Status",
+      siteDescription: "Request-derived public status",
+      defaultIntervalMinutes: 15,
+      defaultRangeHours: 24,
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: "Primary fleet",
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+    });
+    mockReadPublicStatusHourlyRollups.mockResolvedValue([
+      {
+        bucketStart: new Date("2026-04-21T06:00:00.000Z"),
+        publicGroupSlug: "openai",
+        publicModelKey: "gpt-4.1",
+        requestTypeBadge: "openaiCompatible",
+      },
+      {
+        bucketStart: new Date("2026-04-21T07:00:00.000Z"),
+        publicGroupSlug: "openai",
+        publicModelKey: "gpt-4.1",
+        requestTypeBadge: "openaiCompatible",
+      },
+    ]);
+    mockQueryPublicStatusRequests.mockResolvedValue([]);
+    mockRedisSet.mockReset();
+    mockRedisSet.mockResolvedValueOnce("OK");
+
+    const result = await mod.rebuildPublicStatusProjection({
+      intervalMinutes: 15,
+      rangeHours: 24,
+      now: new Date("2026-04-21T10:17:00.000Z"),
+    });
+
+    expect(result.status).toBe("updated");
+    expect(mockReadPublicStatusHourlyRollups).toHaveBeenCalledWith({
+      start: new Date("2026-03-22T10:00:00.000Z"),
+      end: new Date("2026-04-21T10:00:00.000Z"),
+      configVersion: "cfg-1",
+    });
+    expect(mockBuildPublicStatusHourlyRollupsFromRequests).toHaveBeenCalledWith({
+      configVersion: "cfg-1",
+      hourStart: new Date("2026-03-22T10:00:00.000Z"),
+      groups: expect.any(Array),
+      requests: [],
+    });
+    expect(mockBuildPublicStatusHourlyRollupsFromRequests).toHaveBeenCalledWith({
+      configVersion: "cfg-1",
+      hourStart: new Date("2026-04-21T08:00:00.000Z"),
+      groups: expect.any(Array),
+      requests: [],
+    });
+    expect(mockBuildPublicStatusHourlyRollupsFromRequests).toHaveBeenCalledWith({
+      configVersion: "cfg-1",
+      hourStart: new Date("2026-04-21T09:00:00.000Z"),
+      groups: expect.any(Array),
+      requests: [],
+    });
+    const historicalRollupCalls = mockBuildPublicStatusHourlyRollupsFromRequests.mock.calls.slice(
+      0,
+      -1
+    );
+    expect(historicalRollupCalls).not.toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            hourStart: new Date("2026-04-21T10:00:00.000Z"),
+          }),
+        ],
+      ])
+    );
+    expect(mockQueryPublicStatusRequests).toHaveBeenLastCalledWith({
+      groups: expect.any(Array),
+      coveredFrom: new Date("2026-04-21T10:00:00.000Z"),
+      coveredTo: new Date("2026-04-21T10:17:00.000Z"),
     });
   });
 
