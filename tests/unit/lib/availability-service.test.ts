@@ -50,6 +50,17 @@ function extractFinalizedRequestsSql(queryText: string): string {
   return queryText.slice(start, end);
 }
 
+// 终态边界必须仅由 status_code 收敛：不能回退到包含 blocked_by /
+// error_message / provider_chain 任一非空的旧语义，否则会重新把"请求中"
+// 记录纳入可用性统计。每一处断言都重复这套规则，防止个别用例漏检导致回归。
+function expectStatusCodeOnlyFinalizedBoundary(sqlText: string) {
+  expect(sqlText).not.toContain("fn_is_message_request_finalized");
+  expect(sqlText).toContain(`"status_code" is not null`);
+  expect(sqlText).not.toContain(`"blocked_by" is not null`);
+  expect(sqlText).not.toContain(`"error_message" is not null`);
+  expect(sqlText).not.toContain(`"provider_chain" -> -1 ->> 'reason'`);
+}
+
 describe("availability-service", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -313,10 +324,7 @@ describe("availability-service", () => {
     // 这样才能命中部分索引 idx_message_request_provider_created_at_finalized_active；
     // 同时不会把 providerChain / errorMessage 已写入但 statusCode 仍为空的"请求中"
     // 记录纳入聚合 —— 它们会在分类阶段被误判成 failure。
-    expect(finalizedRequestsSql).not.toContain("fn_is_message_request_finalized");
-    expect(finalizedRequestsSql).toContain(`"status_code" is not null`);
-    expect(finalizedRequestsSql).not.toContain(`"blocked_by" is not null`);
-    expect(finalizedRequestsSql).not.toContain(`"provider_chain" -> -1 ->> 'reason'`);
+    expectStatusCodeOnlyFinalizedBoundary(finalizedRequestsSql);
     expect(queryText).toContain("group by");
     expect(queryText).toContain("percentile_cont(0.95)");
     expect(queryText).toContain("row_number() over");
@@ -493,10 +501,7 @@ describe("availability-service", () => {
     );
     // 终态判定只看 status_code IS NOT NULL：要么命中部分索引，要么直接排除"请求中"
     // 的记录，不再依据 providerChain / errorMessage 片段把它们判为终态。
-    expect(finalizedRequestsSql).not.toContain("fn_is_message_request_finalized");
-    expect(finalizedRequestsSql).toContain(`"status_code" is not null`);
-    expect(finalizedRequestsSql).not.toContain(`"blocked_by" is not null`);
-    expect(finalizedRequestsSql).not.toContain(`"provider_chain" -> -1 ->> 'reason'`);
+    expectStatusCodeOnlyFinalizedBoundary(finalizedRequestsSql);
   });
 
   it("queryProviderAvailability 会保留 Gemini passthrough 终态(statusCode!=null 且 durationMs=null)", async () => {
@@ -531,8 +536,9 @@ describe("availability-service", () => {
     );
     expect(finalizedRequestsSql).not.toMatch(/where .*duration_?ms.*is not null/);
     // Gemini passthrough 写入了 statusCode（即使 durationMs 仍为 null），
-    // 因此会被 status_code IS NOT NULL 的终态过滤保留下来。
-    expect(finalizedRequestsSql).toContain(`"status_code" is not null`);
+    // 因此会被 status_code IS NOT NULL 的终态过滤保留下来；同时保持终态边界
+    // 不被其他字段放宽。
+    expectStatusCodeOnlyFinalizedBoundary(finalizedRequestsSql);
   });
 
   it("queryProviderAvailability 当前不会把中间持久化状态(statusCode=null 且 durationMs!=null)误算为 red", async () => {
@@ -567,10 +573,7 @@ describe("availability-service", () => {
 
     // status_code IS NOT NULL 把 statusCode=null 的中间持久化记录直接排除在聚合外，
     // 它们根本不会进入 outcome 分类阶段，所以不会被算成 failure。
-    expect(finalizedRequestsSql).not.toContain("fn_is_message_request_finalized");
-    expect(finalizedRequestsSql).toContain(`"status_code" is not null`);
-    expect(finalizedRequestsSql).not.toContain(`"blocked_by" is not null`);
-    expect(finalizedRequestsSql).not.toContain(`"provider_chain" -> -1 ->> 'reason'`);
+    expectStatusCodeOnlyFinalizedBoundary(finalizedRequestsSql);
     expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
     expect(queryText).toContain(`"successrateoutcome" = 'failure'`);
   });
@@ -741,9 +744,7 @@ describe("availability-service", () => {
     const queryText = normalizeSql(executeMock.mock.calls[0]?.[0]);
     // getCurrentProviderStatus 同样使用 status_code IS NOT NULL 终态边界，
     // 让短窗口查询也能直接命中部分索引并避免误判"请求中"。
-    expect(queryText).not.toContain("fn_is_message_request_finalized");
-    expect(queryText).toContain(`"status_code" is not null`);
-    expect(queryText).not.toContain(`"blocked_by" is not null`);
+    expectStatusCodeOnlyFinalizedBoundary(queryText);
     expect(queryText).toContain("fn_compute_message_request_success_rate_outcome");
     expect(queryText).toContain(">= now() - (15 * interval '1 minute')");
     expect(queryText).toContain("<= now()");
