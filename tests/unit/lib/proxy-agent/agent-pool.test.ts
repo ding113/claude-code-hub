@@ -279,18 +279,85 @@ describe("AgentPool", () => {
           return new Promise<void>(() => {});
         };
 
-        realPool.markUnhealthy(result1.cacheKey, "test-hang-close");
+        realPool.releaseAgent(result1.cacheKey, result1.dispatcherId);
+        realPool.markUnhealthy(result1.cacheKey, "test-hang-close", result1.dispatcherId);
 
         const result2 = await withTimeout(realPool.getAgent(params), 500);
         expect(result2.isNew).toBe(true);
         expect(result2.agent).not.toBe(result1.agent);
 
-        // 断言：即使 close() 处于 pending，也不会阻塞 getAgent()，且会触发 close 调用
+        // 断言：空闲 unhealthy dispatcher 即使 close() 处于 pending，也不会阻塞 getAgent()
         expect(closeCalled).toBe(true);
       } finally {
         await realPool.shutdown();
         vi.useFakeTimers();
       }
+    });
+
+    it("should retire unhealthy active dispatcher without destroying in-flight requests", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      const result1 = await pool.getAgent(params);
+      const result2 = await pool.getAgent(params);
+      const agent1 = result1.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const destroy1 = vi.fn().mockResolvedValue(undefined);
+      agent1.destroy = destroy1;
+
+      pool.markUnhealthy(result1.cacheKey, "SSL certificate error", result1.dispatcherId);
+
+      expect(pool.getPoolStats().cacheSize).toBe(0);
+      expect(pool.getPoolStats().activeRequests).toBe(2);
+      expect(destroy1).not.toHaveBeenCalled();
+
+      const result3 = await pool.getAgent(params);
+      expect(result3.isNew).toBe(true);
+      expect(result3.agent).not.toBe(result1.agent);
+      expect(result3.dispatcherId).not.toBe(result1.dispatcherId);
+      expect(pool.getPoolStats().activeRequests).toBe(3);
+
+      pool.releaseAgent(result1.cacheKey, result1.dispatcherId);
+      expect(destroy1).not.toHaveBeenCalled();
+
+      pool.releaseAgent(result2.cacheKey, result2.dispatcherId);
+      expect(destroy1).toHaveBeenCalledTimes(1);
+
+      pool.releaseAgent(result3.cacheKey, result3.dispatcherId);
+      expect(pool.getPoolStats().activeRequests).toBe(0);
+    });
+
+    it("should ignore stale unhealthy marks for an older dispatcher generation", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      const oldGeneration = await pool.getAgent(params);
+      pool.markUnhealthy(oldGeneration.cacheKey, "initial SSL failure", oldGeneration.dispatcherId);
+
+      const newGeneration = await pool.getAgent(params);
+      expect(newGeneration.dispatcherId).not.toBe(oldGeneration.dispatcherId);
+
+      pool.markUnhealthy(
+        oldGeneration.cacheKey,
+        "late SSL failure from old stream",
+        oldGeneration.dispatcherId
+      );
+
+      const reusedNewGeneration = await pool.getAgent(params);
+      expect(reusedNewGeneration.agent).toBe(newGeneration.agent);
+      expect(reusedNewGeneration.dispatcherId).toBe(newGeneration.dispatcherId);
+
+      pool.releaseAgent(oldGeneration.cacheKey, oldGeneration.dispatcherId);
+      pool.releaseAgent(newGeneration.cacheKey, newGeneration.dispatcherId);
+      pool.releaseAgent(reusedNewGeneration.cacheKey, reusedNewGeneration.dispatcherId);
+      expect(pool.getPoolStats().activeRequests).toBe(0);
     });
 
     it("should track unhealthy agents in stats", async () => {
@@ -309,16 +376,26 @@ describe("AgentPool", () => {
 
     it("should evict all Agents for endpoint on evictEndpoint", async () => {
       // Create agents for same endpoint with different configs
-      await pool.getAgent({
+      const h1 = await pool.getAgent({
         endpointUrl: "https://api.anthropic.com/v1/messages",
         proxyUrl: null,
         enableHttp2: false,
       });
-      await pool.getAgent({
+      const h2 = await pool.getAgent({
         endpointUrl: "https://api.anthropic.com/v1/messages",
         proxyUrl: null,
         enableHttp2: true,
       });
+      const h1Agent = h1.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const h2Agent = h2.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const h1Destroy = vi.fn().mockResolvedValue(undefined);
+      const h2Destroy = vi.fn().mockResolvedValue(undefined);
+      h1Agent.destroy = h1Destroy;
+      h2Agent.destroy = h2Destroy;
       await pool.getAgent({
         endpointUrl: "https://api.openai.com/v1/chat/completions",
         proxyUrl: null,
@@ -333,6 +410,14 @@ describe("AgentPool", () => {
       const statsAfter = pool.getPoolStats();
       expect(statsAfter.cacheSize).toBe(1);
       expect(statsAfter.evictedAgents).toBe(2);
+      expect(statsAfter.activeRequests).toBe(3);
+      expect(h1Destroy).not.toHaveBeenCalled();
+      expect(h2Destroy).not.toHaveBeenCalled();
+
+      pool.releaseAgent(h1.cacheKey, h1.dispatcherId);
+      pool.releaseAgent(h2.cacheKey, h2.dispatcherId);
+      expect(h1Destroy).toHaveBeenCalledTimes(1);
+      expect(h2Destroy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -426,6 +511,51 @@ describe("AgentPool", () => {
       // Should have evicted the oldest (LRU)
       const stats = smallPool.getPoolStats();
       expect(stats.cacheSize).toBeLessThanOrEqual(2);
+
+      await smallPool.shutdown();
+    });
+
+    it("should retire active LRU dispatcher and close it only after release", async () => {
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 2,
+      });
+
+      const r1 = await smallPool.getAgent({
+        endpointUrl: "https://api1.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+      const agent1 = r1.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const destroy1 = vi.fn().mockResolvedValue(undefined);
+      agent1.destroy = destroy1;
+
+      vi.advanceTimersByTime(100);
+      const r2 = await smallPool.getAgent({
+        endpointUrl: "https://api2.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+
+      vi.advanceTimersByTime(100);
+      const r3 = await smallPool.getAgent({
+        endpointUrl: "https://api3.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+
+      expect(smallPool.getPoolStats().cacheSize).toBe(2);
+      expect(smallPool.getPoolStats().activeRequests).toBe(3);
+      expect(destroy1).not.toHaveBeenCalled();
+
+      smallPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
+      expect(destroy1).toHaveBeenCalledTimes(1);
+
+      smallPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
+      smallPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
+      expect(smallPool.getPoolStats().activeRequests).toBe(0);
 
       await smallPool.shutdown();
     });
@@ -593,8 +723,8 @@ describe("AgentPool", () => {
       }
     });
 
-    it("should ignore releaseAgent from stale dispatcher generation", async () => {
-      // 回归用例：cacheKey 相同但 dispatcher 已被重建时，旧 release 不应误减新实例
+    it("should release stale dispatcher generation without decrementing the current dispatcher", async () => {
+      // 回归用例：cacheKey 相同但 dispatcher 已被重建时，旧 release 只应释放旧代 dispatcher
       const regenPool = new AgentPoolImpl({
         ...defaultConfig,
         agentTtlMs: 1000,
@@ -611,20 +741,24 @@ describe("AgentPool", () => {
       expect(regenPool.getPoolStats().activeRequests).toBe(1);
 
       // 模拟外部强制驱逐（例如 markUnhealthy 后下次 getAgent 触发 evictByKey）
-      regenPool.markUnhealthy(r1.cacheKey, "simulated SSL failure");
+      regenPool.markUnhealthy(r1.cacheKey, "simulated SSL failure", r1.dispatcherId);
 
       // 第二代 dispatcher（同 cacheKey，但 dispatcherId 必须不同）
       const r2 = await regenPool.getAgent(params);
       expect(r2.cacheKey).toBe(r1.cacheKey);
       expect(r2.dispatcherId).not.toBe(r1.dispatcherId);
-      expect(regenPool.getPoolStats().activeRequests).toBe(1);
+      expect(regenPool.getPoolStats().activeRequests).toBe(2);
 
-      // 用第一代 dispatcherId 释放 —— 必须被忽略
+      // 用第一代 dispatcherId 释放 —— 只关闭退役旧代，不应误减第二代
       regenPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
       expect(regenPool.getPoolStats().activeRequests).toBe(1);
+      const r3 = await regenPool.getAgent(params);
+      expect(r3.dispatcherId).toBe(r2.dispatcherId);
+      expect(regenPool.getPoolStats().activeRequests).toBe(2);
 
-      // 用第二代 dispatcherId 释放 —— 正常减到 0
+      // 第二代被两个请求持有，释放两次后归零
       regenPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
+      regenPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
       expect(regenPool.getPoolStats().activeRequests).toBe(0);
 
       await regenPool.shutdown();
@@ -660,10 +794,11 @@ describe("AgentPool", () => {
       await shortTtlPool.shutdown();
     });
 
-    it("should force-expire after hard upper bound regardless of active requests", async () => {
+    it("should retire after hard upper bound without destroying active requests", async () => {
       const pool2 = new AgentPoolImpl({
         ...defaultConfig,
         agentTtlMs: 1000,
+        cleanupIntervalMs: 60 * 60 * 1000,
       });
 
       const params = {
@@ -673,7 +808,12 @@ describe("AgentPool", () => {
       };
 
       // getAgent increments activeRequests (never released)
-      await pool2.getAgent(params);
+      const r1 = await pool2.getAgent(params);
+      const agent1 = r1.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const destroy1 = vi.fn().mockResolvedValue(undefined);
+      agent1.destroy = destroy1;
       expect(pool2.getPoolStats().activeRequests).toBe(1);
 
       // Advance past 30-minute hard upper bound
@@ -682,6 +822,12 @@ describe("AgentPool", () => {
       const cleaned = await pool2.cleanup();
       expect(cleaned).toBe(1);
       expect(pool2.getPoolStats().cacheSize).toBe(0);
+      expect(pool2.getPoolStats().activeRequests).toBe(1);
+      expect(destroy1).not.toHaveBeenCalled();
+
+      pool2.releaseAgent(r1.cacheKey, r1.dispatcherId);
+      expect(destroy1).toHaveBeenCalledTimes(1);
+      expect(pool2.getPoolStats().activeRequests).toBe(0);
 
       await pool2.shutdown();
     });

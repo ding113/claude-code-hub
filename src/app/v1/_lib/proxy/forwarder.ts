@@ -3037,13 +3037,15 @@ export class ProxyForwarder {
 
       // ⭐ SSL 证书错误检测：标记 Agent 为不健康，下次请求将创建新 Agent
       const sslErrorCacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+      const sslErrorDispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
       if (isSSLCertificateError(err) && sslErrorCacheKey) {
         const pool = getGlobalAgentPool();
-        pool.markUnhealthy(sslErrorCacheKey, err.message);
+        pool.markUnhealthy(sslErrorCacheKey, err.message, sslErrorDispatcherId ?? undefined);
         logger.warn("ProxyForwarder: SSL certificate error detected, marked agent as unhealthy", {
           providerId: provider.id,
           providerName: provider.name,
           cacheKey: sslErrorCacheKey,
+          dispatcherId: sslErrorDispatcherId,
           connectionType: proxyConfig ? "proxy" : "direct",
           errorMessage: err.message,
           errorCode: err.code,
@@ -3201,13 +3203,19 @@ export class ProxyForwarder {
 
         // ⭐ 标记 HTTP/2 Agent 为不健康，避免后续请求重复失败
         const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+        const http2DispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
         if (http2CacheKey) {
           const pool = getGlobalAgentPool();
-          pool.markUnhealthy(http2CacheKey, `HTTP/2 protocol error: ${err.message}`);
+          pool.markUnhealthy(
+            http2CacheKey,
+            `HTTP/2 protocol error: ${err.message}`,
+            http2DispatcherId ?? undefined
+          );
           logger.debug("ProxyForwarder: Marked HTTP/2 agent as unhealthy due to protocol error", {
             providerId: provider.id,
             providerName: provider.name,
             cacheKey: http2CacheKey,
+            dispatcherId: http2DispatcherId,
           });
         }
 
