@@ -236,6 +236,39 @@ describe("AgentPool", () => {
       expect(result2.agent).not.toBe(result1.agent);
     });
 
+    it("旧两参数 markUnhealthy 应 warn 并安全忽略", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const params = {
+        endpointUrl: "https://legacy-unhealthy.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      try {
+        const result1 = await pool.getAgent(params);
+
+        pool.markUnhealthy(result1.cacheKey, "legacy caller without dispatcherId");
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Ignored cacheKey-only unhealthy mark",
+          expect.objectContaining({
+            cacheKey: result1.cacheKey,
+            reason: "legacy caller without dispatcherId",
+          })
+        );
+
+        const result2 = await pool.getAgent(params);
+        expect(result2.isNew).toBe(false);
+        expect(result2.agent).toBe(result1.agent);
+        expect(result2.dispatcherId).toBe(result1.dispatcherId);
+
+        pool.releaseAgent(result1.cacheKey, result1.dispatcherId);
+        pool.releaseAgent(result2.cacheKey, result2.dispatcherId);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
     it("should not hang when evicting an unhealthy agent whose close() never resolves", async () => {
       // 说明：beforeEach 使用了 fake timers，但此用例需要依赖真实 setTimeout 做“防卡死”断言
       await pool.shutdown();

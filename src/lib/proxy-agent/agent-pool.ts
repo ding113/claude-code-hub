@@ -136,6 +136,11 @@ export interface AgentPool {
    * 返回值，避免旧请求迟到错误误伤同 cacheKey 的新 dispatcher。
    */
   markUnhealthy(cacheKey: string, reason: string, dispatcherId: string): void;
+  /**
+   * @deprecated 保留旧签名仅用于源码兼容。缺少 dispatcherId 时会记录 warn 并安全忽略，
+   * 不再回退到 cacheKey 级别驱逐，避免旧请求误伤新 dispatcher 代际。
+   */
+  markUnhealthy(cacheKey: string, reason: string): void;
 
   /**
    * Evict all Agents for a specific endpoint
@@ -415,7 +420,17 @@ export class AgentPoolImpl implements AgentPool {
     }
   }
 
-  markUnhealthy(cacheKey: string, reason: string, dispatcherId: string): void {
+  markUnhealthy(cacheKey: string, reason: string, dispatcherId: string): void;
+  markUnhealthy(cacheKey: string, reason: string): void;
+  markUnhealthy(cacheKey: string, reason: string, dispatcherId?: string): void {
+    if (!dispatcherId) {
+      logger.warn("AgentPool: Ignored cacheKey-only unhealthy mark", {
+        cacheKey,
+        reason,
+      });
+      return;
+    }
+
     const cached = this.cache.get(cacheKey);
     if (cached && cached.id === dispatcherId) {
       cached.healthy = false;
