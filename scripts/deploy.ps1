@@ -212,28 +212,29 @@ function Select-Branch {
     Write-Host "  1) main   (Stable release - recommended for production)" -ForegroundColor Green
     Write-Host "  2) dev    (Latest features - for testing)" -ForegroundColor Yellow
     Write-Host ""
-    
+
     while ($true) {
-        $choice = Read-Host "Enter your choice [1]"
+        $choice = Read-Host "Type 1 or 2 (or 'main'/'dev') and press Enter [default: 1]"
         if ([string]::IsNullOrWhiteSpace($choice)) {
             $choice = "1"
         }
-        
-        switch ($choice) {
-            "1" {
+        $normalized = $choice.Trim().ToLower()
+
+        switch ($normalized) {
+            { $_ -in "1", "main" } {
                 $script:IMAGE_TAG = "latest"
                 $script:BRANCH_NAME = "main"
                 Write-ColorOutput "Selected branch: main (image tag: latest)" -Type Success
                 break
             }
-            "2" {
+            { $_ -in "2", "dev" } {
                 $script:IMAGE_TAG = "dev"
                 $script:BRANCH_NAME = "dev"
                 Write-ColorOutput "Selected branch: dev (image tag: dev)" -Type Success
                 break
             }
             default {
-                Write-ColorOutput "Invalid choice. Please enter 1 or 2." -Type Error
+                Write-ColorOutput "Invalid choice. Type 1, 2, 'main', or 'dev' and press Enter." -Type Error
                 continue
             }
         }
