@@ -169,6 +169,24 @@ describe("admin token opaque-mode fallback", () => {
     const session = await getSession();
 
     expect(session).toBeNull();
+    expect(mockReadSession).not.toHaveBeenCalled();
+    expect(mockValidateApiKeyAndGetUser).not.toHaveBeenCalled();
+  });
+
+  it("opaque mode + expired signed admin auth cookie -> auth fails without Redis lookup", async () => {
+    const { createSignedAdminSessionToken } = await import("@/lib/auth-admin-session-token");
+    const { getSession } = await import("@/lib/auth");
+    const signedToken = await createSignedAdminSessionToken({
+      adminToken: ADMIN_TOKEN,
+      ttlSeconds: 60,
+      now: Date.now() - 61_000,
+    });
+    setAuthCookie(signedToken);
+
+    const session = await getSession();
+
+    expect(session).toBeNull();
+    expect(mockReadSession).not.toHaveBeenCalled();
     expect(mockValidateApiKeyAndGetUser).not.toHaveBeenCalled();
   });
 

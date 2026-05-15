@@ -2,6 +2,7 @@ import { cookies, headers } from "next/headers";
 import type { NextResponse } from "next/server";
 import {
   createSignedAdminSessionToken,
+  isSignedAdminSessionTokenFormat,
   verifySignedAdminSessionToken,
 } from "@/lib/auth-admin-session-token";
 import { DEFAULT_AUTH_SESSION_TTL_SECONDS } from "@/lib/auth-session-store";
@@ -289,11 +290,11 @@ export async function validateAuthToken(
   options?: { allowReadOnlyAccess?: boolean }
 ): Promise<AuthSession | null> {
   const mode = getSessionTokenMode();
+  const signedAdminTokenFormat = isSignedAdminSessionTokenFormat(token);
 
   if (mode !== "legacy") {
-    const signedAdminSession = await validateSignedAdminSessionToken(token, options);
-    if (signedAdminSession) {
-      return signedAdminSession;
+    if (signedAdminTokenFormat) {
+      return validateSignedAdminSessionToken(token, options);
     }
 
     try {
@@ -314,6 +315,10 @@ export async function validateAuthToken(
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  if (signedAdminTokenFormat) {
+    return null;
   }
 
   if (mode === "legacy" || mode === "dual") {
