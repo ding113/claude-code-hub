@@ -4,7 +4,7 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
-import { and, eq, inArray, isNull, type SQLWrapper, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, type SQLWrapper, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
 import type {
@@ -46,28 +46,6 @@ const FINALIZED_REQUEST_OUTCOME_ALIAS = "successRateOutcome" as const;
 const FINALIZED_REQUEST_OUTCOME_SQL = sql.raw(`"${FINALIZED_REQUEST_OUTCOME_ALIAS}"`);
 const COUNTABLE_REQUEST_OUTCOME_SQL = sql`${FINALIZED_REQUEST_OUTCOME_SQL} IN ('success', 'failure')`;
 
-/**
- * Provider-chain `reason` values that, when present on the last chain entry,
- * indicate the message-request has reached a terminal state.
- *
- * Mirrors the list inside `fn_is_message_request_finalized` (drizzle/0095_*.sql)
- * and `fn_compute_message_request_success_rate_outcome` — keep in sync.
- */
-const FINALIZED_PROVIDER_CHAIN_REASONS = [
-  "request_success",
-  "retry_success",
-  "retry_failed",
-  "system_error",
-  "resource_not_found",
-  "client_error_non_retryable",
-  "concurrent_limit_failed",
-  "hedge_winner",
-  "hedge_loser_cancelled",
-  "client_abort",
-] as const;
-const FINALIZED_PROVIDER_CHAIN_REASONS_SQL = sql.raw(
-  FINALIZED_PROVIDER_CHAIN_REASONS.map((reason) => `'${reason}'`).join(", ")
-);
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
@@ -85,62 +63,24 @@ export class AvailabilityQueryValidationError extends Error {
 }
 
 /**
- * "Finalized request" predicate used in the availability CTE WHERE clause.
+ * 可用性监控的"已终态"边界收敛为 `status_code IS NOT NULL`。
  *
- * SEMANTICALLY EQUIVALENT to `fn_is_message_request_finalized(blocked_by,
- * status_code, provider_chain, error_message)` defined in drizzle/0095_*.sql
- * (re-affirmed in 0097_*.sql / 0098_*.sql). It is intentionally inlined here
- * because PostgreSQL does NOT inline PL/pgSQL functions, which means calling
- * the function in the WHERE clause makes the predicate opaque to the
- * planner. That hides the dominant `status_code IS NOT NULL` branch and
- * prevents the planner from using the partial index
- * `idx_message_request_provider_created_at_finalized_active`
- * (predicate: `status_code IS NOT NULL AND deleted_at IS NULL`), which
- * collapses the dashboard query into a sequential scan.
+ * 这与部分索引 `idx_message_request_provider_created_at_finalized_active`
+ * 的谓词 `deleted_at IS NULL AND status_code IS NOT NULL` 对齐，让
+ * provider + 时间范围聚合可以直接命中索引，而不是退化为大范围扫描。
  *
- * KEEP IN SYNC with `fn_is_message_request_finalized` in
- * drizzle/0095_young_lily_hollister.sql; the trigger and the row-level
- * outcome function still call the SQL function (per-row write path, not
- * latency critical), so the canonical definition stays in PL/pgSQL.
+ * 不复刻 `fn_is_message_request_finalized` 的语义（即使内联）也是有意为之：
+ * 该函数会把仅有 providerChain / errorMessage 片段但 statusCode 仍为 NULL
+ * 的"请求中"记录判为终态；放到可用性统计里会被分类函数误算成 failure。
+ * 终态记录的成功/失败/排除分类继续由
+ * `fn_compute_message_request_success_rate_outcome(...)` 处理。
+ *
+ * 已知限制：若未来出现 status_code 长时间未落库但请求已稳定结束的写路径，
+ * 这些记录会被排除；届时应引入独立的、SARGable 的 finalized 谓词，
+ * 而不是放回 PL/pgSQL 函数调用。
  */
 function buildAvailabilityFinalizedCondition() {
-  // The `IS NOT NULL` checks below are individually SARGable. Listing
-  // status_code first encourages the planner to scan the partial index.
-  //
-  // The provider_chain branch wraps each jsonb-array operation in a CASE
-  // because PostgreSQL does NOT guarantee left-to-right short-circuit of
-  // AND / OR (see PG docs on Logical Operators). Without CASE, an
-  // observed-rare-but-legal historical row where `provider_chain` is a
-  // non-array jsonb value (object, scalar, or json null) would make
-  // `jsonb_array_length(...)` raise `cannot get array length of a non-array`
-  // and crash the dashboard query.
-  //
-  // The `?` JSONB key-existence operator on the last line is correct under
-  // the `pg` driver Drizzle uses today (parameterized via `$N`). If we ever
-  // swap drivers (e.g. `postgres.js`) bare `?` may be reinterpreted as a
-  // positional placeholder; either change the driver or use
-  // `jsonb_exists(..., 'statusCode')` at that point.
-  return sql`(
-    ${messageRequest.statusCode} IS NOT NULL
-    OR ${messageRequest.blockedBy} IS NOT NULL
-    OR COALESCE(${messageRequest.errorMessage}, '') <> ''
-    OR (
-      CASE
-        WHEN ${messageRequest.providerChain} IS NULL THEN FALSE
-        WHEN jsonb_typeof(${messageRequest.providerChain}) <> 'array' THEN FALSE
-        WHEN jsonb_array_length(${messageRequest.providerChain}) = 0 THEN FALSE
-        WHEN jsonb_typeof(${messageRequest.providerChain} -> -1) <> 'object' THEN FALSE
-        ELSE (
-          (${messageRequest.providerChain} -> -1 ->> 'reason') IN (${FINALIZED_PROVIDER_CHAIN_REASONS_SQL})
-          OR (
-            (${messageRequest.providerChain} -> -1 ? 'statusCode')
-            AND jsonb_typeof(${messageRequest.providerChain} -> -1 -> 'statusCode') = 'number'
-          )
-          OR COALESCE(${messageRequest.providerChain} -> -1 ->> 'errorMessage', '') <> ''
-        )
-      END
-    )
-  )`;
+  return isNotNull(messageRequest.statusCode);
 }
 
 function assertValidDate(date: Date, fieldName: string): Date {
