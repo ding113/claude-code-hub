@@ -907,6 +907,66 @@ describe("AgentPool", () => {
       }
     });
 
+    it("同 cacheKey 退役旧代 release 后应回收替换 credit", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 1,
+      });
+
+      try {
+        const endpointParams = {
+          endpointUrl: "https://credit-reclaim.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        };
+
+        const original = await smallPool.getAgent(endpointParams);
+        const originalAgent = original.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const originalDestroy = vi.fn().mockResolvedValue(undefined);
+        originalAgent.destroy = originalDestroy;
+
+        smallPool.markUnhealthy(
+          original.cacheKey,
+          "replace active dispatcher",
+          original.dispatcherId
+        );
+
+        const replacement = await smallPool.getAgent(endpointParams);
+        expect(replacement.dispatcherId).not.toBe(original.dispatcherId);
+
+        smallPool.releaseAgent(original.cacheKey, original.dispatcherId);
+        expect(originalDestroy).toHaveBeenCalledTimes(1);
+
+        smallPool.releaseAgent(replacement.cacheKey, replacement.dispatcherId);
+        await smallPool.evictEndpoint("https://credit-reclaim.example.com");
+
+        const occupied = await smallPool.getAgent({
+          endpointUrl: "https://credit-occupied.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        await expect(smallPool.getAgent(endpointParams)).rejects.toThrow(
+          "AgentPool live dispatcher capacity exhausted"
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Live dispatcher capacity exhausted",
+          expect.objectContaining({
+            cacheKey: original.cacheKey,
+            replacementCapacityCredit: 0,
+          })
+        );
+
+        smallPool.releaseAgent(occupied.cacheKey, occupied.dispatcherId);
+      } finally {
+        warnSpy.mockRestore();
+        await smallPool.shutdown();
+      }
+    });
+
     it("should reject new dispatcher creation when all live capacity is active", async () => {
       const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
       const smallPool = new AgentPoolImpl({

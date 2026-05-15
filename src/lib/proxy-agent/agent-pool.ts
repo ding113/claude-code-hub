@@ -212,6 +212,7 @@ const MAX_RETIRED_AGENT_LIFETIME_MS = 6 * 60 * 60 * 1000;
 export class AgentPoolImpl implements AgentPool {
   private cache: Map<string, CachedAgent> = new Map();
   private retiredAgents: Map<string, RetiredAgent> = new Map();
+  private activeRetiredCountsByCacheKey: Map<string, number> = new Map();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private isShuttingDown = false;
   private config: AgentPoolConfig;
@@ -314,6 +315,8 @@ export class AgentPoolImpl implements AgentPool {
       }
     }
 
+    // 容量拒绝不计入 totalRequests/cacheMisses：调用方没有拿到 dispatcher，
+    // 这里保持“成功分配/复用”的命中率口径，避免背压噪声污染连接复用指标。
     this.ensureCapacityForNewAgent(cacheKey);
 
     // Cache miss - create new agent with race condition protection
@@ -406,6 +409,7 @@ export class AgentPoolImpl implements AgentPool {
 
       if (retired.activeRequests === 0) {
         this.retiredAgents.delete(dispatcherId);
+        this.decrementActiveRetiredCount(retired.cacheKey);
         void this.closeAgent(retired.agent, cacheKey);
       }
     }
@@ -568,6 +572,7 @@ export class AgentPoolImpl implements AgentPool {
 
     this.cache.clear();
     this.retiredAgents.clear();
+    this.activeRetiredCountsByCacheKey.clear();
     this.pendingCreations.clear();
     this.endpointEvictionEpochs.clear();
 
@@ -592,6 +597,8 @@ export class AgentPoolImpl implements AgentPool {
     }
 
     this.cache.delete(key);
+    // 统计口径是“从可复用 cache 驱逐的 dispatcher 代数”；
+    // active dispatcher 可能先进入 retired，稍后才真正关闭。
     this.stats.evictedAgents++;
     this.disposeCachedAgent(key, cached, retiredBy, retireReason);
     return true;
@@ -613,6 +620,7 @@ export class AgentPoolImpl implements AgentPool {
         retireReason,
       };
       this.retiredAgents.set(cached.id, retired);
+      this.incrementActiveRetiredCount(key);
       logger.debug("AgentPool: Retired active agent", {
         cacheKey: key,
         dispatcherId: cached.id,
@@ -645,6 +653,7 @@ export class AgentPoolImpl implements AgentPool {
       }
 
       this.retiredAgents.delete(dispatcherId);
+      this.decrementActiveRetiredCount(retired.cacheKey);
       void this.closeAgent(retired.agent, retired.cacheKey);
       cleaned++;
     }
@@ -712,12 +721,27 @@ export class AgentPoolImpl implements AgentPool {
   private getReplacementCapacityCredit(cacheKey: string): number {
     // 同 cacheKey 的退役活跃旧代原本占用的是这个逻辑槽位。允许最多 1 个替换 credit，
     // 让硬过期/unhealthy 后能重建当前可复用代；更多旧代仍计入容量，避免无限堆积。
-    for (const retired of this.retiredAgents.values()) {
-      if (retired.cacheKey === cacheKey && retired.activeRequests > 0) {
-        return 1;
-      }
+    return this.activeRetiredCountsByCacheKey.has(cacheKey) ? 1 : 0;
+  }
+
+  private incrementActiveRetiredCount(cacheKey: string): void {
+    this.activeRetiredCountsByCacheKey.set(
+      cacheKey,
+      (this.activeRetiredCountsByCacheKey.get(cacheKey) ?? 0) + 1
+    );
+  }
+
+  private decrementActiveRetiredCount(cacheKey: string): void {
+    const count = this.activeRetiredCountsByCacheKey.get(cacheKey);
+    if (!count) {
+      return;
     }
-    return 0;
+
+    if (count === 1) {
+      this.activeRetiredCountsByCacheKey.delete(cacheKey);
+    } else {
+      this.activeRetiredCountsByCacheKey.set(cacheKey, count - 1);
+    }
   }
 
   private getReservedDispatcherCount(replacementCacheKey?: string): number {
