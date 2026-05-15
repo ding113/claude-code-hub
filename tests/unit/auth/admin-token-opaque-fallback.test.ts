@@ -148,6 +148,18 @@ describe("admin token opaque-mode fallback", () => {
     expect(mockReadSession).not.toHaveBeenCalled();
   });
 
+  it("legacy mode + signed admin auth cookie -> auth fails without reading Redis", async () => {
+    const { createSignedAdminAuthToken, getSession } = await import("@/lib/auth");
+    const signedToken = await createSignedAdminAuthToken();
+    setSessionMode("legacy");
+    setAuthCookie(signedToken);
+
+    const session = await getSession();
+
+    expect(session).toBeNull();
+    expect(mockReadSession).not.toHaveBeenCalled();
+  });
+
   it("opaque mode + tampered signed admin auth cookie -> auth fails", async () => {
     const { createSignedAdminAuthToken, getSession } = await import("@/lib/auth");
     const signedToken = await createSignedAdminAuthToken();

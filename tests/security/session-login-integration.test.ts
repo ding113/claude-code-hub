@@ -261,6 +261,7 @@ describe("POST /api/auth/login session token mode integration", () => {
   it("opaque mode signs ADMIN_TOKEN login without requiring Redis session persistence", async () => {
     mockGetSessionTokenMode.mockReturnValue("opaque");
     mockValidateKey.mockResolvedValue(adminTokenSession);
+    // 防御性设置：如果实现错误地调用 createSession，本用例应立即失败。
     mockCreateSession.mockRejectedValue(new Error("redis unavailable"));
 
     const res = await POST(makeRequest({ key: "admin-token" }));

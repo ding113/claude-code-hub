@@ -38,6 +38,8 @@ OS_TYPE=""
 IMAGE_TAG="latest"
 BRANCH_NAME="main"
 APP_PORT="23000"
+AUTH_SESSION_TTL_SECONDS="604800"
+SESSION_TTL="300"
 UPDATE_MODE=false
 FORCE_NEW=false
 
@@ -418,6 +420,21 @@ load_existing_env() {
             APP_PORT="$existing_port"
         fi
     fi
+
+    # 读取会话 TTL，升级时保留用户已有配置
+    local existing_auth_session_ttl
+    existing_auth_session_ttl=$(grep '^AUTH_SESSION_TTL_SECONDS=' "$env_file" | head -1 | cut -d'=' -f2-)
+    if [[ -n "$existing_auth_session_ttl" ]]; then
+        AUTH_SESSION_TTL_SECONDS="$existing_auth_session_ttl"
+        log_info "Preserved existing auth session TTL"
+    fi
+
+    local existing_session_ttl
+    existing_session_ttl=$(grep '^SESSION_TTL=' "$env_file" | head -1 | cut -d'=' -f2-)
+    if [[ -n "$existing_session_ttl" ]]; then
+        SESSION_TTL="$existing_session_ttl"
+        log_info "Preserved existing proxy session TTL"
+    fi
 }
 
 create_deployment_dir() {
@@ -658,8 +675,8 @@ AUTO_MIGRATE=true
 ENABLE_RATE_LIMIT=true
 
 # Session Configuration
-AUTH_SESSION_TTL_SECONDS=604800
-SESSION_TTL=300
+AUTH_SESSION_TTL_SECONDS=${AUTH_SESSION_TTL_SECONDS}
+SESSION_TTL=${SESSION_TTL}
 STORE_SESSION_MESSAGES=false
 STORE_SESSION_RESPONSE_BODY=true
 

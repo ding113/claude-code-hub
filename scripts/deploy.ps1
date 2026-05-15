@@ -43,6 +43,8 @@ $script:DEPLOY_DIR = "C:\ProgramData\claude-code-hub"
 $script:IMAGE_TAG = "latest"
 $script:BRANCH_NAME = "main"
 $script:APP_PORT = "23000"
+$script:AUTH_SESSION_TTL_SECONDS = "604800"
+$script:SESSION_TTL = "300"
 $script:ENABLE_CADDY = $false
 $script:DOMAIN_ARG = ""
 $script:UPDATE_MODE = $false
@@ -333,6 +335,19 @@ function Import-ExistingEnv {
             $script:APP_PORT = ($portLine.Line -split '=', 2)[1]
         }
     }
+
+    # 读取会话 TTL，升级时保留用户已有配置
+    $authSessionTtlLine = Select-String -Path $envFile -Pattern '^AUTH_SESSION_TTL_SECONDS=' | Select-Object -First 1
+    if ($authSessionTtlLine) {
+        $script:AUTH_SESSION_TTL_SECONDS = ($authSessionTtlLine.Line -split '=', 2)[1]
+        Write-ColorOutput "Preserved existing auth session TTL" -Type Info
+    }
+
+    $sessionTtlLine = Select-String -Path $envFile -Pattern '^SESSION_TTL=' | Select-Object -First 1
+    if ($sessionTtlLine) {
+        $script:SESSION_TTL = ($sessionTtlLine.Line -split '=', 2)[1]
+        Write-ColorOutput "Preserved existing proxy session TTL" -Type Info
+    }
 }
 
 function New-DeploymentDirectory {
@@ -574,8 +589,8 @@ AUTO_MIGRATE=true
 ENABLE_RATE_LIMIT=true
 
 # Session Configuration
-AUTH_SESSION_TTL_SECONDS=604800
-SESSION_TTL=300
+AUTH_SESSION_TTL_SECONDS=$($script:AUTH_SESSION_TTL_SECONDS)
+SESSION_TTL=$($script:SESSION_TTL)
 STORE_SESSION_MESSAGES=false
 STORE_SESSION_RESPONSE_BODY=true
 

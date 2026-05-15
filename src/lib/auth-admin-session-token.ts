@@ -12,7 +12,6 @@ interface SignedAdminSessionPayload {
   typ: "admin-session";
   iat: number;
   exp: number;
-  fp: string;
   nonce: string;
 }
 
@@ -27,6 +26,8 @@ export interface VerifySignedAdminSessionTokenOptions {
   maxTtlSeconds: number;
   now?: number;
 }
+
+let cachedSigningKey: { adminToken: string; keyPromise: Promise<CryptoKey> } | null = null;
 
 function encodeBase64Url(value: string | Uint8Array): string {
   const bytes = typeof value === "string" ? textEncoder.encode(value) : value;
@@ -57,24 +58,25 @@ function decodeBase64UrlToString(value: string): string | null {
   }
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", textEncoder.encode(value));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
+function getSigningKey(adminToken: string): Promise<CryptoKey> {
+  if (cachedSigningKey?.adminToken === adminToken) {
+    return cachedSigningKey.keyPromise;
+  }
 
-async function getAdminTokenFingerprint(adminToken: string): Promise<string> {
-  return `sha256:${await sha256Hex(adminToken)}`;
-}
-
-async function signAdminSessionValue(value: string, adminToken: string): Promise<string> {
   const signingSecret = `cch-admin-session-token-v1:${adminToken}`;
-  const key = await globalThis.crypto.subtle.importKey(
+  const keyPromise = globalThis.crypto.subtle.importKey(
     "raw",
     textEncoder.encode(signingSecret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
+  cachedSigningKey = { adminToken, keyPromise };
+  return keyPromise;
+}
+
+async function signAdminSessionValue(value: string, adminToken: string): Promise<string> {
+  const key = await getSigningKey(adminToken);
   const signature = await globalThis.crypto.subtle.sign("HMAC", key, textEncoder.encode(value));
   return encodeBase64Url(new Uint8Array(signature));
 }
@@ -91,7 +93,6 @@ function parseSignedAdminSessionPayload(raw: string): SignedAdminSessionPayload 
     if (obj.typ !== "admin-session") return null;
     if (typeof obj.iat !== "number" || !Number.isFinite(obj.iat)) return null;
     if (typeof obj.exp !== "number" || !Number.isFinite(obj.exp)) return null;
-    if (typeof obj.fp !== "string" || !obj.fp.startsWith("sha256:")) return null;
     if (typeof obj.nonce !== "string" || obj.nonce.length === 0) return null;
 
     return {
@@ -99,7 +100,6 @@ function parseSignedAdminSessionPayload(raw: string): SignedAdminSessionPayload 
       typ: obj.typ,
       iat: obj.iat,
       exp: obj.exp,
-      fp: obj.fp,
       nonce: obj.nonce,
     };
   } catch {
@@ -130,7 +130,6 @@ export async function createSignedAdminSessionToken({
     typ: "admin-session",
     iat: now,
     exp: now + normalizedTtlSeconds * 1000,
-    fp: await getAdminTokenFingerprint(adminToken),
     nonce: globalThis.crypto.randomUUID(),
   };
 
@@ -181,6 +180,7 @@ export async function verifySignedAdminSessionToken(
     return false;
   }
 
+  // 降低 AUTH_SESSION_TTL_SECONDS 会立即收紧已签发 cookie 的最大窗口，这是有意的安全上限。
   if (payload.exp <= payload.iat || payload.exp - payload.iat > maxTtlMs) {
     return false;
   }
@@ -188,6 +188,5 @@ export async function verifySignedAdminSessionToken(
     return false;
   }
 
-  const currentFingerprint = await getAdminTokenFingerprint(adminToken);
-  return constantTimeEqual(payload.fp, currentFingerprint);
+  return true;
 }

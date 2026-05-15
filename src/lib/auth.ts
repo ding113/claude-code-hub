@@ -290,12 +290,12 @@ export async function validateAuthToken(
 ): Promise<AuthSession | null> {
   const mode = getSessionTokenMode();
 
-  const signedAdminSession = await validateSignedAdminSessionToken(token, options);
-  if (signedAdminSession) {
-    return signedAdminSession;
-  }
-
   if (mode !== "legacy") {
+    const signedAdminSession = await validateSignedAdminSessionToken(token, options);
+    if (signedAdminSession) {
+      return signedAdminSession;
+    }
+
     try {
       const sessionStore = await getSessionStore();
       const sessionData = await sessionStore.read(token);
