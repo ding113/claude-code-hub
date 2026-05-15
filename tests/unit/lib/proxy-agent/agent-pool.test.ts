@@ -1203,14 +1203,12 @@ describe("AgentPool", () => {
       const createPromise = new Promise<unknown>((resolve) => {
         resolveCreate = resolve;
       });
-      const privatePool = pool as unknown as {
-        createAgent: () => Promise<unknown>;
-      };
-      privatePool.createAgent = vi.fn().mockReturnValue(createPromise);
+      const createSpy = vi.spyOn(pool as any, "createAgent");
+      createSpy.mockImplementationOnce(() => createPromise);
 
       const getPromise = pool.getAgent(params);
       await Promise.resolve();
-      expect(privatePool.createAgent).toHaveBeenCalled();
+      expect(createSpy).toHaveBeenCalled();
 
       await pool.shutdown();
       expect(pool.getPoolStats().pendingCreations).toBe(0);
@@ -1222,6 +1220,7 @@ describe("AgentPool", () => {
       expect(lateAgent.close).not.toHaveBeenCalled();
       expect(pool.getPoolStats().cacheSize).toBe(0);
       expect(pool.getPoolStats().activeRequests).toBe(0);
+      createSpy.mockRestore();
     });
   });
 });
