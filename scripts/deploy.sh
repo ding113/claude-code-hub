@@ -244,27 +244,30 @@ select_branch() {
     echo -e "  ${GREEN}1)${NC} main   (Stable release - recommended for production)"
     echo -e "  ${YELLOW}2)${NC} dev    (Latest features - for testing)"
     echo ""
-    
-    local choice
+
+    local choice normalized
     while true; do
-        read -p "Enter your choice [1]: " choice
-        choice=${choice:-1}
-        
-        case $choice in
-            1)
+        read -r -p "Type 1 or 2 (or 'main'/'dev') and press Enter [default: 1]: " choice
+        # Trim whitespace, lowercase, then apply default — so whitespace-only input
+        # also falls back to "1" (the bare ${choice:-1} would not trigger on "   ").
+        normalized=$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        normalized=${normalized:-1}
+
+        case "$normalized" in
+            1|main)
                 IMAGE_TAG="latest"
                 BRANCH_NAME="main"
                 log_success "Selected branch: main (image tag: latest)"
                 break
                 ;;
-            2)
+            2|dev)
                 IMAGE_TAG="dev"
                 BRANCH_NAME="dev"
                 log_success "Selected branch: dev (image tag: dev)"
                 break
                 ;;
             *)
-                log_error "Invalid choice. Please enter 1 or 2."
+                log_error "Invalid choice. Type 1, 2, 'main', or 'dev' and press Enter."
                 ;;
         esac
     done
