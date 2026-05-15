@@ -4,6 +4,7 @@ import { defaultLocale, type Locale, locales } from "@/i18n/config";
 import {
   type AuthCredentialType,
   type AuthSession,
+  createSignedAdminAuthToken,
   getLoginRedirectTarget,
   getSessionTokenMode,
   setAuthCookie,
@@ -126,11 +127,15 @@ async function getLoginSessionStore() {
   return sessionStoreInstance;
 }
 
-async function createOpaqueSession(key: string, session: AuthSession) {
+async function createOpaqueSession(
+  key: string,
+  session: AuthSession,
+  credentialType = classifyLoginCredential(key, session)
+) {
   const store = await getLoginSessionStore();
   return store.create({
     keyFingerprint: await toKeyFingerprint(key),
-    credentialType: classifyLoginCredential(key, session),
+    credentialType,
     userId: session.user.id,
     userRole: session.user.role,
   });
@@ -274,11 +279,16 @@ export async function POST(request: NextRequest) {
         });
       }
     } else {
+      const credentialType = classifyLoginCredential(key, session);
       try {
-        const opaqueSession = await createOpaqueSession(key, session);
-        await setAuthCookie(opaqueSession.sessionId);
+        if (credentialType === "admin-token") {
+          await setAuthCookie(await createSignedAdminAuthToken());
+        } else {
+          const opaqueSession = await createOpaqueSession(key, session, credentialType);
+          await setAuthCookie(opaqueSession.sessionId);
+        }
       } catch (error) {
-        logger.error("Failed to create opaque session in opaque mode", {
+        logger.error("Failed to create auth session in opaque mode", {
           error: error instanceof Error ? error.message : String(error),
         });
         const serverError = t?.("serverError") ?? "Internal server error";

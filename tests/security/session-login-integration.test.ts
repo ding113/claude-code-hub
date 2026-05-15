@@ -6,6 +6,7 @@ const mockSetAuthCookie = vi.hoisted(() => vi.fn());
 const mockGetSessionTokenMode = vi.hoisted(() => vi.fn());
 const mockGetLoginRedirectTarget = vi.hoisted(() => vi.fn());
 const mockToKeyFingerprint = vi.hoisted(() => vi.fn());
+const mockCreateSignedAdminAuthToken = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
 const mockCreateSession = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
@@ -30,6 +31,7 @@ vi.mock("@/lib/auth", () => ({
   getSessionTokenMode: mockGetSessionTokenMode,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
   toKeyFingerprint: mockToKeyFingerprint,
+  createSignedAdminAuthToken: mockCreateSignedAdminAuthToken,
   withNoStoreHeaders: realWithNoStoreHeaders,
 }));
 
@@ -108,6 +110,7 @@ describe("POST /api/auth/login session token mode integration", () => {
     mockToKeyFingerprint.mockResolvedValue(
       "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
     );
+    mockCreateSignedAdminAuthToken.mockResolvedValue("cch_admin_session_v1.payload.signature");
     mockGetEnvConfig.mockReturnValue({ ADMIN_TOKEN: "admin-token", ENABLE_SECURE_COOKIES: false });
     mockCreateSession.mockResolvedValue({
       sessionId: "sid_opaque_session_123",
@@ -255,31 +258,19 @@ describe("POST /api/auth/login session token mode integration", () => {
     }
   });
 
-  it("opaque mode records admin-token credential provenance for ADMIN_TOKEN login", async () => {
+  it("opaque mode signs ADMIN_TOKEN login without requiring Redis session persistence", async () => {
     mockGetSessionTokenMode.mockReturnValue("opaque");
     mockValidateKey.mockResolvedValue(adminTokenSession);
-    mockCreateSession.mockResolvedValue({
-      sessionId: "sid_admin_token_session",
-      keyFingerprint: "sha256:abcdef",
-      userId: -1,
-      userRole: "admin",
-      createdAt: 100,
-      expiresAt: 200,
-    });
+    mockCreateSession.mockRejectedValue(new Error("redis unavailable"));
 
     const res = await POST(makeRequest({ key: "admin-token" }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
     expect(json.loginType).toBe("admin");
-    expect(mockCreateSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: -1,
-        userRole: "admin",
-        credentialType: "admin-token",
-      })
-    );
-    expect(mockSetAuthCookie).toHaveBeenCalledWith("sid_admin_token_session");
+    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(mockCreateSignedAdminAuthToken).toHaveBeenCalledTimes(1);
+    expect(mockSetAuthCookie).toHaveBeenCalledWith("cch_admin_session_v1.payload.signature");
   });
 
   it("opaque mode keeps browser-login capable admin keys as session credentials", async () => {

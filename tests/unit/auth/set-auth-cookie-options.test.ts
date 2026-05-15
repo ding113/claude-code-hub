@@ -73,11 +73,23 @@ describe("setAuthCookie options", () => {
       expect(options.sameSite).toBe("lax");
     });
 
-    it("always sets maxAge to 7 days (604800 seconds)", async () => {
+    it("sets maxAge to the default auth session TTL (604800 seconds)", async () => {
       await setAuthCookie("any-key");
 
       const [, , options] = mockCookieSet.mock.calls[0];
       expect(options.maxAge).toBe(604800);
+    });
+
+    it("sets maxAge from AUTH_SESSION_TTL_SECONDS when configured", async () => {
+      mockGetEnvConfig.mockReturnValue({
+        ENABLE_SECURE_COOKIES: true,
+        AUTH_SESSION_TTL_SECONDS: 86_400,
+      });
+
+      await setAuthCookie("any-key");
+
+      const [, , options] = mockCookieSet.mock.calls[0];
+      expect(options.maxAge).toBe(86_400);
     });
 
     it("always sets path to /", async () => {

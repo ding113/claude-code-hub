@@ -1,5 +1,10 @@
 import { cookies, headers } from "next/headers";
 import type { NextResponse } from "next/server";
+import {
+  createSignedAdminSessionToken,
+  verifySignedAdminSessionToken,
+} from "@/lib/auth-admin-session-token";
+import { DEFAULT_AUTH_SESSION_TTL_SECONDS } from "@/lib/auth-session-store";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
@@ -39,7 +44,7 @@ declare global {
 }
 
 export const AUTH_COOKIE_NAME = "auth-token";
-const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+const MIN_AUTH_SESSION_TTL_SECONDS = 1;
 
 export interface AuthSession {
   user: User;
@@ -51,6 +56,15 @@ export type SessionTokenKind = "legacy" | "opaque";
 
 export function getSessionTokenMode(): SessionTokenMode {
   return getEnvConfig().SESSION_TOKEN_MODE;
+}
+
+export function getAuthSessionTtlSeconds(): number {
+  const ttl = getEnvConfig().AUTH_SESSION_TTL_SECONDS;
+  if (!Number.isFinite(ttl) || typeof ttl !== "number" || ttl <= 0) {
+    return DEFAULT_AUTH_SESSION_TTL_SECONDS;
+  }
+
+  return Math.max(MIN_AUTH_SESSION_TTL_SECONDS, Math.floor(ttl));
 }
 
 // Session contract: opaque token is a random string, not the API key
@@ -255,7 +269,7 @@ export async function setAuthCookie(keyString: string) {
     httpOnly: true,
     secure: env.ENABLE_SECURE_COOKIES,
     sameSite: "lax",
-    maxAge: AUTH_COOKIE_MAX_AGE,
+    maxAge: getAuthSessionTtlSeconds(),
     path: "/",
   });
 }
@@ -275,6 +289,11 @@ export async function validateAuthToken(
   options?: { allowReadOnlyAccess?: boolean }
 ): Promise<AuthSession | null> {
   const mode = getSessionTokenMode();
+
+  const signedAdminSession = await validateSignedAdminSessionToken(token, options);
+  if (signedAdminSession) {
+    return signedAdminSession;
+  }
 
   if (mode !== "legacy") {
     try {
@@ -309,6 +328,42 @@ export async function validateAuthToken(
   }
 
   return null;
+}
+
+export async function createSignedAdminAuthToken(): Promise<string> {
+  const adminToken = config.auth.adminToken;
+  if (!adminToken) {
+    throw new Error("ADMIN_TOKEN is not configured");
+  }
+
+  return createSignedAdminSessionToken({
+    adminToken,
+    ttlSeconds: getAuthSessionTtlSeconds(),
+  });
+}
+
+export async function isSignedAdminAuthToken(token: string): Promise<boolean> {
+  const adminToken = config.auth.adminToken;
+  if (!adminToken) {
+    return false;
+  }
+
+  return verifySignedAdminSessionToken(token, {
+    adminToken,
+    maxTtlSeconds: getAuthSessionTtlSeconds(),
+  });
+}
+
+async function validateSignedAdminSessionToken(
+  token: string,
+  options?: { allowReadOnlyAccess?: boolean }
+): Promise<AuthSession | null> {
+  if (!(await isSignedAdminAuthToken(token))) {
+    return null;
+  }
+
+  const adminToken = config.auth.adminToken;
+  return adminToken ? validateKey(adminToken, options) : null;
 }
 
 export async function getSession(options?: {

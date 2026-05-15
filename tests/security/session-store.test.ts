@@ -11,6 +11,8 @@ const { getRedisClientMock, loggerMock } = vi.hoisted(() => ({
   },
 }));
 
+const ORIGINAL_AUTH_SESSION_TTL_SECONDS = process.env.AUTH_SESSION_TTL_SECONDS;
+
 vi.mock("@/lib/redis", () => ({
   getRedisClient: getRedisClientMock,
 }));
@@ -62,6 +64,12 @@ describe("RedisSessionStore", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    if (ORIGINAL_AUTH_SESSION_TTL_SECONDS === undefined) {
+      delete process.env.AUTH_SESSION_TTL_SECONDS;
+    } else {
+      process.env.AUTH_SESSION_TTL_SECONDS = ORIGINAL_AUTH_SESSION_TTL_SECONDS;
+    }
+    vi.resetModules();
   });
 
   it("create() returns session data with generated sessionId", async () => {
@@ -247,6 +255,25 @@ describe("RedisSessionStore", () => {
     const key = `cch:session:${created.sessionId}`;
     expect(redis.ttlByKey.get(key)).toBe(120);
     expect(created.expiresAt - created.createdAt).toBe(120_000);
+  });
+
+  it("create() uses AUTH_SESSION_TTL_SECONDS as the default TTL", async () => {
+    process.env.AUTH_SESSION_TTL_SECONDS = "3600";
+    vi.resetModules();
+    getRedisClientMock.mockReturnValue(redis);
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    const store = new RedisSessionStore();
+    const created = await store.create({
+      keyFingerprint: "fp-env-ttl",
+      credentialType: "user-api-key",
+      userId: 9,
+      userRole: "user",
+    });
+
+    const key = `cch:session:${created.sessionId}`;
+    expect(redis.ttlByKey.get(key)).toBe(3600);
+    expect(created.expiresAt - created.createdAt).toBe(3_600_000);
   });
 
   it("create() throws when Redis setex fails", async () => {

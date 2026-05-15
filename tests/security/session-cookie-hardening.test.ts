@@ -16,6 +16,7 @@ const mockCookieSet = vi.hoisted(() => vi.fn());
 const mockCookies = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
 const mockClearAuthCookie = vi.hoisted(() => vi.fn());
+const mockGetAuthCookie = vi.hoisted(() => vi.fn());
 
 const realWithNoStoreHeaders = vi.hoisted(() => {
   return <T extends InstanceType<typeof NextResponse>>(response: T): T => {
@@ -30,7 +31,10 @@ vi.mock("@/lib/auth", () => ({
   setAuthCookie: mockSetAuthCookie,
   getSessionTokenMode: mockGetSessionTokenMode,
   clearAuthCookie: mockClearAuthCookie,
+  getAuthCookie: mockGetAuthCookie,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
+  createSignedAdminAuthToken: vi.fn().mockResolvedValue("cch_admin_session_v1.payload.signature"),
+  detectSessionTokenKind: (token: string) => (token.startsWith("sid_") ? "opaque" : "legacy"),
   toKeyFingerprint: vi.fn().mockResolvedValue("sha256:mock"),
   withNoStoreHeaders: realWithNoStoreHeaders,
 }));
