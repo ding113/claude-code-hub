@@ -16,7 +16,7 @@ import { logger } from "@/lib/logger";
  * Agent Pool Configuration
  */
 export interface AgentPoolConfig {
-  /** Maximum total number of live dispatcher generations, including retired active agents (default: 100) */
+  /** 最大存活 dispatcher 代数，包含 cached、retired，以及正在创建中的容量预留（默认：100） */
   maxTotalAgents: number;
   /** Agent TTL in milliseconds (default: 300000 = 5 minutes) */
   agentTtlMs: number;
@@ -522,6 +522,7 @@ export class AgentPoolImpl implements AgentPool {
 
     this.cache.clear();
     this.retiredAgents.clear();
+    this.pendingCreations.clear();
 
     logger.info("AgentPool: Shutdown complete");
   }

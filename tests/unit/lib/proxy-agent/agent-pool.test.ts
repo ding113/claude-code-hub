@@ -1154,6 +1154,8 @@ describe("AgentPool", () => {
       expect(privatePool.createAgent).toHaveBeenCalled();
 
       await pool.shutdown();
+      expect(pool.getPoolStats().pendingCreations).toBe(0);
+
       resolveCreate(lateAgent);
 
       await expect(getPromise).rejects.toThrow("AgentPool is shutting down");
