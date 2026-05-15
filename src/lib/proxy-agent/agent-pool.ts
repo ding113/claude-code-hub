@@ -297,9 +297,10 @@ export class AgentPoolImpl implements AgentPool {
       return { ...result, isNew: false };
     }
 
+    this.ensureCapacityForNewAgent(cacheKey);
+
     // Cache miss - create new agent with race condition protection
     this.stats.cacheMisses++;
-    this.ensureCapacityForNewAgent(cacheKey);
 
     // Create the agent creation promise and store it
     const creationPromise = this.createAgentWithCache(params, cacheKey);

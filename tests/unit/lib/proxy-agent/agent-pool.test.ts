@@ -612,6 +612,7 @@ describe("AgentPool", () => {
           })
         ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
 
+        expect(smallPool.getPoolStats().cacheMisses).toBe(2);
         expect(warnSpy).toHaveBeenCalledWith(
           "AgentPool: Live dispatcher capacity exhausted",
           expect.objectContaining({
