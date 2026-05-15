@@ -220,25 +220,22 @@ function Select-Branch {
         }
         $normalized = $choice.Trim().ToLower()
 
-        switch ($normalized) {
-            { $_ -in "1", "main" } {
-                $script:IMAGE_TAG = "latest"
-                $script:BRANCH_NAME = "main"
-                Write-ColorOutput "Selected branch: main (image tag: latest)" -Type Success
-                break
-            }
-            { $_ -in "2", "dev" } {
-                $script:IMAGE_TAG = "dev"
-                $script:BRANCH_NAME = "dev"
-                Write-ColorOutput "Selected branch: dev (image tag: dev)" -Type Success
-                break
-            }
-            default {
-                Write-ColorOutput "Invalid choice. Type 1, 2, 'main', or 'dev' and press Enter." -Type Error
-                continue
-            }
+        # Use if/return rather than switch+break — in PowerShell `break` inside a
+        # switch exits the switch, not the surrounding while, so the loop control
+        # has to live at this scope.
+        if ($normalized -in "1", "main") {
+            $script:IMAGE_TAG = "latest"
+            $script:BRANCH_NAME = "main"
+            Write-ColorOutput "Selected branch: main (image tag: latest)" -Type Success
+            return
         }
-        break
+        if ($normalized -in "2", "dev") {
+            $script:IMAGE_TAG = "dev"
+            $script:BRANCH_NAME = "dev"
+            Write-ColorOutput "Selected branch: dev (image tag: dev)" -Type Success
+            return
+        }
+        Write-ColorOutput "Invalid choice. Type 1, 2, 'main', or 'dev' and press Enter." -Type Error
     }
 }
 

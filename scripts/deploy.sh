@@ -247,10 +247,11 @@ select_branch() {
 
     local choice normalized
     while true; do
-        read -p "Type 1 or 2 (or 'main'/'dev') and press Enter [default: 1]: " choice
-        choice=${choice:-1}
-        # Trim whitespace and lowercase
+        read -r -p "Type 1 or 2 (or 'main'/'dev') and press Enter [default: 1]: " choice
+        # Trim whitespace, lowercase, then apply default — so whitespace-only input
+        # also falls back to "1" (the bare ${choice:-1} would not trigger on "   ").
         normalized=$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        normalized=${normalized:-1}
 
         case "$normalized" in
             1|main)
