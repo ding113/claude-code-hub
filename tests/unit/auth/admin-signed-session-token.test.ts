@@ -112,7 +112,7 @@ describe("signed admin session token", () => {
     ).resolves.toBe(false);
   });
 
-  it("rejects tokens longer than the current configured TTL ceiling", async () => {
+  it("caps existing tokens by the current configured TTL from their issue time", async () => {
     const token = await createSignedAdminSessionToken({
       adminToken,
       ttlSeconds: 604_800,
@@ -123,7 +123,15 @@ describe("signed admin session token", () => {
       verifySignedAdminSessionToken(token, {
         adminToken,
         maxTtlSeconds: 300,
-        now: now + 1000,
+        now: now + 299_000,
+      })
+    ).resolves.toBe(true);
+
+    await expect(
+      verifySignedAdminSessionToken(token, {
+        adminToken,
+        maxTtlSeconds: 300,
+        now: now + 300_001,
       })
     ).resolves.toBe(false);
   });

@@ -180,11 +180,13 @@ export async function verifySignedAdminSessionToken(
     return false;
   }
 
-  // 降低 AUTH_SESSION_TTL_SECONDS 会立即收紧已签发 cookie 的最大窗口，这是有意的安全上限。
-  if (payload.exp <= payload.iat || payload.exp - payload.iat > maxTtlMs) {
+  if (payload.exp <= payload.iat) {
     return false;
   }
-  if (payload.iat > now + CLOCK_SKEW_MS || payload.exp <= now) {
+
+  // 当前 TTL 是签发时间起算的有效期上限；降低配置会收紧旧 cookie 的剩余寿命，但不会立即踢掉仍在新窗口内的会话。
+  const effectiveExpiresAt = Math.min(payload.exp, payload.iat + maxTtlMs);
+  if (payload.iat > now + CLOCK_SKEW_MS || effectiveExpiresAt <= now) {
     return false;
   }
 
