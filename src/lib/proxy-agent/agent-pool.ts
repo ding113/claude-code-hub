@@ -251,7 +251,6 @@ export class AgentPoolImpl implements AgentPool {
     }
 
     const cacheKey = generateAgentCacheKey(params);
-    this.stats.totalRequests++;
 
     // Try to get from cache
     const now = Date.now();
@@ -261,6 +260,7 @@ export class AgentPoolImpl implements AgentPool {
       cached.lastUsedAt = now;
       cached.requestCount++;
       cached.activeRequests++;
+      this.stats.totalRequests++;
       this.stats.cacheHits++;
       return { agent: cached.agent, isNew: false, cacheKey, dispatcherId: cached.id };
     }
@@ -296,6 +296,7 @@ export class AgentPoolImpl implements AgentPool {
       }
       // Count as cache hit - we're reusing the pending result, not creating a new agent
       // Note: Don't decrement cacheMisses here since we never incremented it for this request
+      this.stats.totalRequests++;
       this.stats.cacheHits++;
       return { ...result, isNew: false };
     }
@@ -303,6 +304,7 @@ export class AgentPoolImpl implements AgentPool {
     this.ensureCapacityForNewAgent(cacheKey);
 
     // Cache miss - create new agent with race condition protection
+    this.stats.totalRequests++;
     this.stats.cacheMisses++;
 
     // Create the agent creation promise and store it
