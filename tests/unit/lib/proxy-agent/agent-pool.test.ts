@@ -1315,6 +1315,96 @@ describe("AgentPool", () => {
       }
     });
 
+    it("should not count failed creations as cache misses", async () => {
+      const createSpy = vi.spyOn(pool as any, "createAgent");
+      createSpy.mockRejectedValueOnce(new Error("create failed"));
+
+      try {
+        await expect(
+          pool.getAgent({
+            endpointUrl: "https://create-fails.example.com/v1",
+            proxyUrl: null,
+            enableHttp2: false,
+          })
+        ).rejects.toThrow("create failed");
+
+        expect(pool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            cacheMisses: 0,
+            pendingCreations: 0,
+            totalRequests: 0,
+          })
+        );
+      } finally {
+        createSpy.mockRestore();
+      }
+    });
+
+    it("stale pending creation after endpoint eviction should not reserve capacity", async () => {
+      vi.useRealTimers();
+      const concurrentPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 1,
+      });
+
+      const lateAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      const freshAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      let resolveCreate!: (agent: unknown) => void;
+      const createPromise = new Promise<unknown>((resolve) => {
+        resolveCreate = resolve;
+      });
+      const createSpy = vi.spyOn(concurrentPool as any, "createAgent");
+      createSpy.mockImplementationOnce(() => createPromise);
+      let staleGetPromise: Promise<unknown> | null = null;
+
+      try {
+        staleGetPromise = concurrentPool.getAgent({
+          endpointUrl: "https://stale-pending.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        await Promise.resolve();
+        expect(createSpy).toHaveBeenCalledTimes(1);
+
+        await concurrentPool.evictEndpoint("https://stale-pending.example.com");
+
+        createSpy.mockResolvedValueOnce(freshAgent);
+        const freshResult = await concurrentPool.getAgent({
+          endpointUrl: "https://fresh-after-eviction.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        expect(freshResult.agent).toBe(freshAgent);
+        expect(concurrentPool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            cacheSize: 1,
+            pendingCreations: 0,
+          })
+        );
+
+        resolveCreate(lateAgent);
+        await expect(staleGetPromise).rejects.toThrow(
+          "AgentPool endpoint was evicted during creation"
+        );
+        expect(lateAgent.destroy).toHaveBeenCalledTimes(1);
+
+        concurrentPool.releaseAgent(freshResult.cacheKey, freshResult.dispatcherId);
+      } finally {
+        resolveCreate(lateAgent);
+        await staleGetPromise?.catch(() => undefined);
+        createSpy.mockRestore();
+        await concurrentPool.shutdown();
+        vi.useFakeTimers();
+      }
+    });
+
     it("should release stale dispatcher generation without decrementing the current dispatcher", async () => {
       // 回归用例：cacheKey 相同但 dispatcher 已被重建时，旧 release 只应释放旧代 dispatcher
       const regenPool = new AgentPoolImpl({

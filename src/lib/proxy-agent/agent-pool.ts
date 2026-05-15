@@ -324,10 +324,6 @@ export class AgentPoolImpl implements AgentPool {
     // 这里保持“成功分配/复用”的命中率口径，避免背压噪声污染连接复用指标。
     this.ensureCapacityForNewAgent(cacheKey);
 
-    // Cache miss - create new agent with race condition protection
-    this.stats.totalRequests++;
-    this.stats.cacheMisses++;
-
     // Create the agent creation promise and store it
     const endpointKey = new URL(params.endpointUrl).origin;
     const startedAtEvictionSequence = this.endpointEvictionSequence;
@@ -344,7 +340,10 @@ export class AgentPoolImpl implements AgentPool {
     });
 
     try {
-      return await creationPromise;
+      const result = await creationPromise;
+      this.stats.totalRequests++;
+      this.stats.cacheMisses++;
+      return result;
     } finally {
       // Clean up pending creation
       if (this.pendingCreations.get(cacheKey)?.promise === creationPromise) {
@@ -477,6 +476,12 @@ export class AgentPoolImpl implements AgentPool {
     for (const key of keysToEvict) {
       this.evictByKey(key, "endpoint", "endpoint eviction");
     }
+
+    for (const [key, pending] of this.pendingCreations.entries()) {
+      if (pending.endpointKey === endpointKey) {
+        this.pendingCreations.delete(key);
+      }
+    }
   }
 
   private isPendingCreationCurrent(pending: PendingAgentCreation): boolean {
@@ -505,7 +510,7 @@ export class AgentPoolImpl implements AgentPool {
       cacheSize: this.cache.size,
       retiredAgents: this.retiredAgents.size,
       liveAgents: this.getLiveDispatcherCount(),
-      pendingCreations: this.pendingCreations.size,
+      pendingCreations: this.getPendingCreationReservationCount(),
       totalRequests: this.stats.totalRequests,
       cacheHits: this.stats.cacheHits,
       cacheMisses: this.stats.cacheMisses,
@@ -761,7 +766,10 @@ export class AgentPoolImpl implements AgentPool {
 
   private getReservedDispatcherCount(replacementCacheKey?: string): number {
     let reserved = this.getLiveDispatcherCount();
-    for (const cacheKey of this.pendingCreations.keys()) {
+    for (const [cacheKey, pending] of this.pendingCreations.entries()) {
+      if (!this.isPendingCreationCurrent(pending)) {
+        continue;
+      }
       // 创建完成到 finally 删除 pending 之间，cache 里已经有同 key dispatcher，
       // 此时不要把 pending 和 cache 重复计数。
       if (!this.cache.has(cacheKey)) {
@@ -772,6 +780,16 @@ export class AgentPoolImpl implements AgentPool {
       reserved -= this.getReplacementCapacityCredit(replacementCacheKey);
     }
     return Math.max(0, reserved);
+  }
+
+  private getPendingCreationReservationCount(): number {
+    let reservedPendingCreations = 0;
+    for (const [cacheKey, pending] of this.pendingCreations.entries()) {
+      if (this.isPendingCreationCurrent(pending) && !this.cache.has(cacheKey)) {
+        reservedPendingCreations++;
+      }
+    }
+    return reservedPendingCreations;
   }
 
   private ensureCapacityForNewAgent(cacheKey: string): void {

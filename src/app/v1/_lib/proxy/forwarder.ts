@@ -3241,6 +3241,18 @@ export class ProxyForwarder {
             cacheKey: http2CacheKey,
             dispatcherId: http2DispatcherId,
           });
+        } else if (http2CacheKey) {
+          logger.warn(
+            "ProxyForwarder: HTTP/2 protocol error detected but dispatcherId is missing",
+            {
+              providerId: provider.id,
+              providerName: provider.name,
+              cacheKey: http2CacheKey,
+              connectionType: proxyConfig ? "proxy" : "direct",
+              errorMessage: err.message || "(empty message)",
+              errorCode: err.code || "N/A",
+            }
+          );
         }
 
         // 如果使用了代理，创建不支持 HTTP/2 的代理 Agent
