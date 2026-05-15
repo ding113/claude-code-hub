@@ -351,7 +351,7 @@ export class AgentPoolImpl implements AgentPool {
     this.cache.set(cacheKey, newCached);
 
     // Enforce max size (LRU eviction)
-    this.enforceMaxSize();
+    this.enforceMaxSize(cacheKey);
 
     return { agent, isNew: true, cacheKey, dispatcherId };
   }
@@ -729,32 +729,41 @@ export class AgentPoolImpl implements AgentPool {
       return;
     }
 
-    this.evictIdleCachedAgentsUntilBelowLimit();
+    this.evictIdleCachedAgentsUntilBelowLimit(cacheKey);
   }
 
-  private enforceMaxSize(): void {
-    if (this.getReservedDispatcherCount() <= this.config.maxTotalAgents) {
+  private enforceMaxSize(replacementCacheKey?: string): void {
+    if (this.getReservedDispatcherCount(replacementCacheKey) <= this.config.maxTotalAgents) {
       return;
     }
 
     this.cleanupRetiredAgents(Date.now());
 
-    if (this.getReservedDispatcherCount() <= this.config.maxTotalAgents) {
+    if (this.getReservedDispatcherCount(replacementCacheKey) <= this.config.maxTotalAgents) {
       return;
     }
 
-    this.evictIdleCachedAgentsUntilAtLimit();
+    this.evictIdleCachedAgentsUntilAtLimit(replacementCacheKey);
   }
 
-  private evictIdleCachedAgentsUntilBelowLimit(): void {
-    this.evictIdleCachedAgents((reserved) => reserved < this.config.maxTotalAgents);
+  private evictIdleCachedAgentsUntilBelowLimit(replacementCacheKey?: string): void {
+    this.evictIdleCachedAgents(
+      (reserved) => reserved < this.config.maxTotalAgents,
+      replacementCacheKey
+    );
   }
 
-  private evictIdleCachedAgentsUntilAtLimit(): void {
-    this.evictIdleCachedAgents((reserved) => reserved <= this.config.maxTotalAgents);
+  private evictIdleCachedAgentsUntilAtLimit(replacementCacheKey?: string): void {
+    this.evictIdleCachedAgents(
+      (reserved) => reserved <= this.config.maxTotalAgents,
+      replacementCacheKey
+    );
   }
 
-  private evictIdleCachedAgents(isWithinLimit: (reserved: number) => boolean): void {
+  private evictIdleCachedAgents(
+    isWithinLimit: (reserved: number) => boolean,
+    replacementCacheKey?: string
+  ): void {
     const now = Date.now();
 
     // LRU 只回收空闲 dispatcher。活跃 dispatcher 已经代表真实在途请求；
@@ -769,7 +778,7 @@ export class AgentPoolImpl implements AgentPool {
       });
 
     for (const [key] of idleEntries) {
-      if (isWithinLimit(this.getReservedDispatcherCount())) {
+      if (isWithinLimit(this.getReservedDispatcherCount(replacementCacheKey))) {
         break;
       }
       this.evictByKey(key, "lru", "max live dispatcher capacity exceeded");

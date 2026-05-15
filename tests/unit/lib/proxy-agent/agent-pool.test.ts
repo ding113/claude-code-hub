@@ -725,6 +725,87 @@ describe("AgentPool", () => {
       }
     });
 
+    it("同 cacheKey 替换 credit 回收容量时不应额外淘汰空闲 dispatcher", async () => {
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 3,
+        cleanupIntervalMs: 3 * 60 * 60 * 1000,
+      });
+
+      try {
+        const original = await smallPool.getAgent({
+          endpointUrl: "https://credit-replacement.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        const idleOld = await smallPool.getAgent({
+          endpointUrl: "https://idle-old.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const idleOldAgent = idleOld.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const idleOldDestroy = vi.fn().mockResolvedValue(undefined);
+        idleOldAgent.destroy = idleOldDestroy;
+        smallPool.releaseAgent(idleOld.cacheKey, idleOld.dispatcherId);
+
+        vi.advanceTimersByTime(100);
+
+        const idleKeep = await smallPool.getAgent({
+          endpointUrl: "https://idle-keep.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const idleKeepAgent = idleKeep.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const idleKeepDestroy = vi.fn().mockResolvedValue(undefined);
+        idleKeepAgent.destroy = idleKeepDestroy;
+        smallPool.releaseAgent(idleKeep.cacheKey, idleKeep.dispatcherId);
+
+        vi.advanceTimersByTime(31 * 60 * 1000);
+
+        const replacement1 = await smallPool.getAgent({
+          endpointUrl: "https://credit-replacement.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        expect(replacement1.dispatcherId).not.toBe(original.dispatcherId);
+        expect(idleOldDestroy).not.toHaveBeenCalled();
+        expect(idleKeepDestroy).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(31 * 60 * 1000);
+
+        const replacement2 = await smallPool.getAgent({
+          endpointUrl: "https://credit-replacement.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        expect(replacement2.dispatcherId).not.toBe(replacement1.dispatcherId);
+        expect(idleOldDestroy).toHaveBeenCalledTimes(1);
+        expect(idleKeepDestroy).not.toHaveBeenCalled();
+        expect(smallPool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            activeRequests: 3,
+            cacheSize: 2,
+            liveAgents: 4,
+            retiredAgents: 2,
+          })
+        );
+
+        smallPool.releaseAgent(original.cacheKey, original.dispatcherId);
+        smallPool.releaseAgent(replacement1.cacheKey, replacement1.dispatcherId);
+        smallPool.releaseAgent(replacement2.cacheKey, replacement2.dispatcherId);
+        expect(smallPool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        await smallPool.shutdown();
+      }
+    });
+
     it("should reject new dispatcher creation when all live capacity is active", async () => {
       const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
       const smallPool = new AgentPoolImpl({
