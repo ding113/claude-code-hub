@@ -227,7 +227,7 @@ describe("AgentPool", () => {
       };
 
       const result1 = await pool.getAgent(params);
-      pool.markUnhealthy(result1.cacheKey, "SSL certificate error");
+      pool.markUnhealthy(result1.cacheKey, "SSL certificate error", result1.dispatcherId);
 
       const result2 = await pool.getAgent(params);
 
@@ -368,7 +368,7 @@ describe("AgentPool", () => {
       };
 
       const result = await pool.getAgent(params);
-      pool.markUnhealthy(result.cacheKey, "SSL certificate error");
+      pool.markUnhealthy(result.cacheKey, "SSL certificate error", result.dispatcherId);
 
       const stats = pool.getPoolStats();
       expect(stats.unhealthyAgents).toBe(1);
@@ -832,6 +832,40 @@ describe("AgentPool", () => {
       await pool2.shutdown();
     });
 
+    it("should force-close retired agents stuck active for more than 6 hours", async () => {
+      const pool2 = new AgentPoolImpl({
+        ...defaultConfig,
+        cleanupIntervalMs: 60 * 60 * 1000,
+      });
+
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      const r1 = await pool2.getAgent(params);
+      const agent1 = r1.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const destroy1 = vi.fn().mockResolvedValue(undefined);
+      agent1.destroy = destroy1;
+
+      pool2.markUnhealthy(r1.cacheKey, "stuck retired stream", r1.dispatcherId);
+      expect(pool2.getPoolStats().cacheSize).toBe(0);
+      expect(pool2.getPoolStats().activeRequests).toBe(1);
+      expect(destroy1).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(6 * 60 * 60 * 1000 + 1);
+
+      const cleaned = await pool2.cleanup();
+      expect(cleaned).toBe(1);
+      expect(pool2.getPoolStats().activeRequests).toBe(0);
+      expect(destroy1).toHaveBeenCalledTimes(1);
+
+      await pool2.shutdown();
+    });
+
     it("should be a no-op when releasing non-existent key", () => {
       // Should not throw
       pool.releaseAgent("nonexistent-key", "disp-1");
@@ -984,6 +1018,39 @@ describe("AgentPool", () => {
       if (typeof agent.close === "function") {
         expect(agent.close).not.toHaveBeenCalled();
       }
+    });
+
+    it("should close a dispatcher created after shutdown starts instead of caching it", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+      const lateAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      let resolveCreate!: (agent: unknown) => void;
+      const createPromise = new Promise<unknown>((resolve) => {
+        resolveCreate = resolve;
+      });
+      const privatePool = pool as unknown as {
+        createAgent: () => Promise<unknown>;
+      };
+      privatePool.createAgent = vi.fn().mockReturnValue(createPromise);
+
+      const getPromise = pool.getAgent(params);
+      await Promise.resolve();
+      expect(privatePool.createAgent).toHaveBeenCalled();
+
+      await pool.shutdown();
+      resolveCreate(lateAgent);
+
+      await expect(getPromise).rejects.toThrow("AgentPool is shutting down");
+      expect(lateAgent.destroy).toHaveBeenCalledTimes(1);
+      expect(lateAgent.close).not.toHaveBeenCalled();
+      expect(pool.getPoolStats().cacheSize).toBe(0);
+      expect(pool.getPoolStats().activeRequests).toBe(0);
     });
   });
 });

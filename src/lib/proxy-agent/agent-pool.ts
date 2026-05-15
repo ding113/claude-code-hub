@@ -114,9 +114,13 @@ export interface AgentPool {
   releaseAgent(cacheKey: string, dispatcherId: string): void;
 
   /**
-   * Mark an Agent as unhealthy (will be replaced on next getAgent call)
+   * Mark one dispatcher generation as unhealthy.
+   *
+   * 空闲 dispatcher 会立即关闭；仍有在途请求的 dispatcher 会被退役，
+   * 等对应请求全部 release 后再关闭。dispatcherId 必须来自 getAgent()
+   * 返回值，避免旧请求迟到错误误伤同 cacheKey 的新 dispatcher。
    */
-  markUnhealthy(cacheKey: string, reason: string, dispatcherId?: string): void;
+  markUnhealthy(cacheKey: string, reason: string, dispatcherId: string): void;
 
   /**
    * Evict all Agents for a specific endpoint
@@ -194,6 +198,7 @@ export class AgentPoolImpl implements AgentPool {
   private cache: Map<string, CachedAgent> = new Map();
   private retiredAgents: Map<string, RetiredAgent> = new Map();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private isShuttingDown = false;
   private config: AgentPoolConfig;
   private stats = {
     totalRequests: 0,
@@ -232,14 +237,19 @@ export class AgentPoolImpl implements AgentPool {
   }
 
   async getAgent(params: GetAgentParams): Promise<GetAgentResult> {
+    if (this.isShuttingDown) {
+      throw new Error("AgentPool is shutting down");
+    }
+
     const cacheKey = generateAgentCacheKey(params);
     this.stats.totalRequests++;
 
     // Try to get from cache
+    const now = Date.now();
     const cached = this.cache.get(cacheKey);
-    const expirationReason = cached ? this.getExpirationReason(cached) : null;
+    const expirationReason = cached ? this.getExpirationReason(cached, now) : null;
     if (cached?.healthy && !expirationReason) {
-      cached.lastUsedAt = Date.now();
+      cached.lastUsedAt = now;
       cached.requestCount++;
       cached.activeRequests++;
       this.stats.cacheHits++;
@@ -247,11 +257,14 @@ export class AgentPoolImpl implements AgentPool {
     }
 
     if (cached) {
-      this.evictByKey(
-        cacheKey,
-        cached.healthy ? (expirationReason ?? "expired") : "unhealthy",
-        cached.healthy ? (expirationReason ?? "expired") : "unhealthy"
-      );
+      const retiredBy: AgentRetirementReason = cached.healthy ? "expired" : "unhealthy";
+      const retireReason =
+        retiredBy === "expired" && now - cached.createdAt > MAX_AGENT_LIFETIME_MS
+          ? "hard lifetime exceeded before reuse"
+          : retiredBy === "expired"
+            ? "ttl expired before reuse"
+            : "unhealthy before reuse";
+      this.evictByKey(cacheKey, retiredBy, retireReason);
     }
 
     // Check if there's a pending creation for this key (race condition prevention)
@@ -305,6 +318,11 @@ export class AgentPoolImpl implements AgentPool {
   ): Promise<GetAgentResult> {
     // Create new agent
     const agent = await this.createAgent(params);
+    if (this.isShuttingDown) {
+      void this.closeAgent(agent, cacheKey);
+      throw new Error("AgentPool is shutting down");
+    }
+
     const url = new URL(params.endpointUrl);
     const dispatcherId = `disp-${++this.dispatcherIdCounter}`;
 
@@ -350,9 +368,9 @@ export class AgentPoolImpl implements AgentPool {
     }
   }
 
-  markUnhealthy(cacheKey: string, reason: string, dispatcherId?: string): void {
+  markUnhealthy(cacheKey: string, reason: string, dispatcherId: string): void {
     const cached = this.cache.get(cacheKey);
-    if (cached && (!dispatcherId || cached.id === dispatcherId)) {
+    if (cached && cached.id === dispatcherId) {
       cached.healthy = false;
       this.evictByKey(cacheKey, "unhealthy", reason);
       logger.warn("AgentPool: Agent marked as unhealthy", {
@@ -363,24 +381,22 @@ export class AgentPoolImpl implements AgentPool {
       return;
     }
 
-    if (dispatcherId) {
-      const retired = this.retiredAgents.get(dispatcherId);
-      if (retired && retired.cacheKey === cacheKey) {
-        retired.healthy = false;
-        retired.retiredBy = "unhealthy";
-        retired.retireReason = reason;
-        logger.warn("AgentPool: Retired agent marked as unhealthy", {
-          cacheKey,
-          dispatcherId,
-          reason,
-        });
-        return;
-      }
+    const retired = this.retiredAgents.get(dispatcherId);
+    if (retired && retired.cacheKey === cacheKey) {
+      retired.healthy = false;
+      retired.retiredBy = "unhealthy";
+      retired.retireReason = reason;
+      logger.warn("AgentPool: Retired agent marked as unhealthy", {
+        cacheKey,
+        dispatcherId,
+        reason,
+      });
+      return;
     }
 
     logger.debug("AgentPool: Ignored stale unhealthy mark", {
       cacheKey,
-      dispatcherId: dispatcherId ?? null,
+      dispatcherId,
       currentDispatcherId: cached?.id ?? null,
       reason,
     });
@@ -437,18 +453,21 @@ export class AgentPoolImpl implements AgentPool {
       }
     }
 
-    let cleaned = 0;
+    let cleanedFromCache = 0;
     for (const key of keysToCleanup) {
       if (this.evictByKey(key, "expired", "ttl cleanup")) {
-        cleaned++;
+        cleanedFromCache++;
       }
     }
 
-    cleaned += this.cleanupRetiredAgents(now);
+    const cleanedFromRetired = this.cleanupRetiredAgents(now);
+    const cleaned = cleanedFromCache + cleanedFromRetired;
 
-    if (keysToCleanup.length > 0) {
+    if (cleaned > 0) {
       logger.debug("AgentPool: Cleaned up expired agents", {
-        count: keysToCleanup.length,
+        fromCache: cleanedFromCache,
+        fromRetired: cleanedFromRetired,
+        total: cleaned,
       });
     }
 
@@ -456,6 +475,8 @@ export class AgentPoolImpl implements AgentPool {
   }
 
   async shutdown(): Promise<void> {
+    this.isShuttingDown = true;
+
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
