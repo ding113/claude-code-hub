@@ -16,7 +16,10 @@ import { logger } from "@/lib/logger";
  * Agent Pool Configuration
  */
 export interface AgentPoolConfig {
-  /** Maximum total number of cached agents (default: 100) */
+  /**
+   * 最大 dispatcher 容量，通常包含 cached、retired，以及正在创建中的容量预留（默认：100）。
+   * 同 cacheKey 退役中的活跃旧代可提供 1 个替换 credit，避免满载时硬过期/unhealthy 后无法重建。
+   */
   maxTotalAgents: number;
   /** Agent TTL in milliseconds (default: 300000 = 5 minutes) */
   agentTtlMs: number;
@@ -48,18 +51,39 @@ interface CachedAgent {
   activeRequests: number;
 }
 
+type AgentRetirementReason = "unhealthy" | "expired" | "lru" | "endpoint";
+
+interface RetiredAgent extends CachedAgent {
+  cacheKey: string;
+  retiredAt: number;
+  retiredBy: AgentRetirementReason;
+  retireReason: string;
+}
+
+interface PendingAgentCreation {
+  promise: Promise<GetAgentResult>;
+  endpointKey: string;
+  startedAtEvictionSequence: number;
+}
+
 /**
  * Agent Pool Statistics
  */
 export interface AgentPoolStats {
   cacheSize: number;
+  /** Retired dispatcher generations still waiting for in-flight requests to finish */
+  retiredAgents: number;
+  /** Total live dispatcher generations: cached + retired */
+  liveAgents: number;
+  /** Pending dispatcher creations that have reserved capacity */
+  pendingCreations: number;
   totalRequests: number;
   cacheHits: number;
   cacheMisses: number;
   hitRate: number;
   unhealthyAgents: number;
   evictedAgents: number;
-  /** Total in-flight requests across all cached agents */
+  /** Total in-flight requests across cached and retired agents */
   activeRequests: number;
 }
 
@@ -105,7 +129,16 @@ export interface AgentPool {
   releaseAgent(cacheKey: string, dispatcherId: string): void;
 
   /**
-   * Mark an Agent as unhealthy (will be replaced on next getAgent call)
+   * Mark one dispatcher generation as unhealthy.
+   *
+   * 空闲 dispatcher 会立即关闭；仍有在途请求的 dispatcher 会被退役，
+   * 等对应请求全部 release 后再关闭。dispatcherId 必须来自 getAgent()
+   * 返回值，避免旧请求迟到错误误伤同 cacheKey 的新 dispatcher。
+   */
+  markUnhealthy(cacheKey: string, reason: string, dispatcherId: string): void;
+  /**
+   * @deprecated 保留旧签名仅用于源码兼容。缺少 dispatcherId 时会记录 warn 并安全忽略，
+   * 不再回退到 cacheKey 级别驱逐，避免旧请求误伤新 dispatcher 代际。
    */
   markUnhealthy(cacheKey: string, reason: string): void;
 
@@ -175,13 +208,18 @@ const DEFAULT_CONFIG: AgentPoolConfig = {
   cleanupIntervalMs: 30000, // 30 seconds
 };
 
+const MAX_AGENT_LIFETIME_MS = 30 * 60 * 1000;
+const MAX_RETIRED_AGENT_LIFETIME_MS = 6 * 60 * 60 * 1000;
+
 /**
  * Agent Pool Implementation
  */
 export class AgentPoolImpl implements AgentPool {
   private cache: Map<string, CachedAgent> = new Map();
-  private unhealthyKeys: Set<string> = new Set();
+  private retiredAgents: Map<string, RetiredAgent> = new Map();
+  private activeRetiredCountsByCacheKey: Map<string, number> = new Map();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private isShuttingDown = false;
   private config: AgentPoolConfig;
   private stats = {
     totalRequests: 0,
@@ -190,9 +228,12 @@ export class AgentPoolImpl implements AgentPool {
     evictedAgents: 0,
   };
   /** Pending agent creation promises to prevent race conditions */
-  private pendingCreations: Map<string, Promise<GetAgentResult>> = new Map();
+  private pendingCreations: Map<string, PendingAgentCreation> = new Map();
   /** Monotonic counter for generating unique dispatcher ids per creation */
   private dispatcherIdCounter = 0;
+  /** 端点驱逐版本，用来拒绝驱逐期间才完成的 dispatcher 创建。 */
+  private endpointEvictionEpochs: Map<string, number> = new Map();
+  private endpointEvictionSequence = 0;
   /**
    * Pending destroy/close promises (best-effort).
    *
@@ -220,57 +261,94 @@ export class AgentPoolImpl implements AgentPool {
   }
 
   async getAgent(params: GetAgentParams): Promise<GetAgentResult> {
-    const cacheKey = generateAgentCacheKey(params);
-    this.stats.totalRequests++;
-
-    // Check if marked as unhealthy
-    if (this.unhealthyKeys.has(cacheKey)) {
-      this.unhealthyKeys.delete(cacheKey);
-      await this.evictByKey(cacheKey);
+    if (this.isShuttingDown) {
+      throw new Error("AgentPool is shutting down");
     }
 
+    const cacheKey = generateAgentCacheKey(params);
+
     // Try to get from cache
+    const now = Date.now();
     const cached = this.cache.get(cacheKey);
-    if (cached && !this.isExpired(cached)) {
-      cached.lastUsedAt = Date.now();
+    const expirationReason = cached ? this.getExpirationReason(cached, now) : null;
+    if (cached?.healthy && !expirationReason) {
+      cached.lastUsedAt = now;
       cached.requestCount++;
       cached.activeRequests++;
+      this.stats.totalRequests++;
       this.stats.cacheHits++;
       return { agent: cached.agent, isNew: false, cacheKey, dispatcherId: cached.id };
+    }
+
+    if (cached) {
+      // markUnhealthy 会同步驱逐当前 cache entry，因此这里的 cached entry 只会是已过期的健康实例。
+      const retireReason =
+        now - cached.createdAt > MAX_AGENT_LIFETIME_MS
+          ? "hard lifetime exceeded before reuse"
+          : "ttl expired before reuse";
+      this.evictByKey(cacheKey, "expired", retireReason);
     }
 
     // Check if there's a pending creation for this key (race condition prevention)
     const pending = this.pendingCreations.get(cacheKey);
     if (pending) {
-      // Wait for the pending creation and return its result
-      const result = await pending;
-      // ⚠️ 关键：等待 pending 创建的调用者也必须计入 activeRequests。
-      // 创建者在 createAgentWithCache 里把 activeRequests 初始化为 1（只代表它自己），
-      // 这里的每个等待者都要再 +1，否则一旦创建者完成并减到 0，cleanup/LRU 会在其它
-      // 仍在飞行中的请求头上把共享 agent 驱逐掉，又会把 STREAM_PROCESSING_ERROR 带回来。
-      const currentCached = this.cache.get(cacheKey);
-      if (currentCached && currentCached.id === result.dispatcherId) {
-        currentCached.activeRequests++;
-        currentCached.lastUsedAt = Date.now();
+      if (!this.isPendingCreationCurrent(pending)) {
+        this.pendingCreations.delete(cacheKey);
+      } else {
+        // Wait for the pending creation and return its result
+        const result = await pending.promise;
+        // ⚠️ 关键：等待 pending 创建的调用者也必须计入 activeRequests。
+        // 创建者在 createAgentWithCache 里把 activeRequests 初始化为 1（只代表它自己），
+        // 这里的每个等待者都要再 +1，否则一旦创建者完成并减到 0，cleanup/LRU 会在其它
+        // 仍在飞行中的请求头上把共享 agent 驱逐掉，又会把 STREAM_PROCESSING_ERROR 带回来。
+        const currentCached = this.cache.get(cacheKey);
+        if (currentCached && currentCached.id === result.dispatcherId) {
+          currentCached.activeRequests++;
+          currentCached.lastUsedAt = Date.now();
+        } else {
+          const retired = this.retiredAgents.get(result.dispatcherId);
+          if (retired && retired.cacheKey === cacheKey) {
+            retired.activeRequests++;
+            retired.lastUsedAt = Date.now();
+          }
+        }
+        // Count as cache hit - we're reusing the pending result, not creating a new agent
+        // Note: Don't decrement cacheMisses here since we never incremented it for this request
+        this.stats.totalRequests++;
+        this.stats.cacheHits++;
+        return { ...result, isNew: false };
       }
-      // Count as cache hit - we're reusing the pending result, not creating a new agent
-      // Note: Don't decrement cacheMisses here since we never incremented it for this request
-      this.stats.cacheHits++;
-      return { ...result, isNew: false };
     }
 
-    // Cache miss - create new agent with race condition protection
-    this.stats.cacheMisses++;
+    // 容量拒绝不计入 totalRequests/cacheMisses：调用方没有拿到 dispatcher，
+    // 这里保持“成功分配/复用”的命中率口径，避免背压噪声污染连接复用指标。
+    this.ensureCapacityForNewAgent(cacheKey);
 
     // Create the agent creation promise and store it
-    const creationPromise = this.createAgentWithCache(params, cacheKey, cached);
-    this.pendingCreations.set(cacheKey, creationPromise);
+    const endpointKey = new URL(params.endpointUrl).origin;
+    const startedAtEvictionSequence = this.endpointEvictionSequence;
+    const creationPromise = this.createAgentWithCache(
+      params,
+      cacheKey,
+      endpointKey,
+      startedAtEvictionSequence
+    );
+    this.pendingCreations.set(cacheKey, {
+      promise: creationPromise,
+      endpointKey,
+      startedAtEvictionSequence,
+    });
 
     try {
-      return await creationPromise;
+      const result = await creationPromise;
+      this.stats.totalRequests++;
+      this.stats.cacheMisses++;
+      return result;
     } finally {
       // Clean up pending creation
-      this.pendingCreations.delete(cacheKey);
+      if (this.pendingCreations.get(cacheKey)?.promise === creationPromise) {
+        this.pendingCreations.delete(cacheKey);
+      }
     }
   }
 
@@ -281,22 +359,27 @@ export class AgentPoolImpl implements AgentPool {
   private async createAgentWithCache(
     params: GetAgentParams,
     cacheKey: string,
-    existingCached: CachedAgent | undefined
+    endpointKey: string,
+    creationStartedAtEvictionSequence: number
   ): Promise<GetAgentResult> {
-    // Evict old entry if exists
-    if (existingCached) {
-      await this.evictByKey(cacheKey);
-    }
-
     // Create new agent
     const agent = await this.createAgent(params);
-    const url = new URL(params.endpointUrl);
+    if (this.isShuttingDown) {
+      void this.closeAgent(agent, cacheKey);
+      throw new Error("AgentPool is shutting down");
+    }
+
+    if ((this.endpointEvictionEpochs.get(endpointKey) ?? 0) > creationStartedAtEvictionSequence) {
+      void this.closeAgent(agent, cacheKey);
+      throw new Error(`AgentPool endpoint was evicted during creation: ${endpointKey}`);
+    }
+
     const dispatcherId = `disp-${++this.dispatcherIdCounter}`;
 
     const newCached: CachedAgent = {
       id: dispatcherId,
       agent,
-      endpointKey: url.origin,
+      endpointKey,
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
       requestCount: 1,
@@ -307,7 +390,7 @@ export class AgentPoolImpl implements AgentPool {
     this.cache.set(cacheKey, newCached);
 
     // Enforce max size (LRU eviction)
-    await this.enforceMaxSize();
+    this.enforceMaxSize(cacheKey);
 
     return { agent, isNew: true, cacheKey, dispatcherId };
   }
@@ -320,18 +403,68 @@ export class AgentPoolImpl implements AgentPool {
     if (cached && cached.id === dispatcherId && cached.activeRequests > 0) {
       cached.activeRequests--;
       cached.lastUsedAt = Date.now(); // refresh TTL from stream completion
+      return;
+    }
+
+    const retired = this.retiredAgents.get(dispatcherId);
+    if (retired && retired.cacheKey === cacheKey && retired.activeRequests > 0) {
+      retired.activeRequests--;
+      retired.lastUsedAt = Date.now();
+
+      if (retired.activeRequests === 0) {
+        this.retiredAgents.delete(dispatcherId);
+        this.decrementActiveRetiredCount(retired.cacheKey);
+        void this.closeAgent(retired.agent, cacheKey);
+      }
     }
   }
 
-  markUnhealthy(cacheKey: string, reason: string): void {
-    this.unhealthyKeys.add(cacheKey);
-    logger.warn("AgentPool: Agent marked as unhealthy", {
+  markUnhealthy(cacheKey: string, reason: string, dispatcherId: string): void;
+  markUnhealthy(cacheKey: string, reason: string): void;
+  markUnhealthy(cacheKey: string, reason: string, dispatcherId?: string): void {
+    if (!dispatcherId) {
+      logger.warn("AgentPool: Ignored cacheKey-only unhealthy mark", {
+        cacheKey,
+        reason,
+      });
+      return;
+    }
+
+    const cached = this.cache.get(cacheKey);
+    if (cached && cached.id === dispatcherId) {
+      cached.healthy = false;
+      this.evictByKey(cacheKey, "unhealthy", reason);
+      logger.warn("AgentPool: Agent marked as unhealthy", {
+        cacheKey,
+        dispatcherId: cached.id,
+        reason,
+      });
+      return;
+    }
+
+    const retired = this.retiredAgents.get(dispatcherId);
+    if (retired && retired.cacheKey === cacheKey) {
+      retired.healthy = false;
+      logger.warn("AgentPool: Retired agent marked as unhealthy", {
+        cacheKey,
+        dispatcherId,
+        retiredBy: retired.retiredBy,
+        retireReason: retired.retireReason,
+        reason,
+      });
+      return;
+    }
+
+    logger.debug("AgentPool: Ignored stale unhealthy mark", {
       cacheKey,
+      dispatcherId,
+      currentDispatcherId: cached?.id ?? null,
       reason,
     });
   }
 
   async evictEndpoint(endpointKey: string): Promise<void> {
+    this.endpointEvictionEpochs.set(endpointKey, ++this.endpointEvictionSequence);
     const keysToEvict: string[] = [];
 
     for (const [key, cached] of this.cache.entries()) {
@@ -341,22 +474,43 @@ export class AgentPoolImpl implements AgentPool {
     }
 
     for (const key of keysToEvict) {
-      await this.evictByKey(key);
+      this.evictByKey(key, "endpoint", "endpoint eviction");
+    }
+
+    for (const [key, pending] of this.pendingCreations.entries()) {
+      if (pending.endpointKey === endpointKey) {
+        this.pendingCreations.delete(key);
+      }
     }
   }
 
+  private isPendingCreationCurrent(pending: PendingAgentCreation): boolean {
+    return (
+      (this.endpointEvictionEpochs.get(pending.endpointKey) ?? 0) <=
+      pending.startedAtEvictionSequence
+    );
+  }
+
   getPoolStats(): AgentPoolStats {
-    const unhealthyCount = this.unhealthyKeys.size;
+    let unhealthyCount = 0;
     const hitRate =
       this.stats.totalRequests > 0 ? this.stats.cacheHits / this.stats.totalRequests : 0;
 
     let activeRequests = 0;
     for (const cached of this.cache.values()) {
       activeRequests += cached.activeRequests;
+      if (!cached.healthy) unhealthyCount++;
+    }
+    for (const retired of this.retiredAgents.values()) {
+      activeRequests += retired.activeRequests;
+      if (!retired.healthy) unhealthyCount++;
     }
 
     return {
       cacheSize: this.cache.size,
+      retiredAgents: this.retiredAgents.size,
+      liveAgents: this.getLiveDispatcherCount(),
+      pendingCreations: this.getPendingCreationReservationCount(),
       totalRequests: this.stats.totalRequests,
       cacheHits: this.stats.cacheHits,
       cacheMisses: this.stats.cacheMisses,
@@ -372,34 +526,49 @@ export class AgentPoolImpl implements AgentPool {
     const keysToCleanup: string[] = [];
 
     for (const [key, cached] of this.cache.entries()) {
-      if (this.isExpired(cached, now)) {
+      if (this.getExpirationReason(cached, now)) {
         keysToCleanup.push(key);
       }
     }
 
+    let cleanedFromCache = 0;
     for (const key of keysToCleanup) {
-      await this.evictByKey(key);
+      if (this.evictByKey(key, "expired", "ttl cleanup")) {
+        cleanedFromCache++;
+      }
     }
 
-    if (keysToCleanup.length > 0) {
+    const cleanedFromRetired = this.cleanupRetiredAgents(now);
+    const cleaned = cleanedFromCache + cleanedFromRetired;
+
+    if (cleaned > 0) {
       logger.debug("AgentPool: Cleaned up expired agents", {
-        count: keysToCleanup.length,
+        fromCache: cleanedFromCache,
+        fromRetired: cleanedFromRetired,
+        total: cleaned,
       });
     }
 
-    return keysToCleanup.length;
+    return cleaned;
   }
 
   async shutdown(): Promise<void> {
+    this.isShuttingDown = true;
+
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
 
     // closeAgent 本身是 fire-and-forget（不 await destroy/close），这里并行触发即可。
-    await Promise.allSettled(
-      Array.from(this.cache.entries()).map(([key, cached]) => this.closeAgent(cached.agent, key))
-    );
+    await Promise.allSettled([
+      ...Array.from(this.cache.entries()).map(([key, cached]) =>
+        this.closeAgent(cached.agent, key)
+      ),
+      ...Array.from(this.retiredAgents.values()).map((retired) =>
+        this.closeAgent(retired.agent, retired.cacheKey)
+      ),
+    ]);
 
     // Best-effort：等待部分 pending cleanup 完成，但永不无限等待（避免重蹈 “close() 等待 in-flight” 的覆辙）
     if (this.pendingCleanups.size > 0) {
@@ -422,30 +591,94 @@ export class AgentPoolImpl implements AgentPool {
     }
 
     this.cache.clear();
-    this.unhealthyKeys.clear();
+    this.retiredAgents.clear();
+    this.activeRetiredCountsByCacheKey.clear();
+    this.pendingCreations.clear();
+    this.endpointEvictionEpochs.clear();
 
     logger.info("AgentPool: Shutdown complete");
   }
 
-  private isExpired(cached: CachedAgent, now: number = Date.now()): boolean {
-    // Hard upper bound: force-expire after 30 minutes regardless of active requests
-    // Prevents permanent pinning if releaseAgent is never called (caller bug)
-    const MAX_AGENT_LIFETIME_MS = 30 * 60 * 1000;
-    if (now - cached.createdAt > MAX_AGENT_LIFETIME_MS) return true;
+  private getExpirationReason(cached: CachedAgent, now: number = Date.now()): "expired" | null {
+    // 30 分钟后不再把这个 dispatcher 分配给新请求。
+    // 正在传输的流只会被退役，不会被立刻 destroy，等自身 release 后再关闭。
+    if (now - cached.createdAt > MAX_AGENT_LIFETIME_MS) return "expired";
 
-    // Never expire agents with in-flight requests
-    if (cached.activeRequests > 0) return false;
+    // 普通 TTL 不清理仍有在途请求的 dispatcher。
+    if (cached.activeRequests > 0) return null;
 
-    return now - cached.lastUsedAt > this.config.agentTtlMs;
+    return now - cached.lastUsedAt > this.config.agentTtlMs ? "expired" : null;
   }
 
-  private async evictByKey(key: string): Promise<void> {
+  private evictByKey(key: string, retiredBy: AgentRetirementReason, retireReason: string): boolean {
     const cached = this.cache.get(key);
-    if (cached) {
-      await this.closeAgent(cached.agent, key);
-      this.cache.delete(key);
-      this.stats.evictedAgents++;
+    if (!cached) {
+      return false;
     }
+
+    this.cache.delete(key);
+    // 统计口径是“从可复用 cache 驱逐的 dispatcher 代数”；
+    // active dispatcher 可能先进入 retired，稍后才真正关闭。
+    this.stats.evictedAgents++;
+    this.disposeCachedAgent(key, cached, retiredBy, retireReason);
+    return true;
+  }
+
+  private disposeCachedAgent(
+    key: string,
+    cached: CachedAgent,
+    retiredBy: AgentRetirementReason,
+    retireReason: string
+  ): void {
+    if (cached.activeRequests > 0) {
+      const retired: RetiredAgent = {
+        ...cached,
+        cacheKey: key,
+        healthy: retiredBy === "unhealthy" ? false : cached.healthy,
+        retiredAt: Date.now(),
+        retiredBy,
+        retireReason,
+      };
+      this.retiredAgents.set(cached.id, retired);
+      this.incrementActiveRetiredCount(key);
+      logger.debug("AgentPool: Retired active agent", {
+        cacheKey: key,
+        dispatcherId: cached.id,
+        activeRequests: cached.activeRequests,
+        retiredBy,
+      });
+      return;
+    }
+
+    void this.closeAgent(cached.agent, key);
+  }
+
+  private cleanupRetiredAgents(now: number): number {
+    let cleaned = 0;
+    for (const [dispatcherId, retired] of this.retiredAgents.entries()) {
+      const activeTooLong =
+        retired.activeRequests > 0 && now - retired.retiredAt > MAX_RETIRED_AGENT_LIFETIME_MS;
+      if (retired.activeRequests > 0 && !activeTooLong) {
+        continue;
+      }
+
+      if (activeTooLong) {
+        logger.warn("AgentPool: Force closing long-retired active agent", {
+          cacheKey: retired.cacheKey,
+          dispatcherId,
+          activeRequests: retired.activeRequests,
+          retiredBy: retired.retiredBy,
+          retiredForMs: now - retired.retiredAt,
+        });
+      }
+
+      this.retiredAgents.delete(dispatcherId);
+      this.decrementActiveRetiredCount(retired.cacheKey);
+      void this.closeAgent(retired.agent, retired.cacheKey);
+      cleaned++;
+    }
+
+    return cleaned;
   }
 
   private async closeAgent(agent: Dispatcher, key: string): Promise<void> {
@@ -501,20 +734,152 @@ export class AgentPoolImpl implements AgentPool {
     }
   }
 
-  private async enforceMaxSize(): Promise<void> {
-    if (this.cache.size <= this.config.maxTotalAgents) {
+  private getLiveDispatcherCount(): number {
+    return this.cache.size + this.retiredAgents.size;
+  }
+
+  private getReplacementCapacityCredit(cacheKey: string): number {
+    // 同 cacheKey 的退役活跃旧代原本占用的是这个逻辑槽位。允许最多 1 个替换 credit，
+    // 让硬过期/unhealthy 后能重建当前可复用代；更多旧代仍计入容量，避免无限堆积。
+    return this.activeRetiredCountsByCacheKey.has(cacheKey) ? 1 : 0;
+  }
+
+  private incrementActiveRetiredCount(cacheKey: string): void {
+    this.activeRetiredCountsByCacheKey.set(
+      cacheKey,
+      (this.activeRetiredCountsByCacheKey.get(cacheKey) ?? 0) + 1
+    );
+  }
+
+  private decrementActiveRetiredCount(cacheKey: string): void {
+    const count = this.activeRetiredCountsByCacheKey.get(cacheKey);
+    if (!count) {
       return;
     }
 
-    // Sort by lastUsedAt (oldest first) for LRU eviction
-    const entries = Array.from(this.cache.entries()).sort(
-      ([, a], [, b]) => a.lastUsedAt - b.lastUsedAt
+    if (count === 1) {
+      this.activeRetiredCountsByCacheKey.delete(cacheKey);
+    } else {
+      this.activeRetiredCountsByCacheKey.set(cacheKey, count - 1);
+    }
+  }
+
+  private getReservedDispatcherCount(replacementCacheKey?: string): number {
+    let reserved = this.getLiveDispatcherCount();
+    for (const [cacheKey, pending] of this.pendingCreations.entries()) {
+      if (!this.isPendingCreationCurrent(pending)) {
+        continue;
+      }
+      // 创建完成到 finally 删除 pending 之间，cache 里已经有同 key dispatcher，
+      // 此时不要把 pending 和 cache 重复计数。
+      if (!this.cache.has(cacheKey)) {
+        reserved++;
+      }
+    }
+    if (replacementCacheKey) {
+      reserved -= this.getReplacementCapacityCredit(replacementCacheKey);
+    }
+    return Math.max(0, reserved);
+  }
+
+  private getPendingCreationReservationCount(): number {
+    let reservedPendingCreations = 0;
+    for (const [cacheKey, pending] of this.pendingCreations.entries()) {
+      if (this.isPendingCreationCurrent(pending) && !this.cache.has(cacheKey)) {
+        reservedPendingCreations++;
+      }
+    }
+    return reservedPendingCreations;
+  }
+
+  private ensureCapacityForNewAgent(cacheKey: string): void {
+    this.reclaimCapacityForNewAgent(cacheKey);
+
+    if (this.getReservedDispatcherCount(cacheKey) < this.config.maxTotalAgents) {
+      return;
+    }
+
+    const reservedDispatchers = this.getReservedDispatcherCount();
+    const replacementCapacityCredit = this.getReplacementCapacityCredit(cacheKey);
+    logger.warn("AgentPool: Live dispatcher capacity exhausted", {
+      cacheKey,
+      maxTotalAgents: this.config.maxTotalAgents,
+      reservedDispatchers,
+      effectiveReservedDispatchers: Math.max(0, reservedDispatchers - replacementCapacityCredit),
+      replacementCapacityCredit,
+      cacheSize: this.cache.size,
+      retiredAgents: this.retiredAgents.size,
+      pendingCreations: this.pendingCreations.size,
+      activeRequests: this.getPoolStats().activeRequests,
+    });
+
+    throw new Error(`AgentPool live dispatcher capacity exhausted: ${this.config.maxTotalAgents}`);
+  }
+
+  private reclaimCapacityForNewAgent(cacheKey: string): void {
+    if (this.getReservedDispatcherCount() < this.config.maxTotalAgents) {
+      return;
+    }
+
+    this.cleanupRetiredAgents(Date.now());
+
+    if (this.getReservedDispatcherCount(cacheKey) < this.config.maxTotalAgents) {
+      return;
+    }
+
+    this.evictIdleCachedAgentsUntilBelowLimit(cacheKey);
+  }
+
+  private enforceMaxSize(replacementCacheKey?: string): void {
+    if (this.getReservedDispatcherCount(replacementCacheKey) <= this.config.maxTotalAgents) {
+      return;
+    }
+
+    this.cleanupRetiredAgents(Date.now());
+
+    if (this.getReservedDispatcherCount(replacementCacheKey) <= this.config.maxTotalAgents) {
+      return;
+    }
+
+    this.evictIdleCachedAgentsUntilAtLimit(replacementCacheKey);
+  }
+
+  private evictIdleCachedAgentsUntilBelowLimit(replacementCacheKey?: string): void {
+    this.evictIdleCachedAgents(
+      (reserved) => reserved < this.config.maxTotalAgents,
+      replacementCacheKey
     );
+  }
 
-    const toEvict = entries.slice(0, this.cache.size - this.config.maxTotalAgents);
+  private evictIdleCachedAgentsUntilAtLimit(replacementCacheKey?: string): void {
+    this.evictIdleCachedAgents(
+      (reserved) => reserved <= this.config.maxTotalAgents,
+      replacementCacheKey
+    );
+  }
 
-    for (const [key] of toEvict) {
-      await this.evictByKey(key);
+  private evictIdleCachedAgents(
+    isWithinLimit: (reserved: number) => boolean,
+    replacementCacheKey?: string
+  ): void {
+    const now = Date.now();
+
+    // LRU 只回收空闲 dispatcher。活跃 dispatcher 已经代表真实在途请求；
+    // 继续把它们转入 retired 不能释放 live 容量，只会突破 maxTotalAgents 的连接预算。
+    const idleEntries = Array.from(this.cache.entries())
+      .filter(([, cached]) => cached.activeRequests === 0)
+      .sort(([, a], [, b]) => {
+        const aExpired = this.getExpirationReason(a, now) ? 0 : 1;
+        const bExpired = this.getExpirationReason(b, now) ? 0 : 1;
+        if (aExpired !== bExpired) return aExpired - bExpired;
+        return a.lastUsedAt - b.lastUsedAt;
+      });
+
+    for (const [key] of idleEntries) {
+      if (isWithinLimit(this.getReservedDispatcherCount(replacementCacheKey))) {
+        break;
+      }
+      this.evictByKey(key, "lru", "max live dispatcher capacity exceeded");
     }
   }
 
