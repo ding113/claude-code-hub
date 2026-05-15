@@ -778,36 +778,39 @@ describe("AgentPool", () => {
           };
         });
 
-        // 同时发起 3 个请求：首个进入 createAgentWithCache；后两个必须走 pendingCreations
-        const p1 = concurrentPool.getAgent(params);
-        const p2 = concurrentPool.getAgent(params);
-        const p3 = concurrentPool.getAgent(params);
+        try {
+          // 同时发起 3 个请求：首个进入 createAgentWithCache；后两个必须走 pendingCreations
+          const p1 = concurrentPool.getAgent(params);
+          const p2 = concurrentPool.getAgent(params);
+          const p3 = concurrentPool.getAgent(params);
 
-        // 稍微等一个 microtask，确保 p2/p3 已经进入 await pending 分支
-        await Promise.resolve();
-        await Promise.resolve();
+          // 稍微等一个 microtask，确保 p2/p3 已经进入 await pending 分支
+          await Promise.resolve();
+          await Promise.resolve();
 
-        // 放行创建
-        releaseCreate?.();
+          // 放行创建
+          releaseCreate?.();
 
-        const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+          const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
 
-        // 三个调用应拿到相同的 cacheKey 与 dispatcherId
-        expect(r2.cacheKey).toBe(r1.cacheKey);
-        expect(r3.cacheKey).toBe(r1.cacheKey);
-        expect(r2.dispatcherId).toBe(r1.dispatcherId);
-        expect(r3.dispatcherId).toBe(r1.dispatcherId);
+          // 三个调用应拿到相同的 cacheKey 与 dispatcherId
+          expect(r2.cacheKey).toBe(r1.cacheKey);
+          expect(r3.cacheKey).toBe(r1.cacheKey);
+          expect(r2.dispatcherId).toBe(r1.dispatcherId);
+          expect(r3.dispatcherId).toBe(r1.dispatcherId);
 
-        // 关键断言：所有 3 个并发 waiter 都应计入 activeRequests
-        expect(concurrentPool.getPoolStats().activeRequests).toBe(3);
+          // 关键断言：所有 3 个并发 waiter 都应计入 activeRequests
+          expect(concurrentPool.getPoolStats().activeRequests).toBe(3);
 
-        // 释放 3 次后归零，且仍能再多释一次（no-op）
-        concurrentPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
-        concurrentPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
-        concurrentPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
-        expect(concurrentPool.getPoolStats().activeRequests).toBe(0);
-
-        createSpy.mockRestore();
+          // 释放 3 次后归零，且仍能再多释一次（no-op）
+          concurrentPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
+          concurrentPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
+          concurrentPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
+          expect(concurrentPool.getPoolStats().activeRequests).toBe(0);
+        } finally {
+          releaseCreate?.();
+          createSpy.mockRestore();
+        }
       } finally {
         await concurrentPool.shutdown();
         vi.useFakeTimers();
@@ -837,41 +840,45 @@ describe("AgentPool", () => {
           };
         });
 
-        const p1 = concurrentPool.getAgent({
-          endpointUrl: "https://api1.example.com/v1",
-          proxyUrl: null,
-          enableHttp2: false,
-        });
-
-        await Promise.resolve();
-        await Promise.resolve();
-
-        await expect(
-          concurrentPool.getAgent({
-            endpointUrl: "https://api2.example.com/v1",
+        try {
+          const p1 = concurrentPool.getAgent({
+            endpointUrl: "https://api1.example.com/v1",
             proxyUrl: null,
             enableHttp2: false,
-          })
-        ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
+          });
 
-        expect(warnSpy).toHaveBeenCalledWith(
-          "AgentPool: Live dispatcher capacity exhausted",
-          expect.objectContaining({
-            activeRequests: 0,
-            cacheSize: 0,
-            maxTotalAgents: 1,
-            pendingCreations: 1,
-            retiredAgents: 0,
-          })
-        );
+          await Promise.resolve();
+          await Promise.resolve();
 
-        releaseCreate?.();
-        const r1 = await p1;
-        expect(concurrentPool.getPoolStats().liveAgents).toBe(1);
-        expect(concurrentPool.getPoolStats().pendingCreations).toBe(0);
+          await expect(
+            concurrentPool.getAgent({
+              endpointUrl: "https://api2.example.com/v1",
+              proxyUrl: null,
+              enableHttp2: false,
+            })
+          ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
 
-        concurrentPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
-        createSpy.mockRestore();
+          expect(warnSpy).toHaveBeenCalledWith(
+            "AgentPool: Live dispatcher capacity exhausted",
+            expect.objectContaining({
+              activeRequests: 0,
+              cacheSize: 0,
+              maxTotalAgents: 1,
+              pendingCreations: 1,
+              retiredAgents: 0,
+            })
+          );
+
+          releaseCreate?.();
+          const r1 = await p1;
+          expect(concurrentPool.getPoolStats().liveAgents).toBe(1);
+          expect(concurrentPool.getPoolStats().pendingCreations).toBe(0);
+
+          concurrentPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
+        } finally {
+          releaseCreate?.();
+          createSpy.mockRestore();
+        }
       } finally {
         warnSpy.mockRestore();
         await concurrentPool.shutdown();
@@ -1206,22 +1213,28 @@ describe("AgentPool", () => {
       });
       const createSpy = vi.spyOn(pool as any, "createAgent");
       createSpy.mockImplementationOnce(() => createPromise);
+      let getPromise: Promise<unknown> | null = null;
 
-      const getPromise = pool.getAgent(params);
-      await Promise.resolve();
-      expect(createSpy).toHaveBeenCalled();
+      try {
+        getPromise = pool.getAgent(params);
+        await Promise.resolve();
+        expect(createSpy).toHaveBeenCalled();
 
-      await pool.shutdown();
-      expect(pool.getPoolStats().pendingCreations).toBe(0);
+        await pool.shutdown();
+        expect(pool.getPoolStats().pendingCreations).toBe(0);
 
-      resolveCreate(lateAgent);
+        resolveCreate(lateAgent);
 
-      await expect(getPromise).rejects.toThrow("AgentPool is shutting down");
-      expect(lateAgent.destroy).toHaveBeenCalledTimes(1);
-      expect(lateAgent.close).not.toHaveBeenCalled();
-      expect(pool.getPoolStats().cacheSize).toBe(0);
-      expect(pool.getPoolStats().activeRequests).toBe(0);
-      createSpy.mockRestore();
+        await expect(getPromise).rejects.toThrow("AgentPool is shutting down");
+        expect(lateAgent.destroy).toHaveBeenCalledTimes(1);
+        expect(lateAgent.close).not.toHaveBeenCalled();
+        expect(pool.getPoolStats().cacheSize).toBe(0);
+        expect(pool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        resolveCreate(lateAgent);
+        await getPromise?.catch(() => undefined);
+        createSpy.mockRestore();
+      }
     });
   });
 });
