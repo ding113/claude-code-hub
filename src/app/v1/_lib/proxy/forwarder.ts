@@ -3169,9 +3169,13 @@ export class ProxyForwarder {
       // 场景：HTTP/2 连接失败（GOAWAY、RST_STREAM、PROTOCOL_ERROR 等）
       // 策略：透明回退到 HTTP/1.1，不触发供应商切换或熔断器
       if (enableHttp2 && isHttp2Error(err)) {
+        const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+        const http2DispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
         logger.warn("ProxyForwarder: HTTP/2 protocol error detected, falling back to HTTP/1.1", {
           providerId: provider.id,
           providerName: provider.name,
+          cacheKey: http2CacheKey,
+          dispatcherId: http2DispatcherId,
           errorName: err.name,
           errorMessage: err.message || "(empty message)",
           errorCode: err.code || "N/A",
@@ -3202,8 +3206,6 @@ export class ProxyForwarder {
         delete http1FallbackInit.dispatcher;
 
         // ⭐ 标记 HTTP/2 Agent 为不健康，避免后续请求重复失败
-        const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
-        const http2DispatcherId = proxyConfig?.dispatcherId ?? directConnectionDispatcherId;
         if (http2CacheKey && http2DispatcherId) {
           const pool = getGlobalAgentPool();
           pool.markUnhealthy(

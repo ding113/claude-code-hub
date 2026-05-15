@@ -518,6 +518,65 @@ describe("AgentPool", () => {
       await smallPool.shutdown();
     });
 
+    it("容量紧张时应优先淘汰已过期的空闲 dispatcher", async () => {
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 2,
+        agentTtlMs: 60 * 60 * 1000,
+      });
+
+      const expiring = await smallPool.getAgent({
+        endpointUrl: "https://expired.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+      const expiringAgent = expiring.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const expiringDestroy = vi.fn().mockResolvedValue(undefined);
+      expiringAgent.destroy = expiringDestroy;
+      smallPool.releaseAgent(expiring.cacheKey, expiring.dispatcherId);
+
+      vi.advanceTimersByTime(20 * 60 * 1000);
+
+      const validLru = await smallPool.getAgent({
+        endpointUrl: "https://valid-lru.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+      const validLruAgent = validLru.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const validLruDestroy = vi.fn().mockResolvedValue(undefined);
+      validLruAgent.destroy = validLruDestroy;
+      smallPool.releaseAgent(validLru.cacheKey, validLru.dispatcherId);
+
+      vi.advanceTimersByTime(9 * 60 * 1000 + 50 * 1000);
+
+      const reusedExpiring = await smallPool.getAgent({
+        endpointUrl: "https://expired.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+      expect(reusedExpiring.dispatcherId).toBe(expiring.dispatcherId);
+      smallPool.releaseAgent(reusedExpiring.cacheKey, reusedExpiring.dispatcherId);
+
+      vi.advanceTimersByTime(11 * 1000);
+
+      const newEntry = await smallPool.getAgent({
+        endpointUrl: "https://new.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+
+      expect(expiringDestroy).toHaveBeenCalledTimes(1);
+      expect(validLruDestroy).not.toHaveBeenCalled();
+      expect(smallPool.getPoolStats().cacheSize).toBe(2);
+
+      smallPool.releaseAgent(newEntry.cacheKey, newEntry.dispatcherId);
+      await smallPool.shutdown();
+    });
+
     it("should reject new dispatcher creation when all live capacity is active", async () => {
       const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
       const smallPool = new AgentPoolImpl({

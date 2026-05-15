@@ -730,11 +730,18 @@ export class AgentPoolImpl implements AgentPool {
   }
 
   private evictIdleCachedAgents(isWithinLimit: (reserved: number) => boolean): void {
+    const now = Date.now();
+
     // LRU 只回收空闲 dispatcher。活跃 dispatcher 已经代表真实在途请求；
     // 继续把它们转入 retired 不能释放 live 容量，只会突破 maxTotalAgents 的连接预算。
     const idleEntries = Array.from(this.cache.entries())
       .filter(([, cached]) => cached.activeRequests === 0)
-      .sort(([, a], [, b]) => a.lastUsedAt - b.lastUsedAt);
+      .sort(([, a], [, b]) => {
+        const aExpired = this.getExpirationReason(a, now) ? 0 : 1;
+        const bExpired = this.getExpirationReason(b, now) ? 0 : 1;
+        if (aExpired !== bExpired) return aExpired - bExpired;
+        return a.lastUsedAt - b.lastUsedAt;
+      });
 
     for (const [key] of idleEntries) {
       if (isWithinLimit(this.getReservedDispatcherCount())) {
