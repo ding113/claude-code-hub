@@ -31,11 +31,12 @@ vi.mock("fetch-socks", () => ({
 import {
   type AgentPool,
   AgentPoolImpl,
+  type AgentPoolConfig,
   generateAgentCacheKey,
   getGlobalAgentPool,
   resetGlobalAgentPool,
-  type AgentPoolConfig,
 } from "@/lib/proxy-agent/agent-pool";
+import { logger } from "@/lib/logger";
 
 describe("generateAgentCacheKey", () => {
   it("should generate correct cache key for direct connection", () => {
@@ -833,37 +834,51 @@ describe("AgentPool", () => {
     });
 
     it("should force-close retired agents stuck active for more than 6 hours", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
       const pool2 = new AgentPoolImpl({
         ...defaultConfig,
         cleanupIntervalMs: 60 * 60 * 1000,
       });
 
-      const params = {
-        endpointUrl: "https://api.anthropic.com/v1/messages",
-        proxyUrl: null,
-        enableHttp2: false,
-      };
+      try {
+        const params = {
+          endpointUrl: "https://api.anthropic.com/v1/messages",
+          proxyUrl: null,
+          enableHttp2: false,
+        };
 
-      const r1 = await pool2.getAgent(params);
-      const agent1 = r1.agent as unknown as {
-        destroy?: () => Promise<void>;
-      };
-      const destroy1 = vi.fn().mockResolvedValue(undefined);
-      agent1.destroy = destroy1;
+        const r1 = await pool2.getAgent(params);
+        const agent1 = r1.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const destroy1 = vi.fn().mockResolvedValue(undefined);
+        agent1.destroy = destroy1;
 
-      pool2.markUnhealthy(r1.cacheKey, "stuck retired stream", r1.dispatcherId);
-      expect(pool2.getPoolStats().cacheSize).toBe(0);
-      expect(pool2.getPoolStats().activeRequests).toBe(1);
-      expect(destroy1).not.toHaveBeenCalled();
+        pool2.markUnhealthy(r1.cacheKey, "stuck retired stream", r1.dispatcherId);
+        expect(pool2.getPoolStats().cacheSize).toBe(0);
+        expect(pool2.getPoolStats().activeRequests).toBe(1);
+        expect(destroy1).not.toHaveBeenCalled();
 
-      vi.advanceTimersByTime(6 * 60 * 60 * 1000 + 1);
+        vi.advanceTimersByTime(6 * 60 * 60 * 1000 + 1);
 
-      const cleaned = await pool2.cleanup();
-      expect(cleaned).toBe(1);
-      expect(pool2.getPoolStats().activeRequests).toBe(0);
-      expect(destroy1).toHaveBeenCalledTimes(1);
-
-      await pool2.shutdown();
+        const cleaned = await pool2.cleanup();
+        expect(cleaned).toBe(1);
+        expect(pool2.getPoolStats().activeRequests).toBe(0);
+        expect(destroy1).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Force closing long-retired active agent",
+          expect.objectContaining({
+            activeRequests: 1,
+            cacheKey: r1.cacheKey,
+            dispatcherId: r1.dispatcherId,
+            retiredBy: "unhealthy",
+            retiredForMs: 6 * 60 * 60 * 1000 + 1,
+          })
+        );
+      } finally {
+        warnSpy.mockRestore();
+        await pool2.shutdown();
+      }
     });
 
     it("should be a no-op when releasing non-existent key", () => {

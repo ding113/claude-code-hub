@@ -257,14 +257,12 @@ export class AgentPoolImpl implements AgentPool {
     }
 
     if (cached) {
-      const retiredBy: AgentRetirementReason = cached.healthy ? "expired" : "unhealthy";
+      // markUnhealthy 会同步驱逐当前 cache entry，因此这里的 cached entry 只会是已过期的健康实例。
       const retireReason =
-        retiredBy === "expired" && now - cached.createdAt > MAX_AGENT_LIFETIME_MS
+        now - cached.createdAt > MAX_AGENT_LIFETIME_MS
           ? "hard lifetime exceeded before reuse"
-          : retiredBy === "expired"
-            ? "ttl expired before reuse"
-            : "unhealthy before reuse";
-      this.evictByKey(cacheKey, retiredBy, retireReason);
+          : "ttl expired before reuse";
+      this.evictByKey(cacheKey, "expired", retireReason);
     }
 
     // Check if there's a pending creation for this key (race condition prevention)
