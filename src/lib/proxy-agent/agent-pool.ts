@@ -16,7 +16,7 @@ import { logger } from "@/lib/logger";
  * Agent Pool Configuration
  */
 export interface AgentPoolConfig {
-  /** Maximum total number of cached agents (default: 100) */
+  /** Maximum total number of live dispatcher generations, including retired active agents (default: 100) */
   maxTotalAgents: number;
   /** Agent TTL in milliseconds (default: 300000 = 5 minutes) */
   agentTtlMs: number;
@@ -62,13 +62,19 @@ interface RetiredAgent extends CachedAgent {
  */
 export interface AgentPoolStats {
   cacheSize: number;
+  /** Retired dispatcher generations still waiting for in-flight requests to finish */
+  retiredAgents: number;
+  /** Total live dispatcher generations: cached + retired */
+  liveAgents: number;
+  /** Pending dispatcher creations that have reserved capacity */
+  pendingCreations: number;
   totalRequests: number;
   cacheHits: number;
   cacheMisses: number;
   hitRate: number;
   unhealthyAgents: number;
   evictedAgents: number;
-  /** Total in-flight requests across all cached agents */
+  /** Total in-flight requests across cached and retired agents */
   activeRequests: number;
 }
 
@@ -293,6 +299,7 @@ export class AgentPoolImpl implements AgentPool {
 
     // Cache miss - create new agent with race condition protection
     this.stats.cacheMisses++;
+    this.ensureCapacityForNewAgent(cacheKey);
 
     // Create the agent creation promise and store it
     const creationPromise = this.createAgentWithCache(params, cacheKey);
@@ -338,7 +345,7 @@ export class AgentPoolImpl implements AgentPool {
     this.cache.set(cacheKey, newCached);
 
     // Enforce max size (LRU eviction)
-    await this.enforceMaxSize();
+    this.enforceMaxSize();
 
     return { agent, isNew: true, cacheKey, dispatcherId };
   }
@@ -431,6 +438,9 @@ export class AgentPoolImpl implements AgentPool {
 
     return {
       cacheSize: this.cache.size,
+      retiredAgents: this.retiredAgents.size,
+      liveAgents: this.getLiveDispatcherCount(),
+      pendingCreations: this.pendingCreations.size,
       totalRequests: this.stats.totalRequests,
       cacheHits: this.stats.cacheHits,
       cacheMisses: this.stats.cacheMisses,
@@ -647,22 +657,89 @@ export class AgentPoolImpl implements AgentPool {
     }
   }
 
-  private async enforceMaxSize(): Promise<void> {
-    if (this.cache.size <= this.config.maxTotalAgents) {
+  private getLiveDispatcherCount(): number {
+    return this.cache.size + this.retiredAgents.size;
+  }
+
+  private getReservedDispatcherCount(): number {
+    let reserved = this.getLiveDispatcherCount();
+    for (const cacheKey of this.pendingCreations.keys()) {
+      // 创建完成到 finally 删除 pending 之间，cache 里已经有同 key dispatcher，
+      // 此时不要把 pending 和 cache 重复计数。
+      if (!this.cache.has(cacheKey)) {
+        reserved++;
+      }
+    }
+    return reserved;
+  }
+
+  private ensureCapacityForNewAgent(cacheKey: string): void {
+    this.reclaimCapacityForNewAgent();
+
+    if (this.getReservedDispatcherCount() < this.config.maxTotalAgents) {
       return;
     }
 
-    // LRU 优先清理空闲 dispatcher；只有容量压力下全是活跃请求时才退役活跃 dispatcher。
-    const entries = Array.from(this.cache.entries()).sort(([, a], [, b]) => {
-      const activeDelta = Number(a.activeRequests > 0) - Number(b.activeRequests > 0);
-      if (activeDelta !== 0) return activeDelta;
-      return a.lastUsedAt - b.lastUsedAt;
+    logger.warn("AgentPool: Live dispatcher capacity exhausted", {
+      cacheKey,
+      maxTotalAgents: this.config.maxTotalAgents,
+      cacheSize: this.cache.size,
+      retiredAgents: this.retiredAgents.size,
+      pendingCreations: this.pendingCreations.size,
+      activeRequests: this.getPoolStats().activeRequests,
     });
 
-    const toEvict = entries.slice(0, this.cache.size - this.config.maxTotalAgents);
+    throw new Error(`AgentPool live dispatcher capacity exhausted: ${this.config.maxTotalAgents}`);
+  }
 
-    for (const [key] of toEvict) {
-      this.evictByKey(key, "lru", "max size exceeded");
+  private reclaimCapacityForNewAgent(): void {
+    if (this.getReservedDispatcherCount() < this.config.maxTotalAgents) {
+      return;
+    }
+
+    this.cleanupRetiredAgents(Date.now());
+
+    if (this.getReservedDispatcherCount() < this.config.maxTotalAgents) {
+      return;
+    }
+
+    this.evictIdleCachedAgentsUntilBelowLimit();
+  }
+
+  private enforceMaxSize(): void {
+    if (this.getReservedDispatcherCount() <= this.config.maxTotalAgents) {
+      return;
+    }
+
+    this.cleanupRetiredAgents(Date.now());
+
+    if (this.getReservedDispatcherCount() <= this.config.maxTotalAgents) {
+      return;
+    }
+
+    this.evictIdleCachedAgentsUntilAtLimit();
+  }
+
+  private evictIdleCachedAgentsUntilBelowLimit(): void {
+    this.evictIdleCachedAgents((reserved) => reserved < this.config.maxTotalAgents);
+  }
+
+  private evictIdleCachedAgentsUntilAtLimit(): void {
+    this.evictIdleCachedAgents((reserved) => reserved <= this.config.maxTotalAgents);
+  }
+
+  private evictIdleCachedAgents(isWithinLimit: (reserved: number) => boolean): void {
+    // LRU 只回收空闲 dispatcher。活跃 dispatcher 已经代表真实在途请求；
+    // 继续把它们转入 retired 不能释放 live 容量，只会突破 maxTotalAgents 的连接预算。
+    const idleEntries = Array.from(this.cache.entries())
+      .filter(([, cached]) => cached.activeRequests === 0)
+      .sort(([, a], [, b]) => a.lastUsedAt - b.lastUsedAt);
+
+    for (const [key] of idleEntries) {
+      if (isWithinLimit(this.getReservedDispatcherCount())) {
+        break;
+      }
+      this.evictByKey(key, "lru", "max live dispatcher capacity exceeded");
     }
   }
 

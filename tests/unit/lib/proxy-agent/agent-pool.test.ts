@@ -486,20 +486,22 @@ describe("AgentPool", () => {
         maxTotalAgents: 2,
       });
 
-      // Create 3 agents (exceeds max of 2)
-      await smallPool.getAgent({
+      // Create 3 agents after releasing earlier requests so LRU can reclaim idle capacity.
+      const r1 = await smallPool.getAgent({
         endpointUrl: "https://api1.example.com/v1",
         proxyUrl: null,
         enableHttp2: false,
       });
+      smallPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
 
       vi.advanceTimersByTime(100);
 
-      await smallPool.getAgent({
+      const r2 = await smallPool.getAgent({
         endpointUrl: "https://api2.example.com/v1",
         proxyUrl: null,
         enableHttp2: false,
       });
+      smallPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
 
       vi.advanceTimersByTime(100);
 
@@ -516,49 +518,77 @@ describe("AgentPool", () => {
       await smallPool.shutdown();
     });
 
-    it("should retire active LRU dispatcher and close it only after release", async () => {
+    it("should reject new dispatcher creation when all live capacity is active", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
       const smallPool = new AgentPoolImpl({
         ...defaultConfig,
         maxTotalAgents: 2,
       });
 
-      const r1 = await smallPool.getAgent({
-        endpointUrl: "https://api1.example.com/v1",
-        proxyUrl: null,
-        enableHttp2: false,
-      });
-      const agent1 = r1.agent as unknown as {
-        destroy?: () => Promise<void>;
-      };
-      const destroy1 = vi.fn().mockResolvedValue(undefined);
-      agent1.destroy = destroy1;
+      try {
+        const r1 = await smallPool.getAgent({
+          endpointUrl: "https://api1.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const agent1 = r1.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const destroy1 = vi.fn().mockResolvedValue(undefined);
+        agent1.destroy = destroy1;
 
-      vi.advanceTimersByTime(100);
-      const r2 = await smallPool.getAgent({
-        endpointUrl: "https://api2.example.com/v1",
-        proxyUrl: null,
-        enableHttp2: false,
-      });
+        vi.advanceTimersByTime(100);
+        const r2 = await smallPool.getAgent({
+          endpointUrl: "https://api2.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
 
-      vi.advanceTimersByTime(100);
-      const r3 = await smallPool.getAgent({
-        endpointUrl: "https://api3.example.com/v1",
-        proxyUrl: null,
-        enableHttp2: false,
-      });
+        vi.advanceTimersByTime(100);
+        await expect(
+          smallPool.getAgent({
+            endpointUrl: "https://api3.example.com/v1",
+            proxyUrl: null,
+            enableHttp2: false,
+          })
+        ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
 
-      expect(smallPool.getPoolStats().cacheSize).toBe(2);
-      expect(smallPool.getPoolStats().activeRequests).toBe(3);
-      expect(destroy1).not.toHaveBeenCalled();
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Live dispatcher capacity exhausted",
+          expect.objectContaining({
+            activeRequests: 2,
+            cacheSize: 2,
+            maxTotalAgents: 2,
+            pendingCreations: 0,
+            retiredAgents: 0,
+          })
+        );
+        expect(smallPool.getPoolStats().cacheSize).toBe(2);
+        expect(smallPool.getPoolStats().liveAgents).toBe(2);
+        expect(smallPool.getPoolStats().activeRequests).toBe(2);
+        expect(destroy1).not.toHaveBeenCalled();
 
-      smallPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
-      expect(destroy1).toHaveBeenCalledTimes(1);
+        smallPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
+        expect(smallPool.getPoolStats().activeRequests).toBe(1);
+        expect(destroy1).not.toHaveBeenCalled();
 
-      smallPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
-      smallPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
-      expect(smallPool.getPoolStats().activeRequests).toBe(0);
+        const r3 = await smallPool.getAgent({
+          endpointUrl: "https://api3.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        expect(smallPool.getPoolStats().cacheSize).toBe(2);
+        expect(smallPool.getPoolStats().liveAgents).toBe(2);
+        expect(smallPool.getPoolStats().activeRequests).toBe(2);
+        expect(destroy1).toHaveBeenCalledTimes(1);
 
-      await smallPool.shutdown();
+        smallPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
+        smallPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
+        expect(smallPool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        warnSpy.mockRestore();
+        await smallPool.shutdown();
+      }
     });
   });
 
@@ -719,6 +749,71 @@ describe("AgentPool", () => {
 
         createSpy.mockRestore();
       } finally {
+        await concurrentPool.shutdown();
+        vi.useFakeTimers();
+      }
+    });
+
+    it("should count pending creations against live dispatcher capacity", async () => {
+      vi.useRealTimers();
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const concurrentPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 1,
+      });
+      try {
+        let releaseCreate: (() => void) | null = null;
+        const createBlocker = new Promise<void>((resolve) => {
+          releaseCreate = resolve;
+        });
+
+        const createSpy = vi.spyOn(concurrentPool as any, "createAgent");
+        createSpy.mockImplementationOnce(async () => {
+          await createBlocker;
+          return {
+            close: vi.fn().mockResolvedValue(undefined),
+            destroy: vi.fn().mockResolvedValue(undefined),
+            options: {},
+          };
+        });
+
+        const p1 = concurrentPool.getAgent({
+          endpointUrl: "https://api1.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        await expect(
+          concurrentPool.getAgent({
+            endpointUrl: "https://api2.example.com/v1",
+            proxyUrl: null,
+            enableHttp2: false,
+          })
+        ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Live dispatcher capacity exhausted",
+          expect.objectContaining({
+            activeRequests: 0,
+            cacheSize: 0,
+            maxTotalAgents: 1,
+            pendingCreations: 1,
+            retiredAgents: 0,
+          })
+        );
+
+        releaseCreate?.();
+        const r1 = await p1;
+        expect(concurrentPool.getPoolStats().liveAgents).toBe(1);
+        expect(concurrentPool.getPoolStats().pendingCreations).toBe(0);
+
+        concurrentPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
+        createSpy.mockRestore();
+      } finally {
+        warnSpy.mockRestore();
         await concurrentPool.shutdown();
         vi.useFakeTimers();
       }
