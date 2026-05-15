@@ -16,7 +16,10 @@ import { logger } from "@/lib/logger";
  * Agent Pool Configuration
  */
 export interface AgentPoolConfig {
-  /** 最大存活 dispatcher 代数，包含 cached、retired，以及正在创建中的容量预留（默认：100） */
+  /**
+   * 最大 dispatcher 容量，通常包含 cached、retired，以及正在创建中的容量预留（默认：100）。
+   * 同 cacheKey 退役中的活跃旧代可提供 1 个替换 credit，避免满载时硬过期/unhealthy 后无法重建。
+   */
   maxTotalAgents: number;
   /** Agent TTL in milliseconds (default: 300000 = 5 minutes) */
   agentTtlMs: number;
@@ -663,7 +666,18 @@ export class AgentPoolImpl implements AgentPool {
     return this.cache.size + this.retiredAgents.size;
   }
 
-  private getReservedDispatcherCount(): number {
+  private getReplacementCapacityCredit(cacheKey: string): number {
+    // 同 cacheKey 的退役活跃旧代原本占用的是这个逻辑槽位。允许最多 1 个替换 credit，
+    // 让硬过期/unhealthy 后能重建当前可复用代；更多旧代仍计入容量，避免无限堆积。
+    for (const retired of this.retiredAgents.values()) {
+      if (retired.cacheKey === cacheKey && retired.activeRequests > 0) {
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  private getReservedDispatcherCount(replacementCacheKey?: string): number {
     let reserved = this.getLiveDispatcherCount();
     for (const cacheKey of this.pendingCreations.keys()) {
       // 创建完成到 finally 删除 pending 之间，cache 里已经有同 key dispatcher，
@@ -672,19 +686,27 @@ export class AgentPoolImpl implements AgentPool {
         reserved++;
       }
     }
-    return reserved;
+    if (replacementCacheKey) {
+      reserved -= this.getReplacementCapacityCredit(replacementCacheKey);
+    }
+    return Math.max(0, reserved);
   }
 
   private ensureCapacityForNewAgent(cacheKey: string): void {
-    this.reclaimCapacityForNewAgent();
+    this.reclaimCapacityForNewAgent(cacheKey);
 
-    if (this.getReservedDispatcherCount() < this.config.maxTotalAgents) {
+    if (this.getReservedDispatcherCount(cacheKey) < this.config.maxTotalAgents) {
       return;
     }
 
+    const reservedDispatchers = this.getReservedDispatcherCount();
+    const replacementCapacityCredit = this.getReplacementCapacityCredit(cacheKey);
     logger.warn("AgentPool: Live dispatcher capacity exhausted", {
       cacheKey,
       maxTotalAgents: this.config.maxTotalAgents,
+      reservedDispatchers,
+      effectiveReservedDispatchers: Math.max(0, reservedDispatchers - replacementCapacityCredit),
+      replacementCapacityCredit,
       cacheSize: this.cache.size,
       retiredAgents: this.retiredAgents.size,
       pendingCreations: this.pendingCreations.size,
@@ -694,14 +716,14 @@ export class AgentPoolImpl implements AgentPool {
     throw new Error(`AgentPool live dispatcher capacity exhausted: ${this.config.maxTotalAgents}`);
   }
 
-  private reclaimCapacityForNewAgent(): void {
+  private reclaimCapacityForNewAgent(cacheKey: string): void {
     if (this.getReservedDispatcherCount() < this.config.maxTotalAgents) {
       return;
     }
 
     this.cleanupRetiredAgents(Date.now());
 
-    if (this.getReservedDispatcherCount() < this.config.maxTotalAgents) {
+    if (this.getReservedDispatcherCount(cacheKey) < this.config.maxTotalAgents) {
       return;
     }
 
