@@ -1037,17 +1037,20 @@ export const usageLedger = pgTable('usage_ledger', {
     .on(table.model)
     .where(sql`${table.model} IS NOT NULL`),
   // #slow-query: covering index for SUM(cost_usd) per key (replaces old key+cost, adds created_at for time range)
+  // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerKeyCostIdx: index('idx_usage_ledger_key_cost')
-    .on(table.key, table.createdAt, table.costUsd)
+    .on(table.key, table.createdAt, table.costUsd, table.endpoint)
     .where(sql`${table.blockedBy} IS NULL`),
   // #slow-query: covering index for SUM(cost_usd) per user (Quotas page + rate-limit total)
   // Keys: user_id (equality), created_at (range filter), cost_usd (aggregation, index-only scan)
+  // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerUserCostCoverIdx: index('idx_usage_ledger_user_cost_cover')
-    .on(table.userId, table.createdAt, table.costUsd)
+    .on(table.userId, table.createdAt, table.costUsd, table.endpoint)
     .where(sql`${table.blockedBy} IS NULL`),
   // #slow-query: covering index for SUM(cost_usd) per provider (rate-limit total)
+  // endpoint trailing column keeps LEDGER_BILLING_CONDITION's non-billing-endpoint filter index-only (Drizzle lacks INCLUDE support)
   usageLedgerProviderCostCoverIdx: index('idx_usage_ledger_provider_cost_cover')
-    .on(table.finalProviderId, table.createdAt, table.costUsd)
+    .on(table.finalProviderId, table.createdAt, table.costUsd, table.endpoint)
     .where(sql`${table.blockedBy} IS NULL`),
   // #slow-query: covering index for LATERAL last-usage per key (getUsers)
   // finalProviderId as trailing key column for index-only scan (Drizzle lacks INCLUDE support)
