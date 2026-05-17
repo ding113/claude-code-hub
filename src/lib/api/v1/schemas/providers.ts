@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { HIDDEN_PROVIDER_TYPES as HIDDEN_PROVIDER_TYPE_VALUES } from "@/lib/api/v1/_shared/constants";
+import { PROVIDER_KEY_MAX_LENGTH } from "@/lib/constants/provider.constants";
 import { ProviderTypeSchema } from "./_common";
 
 export const HIDDEN_PROVIDER_TYPES = new Set(HIDDEN_PROVIDER_TYPE_VALUES);
@@ -338,7 +339,7 @@ export const ProviderCreateSchema = z
   .object({
     name: z.string().trim().min(1).max(64).describe("Provider display name."),
     url: z.string().trim().url().max(255).describe("Provider upstream base URL."),
-    key: z.string().min(1).max(1024).describe("Provider API key. Write-only."),
+    key: z.string().min(1).max(PROVIDER_KEY_MAX_LENGTH).describe("Provider API key. Write-only."),
     is_enabled: z.boolean().optional().describe("Whether the provider is enabled."),
     weight: z.number().int().min(1).max(100).optional().describe("Provider routing weight."),
     priority: z.number().int().min(0).optional().describe("Provider routing priority."),
@@ -491,7 +492,12 @@ export const ProviderCreateSchema = z
 
 export const ProviderUpdateSchema = ProviderCreateSchema.omit({ key: true })
   .extend({
-    key: z.string().min(1).max(1024).optional().describe("Provider API key. Write-only."),
+    key: z
+      .string()
+      .min(1)
+      .max(PROVIDER_KEY_MAX_LENGTH)
+      .optional()
+      .describe("Provider API key. Write-only."),
     provider_type: ProviderTypeSchema.optional(),
   })
   .partial()
