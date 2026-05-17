@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   PROVIDER_DEFAULTS,
+  PROVIDER_KEY_MAX_LENGTH,
   PROVIDER_LIMITS,
   PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
@@ -457,7 +458,7 @@ export const CreateProviderSchema = z
   .object({
     name: z.string().min(1, "服务商名称不能为空").max(64, "服务商名称不能超过64个字符"),
     url: z.string().url("请输入有效的URL地址").max(255, "URL长度不能超过255个字符"),
-    key: z.string().min(1, "API密钥不能为空").max(1024, "API密钥长度不能超过1024个字符"),
+    key: z.string().min(1, "API密钥不能为空").max(PROVIDER_KEY_MAX_LENGTH, "API密钥长度超出限制"),
     // 数据库字段命名：下划线
     is_enabled: z.boolean().optional().default(PROVIDER_DEFAULTS.IS_ENABLED),
     weight: z
@@ -703,7 +704,7 @@ export const UpdateProviderSchema = z
   .object({
     name: z.string().min(1).max(64).optional(),
     url: z.string().url().max(255).optional(),
-    key: z.string().min(1).max(1024).optional(),
+    key: z.string().min(1).max(PROVIDER_KEY_MAX_LENGTH).optional(),
     is_enabled: z.boolean().optional(),
     weight: z
       .number()

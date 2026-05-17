@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { PROVIDER_KEY_MAX_LENGTH } from "@/lib/constants/provider.constants";
 import {
   CreateProviderSchema,
   CreateUserSchema,
@@ -292,5 +293,50 @@ describe("Provider schemas - custom_headers", () => {
         }).success
       ).toBe(false);
     });
+  });
+});
+
+describe("Provider schemas - API 密钥长度限制", () => {
+  const createBase = {
+    name: "测试供应商",
+    url: "https://api.example.com",
+  };
+
+  test("CreateProviderSchema 接受远超旧 1024 限制的密钥", () => {
+    const longKey = "k".repeat(8192);
+    expect(CreateProviderSchema.safeParse({ ...createBase, key: longKey }).success).toBe(true);
+  });
+
+  test("CreateProviderSchema 接受长度正好为上限的密钥", () => {
+    const maxKey = "k".repeat(PROVIDER_KEY_MAX_LENGTH);
+    expect(CreateProviderSchema.safeParse({ ...createBase, key: maxKey }).success).toBe(true);
+  });
+
+  test("CreateProviderSchema 拒绝超出上限的密钥", () => {
+    const tooLongKey = "k".repeat(PROVIDER_KEY_MAX_LENGTH + 1);
+    expect(CreateProviderSchema.safeParse({ ...createBase, key: tooLongKey }).success).toBe(false);
+  });
+
+  test("CreateProviderSchema 仍拒绝空密钥", () => {
+    expect(CreateProviderSchema.safeParse({ ...createBase, key: "" }).success).toBe(false);
+  });
+
+  test("UpdateProviderSchema 接受远超旧 1024 限制的密钥", () => {
+    const longKey = "k".repeat(65536);
+    expect(UpdateProviderSchema.safeParse({ key: longKey }).success).toBe(true);
+  });
+
+  test("UpdateProviderSchema 接受长度正好为上限的密钥", () => {
+    const maxKey = "k".repeat(PROVIDER_KEY_MAX_LENGTH);
+    expect(UpdateProviderSchema.safeParse({ key: maxKey }).success).toBe(true);
+  });
+
+  test("UpdateProviderSchema 拒绝超出上限的密钥", () => {
+    const tooLongKey = "k".repeat(PROVIDER_KEY_MAX_LENGTH + 1);
+    expect(UpdateProviderSchema.safeParse({ key: tooLongKey }).success).toBe(false);
+  });
+
+  test("UpdateProviderSchema 仍拒绝空密钥", () => {
+    expect(UpdateProviderSchema.safeParse({ key: "" }).success).toBe(false);
   });
 });
