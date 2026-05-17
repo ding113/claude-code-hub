@@ -704,7 +704,11 @@ export const UpdateProviderSchema = z
   .object({
     name: z.string().min(1).max(64).optional(),
     url: z.string().url().max(255).optional(),
-    key: z.string().min(1).max(PROVIDER_KEY_MAX_LENGTH).optional(),
+    key: z
+      .string()
+      .min(1, "API密钥不能为空")
+      .max(PROVIDER_KEY_MAX_LENGTH, "API密钥长度超出限制")
+      .optional(),
     is_enabled: z.boolean().optional(),
     weight: z
       .number()
