@@ -4,8 +4,6 @@ import { format } from "date-fns";
 import { Calendar, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import { getProviders } from "@/actions/providers";
-import { searchUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getProviders } from "@/lib/api-client/v1/actions/providers";
+import { searchUsers } from "@/lib/api-client/v1/actions/users";
 import type { RateLimitEventFilters, RateLimitType } from "@/types/statistics";
 
 export interface RateLimitFiltersProps {

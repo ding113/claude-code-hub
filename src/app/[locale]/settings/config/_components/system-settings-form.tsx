@@ -5,6 +5,7 @@ import {
   ChevronDown,
   CircleHelp,
   Clock,
+  Coins,
   Eye,
   FileCode,
   Globe,
@@ -20,7 +21,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { saveSystemSettings } from "@/actions/system-config";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { InlineWarning } from "@/components/ui/inline-warning";
@@ -36,6 +36,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { saveSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
@@ -49,6 +50,7 @@ import { DEFAULT_IP_EXTRACTION_CONFIG, type IpExtractionConfig } from "@/types/i
 import type {
   BillingModelSource,
   CodexPriorityBillingSource,
+  FakeStreamingWhitelistEntry,
   SystemSettings,
 } from "@/types/system-config";
 
@@ -60,10 +62,12 @@ interface SystemSettingsFormProps {
     | "currencyDisplay"
     | "billingModelSource"
     | "codexPriorityBillingSource"
+    | "billNonSuccessfulRequests"
     | "timezone"
     | "verboseProviderError"
     | "passThroughUpstreamErrorMessage"
     | "enableHttp2"
+    | "enableOpenaiResponsesWebsocket"
     | "enableHighConcurrencyMode"
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
@@ -71,6 +75,7 @@ interface SystemSettingsFormProps {
     | "enableResponseInputRectifier"
     | "enableThinkingBudgetRectifier"
     | "allowNonConversationEndpointProviderFallback"
+    | "fakeStreamingWhitelist"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
@@ -117,6 +122,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [codexPriorityBillingSource, setCodexPriorityBillingSource] =
     useState<CodexPriorityBillingSource>(initialSettings.codexPriorityBillingSource);
+  const [billNonSuccessfulRequests, setBillNonSuccessfulRequests] = useState(
+    initialSettings.billNonSuccessfulRequests
+  );
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
@@ -125,6 +133,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.passThroughUpstreamErrorMessage
   );
   const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
+  const [enableOpenaiResponsesWebsocket, setEnableOpenaiResponsesWebsocket] = useState(
+    initialSettings.enableOpenaiResponsesWebsocket
+  );
   const [enableHighConcurrencyMode, setEnableHighConcurrencyMode] = useState(
     initialSettings.enableHighConcurrencyMode
   );
@@ -144,6 +155,14 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     allowNonConversationEndpointProviderFallback,
     setAllowNonConversationEndpointProviderFallback,
   ] = useState(initialSettings.allowNonConversationEndpointProviderFallback);
+  const [fakeStreamingWhitelist, setFakeStreamingWhitelist] = useState<
+    FakeStreamingWhitelistEntry[]
+  >(() =>
+    (initialSettings.fakeStreamingWhitelist ?? []).map((entry) => ({
+      model: entry.model,
+      groupTags: [...entry.groupTags],
+    }))
+  );
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
   );
@@ -233,6 +252,46 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       ipExtractionConfigToSave = parsed as IpExtractionConfig;
     }
 
+    const sanitizedFakeStreamingWhitelist: FakeStreamingWhitelistEntry[] = (() => {
+      // If the same model is listed multiple times, merge their groupTags
+      // (deduped, trimmed) instead of silently dropping later entries. The
+      // server-side schema rejects duplicates, so this aggregates client
+      // intent before submission.
+      //
+      // Empty groupTags means "all groups" — that is strictly broader than any
+      // explicit tag set, so once any entry for a model selects "all groups"
+      // the merged result must remain empty (do not narrow it by unioning in
+      // explicit tags from sibling rows).
+      const merged = new Map<string, Set<string>>();
+      const allGroupsModels = new Set<string>();
+      const order: string[] = [];
+      for (const entry of fakeStreamingWhitelist) {
+        const model = entry.model.trim();
+        if (!model) continue;
+        if (!merged.has(model)) {
+          merged.set(model, new Set<string>());
+          order.push(model);
+        }
+        if (entry.groupTags.length === 0) {
+          allGroupsModels.add(model);
+          continue;
+        }
+        if (allGroupsModels.has(model)) continue;
+        const groups = merged.get(model);
+        if (!groups) continue;
+        for (const tag of entry.groupTags) {
+          const trimmed = tag.trim();
+          if (trimmed) groups.add(trimmed);
+        }
+      }
+      return order.map((model) => ({
+        model,
+        groupTags: allGroupsModels.has(model)
+          ? []
+          : Array.from(merged.get(model) ?? new Set<string>()),
+      }));
+    })();
+
     startTransition(async () => {
       const result = await saveSystemSettings({
         siteTitle,
@@ -240,16 +299,19 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         currencyDisplay,
         billingModelSource,
         codexPriorityBillingSource,
+        billNonSuccessfulRequests,
         timezone,
         verboseProviderError,
         passThroughUpstreamErrorMessage,
         enableHttp2,
+        enableOpenaiResponsesWebsocket,
         enableHighConcurrencyMode,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
         enableBillingHeaderRectifier,
         enableResponseInputRectifier,
         allowNonConversationEndpointProviderFallback,
+        fakeStreamingWhitelist: sanitizedFakeStreamingWhitelist,
         enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion,
         enableClaudeMetadataUserIdInjection,
@@ -276,10 +338,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCurrencyDisplay(result.data.currencyDisplay);
         setBillingModelSource(result.data.billingModelSource);
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
+        setBillNonSuccessfulRequests(result.data.billNonSuccessfulRequests);
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
         setEnableHttp2(result.data.enableHttp2);
+        setEnableOpenaiResponsesWebsocket(result.data.enableOpenaiResponsesWebsocket);
         setEnableHighConcurrencyMode(result.data.enableHighConcurrencyMode);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
@@ -287,6 +351,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableResponseInputRectifier(result.data.enableResponseInputRectifier);
         setAllowNonConversationEndpointProviderFallback(
           result.data.allowNonConversationEndpointProviderFallback
+        );
+        setFakeStreamingWhitelist(
+          (result.data.fakeStreamingWhitelist ?? []).map((entry) => ({
+            model: entry.model,
+            groupTags: [...entry.groupTags],
+          }))
         );
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
@@ -470,6 +540,46 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="allow-global-usage"
             checked={allowGlobalUsageView}
             onCheckedChange={(checked) => setAllowGlobalUsageView(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Bill Non-Successful Requests */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+              <Coins className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-foreground">
+                  {t("billNonSuccessfulRequests")}
+                </p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t("billNonSuccessfulRequestsTooltip")}
+                      className={tooltipButtonClassName}
+                    >
+                      <CircleHelp className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                    {t("billNonSuccessfulRequestsTooltip")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("billNonSuccessfulRequestsDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="bill-non-successful-requests"
+            aria-label={t("billNonSuccessfulRequests")}
+            checked={billNonSuccessfulRequests}
+            onCheckedChange={(checked) => setBillNonSuccessfulRequests(checked)}
             disabled={isPending}
           />
         </div>

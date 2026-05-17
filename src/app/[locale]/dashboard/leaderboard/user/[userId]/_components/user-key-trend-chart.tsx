@@ -5,10 +5,10 @@ import { AlertCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { getUserInsightsKeyTrend } from "@/actions/admin-user-insights";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getUserInsightsKeyTrend } from "@/lib/api-client/v1/actions/admin-user-insights";
 import type { DatabaseKeyStatRow } from "@/types/statistics";
 import type { TimeRangePreset } from "./filters/types";
 

@@ -77,11 +77,11 @@ describe("UsageDoc - OpenCode 配置教程", () => {
     expect(text).toContain("claude-sonnet-4-5-20250929");
     expect(text).toContain("claude-opus-4-5-20251101");
 
-    expect(text).toContain('"model": "openai/gpt-5.2"');
-    expect(text).toContain('"small_model": "openai/gpt-5.2-small"');
+    expect(text).toContain('"model": "openai/gpt-5.4"');
+    expect(text).toContain('"small_model": "openai/gpt-5.4-small"');
 
-    expect(text).toContain("gpt-5.2");
-    expect(text).toContain("gpt-5.2-small");
+    expect(text).toContain("gpt-5.4");
+    expect(text).toContain("gpt-5.4-small");
     expect(text).toContain('"reasoningEffort": "xhigh"');
     expect(text).toContain('"reasoningEffort": "medium"');
     expect(text).toContain('"store": false');

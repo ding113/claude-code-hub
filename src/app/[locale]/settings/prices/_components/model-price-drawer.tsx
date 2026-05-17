@@ -4,7 +4,6 @@ import { Loader2, Pencil, Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { upsertSingleModelPrice } from "@/actions/model-prices";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +33,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { upsertSingleModelPrice } from "@/lib/api-client/v1/actions/model-prices";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { getEditableExtraPriceData } from "@/lib/utils/model-price-fields";
 import type { ModelPrice } from "@/types/model-price";

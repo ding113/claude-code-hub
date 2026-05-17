@@ -132,6 +132,64 @@ describe("admin token opaque-mode fallback", () => {
     expect(session!.key.name).toBe("ADMIN_TOKEN");
   });
 
+  it("opaque mode + signed admin auth cookie -> auth succeeds without Redis", async () => {
+    mockReadSession.mockRejectedValue(new Error("redis unavailable"));
+
+    const { createSignedAdminAuthToken, getSession } = await import("@/lib/auth");
+    const signedToken = await createSignedAdminAuthToken();
+    setAuthCookie(signedToken);
+
+    const session = await getSession();
+
+    expect(session).not.toBeNull();
+    expect(session!.user.id).toBe(-1);
+    expect(session!.user.role).toBe("admin");
+    expect(session!.key.name).toBe("ADMIN_TOKEN");
+    expect(mockReadSession).not.toHaveBeenCalled();
+  });
+
+  it("legacy mode + signed admin auth cookie -> auth fails without reading Redis", async () => {
+    const { createSignedAdminAuthToken, getSession } = await import("@/lib/auth");
+    const signedToken = await createSignedAdminAuthToken();
+    setSessionMode("legacy");
+    setAuthCookie(signedToken);
+
+    const session = await getSession();
+
+    expect(session).toBeNull();
+    expect(mockReadSession).not.toHaveBeenCalled();
+  });
+
+  it("opaque mode + tampered signed admin auth cookie -> auth fails", async () => {
+    const { createSignedAdminAuthToken, getSession } = await import("@/lib/auth");
+    const signedToken = await createSignedAdminAuthToken();
+    const tamperedToken = `${signedToken.slice(0, -1)}${signedToken.endsWith("a") ? "b" : "a"}`;
+    setAuthCookie(tamperedToken);
+
+    const session = await getSession();
+
+    expect(session).toBeNull();
+    expect(mockReadSession).not.toHaveBeenCalled();
+    expect(mockValidateApiKeyAndGetUser).not.toHaveBeenCalled();
+  });
+
+  it("opaque mode + expired signed admin auth cookie -> auth fails without Redis lookup", async () => {
+    const { createSignedAdminSessionToken } = await import("@/lib/auth-admin-session-token");
+    const { getSession } = await import("@/lib/auth");
+    const signedToken = await createSignedAdminSessionToken({
+      adminToken: ADMIN_TOKEN,
+      ttlSeconds: 60,
+      now: Date.now() - 61_000,
+    });
+    setAuthCookie(signedToken);
+
+    const session = await getSession();
+
+    expect(session).toBeNull();
+    expect(mockReadSession).not.toHaveBeenCalled();
+    expect(mockValidateApiKeyAndGetUser).not.toHaveBeenCalled();
+  });
+
   it("opaque mode + valid opaque session -> auth succeeds (original logic unchanged)", async () => {
     const crypto = await import("node:crypto");
     const keyString = "sk-opaque-source-key";

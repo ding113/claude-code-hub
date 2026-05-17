@@ -16,7 +16,6 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getSessionDetails, terminateActiveSession } from "@/actions/active-sessions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +37,11 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePathname, useRouter } from "@/i18n/routing";
-import type { CurrencyCode } from "@/lib/utils/currency";
+import {
+  getSessionDetails,
+  terminateActiveSession,
+} from "@/lib/api-client/v1/actions/active-sessions";
+import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import {
   DEFAULT_SESSION_DETAIL_VIEW_MODE,
   type SessionDetailSnapshots,
@@ -48,16 +51,6 @@ import { RequestListSidebar } from "./request-list-sidebar";
 import { SessionMessagesDetailsTabs } from "./session-details-tabs";
 import { hasSnapshotData } from "./session-messages-guards";
 import { SessionStats } from "./session-stats";
-
-async function fetchSystemSettings(): Promise<{
-  currencyDisplay: CurrencyCode;
-}> {
-  const response = await fetch("/api/system-settings");
-  if (!response.ok) {
-    throw new Error("Failed to fetch system settings");
-  }
-  return response.json();
-}
 
 export function SessionMessagesClient() {
   const t = useTranslations("dashboard.sessions");
@@ -117,7 +110,7 @@ export function SessionMessagesClient() {
 
   const { data: systemSettings } = useQuery({
     queryKey: ["system-settings"],
-    queryFn: fetchSystemSettings,
+    queryFn: getSystemSettings,
   });
 
   const currencyCode = systemSettings?.currencyDisplay || "USD";

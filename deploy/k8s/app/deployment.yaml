@@ -59,10 +59,10 @@ spec:
               value: "10"
             - name: FETCH_CONNECT_TIMEOUT
               value: "30"
-            - name: FETCH_HEADERS_TIMEOUT
-              value: "600"
-            - name: FETCH_BODY_TIMEOUT
-              value: "600"
+            #- name: FETCH_HEADERS_TIMEOUT
+            #  value: "600"
+            #- name: FETCH_BODY_TIMEOUT
+            #  value: "600"
             - name: ENABLE_RATE_LIMIT
               value: "true"
             - name: ENABLE_API_KEY_REDIS_CACHE
@@ -73,6 +73,8 @@ spec:
               value: "true"
             - name: ENABLE_PROVIDER_CACHE
               value: "true"
+            - name: AUTH_SESSION_TTL_SECONDS
+              value: "604800"
             - name: SESSION_TTL
               value: "300"
             - name: MESSAGE_REQUEST_WRITE_MODE

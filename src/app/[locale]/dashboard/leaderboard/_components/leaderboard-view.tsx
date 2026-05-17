@@ -3,7 +3,6 @@
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { getAllUserKeyGroups, getAllUserTags } from "@/actions/users";
 import { LeaderboardPrimaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-primary-tabs";
 import { LeaderboardSecondaryTabs } from "@/app/[locale]/dashboard/leaderboard/_components/leaderboard-secondary-tabs";
 import {
@@ -23,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TagInput } from "@/components/ui/tag-input";
 import { Link } from "@/i18n/routing";
+import { getAllUserKeyGroups, getAllUserTags } from "@/lib/api-client/v1/actions/users";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
   DateRangeParams,

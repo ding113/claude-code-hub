@@ -13,6 +13,21 @@
   "copyResult": "Copy Result",
   "copySuccess": "Copied to clipboard",
   "customConfig": "Custom",
+  "customHeaders": {
+    "label": "Custom request headers (JSON)",
+    "desc": "Static headers merged into the outbound test request. Will not override authentication.",
+    "geminiNotSupported": "Custom headers are not supported for the Gemini test path",
+    "errors": {
+      "invalidJson": "Custom headers must be valid JSON",
+      "notObject": "Custom headers must be a JSON object",
+      "invalidName": "Header name contains characters that are not allowed",
+      "duplicateName": "Header name appears more than once (case-insensitive)",
+      "protectedName": "Authentication headers cannot be set via custom headers",
+      "invalidValue": "Header values must be strings",
+      "emptyName": "Header name cannot be empty",
+      "crlf": "Header name and value cannot contain line breaks"
+    }
+  },
   "customPayloadDesc": "Enter custom JSON payload to override default request body",
   "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
   "disclaimer": {

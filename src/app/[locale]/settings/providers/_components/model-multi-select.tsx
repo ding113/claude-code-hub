@@ -11,12 +11,6 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import {
-  type AvailableModelCatalogItem,
-  type AvailableModelCatalogScope,
-  getAvailableModelCatalog,
-} from "@/actions/model-prices";
-import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,6 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  type AvailableModelCatalogItem,
+  type AvailableModelCatalogScope,
+  getAvailableModelCatalog,
+} from "@/lib/api-client/v1/actions/model-prices";
+import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/lib/api-client/v1/actions/providers";
 import { PRICE_FILTER_VENDORS } from "@/lib/model-vendor-icons";
 import { cn } from "@/lib/utils";
 import type { ProviderType } from "@/types/provider";

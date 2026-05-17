@@ -149,6 +149,7 @@ export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
                 placeholder={t("sections.proxy.url.placeholder")}
                 disabled={state.ui.isPending}
                 className="pr-10 font-mono text-sm"
+                autoComplete="off"
               />
               <Network className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             </div>

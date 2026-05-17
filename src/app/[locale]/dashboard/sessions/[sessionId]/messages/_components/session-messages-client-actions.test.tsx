@@ -123,7 +123,7 @@ function createSnapshots(): SessionDetailSnapshots {
     defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
     request: {
       before: {
-        body: { model: "gpt-5.2", input: "before" },
+        body: { model: "gpt-5.4", input: "before" },
         messages: { role: "user", content: "before" },
         headers: { "x-before": "1" },
         meta: {
@@ -133,7 +133,7 @@ function createSnapshots(): SessionDetailSnapshots {
         },
       },
       after: {
-        body: { model: "gpt-5.2", input: "after" },
+        body: { model: "gpt-5.4", input: "after" },
         messages: { role: "user", content: "after" },
         headers: { "x-after": "1" },
         meta: {
@@ -174,7 +174,7 @@ function buildDetailsData(
   }> = {}
 ) {
   return {
-    requestBody: { model: "gpt-5.2", input: "legacy" },
+    requestBody: { model: "gpt-5.4", input: "legacy" },
     messages: { role: "user", content: "legacy" },
     response: '{"legacy":true}',
     requestHeaders: { "x-legacy": "1" },
@@ -322,7 +322,7 @@ describe("SessionMessagesClient (request export actions)", () => {
           lastRequestAt: "2026-01-01T00:01:00.000Z",
           totalDurationMs: 1500,
           providers: [{ id: 1, name: "p1" }],
-          models: ["gpt-5.2"],
+          models: ["gpt-5.4"],
           totalInputTokens: 10,
           totalOutputTokens: 20,
           totalCacheCreationTokens: 30,
@@ -589,7 +589,7 @@ describe("SessionMessagesClient (request export actions)", () => {
           lastRequestAt: "2026-01-01T00:01:00.000Z",
           totalDurationMs: 1500,
           providers: [{ id: 1, name: "p1" }],
-          models: ["gpt-5.2"],
+          models: ["gpt-5.4"],
           totalInputTokens: 10,
           totalOutputTokens: 20,
           totalCacheCreationTokens: 30,

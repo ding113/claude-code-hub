@@ -1,5 +1,11 @@
 import { cookies, headers } from "next/headers";
 import type { NextResponse } from "next/server";
+import {
+  createSignedAdminSessionToken,
+  isSignedAdminSessionTokenFormat,
+  verifySignedAdminSessionToken,
+} from "@/lib/auth-admin-session-token";
+import { DEFAULT_AUTH_SESSION_TTL_SECONDS } from "@/lib/auth-session-store";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
@@ -39,7 +45,7 @@ declare global {
 }
 
 export const AUTH_COOKIE_NAME = "auth-token";
-const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+const MIN_AUTH_SESSION_TTL_SECONDS = 1;
 
 export interface AuthSession {
   user: User;
@@ -53,10 +59,20 @@ export function getSessionTokenMode(): SessionTokenMode {
   return getEnvConfig().SESSION_TOKEN_MODE;
 }
 
+export function getAuthSessionTtlSeconds(): number {
+  const ttl = getEnvConfig().AUTH_SESSION_TTL_SECONDS;
+  if (!Number.isFinite(ttl) || typeof ttl !== "number" || ttl <= 0) {
+    return DEFAULT_AUTH_SESSION_TTL_SECONDS;
+  }
+
+  return Math.max(MIN_AUTH_SESSION_TTL_SECONDS, Math.floor(ttl));
+}
+
 // Session contract: opaque token is a random string, not the API key
 export interface OpaqueSessionContract {
   sessionId: string; // random opaque token
   keyFingerprint: string; // hash of the API key (for audit, not auth)
+  credentialType?: "session" | "admin-token" | "user-api-key"; // token provenance for management API policy
   createdAt: number; // unix timestamp
   expiresAt: number; // unix timestamp
   userId: number;
@@ -103,6 +119,7 @@ export function isOpaqueSessionContract(value: unknown): value is OpaqueSessionC
   if (!value || typeof value !== "object") return false;
 
   const candidate = value as Record<string, unknown>;
+  const credentialType = candidate.credentialType;
   return (
     typeof candidate.sessionId === "string" &&
     candidate.sessionId.length > 0 &&
@@ -116,7 +133,11 @@ export function isOpaqueSessionContract(value: unknown): value is OpaqueSessionC
     typeof candidate.userId === "number" &&
     Number.isInteger(candidate.userId) &&
     typeof candidate.userRole === "string" &&
-    candidate.userRole.length > 0
+    candidate.userRole.length > 0 &&
+    (credentialType === undefined ||
+      credentialType === "session" ||
+      credentialType === "admin-token" ||
+      credentialType === "user-api-key")
   );
 }
 
@@ -127,6 +148,8 @@ export function detectSessionTokenKind(token: string): SessionTokenKind {
   if (!trimmed) return "legacy";
   return trimmed.startsWith(OPAQUE_SESSION_ID_PREFIX) ? "opaque" : "legacy";
 }
+
+export type AuthCredentialType = "session" | "admin-token" | "user-api-key" | "none";
 
 export function isSessionTokenAccepted(
   token: string,
@@ -247,7 +270,7 @@ export async function setAuthCookie(keyString: string) {
     httpOnly: true,
     secure: env.ENABLE_SECURE_COOKIES,
     sameSite: "lax",
-    maxAge: AUTH_COOKIE_MAX_AGE,
+    maxAge: getAuthSessionTtlSeconds(),
     path: "/",
   });
 }
@@ -267,8 +290,13 @@ export async function validateAuthToken(
   options?: { allowReadOnlyAccess?: boolean }
 ): Promise<AuthSession | null> {
   const mode = getSessionTokenMode();
+  const signedAdminTokenFormat = isSignedAdminSessionTokenFormat(token);
 
   if (mode !== "legacy") {
+    if (signedAdminTokenFormat) {
+      return validateSignedAdminSessionToken(token, options);
+    }
+
     try {
       const sessionStore = await getSessionStore();
       const sessionData = await sessionStore.read(token);
@@ -289,6 +317,10 @@ export async function validateAuthToken(
     }
   }
 
+  if (signedAdminTokenFormat) {
+    return null;
+  }
+
   if (mode === "legacy" || mode === "dual") {
     return validateKey(token, options);
   }
@@ -301,6 +333,42 @@ export async function validateAuthToken(
   }
 
   return null;
+}
+
+export async function createSignedAdminAuthToken(): Promise<string> {
+  const adminToken = config.auth.adminToken;
+  if (!adminToken) {
+    throw new Error("ADMIN_TOKEN is not configured");
+  }
+
+  return createSignedAdminSessionToken({
+    adminToken,
+    ttlSeconds: getAuthSessionTtlSeconds(),
+  });
+}
+
+export async function isSignedAdminAuthToken(token: string): Promise<boolean> {
+  const adminToken = config.auth.adminToken;
+  if (!adminToken) {
+    return false;
+  }
+
+  return verifySignedAdminSessionToken(token, {
+    adminToken,
+    maxTtlSeconds: getAuthSessionTtlSeconds(),
+  });
+}
+
+async function validateSignedAdminSessionToken(
+  token: string,
+  options?: { allowReadOnlyAccess?: boolean }
+): Promise<AuthSession | null> {
+  if (!(await isSignedAdminAuthToken(token))) {
+    return null;
+  }
+
+  const adminToken = config.auth.adminToken;
+  return adminToken ? validateKey(adminToken, options) : null;
 }
 
 export async function getSession(options?: {

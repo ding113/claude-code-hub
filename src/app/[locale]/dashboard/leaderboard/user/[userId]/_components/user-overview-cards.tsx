@@ -3,9 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, AlertCircle, Clock, DollarSign, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getUserInsightsOverview } from "@/actions/admin-user-insights";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getUserInsightsOverview } from "@/lib/api-client/v1/actions/admin-user-insights";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils";
 
 interface UserOverviewCardsProps {

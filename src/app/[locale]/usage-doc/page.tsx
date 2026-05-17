@@ -663,7 +663,7 @@ sk_xxxxxxxxxxxxxxxxxx`}
                 <CodeBlock
                   language="toml"
                   code={`model_provider = "cch"
-model = "gpt-5.2"
+model = "gpt-5.4"
 model_reasoning_effort = "xhigh"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
@@ -709,7 +709,7 @@ network_access = true`}
                 <CodeBlock
                   language="toml"
                   code={`model_provider = "cch"
-model = "gpt-5.2"
+model = "gpt-5.4"
 model_reasoning_effort = "xhigh"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
@@ -1087,8 +1087,8 @@ gemini`}
         $schema: "https://opencode.ai/config.json",
         theme: "opencode",
         autoupdate: false,
-        model: "openai/gpt-5.2",
-        small_model: "openai/gpt-5.2-small",
+        model: "openai/gpt-5.4",
+        small_model: "openai/gpt-5.4-small",
         provider: {
           cchClaude: {
             npm: "@ai-sdk/anthropic",
@@ -1113,17 +1113,17 @@ gemini`}
               setCacheKey: true,
             },
             models: {
-              "gpt-5.2": {
-                name: "GPT-5.2",
+              "gpt-5.4": {
+                name: "GPT-5.4",
                 options: {
                   reasoningEffort: "xhigh",
                   store: false,
                   include: ["reasoning.encrypted_content"],
                 },
               },
-              "gpt-5.2-small": {
-                id: "gpt-5.2",
-                name: "GPT-5.2 Small",
+              "gpt-5.4-small": {
+                id: "gpt-5.4",
+                name: "GPT-5.4 Small",
                 options: {
                   reasoningEffort: "medium",
                   store: false,
@@ -1251,8 +1251,8 @@ gemini`}
       "provider": "anthropic"
     },
     {
-      "model_display_name": "GPT-5.2 [cch]",
-      "model": "gpt-5.2",
+      "model_display_name": "GPT-5.4 [cch]",
+      "model": "gpt-5.4",
       "base_url": "${apiOrigin}/v1",
       "api_key": "your-api-key-here",
       "provider": "openai"

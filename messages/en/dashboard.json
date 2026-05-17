@@ -718,6 +718,7 @@
       "noRequests": "No requests found",
       "fetchFailed": "Failed to fetch requests",
       "unknownError": "Unknown error occurred",
+      "searchPlaceholder": "Search requests...",
       "prev": "Prev",
       "next": "Next",
       "orderAsc": "Switch to ascending order (oldest first)",

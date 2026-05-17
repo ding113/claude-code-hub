@@ -3,7 +3,6 @@
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { listProvidersForFilterAction } from "@/actions/request-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,6 +15,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { listProvidersForFilterAction } from "@/lib/api-client/v1/actions/request-filters";
 
 interface ProviderMultiSelectProps {
   selectedProviderIds: number[];

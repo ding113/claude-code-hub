@@ -81,13 +81,15 @@ bun run db:studio         # Open Drizzle Studio
 src/
 ├── app/
 │   ├── [locale]/dashboard/    # Dashboard UI pages
-│   ├── api/                   # Internal API routes
+│   ├── api/
+│   │   ├── v1/                # REST management API + OpenAPI docs
+│   │   └── actions/           # Legacy Server Action adapter (deprecated)
 │   └── v1/                    # Proxy API (Claude/OpenAI compatible)
 │       └── _lib/
 │           ├── proxy/         # Core proxy pipeline
 │           ├── converters/    # Format converters (claude/openai/codex/gemini)
 │           └── codex/         # Codex CLI adapter
-├── actions/                   # Server Actions (exposed via /api/actions)
+├── actions/                   # Server Actions reused by REST handlers
 ├── lib/                       # Core business logic
 │   ├── session-manager.ts     # Session & context caching
 │   ├── circuit-breaker.ts     # Provider health management
@@ -117,8 +119,10 @@ Key components:
 
 ### API Layer
 - **Proxy endpoints**: `/v1/messages`, `/v1/chat/completions`, `/v1/responses`
-- **Management API**: `/api/actions/{module}/{action}` - Auto-generated OpenAPI docs
-- **Docs**: `/api/actions/scalar` (Scalar UI), `/api/actions/docs` (Swagger)
+- **Management API**: `/api/v1/*` - RESTful management surface documented by OpenAPI
+- **Legacy Management API**: `/api/actions/{module}/{action}` - Deprecated Server Action adapter, retained behind `ENABLE_LEGACY_ACTIONS_API`
+- **Docs**: `/api/v1/scalar` (Scalar UI), `/api/v1/docs` (Swagger), `/api/v1/openapi.json`
+- **OpenAPI checks**: `bun run test:v1`, `bun run openapi:check`, `bun run openapi:lint`
 
 ## Code Conventions
 

@@ -31,11 +31,12 @@ vi.mock("fetch-socks", () => ({
 import {
   type AgentPool,
   AgentPoolImpl,
+  type AgentPoolConfig,
   generateAgentCacheKey,
   getGlobalAgentPool,
   resetGlobalAgentPool,
-  type AgentPoolConfig,
 } from "@/lib/proxy-agent/agent-pool";
+import { logger } from "@/lib/logger";
 
 describe("generateAgentCacheKey", () => {
   it("should generate correct cache key for direct connection", () => {
@@ -227,12 +228,45 @@ describe("AgentPool", () => {
       };
 
       const result1 = await pool.getAgent(params);
-      pool.markUnhealthy(result1.cacheKey, "SSL certificate error");
+      pool.markUnhealthy(result1.cacheKey, "SSL certificate error", result1.dispatcherId);
 
       const result2 = await pool.getAgent(params);
 
       expect(result2.isNew).toBe(true);
       expect(result2.agent).not.toBe(result1.agent);
+    });
+
+    it("旧两参数 markUnhealthy 应 warn 并安全忽略", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const params = {
+        endpointUrl: "https://legacy-unhealthy.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      try {
+        const result1 = await pool.getAgent(params);
+
+        pool.markUnhealthy(result1.cacheKey, "legacy caller without dispatcherId");
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Ignored cacheKey-only unhealthy mark",
+          expect.objectContaining({
+            cacheKey: result1.cacheKey,
+            reason: "legacy caller without dispatcherId",
+          })
+        );
+
+        const result2 = await pool.getAgent(params);
+        expect(result2.isNew).toBe(false);
+        expect(result2.agent).toBe(result1.agent);
+        expect(result2.dispatcherId).toBe(result1.dispatcherId);
+
+        pool.releaseAgent(result1.cacheKey, result1.dispatcherId);
+        pool.releaseAgent(result2.cacheKey, result2.dispatcherId);
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it("should not hang when evicting an unhealthy agent whose close() never resolves", async () => {
@@ -279,18 +313,156 @@ describe("AgentPool", () => {
           return new Promise<void>(() => {});
         };
 
-        realPool.markUnhealthy(result1.cacheKey, "test-hang-close");
+        realPool.releaseAgent(result1.cacheKey, result1.dispatcherId);
+        realPool.markUnhealthy(result1.cacheKey, "test-hang-close", result1.dispatcherId);
 
         const result2 = await withTimeout(realPool.getAgent(params), 500);
         expect(result2.isNew).toBe(true);
         expect(result2.agent).not.toBe(result1.agent);
 
-        // 断言：即使 close() 处于 pending，也不会阻塞 getAgent()，且会触发 close 调用
+        // 断言：空闲 unhealthy dispatcher 即使 close() 处于 pending，也不会阻塞 getAgent()
         expect(closeCalled).toBe(true);
       } finally {
         await realPool.shutdown();
         vi.useFakeTimers();
       }
+    });
+
+    it("should retire unhealthy active dispatcher without destroying in-flight requests", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      const result1 = await pool.getAgent(params);
+      const result2 = await pool.getAgent(params);
+      const agent1 = result1.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const destroy1 = vi.fn().mockResolvedValue(undefined);
+      agent1.destroy = destroy1;
+
+      pool.markUnhealthy(result1.cacheKey, "SSL certificate error", result1.dispatcherId);
+
+      expect(pool.getPoolStats().cacheSize).toBe(0);
+      expect(pool.getPoolStats().activeRequests).toBe(2);
+      expect(destroy1).not.toHaveBeenCalled();
+
+      const result3 = await pool.getAgent(params);
+      expect(result3.isNew).toBe(true);
+      expect(result3.agent).not.toBe(result1.agent);
+      expect(result3.dispatcherId).not.toBe(result1.dispatcherId);
+      expect(pool.getPoolStats().activeRequests).toBe(3);
+
+      pool.releaseAgent(result1.cacheKey, result1.dispatcherId);
+      expect(destroy1).not.toHaveBeenCalled();
+
+      pool.releaseAgent(result2.cacheKey, result2.dispatcherId);
+      expect(destroy1).toHaveBeenCalledTimes(1);
+
+      pool.releaseAgent(result3.cacheKey, result3.dispatcherId);
+      expect(pool.getPoolStats().activeRequests).toBe(0);
+    });
+
+    it("满载时同 cacheKey unhealthy 退役后仍应允许替换 dispatcher", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 2,
+        cleanupIntervalMs: 60 * 60 * 1000,
+      });
+
+      try {
+        const unhealthy = await smallPool.getAgent({
+          endpointUrl: "https://replace-unhealthy.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const unhealthyAgent = unhealthy.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const unhealthyDestroy = vi.fn().mockResolvedValue(undefined);
+        unhealthyAgent.destroy = unhealthyDestroy;
+
+        const occupied = await smallPool.getAgent({
+          endpointUrl: "https://occupied-unhealthy.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        smallPool.markUnhealthy(
+          unhealthy.cacheKey,
+          "SSL certificate error",
+          unhealthy.dispatcherId
+        );
+
+        const replacement = await smallPool.getAgent({
+          endpointUrl: "https://replace-unhealthy.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        expect(replacement.isNew).toBe(true);
+        expect(replacement.dispatcherId).not.toBe(unhealthy.dispatcherId);
+        expect(unhealthyDestroy).not.toHaveBeenCalled();
+        expect(smallPool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            activeRequests: 3,
+            cacheSize: 2,
+            liveAgents: 3,
+            retiredAgents: 1,
+          })
+        );
+
+        await expect(
+          smallPool.getAgent({
+            endpointUrl: "https://new-while-unhealthy-replacement-active.example.com/v1",
+            proxyUrl: null,
+            enableHttp2: false,
+          })
+        ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
+
+        smallPool.releaseAgent(unhealthy.cacheKey, unhealthy.dispatcherId);
+        expect(unhealthyDestroy).toHaveBeenCalledTimes(1);
+        expect(smallPool.getPoolStats().liveAgents).toBe(2);
+
+        smallPool.releaseAgent(occupied.cacheKey, occupied.dispatcherId);
+        smallPool.releaseAgent(replacement.cacheKey, replacement.dispatcherId);
+        expect(smallPool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        warnSpy.mockRestore();
+        await smallPool.shutdown();
+      }
+    });
+
+    it("should ignore stale unhealthy marks for an older dispatcher generation", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+
+      const oldGeneration = await pool.getAgent(params);
+      pool.markUnhealthy(oldGeneration.cacheKey, "initial SSL failure", oldGeneration.dispatcherId);
+
+      const newGeneration = await pool.getAgent(params);
+      expect(newGeneration.dispatcherId).not.toBe(oldGeneration.dispatcherId);
+
+      pool.markUnhealthy(
+        oldGeneration.cacheKey,
+        "late SSL failure from old stream",
+        oldGeneration.dispatcherId
+      );
+
+      const reusedNewGeneration = await pool.getAgent(params);
+      expect(reusedNewGeneration.agent).toBe(newGeneration.agent);
+      expect(reusedNewGeneration.dispatcherId).toBe(newGeneration.dispatcherId);
+
+      pool.releaseAgent(oldGeneration.cacheKey, oldGeneration.dispatcherId);
+      pool.releaseAgent(newGeneration.cacheKey, newGeneration.dispatcherId);
+      pool.releaseAgent(reusedNewGeneration.cacheKey, reusedNewGeneration.dispatcherId);
+      expect(pool.getPoolStats().activeRequests).toBe(0);
     });
 
     it("should track unhealthy agents in stats", async () => {
@@ -301,7 +473,7 @@ describe("AgentPool", () => {
       };
 
       const result = await pool.getAgent(params);
-      pool.markUnhealthy(result.cacheKey, "SSL certificate error");
+      pool.markUnhealthy(result.cacheKey, "SSL certificate error", result.dispatcherId);
 
       const stats = pool.getPoolStats();
       expect(stats.unhealthyAgents).toBe(1);
@@ -309,16 +481,26 @@ describe("AgentPool", () => {
 
     it("should evict all Agents for endpoint on evictEndpoint", async () => {
       // Create agents for same endpoint with different configs
-      await pool.getAgent({
+      const h1 = await pool.getAgent({
         endpointUrl: "https://api.anthropic.com/v1/messages",
         proxyUrl: null,
         enableHttp2: false,
       });
-      await pool.getAgent({
+      const h2 = await pool.getAgent({
         endpointUrl: "https://api.anthropic.com/v1/messages",
         proxyUrl: null,
         enableHttp2: true,
       });
+      const h1Agent = h1.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const h2Agent = h2.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const h1Destroy = vi.fn().mockResolvedValue(undefined);
+      const h2Destroy = vi.fn().mockResolvedValue(undefined);
+      h1Agent.destroy = h1Destroy;
+      h2Agent.destroy = h2Destroy;
       await pool.getAgent({
         endpointUrl: "https://api.openai.com/v1/chat/completions",
         proxyUrl: null,
@@ -333,6 +515,115 @@ describe("AgentPool", () => {
       const statsAfter = pool.getPoolStats();
       expect(statsAfter.cacheSize).toBe(1);
       expect(statsAfter.evictedAgents).toBe(2);
+      expect(statsAfter.activeRequests).toBe(3);
+      expect(h1Destroy).not.toHaveBeenCalled();
+      expect(h2Destroy).not.toHaveBeenCalled();
+
+      pool.releaseAgent(h1.cacheKey, h1.dispatcherId);
+      pool.releaseAgent(h2.cacheKey, h2.dispatcherId);
+      expect(h1Destroy).toHaveBeenCalledTimes(1);
+      expect(h2Destroy).toHaveBeenCalledTimes(1);
+    });
+
+    it("should close a dispatcher created after endpoint eviction instead of caching it", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+      const lateAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      const freshAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      let resolveCreate!: (agent: unknown) => void;
+      const createPromise = new Promise<unknown>((resolve) => {
+        resolveCreate = resolve;
+      });
+      const createSpy = vi.spyOn(pool as any, "createAgent");
+      createSpy.mockImplementationOnce(() => createPromise);
+      let getPromise: Promise<unknown> | null = null;
+
+      try {
+        getPromise = pool.getAgent(params);
+        await Promise.resolve();
+        expect(createSpy).toHaveBeenCalled();
+
+        await pool.evictEndpoint("https://api.anthropic.com");
+
+        createSpy.mockResolvedValueOnce(freshAgent);
+        const freshResult = await pool.getAgent(params);
+        expect(freshResult.agent).toBe(freshAgent);
+        expect(freshResult.isNew).toBe(true);
+
+        resolveCreate(lateAgent);
+
+        await expect(getPromise).rejects.toThrow("AgentPool endpoint was evicted during creation");
+        expect(lateAgent.destroy).toHaveBeenCalledTimes(1);
+        expect(lateAgent.close).not.toHaveBeenCalled();
+        expect(pool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            activeRequests: 1,
+            cacheSize: 1,
+            pendingCreations: 0,
+          })
+        );
+        pool.releaseAgent(freshResult.cacheKey, freshResult.dispatcherId);
+      } finally {
+        resolveCreate(lateAgent);
+        await getPromise?.catch(() => undefined);
+        createSpy.mockRestore();
+      }
+    });
+
+    it("should preserve retirement metadata when a retired dispatcher is later marked unhealthy", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+      try {
+        const result = await pool.getAgent({
+          endpointUrl: "https://api.anthropic.com/v1/messages",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const agent = result.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const destroy = vi.fn().mockResolvedValue(undefined);
+        agent.destroy = destroy;
+
+        await pool.evictEndpoint("https://api.anthropic.com");
+        pool.markUnhealthy(result.cacheKey, "late SSL failure", result.dispatcherId);
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Retired agent marked as unhealthy",
+          expect.objectContaining({
+            cacheKey: result.cacheKey,
+            dispatcherId: result.dispatcherId,
+            reason: "late SSL failure",
+            retiredBy: "endpoint",
+            retireReason: "endpoint eviction",
+          })
+        );
+
+        vi.advanceTimersByTime(6 * 60 * 60 * 1000 + 1);
+        const cleaned = await pool.cleanup();
+
+        expect(cleaned).toBe(1);
+        expect(destroy).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Force closing long-retired active agent",
+          expect.objectContaining({
+            cacheKey: result.cacheKey,
+            dispatcherId: result.dispatcherId,
+            retiredBy: "endpoint",
+          })
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 
@@ -400,20 +691,22 @@ describe("AgentPool", () => {
         maxTotalAgents: 2,
       });
 
-      // Create 3 agents (exceeds max of 2)
-      await smallPool.getAgent({
+      // Create 3 agents after releasing earlier requests so LRU can reclaim idle capacity.
+      const r1 = await smallPool.getAgent({
         endpointUrl: "https://api1.example.com/v1",
         proxyUrl: null,
         enableHttp2: false,
       });
+      smallPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
 
       vi.advanceTimersByTime(100);
 
-      await smallPool.getAgent({
+      const r2 = await smallPool.getAgent({
         endpointUrl: "https://api2.example.com/v1",
         proxyUrl: null,
         enableHttp2: false,
       });
+      smallPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
 
       vi.advanceTimersByTime(100);
 
@@ -428,6 +721,363 @@ describe("AgentPool", () => {
       expect(stats.cacheSize).toBeLessThanOrEqual(2);
 
       await smallPool.shutdown();
+    });
+
+    it("容量紧张时应优先淘汰已过期的空闲 dispatcher", async () => {
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 2,
+        agentTtlMs: 60 * 60 * 1000,
+        cleanupIntervalMs: 60 * 60 * 1000,
+      });
+
+      const expiring = await smallPool.getAgent({
+        endpointUrl: "https://expired.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+      const expiringAgent = expiring.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const expiringDestroy = vi.fn().mockResolvedValue(undefined);
+      expiringAgent.destroy = expiringDestroy;
+      smallPool.releaseAgent(expiring.cacheKey, expiring.dispatcherId);
+
+      vi.advanceTimersByTime(20 * 60 * 1000);
+
+      const validLru = await smallPool.getAgent({
+        endpointUrl: "https://valid-lru.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+      const validLruAgent = validLru.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const validLruDestroy = vi.fn().mockResolvedValue(undefined);
+      validLruAgent.destroy = validLruDestroy;
+      smallPool.releaseAgent(validLru.cacheKey, validLru.dispatcherId);
+
+      vi.advanceTimersByTime(9 * 60 * 1000 + 50 * 1000);
+
+      const reusedExpiring = await smallPool.getAgent({
+        endpointUrl: "https://expired.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+      expect(reusedExpiring.dispatcherId).toBe(expiring.dispatcherId);
+      smallPool.releaseAgent(reusedExpiring.cacheKey, reusedExpiring.dispatcherId);
+
+      vi.advanceTimersByTime(11 * 1000);
+
+      const newEntry = await smallPool.getAgent({
+        endpointUrl: "https://new.example.com/v1",
+        proxyUrl: null,
+        enableHttp2: false,
+      });
+
+      expect(expiringDestroy).toHaveBeenCalledTimes(1);
+      expect(validLruDestroy).not.toHaveBeenCalled();
+      expect(smallPool.getPoolStats().cacheSize).toBe(2);
+
+      smallPool.releaseAgent(newEntry.cacheKey, newEntry.dispatcherId);
+      await smallPool.shutdown();
+    });
+
+    it("满载时同 cacheKey 硬过期退役后仍应允许替换 dispatcher", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 2,
+        cleanupIntervalMs: 60 * 60 * 1000,
+      });
+
+      try {
+        const expiring = await smallPool.getAgent({
+          endpointUrl: "https://replace-expired.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const expiringAgent = expiring.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const expiringDestroy = vi.fn().mockResolvedValue(undefined);
+        expiringAgent.destroy = expiringDestroy;
+
+        const occupied = await smallPool.getAgent({
+          endpointUrl: "https://occupied.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        vi.advanceTimersByTime(31 * 60 * 1000);
+
+        const replacement = await smallPool.getAgent({
+          endpointUrl: "https://replace-expired.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        expect(replacement.isNew).toBe(true);
+        expect(replacement.dispatcherId).not.toBe(expiring.dispatcherId);
+        expect(expiringDestroy).not.toHaveBeenCalled();
+        expect(smallPool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            activeRequests: 3,
+            cacheSize: 2,
+            liveAgents: 3,
+            retiredAgents: 1,
+          })
+        );
+
+        await expect(
+          smallPool.getAgent({
+            endpointUrl: "https://new-while-replacement-active.example.com/v1",
+            proxyUrl: null,
+            enableHttp2: false,
+          })
+        ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Live dispatcher capacity exhausted",
+          expect.objectContaining({
+            effectiveReservedDispatchers: 3,
+            replacementCapacityCredit: 0,
+            reservedDispatchers: 3,
+          })
+        );
+
+        smallPool.releaseAgent(expiring.cacheKey, expiring.dispatcherId);
+        expect(expiringDestroy).toHaveBeenCalledTimes(1);
+        expect(smallPool.getPoolStats().liveAgents).toBe(2);
+
+        smallPool.releaseAgent(occupied.cacheKey, occupied.dispatcherId);
+        smallPool.releaseAgent(replacement.cacheKey, replacement.dispatcherId);
+        expect(smallPool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        warnSpy.mockRestore();
+        await smallPool.shutdown();
+      }
+    });
+
+    it("同 cacheKey 替换 credit 回收容量时不应额外淘汰空闲 dispatcher", async () => {
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 3,
+        cleanupIntervalMs: 3 * 60 * 60 * 1000,
+      });
+
+      try {
+        const original = await smallPool.getAgent({
+          endpointUrl: "https://credit-replacement.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        const idleOld = await smallPool.getAgent({
+          endpointUrl: "https://idle-old.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const idleOldAgent = idleOld.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const idleOldDestroy = vi.fn().mockResolvedValue(undefined);
+        idleOldAgent.destroy = idleOldDestroy;
+        smallPool.releaseAgent(idleOld.cacheKey, idleOld.dispatcherId);
+
+        vi.advanceTimersByTime(100);
+
+        const idleKeep = await smallPool.getAgent({
+          endpointUrl: "https://idle-keep.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const idleKeepAgent = idleKeep.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const idleKeepDestroy = vi.fn().mockResolvedValue(undefined);
+        idleKeepAgent.destroy = idleKeepDestroy;
+        smallPool.releaseAgent(idleKeep.cacheKey, idleKeep.dispatcherId);
+
+        vi.advanceTimersByTime(31 * 60 * 1000);
+
+        const replacement1 = await smallPool.getAgent({
+          endpointUrl: "https://credit-replacement.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        expect(replacement1.dispatcherId).not.toBe(original.dispatcherId);
+        expect(idleOldDestroy).not.toHaveBeenCalled();
+        expect(idleKeepDestroy).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(31 * 60 * 1000);
+
+        const replacement2 = await smallPool.getAgent({
+          endpointUrl: "https://credit-replacement.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        expect(replacement2.dispatcherId).not.toBe(replacement1.dispatcherId);
+        expect(idleOldDestroy).toHaveBeenCalledTimes(1);
+        expect(idleKeepDestroy).not.toHaveBeenCalled();
+        expect(smallPool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            activeRequests: 3,
+            cacheSize: 2,
+            liveAgents: 4,
+            retiredAgents: 2,
+          })
+        );
+
+        smallPool.releaseAgent(original.cacheKey, original.dispatcherId);
+        smallPool.releaseAgent(replacement1.cacheKey, replacement1.dispatcherId);
+        smallPool.releaseAgent(replacement2.cacheKey, replacement2.dispatcherId);
+        expect(smallPool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        await smallPool.shutdown();
+      }
+    });
+
+    it("同 cacheKey 退役旧代 release 后应回收替换 credit", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 1,
+      });
+
+      try {
+        const endpointParams = {
+          endpointUrl: "https://credit-reclaim.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        };
+
+        const original = await smallPool.getAgent(endpointParams);
+        const originalAgent = original.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const originalDestroy = vi.fn().mockResolvedValue(undefined);
+        originalAgent.destroy = originalDestroy;
+
+        smallPool.markUnhealthy(
+          original.cacheKey,
+          "replace active dispatcher",
+          original.dispatcherId
+        );
+
+        const replacement = await smallPool.getAgent(endpointParams);
+        expect(replacement.dispatcherId).not.toBe(original.dispatcherId);
+
+        smallPool.releaseAgent(original.cacheKey, original.dispatcherId);
+        expect(originalDestroy).toHaveBeenCalledTimes(1);
+
+        smallPool.releaseAgent(replacement.cacheKey, replacement.dispatcherId);
+        await smallPool.evictEndpoint("https://credit-reclaim.example.com");
+
+        const occupied = await smallPool.getAgent({
+          endpointUrl: "https://credit-occupied.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        await expect(smallPool.getAgent(endpointParams)).rejects.toThrow(
+          "AgentPool live dispatcher capacity exhausted"
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Live dispatcher capacity exhausted",
+          expect.objectContaining({
+            cacheKey: original.cacheKey,
+            replacementCapacityCredit: 0,
+          })
+        );
+
+        smallPool.releaseAgent(occupied.cacheKey, occupied.dispatcherId);
+      } finally {
+        warnSpy.mockRestore();
+        await smallPool.shutdown();
+      }
+    });
+
+    it("should reject new dispatcher creation when all live capacity is active", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const smallPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 2,
+      });
+
+      try {
+        const r1 = await smallPool.getAgent({
+          endpointUrl: "https://api1.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        const agent1 = r1.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const destroy1 = vi.fn().mockResolvedValue(undefined);
+        agent1.destroy = destroy1;
+
+        vi.advanceTimersByTime(100);
+        const r2 = await smallPool.getAgent({
+          endpointUrl: "https://api2.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        vi.advanceTimersByTime(100);
+        await expect(
+          smallPool.getAgent({
+            endpointUrl: "https://api3.example.com/v1",
+            proxyUrl: null,
+            enableHttp2: false,
+          })
+        ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
+
+        expect(smallPool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            cacheMisses: 2,
+            hitRate: 0,
+            totalRequests: 2,
+          })
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Live dispatcher capacity exhausted",
+          expect.objectContaining({
+            activeRequests: 2,
+            cacheSize: 2,
+            maxTotalAgents: 2,
+            pendingCreations: 0,
+            retiredAgents: 0,
+          })
+        );
+        expect(smallPool.getPoolStats().cacheSize).toBe(2);
+        expect(smallPool.getPoolStats().liveAgents).toBe(2);
+        expect(smallPool.getPoolStats().activeRequests).toBe(2);
+        expect(destroy1).not.toHaveBeenCalled();
+
+        smallPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
+        expect(smallPool.getPoolStats().activeRequests).toBe(1);
+        expect(destroy1).not.toHaveBeenCalled();
+
+        const r3 = await smallPool.getAgent({
+          endpointUrl: "https://api3.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        expect(smallPool.getPoolStats().cacheSize).toBe(2);
+        expect(smallPool.getPoolStats().liveAgents).toBe(2);
+        expect(smallPool.getPoolStats().activeRequests).toBe(2);
+        expect(destroy1).toHaveBeenCalledTimes(1);
+
+        smallPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
+        smallPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
+        expect(smallPool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        warnSpy.mockRestore();
+        await smallPool.shutdown();
+      }
     });
   });
 
@@ -557,44 +1207,206 @@ describe("AgentPool", () => {
           };
         });
 
-        // 同时发起 3 个请求：首个进入 createAgentWithCache；后两个必须走 pendingCreations
-        const p1 = concurrentPool.getAgent(params);
-        const p2 = concurrentPool.getAgent(params);
-        const p3 = concurrentPool.getAgent(params);
+        try {
+          // 同时发起 3 个请求：首个进入 createAgentWithCache；后两个必须走 pendingCreations
+          const p1 = concurrentPool.getAgent(params);
+          const p2 = concurrentPool.getAgent(params);
+          const p3 = concurrentPool.getAgent(params);
 
-        // 稍微等一个 microtask，确保 p2/p3 已经进入 await pending 分支
-        await Promise.resolve();
-        await Promise.resolve();
+          // 稍微等一个 microtask，确保 p2/p3 已经进入 await pending 分支
+          await Promise.resolve();
+          await Promise.resolve();
 
-        // 放行创建
-        releaseCreate?.();
+          // 放行创建
+          releaseCreate?.();
 
-        const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+          const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
 
-        // 三个调用应拿到相同的 cacheKey 与 dispatcherId
-        expect(r2.cacheKey).toBe(r1.cacheKey);
-        expect(r3.cacheKey).toBe(r1.cacheKey);
-        expect(r2.dispatcherId).toBe(r1.dispatcherId);
-        expect(r3.dispatcherId).toBe(r1.dispatcherId);
+          // 三个调用应拿到相同的 cacheKey 与 dispatcherId
+          expect(r2.cacheKey).toBe(r1.cacheKey);
+          expect(r3.cacheKey).toBe(r1.cacheKey);
+          expect(r2.dispatcherId).toBe(r1.dispatcherId);
+          expect(r3.dispatcherId).toBe(r1.dispatcherId);
 
-        // 关键断言：所有 3 个并发 waiter 都应计入 activeRequests
-        expect(concurrentPool.getPoolStats().activeRequests).toBe(3);
+          // 关键断言：所有 3 个并发 waiter 都应计入 activeRequests
+          expect(concurrentPool.getPoolStats().activeRequests).toBe(3);
 
-        // 释放 3 次后归零，且仍能再多释一次（no-op）
-        concurrentPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
-        concurrentPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
-        concurrentPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
-        expect(concurrentPool.getPoolStats().activeRequests).toBe(0);
-
-        createSpy.mockRestore();
+          // 释放 3 次后归零，且仍能再多释一次（no-op）
+          concurrentPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
+          concurrentPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
+          concurrentPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
+          expect(concurrentPool.getPoolStats().activeRequests).toBe(0);
+        } finally {
+          releaseCreate?.();
+          createSpy.mockRestore();
+        }
       } finally {
         await concurrentPool.shutdown();
         vi.useFakeTimers();
       }
     });
 
-    it("should ignore releaseAgent from stale dispatcher generation", async () => {
-      // 回归用例：cacheKey 相同但 dispatcher 已被重建时，旧 release 不应误减新实例
+    it("should count pending creations against live dispatcher capacity", async () => {
+      vi.useRealTimers();
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const concurrentPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 1,
+      });
+      try {
+        let releaseCreate: (() => void) | null = null;
+        const createBlocker = new Promise<void>((resolve) => {
+          releaseCreate = resolve;
+        });
+
+        const createSpy = vi.spyOn(concurrentPool as any, "createAgent");
+        createSpy.mockImplementationOnce(async () => {
+          await createBlocker;
+          return {
+            close: vi.fn().mockResolvedValue(undefined),
+            destroy: vi.fn().mockResolvedValue(undefined),
+            options: {},
+          };
+        });
+
+        try {
+          const p1 = concurrentPool.getAgent({
+            endpointUrl: "https://api1.example.com/v1",
+            proxyUrl: null,
+            enableHttp2: false,
+          });
+
+          await Promise.resolve();
+          await Promise.resolve();
+
+          await expect(
+            concurrentPool.getAgent({
+              endpointUrl: "https://api2.example.com/v1",
+              proxyUrl: null,
+              enableHttp2: false,
+            })
+          ).rejects.toThrow("AgentPool live dispatcher capacity exhausted");
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            "AgentPool: Live dispatcher capacity exhausted",
+            expect.objectContaining({
+              activeRequests: 0,
+              cacheSize: 0,
+              maxTotalAgents: 1,
+              pendingCreations: 1,
+              retiredAgents: 0,
+            })
+          );
+
+          releaseCreate?.();
+          const r1 = await p1;
+          expect(concurrentPool.getPoolStats().liveAgents).toBe(1);
+          expect(concurrentPool.getPoolStats().pendingCreations).toBe(0);
+
+          concurrentPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
+        } finally {
+          releaseCreate?.();
+          createSpy.mockRestore();
+        }
+      } finally {
+        warnSpy.mockRestore();
+        await concurrentPool.shutdown();
+        vi.useFakeTimers();
+      }
+    });
+
+    it("should not count failed creations as cache misses", async () => {
+      const createSpy = vi.spyOn(pool as any, "createAgent");
+      createSpy.mockRejectedValueOnce(new Error("create failed"));
+
+      try {
+        await expect(
+          pool.getAgent({
+            endpointUrl: "https://create-fails.example.com/v1",
+            proxyUrl: null,
+            enableHttp2: false,
+          })
+        ).rejects.toThrow("create failed");
+
+        expect(pool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            cacheMisses: 0,
+            pendingCreations: 0,
+            totalRequests: 0,
+          })
+        );
+      } finally {
+        createSpy.mockRestore();
+      }
+    });
+
+    it("stale pending creation after endpoint eviction should not reserve capacity", async () => {
+      vi.useRealTimers();
+      const concurrentPool = new AgentPoolImpl({
+        ...defaultConfig,
+        maxTotalAgents: 1,
+      });
+
+      const lateAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      const freshAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      let resolveCreate!: (agent: unknown) => void;
+      const createPromise = new Promise<unknown>((resolve) => {
+        resolveCreate = resolve;
+      });
+      const createSpy = vi.spyOn(concurrentPool as any, "createAgent");
+      createSpy.mockImplementationOnce(() => createPromise);
+      let staleGetPromise: Promise<unknown> | null = null;
+
+      try {
+        staleGetPromise = concurrentPool.getAgent({
+          endpointUrl: "https://stale-pending.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+        await Promise.resolve();
+        expect(createSpy).toHaveBeenCalledTimes(1);
+
+        await concurrentPool.evictEndpoint("https://stale-pending.example.com");
+
+        createSpy.mockResolvedValueOnce(freshAgent);
+        const freshResult = await concurrentPool.getAgent({
+          endpointUrl: "https://fresh-after-eviction.example.com/v1",
+          proxyUrl: null,
+          enableHttp2: false,
+        });
+
+        expect(freshResult.agent).toBe(freshAgent);
+        expect(concurrentPool.getPoolStats()).toEqual(
+          expect.objectContaining({
+            cacheSize: 1,
+            pendingCreations: 0,
+          })
+        );
+
+        resolveCreate(lateAgent);
+        await expect(staleGetPromise).rejects.toThrow(
+          "AgentPool endpoint was evicted during creation"
+        );
+        expect(lateAgent.destroy).toHaveBeenCalledTimes(1);
+
+        concurrentPool.releaseAgent(freshResult.cacheKey, freshResult.dispatcherId);
+      } finally {
+        resolveCreate(lateAgent);
+        await staleGetPromise?.catch(() => undefined);
+        createSpy.mockRestore();
+        await concurrentPool.shutdown();
+        vi.useFakeTimers();
+      }
+    });
+
+    it("should release stale dispatcher generation without decrementing the current dispatcher", async () => {
+      // 回归用例：cacheKey 相同但 dispatcher 已被重建时，旧 release 只应释放旧代 dispatcher
       const regenPool = new AgentPoolImpl({
         ...defaultConfig,
         agentTtlMs: 1000,
@@ -611,20 +1423,24 @@ describe("AgentPool", () => {
       expect(regenPool.getPoolStats().activeRequests).toBe(1);
 
       // 模拟外部强制驱逐（例如 markUnhealthy 后下次 getAgent 触发 evictByKey）
-      regenPool.markUnhealthy(r1.cacheKey, "simulated SSL failure");
+      regenPool.markUnhealthy(r1.cacheKey, "simulated SSL failure", r1.dispatcherId);
 
       // 第二代 dispatcher（同 cacheKey，但 dispatcherId 必须不同）
       const r2 = await regenPool.getAgent(params);
       expect(r2.cacheKey).toBe(r1.cacheKey);
       expect(r2.dispatcherId).not.toBe(r1.dispatcherId);
-      expect(regenPool.getPoolStats().activeRequests).toBe(1);
+      expect(regenPool.getPoolStats().activeRequests).toBe(2);
 
-      // 用第一代 dispatcherId 释放 —— 必须被忽略
+      // 用第一代 dispatcherId 释放 —— 只关闭退役旧代，不应误减第二代
       regenPool.releaseAgent(r1.cacheKey, r1.dispatcherId);
       expect(regenPool.getPoolStats().activeRequests).toBe(1);
+      const r3 = await regenPool.getAgent(params);
+      expect(r3.dispatcherId).toBe(r2.dispatcherId);
+      expect(regenPool.getPoolStats().activeRequests).toBe(2);
 
-      // 用第二代 dispatcherId 释放 —— 正常减到 0
+      // 第二代被两个请求持有，释放两次后归零
       regenPool.releaseAgent(r2.cacheKey, r2.dispatcherId);
+      regenPool.releaseAgent(r3.cacheKey, r3.dispatcherId);
       expect(regenPool.getPoolStats().activeRequests).toBe(0);
 
       await regenPool.shutdown();
@@ -660,10 +1476,11 @@ describe("AgentPool", () => {
       await shortTtlPool.shutdown();
     });
 
-    it("should force-expire after hard upper bound regardless of active requests", async () => {
+    it("should retire after hard upper bound without destroying active requests", async () => {
       const pool2 = new AgentPoolImpl({
         ...defaultConfig,
         agentTtlMs: 1000,
+        cleanupIntervalMs: 60 * 60 * 1000,
       });
 
       const params = {
@@ -673,7 +1490,12 @@ describe("AgentPool", () => {
       };
 
       // getAgent increments activeRequests (never released)
-      await pool2.getAgent(params);
+      const r1 = await pool2.getAgent(params);
+      const agent1 = r1.agent as unknown as {
+        destroy?: () => Promise<void>;
+      };
+      const destroy1 = vi.fn().mockResolvedValue(undefined);
+      agent1.destroy = destroy1;
       expect(pool2.getPoolStats().activeRequests).toBe(1);
 
       // Advance past 30-minute hard upper bound
@@ -682,8 +1504,62 @@ describe("AgentPool", () => {
       const cleaned = await pool2.cleanup();
       expect(cleaned).toBe(1);
       expect(pool2.getPoolStats().cacheSize).toBe(0);
+      expect(pool2.getPoolStats().activeRequests).toBe(1);
+      expect(destroy1).not.toHaveBeenCalled();
+
+      pool2.releaseAgent(r1.cacheKey, r1.dispatcherId);
+      expect(destroy1).toHaveBeenCalledTimes(1);
+      expect(pool2.getPoolStats().activeRequests).toBe(0);
 
       await pool2.shutdown();
+    });
+
+    it("should force-close retired agents stuck active for more than 6 hours", async () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const pool2 = new AgentPoolImpl({
+        ...defaultConfig,
+        cleanupIntervalMs: 60 * 60 * 1000,
+      });
+
+      try {
+        const params = {
+          endpointUrl: "https://api.anthropic.com/v1/messages",
+          proxyUrl: null,
+          enableHttp2: false,
+        };
+
+        const r1 = await pool2.getAgent(params);
+        const agent1 = r1.agent as unknown as {
+          destroy?: () => Promise<void>;
+        };
+        const destroy1 = vi.fn().mockResolvedValue(undefined);
+        agent1.destroy = destroy1;
+
+        pool2.markUnhealthy(r1.cacheKey, "stuck retired stream", r1.dispatcherId);
+        expect(pool2.getPoolStats().cacheSize).toBe(0);
+        expect(pool2.getPoolStats().activeRequests).toBe(1);
+        expect(destroy1).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(6 * 60 * 60 * 1000 + 1);
+
+        const cleaned = await pool2.cleanup();
+        expect(cleaned).toBe(1);
+        expect(pool2.getPoolStats().activeRequests).toBe(0);
+        expect(destroy1).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith(
+          "AgentPool: Force closing long-retired active agent",
+          expect.objectContaining({
+            activeRequests: 1,
+            cacheKey: r1.cacheKey,
+            dispatcherId: r1.dispatcherId,
+            retiredBy: "unhealthy",
+            retiredForMs: 6 * 60 * 60 * 1000 + 1,
+          })
+        );
+      } finally {
+        warnSpy.mockRestore();
+        await pool2.shutdown();
+      }
     });
 
     it("should be a no-op when releasing non-existent key", () => {
@@ -837,6 +1713,46 @@ describe("AgentPool", () => {
       }
       if (typeof agent.close === "function") {
         expect(agent.close).not.toHaveBeenCalled();
+      }
+    });
+
+    it("should close a dispatcher created after shutdown starts instead of caching it", async () => {
+      const params = {
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: false,
+      };
+      const lateAgent = {
+        close: vi.fn().mockResolvedValue(undefined),
+        destroy: vi.fn().mockResolvedValue(undefined),
+      };
+      let resolveCreate!: (agent: unknown) => void;
+      const createPromise = new Promise<unknown>((resolve) => {
+        resolveCreate = resolve;
+      });
+      const createSpy = vi.spyOn(pool as any, "createAgent");
+      createSpy.mockImplementationOnce(() => createPromise);
+      let getPromise: Promise<unknown> | null = null;
+
+      try {
+        getPromise = pool.getAgent(params);
+        await Promise.resolve();
+        expect(createSpy).toHaveBeenCalled();
+
+        await pool.shutdown();
+        expect(pool.getPoolStats().pendingCreations).toBe(0);
+
+        resolveCreate(lateAgent);
+
+        await expect(getPromise).rejects.toThrow("AgentPool is shutting down");
+        expect(lateAgent.destroy).toHaveBeenCalledTimes(1);
+        expect(lateAgent.close).not.toHaveBeenCalled();
+        expect(pool.getPoolStats().cacheSize).toBe(0);
+        expect(pool.getPoolStats().activeRequests).toBe(0);
+      } finally {
+        resolveCreate(lateAgent);
+        await getPromise?.catch(() => undefined);
+        createSpy.mockRestore();
       }
     });
   });

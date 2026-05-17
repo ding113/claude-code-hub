@@ -37,7 +37,7 @@ jobs:
       (github.event.pusher.name != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]'))
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -191,7 +191,7 @@ jobs:
 
       - name: Setup Node.js for formatting
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
 
@@ -203,7 +203,7 @@ jobs:
 
       - name: Cache Bun package cache
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -258,7 +258,7 @@ jobs:
 
       - name: Create GitHub Release
         if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.next_version.outputs.new_tag }}
           name: Release ${{ steps.next_version.outputs.new_version }}
@@ -381,15 +381,15 @@ jobs:
       # Docker构建步骤
       - name: Set up QEMU
         if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
         if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -397,7 +397,7 @@ jobs:
 
       - name: Build and push Docker image
         if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./deploy/Dockerfile

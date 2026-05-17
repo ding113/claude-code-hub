@@ -4,8 +4,8 @@
  * 用于将旧的单 URL 配置迁移到新的多目标 Webhook 系统。
  */
 
-import { updateBindingsAction } from "@/actions/notification-bindings";
-import { createWebhookTargetAction } from "@/actions/webhook-targets";
+import { updateBindingsAction } from "@/lib/api-client/v1/actions/notification-bindings";
+import { createWebhookTargetAction } from "@/lib/api-client/v1/actions/webhook-targets";
 import { logger } from "@/lib/logger";
 import type { NotificationType } from "@/repository/notification-bindings";
 import type { NotificationSettings } from "@/repository/notifications";

@@ -76,6 +76,8 @@ export interface RoutingState {
   // Scheduled active time window (HH:mm format, null = always active)
   activeTimeStart: string | null;
   activeTimeEnd: string | null;
+  // Static custom request headers as JSON text (parsed on submit, null/empty cleared on save)
+  customHeadersText: string;
 }
 
 export interface RateLimitState {
@@ -171,6 +173,7 @@ export type ProviderFormAction =
   | { type: "SET_GEMINI_GOOGLE_SEARCH"; payload: GeminiGoogleSearchPreference }
   | { type: "SET_ACTIVE_TIME_START"; payload: string | null }
   | { type: "SET_ACTIVE_TIME_END"; payload: string | null }
+  | { type: "SET_CUSTOM_HEADERS_TEXT"; payload: string }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }
   | { type: "SET_LIMIT_DAILY_USD"; payload: number | null }

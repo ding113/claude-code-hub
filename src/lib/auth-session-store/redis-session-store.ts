@@ -1,9 +1,15 @@
 import "server-only";
 
 import type Redis from "ioredis";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
-import { DEFAULT_SESSION_TTL, type SessionData, type SessionStore } from "./index";
+import {
+  DEFAULT_AUTH_SESSION_TTL_SECONDS,
+  DEFAULT_SESSION_TTL,
+  type SessionData,
+  type SessionStore,
+} from "./index";
 
 const SESSION_KEY_PREFIX = "cch:session:";
 const MIN_TTL_SECONDS = 1;
@@ -27,6 +33,17 @@ function normalizeTtlSeconds(value: number | undefined): number {
   return Math.max(MIN_TTL_SECONDS, Math.floor(value));
 }
 
+function resolveDefaultAuthSessionTtlSeconds(): number {
+  try {
+    return normalizeTtlSeconds(getEnvConfig().AUTH_SESSION_TTL_SECONDS);
+  } catch (error) {
+    logger.warn("[AuthSessionStore] Failed to resolve auth session TTL, using default", {
+      error: toLogError(error),
+    });
+    return DEFAULT_AUTH_SESSION_TTL_SECONDS;
+  }
+}
+
 function buildSessionKey(sessionId: string): string {
   return `${SESSION_KEY_PREFIX}${sessionId}`;
 }
@@ -43,12 +60,21 @@ function parseSessionData(raw: string): SessionData | null {
     if (typeof obj.keyFingerprint !== "string") return null;
     if (typeof obj.userRole !== "string") return null;
     if (typeof obj.userId !== "number" || !Number.isInteger(obj.userId)) return null;
+    const credentialType =
+      obj.credentialType === "session" ||
+      obj.credentialType === "admin-token" ||
+      obj.credentialType === "user-api-key"
+        ? obj.credentialType
+        : obj.userId === -1
+          ? "admin-token"
+          : "session";
     if (!Number.isFinite(obj.createdAt) || typeof obj.createdAt !== "number") return null;
     if (!Number.isFinite(obj.expiresAt) || typeof obj.expiresAt !== "number") return null;
 
     return {
       sessionId: obj.sessionId,
       keyFingerprint: obj.keyFingerprint,
+      credentialType,
       userId: obj.userId as number,
       userRole: obj.userRole,
       createdAt: obj.createdAt,
@@ -76,7 +102,10 @@ export class RedisSessionStore implements SessionStore {
   private readonly redisClient?: RedisSessionClient | null;
 
   constructor(options: RedisSessionStoreOptions = {}) {
-    this.defaultTtlSeconds = normalizeTtlSeconds(options.defaultTtlSeconds);
+    this.defaultTtlSeconds =
+      options.defaultTtlSeconds === undefined
+        ? resolveDefaultAuthSessionTtlSeconds()
+        : normalizeTtlSeconds(options.defaultTtlSeconds);
     this.redisClient = options.redisClient;
   }
 
@@ -106,6 +135,7 @@ export class RedisSessionStore implements SessionStore {
     const sessionData: SessionData = {
       sessionId: `sid_${globalThis.crypto.randomUUID()}`,
       keyFingerprint: data.keyFingerprint,
+      credentialType: data.credentialType,
       userId: data.userId,
       userRole: data.userRole,
       createdAt,
@@ -196,6 +226,7 @@ export class RedisSessionStore implements SessionStore {
       nextSession = await this.create(
         {
           keyFingerprint: oldSession.keyFingerprint,
+          credentialType: oldSession.credentialType,
           userId: oldSession.userId,
           userRole: oldSession.userRole,
         },

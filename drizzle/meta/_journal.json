@@ -694,6 +694,41 @@
       "when": 1776965161943,
       "tag": "0098_equal_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1777361216354,
+      "tag": "0099_nervous_squadron_sinister",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1777362451734,
+      "tag": "0100_equal_expediter",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1777362451735,
+      "tag": "0101_worthless_gauntlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1777739658761,
+      "tag": "0102_useful_lionheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1779003941480,
+      "tag": "0103_small_master_mold",
+      "breakpoints": true
     }
   ]
 }

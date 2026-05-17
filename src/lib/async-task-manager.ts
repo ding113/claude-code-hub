@@ -48,19 +48,17 @@ class AsyncTaskManagerClass {
       return;
     }
 
-    // 定义统一的清理处理器
-    const exitHandler = (signal: string) => {
-      logger.info(`[AsyncTaskManager] Received ${signal}, cleaning up all tasks`, {
+    // SIGTERM/SIGINT 的取消时机由 src/lib/lifecycle/shutdown.ts 编排：
+    // 不在 drain 阶段取消任务（否则 server.close() 的 drain 完全失去意义——
+    // SSE/流式响应正期望被允许自然结束）。编排器进入 cleanup 阶段后才会调用
+    // shutdownAllAsyncTasks()。这里只保留 beforeExit 兜底，覆盖事件循环自然
+    // 耗尽路径（例如脚本类调用方未触发 SIGTERM）。
+    process.once("beforeExit", () => {
+      logger.info("[AsyncTaskManager] beforeExit reached, cancelling remaining tasks", {
         activeTaskCount: this.tasks.size,
       });
       this.cleanupAll();
-    };
-
-    // 监听所有退出信号（确保 Docker 环境下优雅关闭）
-    // 使用 once 而非 on，避免重复注册（特别是热重载场景）
-    process.once("SIGTERM", () => exitHandler("SIGTERM")); // Docker stop
-    process.once("SIGINT", () => exitHandler("SIGINT")); // Ctrl+C
-    process.once("beforeExit", () => exitHandler("beforeExit")); // 正常退出
+    });
 
     // 每分钟检查并清理超时任务（>10 分钟未完成，防止内存泄漏）
     this.cleanupInterval = setInterval(() => {
@@ -208,7 +206,7 @@ class AsyncTaskManagerClass {
   /**
    * 清理所有任务（进程退出时调用）
    */
-  private cleanupAll(): void {
+  cleanupAll(): void {
     logger.info("[AsyncTaskManager] Cleaning up all tasks", {
       count: this.tasks.size,
     });
@@ -247,3 +245,9 @@ class AsyncTaskManagerClass {
 const g = globalThis as unknown as { __ASYNC_TASK_MANAGER__?: AsyncTaskManagerClass };
 export const AsyncTaskManager =
   g.__ASYNC_TASK_MANAGER__ ?? (g.__ASYNC_TASK_MANAGER__ = new AsyncTaskManagerClass());
+
+// 供 shutdown 编排器调用：在 cleanup 阶段（server.close 完成后）才取消残留任务，
+// 避免 drain 期间打断流式响应。
+export function shutdownAllAsyncTasks(): void {
+  AsyncTaskManager.cleanupAll();
+}

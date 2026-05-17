@@ -14,6 +14,7 @@ import { getSystemSettings, updateSystemSettings } from "@/repository/system-con
 import type { IpExtractionConfig } from "@/types/ip-extraction";
 import type {
   CodexPriorityBillingSource,
+  FakeStreamingWhitelistEntry,
   ResponseFixerConfig,
   SystemSettings,
 } from "@/types/system-config";
@@ -56,6 +57,7 @@ export async function saveSystemSettings(formData: {
   currencyDisplay?: string;
   billingModelSource?: string;
   codexPriorityBillingSource?: CodexPriorityBillingSource;
+  billNonSuccessfulRequests?: boolean;
   timezone?: string | null;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -65,6 +67,7 @@ export async function saveSystemSettings(formData: {
   verboseProviderError?: boolean;
   passThroughUpstreamErrorMessage?: boolean;
   enableHttp2?: boolean;
+  enableOpenaiResponsesWebsocket?: boolean;
   enableHighConcurrencyMode?: boolean;
   interceptAnthropicWarmupRequests?: boolean;
   enableThinkingSignatureRectifier?: boolean;
@@ -72,6 +75,7 @@ export async function saveSystemSettings(formData: {
   enableBillingHeaderRectifier?: boolean;
   enableResponseInputRectifier?: boolean;
   allowNonConversationEndpointProviderFallback?: boolean;
+  fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
   enableCodexSessionIdCompletion?: boolean;
   enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
@@ -104,6 +108,7 @@ export async function saveSystemSettings(formData: {
       currencyDisplay: validated.currencyDisplay,
       billingModelSource: validated.billingModelSource,
       codexPriorityBillingSource: validated.codexPriorityBillingSource,
+      billNonSuccessfulRequests: validated.billNonSuccessfulRequests,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
@@ -113,6 +118,7 @@ export async function saveSystemSettings(formData: {
       verboseProviderError: validated.verboseProviderError,
       passThroughUpstreamErrorMessage: validated.passThroughUpstreamErrorMessage,
       enableHttp2: validated.enableHttp2,
+      enableOpenaiResponsesWebsocket: validated.enableOpenaiResponsesWebsocket,
       enableHighConcurrencyMode: validated.enableHighConcurrencyMode,
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
@@ -121,6 +127,7 @@ export async function saveSystemSettings(formData: {
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
         validated.allowNonConversationEndpointProviderFallback,
+      fakeStreamingWhitelist: validated.fakeStreamingWhitelist,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,

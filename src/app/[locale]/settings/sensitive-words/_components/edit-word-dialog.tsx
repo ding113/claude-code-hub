@@ -3,7 +3,6 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { updateSensitiveWordAction } from "@/actions/sensitive-words";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { updateSensitiveWordAction } from "@/lib/api-client/v1/actions/sensitive-words";
 import type { SensitiveWord } from "@/repository/sensitive-words";
 
 interface EditWordDialogProps {

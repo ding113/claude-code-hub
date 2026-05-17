@@ -1,11 +1,52 @@
+import { extractApiKeyFromHeaders as sharedExtractApiKeyFromHeaders } from "@/lib/api/auth-header-extractor";
 import { getClientIpWithFreshSettings } from "@/lib/ip";
 import { logger } from "@/lib/logger";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
-import { validateApiKeyAndGetUser } from "@/repository/key";
+import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
+import { resolveApiKeyAuthOutcome } from "@/repository/key";
 import { markUserExpired } from "@/repository/user";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { ProxyResponses } from "./responses";
-import type { AuthState, ProxySession } from "./session";
+import type { AuthFailureKind, AuthState, ProxySession } from "./session";
+
+async function getRequestLocale(): Promise<string> {
+  // Match the rate-limit-guard pattern: read next-intl's request locale
+  // (Accept-Language or cookie) lazily inside the guard so the proxy hot
+  // path does not pay the import cost on every cold start.
+  const { getLocale } = await import("next-intl/server");
+  return await getLocale();
+}
+
+/**
+ * Build an auth failure AuthState. The factory exists so every call site is
+ * forced (by the function signature) to supply both `failureKind` and an
+ * `errorResponse` — preventing the footgun where a new failure branch could
+ * forget to tag itself and silently get classified as a credentials failure
+ * by the brute-force rate limiter.
+ */
+function buildAuthFailure(params: {
+  failureKind: AuthFailureKind;
+  errorResponse: Response;
+  apiKey?: string | null;
+}): AuthState {
+  return {
+    user: null,
+    key: null,
+    apiKey: params.apiKey ?? null,
+    success: false,
+    failureKind: params.failureKind,
+    errorResponse: params.errorResponse,
+  };
+}
+
+/**
+ * Exhaustiveness helper. Calling this from a "should be unreachable" branch
+ * gives a compile-time error when a new union member is added without an
+ * explicit handler.
+ */
+function assertNever(value: never, context: string): never {
+  throw new Error(`Unhandled discriminant in ${context}: ${JSON.stringify(value)}`);
+}
 
 /**
  * Pre-auth rate limiter: throttles repeated authentication failures per IP
@@ -72,8 +113,13 @@ export class ProxyAuthenticator {
       return null;
     }
 
-    // Record failure for rate limiting
-    proxyAuthPolicy.recordFailure(clientIp, authState.apiKey ?? candidateApiKey ?? undefined);
+    // Only `credentials` failures should feed the brute-force rate limiter.
+    // `account_state` failures (key/user disabled or expired) match a real
+    // record, so recording them would let an admin lock themselves out by
+    // simply disabling a key and watching the owner retry.
+    if (authState.failureKind !== "account_state") {
+      proxyAuthPolicy.recordFailure(clientIp, authState.apiKey ?? candidateApiKey ?? undefined);
+    }
 
     // 返回详细的错误信息，帮助用户快速定位问题
     return authState.errorResponse ?? ProxyResponses.buildError(401, "认证失败");
@@ -127,17 +173,14 @@ export class ProxyAuthenticator {
         hasGeminiApiKeyHeader: !!headers.geminiApiKeyHeader,
         hasGeminiApiKeyQuery: !!headers.geminiApiKeyQuery,
       });
-      return {
-        user: null,
-        key: null,
-        apiKey: null,
-        success: false,
+      return buildAuthFailure({
+        failureKind: "credentials",
         errorResponse: ProxyResponses.buildError(
           401,
           "未提供认证凭据。请在 Authorization 头部、x-api-key 头部或 x-goog-api-key 头部中包含 API 密钥。",
           "authentication_error"
         ),
-      };
+      });
     }
 
     const [firstKey] = providedKeys;
@@ -147,43 +190,78 @@ export class ProxyAuthenticator {
       logger.warn("[ProxyAuthenticator] Multiple conflicting API keys provided", {
         keyCount: providedKeys.length,
       });
-      return {
-        user: null,
-        key: null,
-        apiKey: null,
-        success: false,
+      return buildAuthFailure({
+        failureKind: "credentials",
         errorResponse: ProxyResponses.buildError(
           401,
           "提供了多个冲突的 API 密钥。请仅使用一种认证方式。",
           "authentication_error"
         ),
-      };
+      });
     }
 
     const apiKey = firstKey;
-    const authResult = await validateApiKeyAndGetUser(apiKey);
+    const outcome = await resolveApiKeyAuthOutcome(apiKey);
 
-    if (!authResult) {
-      logger.debug("[ProxyAuthenticator] API key validation failed", {
-        apiKeyLength: apiKey.length,
-        fromHeader: !!headers.authHeader || !!headers.apiKeyHeader || !!headers.geminiApiKeyHeader,
-        fromQuery: !!headers.geminiApiKeyQuery,
-      });
-      return {
-        user: null,
-        key: null,
-        apiKey,
-        success: false,
-        errorResponse: ProxyResponses.buildError(
-          401,
-          "API 密钥无效。提供的密钥不存在、已被删除、已被禁用或已过期。",
-          "invalid_api_key"
-        ),
-      };
+    if (!outcome.ok) {
+      // Exhaustive switch: adding a new ApiKeyAuthFailureReason in the
+      // repository layer will trigger a compile error in assertNever below
+      // until this guard is updated, preventing a new variant from silently
+      // falling into the wrong branch.
+      const locale = await getRequestLocale();
+      switch (outcome.reason) {
+        case "not_found":
+          logger.debug("[ProxyAuthenticator] API key validation failed: not found", {
+            apiKeyLength: apiKey.length,
+            fromHeader:
+              !!headers.authHeader || !!headers.apiKeyHeader || !!headers.geminiApiKeyHeader,
+            fromQuery: !!headers.geminiApiKeyQuery,
+          });
+          return buildAuthFailure({
+            apiKey,
+            failureKind: "credentials",
+            errorResponse: ProxyResponses.buildError(
+              401,
+              await getErrorMessageServer(locale, ERROR_CODES.PROXY_INVALID_API_KEY),
+              "invalid_api_key"
+            ),
+          });
+
+        case "key_disabled":
+          logger.warn("[ProxyAuthenticator] API key is disabled", {
+            apiKeyLength: apiKey.length,
+          });
+          return buildAuthFailure({
+            apiKey,
+            failureKind: "account_state",
+            errorResponse: ProxyResponses.buildError(
+              401,
+              await getErrorMessageServer(locale, ERROR_CODES.PROXY_API_KEY_DISABLED),
+              "key_disabled"
+            ),
+          });
+
+        case "key_expired":
+          logger.warn("[ProxyAuthenticator] API key has expired", {
+            apiKeyLength: apiKey.length,
+          });
+          return buildAuthFailure({
+            apiKey,
+            failureKind: "account_state",
+            errorResponse: ProxyResponses.buildError(
+              401,
+              await getErrorMessageServer(locale, ERROR_CODES.PROXY_API_KEY_EXPIRED),
+              "key_expired"
+            ),
+          });
+
+        default:
+          assertNever(outcome.reason, "ProxyAuthenticator.validate outcome.reason");
+      }
     }
 
     // Check user status and expiration
-    const { user } = authResult;
+    const { user } = outcome;
 
     // 1. Check if user is disabled
     if (!user.isEnabled) {
@@ -191,17 +269,15 @@ export class ProxyAuthenticator {
         userId: user.id,
         userName: user.name,
       });
-      return {
-        user: null,
-        key: null,
+      return buildAuthFailure({
         apiKey,
-        success: false,
+        failureKind: "account_state",
         errorResponse: ProxyResponses.buildError(
           401,
           "用户账户已被禁用。请联系管理员。",
           "user_disabled"
         ),
-      };
+      });
     }
 
     // 2. Check if user is expired (lazy expiration check)
@@ -218,26 +294,24 @@ export class ProxyAuthenticator {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-      return {
-        user: null,
-        key: null,
+      return buildAuthFailure({
         apiKey,
-        success: false,
+        failureKind: "account_state",
         errorResponse: ProxyResponses.buildError(
           401,
           `用户账户已于 ${user.expiresAt.toISOString().split("T")[0]} 过期。请续费订阅。`,
           "user_expired"
         ),
-      };
+      });
     }
 
     logger.debug("[ProxyAuthenticator] Authentication successful", {
-      userId: authResult.user.id,
-      userName: authResult.user.name,
-      keyName: authResult.key.name,
+      userId: outcome.user.id,
+      userName: outcome.user.name,
+      keyName: outcome.key.name,
     });
 
-    return { user: authResult.user, key: authResult.key, apiKey, success: true };
+    return { user: outcome.user, key: outcome.key, apiKey, success: true };
   }
 
   private static extractKeyFromAuthorization(authHeader?: string): string | null {
@@ -281,26 +355,5 @@ export function extractApiKeyFromHeaders(headers: {
   "x-api-key"?: string | null;
   "x-goog-api-key"?: string | null;
 }): string | null {
-  // 1. Bearer token
-  const authHeader = headers.authorization?.trim();
-  if (authHeader) {
-    const match = /^Bearer\s+(.+)$/i.exec(authHeader);
-    if (match?.[1]?.trim()) {
-      return match[1].trim();
-    }
-  }
-
-  // 2. x-api-key header
-  const apiKey = headers["x-api-key"]?.trim();
-  if (apiKey) {
-    return apiKey;
-  }
-
-  // 3. x-goog-api-key header (Gemini)
-  const geminiKey = headers["x-goog-api-key"]?.trim();
-  if (geminiKey) {
-    return geminiKey;
-  }
-
-  return null;
+  return sharedExtractApiKeyFromHeaders(headers);
 }

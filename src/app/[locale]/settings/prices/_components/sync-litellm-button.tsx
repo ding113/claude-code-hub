@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { checkLiteLLMSyncConflicts, syncLiteLLMPrices } from "@/actions/model-prices";
 import { Button } from "@/components/ui/button";
+import {
+  checkLiteLLMSyncConflicts,
+  syncLiteLLMPrices,
+} from "@/lib/api-client/v1/actions/model-prices";
 import type { SyncConflict } from "@/types/model-price";
 import { SyncConflictDialog } from "./sync-conflict-dialog";
 

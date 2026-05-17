@@ -15,7 +15,6 @@ import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { renewKeyExpiresAt, toggleKeyEnabled } from "@/actions/keys";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +31,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  getUnmaskedKey,
+  renewKeyExpiresAt,
+  toggleKeyEnabled,
+} from "@/lib/api-client/v1/actions/keys";
 import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
@@ -47,7 +51,8 @@ export interface KeyRowItemProps {
     id: number;
     name: string;
     maskedKey: string;
-    fullKey?: string;
+    /** Whether the current viewer is allowed to reveal/copy the unmasked key. */
+    canReveal: boolean;
     canCopy: boolean;
     providerGroup?: string | null;
     todayUsage: number;
@@ -197,19 +202,65 @@ export function KeyRowItem({
   const keyExpiryStatus = getKeyExpiryStatus(localStatus, localExpiresAt);
   const remainingGroups = Math.max(0, effectiveGroups.length - visibleGroups.length);
 
-  const canReveal = Boolean(keyData.fullKey);
-  const canCopy = Boolean(keyData.canCopy && keyData.fullKey);
+  const canReveal = Boolean(keyData.canReveal);
+  const canCopy = Boolean(keyData.canCopy);
   const displayKey = keyData.maskedKey || "-";
 
-  const handleCopy = async () => {
-    if (!canCopy || !keyData.fullKey) return;
+  // Cache the unmasked key in component state once revealed; fetched on demand.
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [isRevealing, setIsRevealing] = useState(false);
+
+  // Drop the cached unmasked key whenever the underlying row identity changes
+  // (e.g. parent reuses the same KeyRowItem instance for a different key).
+  // Without this, the dialog/copy could expose the previous row's key.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when row identity changes
+  useEffect(() => {
+    setRevealedKey(null);
+    setFullKeyDialogOpen(false);
+  }, [keyData.id, keyData.maskedKey]);
+
+  const fetchUnmaskedKey = async (): Promise<string | null> => {
+    if (revealedKey) return revealedKey;
+    setIsRevealing(true);
     try {
-      await navigator.clipboard.writeText(keyData.fullKey);
+      const res = await getUnmaskedKey(keyData.id);
+      if (!res.ok) {
+        toast.error(res.error || translations.actions.copyFailed);
+        return null;
+      }
+      if (!res.data?.key) {
+        toast.error(translations.actions.copyFailed);
+        return null;
+      }
+      setRevealedKey(res.data.key);
+      return res.data.key;
+    } catch (error) {
+      console.error("[KeyRowItem] reveal failed", error);
+      toast.error(translations.actions.copyFailed);
+      return null;
+    } finally {
+      setIsRevealing(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!canCopy) return;
+    const fullKey = await fetchUnmaskedKey();
+    if (!fullKey) return;
+    try {
+      await navigator.clipboard.writeText(fullKey);
       toast.success(translations.actions.copySuccess);
     } catch (error) {
       console.error("[KeyRowItem] copy failed", error);
       toast.error(translations.actions.copyFailed);
     }
+  };
+
+  const handleReveal = async () => {
+    if (!canReveal) return;
+    const fullKey = await fetchUnmaskedKey();
+    if (!fullKey) return;
+    setFullKeyDialogOpen(true);
   };
 
   const handleToggleEnabled = async (checked: boolean) => {
@@ -364,6 +415,7 @@ export function KeyRowItem({
                       e.stopPropagation();
                       void handleCopy();
                     }}
+                    disabled={isRevealing}
                     className="h-7 w-7"
                   >
                     <Copy className="h-3.5 w-3.5" />
@@ -383,8 +435,9 @@ export function KeyRowItem({
                     aria-label={translations.actions.show}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setFullKeyDialogOpen(true);
+                      void handleReveal();
                     }}
+                    disabled={isRevealing}
                     className="h-7 w-7"
                   >
                     <Eye className="h-3.5 w-3.5" />
@@ -629,12 +682,12 @@ export function KeyRowItem({
       </div>
 
       {/* Full Key Display Dialog */}
-      {keyData.fullKey && (
+      {revealedKey && (
         <KeyFullDisplayDialog
           open={fullKeyDialogOpen}
           onOpenChange={setFullKeyDialogOpen}
           keyName={keyData.name}
-          fullKey={keyData.fullKey}
+          fullKey={revealedKey}
         />
       )}
 

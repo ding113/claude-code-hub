@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
   clearAuthCookie,
+  detectSessionTokenKind,
   getAuthCookie,
   getSessionTokenMode,
   type SessionTokenMode,
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
   if (mode !== "legacy") {
     try {
       const sessionId = await resolveAuthCookieToken();
-      if (sessionId) {
+      if (sessionId && detectSessionTokenKind(sessionId) === "opaque") {
         const store = await getLogoutSessionStore();
         await store.revoke(sessionId);
       }

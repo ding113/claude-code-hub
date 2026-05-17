@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/drizzle/db";
+import { isShuttingDown } from "@/lib/lifecycle/shutdown";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
 import { APP_VERSION } from "@/lib/version";
@@ -140,6 +141,24 @@ export async function checkProxy(): Promise<ComponentHealth> {
 
 export async function checkReadiness(): Promise<HealthCheckResponse> {
   const version = getAppVersion();
+
+  // Shutdown 中立即返回 503，让 Service/Ingress 在 server.close() drain 之前就摘流，
+  // 否则新连接还会被路由到正在 drain 的 pod 上。
+  if (isShuttingDown()) {
+    const downForShutdown: ComponentHealth = { status: "down", message: "shutting_down" };
+    return {
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      version,
+      uptime: Math.round(process.uptime()),
+      components: {
+        database: downForShutdown,
+        redis: downForShutdown,
+        proxy: downForShutdown,
+      },
+    };
+  }
+
   const [database, redis, proxy] = await Promise.all([checkDatabase(), checkRedis(), checkProxy()]);
 
   // DB 必需，Redis/Proxy 可选（降级但不摘流量）

@@ -5,12 +5,6 @@ import { Activity, CheckCircle2, Play, RefreshCw, XCircle } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  type DashboardProviderVendor,
-  getDashboardProviderEndpoints,
-  getDashboardProviderVendors,
-  probeProviderEndpoint,
-} from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +23,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  type DashboardProviderVendor,
+  getDashboardProviderEndpoints,
+  getDashboardProviderVendors,
+  getProviderEndpointProbeLogs,
+  probeProviderEndpoint,
+} from "@/lib/api-client/v1/actions/provider-endpoints";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderType } from "@/types/provider";
@@ -94,14 +95,12 @@ export function EndpointProbeHistory() {
 
     setLoadingLogs(true);
     try {
-      const params = new URLSearchParams({
-        endpointId: selectedEndpointId.toString(),
-        limit: "50",
+      const result = await getProviderEndpointProbeLogs({
+        endpointId: selectedEndpointId,
+        limit: 50,
       });
-      const res = await fetch(`/api/availability/endpoints/probe-logs?${params.toString()}`);
-      const data = await res.json();
-      if (data.logs) {
-        setLogs(data.logs);
+      if (result.ok) {
+        setLogs(result.data.logs ?? []);
       }
     } catch (error) {
       console.error("Failed to fetch logs", error);

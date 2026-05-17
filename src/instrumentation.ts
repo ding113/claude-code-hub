@@ -3,7 +3,7 @@
  * 在服务器启动时自动执行数据库迁移
  */
 
-import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
+import { startCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
 import { CHANNEL_API_KEYS_UPDATED, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
 import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
@@ -19,7 +19,110 @@ const instrumentationState = globalThis as unknown as {
   __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
   __CCH_API_KEY_VF_SYNC_STARTED__?: boolean;
   __CCH_API_KEY_VF_SYNC_CLEANUP__?: (() => void) | null;
+  __CCH_LIFECYCLE_MARKERS_LOGGED__?: boolean;
+  __CCH_CRASH_HANDLERS_REGISTERED__?: boolean;
+  __CCH_PROCESS_STARTED_AT__?: number;
 };
+
+/**
+ * 进程级崩溃诊断
+ *
+ * 背景：生产环境曾出现 exitCode=139 (SIGSEGV) 重启（issue #1147），但日志中
+ * 未捕获到任何 JS 异常。本函数注册 uncaughtException / unhandledRejection 兜底
+ * 处理器，并在崩溃时尝试写入 Node 诊断报告（report.*.json）。
+ *
+ * 必要的 node 启动参数（在 Dockerfile 中配置）：
+ *   --report-on-fatalerror --report-uncaught-exception --report-directory=/app/reports
+ *
+ * 这两个 process.on(...) 不会与现有的 SIGTERM / SIGINT 处理器冲突。
+ */
+function registerCrashDiagnostics(): void {
+  if (instrumentationState.__CCH_CRASH_HANDLERS_REGISTERED__) {
+    return;
+  }
+  instrumentationState.__CCH_CRASH_HANDLERS_REGISTERED__ = true;
+
+  const writeReport = (trigger: string, err: unknown): string | undefined => {
+    try {
+      const report = (
+        process as NodeJS.Process & {
+          report?: { writeReport: (filename?: string, err?: unknown) => string };
+        }
+      ).report;
+      if (report?.writeReport) {
+        return report.writeReport(`report.${trigger}.${Date.now()}.json`, err as Error);
+      }
+    } catch {
+      // 写入诊断报告失败不应再抛出
+    }
+    return undefined;
+  };
+
+  // pino 在生产环境是同步直写 stdout（无 transport），但 dev 用 pino-pretty
+  // worker 是异步的；fatal 路径下 process.exit() 可能抢在 worker 写出之前。
+  // 用一行 JSON 直接同步写 stderr 作为兜底，确保至少日志层面留下痕迹。
+  const writeFatalStderr = (trigger: string, err: Error, reportPath?: string): void => {
+    try {
+      const line = JSON.stringify({
+        time: new Date().toISOString(),
+        level: "fatal",
+        msg: `[Lifecycle] ${trigger}`,
+        pid: process.pid,
+        error: err.message,
+        errorName: err.name,
+        stack: err.stack,
+        reportPath,
+      });
+      process.stderr.write(`${line}\n`);
+    } catch {
+      // ignore: 兜底写失败时已无更上游
+    }
+  };
+
+  process.on("uncaughtException", (err: Error) => {
+    const reportPath = writeReport("uncaughtException", err);
+    writeFatalStderr("uncaughtException", err, reportPath);
+    logger.fatal("[Lifecycle] uncaughtException", {
+      error: err.message,
+      errorName: err.name,
+      stack: err.stack,
+      reportPath,
+    });
+    // 与 Node 默认行为一致：捕获后退出，避免后续运行在不一致状态
+    process.exit(1);
+  });
+
+  // Node 20 默认 --unhandled-rejections=throw：未注册处理器时直接 fail-fast。
+  // 注册了处理器就会变成 "继续运行"，相当于回归到旧行为。我们仍要求 fail-fast，
+  // 否则一个未捕获的 promise 会让进程留在未定义状态、绕过 supervisor 重启。
+  // 因此：写诊断报告 + 同步落盘日志 + 主动 exit(1) 复现默认语义。
+  process.on("unhandledRejection", (reason: unknown) => {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    const reportPath = writeReport("unhandledRejection", err);
+    writeFatalStderr("unhandledRejection", err, reportPath);
+    logger.fatal("[Lifecycle] unhandledRejection", {
+      error: err.message,
+      errorName: err.name,
+      stack: err.stack,
+      reportPath,
+    });
+    process.exit(1);
+  });
+}
+
+function logStartupMarker(): void {
+  if (instrumentationState.__CCH_LIFECYCLE_MARKERS_LOGGED__) {
+    return;
+  }
+  instrumentationState.__CCH_LIFECYCLE_MARKERS_LOGGED__ = true;
+  instrumentationState.__CCH_PROCESS_STARTED_AT__ = Date.now();
+  logger.info("[Lifecycle] Process started", {
+    pid: process.pid,
+    nodeVersion: process.version,
+    execArgv: process.execArgv,
+    nodeOptions: process.env.NODE_OPTIONS ?? null,
+  });
+}
 
 /**
  * 同步错误规则并初始化检测器
@@ -140,6 +243,12 @@ function warmupApiKeyVacuumFilter(): void {
 export async function register() {
   // 仅在服务器端执行
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    // 生命周期与崩溃诊断（issue #1147）
+    // - startup marker：让运维能从日志中区分 "正常启动" 与 "Docker 异常重启后立即恢复"
+    // - crash handlers：兜底 uncaughtException / unhandledRejection，并触发 Node 诊断报告
+    logStartupMarker();
+    registerCrashDiagnostics();
+
     // Initialize Langfuse observability (no-op if env vars not set)
     try {
       const { initLangfuse } = await import("@/lib/langfuse");
@@ -167,117 +276,11 @@ export async function register() {
 
     if (!instrumentationState.__CCH_SHUTDOWN_HOOKS_REGISTERED__) {
       instrumentationState.__CCH_SHUTDOWN_HOOKS_REGISTERED__ = true;
-
-      const shutdownHandler = async (signal: string) => {
-        if (instrumentationState.__CCH_SHUTDOWN_IN_PROGRESS__) {
-          return;
-        }
-        instrumentationState.__CCH_SHUTDOWN_IN_PROGRESS__ = true;
-
-        logger.info(`[Instrumentation] Received ${signal}, cleaning up...`);
-
-        try {
-          stopCacheCleanup();
-          instrumentationState.__CCH_CACHE_CLEANUP_STARTED__ = false;
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop cache cleanup", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          instrumentationState.__CCH_API_KEY_VF_SYNC_CLEANUP__?.();
-          instrumentationState.__CCH_API_KEY_VF_SYNC_STARTED__ = false;
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to cleanup API key vacuum filter sync", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          const { stopEndpointProbeScheduler } = await import(
-            "@/lib/provider-endpoints/probe-scheduler"
-          );
-          stopEndpointProbeScheduler();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop endpoint probe scheduler", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          const { stopPublicStatusRebuildScheduler } = await import(
-            "@/lib/public-status/scheduler"
-          );
-          await stopPublicStatusRebuildScheduler();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop public status rebuild scheduler", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          const { stopEndpointProbeLogCleanup } = await import(
-            "@/lib/provider-endpoints/probe-log-cleanup"
-          );
-          stopEndpointProbeLogCleanup();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop endpoint probe log cleanup", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          const { closeRedis } = await import("@/lib/redis");
-          await closeRedis();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to close Redis connection", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        // Flush Langfuse pending spans
-        try {
-          const { shutdownLangfuse } = await import("@/lib/langfuse");
-          await shutdownLangfuse();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to shutdown Langfuse", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        // 尽力将 message_request 的异步批量更新刷入数据库（避免终止时丢失尾部日志）
-        try {
-          const { stopMessageRequestWriteBuffer } = await import(
-            "@/repository/message-write-buffer"
-          );
-          await stopMessageRequestWriteBuffer();
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop message request write buffer", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        try {
-          if (instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__) {
-            clearInterval(instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__);
-            instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__ = undefined;
-            instrumentationState.__CCH_CLOUD_PRICE_SYNC_STARTED__ = false;
-          }
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to stop cloud price sync scheduler", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      };
-
-      process.once("SIGTERM", () => {
-        void shutdownHandler("SIGTERM");
-      });
-
-      process.once("SIGINT", () => {
-        void shutdownHandler("SIGINT");
-      });
+      // SIGTERM/SIGINT 注册移到 server.js，因为它持有 HTTP server 句柄、可以先
+      // server.close() 再让 application cleanup 跑。这里只把 cleanup 函数集
+      // 挂到 globalThis 让 server.js 桥接调用。
+      const { bindLifecycleGlobals } = await import("@/lib/lifecycle/shutdown");
+      bindLifecycleGlobals();
     }
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)

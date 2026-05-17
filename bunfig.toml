@@ -1,0 +1,5 @@
+[install]
+# Use Yarn registry (Cloudflare CDN-backed) — faster and more reliable globally than
+# the default npmjs.org. Picked after npmmirror (Taobao) proved slow from US-region
+# runtimes and the default registry showed intermittent slowness.
+registry = "https://registry.yarnpkg.com/"

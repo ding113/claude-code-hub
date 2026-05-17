@@ -22,6 +22,9 @@ export const PROVIDER_RULE_LIMITS = {
   MAX_TEXT_LENGTH: 4_096,
 } as const;
 
+// 供应商 API 密钥最大长度（字符数），取宽松上限即可
+export const PROVIDER_KEY_MAX_LENGTH = 1024 * 1024;
+
 export const PROVIDER_DEFAULTS = {
   IS_ENABLED: true,
   WEIGHT: 1,

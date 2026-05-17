@@ -65,7 +65,7 @@ function createRawPassthroughSession(bodyText: string, extraHeaders?: HeadersIni
     originalHeaders,
     headerLog: JSON.stringify(Object.fromEntries(headers.entries())),
     request: {
-      model: "gpt-5",
+      model: "gpt-5.4",
       log: bodyText,
       message: JSON.parse(bodyText) as Record<string, unknown>,
       buffer: new TextEncoder().encode(bodyText).buffer,
@@ -92,7 +92,7 @@ function createRawPassthroughSession(bodyText: string, extraHeaders?: HeadersIni
     endpointPolicy: resolveEndpointPolicy("/v1/responses/compact"),
     setCacheTtlResolved: vi.fn(),
     getCacheTtlResolved: vi.fn(() => null),
-    getCurrentModel: vi.fn(() => "gpt-5"),
+    getCurrentModel: vi.fn(() => "gpt-5.4"),
     clientRequestsContext1m: vi.fn(() => false),
     setContext1mApplied: vi.fn(),
     getContext1mApplied: vi.fn(() => false),
@@ -126,7 +126,7 @@ describe("ProxyForwarder raw passthrough regression", () => {
   });
 
   it("raw passthrough 应优先保留原始请求体字节，而不是重新 JSON.stringify", async () => {
-    const originalBody = '{\n  "model": "gpt-5",\n  "input": [1, 2, 3]\n}\n';
+    const originalBody = '{\n  "model": "gpt-5.4",\n  "input": [1, 2, 3]\n}\n';
     const session = createRawPassthroughSession(originalBody);
     const provider = createProvider();
 
@@ -150,7 +150,7 @@ describe("ProxyForwarder raw passthrough regression", () => {
   });
 
   it("raw passthrough 出站请求不得继续携带 transfer-encoding 这类 hop-by-hop 头", async () => {
-    const body = '{"model":"gpt-5","input":[]}';
+    const body = '{"model":"gpt-5.4","input":[]}';
     const session = createRawPassthroughSession(body, {
       connection: "keep-alive",
       "transfer-encoding": "chunked",

@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Provider } from "@/types/provider";
 import { DEFAULT_CODEX_USER_AGENT, ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import {
+  INTERNAL_SECRET_HEADER,
+  RESPONSES_WS_SESSION_HEADER,
+  WS_FORWARD_FLAG_HEADER,
+} from "@/app/v1/_lib/responses-ws/internal-secret";
 
 function createSession({
   userAgent,
@@ -202,6 +207,27 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     expect(resultHeaders.get("connection")).toBeNull();
     expect(resultHeaders.get("transfer-encoding")).toBeNull();
     expect(resultHeaders.get("content-length")).toBeNull();
+  });
+
+  it("应该剥离 WS 内部隧道 header，避免把 loopback secret 透传给上游", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([
+        ["user-agent", "Original-UA/1.0"],
+        ["x-cch-client-transport", "websocket"],
+        [WS_FORWARD_FLAG_HEADER, "1"],
+        [RESPONSES_WS_SESSION_HEADER, "client-session-1"],
+        [INTERNAL_SECRET_HEADER, "loopback-secret-should-stay-local"],
+      ]),
+    });
+
+    const provider = createCodexProvider();
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("x-cch-client-transport")).toBeNull();
+    expect(resultHeaders.get(WS_FORWARD_FLAG_HEADER)).toBeNull();
+    expect(resultHeaders.get(RESPONSES_WS_SESSION_HEADER)).toBeNull();
+    expect(resultHeaders.get(INTERNAL_SECRET_HEADER)).toBeNull();
   });
 });
 
@@ -450,5 +476,269 @@ describe("ProxyForwarder - buildGeminiHeaders headers passthrough", () => {
     expect(resultHeaders.get("connection")).toBeNull();
     expect(resultHeaders.get("transfer-encoding")).toBeNull();
     expect(resultHeaders.get("content-length")).toBeNull();
+  });
+});
+
+describe("ProxyForwarder - buildHeaders custom headers", () => {
+  function withCustomHeaders<P extends Provider>(
+    provider: P,
+    customHeaders: Record<string, string> | null
+  ): P {
+    return Object.assign(Object.create(Object.getPrototypeOf(provider)), provider, {
+      customHeaders,
+    });
+  }
+
+  it("应该把 provider.customHeaders 注入出站 Headers (codex)", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createCodexProvider(), {
+      "cf-aig-authorization": "Bearer provider-token",
+      "x-tenant-id": "tenant-42",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("cf-aig-authorization")).toBe("Bearer provider-token");
+    expect(resultHeaders.get("x-tenant-id")).toBe("tenant-42");
+    // 不影响鉴权
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+  });
+
+  it("应该允许 provider.customHeaders 覆盖默认 content-type", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      "content-type": "application/x-ndjson",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("content-type")).toBe("application/x-ndjson");
+  });
+
+  it("即使 DB 中 customHeaders 包含受保护的 authorization，也不应覆盖鉴权头 (codex)", () => {
+    const session = createAuthLeakSession();
+    const provider = withCustomHeaders(createCodexProvider(), {
+      Authorization: "Bearer attacker-attempt",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+  });
+
+  it("即使 DB 中 customHeaders 包含受保护的 x-api-key，也不应破坏 claude 直连双头", () => {
+    const session = createAuthLeakSession();
+    const provider = withCustomHeaders(createClaudeProvider(), {
+      "x-api-key": "attacker-attempt",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer test-outbound-key");
+    expect(resultHeaders.get("x-api-key")).toBe("test-outbound-key");
+  });
+
+  it("provider.customHeaders 为 null 时维持现有行为", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), null);
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("cf-aig-authorization")).toBeNull();
+    expect(resultHeaders.get("content-type")).toBe("application/json");
+  });
+
+  it("不应允许 customHeaders 通过 host 改写上游目标", () => {
+    // Defense-in-depth: 即使 DB 中混入脏数据，host 也不能被绕过到攻击者目标。
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      host: "attacker.example.com",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("host")).toBe("openai.example.com");
+  });
+
+  it("不应允许 customHeaders 注入 hop-by-hop 传输层头", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      connection: "Upgrade",
+      "transfer-encoding": "chunked",
+      "content-length": "999",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("connection")).toBeNull();
+    expect(resultHeaders.get("transfer-encoding")).toBeNull();
+    expect(resultHeaders.get("content-length")).toBeNull();
+  });
+
+  it("不应允许 customHeaders 注入 WS 内部隧道 header", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createOpenAIProvider(), {
+      [INTERNAL_SECRET_HEADER]: "attacker-loopback-secret",
+      [WS_FORWARD_FLAG_HEADER]: "1",
+      [RESPONSES_WS_SESSION_HEADER]: "spoofed",
+    });
+
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get(INTERNAL_SECRET_HEADER)).toBeNull();
+    expect(resultHeaders.get(WS_FORWARD_FLAG_HEADER)).toBeNull();
+    expect(resultHeaders.get(RESPONSES_WS_SESSION_HEADER)).toBeNull();
+  });
+});
+
+describe("ProxyForwarder - buildGeminiHeaders custom headers", () => {
+  function withCustomHeaders<P extends Provider>(
+    provider: P,
+    customHeaders: Record<string, string> | null
+  ): P {
+    return Object.assign(Object.create(Object.getPrototypeOf(provider)), provider, {
+      customHeaders,
+    });
+  }
+
+  it("应该把 provider.customHeaders 注入出站 Gemini Headers", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createGeminiProvider("gemini"), {
+      "cf-aig-authorization": "Bearer provider-token",
+    });
+    const { buildGeminiHeaders } = ProxyForwarder as unknown as {
+      buildGeminiHeaders: (
+        session: ProxySession,
+        provider: Provider,
+        baseUrl: string,
+        accessToken: string,
+        isApiKey: boolean
+      ) => Headers;
+    };
+
+    const resultHeaders = buildGeminiHeaders(
+      session,
+      provider,
+      "https://generativelanguage.googleapis.com/v1beta",
+      "upstream-api-key",
+      true
+    );
+
+    expect(resultHeaders.get("cf-aig-authorization")).toBe("Bearer provider-token");
+    expect(resultHeaders.get("x-goog-api-key")).toBe("upstream-api-key");
+  });
+
+  it("DB 中 customHeaders 包含 x-goog-api-key 时不能覆盖鉴权", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createGeminiProvider("gemini"), {
+      "x-goog-api-key": "attacker-attempt",
+    });
+    const { buildGeminiHeaders } = ProxyForwarder as unknown as {
+      buildGeminiHeaders: (
+        session: ProxySession,
+        provider: Provider,
+        baseUrl: string,
+        accessToken: string,
+        isApiKey: boolean
+      ) => Headers;
+    };
+
+    const resultHeaders = buildGeminiHeaders(
+      session,
+      provider,
+      "https://generativelanguage.googleapis.com/v1beta",
+      "upstream-api-key",
+      true
+    );
+
+    expect(resultHeaders.get("x-goog-api-key")).toBe("upstream-api-key");
+  });
+
+  it("DB 中 customHeaders 包含 authorization 时不能覆盖 OAuth Bearer", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createGeminiProvider("gemini"), {
+      authorization: "Bearer attacker-attempt",
+    });
+    const { buildGeminiHeaders } = ProxyForwarder as unknown as {
+      buildGeminiHeaders: (
+        session: ProxySession,
+        provider: Provider,
+        baseUrl: string,
+        accessToken: string,
+        isApiKey: boolean
+      ) => Headers;
+    };
+
+    const resultHeaders = buildGeminiHeaders(
+      session,
+      provider,
+      "https://generativelanguage.googleapis.com/v1beta",
+      "upstream-oauth-token",
+      false
+    );
+
+    expect(resultHeaders.get("authorization")).toBe("Bearer upstream-oauth-token");
+  });
+
+  it("Gemini: 不应允许 customHeaders 通过 host / 传输层头改写出站请求", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([["user-agent", "Original-UA/1.0"]]),
+    });
+    const provider = withCustomHeaders(createGeminiProvider("gemini"), {
+      host: "attacker.example.com",
+      connection: "Upgrade",
+      "content-length": "999",
+      [INTERNAL_SECRET_HEADER]: "spoofed",
+    });
+    const { buildGeminiHeaders } = ProxyForwarder as unknown as {
+      buildGeminiHeaders: (
+        session: ProxySession,
+        provider: Provider,
+        baseUrl: string,
+        accessToken: string,
+        isApiKey: boolean
+      ) => Headers;
+    };
+
+    const resultHeaders = buildGeminiHeaders(
+      session,
+      provider,
+      "https://generativelanguage.googleapis.com/v1beta",
+      "upstream-api-key",
+      true
+    );
+
+    expect(resultHeaders.get("host")).toBe("generativelanguage.googleapis.com");
+    expect(resultHeaders.get("connection")).toBeNull();
+    expect(resultHeaders.get("content-length")).toBeNull();
+    expect(resultHeaders.get(INTERNAL_SECRET_HEADER)).toBeNull();
   });
 });

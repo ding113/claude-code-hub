@@ -52,7 +52,7 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     expect(processOnceSpy).not.toHaveBeenCalled();
   });
 
-  it("registers exit hooks when NEXT_RUNTIME is nodejs", async () => {
+  it("registers only beforeExit when NEXT_RUNTIME is nodejs (SIGTERM/SIGINT are owned by server.js orchestrator)", async () => {
     vi.useFakeTimers();
 
     const processOnceSpy = vi.spyOn(process, "once");
@@ -61,13 +61,13 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     const { AsyncTaskManager } = await import("@/lib/async-task-manager");
     AsyncTaskManager.register("t1", Promise.resolve());
 
-    expect(processOnceSpy).toHaveBeenCalledTimes(3);
-    expect(processOnceSpy).toHaveBeenNthCalledWith(1, "SIGTERM", expect.any(Function));
-    expect(processOnceSpy).toHaveBeenNthCalledWith(2, "SIGINT", expect.any(Function));
-    expect(processOnceSpy).toHaveBeenNthCalledWith(3, "beforeExit", expect.any(Function));
+    const signals = processOnceSpy.mock.calls.map((c) => c[0]);
+    expect(signals).toContain("beforeExit");
+    expect(signals).not.toContain("SIGTERM");
+    expect(signals).not.toContain("SIGINT");
   });
 
-  it("handles exit signal callback by running cleanupAll", async () => {
+  it("beforeExit callback runs cleanupAll", async () => {
     vi.useFakeTimers();
 
     const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
@@ -82,19 +82,34 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     });
     const controller = AsyncTaskManager.register("t1", taskPromise);
 
-    const sigtermHandler = processOnceSpy.mock.calls.find((c) => c[0] === "SIGTERM")?.[1];
-    const sigintHandler = processOnceSpy.mock.calls.find((c) => c[0] === "SIGINT")?.[1];
     const beforeExitHandler = processOnceSpy.mock.calls.find((c) => c[0] === "beforeExit")?.[1];
-    expect(sigtermHandler).toBeTypeOf("function");
-    expect(sigintHandler).toBeTypeOf("function");
     expect(beforeExitHandler).toBeTypeOf("function");
 
-    sigtermHandler?.();
-    sigintHandler?.();
     beforeExitHandler?.();
 
     expect(controller.signal.aborted).toBe(true);
     expect(clearIntervalSpy).toHaveBeenCalled();
+
+    resolveTask!();
+    await taskPromise;
+  });
+
+  it("shutdownAllAsyncTasks cancels all in-flight tasks", async () => {
+    process.env.CI = "true";
+    process.env.NEXT_RUNTIME = "nodejs";
+
+    const { AsyncTaskManager, shutdownAllAsyncTasks } = await import("@/lib/async-task-manager");
+
+    let resolveTask: () => void;
+    const taskPromise = new Promise<void>((resolve) => {
+      resolveTask = resolve;
+    });
+    const controller = AsyncTaskManager.register("t1", taskPromise);
+    expect(controller.signal.aborted).toBe(false);
+
+    shutdownAllAsyncTasks();
+
+    expect(controller.signal.aborted).toBe(true);
 
     resolveTask!();
     await taskPromise;

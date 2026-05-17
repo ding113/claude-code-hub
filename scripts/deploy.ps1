@@ -43,6 +43,8 @@ $script:DEPLOY_DIR = "C:\ProgramData\claude-code-hub"
 $script:IMAGE_TAG = "latest"
 $script:BRANCH_NAME = "main"
 $script:APP_PORT = "23000"
+$script:AUTH_SESSION_TTL_SECONDS = "604800"
+$script:SESSION_TTL = "300"
 $script:ENABLE_CADDY = $false
 $script:DOMAIN_ARG = ""
 $script:UPDATE_MODE = $false
@@ -212,32 +214,30 @@ function Select-Branch {
     Write-Host "  1) main   (Stable release - recommended for production)" -ForegroundColor Green
     Write-Host "  2) dev    (Latest features - for testing)" -ForegroundColor Yellow
     Write-Host ""
-    
+
     while ($true) {
-        $choice = Read-Host "Enter your choice [1]"
+        $choice = Read-Host "Type 1 or 2 (or 'main'/'dev') and press Enter [default: 1]"
         if ([string]::IsNullOrWhiteSpace($choice)) {
             $choice = "1"
         }
-        
-        switch ($choice) {
-            "1" {
-                $script:IMAGE_TAG = "latest"
-                $script:BRANCH_NAME = "main"
-                Write-ColorOutput "Selected branch: main (image tag: latest)" -Type Success
-                break
-            }
-            "2" {
-                $script:IMAGE_TAG = "dev"
-                $script:BRANCH_NAME = "dev"
-                Write-ColorOutput "Selected branch: dev (image tag: dev)" -Type Success
-                break
-            }
-            default {
-                Write-ColorOutput "Invalid choice. Please enter 1 or 2." -Type Error
-                continue
-            }
+        $normalized = $choice.Trim().ToLower()
+
+        # Use if/return rather than switch+break — in PowerShell `break` inside a
+        # switch exits the switch, not the surrounding while, so the loop control
+        # has to live at this scope.
+        if ($normalized -in "1", "main") {
+            $script:IMAGE_TAG = "latest"
+            $script:BRANCH_NAME = "main"
+            Write-ColorOutput "Selected branch: main (image tag: latest)" -Type Success
+            return
         }
-        break
+        if ($normalized -in "2", "dev") {
+            $script:IMAGE_TAG = "dev"
+            $script:BRANCH_NAME = "dev"
+            Write-ColorOutput "Selected branch: dev (image tag: dev)" -Type Success
+            return
+        }
+        Write-ColorOutput "Invalid choice. Type 1, 2, 'main', or 'dev' and press Enter." -Type Error
     }
 }
 
@@ -335,6 +335,19 @@ function Import-ExistingEnv {
             $script:APP_PORT = ($portLine.Line -split '=', 2)[1]
         }
     }
+
+    # 读取会话 TTL，升级时保留用户已有配置
+    $authSessionTtlLine = Select-String -Path $envFile -Pattern '^AUTH_SESSION_TTL_SECONDS=' | Select-Object -First 1
+    if ($authSessionTtlLine) {
+        $script:AUTH_SESSION_TTL_SECONDS = ($authSessionTtlLine.Line -split '=', 2)[1]
+        Write-ColorOutput "Preserved existing auth session TTL" -Type Info
+    }
+
+    $sessionTtlLine = Select-String -Path $envFile -Pattern '^SESSION_TTL=' | Select-Object -First 1
+    if ($sessionTtlLine) {
+        $script:SESSION_TTL = ($sessionTtlLine.Line -split '=', 2)[1]
+        Write-ColorOutput "Preserved existing proxy session TTL" -Type Info
+    }
 }
 
 function New-DeploymentDirectory {
@@ -429,6 +442,7 @@ services:
       REDIS_URL: redis://claude-code-hub-redis-${SUFFIX}:6379
       AUTO_MIGRATE: `${AUTO_MIGRATE:-true}
       ENABLE_RATE_LIMIT: `${ENABLE_RATE_LIMIT:-true}
+      AUTH_SESSION_TTL_SECONDS: `${AUTH_SESSION_TTL_SECONDS:-604800}
       SESSION_TTL: `${SESSION_TTL:-300}
       TZ: Asia/Shanghai
 $appPortsSection
@@ -575,7 +589,8 @@ AUTO_MIGRATE=true
 ENABLE_RATE_LIMIT=true
 
 # Session Configuration
-SESSION_TTL=300
+AUTH_SESSION_TTL_SECONDS=$($script:AUTH_SESSION_TTL_SECONDS)
+SESSION_TTL=$($script:SESSION_TTL)
 STORE_SESSION_MESSAGES=false
 STORE_SESSION_RESPONSE_BODY=true
 
@@ -600,7 +615,7 @@ LOG_LEVEL=info
             $managedKeys = @(
                 "ADMIN_TOKEN", "DB_USER", "DB_PASSWORD", "DB_NAME",
                 "APP_PORT", "APP_URL", "AUTO_MIGRATE", "ENABLE_RATE_LIMIT",
-                "SESSION_TTL", "STORE_SESSION_MESSAGES", "STORE_SESSION_RESPONSE_BODY",
+                "AUTH_SESSION_TTL_SECONDS", "SESSION_TTL", "STORE_SESSION_MESSAGES", "STORE_SESSION_RESPONSE_BODY",
                 "ENABLE_SECURE_COOKIES", "ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS",
                 "ENABLE_ENDPOINT_CIRCUIT_BREAKER", "NODE_ENV", "TZ", "LOG_LEVEL"
             )

@@ -3,8 +3,8 @@
 import { BarChart3 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { getUsageLogsStats } from "@/actions/usage-logs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getUsageLogsStats } from "@/lib/api-client/v1/actions/usage-logs";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";

@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -28,7 +28,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -47,6 +47,11 @@ jobs:
       - name: Run type checking
         run: bun run typecheck
 
+      - name: Check v1 OpenAPI contract
+        run: |
+          bun run openapi:check
+          bun run openapi:lint
+
       - name: Check formatting
         run: bun run format:check
 
@@ -58,7 +63,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -66,7 +71,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -81,6 +86,9 @@ jobs:
 
       - name: Run unit tests
         run: bun run test -- tests/unit/ --passWithNoTests
+
+      - name: Run v1 management API tests
+        run: bun run test:v1
 
   # ==================== 集成测试（需要数据库）====================
   integration-tests:
@@ -119,13 +127,14 @@ jobs:
       ADMIN_TOKEN: test-admin-token-for-ci
       AUTO_MIGRATE: true
       ENABLE_RATE_LIMIT: true
+      AUTH_SESSION_TTL_SECONDS: 604800
       SESSION_TTL: 300
       VITEST_STATEFUL_MAX_WORKERS: 2
       VITEST_STATEFUL_MAX_CONCURRENCY: 3
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -133,7 +142,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -193,13 +202,14 @@ jobs:
       AUTO_MIGRATE: true
       PORT: 13500
       ENABLE_RATE_LIMIT: true
+      AUTH_SESSION_TTL_SECONDS: 604800
       SESSION_TTL: 300
       VITEST_STATEFUL_MAX_WORKERS: 1
       VITEST_STATEFUL_MAX_CONCURRENCY: 3
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -207,7 +217,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
           # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
@@ -224,7 +234,7 @@ jobs:
         run: bun run db:migrate
 
       - name: Cache Next.js build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('package.json', '.bun-version') }}-${{ hashFiles('src/**/*.js', 'src/**/*.jsx', 'src/**/*.ts', 'src/**/*.tsx', 'next.config.*', 'tsconfig.json', 'postcss.config.*') }}
@@ -243,12 +253,13 @@ jobs:
 
       - name: Wait for server ready
         run: |
-          timeout 60 bash -c 'until curl -f http://localhost:13500/api/actions/health; do sleep 2; done'
+          timeout 60 bash -c 'until curl -f http://localhost:13500/api/actions/health && curl -f http://localhost:13500/api/v1/health; do sleep 2; done'
 
       - name: Run E2E API tests
         run: bun run test:e2e
         env:
           API_BASE_URL: http://localhost:13500/api/actions
+          API_E2E_BASE_URL: http://localhost:13500/api/v1
           TEST_ADMIN_TOKEN: test-admin-token-for-ci
           AUTO_CLEANUP_TEST_DATA: true
 
@@ -281,7 +292,7 @@ jobs:
 
       - name: Create summary
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const summary = `## 🧪 测试结果

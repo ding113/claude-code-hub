@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getActiveSessions } from "@/actions/active-sessions";
 import { useRouter } from "@/i18n/routing";
+import { getActiveSessions } from "@/lib/api-client/v1/actions/active-sessions";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ActiveSessionInfo } from "@/types/session";
 import { SessionListItem } from "./session-list-item";

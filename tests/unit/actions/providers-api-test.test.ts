@@ -148,6 +148,97 @@ describe("providers api test actions", () => {
     expect(forwarded?.rawResponse).toBe('{"error":"Invalid URL (POST /v1/v1/responses)"}');
   });
 
+  test("testProviderUnified 应该把合法的 customHeaders 透传给 executeProviderTest", async () => {
+    executeProviderTestMock.mockResolvedValue({
+      success: true,
+      status: "green",
+      subStatus: "success",
+      message: "ok",
+      latencyMs: 50,
+      httpStatusCode: 200,
+      testedAt: new Date(),
+      validationDetails: {
+        httpPassed: true,
+        latencyPassed: true,
+        contentPassed: true,
+      },
+    });
+
+    const { testProviderUnified } = await import("@/actions/providers");
+    const result = await testProviderUnified({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test",
+      providerType: "openai-compatible",
+      customHeaders: { "cf-aig-authorization": "Bearer test" },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(executeProviderTestMock).toHaveBeenCalledTimes(1);
+    expect(executeProviderTestMock.mock.calls[0]?.[0]?.customHeaders).toEqual({
+      "cf-aig-authorization": "Bearer test",
+    });
+  });
+
+  test("testProviderUnified 应该拒绝非法的 customHeaders 并不调用 executeProviderTest", async () => {
+    const { testProviderUnified } = await import("@/actions/providers");
+    const result = await testProviderUnified({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test",
+      providerType: "openai-compatible",
+      customHeaders: { Authorization: "Bearer attacker" } as Record<string, string>,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(executeProviderTestMock).not.toHaveBeenCalled();
+    if (!result.ok) {
+      expect(result.error).not.toContain("attacker");
+    }
+  });
+
+  test("testProviderUnified 在 customHeaders 含 CRLF 时返回错误且不泄露原始值", async () => {
+    const { testProviderUnified } = await import("@/actions/providers");
+    const result = await testProviderUnified({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test",
+      providerType: "openai-compatible",
+      customHeaders: { "x-foo": "bad\r\nvalue-secret" } as Record<string, string>,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(executeProviderTestMock).not.toHaveBeenCalled();
+    if (!result.ok) {
+      expect(result.error).not.toContain("value-secret");
+    }
+  });
+
+  test("testProviderUnified 把空 customHeaders 归一化后不传给 executeProviderTest", async () => {
+    executeProviderTestMock.mockResolvedValue({
+      success: true,
+      status: "green",
+      subStatus: "success",
+      message: "ok",
+      latencyMs: 50,
+      httpStatusCode: 200,
+      testedAt: new Date(),
+      validationDetails: {
+        httpPassed: true,
+        latencyPassed: true,
+        contentPassed: true,
+      },
+    });
+
+    const { testProviderUnified } = await import("@/actions/providers");
+    await testProviderUnified({
+      providerUrl: "https://api.example.com",
+      apiKey: "sk-test",
+      providerType: "openai-compatible",
+      customHeaders: {},
+    });
+
+    expect(executeProviderTestMock).toHaveBeenCalledTimes(1);
+    expect(executeProviderTestMock.mock.calls[0]?.[0]?.customHeaders).toBeUndefined();
+  });
+
   test("testProviderGemini 成功时也应该返回完整响应体，保证前端能展示原始 body", async () => {
     const responseBody = JSON.stringify({
       candidates: [

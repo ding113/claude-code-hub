@@ -15,14 +15,6 @@ import { useTranslations } from "next-intl";
 import type * as React from "react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import type { ProviderGroupWithCount } from "@/actions/provider-groups";
-import {
-  createProviderGroup,
-  deleteProviderGroup,
-  getProviderGroups,
-  updateProviderGroup,
-} from "@/actions/provider-groups";
-import { editProvider } from "@/actions/providers";
 import type { BatchActionMode } from "@/app/[locale]/settings/providers/_components/batch-edit/provider-batch-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +38,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { ProviderGroupWithCount } from "@/lib/api-client/v1/actions/provider-groups";
+import {
+  createProviderGroup,
+  deleteProviderGroup,
+  getProviderGroups,
+  updateProviderGroup,
+} from "@/lib/api-client/v1/actions/provider-groups";
+import { editProvider } from "@/lib/api-client/v1/actions/providers";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";

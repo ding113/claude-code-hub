@@ -9,6 +9,7 @@ import { buildProxyUrl } from "@/app/v1/_lib/url";
 import { db } from "@/drizzle/db";
 import { providers as providersTable } from "@/drizzle/schema";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+import { redactUrlCredentials } from "@/lib/api/v1/_shared/redaction";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
@@ -21,6 +22,7 @@ import {
   resetCircuit,
 } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { normalizeCustomHeadersRecord } from "@/lib/custom-headers";
 import { logger } from "@/lib/logger";
 import { PROVIDER_ALLOWED_MODEL_RULE_INPUT_LIST_SCHEMA } from "@/lib/provider-allowed-model-schema";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
@@ -220,6 +222,25 @@ function shouldInvalidateStickySessionsOnProviderEdit(
   );
 }
 
+function redactProviderUrlFields<T>(value: T): T {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const copy = { ...(value as Record<string, unknown>) };
+  for (const key of ["url", "providerUrl", "websiteUrl", "proxyUrl", "mcpPassthroughUrl"]) {
+    if (typeof copy[key] === "string") {
+      copy[key] = redactUrlCredentials(copy[key]);
+    }
+  }
+  for (const key of ["provider_url", "website_url", "proxy_url", "mcp_passthrough_url"]) {
+    if (typeof copy[key] === "string") {
+      copy[key] = redactUrlCredentials(copy[key]);
+    }
+  }
+  return copy as T;
+}
+
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
   try {
@@ -335,6 +356,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        customHeaders: provider.customHeaders,
         firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
         streamingIdleTimeoutMs: provider.streamingIdleTimeoutMs,
         requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
@@ -541,6 +563,7 @@ export async function addProvider(data: {
   circuit_breaker_half_open_success_threshold?: number;
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+  custom_headers?: Record<string, string> | null;
   first_byte_timeout_streaming_ms?: number;
   streaming_idle_timeout_ms?: number;
   request_timeout_non_streaming_ms?: number;
@@ -551,7 +574,7 @@ export async function addProvider(data: {
   rpm: number | null;
   rpd: number | null;
   cc: number | null;
-}): Promise<ActionResult> {
+}): Promise<ActionResult<{ id: number }>> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -560,9 +583,9 @@ export async function addProvider(data: {
 
     logger.trace("addProvider:input", {
       name: data.name,
-      url: data.url,
+      url: redactUrlCredentials(data.url),
       provider_type: data.provider_type,
-      proxy_url: data.proxy_url ? data.proxy_url.replace(/:\/\/[^@]*@/, "://***@") : null,
+      proxy_url: redactUrlCredentials(data.proxy_url),
     });
 
     // 验证代理 URL 格式
@@ -586,7 +609,7 @@ export async function addProvider(data: {
         logger.trace("addProvider:favicon_generated", { domain, faviconUrl });
       } catch (error) {
         logger.warn("addProvider:favicon_fetch_failed", {
-          websiteUrl: validated.website_url,
+          websiteUrl: redactUrlCredentials(validated.website_url),
           error: error instanceof Error ? error.message : String(error),
         });
         // Favicon 获取失败不影响主流程
@@ -682,12 +705,12 @@ export async function addProvider(data: {
       after: {
         id: provider.id,
         name: provider.name,
-        url: provider.url,
+        url: redactUrlCredentials(provider.url),
         isEnabled: provider.isEnabled,
       },
       success: true,
     });
-    return { ok: true };
+    return { ok: true, data: { id: provider.id } };
   } catch (error) {
     logger.trace("addProvider:error", {
       message: error instanceof Error ? error.message : String(error),
@@ -755,6 +778,7 @@ export async function editProvider(
     circuit_breaker_half_open_success_threshold?: number;
     proxy_url?: string | null;
     proxy_fallback_to_direct?: boolean;
+    custom_headers?: Record<string, string> | null;
     first_byte_timeout_streaming_ms?: number;
     streaming_idle_timeout_ms?: number;
     request_timeout_non_streaming_ms?: number;
@@ -797,7 +821,7 @@ export async function editProvider(
           });
         } catch (error) {
           logger.warn("editProvider:favicon_fetch_failed", {
-            websiteUrl: validated.website_url,
+            websiteUrl: redactUrlCredentials(validated.website_url),
             error: error instanceof Error ? error.message : String(error),
           });
           faviconUrl = null;
@@ -934,10 +958,10 @@ export async function editProvider(
       action: "provider.update",
       targetType: "provider",
       targetId: String(providerId),
-      before: preimageFields,
-      after: data,
+      before: redactProviderUrlFields(preimageFields),
+      after: redactProviderUrlFields(data),
       success: true,
-      redactExtraKeys: ["key"],
+      redactExtraKeys: ["key", "custom_headers", "customHeaders"],
     });
     return {
       ok: true,
@@ -1022,7 +1046,9 @@ export async function removeProvider(
       targetType: "provider",
       targetId: String(providerId),
       targetName: provider?.name ?? null,
-      before: provider ? { id: provider.id, name: provider.name, url: provider.url } : undefined,
+      before: provider
+        ? { id: provider.id, name: provider.name, url: redactUrlCredentials(provider.url) }
+        : undefined,
       success: true,
     });
     return {
@@ -1464,6 +1490,7 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",
   proxy_url: "proxyUrl",
   proxy_fallback_to_direct: "proxyFallbackToDirect",
+  custom_headers: "customHeaders",
   first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
   streaming_idle_timeout_ms: "streamingIdleTimeoutMs",
   request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
@@ -3143,11 +3170,32 @@ export async function getUnmaskedProviderKey(id: number): Promise<ActionResult<{
       providerId: id,
       providerName: provider.name,
     });
+    emitActionAudit({
+      category: "provider",
+      action: "provider.key_reveal",
+      targetType: "provider",
+      targetId: String(provider.id),
+      targetName: provider.name,
+      after: {
+        id: provider.id,
+        name: provider.name,
+      },
+      success: true,
+      redactExtraKeys: ["key"],
+    });
 
     return { ok: true, data: { key: provider.key } };
   } catch (error) {
     logger.error("获取供应商密钥失败:", error);
     const message = error instanceof Error ? error.message : "获取供应商密钥失败";
+    emitActionAudit({
+      category: "provider",
+      action: "provider.key_reveal",
+      targetType: "provider",
+      targetId: String(id),
+      success: false,
+      errorMessage: "KEY_REVEAL_FAILED",
+    });
     return { ok: false, error: message };
   }
 }
@@ -4261,7 +4309,7 @@ export async function testProviderOpenAIChatCompletions(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/chat/completions",
-    defaultModel: "gpt-5.3-codex",
+    defaultModel: "gpt-5.4",
     headers: (apiKey, context) => {
       void context;
       return {
@@ -4295,7 +4343,7 @@ export async function testProviderOpenAIResponses(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/responses",
-    defaultModel: "gpt-5.3-codex",
+    defaultModel: "gpt-5.4",
     headers: (apiKey, context) => {
       void context;
       return {
@@ -4353,7 +4401,7 @@ export async function testProviderGemini(
   }
 
   logger.debug("testProviderGemini: Starting test", {
-    providerUrl: data.providerUrl,
+    providerUrl: redactUrlCredentials(data.providerUrl),
     model: data.model,
     hasApiKey: !!data.apiKey,
     apiKeyLength: data.apiKey?.length,
@@ -4632,6 +4680,19 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
     };
   }
 
+  // Validate static custom headers via shared parser；错误码不包含原始值，避免日志/错误泄漏
+  let normalizedCustomHeaders: Record<string, string> | undefined;
+  if (data.customHeaders !== undefined) {
+    const headerValidation = normalizeCustomHeadersRecord(data.customHeaders);
+    if (!headerValidation.ok) {
+      return {
+        ok: false,
+        error: `custom_headers_${headerValidation.code}`,
+      };
+    }
+    normalizedCustomHeaders = headerValidation.value ?? undefined;
+  }
+
   try {
     // Build test configuration
     const config: ProviderTestConfig = {
@@ -4647,7 +4708,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
       // Custom configuration fields
       preset: data.preset,
       customPayload: data.customPayload,
-      customHeaders: data.customHeaders,
+      customHeaders: normalizedCustomHeaders,
     };
 
     // Execute test

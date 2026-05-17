@@ -46,6 +46,7 @@ const realWithNoStoreHeaders = vi.hoisted(() => {
 
 vi.mock("@/lib/auth", () => ({
   clearAuthCookie: mockClearAuthCookie,
+  detectSessionTokenKind: (token: string) => (token.startsWith("sid_") ? "opaque" : "legacy"),
   getAuthCookie: mockGetAuthCookie,
   getSessionTokenMode: mockGetSessionTokenMode,
   withNoStoreHeaders: realWithNoStoreHeaders,
@@ -141,6 +142,19 @@ describe("session fixation rotation and logout revocation", () => {
     expect(response.status).toBe(200);
     expect(mockRedisSessionStoreCtor).toHaveBeenCalledTimes(1);
     expect(mockRevoke).toHaveBeenCalledWith("sid_opaque_session");
+    expect(mockClearAuthCookie).toHaveBeenCalledTimes(1);
+  });
+
+  it("opaque mode logout skips Redis revocation for signed admin auth token", async () => {
+    mockGetSessionTokenMode.mockReturnValue("opaque");
+    mockGetAuthCookie.mockResolvedValue("cch_admin_session_v1.payload.signature");
+    const POST = await loadLogoutPost();
+
+    const response = await POST(makeLogoutRequest());
+
+    expect(response.status).toBe(200);
+    expect(mockRedisSessionStoreCtor).not.toHaveBeenCalled();
+    expect(mockRevoke).not.toHaveBeenCalled();
     expect(mockClearAuthCookie).toHaveBeenCalledTimes(1);
   });
 

@@ -36,6 +36,8 @@ export interface ProviderChainItem {
     | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
     | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
     | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
+    | "responses_ws_attempted" // 已尝试与上游建立 OpenAI Responses WebSocket 连接（信息性，无论最终成功或降级）
+    | "responses_ws_fallback" // 上游 WebSocket 不支持或握手/首帧前失败，回退到 HTTP（不切换供应商、不计入熔断器）
     | "endpoint_pool_exhausted" // 端点池耗尽（所有端点熔断或不可用，严格模式阻止降级）
     | "vendor_type_all_timeout" // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
     | "client_restriction_filtered" // Provider skipped due to client restriction (neutral, no circuit breaker)
@@ -220,6 +222,26 @@ export interface ProviderChainItem {
     // --- 重试特有 ---
     excludedProviderIds?: number[]; // 已排除的供应商 ID 列表
     retryReason?: string; // 重试原因
+
+    // --- OpenAI Responses WebSocket 特有（clientTransport==="websocket" 时相关） ---
+    // 客户端进入本次请求使用的传输层
+    clientTransport?: "http" | "websocket";
+    // 是否尝试了上游 WebSocket 建连（仅当 clientTransport==="websocket" 且供应商为 codex 且全局开关开启时才会为 true）
+    upstreamWsAttempted?: boolean;
+    // 上游 WebSocket 是否至少建连并收到一个事件
+    upstreamWsConnected?: boolean;
+    // 是否最终降级到 HTTP Responses（不计入熔断器）
+    downgradedToHttp?: boolean;
+    // 降级原因（仅当 downgradedToHttp===true 时填充）
+    downgradeReason?:
+      | "setting_disabled"
+      | "provider_not_codex"
+      | "endpoint_ws_unsupported_cached"
+      | "ws_upgrade_rejected"
+      | "ws_closed_before_first_event"
+      | "ws_module_unavailable"
+      | "ws_not_yet_implemented"
+      | "ws_error_pre_first_event";
   };
 }
 

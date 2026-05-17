@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { uploadPriceTable } from "@/actions/model-prices";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useRouter } from "@/i18n/routing";
+import { uploadPriceTable } from "@/lib/api-client/v1/actions/model-prices";
 import type { PriceUpdateResult } from "@/types/model-price";
 
 interface PageLoadingOverlayProps {

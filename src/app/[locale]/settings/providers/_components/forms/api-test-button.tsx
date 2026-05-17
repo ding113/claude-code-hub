@@ -2,18 +2,25 @@
 
 import { Activity, AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import {
   getUnmaskedProviderKey,
   type ProviderApiTestSuccessDetails,
   testProviderGemini,
   testProviderUnified,
-} from "@/actions/providers";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
+} from "@/lib/api-client/v1/actions/providers";
+import {
+  CUSTOM_HEADERS_PLACEHOLDER,
+  type CustomHeadersValidationErrorCode,
+  parseCustomHeadersJsonText,
+  stringifyCustomHeadersForTextarea,
+} from "@/lib/custom-headers";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { AllowedModelRuleInput, ProviderType } from "@/types/provider";
 import { TestResultCard, type UnifiedTestResultData } from "./test-result-card";
@@ -26,7 +33,7 @@ const API_TEST_UI_CONFIG = {
 const DEFAULT_MODELS: Record<ProviderType, string> = {
   claude: "claude-haiku-4-5-20251001",
   "claude-auth": "claude-haiku-4-5-20251001",
-  codex: "gpt-5.3-codex",
+  codex: "gpt-5.4",
   "openai-compatible": "gpt-4.1-mini",
   gemini: "gemini-2.5-flash",
   "gemini-cli": "gemini-2.5-flash",
@@ -82,6 +89,7 @@ interface ApiTestButtonProps {
   providerId?: number;
   providerType?: ProviderType | null;
   allowedModels?: AllowedModelRuleInput[];
+  customHeaders?: Record<string, string> | null;
   enableMultiProviderTypes: boolean;
 }
 
@@ -94,6 +102,7 @@ export function ApiTestButton({
   providerId,
   providerType,
   allowedModels = [],
+  customHeaders,
   enableMultiProviderTypes: _enableMultiProviderTypes,
 }: ApiTestButtonProps) {
   const t = useTranslations("settings.providers.form.apiTest");
@@ -113,6 +122,13 @@ export function ApiTestButton({
   const [testModel, setTestModel] = useState(() =>
     getDefaultModelForProvider(providerType, normalizedAllowedModels[0])
   );
+  const initialCustomHeadersText = useMemo(
+    () => stringifyCustomHeadersForTextarea(customHeaders ?? null),
+    [customHeaders]
+  );
+  const previousProviderId = useRef(providerId);
+  const [customHeadersText, setCustomHeadersText] = useState(initialCustomHeadersText);
+  const [isCustomHeadersManuallyEdited, setIsCustomHeadersManuallyEdited] = useState(false);
   const [testResult, setTestResult] = useState<UnifiedTestResultData | null>(null);
 
   useEffect(() => {
@@ -123,6 +139,31 @@ export function ApiTestButton({
     setTestModel(getDefaultModelForProvider(providerType, normalizedAllowedModels[0]));
   }, [isModelManuallyEdited, normalizedAllowedModels, providerType]);
 
+  // 仅在用户未手动编辑时随 prop 变更同步；切换 provider 身份时重置编辑标志
+  useEffect(() => {
+    if (previousProviderId.current === providerId) {
+      return;
+    }
+    previousProviderId.current = providerId;
+    setIsCustomHeadersManuallyEdited(false);
+  }, [providerId]);
+
+  useEffect(() => {
+    if (isCustomHeadersManuallyEdited) return;
+    setCustomHeadersText(initialCustomHeadersText);
+  }, [initialCustomHeadersText, isCustomHeadersManuallyEdited]);
+
+  const CUSTOM_HEADER_ERROR_KEYS: Record<CustomHeadersValidationErrorCode, string> = {
+    invalid_json: "customHeaders.errors.invalidJson",
+    not_object: "customHeaders.errors.notObject",
+    invalid_name: "customHeaders.errors.invalidName",
+    duplicate_name: "customHeaders.errors.duplicateName",
+    protected_name: "customHeaders.errors.protectedName",
+    invalid_value: "customHeaders.errors.invalidValue",
+    empty_name: "customHeaders.errors.emptyName",
+    crlf: "customHeaders.errors.crlf",
+  };
+
   const handleTest = async () => {
     if (!providerUrl.trim()) {
       toast.error(t("fillUrlFirst"));
@@ -131,6 +172,21 @@ export function ApiTestButton({
 
     if (!isValidUrl(providerUrl.trim()) || !/^https?:\/\//.test(providerUrl.trim())) {
       toast.error(t("invalidUrl"));
+      return;
+    }
+
+    const parsedCustomHeaders = parseCustomHeadersJsonText(customHeadersText);
+    if (!parsedCustomHeaders.ok) {
+      toast.error(t(CUSTOM_HEADER_ERROR_KEYS[parsedCustomHeaders.code]));
+      return;
+    }
+    const customHeadersValue = parsedCustomHeaders.value;
+
+    if (
+      customHeadersValue &&
+      (resolvedProviderType === "gemini" || resolvedProviderType === "gemini-cli")
+    ) {
+      toast.warning(t("customHeaders.geminiNotSupported"));
       return;
     }
 
@@ -276,6 +332,7 @@ export function ApiTestButton({
           proxyUrl: proxyUrl?.trim() || null,
           proxyFallbackToDirect,
           timeoutMs: getTimeoutMsForProvider(resolvedProviderType),
+          customHeaders: customHeadersValue ?? undefined,
         });
 
         if (!response.ok) {
@@ -386,6 +443,23 @@ export function ApiTestButton({
           disabled={isTesting}
         />
         <div className="text-xs text-muted-foreground">{t("testModelDesc")}</div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="test-custom-headers">{t("customHeaders.label")}</Label>
+        <Textarea
+          id="test-custom-headers"
+          value={customHeadersText}
+          onChange={(event) => {
+            setIsCustomHeadersManuallyEdited(true);
+            setCustomHeadersText(event.target.value);
+          }}
+          placeholder={CUSTOM_HEADERS_PLACEHOLDER}
+          disabled={isTesting}
+          rows={3}
+          spellCheck={false}
+        />
+        <div className="text-xs text-muted-foreground">{t("customHeaders.desc")}</div>
       </div>
 
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">

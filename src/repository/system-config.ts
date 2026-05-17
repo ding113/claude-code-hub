@@ -5,7 +5,11 @@ import { db } from "@/drizzle/db";
 import { systemSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_TITLE } from "@/lib/site-title";
-import type { SystemSettings, UpdateSystemSettingsInput } from "@/types/system-config";
+import {
+  DEFAULT_FAKE_STREAMING_WHITELIST,
+  type SystemSettings,
+  type UpdateSystemSettingsInput,
+} from "@/types/system-config";
 import { toSystemSettings } from "./_shared/transformers";
 
 type TransactionExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -143,6 +147,7 @@ function createFallbackSettings(): SystemSettings {
     currencyDisplay: "USD",
     billingModelSource: "original",
     codexPriorityBillingSource: "requested",
+    billNonSuccessfulRequests: false,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -152,6 +157,7 @@ function createFallbackSettings(): SystemSettings {
     verboseProviderError: false,
     passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
+    enableOpenaiResponsesWebsocket: true,
     enableHighConcurrencyMode: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
@@ -159,6 +165,10 @@ function createFallbackSettings(): SystemSettings {
     enableBillingHeaderRectifier: true,
     enableResponseInputRectifier: true,
     allowNonConversationEndpointProviderFallback: true,
+    fakeStreamingWhitelist: DEFAULT_FAKE_STREAMING_WHITELIST.map((entry) => ({
+      model: entry.model,
+      groupTags: [...entry.groupTags],
+    })),
     enableCodexSessionIdCompletion: true,
     enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
@@ -269,7 +279,10 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       updatedAt: systemSettings.updatedAt,
     };
     const fullSelection = {
+      billNonSuccessfulRequests: systemSettings.billNonSuccessfulRequests,
       passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+      fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
+      enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
       ...selectionWithoutPassThrough,
     };
 
@@ -287,12 +300,83 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
-        // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
-        // 其它已迁移的现代字段保留，避免只缺该列时其它设置被连带默认化。
+        // 最新降级：移除最近新增的 billNonSuccessfulRequests 列。
+        const {
+          billNonSuccessfulRequests: _omitBillNonSuccessful,
+          ...selectionWithoutBillNonSuccessful
+        } = fullSelection;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutBillNonSuccessful)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (billNonSuccessfulFallbackError) {
+          if (!isUndefinedColumnError(billNonSuccessfulFallbackError)) {
+            throw billNonSuccessfulFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 billNonSuccessfulRequests 外仍有列缺失，继续回退到上一代字段集。",
+            { error: billNonSuccessfulFallbackError }
+          );
+        }
+
+        // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列。
+        const {
+          enableOpenaiResponsesWebsocket: _omitOpenaiResponsesWebsocket,
+          ...selectionWithoutOpenaiResponsesWebsocket
+        } = selectionWithoutBillNonSuccessful;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutOpenaiResponsesWebsocket)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (openaiResponsesWebsocketFallbackError) {
+          if (!isUndefinedColumnError(openaiResponsesWebsocketFallbackError)) {
+            throw openaiResponsesWebsocketFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续回退到上一代字段集。",
+            { error: openaiResponsesWebsocketFallbackError }
+          );
+        }
+
+        // 第一层降级：再移除 fakeStreamingWhitelist 列。
+        const {
+          fakeStreamingWhitelist: _omitFakeStreamingWhitelist,
+          ...selectionWithoutFakeStreamingWhitelist
+        } = selectionWithoutOpenaiResponsesWebsocket;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutFakeStreamingWhitelist)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (fakeStreamingFallbackError) {
+          if (!isUndefinedColumnError(fakeStreamingFallbackError)) {
+            throw fakeStreamingFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到上一代字段集。",
+            { error: fakeStreamingFallbackError }
+          );
+        }
+
+        // 第二层降级：再移除 allowNonConversationEndpointProviderFallback 列。
         const {
           allowNonConversationEndpointProviderFallback: _omitNonConversationFallback,
           ...selectionWithoutNonConversationFallback
-        } = fullSelection;
+        } = selectionWithoutFakeStreamingWhitelist;
 
         try {
           const [row] = await db
@@ -532,7 +616,10 @@ export async function updateSystemSettings(
     updatedAt: systemSettings.updatedAt,
   };
   const fullReturning = {
+    billNonSuccessfulRequests: systemSettings.billNonSuccessfulRequests,
     passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+    fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
+    enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
     ...returningWithoutPassThrough,
   };
 
@@ -563,6 +650,11 @@ export async function updateSystemSettings(
     }
     if (payload.codexPriorityBillingSource !== undefined) {
       updates.codexPriorityBillingSource = payload.codexPriorityBillingSource;
+    }
+
+    // 非成功请求按 token 用量计费开关（如果提供）
+    if (payload.billNonSuccessfulRequests !== undefined) {
+      updates.billNonSuccessfulRequests = payload.billNonSuccessfulRequests;
     }
 
     // 系统时区配置字段（如果提供）
@@ -602,6 +694,11 @@ export async function updateSystemSettings(
     // HTTP/2 配置字段（如果提供）
     if (payload.enableHttp2 !== undefined) {
       updates.enableHttp2 = payload.enableHttp2;
+    }
+
+    // OpenAI Responses WebSocket 开关（如果提供）
+    if (payload.enableOpenaiResponsesWebsocket !== undefined) {
+      updates.enableOpenaiResponsesWebsocket = payload.enableOpenaiResponsesWebsocket;
     }
 
     // 高并发模式开关（如果提供）
@@ -698,6 +795,11 @@ export async function updateSystemSettings(
       updates.ipGeoLookupEnabled = payload.ipGeoLookupEnabled;
     }
 
+    // Fake 流式输出白名单（如果提供；空数组表示显式禁用，null 留待 transformer 落默认）
+    if (payload.fakeStreamingWhitelist !== undefined) {
+      updates.fakeStreamingWhitelist = payload.fakeStreamingWhitelist;
+    }
+
     let updated;
     try {
       [updated] = await executor
@@ -714,87 +816,180 @@ export async function updateSystemSettings(
         error,
       });
 
-      // 第一层降级：仅移除本次新增的 allowNonConversationEndpointProviderFallback 列，
-      // 其它字段继续原值更新 / 返回，避免只缺该列时连带丢失 codex/highConcurrency 等更新。
+      // 最新降级：移除最近新增的 billNonSuccessfulRequests 列。
       const {
-        allowNonConversationEndpointProviderFallback: _omitUpdate,
-        ...updatesWithoutNonConversationFallback
+        billNonSuccessfulRequests: _omitUpdateBillNonSuccessful,
+        ...updatesWithoutBillNonSuccessful
       } = updates;
       const {
-        allowNonConversationEndpointProviderFallback: _omitReturning,
-        ...returningWithoutNonConversationFallback
+        billNonSuccessfulRequests: _omitReturningBillNonSuccessful,
+        ...returningWithoutBillNonSuccessful
       } = fullReturning;
 
       try {
         [updated] = await executor
           .update(systemSettings)
-          .set(updatesWithoutNonConversationFallback)
+          .set(updatesWithoutBillNonSuccessful)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutNonConversationFallback);
-      } catch (nonConversationFallbackError) {
-        if (!isUndefinedColumnError(nonConversationFallbackError)) {
-          throw nonConversationFallbackError;
+          .returning(returningWithoutBillNonSuccessful);
+      } catch (billNonSuccessfulFallbackError) {
+        if (!isUndefinedColumnError(billNonSuccessfulFallbackError)) {
+          throw billNonSuccessfulFallbackError;
         }
 
-        logger.warn(
-          "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
-          { error: nonConversationFallbackError }
-        );
+        logger.warn("system_settings 表除 billNonSuccessfulRequests 外仍有列缺失，继续降级更新。", {
+          error: billNonSuccessfulFallbackError,
+        });
+      }
 
+      // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列。
+      const {
+        enableOpenaiResponsesWebsocket: _omitUpdateOpenaiResponsesWebsocket,
+        ...updatesWithoutOpenaiResponsesWebsocket
+      } = updatesWithoutBillNonSuccessful;
+      const {
+        enableOpenaiResponsesWebsocket: _omitReturningOpenaiResponsesWebsocket,
+        ...returningWithoutOpenaiResponsesWebsocket
+      } = returningWithoutBillNonSuccessful;
+
+      if (!updated) {
         try {
-          const withoutPassThroughUpdates = { ...updates };
-          delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
           [updated] = await executor
             .update(systemSettings)
-            .set(withoutPassThroughUpdates)
+            .set(updatesWithoutOpenaiResponsesWebsocket)
             .where(eq(systemSettings.id, current.id))
-            .returning(returningWithoutPassThrough);
-        } catch (passThroughFallbackError) {
-          if (!isUndefinedColumnError(passThroughFallbackError)) {
-            throw passThroughFallbackError;
+            .returning(returningWithoutOpenaiResponsesWebsocket);
+        } catch (openaiResponsesWebsocketFallbackError) {
+          if (!isUndefinedColumnError(openaiResponsesWebsocketFallbackError)) {
+            throw openaiResponsesWebsocketFallbackError;
           }
 
-          const downgradedUpdates = { ...updates };
-          delete downgradedUpdates.passThroughUpstreamErrorMessage;
-          delete downgradedUpdates.enableHighConcurrencyMode;
-          delete downgradedUpdates.publicStatusWindowHours;
-          delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
-          delete downgradedUpdates.ipExtractionConfig;
-          delete downgradedUpdates.ipGeoLookupEnabled;
+          logger.warn(
+            "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续降级更新。",
+            { error: openaiResponsesWebsocketFallbackError }
+          );
+        }
+      }
 
-          const legacyUpdates = { ...downgradedUpdates };
-          delete legacyUpdates.codexPriorityBillingSource;
-          delete legacyUpdates.allowNonConversationEndpointProviderFallback;
+      // 第一层降级：再移除 fakeStreamingWhitelist 列。
+      const {
+        fakeStreamingWhitelist: _omitUpdateFakeStreaming,
+        ...updatesWithoutFakeStreamingWhitelist
+      } = updatesWithoutOpenaiResponsesWebsocket;
+      const {
+        fakeStreamingWhitelist: _omitReturningFakeStreaming,
+        ...returningWithoutFakeStreamingWhitelist
+      } = returningWithoutOpenaiResponsesWebsocket;
+
+      if (!updated) {
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(updatesWithoutFakeStreamingWhitelist)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutFakeStreamingWhitelist);
+        } catch (fakeStreamingFallbackError) {
+          if (!isUndefinedColumnError(fakeStreamingFallbackError)) {
+            throw fakeStreamingFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到 allowNonConversationEndpointProviderFallback 之外的字段集。",
+            { error: fakeStreamingFallbackError }
+          );
+        }
+      }
+
+      // 第二层降级：再移除 allowNonConversationEndpointProviderFallback 列。
+      const {
+        allowNonConversationEndpointProviderFallback: _omitUpdate,
+        ...updatesWithoutNonConversationFallback
+      } = updatesWithoutFakeStreamingWhitelist;
+      const {
+        allowNonConversationEndpointProviderFallback: _omitReturning,
+        ...returningWithoutNonConversationFallback
+      } = returningWithoutFakeStreamingWhitelist;
+
+      if (!updated) {
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(updatesWithoutNonConversationFallback)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutNonConversationFallback);
+        } catch (nonConversationFallbackError) {
+          if (!isUndefinedColumnError(nonConversationFallbackError)) {
+            throw nonConversationFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
+            { error: nonConversationFallbackError }
+          );
 
           try {
+            // Continue pruning from the already-reduced object, otherwise the
+            // freshly removed `fakeStreamingWhitelist` (and any other newer
+            // columns) would be reintroduced and fail again on legacy schemas.
+            const withoutPassThroughUpdates = { ...updatesWithoutNonConversationFallback };
+            delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
             [updated] = await executor
               .update(systemSettings)
-              .set(downgradedUpdates)
+              .set(withoutPassThroughUpdates)
               .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutHighConcurrencyMode);
-          } catch (downgradedFallbackError) {
-            if (!isUndefinedColumnError(downgradedFallbackError)) {
-              throw downgradedFallbackError;
+              .returning(returningWithoutPassThrough);
+          } catch (passThroughFallbackError) {
+            if (!isUndefinedColumnError(passThroughFallbackError)) {
+              throw passThroughFallbackError;
             }
 
-            logger.warn(
-              "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
-              { error: downgradedFallbackError }
-            );
+            // Same rationale: clone from the already-pruned object to avoid
+            // re-introducing newer columns the legacy schema can't handle.
+            const downgradedUpdates = { ...updatesWithoutNonConversationFallback };
+            delete downgradedUpdates.passThroughUpstreamErrorMessage;
+            delete downgradedUpdates.enableHighConcurrencyMode;
+            delete downgradedUpdates.publicStatusWindowHours;
+            delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
+            delete downgradedUpdates.ipExtractionConfig;
+            delete downgradedUpdates.ipGeoLookupEnabled;
 
-            [updated] = await executor
-              .update(systemSettings)
-              .set(legacyUpdates)
-              .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutCodexAndHighConcurrency);
-          }
+            // legacyUpdates already inherits the pruning from
+            // updatesWithoutNonConversationFallback (which dropped
+            // allowNonConversationEndpointProviderFallback), so we only need
+            // to additionally remove codexPriorityBillingSource here.
+            const legacyUpdates = { ...downgradedUpdates };
+            delete legacyUpdates.codexPriorityBillingSource;
 
-          if (!updated) {
-            [updated] = await executor
-              .update(systemSettings)
-              .set(legacyUpdates)
-              .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutCodexAndHighConcurrency);
+            try {
+              [updated] = await executor
+                .update(systemSettings)
+                .set(downgradedUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutHighConcurrencyMode);
+            } catch (downgradedFallbackError) {
+              if (!isUndefinedColumnError(downgradedFallbackError)) {
+                throw downgradedFallbackError;
+              }
+
+              logger.warn(
+                "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
+                { error: downgradedFallbackError }
+              );
+
+              [updated] = await executor
+                .update(systemSettings)
+                .set(legacyUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutCodexAndHighConcurrency);
+            }
+
+            if (!updated) {
+              [updated] = await executor
+                .update(systemSettings)
+                .set(legacyUpdates)
+                .where(eq(systemSettings.id, current.id))
+                .returning(returningWithoutCodexAndHighConcurrency);
+            }
           }
         }
       }

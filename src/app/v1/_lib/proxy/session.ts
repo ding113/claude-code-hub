@@ -30,12 +30,31 @@ import {
   parseOpenAIImageMultipartMetadata,
 } from "./openai-image-compat";
 
+/**
+ * Classification of an auth failure, used to decide whether to record the
+ * failure against the brute-force rate limiter.
+ *
+ * - `credentials`: the request did not present a valid key (missing,
+ *   malformed, multiple conflicting keys, or the key does not match any
+ *   record). These look like brute-force probes — record the failure.
+ * - `account_state`: the credentials matched a real record but the
+ *   key/user is disabled, expired, or otherwise administratively rejected.
+ *   Recording these as failures would lock out legitimate operators whose
+ *   keys were disabled by an admin.
+ */
+export type AuthFailureKind = "credentials" | "account_state";
+
 export interface AuthState {
   user: User | null;
   key: Key | null;
   apiKey: string | null;
   success: boolean;
   errorResponse?: Response; // 认证失败时的详细错误响应
+  /**
+   * Set when `success` is false. Determines whether the proxy auth guard
+   * records the failure against the IP/key rate-limiter.
+   */
+  failureKind?: AuthFailureKind;
 }
 
 export interface MessageContext {
@@ -569,6 +588,8 @@ export class ProxySession {
         | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
         | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
         | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
+        | "responses_ws_attempted" // 已尝试上游 OpenAI Responses WebSocket 建连（信息性记录）
+        | "responses_ws_fallback" // 上游 WebSocket 不可用，回退到 HTTP（不切换供应商、不计入熔断器）
         | "endpoint_pool_exhausted" // 端点池耗尽（strict endpoint policy 阻止了 fallback）
         | "vendor_type_all_timeout" // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
         | "client_restriction_filtered" // 供应商因客户端限制被跳过（会话复用路径）

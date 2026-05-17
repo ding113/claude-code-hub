@@ -417,7 +417,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
               id: key.id,
               name: key.name,
               maskedKey: maskKey(key.key),
-              fullKey: canUserManageKey ? key.key : undefined,
+              canReveal: canUserManageKey,
               canCopy: canUserManageKey,
               expiresAt: key.expiresAt
                 ? key.expiresAt.toISOString().split("T")[0]
@@ -489,6 +489,50 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
   } catch (error) {
     logger.error("Failed to fetch user data:", error);
     return [];
+  }
+}
+
+/**
+ * 按 id 获取单个用户。
+ *
+ * 供新的 management REST detail endpoint 使用。这里保留 ActionResult，
+ * 避免列表 action 在内部异常时返回空数组并把真实错误伪装成 404。
+ */
+export async function getUserById(userId: number): Promise<ActionResult<User>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    if (session.user.role !== "admin" && session.user.id !== userId) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const user = await findUserById(userId);
+    if (!user) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    return { ok: true, data: user };
+  } catch (error) {
+    logger.error(`Failed to fetch user ${userId}:`, error);
+    const message = error instanceof Error ? error.message : "Failed to fetch user";
+    return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
   }
 }
 
@@ -696,7 +740,7 @@ export async function getUsersBatch(
               id: key.id,
               name: key.name,
               maskedKey: maskKey(key.key),
-              fullKey: canUserManageKey ? key.key : undefined,
+              canReveal: canUserManageKey,
               canCopy: canUserManageKey,
               expiresAt: key.expiresAt
                 ? key.expiresAt.toISOString().split("T")[0]
@@ -843,7 +887,7 @@ export async function getUsersBatchCore(
           id: key.id,
           name: key.name,
           maskedKey: maskKey(key.key),
-          fullKey: canUserManageKey ? key.key : undefined,
+          canReveal: canUserManageKey,
           canCopy: canUserManageKey,
           expiresAt: key.expiresAt ? key.expiresAt.toISOString().split("T")[0] : t("neverExpires"),
           status: key.isEnabled ? "enabled" : ("disabled" as const),
@@ -878,12 +922,43 @@ export async function getUsersBatchCore(
       };
     });
 
-    return { ok: true, data: { users: userDisplays, nextCursor, hasMore } };
+    return {
+      ok: true,
+      data: {
+        users: userDisplays.map(toActionTransportUserDisplay),
+        nextCursor,
+        hasMore,
+      },
+    };
   } catch (error) {
     logger.error("Failed to fetch user batch core data:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch user batch core data";
     return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
   }
+}
+
+function toActionTransportUserDisplay(user: UserDisplay): UserDisplay {
+  return {
+    ...user,
+    costResetAt: toActionTransportDate(user.costResetAt),
+    expiresAt: toActionTransportDate(user.expiresAt),
+    keys: user.keys.map((key) => ({
+      ...key,
+      createdAt: toRequiredActionTransportDate(key.createdAt),
+      lastUsedAt: toActionTransportDate(key.lastUsedAt),
+    })),
+  };
+}
+
+function toActionTransportDate(value: Date | null | undefined): Date | null {
+  if (!value) return null;
+  const timestamp = value.getTime();
+  return (Number.isFinite(timestamp) ? value.toISOString() : null) as unknown as Date;
+}
+
+function toRequiredActionTransportDate(value: Date): Date {
+  const timestamp = value.getTime();
+  return (Number.isFinite(timestamp) ? value.toISOString() : null) as unknown as Date;
 }
 
 /**

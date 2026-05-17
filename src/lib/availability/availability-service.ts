@@ -4,7 +4,7 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
-import { and, eq, inArray, isNull, type SQLWrapper, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, type SQLWrapper, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
 import type {
@@ -45,6 +45,7 @@ const AVAILABILITY_SUCCESS_STATUS_CODE_MAX_EXCLUSIVE = 400;
 const FINALIZED_REQUEST_OUTCOME_ALIAS = "successRateOutcome" as const;
 const FINALIZED_REQUEST_OUTCOME_SQL = sql.raw(`"${FINALIZED_REQUEST_OUTCOME_ALIAS}"`);
 const COUNTABLE_REQUEST_OUTCOME_SQL = sql`${FINALIZED_REQUEST_OUTCOME_SQL} IN ('success', 'failure')`;
+
 // Keep the hard cap independent from the UI/API default so future default tuning does not silently relax/tighten the guardrail.
 // It intentionally equals the default today; the separation preserves distinct semantic roles for future tuning.
 export const MAX_BUCKETS_HARD_LIMIT = 100;
@@ -62,19 +63,24 @@ export class AvailabilityQueryValidationError extends Error {
 }
 
 /**
- * 当前版本把“已终态”收敛为 `statusCode` 已落库。
+ * 可用性监控的"已终态"边界收敛为 `status_code IS NOT NULL`。
  *
- * 已知限制：在当前异步写入/丢 patch 的极端场景，或未来新增了 `durationMs` / `errorMessage`
- * 已落库、但 `statusCode` 仍为空且已稳定结束的写路径时，这些记录会被当前可用性统计排除。
- * 届时应引入独立的 finalized 谓词，而不是直接放宽为 `durationMs IS NOT NULL`。
+ * 这与部分索引 `idx_message_request_provider_created_at_finalized_active`
+ * 的谓词 `deleted_at IS NULL AND status_code IS NOT NULL` 对齐，让
+ * provider + 时间范围聚合可以直接命中索引，而不是退化为大范围扫描。
+ *
+ * 不复刻 `fn_is_message_request_finalized` 的语义（即使内联）也是有意为之：
+ * 该函数会把仅有 providerChain / errorMessage 片段但 statusCode 仍为 NULL
+ * 的"请求中"记录判为终态；放到可用性统计里会被分类函数误算成 failure。
+ * 终态记录的成功/失败/排除分类继续由
+ * `fn_compute_message_request_success_rate_outcome(...)` 处理。
+ *
+ * 已知限制：若未来出现 status_code 长时间未落库但请求已稳定结束的写路径，
+ * 这些记录会被排除；届时应引入独立的、SARGable 的 finalized 谓词，
+ * 而不是放回 PL/pgSQL 函数调用。
  */
 function buildAvailabilityFinalizedCondition() {
-  return sql`fn_is_message_request_finalized(
-    ${messageRequest.blockedBy},
-    ${messageRequest.statusCode},
-    ${messageRequest.providerChain},
-    ${messageRequest.errorMessage}
-  )`;
+  return isNotNull(messageRequest.statusCode);
 }
 
 function assertValidDate(date: Date, fieldName: string): Date {

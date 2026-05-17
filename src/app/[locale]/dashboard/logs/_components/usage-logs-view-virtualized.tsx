@@ -6,16 +6,17 @@ import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getKeys } from "@/actions/keys";
-import type { OverviewData } from "@/actions/overview";
-import { getOverviewData } from "@/actions/overview";
-import { getProviders } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { useRouter } from "@/i18n/routing";
+import { getKeys } from "@/lib/api-client/v1/actions/keys";
+import type { OverviewData } from "@/lib/api-client/v1/actions/overview";
+import { getOverviewData } from "@/lib/api-client/v1/actions/overview";
+import { getProviders } from "@/lib/api-client/v1/actions/providers";
+import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import { getHiddenColumns, type LogsTableColumn } from "@/lib/column-visibility";
 import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -42,14 +43,6 @@ interface UsageLogsViewVirtualizedProps {
   billingModelSource?: BillingModelSource;
   serverTimeZone?: string;
   logsRefreshIntervalMs?: number;
-}
-
-async function fetchSystemSettings(): Promise<SystemSettings> {
-  const response = await fetch("/api/system-settings");
-  if (!response.ok) {
-    throw new Error("FETCH_SETTINGS_FAILED");
-  }
-  return response.json() as Promise<SystemSettings>;
 }
 
 async function fetchOverviewData(): Promise<OverviewData> {
@@ -132,7 +125,7 @@ function UsageLogsViewContent({
   const shouldFetchSettings = !currencyCode || !billingModelSource;
   const { data: systemSettings } = useQuery<SystemSettings>({
     queryKey: ["system-settings"],
-    queryFn: fetchSystemSettings,
+    queryFn: getSystemSettings,
     enabled: shouldFetchSettings || isFullscreenOpen,
   });
 

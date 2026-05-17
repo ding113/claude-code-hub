@@ -4,7 +4,6 @@ import { Loader2, Pencil, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { upsertSingleModelPrice } from "@/actions/model-prices";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { upsertSingleModelPrice } from "@/lib/api-client/v1/actions/model-prices";
 import type { ModelPrice } from "@/types/model-price";
 
 interface ModelPriceDialogProps {

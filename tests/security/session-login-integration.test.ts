@@ -6,6 +6,7 @@ const mockSetAuthCookie = vi.hoisted(() => vi.fn());
 const mockGetSessionTokenMode = vi.hoisted(() => vi.fn());
 const mockGetLoginRedirectTarget = vi.hoisted(() => vi.fn());
 const mockToKeyFingerprint = vi.hoisted(() => vi.fn());
+const mockCreateSignedAdminAuthToken = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
 const mockCreateSession = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
@@ -30,6 +31,7 @@ vi.mock("@/lib/auth", () => ({
   getSessionTokenMode: mockGetSessionTokenMode,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
   toKeyFingerprint: mockToKeyFingerprint,
+  createSignedAdminAuthToken: mockCreateSignedAdminAuthToken,
   withNoStoreHeaders: realWithNoStoreHeaders,
 }));
 
@@ -70,7 +72,7 @@ const dashboardSession = {
     description: "desc",
     role: "user" as const,
   },
-  key: { canLoginWebUi: true },
+  key: { id: -1, name: "ADMIN_TOKEN", canLoginWebUi: true },
 };
 
 const readonlySession = {
@@ -81,6 +83,16 @@ const readonlySession = {
     role: "user" as const,
   },
   key: { canLoginWebUi: false },
+};
+
+const adminTokenSession = {
+  user: {
+    id: -1,
+    name: "Admin Token",
+    description: "admin",
+    role: "admin" as const,
+  },
+  key: { canLoginWebUi: true },
 };
 
 describe("POST /api/auth/login session token mode integration", () => {
@@ -98,7 +110,8 @@ describe("POST /api/auth/login session token mode integration", () => {
     mockToKeyFingerprint.mockResolvedValue(
       "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
     );
-    mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
+    mockCreateSignedAdminAuthToken.mockResolvedValue("cch_admin_session_v1.payload.signature");
+    mockGetEnvConfig.mockReturnValue({ ADMIN_TOKEN: "admin-token", ENABLE_SECURE_COOKIES: false });
     mockCreateSession.mockResolvedValue({
       sessionId: "sid_opaque_session_123",
       keyFingerprint: "sha256:abcdef",
@@ -140,6 +153,7 @@ describe("POST /api/auth/login session token mode integration", () => {
       expect.objectContaining({
         userId: 1,
         userRole: "user",
+        credentialType: "session",
         keyFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       })
     );
@@ -163,6 +177,9 @@ describe("POST /api/auth/login session token mode integration", () => {
 
     expect(res.status).toBe(200);
     expect(mockCreateSession).toHaveBeenCalledTimes(1);
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({ credentialType: "session" })
+    );
     expect(mockSetAuthCookie).toHaveBeenCalledTimes(1);
     expect(mockSetAuthCookie).toHaveBeenCalledWith("sid_opaque_session_cookie");
     expect(mockSetAuthCookie).not.toHaveBeenCalledWith("opaque-key");
@@ -225,13 +242,64 @@ describe("POST /api/auth/login session token mode integration", () => {
 
       if (mode === "dual") {
         expect(mockCreateSession).toHaveBeenCalledTimes(1);
+        expect(mockCreateSession).toHaveBeenCalledWith(
+          expect.objectContaining({ credentialType: "user-api-key" })
+        );
         expect(mockSetAuthCookie).toHaveBeenCalledWith("dual-readonly-key");
       }
 
       if (mode === "opaque") {
         expect(mockCreateSession).toHaveBeenCalledTimes(1);
+        expect(mockCreateSession).toHaveBeenCalledWith(
+          expect.objectContaining({ credentialType: "user-api-key" })
+        );
         expect(mockSetAuthCookie).toHaveBeenCalledWith("sid_opaque_session");
       }
     }
+  });
+
+  it("opaque mode signs ADMIN_TOKEN login without requiring Redis session persistence", async () => {
+    mockGetSessionTokenMode.mockReturnValue("opaque");
+    mockValidateKey.mockResolvedValue(adminTokenSession);
+    // 防御性设置：如果实现错误地调用 createSession，本用例应立即失败。
+    mockCreateSession.mockRejectedValue(new Error("redis unavailable"));
+
+    const res = await POST(makeRequest({ key: "admin-token" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.loginType).toBe("admin");
+    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(mockCreateSignedAdminAuthToken).toHaveBeenCalledTimes(1);
+    expect(mockSetAuthCookie).toHaveBeenCalledWith("cch_admin_session_v1.payload.signature");
+  });
+
+  it("opaque mode keeps browser-login capable admin keys as session credentials", async () => {
+    mockGetSessionTokenMode.mockReturnValue("opaque");
+    mockValidateKey.mockResolvedValue({
+      ...dashboardSession,
+      user: { ...dashboardSession.user, role: "admin" as const },
+      key: { ...dashboardSession.key, canLoginWebUi: true },
+    });
+    mockCreateSession.mockResolvedValue({
+      sessionId: "sid_browser_admin_session",
+      keyFingerprint: "sha256:abcdef",
+      userId: 1,
+      userRole: "admin",
+      createdAt: 100,
+      expiresAt: 200,
+    });
+
+    const res = await POST(makeRequest({ key: "browser-admin-db-key" }));
+
+    expect(res.status).toBe(200);
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 1,
+        userRole: "admin",
+        credentialType: "session",
+      })
+    );
+    expect(mockSetAuthCookie).toHaveBeenCalledWith("sid_browser_admin_session");
   });
 });

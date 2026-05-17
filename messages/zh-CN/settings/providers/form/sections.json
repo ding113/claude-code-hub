@@ -146,6 +146,20 @@
       "label": "Cache TTL 计费互换",
       "desc": "反转传入数据的缓存 TTL：1h 令牌视为 5 分钟，反之亦然。影响标记、成本及所有存储指标。"
     },
+    "customHeaders": {
+      "label": "自定义请求头（JSON）",
+      "desc": "静态请求头会合并到出站请求；不会覆盖鉴权头或最终 request filter。",
+      "errors": {
+        "invalidJson": "自定义请求头必须是合法 JSON",
+        "notObject": "自定义请求头必须是 JSON 对象",
+        "invalidName": "请求头名称包含不允许的字符",
+        "duplicateName": "请求头名称重复（不区分大小写）",
+        "protectedName": "鉴权请求头不能通过自定义请求头设置",
+        "invalidValue": "请求头值必须为字符串",
+        "emptyName": "请求头名称不能为空",
+        "crlf": "请求头名称和值不能包含换行符"
+      }
+    },
     "codexOverrides": {
       "title": "Codex 参数覆写",
       "desc": "在供应商级别覆写 Codex (Responses API) 请求参数",
