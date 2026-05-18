@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { looksLikeAnthropicProxyUrl, resolveAnthropicAuthHeaders } from "@/app/v1/_lib/headers";
+import {
+  looksLikeAnthropicProxyUrl,
+  looksLikeAwsExternalAnthropicUrl,
+  resolveAnthropicAuthHeaders,
+} from "@/app/v1/_lib/headers";
 
 describe("Anthropic auth header helpers", () => {
   it("treats official Anthropic domains as direct endpoints", () => {
@@ -32,6 +36,66 @@ describe("Anthropic auth header helpers", () => {
       })
     ).toEqual({
       Authorization: "Bearer sk-test",
+    });
+  });
+
+  describe("AWS External Anthropic (Claude Platform on AWS)", () => {
+    it("recognises aws-external-anthropic regional hosts", () => {
+      expect(
+        looksLikeAwsExternalAnthropicUrl(
+          "https://aws-external-anthropic.us-east-1.api.aws/v1/messages"
+        )
+      ).toBe(true);
+      expect(
+        looksLikeAwsExternalAnthropicUrl(
+          "https://aws-external-anthropic.us-west-2.api.aws"
+        )
+      ).toBe(true);
+      expect(
+        looksLikeAwsExternalAnthropicUrl(
+          "HTTPS://AWS-EXTERNAL-ANTHROPIC.EU-WEST-1.API.AWS/v1/messages"
+        )
+      ).toBe(true);
+    });
+
+    it("rejects unrelated hostnames including bedrock and api.anthropic.com", () => {
+      expect(looksLikeAwsExternalAnthropicUrl("https://api.anthropic.com/v1/messages")).toBe(false);
+      expect(
+        looksLikeAwsExternalAnthropicUrl("https://bedrock-runtime.us-east-1.amazonaws.com")
+      ).toBe(false);
+      expect(
+        looksLikeAwsExternalAnthropicUrl("https://bedrock-mantle.us-east-1.api.aws")
+      ).toBe(false);
+      expect(looksLikeAwsExternalAnthropicUrl("https://my-aws-external-anthropic.com")).toBe(
+        false
+      );
+      expect(looksLikeAwsExternalAnthropicUrl(undefined)).toBe(false);
+      expect(looksLikeAwsExternalAnthropicUrl("not a url")).toBe(false);
+    });
+
+    it("sends only x-api-key when proxying to aws-external-anthropic", () => {
+      expect(
+        resolveAnthropicAuthHeaders(
+          "sk-test",
+          "https://aws-external-anthropic.us-east-1.api.aws/v1/messages"
+        )
+      ).toEqual({
+        "x-api-key": "sk-test",
+      });
+    });
+
+    it("keeps x-api-key only even when forceBearerOnly is requested for AWS", () => {
+      // AWS External Anthropic does not accept `Authorization: Bearer`; an upstream
+      // hard constraint must win over the claude-auth provider preference.
+      expect(
+        resolveAnthropicAuthHeaders(
+          "sk-test",
+          "https://aws-external-anthropic.us-east-1.api.aws",
+          { forceBearerOnly: true }
+        )
+      ).toEqual({
+        "x-api-key": "sk-test",
+      });
     });
   });
 });

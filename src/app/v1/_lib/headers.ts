@@ -39,11 +39,36 @@ export function looksLikeAnthropicProxyUrl(providerUrl?: string | null): boolean
   }
 }
 
+// Claude Platform on AWS gateway: `https://aws-external-anthropic.{region}.api.aws`.
+// 该网关使用 SigV4(Authorization)或 API Key(x-api-key)二选一鉴权;同时携带两者
+// 会被服务端拒绝(`request must not include both 'authorization' and 'x-api-key' headers`)。
+// Bearer 形式不被支持,所以代理只能走 x-api-key 路径。
+export function looksLikeAwsExternalAnthropicUrl(providerUrl?: string | null): boolean {
+  if (!providerUrl) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(providerUrl).hostname.toLowerCase();
+    return /^aws-external-anthropic\.[a-z0-9-]+\.api\.aws$/.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function resolveAnthropicAuthHeaders(
   apiKey: string,
   providerUrl?: string | null,
   options?: { forceBearerOnly?: boolean }
 ): Record<string, string> {
+  // AWS External Anthropic 拒绝 Authorization+x-api-key 共存,且不接受 Bearer。
+  // 上游硬约束优先级最高,即使调用方要求 forceBearerOnly 也按 x-api-key 单发。
+  if (looksLikeAwsExternalAnthropicUrl(providerUrl)) {
+    return {
+      "x-api-key": apiKey,
+    };
+  }
+
   if (options?.forceBearerOnly || looksLikeAnthropicProxyUrl(providerUrl)) {
     return {
       Authorization: `Bearer ${apiKey}`,
