@@ -15371,6 +15371,8 @@ export interface operations {
                     replacement?: unknown;
                     /** @description Filter priority. */
                     priority?: number;
+                    /** @description Whether the filter is enabled. */
+                    isEnabled?: boolean;
                     /**
                      * @description Binding type.
                      * @enum {string}
@@ -16354,6 +16356,8 @@ export interface operations {
                     replacement?: unknown;
                     /** @description Filter priority. */
                     priority?: number;
+                    /** @description Whether the filter is enabled. */
+                    isEnabled?: boolean;
                     /**
                      * @description Binding type.
                      * @enum {string}
@@ -16377,8 +16381,6 @@ export interface operations {
                     operations?: {
                         [key: string]: unknown;
                     }[] | null;
-                    /** @description Whether the filter is enabled. */
-                    isEnabled?: boolean;
                 };
             };
         };
