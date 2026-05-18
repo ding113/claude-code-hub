@@ -89,8 +89,21 @@ export function autoSortProviderPriority(args: unknown) {
   );
 }
 
-export function getProvidersHealthStatus() {
-  return toActionResult(apiGet("/api/v1/providers/health", dashboardCompatOptions));
+export type ProviderHealthStatus = Record<
+  number,
+  {
+    circuitState: "closed" | "open" | "half-open";
+    failureCount: number;
+    lastFailureTime: number | null;
+    circuitOpenUntil: number | null;
+    recoveryMinutes: number | null;
+  }
+>;
+
+// 仪表盘内的 React Query 直接消费返回值；这里不要再用 `toActionResult` 包装，
+// 否则 consumer 会拿到 `{ ok, data }` 而非熔断状态 map，所有熔断指示器永远不显示。
+export function getProvidersHealthStatus(): Promise<ProviderHealthStatus> {
+  return apiGet<ProviderHealthStatus>("/api/v1/providers/health", dashboardCompatOptions);
 }
 
 export function resetProviderCircuit(providerId: number) {
