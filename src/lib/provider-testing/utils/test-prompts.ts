@@ -141,16 +141,6 @@ const OPENAI_VERSIONED_FALLBACK_PATHS = [
   ["/v1/models", "/models"],
 ] as const;
 
-function resolveClaudeHeaders(providerType: ProviderType, apiKey: string, providerUrl?: string) {
-  return {
-    "anthropic-version": "2023-06-01",
-    "content-type": "application/json",
-    ...resolveAnthropicAuthHeaders(apiKey, providerUrl, {
-      forceBearerOnly: providerType === "claude-auth",
-    }),
-  };
-}
-
 export function getTestBody(providerType: ProviderType, model?: string): Record<string, unknown> {
   const targetModel = model || DEFAULT_MODELS[providerType];
 
@@ -187,11 +177,12 @@ export function getTestHeaders(
   switch (providerType) {
     case "claude":
     case "claude-auth":
-      Object.assign(
-        headers,
-        CLAUDE_TEST_HEADERS,
-        resolveClaudeHeaders(providerType, apiKey, providerUrl)
-      );
+      Object.assign(headers, {
+        ...CLAUDE_TEST_HEADERS,
+        ...resolveAnthropicAuthHeaders(apiKey, providerUrl, {
+          forceBearerOnly: providerType === "claude-auth",
+        }),
+      });
       break;
     case "codex":
       Object.assign(headers, {
