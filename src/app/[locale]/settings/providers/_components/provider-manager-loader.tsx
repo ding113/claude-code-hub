@@ -5,6 +5,7 @@ import {
   getProviderStatisticsAsync,
   getProviders,
   getProvidersHealthStatus,
+  type ProviderHealthStatus,
 } from "@/lib/api-client/v1/actions/providers";
 import { getSystemSettings } from "@/lib/api-client/v1/actions/system-config";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -12,17 +13,6 @@ import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
 import { AddProviderDialog } from "./add-provider-dialog";
 import { ProviderManager } from "./provider-manager";
-
-type ProviderHealthStatus = Record<
-  number,
-  {
-    circuitState: "closed" | "open" | "half-open";
-    failureCount: number;
-    lastFailureTime: number | null;
-    circuitOpenUntil: number | null;
-    recoveryMinutes: number | null;
-  }
->;
 
 interface ProviderManagerLoaderProps {
   currentUser?: User;

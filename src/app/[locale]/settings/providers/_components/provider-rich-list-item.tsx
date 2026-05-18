@@ -70,7 +70,12 @@ import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { normalizeProviderGroupTag, parseProviderGroups } from "@/lib/utils/provider-group";
-import type { ProviderDisplay, ProviderStatistics, ProviderVendor } from "@/types/provider";
+import type {
+  ProviderCircuitHealth,
+  ProviderDisplay,
+  ProviderStatistics,
+  ProviderVendor,
+} from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
 import { GroupEditCombobox } from "./group-edit-combobox";
@@ -83,13 +88,7 @@ interface ProviderRichListItemProps {
   provider: ProviderDisplay;
   vendor?: ProviderVendor;
   currentUser?: User;
-  healthStatus?: {
-    circuitState: "closed" | "open" | "half-open";
-    failureCount: number;
-    lastFailureTime: number | null;
-    circuitOpenUntil: number | null;
-    recoveryMinutes: number | null;
-  };
+  healthStatus?: ProviderCircuitHealth;
   /** Endpoint-level circuit breaker info for this provider */
   endpointCircuitInfo?: Array<{
     endpointId: number;
