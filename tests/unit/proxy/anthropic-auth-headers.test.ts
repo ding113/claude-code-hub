@@ -47,9 +47,7 @@ describe("Anthropic auth header helpers", () => {
         )
       ).toBe(true);
       expect(
-        looksLikeAwsExternalAnthropicUrl(
-          "https://aws-external-anthropic.us-west-2.api.aws"
-        )
+        looksLikeAwsExternalAnthropicUrl("https://aws-external-anthropic.us-west-2.api.aws")
       ).toBe(true);
       expect(
         looksLikeAwsExternalAnthropicUrl(
@@ -63,12 +61,10 @@ describe("Anthropic auth header helpers", () => {
       expect(
         looksLikeAwsExternalAnthropicUrl("https://bedrock-runtime.us-east-1.amazonaws.com")
       ).toBe(false);
-      expect(
-        looksLikeAwsExternalAnthropicUrl("https://bedrock-mantle.us-east-1.api.aws")
-      ).toBe(false);
-      expect(looksLikeAwsExternalAnthropicUrl("https://my-aws-external-anthropic.com")).toBe(
+      expect(looksLikeAwsExternalAnthropicUrl("https://bedrock-mantle.us-east-1.api.aws")).toBe(
         false
       );
+      expect(looksLikeAwsExternalAnthropicUrl("https://my-aws-external-anthropic.com")).toBe(false);
       expect(looksLikeAwsExternalAnthropicUrl(undefined)).toBe(false);
       expect(looksLikeAwsExternalAnthropicUrl("not a url")).toBe(false);
     });
@@ -88,11 +84,9 @@ describe("Anthropic auth header helpers", () => {
       // AWS External Anthropic does not accept `Authorization: Bearer`; an upstream
       // hard constraint must win over the claude-auth provider preference.
       expect(
-        resolveAnthropicAuthHeaders(
-          "sk-test",
-          "https://aws-external-anthropic.us-east-1.api.aws",
-          { forceBearerOnly: true }
-        )
+        resolveAnthropicAuthHeaders("sk-test", "https://aws-external-anthropic.us-east-1.api.aws", {
+          forceBearerOnly: true,
+        })
       ).toEqual({
         "x-api-key": "sk-test",
       });
