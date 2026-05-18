@@ -18669,7 +18669,7 @@ export interface operations {
                 /** @description Optional action category filter. */
                 category?: "auth" | "user" | "provider" | "provider_group" | "system_settings" | "key" | "notification" | "sensitive_word" | "model_price";
                 /** @description Optional success filter. */
-                success?: boolean | null;
+                success?: "true" | "false";
                 /** @description Optional inclusive start time. */
                 from?: string;
                 /** @description Optional inclusive end time. */
