@@ -21,4 +21,19 @@ describe("matchesPattern", () => {
   it("returns false for invalid regex patterns instead of throwing", () => {
     expect(matchesPattern("claude-opus-4-1", "regex", "[")).toBe(false);
   });
+
+  describe("glob fallback for regex matching", () => {
+    it.each<[string, string, boolean]>([
+      ["*", "claude-opus-4-1", true],
+      ["*", "", true],
+      ["*.", "claude.opus", true],
+      ["*.", "claudeopus", false],
+      ["claude-*", "claude-opus-4-1", true],
+      ["claude-*", "gpt-4", false],
+      ["*-opus-*", "claude-opus-4-1", true],
+      ["*-opus-*", "claude-sonnet-4-1", false],
+    ])("regex pattern %s matches %s -> %s via glob fallback", (pattern, model, expected) => {
+      expect(matchesPattern(model, "regex", pattern)).toBe(expected);
+    });
+  });
 });
