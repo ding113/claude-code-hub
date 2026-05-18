@@ -1,6 +1,10 @@
 import type { EditProviderResult, RemoveProviderResult } from "@/actions/providers";
 import { DASHBOARD_COMPAT_HEADER } from "@/lib/api/v1/_shared/constants";
-import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
+import type {
+  ProviderDisplay,
+  ProviderHealthStatus,
+  ProviderStatisticsMap,
+} from "@/types/provider";
 import {
   apiDeleteWithHeaders,
   apiGet,
@@ -19,7 +23,12 @@ export type {
   ProviderBatchPreviewRow,
   RemoveProviderResult,
 } from "@/actions/providers";
-export type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
+export type {
+  ProviderCircuitHealth,
+  ProviderDisplay,
+  ProviderHealthStatus,
+  ProviderStatisticsMap,
+} from "@/types/provider";
 
 const dashboardCompatOptions = {
   headers: {
@@ -88,17 +97,6 @@ export function autoSortProviderPriority(args: unknown) {
     apiPost("/api/v1/providers:autoSortPriority", args, dashboardCompatOptions)
   );
 }
-
-export type ProviderHealthStatus = Record<
-  number,
-  {
-    circuitState: "closed" | "open" | "half-open";
-    failureCount: number;
-    lastFailureTime: number | null;
-    circuitOpenUntil: number | null;
-    recoveryMinutes: number | null;
-  }
->;
 
 // 仪表盘内的 React Query 直接消费返回值；这里不要再用 `toActionResult` 包装，
 // 否则 consumer 会拿到 `{ ok, data }` 而非熔断状态 map，所有熔断指示器永远不显示。
