@@ -132,21 +132,27 @@ describe("Anthropic auth header helpers", () => {
       }
     });
 
-    it("redacts userinfo credentials from the warning's providerUrl metadata", () => {
+    it("only logs the URL host so userinfo / query / fragment secrets cannot leak", () => {
       const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
       try {
         resolveAnthropicAuthHeaders(
           "sk-test",
-          "https://leaked-user:leaked-pass@aws-external-anthropic.us-east-1.api.aws/v1/messages",
+          "https://leaked-user:leaked-pass@aws-external-anthropic.us-east-1.api.aws/v1/messages?signature=leaked-sig&token=leaked-tok#leaked-frag",
           { forceBearerOnly: true }
         );
         expect(warnSpy).toHaveBeenCalledTimes(1);
-        const meta = warnSpy.mock.calls[0]?.[1] as { providerUrl?: string } | undefined;
-        expect(meta?.providerUrl).toBeDefined();
-        expect(meta?.providerUrl).not.toContain("leaked-user");
-        expect(meta?.providerUrl).not.toContain("leaked-pass");
-        expect(meta?.providerUrl).toContain("REDACTED");
-        expect(meta?.providerUrl).toContain("aws-external-anthropic.us-east-1.api.aws");
+        const meta = warnSpy.mock.calls[0]?.[1] as
+          | { providerHost?: string; providerUrl?: string }
+          | undefined;
+        // 整段 URL 不应出现在日志元数据中，避免任何 path/query/fragment 泄露面。
+        expect(meta?.providerUrl).toBeUndefined();
+        expect(meta?.providerHost).toBe("aws-external-anthropic.us-east-1.api.aws");
+        const serialized = JSON.stringify(meta);
+        expect(serialized).not.toContain("leaked-user");
+        expect(serialized).not.toContain("leaked-pass");
+        expect(serialized).not.toContain("leaked-sig");
+        expect(serialized).not.toContain("leaked-tok");
+        expect(serialized).not.toContain("leaked-frag");
       } finally {
         warnSpy.mockRestore();
       }

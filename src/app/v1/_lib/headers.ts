@@ -1,4 +1,3 @@
-import { redactUrlCredentials } from "@/lib/api/v1/_shared/redaction";
 import { logger } from "@/lib/logger";
 
 /**
@@ -44,6 +43,15 @@ export function looksLikeAnthropicProxyUrl(providerUrl?: string | null): boolean
 // 该网关使用 SigV4(Authorization)或 API Key(x-api-key)二选一鉴权;同时携带两者
 // 会被服务端拒绝(`request must not include both 'authorization' and 'x-api-key' headers`)。
 // Bearer 形式不被支持,所以代理只能走 x-api-key 路径。
+function safeUrlHost(providerUrl?: string | null): string | undefined {
+  if (!providerUrl) return undefined;
+  try {
+    return new URL(providerUrl).host;
+  } catch {
+    return undefined;
+  }
+}
+
 export function looksLikeAwsExternalAnthropicUrl(providerUrl?: string | null): boolean {
   if (!providerUrl) {
     return false;
@@ -68,10 +76,11 @@ export function resolveAnthropicAuthHeaders(
   // 上游硬约束优先级最高,即使调用方要求 forceBearerOnly 也按 x-api-key 单发。
   if (looksLikeAwsExternalAnthropicUrl(providerUrl)) {
     if (options?.forceBearerOnly) {
-      // providerUrl 可能含 userinfo / query 凭据，落日志前必须脱敏。
+      // 只记录 host：userinfo / query / fragment 都可能携带签名 token 或 API key，
+      // 直接落整段 URL（甚至仅做 userinfo 脱敏）都会留出泄露面。
       logger.warn(
         "[anthropic-auth] forceBearerOnly overridden for AWS External Anthropic gateway; sending x-api-key only",
-        { providerUrl: redactUrlCredentials(providerUrl) }
+        { providerHost: safeUrlHost(providerUrl) }
       );
     }
     return {
