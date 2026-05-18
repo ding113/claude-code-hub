@@ -244,7 +244,7 @@ export async function createRequestFilterAction(data: {
       matchType: data.matchType ?? null,
       replacement: data.replacement ?? null,
       priority: data.priority ?? 0,
-      isEnabled: data.isEnabled,
+      isEnabled: data.isEnabled ?? true,
       bindingType: data.bindingType ?? "global",
       providerIds: data.providerIds ?? null,
       groupTags: data.groupTags ?? null,

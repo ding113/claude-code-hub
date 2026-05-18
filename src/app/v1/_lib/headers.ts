@@ -1,3 +1,4 @@
+import { redactUrlCredentials } from "@/lib/api/v1/_shared/redaction";
 import { logger } from "@/lib/logger";
 
 /**
@@ -50,7 +51,9 @@ export function looksLikeAwsExternalAnthropicUrl(providerUrl?: string | null): b
 
   try {
     const hostname = new URL(providerUrl).hostname.toLowerCase();
-    return /^aws-external-anthropic\.[a-z0-9-]+\.api\.aws$/.test(hostname);
+    // 区域段限定为 AWS 实际命名（`<area>-<direction>-<digit>`，如 `us-east-1`/`us-gov-west-1`），
+    // 避免 `aws-external-anthropic.fake.api.aws` 之类伪造主机伪装成网关。
+    return /^aws-external-anthropic\.[a-z]+(?:-[a-z]+)+-\d+\.api\.aws$/.test(hostname);
   } catch {
     return false;
   }
@@ -65,9 +68,10 @@ export function resolveAnthropicAuthHeaders(
   // 上游硬约束优先级最高,即使调用方要求 forceBearerOnly 也按 x-api-key 单发。
   if (looksLikeAwsExternalAnthropicUrl(providerUrl)) {
     if (options?.forceBearerOnly) {
+      // providerUrl 可能含 userinfo / query 凭据，落日志前必须脱敏。
       logger.warn(
         "[anthropic-auth] forceBearerOnly overridden for AWS External Anthropic gateway; sending x-api-key only",
-        { providerUrl }
+        { providerUrl: redactUrlCredentials(providerUrl) }
       );
     }
     return {

@@ -70,6 +70,28 @@ describe("Anthropic auth header helpers", () => {
       expect(looksLikeAwsExternalAnthropicUrl("not a url")).toBe(false);
     });
 
+    it("rejects spoofed region segments that don't match the AWS region format", () => {
+      // 单段（非 `<area>-<direction>-<digit>` 形式）必须被拒绝，防止 `*.fake.api.aws` 伪装。
+      expect(looksLikeAwsExternalAnthropicUrl("https://aws-external-anthropic.fake.api.aws")).toBe(
+        false
+      );
+      expect(
+        looksLikeAwsExternalAnthropicUrl("https://aws-external-anthropic.us-east.api.aws")
+      ).toBe(false);
+      expect(
+        looksLikeAwsExternalAnthropicUrl("https://aws-external-anthropic.-east-1.api.aws")
+      ).toBe(false);
+    });
+
+    it("still accepts multi-segment AWS region names like us-gov-west-1", () => {
+      expect(
+        looksLikeAwsExternalAnthropicUrl("https://aws-external-anthropic.us-gov-west-1.api.aws")
+      ).toBe(true);
+      expect(
+        looksLikeAwsExternalAnthropicUrl("https://aws-external-anthropic.ap-southeast-1.api.aws")
+      ).toBe(true);
+    });
+
     it("sends only x-api-key when proxying to aws-external-anthropic", () => {
       expect(
         resolveAnthropicAuthHeaders(
@@ -105,6 +127,26 @@ describe("Anthropic auth header helpers", () => {
         warnSpy.mockClear();
         resolveAnthropicAuthHeaders("sk-test", "https://aws-external-anthropic.us-east-1.api.aws");
         expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it("redacts userinfo credentials from the warning's providerUrl metadata", () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      try {
+        resolveAnthropicAuthHeaders(
+          "sk-test",
+          "https://leaked-user:leaked-pass@aws-external-anthropic.us-east-1.api.aws/v1/messages",
+          { forceBearerOnly: true }
+        );
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        const meta = warnSpy.mock.calls[0]?.[1] as { providerUrl?: string } | undefined;
+        expect(meta?.providerUrl).toBeDefined();
+        expect(meta?.providerUrl).not.toContain("leaked-user");
+        expect(meta?.providerUrl).not.toContain("leaked-pass");
+        expect(meta?.providerUrl).toContain("REDACTED");
+        expect(meta?.providerUrl).toContain("aws-external-anthropic.us-east-1.api.aws");
       } finally {
         warnSpy.mockRestore();
       }
