@@ -213,6 +213,7 @@ export async function createRequestFilterAction(data: {
   matchType?: RequestFilterMatchType;
   replacement?: unknown;
   priority?: number;
+  isEnabled?: boolean;
   bindingType?: RequestFilterBindingType;
   providerIds?: number[] | null;
   groupTags?: string[] | null;
@@ -243,6 +244,7 @@ export async function createRequestFilterAction(data: {
       matchType: data.matchType ?? null,
       replacement: data.replacement ?? null,
       priority: data.priority ?? 0,
+      isEnabled: data.isEnabled,
       bindingType: data.bindingType ?? "global",
       providerIds: data.providerIds ?? null,
       groupTags: data.groupTags ?? null,
