@@ -26,7 +26,9 @@ describe("matchesPattern", () => {
     it.each<[string, string, boolean]>([
       ["*", "claude-opus-4-1", true],
       ["*", "", true],
-      ["*.", "claude.opus", true],
+      // 锚定 glob 后 `*.` 表示“以 . 结尾”，不再匹配子串中带点的 "claude.opus"。
+      ["*.", "claude.opus", false],
+      ["*.", "claude.opus.", true],
       ["*.", "claudeopus", false],
       ["claude-*", "claude-opus-4-1", true],
       ["claude-*", "gpt-4", false],
