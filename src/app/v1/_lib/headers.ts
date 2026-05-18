@@ -64,6 +64,12 @@ export function resolveAnthropicAuthHeaders(
   // AWS External Anthropic 拒绝 Authorization+x-api-key 共存,且不接受 Bearer。
   // 上游硬约束优先级最高,即使调用方要求 forceBearerOnly 也按 x-api-key 单发。
   if (looksLikeAwsExternalAnthropicUrl(providerUrl)) {
+    if (options?.forceBearerOnly) {
+      logger.warn(
+        "[anthropic-auth] forceBearerOnly overridden for AWS External Anthropic gateway; sending x-api-key only",
+        { providerUrl }
+      );
+    }
     return {
       "x-api-key": apiKey,
     };

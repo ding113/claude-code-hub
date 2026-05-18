@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   looksLikeAnthropicProxyUrl,
   looksLikeAwsExternalAnthropicUrl,
   resolveAnthropicAuthHeaders,
 } from "@/app/v1/_lib/headers";
+import { logger } from "@/lib/logger";
 
 describe("Anthropic auth header helpers", () => {
   it("treats official Anthropic domains as direct endpoints", () => {
@@ -90,6 +91,23 @@ describe("Anthropic auth header helpers", () => {
       ).toEqual({
         "x-api-key": "sk-test",
       });
+    });
+
+    it("warns when forceBearerOnly is silently overridden by the AWS guard", () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      try {
+        resolveAnthropicAuthHeaders("sk-test", "https://aws-external-anthropic.us-east-1.api.aws", {
+          forceBearerOnly: true,
+        });
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        expect(warnSpy.mock.calls[0]?.[0]).toContain("forceBearerOnly");
+
+        warnSpy.mockClear();
+        resolveAnthropicAuthHeaders("sk-test", "https://aws-external-anthropic.us-east-1.api.aws");
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 });
