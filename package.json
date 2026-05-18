@@ -83,7 +83,7 @@
     "class-variance-authority": "^0.7",
     "clsx": "^2",
     "cmdk": "^1",
-    "date-fns": "^4",
+    "date-fns": "~4.1.0",
     "date-fns-tz": "^3",
     "decimal.js-light": "^2",
     "dotenv": "^17",
