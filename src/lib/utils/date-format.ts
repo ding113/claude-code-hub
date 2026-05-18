@@ -4,7 +4,6 @@
  * Supports optional IANA timezone via date-fns-tz for timezone-aware display.
  */
 
-import type { Locale } from "date-fns";
 import { format, formatDistance, formatRelative } from "date-fns";
 import { enUS, ja, ru, zhCN, zhTW } from "date-fns/locale";
 import { formatInTimeZone } from "date-fns-tz";
@@ -12,7 +11,7 @@ import { formatInTimeZone } from "date-fns-tz";
 /**
  * Map next-intl locale codes to date-fns locale objects
  */
-const LOCALE_MAP: Record<string, Locale> = {
+const LOCALE_MAP: Record<string, typeof enUS> = {
   "zh-CN": zhCN,
   "zh-TW": zhTW,
   en: enUS,
@@ -25,7 +24,7 @@ const LOCALE_MAP: Record<string, Locale> = {
  * @param locale - next-intl locale code (e.g., "zh-CN", "en")
  * @returns date-fns Locale object
  */
-export function getDateFnsLocale(locale: string): Locale {
+export function getDateFnsLocale(locale: string): typeof enUS {
   return LOCALE_MAP[locale] || enUS;
 }
 
