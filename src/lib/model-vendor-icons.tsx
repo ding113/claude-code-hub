@@ -73,9 +73,14 @@ export function getModelVendor(modelId: string): ModelVendorEntry | null {
     return null;
   }
 
+  const icon = MODEL_VENDOR_ICON_BY_KEY[rule.i18nKey];
+  if (!icon && process.env.NODE_ENV !== "production") {
+    console.warn(`[model-vendor-icons] No icon registered for i18nKey "${rule.i18nKey}"`);
+  }
+
   return {
     ...rule,
-    icon: MODEL_VENDOR_ICON_BY_KEY[rule.i18nKey] ?? OpenAI,
+    icon: icon ?? OpenAI,
   };
 }
 

@@ -37,6 +37,8 @@ type PublicStatusFinalDetails = {
 
 const publicStatusRequestSeedCache = new Map<number, PublicStatusRequestSeed>();
 const PUBLIC_STATUS_REQUEST_SEED_CACHE_MAX_SIZE = 10_000;
+const publicStatusFinalizedRequestCache = new Map<number, true>();
+const PUBLIC_STATUS_FINALIZED_REQUEST_CACHE_MAX_SIZE = 10_000;
 
 function rememberPublicStatusRequestSeed(id: number, seed: PublicStatusRequestSeed): void {
   publicStatusRequestSeedCache.set(id, seed);
@@ -56,6 +58,23 @@ function consumePublicStatusRequestSeed(id: number): PublicStatusRequestSeed | n
   return seed;
 }
 
+function claimPublicStatusFinalization(id: number): boolean {
+  if (publicStatusFinalizedRequestCache.has(id)) {
+    return false;
+  }
+
+  publicStatusFinalizedRequestCache.set(id, true);
+  if (publicStatusFinalizedRequestCache.size <= PUBLIC_STATUS_FINALIZED_REQUEST_CACHE_MAX_SIZE) {
+    return true;
+  }
+
+  const firstKey = publicStatusFinalizedRequestCache.keys().next().value as number | undefined;
+  if (firstKey !== undefined) {
+    publicStatusFinalizedRequestCache.delete(firstKey);
+  }
+  return true;
+}
+
 function updatePublicStatusRequestSeed(id: number, patch: Partial<PublicStatusRequestSeed>): void {
   const seed = publicStatusRequestSeedCache.get(id);
   if (!seed) {
@@ -68,17 +87,53 @@ function isPublicStatusFinalDetails(details: PublicStatusFinalDetails): boolean 
   return details.providerChain !== undefined && details.statusCode !== undefined;
 }
 
+async function readPublicStatusRequestSeedFallback(
+  id: number
+): Promise<PublicStatusRequestSeed | null> {
+  const [row] = await db
+    .select({
+      createdAt: messageRequest.createdAt,
+      model: messageRequest.model,
+      originalModel: messageRequest.originalModel,
+      durationMs: messageRequest.durationMs,
+    })
+    .from(messageRequest)
+    .where(
+      and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt), EXCLUDE_WARMUP_CONDITION)
+    )
+    .limit(1);
+
+  if (!row?.createdAt) {
+    return null;
+  }
+
+  return {
+    createdAt: row.createdAt,
+    model: row.model,
+    originalModel: row.originalModel,
+    durationMs: row.durationMs,
+  };
+}
+
 function queuePublicStatusRollupForFinalDetails(
   id: number,
   details: PublicStatusFinalDetails
 ): void {
-  const seed = consumePublicStatusRequestSeed(id);
-  if (!seed || !isPublicStatusFinalDetails(details)) {
+  if (!isPublicStatusFinalDetails(details) || !claimPublicStatusFinalization(id)) {
     return;
   }
 
   void (async () => {
     try {
+      const seed =
+        consumePublicStatusRequestSeed(id) ?? (await readPublicStatusRequestSeedFallback(id));
+      if (!seed) {
+        logger.warn("[MessageRequest] Missing public status rollup request seed", {
+          messageRequestId: id,
+        });
+        return;
+      }
+
       const groups = await getConfiguredPublicStatusGroupsForRollup();
       if (groups.length === 0) {
         return;

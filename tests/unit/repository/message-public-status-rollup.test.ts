@@ -4,6 +4,7 @@ const mockDbInsertValues = vi.hoisted(() => vi.fn());
 const mockDbInsertReturning = vi.hoisted(() => vi.fn());
 const mockDbUpdateSet = vi.hoisted(() => vi.fn());
 const mockDbUpdateWhere = vi.hoisted(() => vi.fn());
+const mockDbSelectLimit = vi.hoisted(() => vi.fn());
 const mockQueuePublicStatusRollupWrite = vi.hoisted(() => vi.fn());
 const mockGetConfiguredPublicStatusGroupsForRollup = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
@@ -26,6 +27,7 @@ vi.mock("@/drizzle/schema", () => ({
     clientIp: "clientIp",
     endpoint: "endpoint",
     messagesCount: "messagesCount",
+    blockedBy: "blockedBy",
     cacheTtlApplied: "cacheTtlApplied",
     cacheCreationInputTokens: "cacheCreationInputTokens",
     cacheCreation5mInputTokens: "cacheCreation5mInputTokens",
@@ -55,7 +57,7 @@ vi.mock("@/drizzle/db", () => ({
           orderBy: vi.fn(() => ({
             limit: vi.fn(async () => []),
           })),
-          limit: vi.fn(async () => []),
+          limit: mockDbSelectLimit,
         })),
       })),
     })),
@@ -93,6 +95,7 @@ describe("repository/message public status rollup hook", () => {
     mockDbInsertValues.mockReturnValue({ returning: mockDbInsertReturning });
     mockDbUpdateSet.mockReturnValue({ where: mockDbUpdateWhere });
     mockDbUpdateWhere.mockResolvedValue(undefined);
+    mockDbSelectLimit.mockResolvedValue([]);
     mockGetConfiguredPublicStatusGroupsForRollup.mockResolvedValue([
       {
         sourceGroupId: 42,
@@ -192,6 +195,50 @@ describe("repository/message public status rollup hook", () => {
           model: "gpt-4.1",
           outputTokens: 50,
           ttfbMs: 200,
+        }),
+      })
+    );
+  });
+
+  it("falls back to the persisted request seed when the in-memory seed is missing", async () => {
+    mockDbSelectLimit.mockResolvedValueOnce([
+      {
+        createdAt: new Date("2026-04-21T10:03:00.000Z"),
+        model: "gpt-4.1",
+        originalModel: "gpt-4.1",
+        durationMs: 1500,
+      },
+    ]);
+
+    const { updateMessageRequestDetails } = await import("@/repository/message");
+
+    await updateMessageRequestDetails(202, {
+      statusCode: 200,
+      ttfbMs: 250,
+      outputTokens: 75,
+      providerChain: [
+        {
+          id: 1,
+          name: "provider-a",
+          groupTag: "openai",
+          reason: "request_success",
+          statusCode: 200,
+        },
+      ],
+      model: "gpt-4.1",
+    });
+    await flushMicrotasks();
+
+    expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledTimes(1);
+    expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: expect.objectContaining({
+          createdAt: new Date("2026-04-21T10:03:00.000Z"),
+          durationMs: 1500,
+          originalModel: "gpt-4.1",
+          model: "gpt-4.1",
+          outputTokens: 75,
+          ttfbMs: 250,
         }),
       })
     );

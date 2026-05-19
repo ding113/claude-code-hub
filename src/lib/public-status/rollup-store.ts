@@ -373,6 +373,7 @@ export async function writePublicStatusRollupEvent(input: {
     }
     if (typeof pipeline.set === "function") {
       pipeline.set(coverageStartKey, bucketStartIso, "NX");
+      pipeline.expire(coverageStartKey, ROLLUP_TTL_SECONDS);
     }
     pipeline.expire(key, ROLLUP_TTL_SECONDS);
     await pipeline.exec();
@@ -385,6 +386,7 @@ export async function writePublicStatusRollupEvent(input: {
       await redis.set(coverageStartKey, bucketStartIso, "NX");
     }
     await redis.expire?.(key, ROLLUP_TTL_SECONDS);
+    await redis.expire?.(coverageStartKey, ROLLUP_TTL_SECONDS);
   }
 
   return { written: true, incrementCount: increments.length, key };

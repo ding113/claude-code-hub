@@ -151,6 +151,7 @@ export function buildPublicStatusRollupKey(input: {
 }): string {
   const bucketMinutes = input.bucketMinutes ?? PUBLIC_STATUS_ROLLUP_BUCKET_MINUTES;
   assertPositiveInteger(bucketMinutes, "bucketMinutes");
+  // alignBucketStartUtc 会按 UTC 向下对齐到最近的 bucketMinutes 边界。
   return [
     resolvePrefix(input.prefix),
     "rollup",

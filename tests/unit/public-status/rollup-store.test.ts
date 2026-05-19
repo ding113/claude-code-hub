@@ -153,6 +153,10 @@ describe("public-status rollup store", () => {
       "NX"
     );
     expect(pipeline.expire).toHaveBeenCalledWith(result.key, 60 * 60 * 24 * 32);
+    expect(pipeline.expire).toHaveBeenCalledWith(
+      buildPublicStatusRollupCoverageStartKey(),
+      60 * 60 * 24 * 32
+    );
     expect(pipeline.exec).toHaveBeenCalledTimes(1);
     expect(pipeline.hincrbyfloat.mock.calls.map((call) => call.join("|")).join("\n")).not.toContain(
       "private.example.com"
