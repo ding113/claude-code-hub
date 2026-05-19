@@ -531,6 +531,23 @@ export interface ProviderStatistics {
  */
 export type ProviderStatisticsMap = Record<number, ProviderStatistics>;
 
+/**
+ * Provider-level (key/credential) circuit breaker snapshot.
+ * Mirrors the shape returned by `/api/v1/providers/health`.
+ */
+export interface ProviderCircuitHealth {
+  circuitState: "closed" | "open" | "half-open";
+  failureCount: number;
+  lastFailureTime: number | null;
+  circuitOpenUntil: number | null;
+  recoveryMinutes: number | null;
+}
+
+/**
+ * Map of provider ID to circuit-breaker health snapshot.
+ */
+export type ProviderHealthStatus = Record<number, ProviderCircuitHealth>;
+
 export interface CreateProviderData {
   name: string;
   url: string;

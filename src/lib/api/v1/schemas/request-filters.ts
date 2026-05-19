@@ -60,6 +60,7 @@ export const RequestFilterCreateSchema = z
     matchType: RequestFilterMatchTypeSchema.optional().describe("Optional match type."),
     replacement: z.unknown().optional().describe("Replacement value."),
     priority: z.number().int().optional().describe("Filter priority."),
+    isEnabled: z.boolean().optional().describe("Whether the filter is enabled."),
     bindingType: RequestFilterBindingTypeSchema.optional().describe("Binding type."),
     providerIds: z
       .array(z.number().int().positive())
@@ -77,11 +78,7 @@ export const RequestFilterCreateSchema = z
   })
   .strict();
 
-export const RequestFilterUpdateSchema = RequestFilterCreateSchema.extend({
-  isEnabled: z.boolean().optional().describe("Whether the filter is enabled."),
-})
-  .partial()
-  .strict();
+export const RequestFilterUpdateSchema = RequestFilterCreateSchema.partial().strict();
 
 export const RequestFilterIdParamSchema = z.object({
   id: z.coerce.number().int().positive().describe("Request filter id."),

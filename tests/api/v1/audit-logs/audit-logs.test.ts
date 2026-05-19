@@ -99,6 +99,30 @@ describe("v1 audit log endpoints", () => {
     expect(detail.json).toMatchObject({ id: 11, operatorUserName: "admin" });
   });
 
+  test("forwards success=false as boolean false to the action layer", async () => {
+    const list = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/audit-logs?success=false",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+
+    expect(list.response.status).toBe(200);
+    expect(getAuditLogsBatchMock).toHaveBeenCalledTimes(1);
+    const call = getAuditLogsBatchMock.mock.calls[0][0] as { filter: { success?: boolean } };
+    expect(call.filter.success).toBe(false);
+  });
+
+  test("omits the success filter when the query param is absent", async () => {
+    await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/audit-logs",
+      headers: { Authorization: "Bearer admin-token" },
+    });
+    expect(getAuditLogsBatchMock).toHaveBeenCalledTimes(1);
+    const call = getAuditLogsBatchMock.mock.calls[0][0] as { filter: { success?: boolean } };
+    expect(call.filter.success).toBeUndefined();
+  });
+
   test("returns problem+json for invalid cursor and missing detail", async () => {
     const invalid = await callV1Route({
       method: "GET",

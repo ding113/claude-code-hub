@@ -19,7 +19,12 @@ export const AuditLogListQuerySchema = z.object({
   cursor: z.string().min(1).optional().describe("Opaque pagination cursor."),
   limit: z.coerce.number().int().min(1).max(100).default(20).describe("Page size."),
   category: AuditCategorySchema.optional().describe("Optional action category filter."),
-  success: z.coerce.boolean().optional().describe("Optional success filter."),
+  // 注意: 不用 z.coerce.boolean()，因为 Boolean("false") === true 会让"失败"过滤器始终返回成功记录。
+  success: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((val) => (val === undefined ? undefined : val === "true"))
+    .describe("Optional success filter."),
   from: IsoDateTimeStringSchema.optional().describe("Optional inclusive start time."),
   to: IsoDateTimeStringSchema.optional().describe("Optional inclusive end time."),
 });

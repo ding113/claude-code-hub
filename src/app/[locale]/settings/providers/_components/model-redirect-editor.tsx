@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
+import { resolveProviderPatternRegex } from "@/lib/provider-pattern-regex";
 import type { ProviderModelRedirectMatchType, ProviderModelRedirectRule } from "@/types/provider";
 
 interface ModelRedirectEditorProps {
@@ -104,14 +105,13 @@ export function ModelRedirectEditor({
       return t("targetTooLong", { max: PROVIDER_RULE_LIMITS.MAX_TEXT_LENGTH });
     }
     if (normalized.matchType === "regex") {
-      try {
-        new RegExp(normalized.source);
-      } catch {
+      const compiled = resolveProviderPatternRegex(normalized.source);
+      if (!compiled) {
         return t("regexInvalid");
       }
 
       try {
-        if (!safeRegex(normalized.source)) {
+        if (!safeRegex(compiled.source)) {
           return t("regexUnsafe");
         }
       } catch {

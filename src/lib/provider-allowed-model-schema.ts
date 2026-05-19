@@ -2,6 +2,7 @@ import safeRegex from "safe-regex";
 import { z } from "zod";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
+import { resolveProviderPatternRegex } from "@/lib/provider-pattern-regex";
 import { PROVIDER_MODEL_REDIRECT_MATCH_TYPE_SCHEMA } from "./provider-model-redirect-schema";
 
 export const PROVIDER_ALLOWED_MODEL_RULE_SCHEMA = z
@@ -21,9 +22,8 @@ export const PROVIDER_ALLOWED_MODEL_RULE_SCHEMA = z
       return;
     }
 
-    try {
-      new RegExp(rule.pattern);
-    } catch {
+    const compiled = resolveProviderPatternRegex(rule.pattern);
+    if (!compiled) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Allowed model regex is invalid",
@@ -33,7 +33,7 @@ export const PROVIDER_ALLOWED_MODEL_RULE_SCHEMA = z
     }
 
     try {
-      if (!safeRegex(rule.pattern)) {
+      if (!safeRegex(compiled.source)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Allowed model regex has potential ReDoS risk",

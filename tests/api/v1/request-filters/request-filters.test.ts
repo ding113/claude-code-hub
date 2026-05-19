@@ -105,6 +105,48 @@ describe("v1 request filters endpoints", () => {
       target: "x-test",
     });
 
+    const createdDisabled = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/request-filters",
+      headers: { Authorization: "Bearer admin-token" },
+      body: {
+        name: "Disabled filter",
+        scope: "header",
+        action: "set",
+        target: "x-disabled",
+        isEnabled: false,
+      },
+    });
+    expect(createdDisabled.response.status).toBe(201);
+    expect(createRequestFilterActionMock).toHaveBeenLastCalledWith({
+      name: "Disabled filter",
+      scope: "header",
+      action: "set",
+      target: "x-disabled",
+      isEnabled: false,
+    });
+
+    const createdEnabled = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/request-filters",
+      headers: { Authorization: "Bearer admin-token" },
+      body: {
+        name: "Enabled filter",
+        scope: "header",
+        action: "set",
+        target: "x-enabled",
+        isEnabled: true,
+      },
+    });
+    expect(createdEnabled.response.status).toBe(201);
+    expect(createRequestFilterActionMock).toHaveBeenLastCalledWith({
+      name: "Enabled filter",
+      scope: "header",
+      action: "set",
+      target: "x-enabled",
+      isEnabled: true,
+    });
+
     const updated = await callV1Route({
       method: "PATCH",
       pathname: "/api/v1/request-filters/1",
