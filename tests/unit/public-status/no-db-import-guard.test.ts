@@ -13,6 +13,8 @@ const guardedFiles = [
   "src/app/[locale]/layout.tsx",
   "src/lib/public-status/public-api-loader.ts",
   "src/lib/public-status/read-store.ts",
+  "src/lib/public-status/rollup-store.ts",
+  "src/lib/public-status/aggregation-core.ts",
   "src/lib/public-status/config-snapshot.ts",
   "src/lib/public-status/layout-metadata.ts",
 ];
@@ -34,6 +36,8 @@ const directTokenGuardFiles = new Set([
   "src/app/[locale]/layout.tsx",
   "src/lib/public-status/public-api-loader.ts",
   "src/lib/public-status/read-store.ts",
+  "src/lib/public-status/rollup-store.ts",
+  "src/lib/public-status/aggregation-core.ts",
 ]);
 
 describe("public-status no-db import guard", () => {

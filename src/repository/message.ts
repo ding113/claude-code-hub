@@ -5,6 +5,11 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
+import { logger } from "@/lib/logger";
+import {
+  getConfiguredPublicStatusGroupsForRollup,
+  queuePublicStatusRollupWrite,
+} from "@/lib/public-status/rollup-store";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
@@ -13,6 +18,92 @@ import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
 import { enqueueMessageRequestUpdate } from "./message-write-buffer";
+
+type PublicStatusRequestSeed = {
+  createdAt: Date;
+  model?: string | null;
+  originalModel?: string | null;
+  durationMs?: number | null;
+};
+
+type PublicStatusFinalDetails = {
+  statusCode?: number;
+  outputTokens?: number;
+  ttfbMs?: number | null;
+  providerChain?: CreateMessageRequestData["provider_chain"];
+  errorMessage?: string;
+  model?: string;
+};
+
+const publicStatusRequestSeedCache = new Map<number, PublicStatusRequestSeed>();
+const PUBLIC_STATUS_REQUEST_SEED_CACHE_MAX_SIZE = 10_000;
+
+function rememberPublicStatusRequestSeed(id: number, seed: PublicStatusRequestSeed): void {
+  publicStatusRequestSeedCache.set(id, seed);
+  if (publicStatusRequestSeedCache.size <= PUBLIC_STATUS_REQUEST_SEED_CACHE_MAX_SIZE) {
+    return;
+  }
+
+  const firstKey = publicStatusRequestSeedCache.keys().next().value as number | undefined;
+  if (firstKey !== undefined) {
+    publicStatusRequestSeedCache.delete(firstKey);
+  }
+}
+
+function consumePublicStatusRequestSeed(id: number): PublicStatusRequestSeed | null {
+  const seed = publicStatusRequestSeedCache.get(id) ?? null;
+  publicStatusRequestSeedCache.delete(id);
+  return seed;
+}
+
+function updatePublicStatusRequestSeed(id: number, patch: Partial<PublicStatusRequestSeed>): void {
+  const seed = publicStatusRequestSeedCache.get(id);
+  if (!seed) {
+    return;
+  }
+  publicStatusRequestSeedCache.set(id, { ...seed, ...patch });
+}
+
+function isPublicStatusFinalDetails(details: PublicStatusFinalDetails): boolean {
+  return details.providerChain !== undefined && details.statusCode !== undefined;
+}
+
+function queuePublicStatusRollupForFinalDetails(
+  id: number,
+  details: PublicStatusFinalDetails
+): void {
+  const seed = consumePublicStatusRequestSeed(id);
+  if (!seed || !isPublicStatusFinalDetails(details)) {
+    return;
+  }
+
+  void (async () => {
+    try {
+      const groups = await getConfiguredPublicStatusGroupsForRollup();
+      if (groups.length === 0) {
+        return;
+      }
+
+      await queuePublicStatusRollupWrite({
+        groups,
+        event: {
+          createdAt: seed.createdAt,
+          model: details.model ?? seed.model,
+          originalModel: seed.originalModel,
+          durationMs: seed.durationMs,
+          ttfbMs: details.ttfbMs,
+          outputTokens: details.outputTokens,
+          providerChain: details.providerChain,
+        },
+      });
+    } catch (error) {
+      logger.warn("[MessageRequest] Failed to queue public status rollup", {
+        error: error instanceof Error ? error.message : String(error),
+        messageRequestId: id,
+      });
+    }
+  })();
+}
 
 /**
  * 创建消息请求记录
@@ -72,6 +163,13 @@ export async function createMessageRequest(
     deletedAt: messageRequest.deletedAt,
   });
 
+  rememberPublicStatusRequestSeed(result.id, {
+    createdAt: result.createdAt!,
+    model: result.model,
+    originalModel: result.originalModel,
+    durationMs: result.durationMs,
+  });
+
   return toMessageRequest(result);
 }
 
@@ -79,6 +177,7 @@ export async function createMessageRequest(
  * 更新消息请求的耗时
  */
 export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
+  updatePublicStatusRequestSeed(id, { durationMs });
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
     enqueueMessageRequestUpdate(id, { durationMs });
     return;
@@ -177,8 +276,14 @@ export async function updateMessageRequestDetails(
     specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
   }
 ): Promise<void> {
+  const shouldQueuePublicStatusRollup =
+    details.providerChain !== undefined && details.statusCode !== undefined;
+
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
     enqueueMessageRequestUpdate(id, details);
+    if (shouldQueuePublicStatusRollup) {
+      queuePublicStatusRollupForFinalDetails(id, details);
+    }
     return;
   }
 
@@ -245,6 +350,9 @@ export async function updateMessageRequestDetails(
   }
 
   await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
+  if (shouldQueuePublicStatusRollup) {
+    queuePublicStatusRollupForFinalDetails(id, details);
+  }
 }
 
 /**

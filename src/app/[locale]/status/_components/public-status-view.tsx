@@ -49,6 +49,10 @@ import { SortableGroupPanel } from "./sortable-group-panel";
 import { StatusHero } from "./status-hero";
 import { StatusToolbar } from "./status-toolbar";
 
+type ViewModelSnapshot = PublicStatusPayload["groups"][number]["models"][number] & {
+  timelineReusedFromPrevious?: boolean;
+};
+
 interface PublicStatusViewProps {
   initialPayload: PublicStatusPayload;
   initialStatus?: PublicStatusRouteStatus;
@@ -151,6 +155,13 @@ function aggregateByFailed(states: DisplayState[]): DisplayState {
   return "operational";
 }
 
+function deriveCurrentModelState(model: ViewModelSnapshot): DisplayState {
+  if (model.timelineReusedFromPrevious) {
+    return model.latestState;
+  }
+  return deriveLatestModelState(model);
+}
+
 export function PublicStatusView({
   initialPayload,
   initialStatus,
@@ -184,6 +195,7 @@ export function PublicStatusView({
         if (filterSlug) {
           params.set("groupSlug", filterSlug);
         }
+        params.set("include", "meta,defaults,groups");
         const requestUrl =
           params.size > 0 ? `/api/public-status?${params.toString()}` : "/api/public-status";
         const response = await fetch(requestUrl, { cache: "no-store" });
@@ -195,7 +207,35 @@ export function PublicStatusView({
           ? { ...next, groups: next.groups.filter((g) => g.publicGroupSlug === filterSlug) }
           : next;
         startTransition(() => {
-          setPayload(scoped);
+          setPayload((previous) => ({
+            ...scoped,
+            groups: scoped.groups.map((group) => {
+              const previousGroup = previous.groups.find(
+                (candidate) => candidate.publicGroupSlug === group.publicGroupSlug
+              );
+              if (!previousGroup) {
+                return group;
+              }
+
+              return {
+                ...group,
+                models: group.models.map((model) => {
+                  const previousModel = previousGroup.models.find(
+                    (candidate) => candidate.publicModelKey === model.publicModelKey
+                  );
+                  if (model.timeline.length > 0) {
+                    return model;
+                  }
+
+                  return {
+                    ...model,
+                    timeline: previousModel?.timeline ?? [],
+                    timelineReusedFromPrevious: Boolean(previousModel?.timeline.length),
+                  };
+                }),
+              };
+            }),
+          }));
           setRouteStatus(nextResponse.status);
         });
       } catch {
@@ -222,9 +262,12 @@ export function PublicStatusView({
       const derivedModels = group.models.map((model) => {
         const filled = fillDisplayTimeline(model.timeline);
         const chartCells = sliceTimelineForChart(filled, CHART_BUCKETS);
-        const uptime24h = computeUptimePct(model.timeline);
+        const uptime24h =
+          (model as ViewModelSnapshot).timelineReusedFromPrevious && model.availabilityPct !== null
+            ? model.availabilityPct
+            : computeUptimePct(model.timeline);
         const ttfb24h = computeAvgTtfb(model.timeline);
-        const latest = deriveLatestModelState(model);
+        const latest = deriveCurrentModelState(model as ViewModelSnapshot);
         return { model, chartCells, uptime24h, ttfb24h, latest };
       });
       const issueCount = derivedModels.filter((d) => d.latest === "failed").length;

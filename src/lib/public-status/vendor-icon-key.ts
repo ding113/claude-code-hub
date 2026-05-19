@@ -1,4 +1,4 @@
-import { getModelVendor } from "@/lib/model-vendor-icons";
+import { getModelVendor } from "@/lib/model-vendor-rules";
 import type { ProviderType } from "@/types/provider";
 
 export const PUBLIC_STATUS_VENDOR_ICON_KEYS = [

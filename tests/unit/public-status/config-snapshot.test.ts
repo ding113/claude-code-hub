@@ -44,6 +44,16 @@ interface ConfigSnapshotModule {
       get: (key: string) => Promise<string | null>;
     };
   }): Promise<{ siteTitle: string; siteDescription: string } | null>;
+  readCurrentInternalPublicStatusConfigSnapshot(input: {
+    redis: {
+      status: string;
+      get: (key: string) => Promise<string | null>;
+    };
+    allowLegacyFallback?: boolean;
+  }): Promise<{
+    configVersion: string;
+    groups: unknown[];
+  } | null>;
   publishPublicStatusConfigSnapshot(input: {
     reason: string;
     snapshot?: {
@@ -165,6 +175,46 @@ describe("public-status config snapshot", () => {
       siteTitle: "Claude Code Hub Status",
       siteDescription: "Request-derived public status",
     });
+  });
+
+  it("can disable legacy config fallback for v2 rollup writers", async () => {
+    const mod = await importPublicStatusModule<ConfigSnapshotModule>(
+      "@/lib/public-status/config-snapshot"
+    );
+
+    const redis = {
+      status: "ready",
+      get: vi.fn(async (key: string) => {
+        if (key === "public-status:v1:config-version:current") {
+          return "cfg-v1";
+        }
+        if (key === "public-status:v1:config-internal:cfg-v1") {
+          return JSON.stringify({
+            configVersion: "cfg-v1",
+            siteTitle: "Legacy",
+            siteDescription: "Legacy",
+            defaultIntervalMinutes: 5,
+            defaultRangeHours: 24,
+            groups: [],
+          });
+        }
+        return null;
+      }),
+    };
+
+    await expect(
+      mod.readCurrentInternalPublicStatusConfigSnapshot({
+        redis,
+        allowLegacyFallback: false,
+      })
+    ).resolves.toBeNull();
+    expect(redis.get).not.toHaveBeenCalledWith("public-status:v1:config-version:current");
+
+    await expect(
+      mod.readCurrentInternalPublicStatusConfigSnapshot({
+        redis,
+      })
+    ).resolves.toMatchObject({ configVersion: "cfg-v1" });
   });
 
   it("does not let an older configVersion overwrite the current pointer", async () => {

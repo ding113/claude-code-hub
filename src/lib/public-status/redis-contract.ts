@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
-const PUBLIC_STATUS_REDIS_PREFIX = "public-status:v1";
+export const PUBLIC_STATUS_REDIS_PREFIX = "public-status:v2";
+export const LEGACY_PUBLIC_STATUS_REDIS_PREFIX = "public-status:v1";
+export const PUBLIC_STATUS_ROLLUP_BUCKET_MINUTES = 5;
 
 export type PublicStatusServeState = "fresh" | "stale" | "rebuilding" | "no-data";
 
@@ -16,6 +18,9 @@ export interface PublicStatusManifest {
   freshUntil: string;
   rebuildState: "idle" | "rebuilding";
   lastCompleteGeneration: string | null;
+  rollupCoverageStartedAt?: string | null;
+  rollupCoverageComplete?: boolean;
+  rollupSampleCount?: number;
 }
 
 export interface PublicStatusManifestResolution {
@@ -65,27 +70,38 @@ export function buildGenerationFingerprint(input: {
   return createHash("sha1").update(fingerprint).digest("hex").slice(0, 16);
 }
 
-export function buildPublicStatusConfigSnapshotKey(configVersion = "current"): string {
-  return `${PUBLIC_STATUS_REDIS_PREFIX}:config:${encodeKeyPart(configVersion)}`;
+function resolvePrefix(prefix?: string): string {
+  return prefix ?? PUBLIC_STATUS_REDIS_PREFIX;
 }
 
-export function buildPublicStatusInternalConfigSnapshotKey(configVersion = "current"): string {
-  return `${PUBLIC_STATUS_REDIS_PREFIX}:config-internal:${encodeKeyPart(configVersion)}`;
+export function buildPublicStatusConfigSnapshotKey(
+  configVersion = "current",
+  options?: { prefix?: string }
+): string {
+  return `${resolvePrefix(options?.prefix)}:config:${encodeKeyPart(configVersion)}`;
 }
 
-export function buildPublicStatusConfigVersionPointerKey(): string {
-  return `${PUBLIC_STATUS_REDIS_PREFIX}:config-version:current`;
+export function buildPublicStatusInternalConfigSnapshotKey(
+  configVersion = "current",
+  options?: { prefix?: string }
+): string {
+  return `${resolvePrefix(options?.prefix)}:config-internal:${encodeKeyPart(configVersion)}`;
+}
+
+export function buildPublicStatusConfigVersionPointerKey(options?: { prefix?: string }): string {
+  return `${resolvePrefix(options?.prefix)}:config-version:current`;
 }
 
 export function buildPublicStatusManifestKey(input: {
   configVersion: string;
   intervalMinutes: number;
   rangeHours: number;
+  prefix?: string;
 }): string {
   assertPositiveInteger(input.intervalMinutes, "intervalMinutes");
   assertPositiveInteger(input.rangeHours, "rangeHours");
   return [
-    PUBLIC_STATUS_REDIS_PREFIX,
+    resolvePrefix(input.prefix),
     "manifest",
     encodeKeyPart(input.configVersion),
     `${input.intervalMinutes}m`,
@@ -97,11 +113,12 @@ export function buildPublicStatusCurrentSnapshotKey(input: {
   intervalMinutes: number;
   rangeHours: number;
   generation: string;
+  prefix?: string;
 }): string {
   assertPositiveInteger(input.intervalMinutes, "intervalMinutes");
   assertPositiveInteger(input.rangeHours, "rangeHours");
   return [
-    PUBLIC_STATUS_REDIS_PREFIX,
+    resolvePrefix(input.prefix),
     "snapshot",
     encodeKeyPart(input.generation),
     `${input.intervalMinutes}m`,
@@ -114,10 +131,11 @@ export function buildPublicStatusSeriesChunkKey(input: {
   generation: string;
   bucketStartIso: string;
   bucketEndIso: string;
+  prefix?: string;
 }): string {
   assertPositiveInteger(input.intervalMinutes, "intervalMinutes");
   return [
-    PUBLIC_STATUS_REDIS_PREFIX,
+    resolvePrefix(input.prefix),
     "series",
     encodeKeyPart(input.generation),
     `${input.intervalMinutes}m`,
@@ -126,17 +144,45 @@ export function buildPublicStatusSeriesChunkKey(input: {
   ].join(":");
 }
 
-export function buildPublicStatusRebuildLockKey(flightKey: string): string {
-  return `${PUBLIC_STATUS_REDIS_PREFIX}:rebuild-lock:${encodeKeyPart(flightKey)}`;
+export function buildPublicStatusRollupKey(input: {
+  bucketStartIso: string;
+  bucketMinutes?: number;
+  prefix?: string;
+}): string {
+  const bucketMinutes = input.bucketMinutes ?? PUBLIC_STATUS_ROLLUP_BUCKET_MINUTES;
+  assertPositiveInteger(bucketMinutes, "bucketMinutes");
+  return [
+    resolvePrefix(input.prefix),
+    "rollup",
+    `${bucketMinutes}m`,
+    encodeKeyPart(alignBucketStartUtc(input.bucketStartIso, bucketMinutes)),
+  ].join(":");
+}
+
+export function buildPublicStatusRollupCoverageStartKey(options?: {
+  bucketMinutes?: number;
+  prefix?: string;
+}): string {
+  const bucketMinutes = options?.bucketMinutes ?? PUBLIC_STATUS_ROLLUP_BUCKET_MINUTES;
+  assertPositiveInteger(bucketMinutes, "bucketMinutes");
+  return `${resolvePrefix(options?.prefix)}:rollup:coverage-start:${bucketMinutes}m`;
+}
+
+export function buildPublicStatusRebuildLockKey(
+  flightKey: string,
+  options?: { prefix?: string }
+): string {
+  return `${resolvePrefix(options?.prefix)}:rebuild-lock:${encodeKeyPart(flightKey)}`;
 }
 
 export function buildPublicStatusRebuildHintKey(input: {
   intervalMinutes: number;
   rangeHours: number;
+  prefix?: string;
 }): string {
   assertPositiveInteger(input.intervalMinutes, "intervalMinutes");
   assertPositiveInteger(input.rangeHours, "rangeHours");
-  return `${PUBLIC_STATUS_REDIS_PREFIX}:rebuild-hint:${input.intervalMinutes}m:${input.rangeHours}h`;
+  return `${resolvePrefix(input.prefix)}:rebuild-hint:${input.intervalMinutes}m:${input.rangeHours}h`;
 }
 
 export function buildPublicStatusTempKey(baseKey: string, nonce: string): string {

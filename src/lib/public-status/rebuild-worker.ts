@@ -1,9 +1,4 @@
 import { getRedisClient } from "@/lib/redis";
-import {
-  buildPublicStatusPayloadFromRequests,
-  getConfiguredPublicStatusGroups,
-  queryPublicStatusRequests,
-} from "./aggregation";
 import { publishCurrentPublicStatusConfigProjection } from "./config-publisher";
 import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import {
@@ -12,9 +7,17 @@ import {
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
   buildPublicStatusRebuildLockKey,
+  buildPublicStatusRollupCoverageStartKey,
   buildPublicStatusSeriesChunkKey,
   buildPublicStatusTempKey,
 } from "./redis-contract";
+import {
+  buildPublicStatusPayloadFromRollups,
+  buildPublicStatusRollupBucketStarts,
+  getConfiguredPublicStatusGroupsFromSnapshot,
+  parsePublicStatusRollupField,
+  readPublicStatusRollupBuckets,
+} from "./rollup-store";
 
 interface PublicStatusRebuildResult {
   sourceGeneration: string;
@@ -28,6 +31,7 @@ const GENERATION_PROJECTION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 interface RedisHintWriter {
   get?(key: string): Promise<string | null> | string | null;
+  hgetall?(key: string): Promise<Record<string, string>> | Record<string, string>;
   set(key: string, value: string, mode: "EX", seconds: number): Promise<unknown> | unknown;
   set(key: string, value: string): Promise<unknown> | unknown;
   del?(...keys: string[]): Promise<unknown> | unknown;
@@ -84,6 +88,23 @@ function shouldPromoteCurrentManifest(
   return true;
 }
 
+function isRollupCoverageComplete(input: {
+  coverageStartedAt: string | null;
+  coveredFrom: string;
+}): boolean {
+  if (!input.coverageStartedAt) {
+    return false;
+  }
+
+  const coverageStartedAtMs = Date.parse(input.coverageStartedAt);
+  const coveredFromMs = Date.parse(input.coveredFrom);
+  return (
+    Number.isFinite(coverageStartedAtMs) &&
+    Number.isFinite(coveredFromMs) &&
+    coverageStartedAtMs <= coveredFromMs
+  );
+}
+
 async function publishPublicStatusProjection(input: {
   redis: RedisHintWriter;
   configVersion: string;
@@ -93,6 +114,9 @@ async function publishPublicStatusProjection(input: {
   generatedAt: string;
   coveredFrom: string;
   coveredTo: string;
+  rollupCoverageStartedAt: string | null;
+  rollupCoverageComplete: boolean;
+  rollupSampleCount: number;
   groups: unknown;
 }): Promise<void> {
   const snapshotKey = buildPublicStatusCurrentSnapshotKey({
@@ -149,6 +173,9 @@ async function publishPublicStatusProjection(input: {
     freshUntil: snapshotRecord.freshUntil,
     rebuildState: "idle" as const,
     lastCompleteGeneration: input.sourceGeneration,
+    rollupCoverageStartedAt: input.rollupCoverageStartedAt,
+    rollupCoverageComplete: input.rollupCoverageComplete,
+    rollupSampleCount: input.rollupSampleCount,
   };
 
   await setWithTtl(
@@ -287,12 +314,17 @@ export async function rebuildPublicStatusProjection(input: {
   if (typeof redis.get !== "function") {
     return { status: "disabled", reason: "redis-unavailable" };
   }
+  if (typeof redis.hgetall !== "function") {
+    return { status: "disabled", reason: "redis-unavailable" };
+  }
   const redisReader = redis as RedisHintWriter & {
     get(key: string): Promise<string | null> | string | null;
+    hgetall(key: string): Promise<Record<string, string>> | Record<string, string>;
   };
 
   let configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
     redis: redisReader,
+    allowLegacyFallback: false,
   });
   if (!configSnapshot) {
     try {
@@ -302,6 +334,7 @@ export async function rebuildPublicStatusProjection(input: {
       if (publishResult.written) {
         configSnapshot = await readCurrentInternalPublicStatusConfigSnapshot({
           redis: redisReader,
+          allowLegacyFallback: false,
         });
       }
     } catch {
@@ -312,7 +345,7 @@ export async function rebuildPublicStatusProjection(input: {
     return { status: "disabled", reason: "missing-config" };
   }
 
-  const groups = getConfiguredPublicStatusGroups(configSnapshot);
+  const groups = getConfiguredPublicStatusGroupsFromSnapshot(configSnapshot);
   if (groups.length === 0) {
     return { status: "disabled", reason: "no-configured-groups" };
   }
@@ -348,17 +381,36 @@ export async function rebuildPublicStatusProjection(input: {
       }
 
       try {
-        const requests = await queryPublicStatusRequests({
-          groups,
-          coveredFrom: new Date(coveredFrom),
-          coveredTo: new Date(coveredTo),
+        const rollupBuckets = await readPublicStatusRollupBuckets({
+          redis: redisReader,
+          bucketStarts: buildPublicStatusRollupBucketStarts({
+            rangeHours: input.rangeHours,
+            intervalMinutes: input.intervalMinutes,
+            now: new Date(coveredTo),
+          }),
         });
-        const aggregation = buildPublicStatusPayloadFromRequests({
+        const rollupCoverageStartedAt = await redisReader.get(
+          buildPublicStatusRollupCoverageStartKey()
+        );
+        const rollupSampleCount = rollupBuckets.reduce((sum, bucket) => {
+          for (const [field, value] of bucket.values) {
+            const parsedField = parsePublicStatusRollupField(field);
+            if (parsedField?.metric === "success" || parsedField?.metric === "failure") {
+              sum += value;
+            }
+          }
+          return sum;
+        }, 0);
+        const rollupCoverageComplete = isRollupCoverageComplete({
+          coverageStartedAt: rollupCoverageStartedAt,
+          coveredFrom,
+        });
+        const aggregation = buildPublicStatusPayloadFromRollups({
           rangeHours: input.rangeHours,
           intervalMinutes: input.intervalMinutes,
           now: new Date(coveredTo),
           groups,
-          requests,
+          rollupBuckets,
         });
 
         await publishPublicStatusProjection({
@@ -370,6 +422,9 @@ export async function rebuildPublicStatusProjection(input: {
           generatedAt: aggregation.generatedAt,
           coveredFrom: aggregation.coveredFrom,
           coveredTo: aggregation.coveredTo,
+          rollupCoverageStartedAt,
+          rollupCoverageComplete,
+          rollupSampleCount,
           groups: aggregation.groups,
         });
 

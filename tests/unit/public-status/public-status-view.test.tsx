@@ -307,9 +307,10 @@ describe("public-status view", () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/public-status?interval=5&rangeHours=24", {
-      cache: "no-store",
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/public-status?interval=5&rangeHours=24&include=meta%2Cdefaults%2Cgroups",
+      { cache: "no-store" }
+    );
 
     await act(async () => {
       vi.advanceTimersByTime(30_000);
@@ -492,9 +493,10 @@ describe("public-status view", () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/public-status?groupSlug=platform", {
-      cache: "no-store",
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/public-status?groupSlug=platform&include=meta%2Cdefaults%2Cgroups",
+      { cache: "no-store" }
+    );
 
     await act(async () => {
       vi.advanceTimersByTime(30_000);
@@ -505,6 +507,101 @@ describe("public-status view", () => {
     expect(text).toContain("Platform Model");
     expect(text).not.toContain("OpenAI Model");
     expect(container.querySelectorAll('[data-testid="sortable-group-panel"]')).toHaveLength(1);
+
+    vi.useRealTimers();
+    unmount();
+  });
+
+  it("updates summary state from polling payload even when timeline is reused", async () => {
+    vi.useFakeTimers();
+
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      json: async () =>
+        buildRouteResponse({
+          groups: [
+            {
+              publicGroupSlug: "openai",
+              displayName: "OpenAI",
+              explanatoryCopy: "Primary models",
+              models: [
+                {
+                  publicModelKey: "gpt-4.1",
+                  label: "GPT-4.1",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "failed",
+                  availabilityPct: 0,
+                  latestTtfbMs: null,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+          ],
+        }),
+    }));
+    global.fetch = fetchMock as typeof global.fetch;
+
+    const { container, unmount } = render(
+      <PublicStatusView
+        initialPayload={buildPayload({
+          groups: [
+            {
+              publicGroupSlug: "openai",
+              displayName: "OpenAI",
+              explanatoryCopy: "Primary models",
+              models: [
+                {
+                  publicModelKey: "gpt-4.1",
+                  label: "GPT-4.1",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "operational",
+                  availabilityPct: 100,
+                  latestTtfbMs: 420,
+                  latestTps: null,
+                  timeline: [
+                    {
+                      bucketStart: "2026-04-21T09:55:00.000Z",
+                      bucketEnd: "2026-04-21T10:00:00.000Z",
+                      state: "operational",
+                      availabilityPct: 100,
+                      ttfbMs: 420,
+                      tps: null,
+                      sampleCount: 1,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })}
+        initialStatus="ready"
+        intervalMinutes={5}
+        rangeHours={24}
+        locale="en"
+        timeZone="UTC"
+        labels={buildLabels()}
+        siteTitle="Acme AI Hub"
+      />
+    );
+
+    expect(container.textContent).toContain("Operational");
+    expect(container.querySelector('[data-testid="public-status-timeline"]')?.textContent).toBe(
+      "1"
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Failed");
+    expect(container.textContent).toContain("0.00%");
+    expect(container.querySelector('[data-testid="public-status-timeline"]')?.textContent).toBe(
+      "1"
+    );
 
     vi.useRealTimers();
     unmount();

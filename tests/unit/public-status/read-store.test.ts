@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
 } from "@/lib/public-status/redis-contract";
@@ -136,6 +137,231 @@ describe("readPublicStatusPayload", () => {
       groups: [],
     });
     expect(triggerRebuildHint).toHaveBeenCalledWith("snapshot-missing");
+  });
+
+  it("falls back to legacy v1 projections during v2 rollout and schedules a rebuild", async () => {
+    const triggerRebuildHint = vi.fn();
+    const redis = createRedisReader({
+      [buildPublicStatusManifestKey({
+        configVersion: "current",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        prefix: LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
+      })]: {
+        configVersion: "cfg-v1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-v1",
+        sourceGeneration: "gen-v1",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-v1",
+      },
+      [buildPublicStatusCurrentSnapshotKey({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-v1",
+        prefix: LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
+      })]: {
+        sourceGeneration: "gen-v1",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "openai",
+            displayName: "OpenAI",
+            explanatoryCopy: null,
+            models: [],
+          },
+        ],
+      },
+    });
+
+    const payload = await readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      nowIso: "2026-04-21T10:00:00.000Z",
+      configVersion: "cfg-v2",
+      hasConfiguredGroups: true,
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(payload).toMatchObject({
+      rebuildState: "stale",
+      sourceGeneration: "gen-v1",
+      generatedAt: "2026-04-21T09:59:00.000Z",
+    });
+    expect(triggerRebuildHint.mock.calls.map(([reason]) => reason)).toEqual([
+      "stale-generation",
+      "legacy-generation",
+      "config-version-mismatch",
+    ]);
+  });
+
+  it("keeps serving legacy projections while a new v2 rollup window is incomplete", async () => {
+    const triggerRebuildHint = vi.fn();
+    const redis = createRedisReader({
+      [buildPublicStatusManifestKey({
+        configVersion: "cfg-v2",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      })]: {
+        configVersion: "cfg-v2",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-v2",
+        sourceGeneration: "gen-v2",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        freshUntil: "2026-04-21T10:05:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-v2",
+        rollupCoverageStartedAt: "2026-04-21T09:55:00.000Z",
+        rollupCoverageComplete: false,
+        rollupSampleCount: 1,
+      },
+      [buildPublicStatusCurrentSnapshotKey({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-v2",
+      })]: {
+        sourceGeneration: "gen-v2",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        freshUntil: "2026-04-21T10:05:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "openai-v2",
+            displayName: "OpenAI v2",
+            explanatoryCopy: null,
+            models: [],
+          },
+        ],
+      },
+      [buildPublicStatusManifestKey({
+        configVersion: "current",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        prefix: LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
+      })]: {
+        configVersion: "cfg-v1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-v1",
+        sourceGeneration: "gen-v1",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-v1",
+      },
+      [buildPublicStatusCurrentSnapshotKey({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-v1",
+        prefix: LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
+      })]: {
+        sourceGeneration: "gen-v1",
+        generatedAt: "2026-04-21T09:59:00.000Z",
+        freshUntil: "2026-04-21T10:04:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "openai-v1",
+            displayName: "OpenAI v1",
+            explanatoryCopy: null,
+            models: [],
+          },
+        ],
+      },
+    });
+
+    const payload = await readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      nowIso: "2026-04-21T10:00:00.000Z",
+      configVersion: "cfg-v2",
+      hasConfiguredGroups: true,
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(payload).toMatchObject({
+      rebuildState: "stale",
+      sourceGeneration: "gen-v1",
+      groups: [expect.objectContaining({ publicGroupSlug: "openai-v1" })],
+    });
+    expect(triggerRebuildHint.mock.calls.map(([reason]) => reason)).toEqual([
+      "rollup-coverage-incomplete",
+      "legacy-generation",
+      "config-version-mismatch",
+    ]);
+  });
+
+  it("serves a stale v2 projection when rollup coverage is incomplete and legacy data is absent", async () => {
+    const triggerRebuildHint = vi.fn();
+    const redis = createRedisReader({
+      [buildPublicStatusManifestKey({
+        configVersion: "cfg-v2",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      })]: {
+        configVersion: "cfg-v2",
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-v2",
+        sourceGeneration: "gen-v2",
+        coveredFrom: "2026-04-20T10:00:00.000Z",
+        coveredTo: "2026-04-21T10:00:00.000Z",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        freshUntil: "2026-04-21T10:05:00.000Z",
+        rebuildState: "idle",
+        lastCompleteGeneration: "gen-v2",
+        rollupCoverageStartedAt: "2026-04-21T09:55:00.000Z",
+        rollupCoverageComplete: false,
+        rollupSampleCount: 1,
+      },
+      [buildPublicStatusCurrentSnapshotKey({
+        intervalMinutes: 5,
+        rangeHours: 24,
+        generation: "gen-v2",
+      })]: {
+        sourceGeneration: "gen-v2",
+        generatedAt: "2026-04-21T10:00:00.000Z",
+        freshUntil: "2026-04-21T10:05:00.000Z",
+        groups: [
+          {
+            publicGroupSlug: "openai-v2",
+            displayName: "OpenAI v2",
+            explanatoryCopy: null,
+            models: [],
+          },
+        ],
+      },
+    });
+
+    const payload = await readPublicStatusPayload({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      nowIso: "2026-04-21T10:00:00.000Z",
+      configVersion: "cfg-v2",
+      hasConfiguredGroups: true,
+      redis,
+      triggerRebuildHint,
+    });
+
+    expect(payload).toMatchObject({
+      rebuildState: "stale",
+      sourceGeneration: "gen-v2",
+      groups: [expect.objectContaining({ publicGroupSlug: "openai-v2" })],
+    });
+    expect(triggerRebuildHint.mock.calls.map(([reason]) => reason)).toEqual([
+      "rollup-coverage-incomplete",
+    ]);
   });
 
   it("marks config-version drift as stale and strips unexpected fields from redis snapshots", async () => {
