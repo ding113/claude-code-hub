@@ -1,6 +1,7 @@
 import safeRegex from "safe-regex";
 import { z } from "zod";
 import { PROVIDER_RULE_LIMITS } from "@/lib/constants/provider.constants";
+import { resolveProviderPatternRegex } from "@/lib/provider-pattern-regex";
 
 export const PROVIDER_MODEL_REDIRECT_MATCH_TYPE_SCHEMA = z.enum([
   "exact",
@@ -35,9 +36,8 @@ export const PROVIDER_MODEL_REDIRECT_RULE_SCHEMA = z
       return;
     }
 
-    try {
-      new RegExp(rule.source);
-    } catch {
+    const compiled = resolveProviderPatternRegex(rule.source);
+    if (!compiled) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Redirect regex is invalid",
@@ -47,7 +47,7 @@ export const PROVIDER_MODEL_REDIRECT_RULE_SCHEMA = z
     }
 
     try {
-      if (!safeRegex(rule.source)) {
+      if (!safeRegex(compiled.source)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Redirect regex has potential ReDoS risk",

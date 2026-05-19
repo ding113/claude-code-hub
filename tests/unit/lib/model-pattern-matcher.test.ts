@@ -21,4 +21,21 @@ describe("matchesPattern", () => {
   it("returns false for invalid regex patterns instead of throwing", () => {
     expect(matchesPattern("claude-opus-4-1", "regex", "[")).toBe(false);
   });
+
+  describe("glob fallback for regex matching", () => {
+    it.each<[string, string, boolean]>([
+      ["*", "claude-opus-4-1", true],
+      ["*", "", true],
+      // 锚定 glob 后 `*.` 表示“以 . 结尾”，不再匹配子串中带点的 "claude.opus"。
+      ["*.", "claude.opus", false],
+      ["*.", "claude.opus.", true],
+      ["*.", "claudeopus", false],
+      ["claude-*", "claude-opus-4-1", true],
+      ["claude-*", "gpt-4", false],
+      ["*-opus-*", "claude-opus-4-1", true],
+      ["*-opus-*", "claude-sonnet-4-1", false],
+    ])("regex pattern %s matches %s -> %s via glob fallback", (pattern, model, expected) => {
+      expect(matchesPattern(model, "regex", pattern)).toBe(expected);
+    });
+  });
 });

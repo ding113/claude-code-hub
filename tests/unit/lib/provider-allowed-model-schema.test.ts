@@ -49,4 +49,29 @@ describe("provider-allowed-model-schema", () => {
 
     expect(result.success).toBe(true);
   });
+
+  describe("regex 模式的 glob 通配符兼容", () => {
+    it.each<[string]>([
+      ["*"],
+      ["*."],
+      ["claude-*"],
+      ["*-opus-*"],
+      ["?"],
+    ])("接受 glob 风格的 pattern: %s", (pattern) => {
+      const result = PROVIDER_ALLOWED_MODEL_RULE_SCHEMA.safeParse({
+        matchType: "regex",
+        pattern,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it("仍然拒绝纯粹无法解析的正则", () => {
+      const result = PROVIDER_ALLOWED_MODEL_RULE_SCHEMA.safeParse({
+        matchType: "regex",
+        pattern: "[",
+      });
+      expect(result.success).toBe(false);
+    });
+  });
 });
