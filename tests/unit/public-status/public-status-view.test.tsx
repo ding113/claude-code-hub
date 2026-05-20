@@ -287,41 +287,46 @@ describe("public-status view", () => {
     }));
     global.fetch = fetchMock as typeof global.fetch;
 
-    const { container, unmount } = render(
-      <PublicStatusView
-        initialPayload={buildPayload({
-          rebuildState: "rebuilding",
-          groups: [],
-        })}
-        initialStatus="no_snapshot"
-        intervalMinutes={5}
-        rangeHours={24}
-        locale="en"
-        timeZone="UTC"
-        labels={buildLabels()}
-        siteTitle="Acme AI Hub"
-      />
-    );
+    let unmount: (() => void) | undefined;
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    try {
+      const { container, unmount: cleanup } = render(
+        <PublicStatusView
+          initialPayload={buildPayload({
+            rebuildState: "rebuilding",
+            groups: [],
+          })}
+          initialStatus="no_snapshot"
+          intervalMinutes={5}
+          rangeHours={24}
+          locale="en"
+          timeZone="UTC"
+          labels={buildLabels()}
+          siteTitle="Acme AI Hub"
+        />
+      );
+      unmount = cleanup;
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/public-status?interval=5&rangeHours=24&include=meta%2Cdefaults%2Cgroups",
-      { cache: "no-store" }
-    );
+      await act(async () => {
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      vi.advanceTimersByTime(30_000);
-      await Promise.resolve();
-    });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/public-status?interval=5&rangeHours=24&include=meta%2Cdefaults%2Cgroups",
+        { cache: "no-store" }
+      );
 
-    expect(container.textContent).toContain("Refresh delayed");
-    expect(container.textContent).toContain("Preparing first snapshot");
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
 
-    vi.useRealTimers();
-    unmount();
+      expect(container.textContent).toContain("Refresh delayed");
+      expect(container.textContent).toContain("Preparing first snapshot");
+    } finally {
+      vi.useRealTimers();
+      unmount?.();
+    }
   });
 
   it("falls back to shared model-prefix vendor icons when payload vendorIconKey is generic", () => {
@@ -453,63 +458,68 @@ describe("public-status view", () => {
     }));
     global.fetch = fetchMock as typeof global.fetch;
 
-    const { container, unmount } = render(
-      <PublicStatusView
-        initialPayload={buildPayload({
-          groups: [
-            {
-              publicGroupSlug: "platform",
-              displayName: "Platform",
-              explanatoryCopy: "Default group",
-              models: [
-                {
-                  publicModelKey: "platform-model",
-                  label: "Platform Model",
-                  vendorIconKey: "openai",
-                  requestTypeBadge: "openaiCompatible",
-                  latestState: "operational",
-                  availabilityPct: 99.9,
-                  latestTtfbMs: 420,
-                  latestTps: null,
-                  timeline: [],
-                },
-              ],
-            },
-          ],
-        })}
-        initialStatus="ready"
-        intervalMinutes={5}
-        rangeHours={24}
-        followServerDefaults={true}
-        filterSlug="platform"
-        locale="en"
-        timeZone="UTC"
-        labels={buildLabels()}
-        siteTitle="Acme AI Hub"
-      />
-    );
+    let unmount: (() => void) | undefined;
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    try {
+      const { container, unmount: cleanup } = render(
+        <PublicStatusView
+          initialPayload={buildPayload({
+            groups: [
+              {
+                publicGroupSlug: "platform",
+                displayName: "Platform",
+                explanatoryCopy: "Default group",
+                models: [
+                  {
+                    publicModelKey: "platform-model",
+                    label: "Platform Model",
+                    vendorIconKey: "openai",
+                    requestTypeBadge: "openaiCompatible",
+                    latestState: "operational",
+                    availabilityPct: 99.9,
+                    latestTtfbMs: 420,
+                    latestTps: null,
+                    timeline: [],
+                  },
+                ],
+              },
+            ],
+          })}
+          initialStatus="ready"
+          intervalMinutes={5}
+          rangeHours={24}
+          followServerDefaults={true}
+          filterSlug="platform"
+          locale="en"
+          timeZone="UTC"
+          labels={buildLabels()}
+          siteTitle="Acme AI Hub"
+        />
+      );
+      unmount = cleanup;
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/public-status?groupSlug=platform&include=meta%2Cdefaults%2Cgroups",
-      { cache: "no-store" }
-    );
+      await act(async () => {
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      vi.advanceTimersByTime(30_000);
-      await Promise.resolve();
-    });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/public-status?groupSlug=platform&include=meta%2Cdefaults%2Cgroups",
+        { cache: "no-store" }
+      );
 
-    const text = container.textContent || "";
-    expect(text).toContain("Platform Model");
-    expect(text).not.toContain("OpenAI Model");
-    expect(container.querySelectorAll('[data-testid="sortable-group-panel"]')).toHaveLength(1);
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
 
-    vi.useRealTimers();
-    unmount();
+      const text = container.textContent || "";
+      expect(text).toContain("Platform Model");
+      expect(text).not.toContain("OpenAI Model");
+      expect(container.querySelectorAll('[data-testid="sortable-group-panel"]')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+      unmount?.();
+    }
   });
 
   it("updates summary state from polling payload even when timeline is reused", async () => {
