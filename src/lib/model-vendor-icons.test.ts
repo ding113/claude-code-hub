@@ -124,7 +124,7 @@ describe("getModelVendor", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     vi.resetModules();
-    vi.doMock("./model-vendor-rules", () => ({
+    vi.doMock("@/lib/model-vendor-rules", () => ({
       getModelVendor: () => ({
         prefix: "missing",
         hasColor: false,
@@ -144,7 +144,7 @@ describe("getModelVendor", () => {
     } finally {
       vi.unstubAllEnvs();
       warnSpy.mockRestore();
-      vi.doUnmock("./model-vendor-rules");
+      vi.doUnmock("@/lib/model-vendor-rules");
       vi.resetModules();
     }
   });

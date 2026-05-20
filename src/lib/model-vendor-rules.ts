@@ -1,13 +1,6 @@
-export interface ModelVendorRule {
-  prefix: string;
-  hasColor: boolean;
-  i18nKey: string;
-  litellmProvider?: string;
-}
-
 // Strictly sorted by prefix length descending to ensure longest-match-first.
 // Within same length, sorted alphabetically.
-export const MODEL_VENDOR_RULES: ModelVendorRule[] = [
+export const MODEL_VENDOR_RULES = [
   {
     prefix: "codestral",
     hasColor: true,
@@ -110,7 +103,9 @@ export const MODEL_VENDOR_RULES: ModelVendorRule[] = [
   { prefix: "o3", hasColor: false, i18nKey: "openai", litellmProvider: "openai" },
   { prefix: "o4", hasColor: false, i18nKey: "openai", litellmProvider: "openai" },
   { prefix: "yi", hasColor: true, i18nKey: "yi" },
-];
+] as const;
+
+export type ModelVendorRule = (typeof MODEL_VENDOR_RULES)[number];
 
 export function getModelVendor(modelId: string): ModelVendorRule | null {
   if (!modelId) return null;

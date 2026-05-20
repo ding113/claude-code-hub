@@ -606,4 +606,73 @@ describe("public-status view", () => {
     vi.useRealTimers();
     unmount();
   });
+
+  it("uses server summary metrics when polling returns a new model without timeline", async () => {
+    vi.useFakeTimers();
+
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      json: async () =>
+        buildRouteResponse({
+          groups: [
+            {
+              publicGroupSlug: "openai",
+              displayName: "OpenAI",
+              explanatoryCopy: "Primary models",
+              models: [
+                {
+                  publicModelKey: "gpt-4.1",
+                  label: "GPT-4.1",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "operational",
+                  availabilityPct: 100,
+                  latestTtfbMs: 420,
+                  latestTps: null,
+                  timeline: [],
+                },
+                {
+                  publicModelKey: "gpt-4.2",
+                  label: "GPT-4.2",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "failed",
+                  availabilityPct: 0,
+                  latestTtfbMs: null,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+          ],
+        }),
+    }));
+    global.fetch = fetchMock as typeof global.fetch;
+
+    const { container, unmount } = render(
+      <PublicStatusView
+        initialPayload={buildPayload()}
+        initialStatus="ready"
+        intervalMinutes={5}
+        rangeHours={24}
+        locale="en"
+        timeZone="UTC"
+        labels={buildLabels()}
+        siteTitle="Acme AI Hub"
+      />
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+
+    const text = container.textContent || "";
+    expect(text).toContain("GPT-4.2");
+    expect(text).toContain("Failed");
+    expect(text).toContain("0.00%");
+
+    vi.useRealTimers();
+    unmount();
+  });
 });

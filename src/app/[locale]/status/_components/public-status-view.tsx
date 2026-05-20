@@ -156,10 +156,14 @@ function aggregateByFailed(states: DisplayState[]): DisplayState {
 }
 
 function deriveCurrentModelState(model: ViewModelSnapshot): DisplayState {
-  if (model.timelineReusedFromPrevious) {
+  if (model.timeline.length === 0 || model.timelineReusedFromPrevious) {
     return model.latestState;
   }
   return deriveLatestModelState(model);
+}
+
+function shouldUseServerModelSummary(model: ViewModelSnapshot): boolean {
+  return model.timeline.length === 0 || Boolean(model.timelineReusedFromPrevious);
 }
 
 export function PublicStatusView({
@@ -262,12 +266,14 @@ export function PublicStatusView({
       const derivedModels = group.models.map((model) => {
         const filled = fillDisplayTimeline(model.timeline);
         const chartCells = sliceTimelineForChart(filled, CHART_BUCKETS);
+        const viewModel = model as ViewModelSnapshot;
+        const useServerSummary = shouldUseServerModelSummary(viewModel);
         const uptime24h =
-          (model as ViewModelSnapshot).timelineReusedFromPrevious && model.availabilityPct !== null
+          useServerSummary && model.availabilityPct !== null
             ? model.availabilityPct
             : computeUptimePct(model.timeline);
         const ttfb24h = computeAvgTtfb(model.timeline);
-        const latest = deriveCurrentModelState(model as ViewModelSnapshot);
+        const latest = deriveCurrentModelState(viewModel);
         return { model, chartCells, uptime24h, ttfb24h, latest };
       });
       const issueCount = derivedModels.filter((d) => d.latest === "failed").length;

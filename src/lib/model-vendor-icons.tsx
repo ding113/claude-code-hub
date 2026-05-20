@@ -33,11 +33,14 @@ import {
   Yi,
   Zhipu,
 } from "@lobehub/icons";
-import { getModelVendor as getModelVendorRule, type ModelVendorRule } from "./model-vendor-rules";
+import {
+  getModelVendor as getModelVendorRule,
+  type ModelVendorRule,
+} from "@/lib/model-vendor-rules";
 
-export interface ModelVendorEntry extends ModelVendorRule {
+export type ModelVendorEntry = ModelVendorRule & {
   icon: React.ComponentType<{ className?: string }>;
-}
+};
 
 const MODEL_VENDOR_ICON_BY_KEY: Record<string, React.ComponentType<{ className?: string }>> = {
   anthropic: Claude.Color,

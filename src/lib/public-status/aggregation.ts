@@ -323,10 +323,10 @@ export function buildPublicStatusPayloadFromRequests(input: {
         bucket.failureCount += 1;
       }
 
-      if (typeof request.ttfbMs === "number") {
+      if (outcome === "success" && typeof request.ttfbMs === "number") {
         bucket.ttfbValues.push(request.ttfbMs);
       }
-      if (typeof tps === "number") {
+      if (outcome === "success" && typeof tps === "number") {
         bucket.tpsValues.push(tps);
       }
     }

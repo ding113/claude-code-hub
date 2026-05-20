@@ -12,6 +12,7 @@ import {
   buildPublicStatusTempKey,
 } from "./redis-contract";
 import {
+  assertSupportedPublicStatusRollupInterval,
   buildPublicStatusPayloadFromRollups,
   buildPublicStatusRollupBucketStarts,
   getConfiguredPublicStatusGroupsFromSnapshot,
@@ -307,6 +308,7 @@ export async function rebuildPublicStatusProjection(input: {
   | { status: "skipped"; reason: "distributed-lock-held"; sourceGeneration: string }
   | { status: "updated"; sourceGeneration: string }
 > {
+  assertSupportedPublicStatusRollupInterval(input.intervalMinutes);
   const redis = getReadyRedisClient(input.redis);
   if (!redis) {
     return { status: "disabled", reason: "redis-unavailable" };

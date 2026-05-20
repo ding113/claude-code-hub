@@ -7,7 +7,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { logger } from "@/lib/logger";
 import {
-  getConfiguredPublicStatusGroupsForRollup,
+  getConfiguredPublicStatusGroupsForRollupResolution,
   queuePublicStatusRollupWrite,
 } from "@/lib/public-status/rollup-store";
 import { formatCostForStorage } from "@/lib/utils/currency";
@@ -39,6 +39,7 @@ const publicStatusRequestSeedCache = new Map<number, PublicStatusRequestSeed>();
 const PUBLIC_STATUS_REQUEST_SEED_CACHE_MAX_SIZE = 10_000;
 const publicStatusFinalizedRequestCache = new Map<number, true>();
 const PUBLIC_STATUS_FINALIZED_REQUEST_CACHE_MAX_SIZE = 10_000;
+const publicStatusInFlightRequestCache = new Set<number>();
 
 function rememberPublicStatusRequestSeed(id: number, seed: PublicStatusRequestSeed): void {
   publicStatusRequestSeedCache.set(id, seed);
@@ -52,10 +53,12 @@ function rememberPublicStatusRequestSeed(id: number, seed: PublicStatusRequestSe
   }
 }
 
-function consumePublicStatusRequestSeed(id: number): PublicStatusRequestSeed | null {
-  const seed = publicStatusRequestSeedCache.get(id) ?? null;
+function peekPublicStatusRequestSeed(id: number): PublicStatusRequestSeed | null {
+  return publicStatusRequestSeedCache.get(id) ?? null;
+}
+
+function consumePublicStatusRequestSeed(id: number): void {
   publicStatusRequestSeedCache.delete(id);
-  return seed;
 }
 
 function claimPublicStatusFinalization(id: number): boolean {
@@ -73,6 +76,22 @@ function claimPublicStatusFinalization(id: number): boolean {
     publicStatusFinalizedRequestCache.delete(firstKey);
   }
   return true;
+}
+
+function unclaimPublicStatusFinalization(id: number): void {
+  publicStatusFinalizedRequestCache.delete(id);
+}
+
+function markPublicStatusRequestInFlight(id: number): boolean {
+  if (publicStatusInFlightRequestCache.has(id)) {
+    return false;
+  }
+  publicStatusInFlightRequestCache.add(id);
+  return true;
+}
+
+function clearPublicStatusRequestInFlight(id: number): void {
+  publicStatusInFlightRequestCache.delete(id);
 }
 
 function updatePublicStatusRequestSeed(id: number, patch: Partial<PublicStatusRequestSeed>): void {
@@ -119,28 +138,38 @@ function queuePublicStatusRollupForFinalDetails(
   id: number,
   details: PublicStatusFinalDetails
 ): void {
-  if (!isPublicStatusFinalDetails(details) || !claimPublicStatusFinalization(id)) {
+  if (!isPublicStatusFinalDetails(details) || !markPublicStatusRequestInFlight(id)) {
+    return;
+  }
+  if (!claimPublicStatusFinalization(id)) {
+    clearPublicStatusRequestInFlight(id);
     return;
   }
 
   void (async () => {
     try {
       const seed =
-        consumePublicStatusRequestSeed(id) ?? (await readPublicStatusRequestSeedFallback(id));
+        peekPublicStatusRequestSeed(id) ?? (await readPublicStatusRequestSeedFallback(id));
       if (!seed) {
         logger.warn("[MessageRequest] Missing public status rollup request seed", {
           messageRequestId: id,
         });
+        unclaimPublicStatusFinalization(id);
         return;
       }
 
-      const groups = await getConfiguredPublicStatusGroupsForRollup();
-      if (groups.length === 0) {
+      const groupResolution = await getConfiguredPublicStatusGroupsForRollupResolution();
+      if (groupResolution.groups.length === 0) {
+        if (groupResolution.retryable) {
+          unclaimPublicStatusFinalization(id);
+        } else {
+          consumePublicStatusRequestSeed(id);
+        }
         return;
       }
 
-      await queuePublicStatusRollupWrite({
-        groups,
+      const result = await queuePublicStatusRollupWrite({
+        groups: groupResolution.groups,
         event: {
           createdAt: seed.createdAt,
           model: details.model ?? seed.model,
@@ -151,11 +180,23 @@ function queuePublicStatusRollupForFinalDetails(
           providerChain: details.providerChain,
         },
       });
+      if (!result.written) {
+        if (result.retryable) {
+          unclaimPublicStatusFinalization(id);
+        } else {
+          consumePublicStatusRequestSeed(id);
+        }
+        return;
+      }
+      consumePublicStatusRequestSeed(id);
     } catch (error) {
+      unclaimPublicStatusFinalization(id);
       logger.warn("[MessageRequest] Failed to queue public status rollup", {
         error: error instanceof Error ? error.message : String(error),
         messageRequestId: id,
       });
+    } finally {
+      clearPublicStatusRequestInFlight(id);
     }
   })();
 }

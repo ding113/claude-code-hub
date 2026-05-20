@@ -6,7 +6,7 @@ const mockDbUpdateSet = vi.hoisted(() => vi.fn());
 const mockDbUpdateWhere = vi.hoisted(() => vi.fn());
 const mockDbSelectLimit = vi.hoisted(() => vi.fn());
 const mockQueuePublicStatusRollupWrite = vi.hoisted(() => vi.fn());
-const mockGetConfiguredPublicStatusGroupsForRollup = vi.hoisted(() => vi.fn());
+const mockGetConfiguredPublicStatusGroupsForRollupResolution = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
 
 vi.mock("@/drizzle/schema", () => ({
@@ -75,7 +75,8 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 vi.mock("@/lib/public-status/rollup-store", () => ({
-  getConfiguredPublicStatusGroupsForRollup: mockGetConfiguredPublicStatusGroupsForRollup,
+  getConfiguredPublicStatusGroupsForRollupResolution:
+    mockGetConfiguredPublicStatusGroupsForRollupResolution,
   queuePublicStatusRollupWrite: mockQueuePublicStatusRollupWrite,
 }));
 
@@ -96,32 +97,36 @@ describe("repository/message public status rollup hook", () => {
     mockDbUpdateSet.mockReturnValue({ where: mockDbUpdateWhere });
     mockDbUpdateWhere.mockResolvedValue(undefined);
     mockDbSelectLimit.mockResolvedValue([]);
-    mockGetConfiguredPublicStatusGroupsForRollup.mockResolvedValue([
-      {
-        sourceGroupId: 42,
-        sourceGroupName: "openai",
-        publicGroupSlug: "openai",
-        displayName: "OpenAI",
-        explanatoryCopy: null,
-        sortOrder: 1,
-        models: [
-          {
-            publicModelKey: "gpt-4.1",
-            label: "GPT-4.1",
-            vendorIconKey: "openai",
-            requestTypeBadge: "openaiCompatible",
-          },
-        ],
-      },
-    ]);
+    mockGetConfiguredPublicStatusGroupsForRollupResolution.mockResolvedValue({
+      retryable: false,
+      groups: [
+        {
+          sourceGroupId: 42,
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: null,
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+    });
     mockQueuePublicStatusRollupWrite.mockResolvedValue({
       written: true,
+      retryable: false,
       incrementCount: 1,
       key: "public-status:v2:rollup:5m:2026-04-21T10%3A00%3A00.000Z",
     });
   });
 
-  it("consumes the in-memory request seed before async rollup write to avoid double counting", async () => {
+  it("queues one rollup for duplicate terminal updates without double counting", async () => {
     mockDbInsertReturning.mockResolvedValue([
       {
         id: 101,
@@ -239,6 +244,269 @@ describe("repository/message public status rollup hook", () => {
           model: "gpt-4.1",
           outputTokens: 75,
           ttfbMs: 250,
+        }),
+      })
+    );
+  });
+
+  it("keeps the seed retryable when the first rollup write fails", async () => {
+    mockDbInsertReturning.mockResolvedValue([
+      {
+        id: 303,
+        providerId: 1,
+        userId: 2,
+        key: "sk-1",
+        model: "gpt-4.1",
+        originalModel: "gpt-4.1",
+        durationMs: null,
+        costUsd: null,
+        costMultiplier: null,
+        sessionId: "session-1",
+        requestSequence: 1,
+        userAgent: null,
+        clientIp: null,
+        endpoint: "/v1/messages",
+        messagesCount: 1,
+        cacheTtlApplied: null,
+        cacheCreationInputTokens: null,
+        cacheCreation5mInputTokens: null,
+        cacheCreation1hInputTokens: null,
+        cacheReadInputTokens: null,
+        specialSettings: null,
+        createdAt: new Date("2026-04-21T10:04:00.000Z"),
+        updatedAt: new Date("2026-04-21T10:04:00.000Z"),
+        deletedAt: null,
+      },
+    ]);
+    mockQueuePublicStatusRollupWrite
+      .mockResolvedValueOnce({
+        written: false,
+        retryable: true,
+        reason: "redis-unavailable",
+        incrementCount: 1,
+        key: "rollup-key",
+      })
+      .mockResolvedValueOnce({
+        written: true,
+        retryable: false,
+        incrementCount: 1,
+        key: "rollup-key",
+      });
+
+    const { createMessageRequest, updateMessageRequestDetails, updateMessageRequestDuration } =
+      await import("@/repository/message");
+
+    await createMessageRequest({
+      provider_id: 1,
+      user_id: 2,
+      key: "sk-1",
+      model: "gpt-4.1",
+      original_model: "gpt-4.1",
+    });
+    await updateMessageRequestDuration(303, 1800);
+
+    const finalDetails = {
+      statusCode: 200,
+      ttfbMs: 300,
+      outputTokens: 90,
+      providerChain: [
+        {
+          id: 1,
+          name: "provider-a",
+          groupTag: "openai",
+          reason: "request_success" as const,
+          statusCode: 200,
+        },
+      ],
+      model: "gpt-4.1",
+    };
+
+    await updateMessageRequestDetails(303, finalDetails);
+    await flushMicrotasks();
+    await updateMessageRequestDetails(303, finalDetails);
+    await flushMicrotasks();
+
+    expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledTimes(2);
+    expect(mockQueuePublicStatusRollupWrite).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        event: expect.objectContaining({
+          createdAt: new Date("2026-04-21T10:04:00.000Z"),
+          durationMs: 1800,
+          outputTokens: 90,
+          ttfbMs: 300,
+        }),
+      })
+    );
+  });
+
+  it("consumes the seed when the request is not part of the public status projection", async () => {
+    mockDbInsertReturning.mockResolvedValue([
+      {
+        id: 404,
+        providerId: 1,
+        userId: 2,
+        key: "sk-1",
+        model: "private-model",
+        originalModel: "private-model",
+        durationMs: null,
+        costUsd: null,
+        costMultiplier: null,
+        sessionId: "session-1",
+        requestSequence: 1,
+        userAgent: null,
+        clientIp: null,
+        endpoint: "/v1/messages",
+        messagesCount: 1,
+        cacheTtlApplied: null,
+        cacheCreationInputTokens: null,
+        cacheCreation5mInputTokens: null,
+        cacheCreation1hInputTokens: null,
+        cacheReadInputTokens: null,
+        specialSettings: null,
+        createdAt: new Date("2026-04-21T10:05:00.000Z"),
+        updatedAt: new Date("2026-04-21T10:05:00.000Z"),
+        deletedAt: null,
+      },
+    ]);
+    mockQueuePublicStatusRollupWrite.mockResolvedValue({
+      written: false,
+      retryable: false,
+      reason: "ignored",
+      incrementCount: 0,
+      key: null,
+    });
+
+    const { createMessageRequest, updateMessageRequestDetails } = await import(
+      "@/repository/message"
+    );
+
+    await createMessageRequest({
+      provider_id: 1,
+      user_id: 2,
+      key: "sk-1",
+      model: "private-model",
+      original_model: "private-model",
+    });
+
+    const finalDetails = {
+      statusCode: 200,
+      ttfbMs: 300,
+      outputTokens: 90,
+      providerChain: [
+        {
+          id: 1,
+          name: "provider-a",
+          groupTag: "openai",
+          reason: "request_success" as const,
+          statusCode: 200,
+        },
+      ],
+      model: "private-model",
+    };
+
+    await updateMessageRequestDetails(404, finalDetails);
+    await flushMicrotasks();
+    await updateMessageRequestDetails(404, finalDetails);
+    await flushMicrotasks();
+
+    expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the seed retryable when public status config is temporarily unavailable", async () => {
+    mockDbInsertReturning.mockResolvedValue([
+      {
+        id: 505,
+        providerId: 1,
+        userId: 2,
+        key: "sk-1",
+        model: "gpt-4.1",
+        originalModel: "gpt-4.1",
+        durationMs: null,
+        costUsd: null,
+        costMultiplier: null,
+        sessionId: "session-1",
+        requestSequence: 1,
+        userAgent: null,
+        clientIp: null,
+        endpoint: "/v1/messages",
+        messagesCount: 1,
+        cacheTtlApplied: null,
+        cacheCreationInputTokens: null,
+        cacheCreation5mInputTokens: null,
+        cacheCreation1hInputTokens: null,
+        cacheReadInputTokens: null,
+        specialSettings: null,
+        createdAt: new Date("2026-04-21T10:06:00.000Z"),
+        updatedAt: new Date("2026-04-21T10:06:00.000Z"),
+        deletedAt: null,
+      },
+    ]);
+    mockGetConfiguredPublicStatusGroupsForRollupResolution
+      .mockResolvedValueOnce({ groups: [], retryable: true })
+      .mockResolvedValueOnce({
+        retryable: false,
+        groups: [
+          {
+            sourceGroupId: 42,
+            sourceGroupName: "openai",
+            publicGroupSlug: "openai",
+            displayName: "OpenAI",
+            explanatoryCopy: null,
+            sortOrder: 1,
+            models: [
+              {
+                publicModelKey: "gpt-4.1",
+                label: "GPT-4.1",
+                vendorIconKey: "openai",
+                requestTypeBadge: "openaiCompatible",
+              },
+            ],
+          },
+        ],
+      });
+
+    const { createMessageRequest, updateMessageRequestDetails, updateMessageRequestDuration } =
+      await import("@/repository/message");
+
+    await createMessageRequest({
+      provider_id: 1,
+      user_id: 2,
+      key: "sk-1",
+      model: "gpt-4.1",
+      original_model: "gpt-4.1",
+    });
+    await updateMessageRequestDuration(505, 1900);
+
+    const finalDetails = {
+      statusCode: 200,
+      ttfbMs: 320,
+      outputTokens: 95,
+      providerChain: [
+        {
+          id: 1,
+          name: "provider-a",
+          groupTag: "openai",
+          reason: "request_success" as const,
+          statusCode: 200,
+        },
+      ],
+      model: "gpt-4.1",
+    };
+
+    await updateMessageRequestDetails(505, finalDetails);
+    await flushMicrotasks();
+    await updateMessageRequestDetails(505, finalDetails);
+    await flushMicrotasks();
+
+    expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledTimes(1);
+    expect(mockQueuePublicStatusRollupWrite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: expect.objectContaining({
+          createdAt: new Date("2026-04-21T10:06:00.000Z"),
+          durationMs: 1900,
+          outputTokens: 95,
+          ttfbMs: 320,
         }),
       })
     );

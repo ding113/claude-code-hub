@@ -1,4 +1,18 @@
 import { logger } from "@/lib/logger";
+import type { PublicStatusConfiguredGroup } from "@/lib/public-status/aggregation-core";
+import { computeTokensPerSecond } from "@/lib/public-status/aggregation-core";
+import {
+  type InternalPublicStatusConfigSnapshot,
+  readCurrentInternalPublicStatusConfigSnapshot,
+} from "@/lib/public-status/config-snapshot";
+import { PUBLIC_STATUS_INTERVAL_OPTIONS } from "@/lib/public-status/constants";
+import type { PublicStatusPayload, PublicStatusTimelineBucket } from "@/lib/public-status/payload";
+import {
+  alignBucketStartUtc,
+  buildPublicStatusRollupCoverageStartKey,
+  buildPublicStatusRollupKey,
+  PUBLIC_STATUS_ROLLUP_BUCKET_MINUTES,
+} from "@/lib/public-status/redis-contract";
 import { getRedisClient } from "@/lib/redis";
 import {
   classifyProviderChainItemOutcome,
@@ -6,18 +20,6 @@ import {
 } from "@/lib/request-outcome";
 import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type { ProviderChainItem } from "@/types/message";
-import { computeTokensPerSecond, type PublicStatusConfiguredGroup } from "./aggregation-core";
-import {
-  type InternalPublicStatusConfigSnapshot,
-  readCurrentInternalPublicStatusConfigSnapshot,
-} from "./config-snapshot";
-import type { PublicStatusPayload, PublicStatusTimelineBucket } from "./payload";
-import {
-  alignBucketStartUtc,
-  buildPublicStatusRollupCoverageStartKey,
-  buildPublicStatusRollupKey,
-  PUBLIC_STATUS_ROLLUP_BUCKET_MINUTES,
-} from "./redis-contract";
 
 const ROLLUP_FIELD_SEPARATOR = "|";
 const ROLLUP_TTL_SECONDS = 60 * 60 * 24 * 32;
@@ -61,6 +63,21 @@ export interface PublicStatusRollupAggregationResult {
   groups: PublicStatusPayload["groups"];
 }
 
+export type PublicStatusRollupWriteResult =
+  | {
+      written: true;
+      retryable: false;
+      incrementCount: number;
+      key: string;
+    }
+  | {
+      written: false;
+      retryable: boolean;
+      reason: "ignored" | "redis-unavailable" | "write-failed";
+      incrementCount: number;
+      key: string | null;
+    };
+
 interface RedisRollupWriter {
   hincrbyfloat?(key: string, field: string, increment: number): Promise<unknown> | unknown;
   expire?(key: string, seconds: number): Promise<unknown> | unknown;
@@ -68,7 +85,7 @@ interface RedisRollupWriter {
     hincrbyfloat(key: string, field: string, increment: number): unknown;
     set?(key: string, value: string, mode: "NX"): unknown;
     expire(key: string, seconds: number): unknown;
-    exec(): Promise<unknown> | unknown;
+    exec(): Promise<Array<[Error | null, unknown]> | null> | Array<[Error | null, unknown]> | null;
   };
   set?(key: string, value: string, mode?: "NX"): Promise<unknown> | unknown;
   status?: string;
@@ -86,6 +103,7 @@ interface RedisRollupReader {
 let cachedConfiguredGroups: {
   configVersion: string;
   groups: PublicStatusConfiguredGroup[];
+  retryable: boolean;
   expiresAt: number;
 } | null = null;
 
@@ -98,6 +116,20 @@ function decodeRollupPart(value: string): string {
     return decodeURIComponent(value);
   } catch {
     return value;
+  }
+}
+
+export function assertSupportedPublicStatusRollupInterval(intervalMinutes: number): void {
+  if (
+    !PUBLIC_STATUS_INTERVAL_OPTIONS.includes(
+      intervalMinutes as (typeof PUBLIC_STATUS_INTERVAL_OPTIONS)[number]
+    )
+  ) {
+    throw new Error(
+      `Unsupported public status rollup intervalMinutes: ${intervalMinutes}. Supported values: ${PUBLIC_STATUS_INTERVAL_OPTIONS.join(
+        ", "
+      )}`
+    );
   }
 }
 
@@ -212,12 +244,16 @@ export function getConfiguredPublicStatusGroupsFromSnapshot(
     );
 }
 
-export async function getConfiguredPublicStatusGroupsForRollup(): Promise<
-  PublicStatusConfiguredGroup[]
-> {
+export async function getConfiguredPublicStatusGroupsForRollupResolution(): Promise<{
+  groups: PublicStatusConfiguredGroup[];
+  retryable: boolean;
+}> {
   const now = Date.now();
   if (cachedConfiguredGroups && cachedConfiguredGroups.expiresAt > now) {
-    return cachedConfiguredGroups.groups;
+    return {
+      groups: cachedConfiguredGroups.groups,
+      retryable: cachedConfiguredGroups.retryable,
+    };
   }
 
   const snapshot = await readCurrentInternalPublicStatusConfigSnapshot({
@@ -227,18 +263,26 @@ export async function getConfiguredPublicStatusGroupsForRollup(): Promise<
     cachedConfiguredGroups = {
       configVersion: "",
       groups: [],
+      retryable: true,
       expiresAt: now + EMPTY_CONFIGURED_GROUPS_CACHE_TTL_MS,
     };
-    return [];
+    return { groups: [], retryable: true };
   }
 
   const groups = getConfiguredPublicStatusGroupsFromSnapshot(snapshot);
   cachedConfiguredGroups = {
     configVersion: snapshot.configVersion,
     groups,
+    retryable: false,
     expiresAt: now + CONFIGURED_GROUPS_CACHE_TTL_MS,
   };
-  return groups;
+  return { groups, retryable: false };
+}
+
+export async function getConfiguredPublicStatusGroupsForRollup(): Promise<
+  PublicStatusConfiguredGroup[]
+> {
+  return (await getConfiguredPublicStatusGroupsForRollupResolution()).groups;
 }
 
 export function buildPublicStatusRollupIncrements(input: {
@@ -323,13 +367,13 @@ export function buildPublicStatusRollupIncrements(input: {
       metric: outcome === "success" ? "success" : "failure",
       value: 1,
     });
-    if (ttfbMs !== null) {
+    if (outcome === "success" && ttfbMs !== null) {
       increments.push(
         { groupId, modelKey, metric: "ttfb_sum", value: ttfbMs },
         { groupId, modelKey, metric: "ttfb_count", value: 1 }
       );
     }
-    if (tps !== null) {
+    if (outcome === "success" && tps !== null) {
       increments.push(
         { groupId, modelKey, metric: "tps_sum", value: tps },
         { groupId, modelKey, metric: "tps_count", value: 1 }
@@ -344,10 +388,16 @@ export async function writePublicStatusRollupEvent(input: {
   event: PublicStatusRollupEvent;
   groups: PublicStatusConfiguredGroup[];
   redis?: RedisRollupWriter | null;
-}): Promise<{ written: boolean; incrementCount: number; key: string | null }> {
+}): Promise<PublicStatusRollupWriteResult> {
   const increments = buildPublicStatusRollupIncrements(input);
   if (increments.length === 0) {
-    return { written: false, incrementCount: 0, key: null };
+    return {
+      written: false,
+      retryable: false,
+      reason: "ignored",
+      incrementCount: 0,
+      key: null,
+    };
   }
 
   const createdAtIso =
@@ -363,20 +413,44 @@ export async function writePublicStatusRollupEvent(input: {
     ("status" in redis && redis.status && redis.status !== "ready") ||
     typeof redis.hincrbyfloat !== "function"
   ) {
-    return { written: false, incrementCount: increments.length, key };
+    return {
+      written: false,
+      retryable: true,
+      reason: "redis-unavailable",
+      incrementCount: increments.length,
+      key,
+    };
   }
 
   if (typeof redis.pipeline === "function") {
     const pipeline = redis.pipeline();
+    const pipelineOperationLabels: string[] = [];
     for (const increment of increments) {
-      pipeline.hincrbyfloat(key, buildPublicStatusRollupField(increment), increment.value);
+      const field = buildPublicStatusRollupField(increment);
+      pipeline.hincrbyfloat(key, field, increment.value);
+      pipelineOperationLabels.push(field);
     }
     if (typeof pipeline.set === "function") {
       pipeline.set(coverageStartKey, bucketStartIso, "NX");
+      pipelineOperationLabels.push(coverageStartKey);
       pipeline.expire(coverageStartKey, ROLLUP_TTL_SECONDS);
+      pipelineOperationLabels.push(`${coverageStartKey}:expire`);
     }
     pipeline.expire(key, ROLLUP_TTL_SECONDS);
-    await pipeline.exec();
+    pipelineOperationLabels.push(`${key}:expire`);
+    const results = await pipeline.exec();
+    if (!results) {
+      throw new Error(`Public status rollup pipeline failed for ${key}: empty exec result`);
+    }
+    const failures = results?.flatMap(([error], index) => (error ? [{ error, index }] : [])) ?? [];
+    if (failures.length > 0) {
+      const firstFailure = failures[0]!;
+      const failedField =
+        pipelineOperationLabels[firstFailure.index] ?? `${key}:pipeline:${firstFailure.index}`;
+      throw new Error(
+        `Public status rollup pipeline failed for ${failedField}: ${firstFailure.error.message}`
+      );
+    }
   } else {
     for (const increment of increments) {
       const field = buildPublicStatusRollupField(increment);
@@ -389,18 +463,24 @@ export async function writePublicStatusRollupEvent(input: {
     await redis.expire?.(coverageStartKey, ROLLUP_TTL_SECONDS);
   }
 
-  return { written: true, incrementCount: increments.length, key };
+  return { written: true, retryable: false, incrementCount: increments.length, key };
 }
 
 export function queuePublicStatusRollupWrite(input: {
   event: PublicStatusRollupEvent;
   groups: PublicStatusConfiguredGroup[];
-}): Promise<{ written: boolean; incrementCount: number; key: string | null }> {
+}): Promise<PublicStatusRollupWriteResult> {
   return writePublicStatusRollupEvent(input).catch((error) => {
     logger.warn("[PublicStatus] Failed to write rollup event", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return { written: false, incrementCount: 0, key: null };
+    return {
+      written: false,
+      retryable: true,
+      reason: "write-failed",
+      incrementCount: 0,
+      key: null,
+    };
   });
 }
 
@@ -524,6 +604,7 @@ function buildBucketStarts(input: {
   rangeHours: number;
   intervalMinutes: number;
 }): { coveredFrom: string; coveredTo: string; bucketStarts: string[] } {
+  assertSupportedPublicStatusRollupInterval(input.intervalMinutes);
   const now = input.now instanceof Date ? input.now : new Date(input.now);
   const baseBucketMs = PUBLIC_STATUS_ROLLUP_BUCKET_MINUTES * 60 * 1000;
   const bucketCount = Math.ceil((input.rangeHours * 60) / PUBLIC_STATUS_ROLLUP_BUCKET_MINUTES);

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildPublicStatusPayloadFromRollups,
-  readPublicStatusRollupBuckets,
   buildPublicStatusRollupField,
   buildPublicStatusRollupIncrements,
   buildPublicStatusRollupBucketStarts,
   parsePublicStatusRollupField,
+  readPublicStatusRollupBuckets,
   writePublicStatusRollupEvent,
   type PublicStatusRollupBucket,
 } from "@/lib/public-status/rollup-store";
@@ -94,6 +94,102 @@ describe("public-status rollup store", () => {
     expect(increments).toEqual([]);
   });
 
+  it("marks unmatched events as ignored instead of retryable write failures", async () => {
+    const redis = {
+      status: "ready",
+      hincrbyfloat: vi.fn(),
+      pipeline: vi.fn(),
+    };
+
+    const result = await writePublicStatusRollupEvent({
+      redis,
+      groups,
+      event: {
+        createdAt: "2026-04-21T10:02:00.000Z",
+        originalModel: "not-public-model",
+        providerChain: [
+          {
+            id: 7,
+            name: "internal-provider",
+            groupTag: "openai",
+            reason: "request_success",
+            statusCode: 200,
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual({
+      written: false,
+      retryable: false,
+      reason: "ignored",
+      incrementCount: 0,
+      key: null,
+    });
+    expect(redis.pipeline).not.toHaveBeenCalled();
+  });
+
+  it("records latency and throughput only for the group that actually succeeds", () => {
+    const fallbackGroups: PublicStatusConfiguredGroup[] = [
+      groups[0]!,
+      {
+        sourceGroupId: 43,
+        sourceGroupName: "backup",
+        publicGroupSlug: "backup-public",
+        displayName: "Backup",
+        explanatoryCopy: null,
+        sortOrder: 2,
+        models: groups[0]!.models,
+      },
+    ];
+
+    const increments = buildPublicStatusRollupIncrements({
+      groups: fallbackGroups,
+      event: {
+        createdAt: "2026-04-21T10:02:00.000Z",
+        originalModel: "gpt-4.1",
+        durationMs: 1200,
+        ttfbMs: 200,
+        outputTokens: 50,
+        providerChain: [
+          {
+            id: 7,
+            name: "failed-provider",
+            groupTag: "openai",
+            reason: "retry_failed",
+            statusCode: 500,
+          },
+          {
+            id: 8,
+            name: "successful-provider",
+            groupTag: "backup",
+            reason: "request_success",
+            statusCode: 200,
+          },
+        ],
+      },
+    });
+
+    expect(increments).toEqual(
+      expect.arrayContaining([
+        { groupId: "42", modelKey: "gpt-4.1", metric: "failure", value: 1 },
+        { groupId: "43", modelKey: "gpt-4.1", metric: "success", value: 1 },
+        { groupId: "43", modelKey: "gpt-4.1", metric: "ttfb_sum", value: 200 },
+        { groupId: "43", modelKey: "gpt-4.1", metric: "ttfb_count", value: 1 },
+        { groupId: "43", modelKey: "gpt-4.1", metric: "tps_sum", value: 50 },
+        { groupId: "43", modelKey: "gpt-4.1", metric: "tps_count", value: 1 },
+      ])
+    );
+    expect(increments).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ groupId: "42", metric: "ttfb_sum" }),
+        expect.objectContaining({ groupId: "42", metric: "ttfb_count" }),
+        expect.objectContaining({ groupId: "42", metric: "tps_sum" }),
+        expect.objectContaining({ groupId: "42", metric: "tps_count" }),
+      ])
+    );
+  });
+
   it("writes one 5m bucket hash instead of endpoint multiplied keys", async () => {
     const fields = new Map<string, number>();
     const pipeline = {
@@ -102,7 +198,16 @@ describe("public-status rollup store", () => {
       }),
       set: vi.fn(),
       expire: vi.fn(),
-      exec: vi.fn(async () => null),
+      exec: vi.fn(async () => [
+        [null, "1"],
+        [null, "1"],
+        [null, "1"],
+        [null, "1"],
+        [null, "1"],
+        [null, "OK"],
+        [null, 1],
+        [null, 1],
+      ]),
     };
     const redis = {
       status: "ready",
@@ -137,6 +242,7 @@ describe("public-status rollup store", () => {
 
     expect(result).toMatchObject({
       written: true,
+      retryable: false,
       key: buildPublicStatusRollupKey({ bucketStartIso: "2026-04-21T10:02:00.000Z" }),
     });
     expect(redis.hincrbyfloat).not.toHaveBeenCalled();
@@ -170,6 +276,90 @@ describe("public-status rollup store", () => {
         })
       )
     ).toBe(1);
+  });
+
+  it("rejects the rollup write when a Redis pipeline command fails", async () => {
+    const pipelineError = new Error("ERR hash command failed");
+    const pipeline = {
+      hincrbyfloat: vi.fn(),
+      set: vi.fn(),
+      expire: vi.fn(),
+      exec: vi.fn(async () => [
+        [pipelineError, null],
+        [null, "1"],
+        [null, "1"],
+        [null, "1"],
+        [null, "1"],
+        [null, "OK"],
+        [null, 1],
+        [null, 1],
+      ]),
+    };
+    const redis = {
+      status: "ready",
+      hincrbyfloat: vi.fn(),
+      pipeline: vi.fn(() => pipeline),
+    };
+
+    await expect(
+      writePublicStatusRollupEvent({
+        redis,
+        groups,
+        event: {
+          createdAt: "2026-04-21T10:02:00.000Z",
+          originalModel: "gpt-4.1",
+          durationMs: 1200,
+          ttfbMs: 200,
+          outputTokens: 50,
+          providerChain: [
+            {
+              id: 7,
+              name: "internal-provider",
+              groupTag: "openai",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+      })
+    ).rejects.toThrow("Public status rollup pipeline failed");
+  });
+
+  it("rejects the rollup write when Redis pipeline returns no result", async () => {
+    const pipeline = {
+      hincrbyfloat: vi.fn(),
+      set: vi.fn(),
+      expire: vi.fn(),
+      exec: vi.fn(async () => null),
+    };
+    const redis = {
+      status: "ready",
+      hincrbyfloat: vi.fn(),
+      pipeline: vi.fn(() => pipeline),
+    };
+
+    await expect(
+      writePublicStatusRollupEvent({
+        redis,
+        groups,
+        event: {
+          createdAt: "2026-04-21T10:02:00.000Z",
+          originalModel: "gpt-4.1",
+          durationMs: 1200,
+          ttfbMs: 200,
+          outputTokens: 50,
+          providerChain: [
+            {
+              id: 7,
+              name: "internal-provider",
+              groupTag: "openai",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+      })
+    ).rejects.toThrow("empty exec result");
   });
 
   it("reads rollup buckets through batched Redis pipelines when available", async () => {
@@ -265,6 +455,25 @@ describe("public-status rollup store", () => {
       state: "operational",
     });
     expect(model?.availabilityPct).toBe(50);
+  });
+
+  it("rejects unsupported display intervals instead of silently rounding boundaries", () => {
+    expect(() =>
+      buildPublicStatusRollupBucketStarts({
+        now: "2026-04-21T11:00:00.000Z",
+        rangeHours: 1,
+        intervalMinutes: 16,
+      })
+    ).toThrow("Unsupported public status rollup intervalMinutes: 16");
+    expect(() =>
+      buildPublicStatusPayloadFromRollups({
+        rangeHours: 1,
+        intervalMinutes: 16,
+        now: "2026-04-21T11:00:00.000Z",
+        groups,
+        rollupBuckets: [],
+      })
+    ).toThrow("Unsupported public status rollup intervalMinutes: 16");
   });
 
   it("marks the latest partially failing bucket as degraded instead of fully operational", () => {
