@@ -592,19 +592,21 @@ describe("public-status view", () => {
       "1"
     );
 
-    await act(async () => {
-      vi.advanceTimersByTime(30_000);
-      await Promise.resolve();
-    });
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
 
-    expect(container.textContent).toContain("Failed");
-    expect(container.textContent).toContain("0.00%");
-    expect(container.querySelector('[data-testid="public-status-timeline"]')?.textContent).toBe(
-      "1"
-    );
-
-    vi.useRealTimers();
-    unmount();
+      expect(container.textContent).toContain("Failed");
+      expect(container.textContent).toContain("0.00%");
+      expect(container.querySelector('[data-testid="public-status-timeline"]')?.textContent).toBe(
+        "1"
+      );
+    } finally {
+      vi.useRealTimers();
+      unmount();
+    }
   });
 
   it("uses server summary metrics when polling returns a new model without timeline", async () => {
@@ -662,17 +664,19 @@ describe("public-status view", () => {
       />
     );
 
-    await act(async () => {
-      vi.advanceTimersByTime(30_000);
-      await Promise.resolve();
-    });
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
 
-    const text = container.textContent || "";
-    expect(text).toContain("GPT-4.2");
-    expect(text).toContain("Failed");
-    expect(text).toContain("0.00%");
-
-    vi.useRealTimers();
-    unmount();
+      const text = container.textContent || "";
+      expect(text).toContain("GPT-4.2");
+      expect(text).toContain("Failed");
+      expect(text).toContain("0.00%");
+    } finally {
+      vi.useRealTimers();
+      unmount();
+    }
   });
 });
