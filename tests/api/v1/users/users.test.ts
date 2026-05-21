@@ -161,6 +161,7 @@ describe("v1 users endpoints", () => {
 
   test("returns the current user from a read-tier self list endpoint", async () => {
     validateAuthTokenMock.mockResolvedValueOnce(userSession);
+    getUsersMock.mockResolvedValueOnce([user(9)]);
 
     const self = await callV1Route({
       method: "GET",
@@ -170,16 +171,24 @@ describe("v1 users endpoints", () => {
 
     expect(self.response.status).toBe(200);
     expect(self.json).toMatchObject({
-      items: [{ id: 9, name: "user-9" }],
+      items: [
+        {
+          id: 9,
+          name: "user-9",
+          keys: [{ id: 10, name: "default", maskedKey: "sk-...cret" }],
+        },
+      ],
       pageInfo: {
         nextCursor: null,
         hasMore: false,
         limit: 1,
       },
     });
+    expect(Array.isArray(self.json.items[0].keys)).toBe(true);
     expect(JSON.stringify(self.json)).not.toContain("sk-user-secret");
-    expect(getUserByIdMock).toHaveBeenCalledWith(9);
-    expect(getUsersMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(self.json)).not.toContain("fullKey");
+    expect(getUsersMock).toHaveBeenCalledWith();
+    expect(getUserByIdMock).not.toHaveBeenCalled();
     expect(validateAuthTokenMock).toHaveBeenCalledWith("user-token", {
       allowReadOnlyAccess: true,
     });
@@ -196,12 +205,14 @@ describe("v1 users endpoints", () => {
 
     expect(self.response.status).toBe(200);
     expect(self.json).toMatchObject({
-      items: [{ id: 1, name: "user-1" }],
+      items: [{ id: 1, name: "user-1", keys: [{ id: 10, name: "default" }] }],
       pageInfo: { nextCursor: null, hasMore: false, limit: 1 },
     });
+    expect(Array.isArray(self.json.items[0].keys)).toBe(true);
     expect(JSON.stringify(self.json)).not.toContain("user-250");
-    expect(getUserByIdMock).toHaveBeenCalledWith(1);
-    expect(getUsersMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(self.json)).not.toContain("fullKey");
+    expect(getUsersMock).toHaveBeenCalledWith();
+    expect(getUserByIdMock).not.toHaveBeenCalled();
   });
 
   test("reads user detail from an id-capable action instead of the first list page", async () => {

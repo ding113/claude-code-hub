@@ -143,12 +143,13 @@ describe("v1 action compatibility client", () => {
         })
       )
       .mockResolvedValueOnce({
-        users: [{ id: 9, name: "self" }],
-        nextCursor: null,
-        hasMore: false,
+        items: [{ id: 9, name: "self", keys: [{ id: 90, name: "default" }] }],
+        pageInfo: { nextCursor: null, hasMore: false },
       });
 
-    await expect(users.getUsers()).resolves.toEqual([{ id: 9, name: "self" }]);
+    await expect(users.getUsers()).resolves.toMatchObject([
+      { id: 9, name: "self", keys: [{ id: 90, name: "default" }] },
+    ]);
 
     expect(getMock).toHaveBeenNthCalledWith(1, "/api/v1/users");
     expect(getMock).toHaveBeenNthCalledWith(2, "/api/v1/users:self");

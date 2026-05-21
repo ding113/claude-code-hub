@@ -78,15 +78,19 @@ export async function listCurrentUser(c: Context): Promise<Response> {
     });
   }
   const actions = await import("@/actions/users");
-  const result = await callAction(
-    c,
-    actions.getUserById,
-    [currentUserId] as never[],
-    c.get("auth")
-  );
+  const result = await callAction(c, actions.getUsers, [] as never[], c.get("auth"));
   if (!result.ok) return actionError(c, result);
+  const currentUser = result.data.find((user) => user.id === currentUserId);
+  if (!currentUser) {
+    return createProblemResponse({
+      status: 404,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "resource.not_found",
+      detail: "Current user was not found.",
+    });
+  }
   return jsonResponse({
-    items: [redactUserKeys(result.data)],
+    items: [redactUserKeys(currentUser)],
     pageInfo: {
       nextCursor: null,
       hasMore: false,
