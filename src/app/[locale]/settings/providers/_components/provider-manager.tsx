@@ -28,7 +28,12 @@ import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
-import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
+import type {
+  ProviderDisplay,
+  ProviderHealthStatus,
+  ProviderStatisticsMap,
+  ProviderType,
+} from "@/types/provider";
 import type { User } from "@/types/user";
 import {
   type BatchActionMode,
@@ -57,16 +62,7 @@ export type EndpointCircuitInfoMap = Record<
 interface ProviderManagerProps {
   providers: ProviderDisplay[];
   currentUser?: User;
-  healthStatus: Record<
-    number,
-    {
-      circuitState: "closed" | "open" | "half-open";
-      failureCount: number;
-      lastFailureTime: number | null;
-      circuitOpenUntil: number | null;
-      recoveryMinutes: number | null;
-    }
-  >;
+  healthStatus: ProviderHealthStatus;
   /** Endpoint-level circuit breaker info, keyed by provider ID */
   endpointCircuitInfo?: EndpointCircuitInfoMap;
   statistics?: ProviderStatisticsMap;

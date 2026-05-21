@@ -39,11 +39,55 @@ export function looksLikeAnthropicProxyUrl(providerUrl?: string | null): boolean
   }
 }
 
+// Claude Platform on AWS gateway: `https://aws-external-anthropic.{region}.api.aws`.
+// 该网关使用 SigV4(Authorization)或 API Key(x-api-key)二选一鉴权;同时携带两者
+// 会被服务端拒绝(`request must not include both 'authorization' and 'x-api-key' headers`)。
+// Bearer 形式不被支持,所以代理只能走 x-api-key 路径。
+function safeUrlHost(providerUrl?: string | null): string | undefined {
+  if (!providerUrl) return undefined;
+  try {
+    return new URL(providerUrl).host;
+  } catch {
+    return undefined;
+  }
+}
+
+export function looksLikeAwsExternalAnthropicUrl(providerUrl?: string | null): boolean {
+  if (!providerUrl) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(providerUrl).hostname.toLowerCase();
+    // 区域段限定为 AWS 实际命名（`<area>-<direction>-<digit>`，如 `us-east-1`/`us-gov-west-1`），
+    // 避免 `aws-external-anthropic.fake.api.aws` 之类伪造主机伪装成网关。
+    return /^aws-external-anthropic\.[a-z]+(?:-[a-z]+)+-\d+\.api\.aws$/.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function resolveAnthropicAuthHeaders(
   apiKey: string,
   providerUrl?: string | null,
   options?: { forceBearerOnly?: boolean }
 ): Record<string, string> {
+  // AWS External Anthropic 拒绝 Authorization+x-api-key 共存,且不接受 Bearer。
+  // 上游硬约束优先级最高,即使调用方要求 forceBearerOnly 也按 x-api-key 单发。
+  if (looksLikeAwsExternalAnthropicUrl(providerUrl)) {
+    if (options?.forceBearerOnly) {
+      // 只记录 host：userinfo / query / fragment 都可能携带签名 token 或 API key，
+      // 直接落整段 URL（甚至仅做 userinfo 脱敏）都会留出泄露面。
+      logger.warn(
+        "[anthropic-auth] forceBearerOnly overridden for AWS External Anthropic gateway; sending x-api-key only",
+        { providerHost: safeUrlHost(providerUrl) }
+      );
+    }
+    return {
+      "x-api-key": apiKey,
+    };
+  }
+
   if (options?.forceBearerOnly || looksLikeAnthropicProxyUrl(providerUrl)) {
     return {
       Authorization: `Bearer ${apiKey}`,

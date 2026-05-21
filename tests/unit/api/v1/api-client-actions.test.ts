@@ -340,4 +340,37 @@ describe("v1 action compatibility client", () => {
       "/api/v1/usage-logs?cursorCreatedAt=2026-04-28T00%3A00%3A00.000Z&cursorId=42&limit=15"
     );
   });
+
+  test("returns the raw provider health map without ActionResult wrapping", async () => {
+    // 仪表盘的 useQuery 直接消费返回值；如果再被包成 `{ ok, data }`，
+    // 熔断状态指示器和重置按钮会因为 `healthStatus[id]?.circuitState` 永远 undefined 而不显示。
+    const healthMap = {
+      1: {
+        circuitState: "open" as const,
+        failureCount: 7,
+        lastFailureTime: 1_700_000_000_000,
+        circuitOpenUntil: 1_700_000_300_000,
+        recoveryMinutes: 5,
+      },
+      2: {
+        circuitState: "closed" as const,
+        failureCount: 0,
+        lastFailureTime: null,
+        circuitOpenUntil: null,
+        recoveryMinutes: null,
+      },
+    };
+    getMock.mockResolvedValue(healthMap);
+
+    const result = await providers.getProvidersHealthStatus();
+
+    expect(getMock).toHaveBeenCalledWith("/api/v1/providers/health", {
+      headers: { [DASHBOARD_COMPAT_HEADER]: "1" },
+    });
+    expect(result).toEqual(healthMap);
+    // Critical: the return must be the map itself, not the `{ ok, data }` wrapper.
+    expect(result).not.toHaveProperty("ok");
+    expect(result).not.toHaveProperty("data");
+    expect(result[1]?.circuitState).toBe("open");
+  });
 });
