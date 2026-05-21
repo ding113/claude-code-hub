@@ -155,6 +155,64 @@ describe("getUsers compatibility", () => {
     expect(result[0]?.name).toBe("xiaolunanbei");
   });
 
+  test("getCurrentUserDisplay only loads the current session user", async () => {
+    getSessionMock.mockResolvedValueOnce({
+      user: { id: 42, role: "admin" },
+      key: { canLoginWebUi: true },
+    });
+    const currentUser = makeUser(42, "current-admin");
+    currentUser.expiresAt = new Date("2026-05-07T07:41:10.000Z");
+    findUserByIdMock.mockResolvedValueOnce(currentUser);
+    findKeyListBatchMock.mockResolvedValueOnce(
+      new Map([
+        [
+          42,
+          [
+            {
+              id: 420,
+              name: "default",
+              key: "sk-current-user-secret",
+              expiresAt: null,
+              isEnabled: true,
+              createdAt: new Date("2026-04-30T07:41:10.000Z"),
+              canLoginWebUi: true,
+              limit5hUsd: null,
+              limit5hResetMode: "rolling",
+              limitDailyUsd: null,
+              dailyResetMode: "fixed",
+              dailyResetTime: "00:00",
+              limitWeeklyUsd: null,
+              limitMonthlyUsd: null,
+              limitTotalUsd: null,
+              limitConcurrentSessions: 0,
+              costResetAt: null,
+              providerGroup: "default",
+            },
+          ],
+        ],
+      ])
+    );
+
+    const { getCurrentUserDisplay } = await import("@/actions/users");
+
+    const result = await getCurrentUserDisplay();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toMatchObject({
+      id: 42,
+      name: "current-admin",
+      keys: [{ id: 420, name: "default", maskedKey: "sk-c••••••cret", canReveal: true }],
+    });
+    expect(result.data.expiresAt).toBeInstanceOf(Date);
+    expect(result.data.keys[0]?.createdAt).toBeInstanceOf(Date);
+    expect(findUserByIdMock).toHaveBeenCalledWith(42);
+    expect(findUserListBatchMock).not.toHaveBeenCalled();
+    expect(findKeyListBatchMock).toHaveBeenCalledWith([42]);
+    expect(findKeyUsageTodayBatchMock).toHaveBeenCalledWith([42]);
+    expect(findKeysStatisticsBatchFromKeysMock).toHaveBeenCalledWith(expect.any(Map));
+  });
+
   test("getUsersBatchCore returns JSON-safe date fields for v1 API transport", async () => {
     const user = makeUser(88, "dated-user");
     user.expiresAt = new Date("2026-05-07T07:41:10.000Z");

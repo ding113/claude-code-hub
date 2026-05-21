@@ -147,9 +147,10 @@ describe("v1 action compatibility client", () => {
         pageInfo: { nextCursor: null, hasMore: false },
       });
 
-    await expect(users.getUsers()).resolves.toMatchObject([
-      { id: 9, name: "self", keys: [{ id: 90, name: "default" }] },
-    ]);
+    const result = await users.getUsers();
+
+    expect(result).toHaveLength(1);
+    expect(result).toMatchObject([{ id: 9, name: "self", keys: [{ id: 90, name: "default" }] }]);
 
     expect(getMock).toHaveBeenNthCalledWith(1, "/api/v1/users");
     expect(getMock).toHaveBeenNthCalledWith(2, "/api/v1/users:self");
