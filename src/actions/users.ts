@@ -521,14 +521,6 @@ export async function getCurrentUserDisplay(): Promise<ActionResult<UserDisplay>
     }
 
     const [displayUser] = await buildUserDisplays([user], session, session.user.role === "admin");
-    if (!displayUser) {
-      return {
-        ok: false,
-        error: tError("USER_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
-      };
-    }
-
     return { ok: true, data: displayUser };
   } catch (error) {
     logger.error("Failed to fetch current user display data:", error);
