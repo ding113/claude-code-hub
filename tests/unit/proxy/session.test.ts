@@ -163,6 +163,29 @@ describe("ProxySession endpoint policy", () => {
   });
 });
 
+describe("ProxySession TTFB recording", () => {
+  it("records TTFB from an explicit timestamp once", () => {
+    const session = createSession({
+      redirectedModel: "gpt-5.4",
+    });
+    session.startTime = 10_000;
+
+    expect(session.recordTtfbAt(12_345)).toBe(2_345);
+    expect(session.ttfbMs).toBe(2_345);
+    expect(session.recordTtfbAt(20_000)).toBe(2_345);
+  });
+
+  it("clamps timestamps before request start to zero", () => {
+    const session = createSession({
+      redirectedModel: "gpt-5.4",
+    });
+    session.startTime = 10_000;
+
+    expect(session.recordTtfbAt(9_000)).toBe(0);
+    expect(session.ttfbMs).toBe(0);
+  });
+});
+
 describe("ProxySession.getCachedPriceDataByBillingSource", () => {
   it("配置 = original 时应优先使用原始模型", async () => {
     const originalPriceData: ModelPriceData = { input_cost_per_token: 1, output_cost_per_token: 2 };

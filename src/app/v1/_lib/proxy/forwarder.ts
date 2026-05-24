@@ -3480,6 +3480,10 @@ export class ProxyForwarder {
       }
     }
 
+    if (!isStreaming) {
+      session.recordTtfbAt(Date.now());
+    }
+
     // 检查 HTTP 错误状态（4xx/5xx 均视为失败，触发重试）
     // 注意：用户要求所有 4xx 都重试，包括 401、403、429 等
     if (!response.ok) {

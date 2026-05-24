@@ -1159,7 +1159,7 @@ export class ProxyResponseHandler {
           await updateMessageRequestDuration(messageContext.id, duration);
           await updateMessageRequestDetails(messageContext.id, {
             statusCode: finalizedStatusCode,
-            ttfbMs: session.ttfbMs ?? duration,
+            ttfbMs: session.ttfbMs,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
@@ -1444,7 +1444,7 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
             inputTokens: usageMetrics?.input_tokens,
             outputTokens: usageMetrics?.output_tokens,
-            ttfbMs: session.ttfbMs ?? duration,
+            ttfbMs: session.ttfbMs,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             cacheCreation5mInputTokens: usageMetrics?.cache_creation_5m_input_tokens,
@@ -3686,7 +3686,7 @@ export async function finalizeRequestStats(
   session: ProxySession,
   responseText: string,
   statusCode: number,
-  duration: number,
+  _duration: number,
   errorMessage?: string,
   providerIdOverride?: number,
   /**
@@ -3770,7 +3770,7 @@ export async function finalizeRequestStats(
     await updateMessageRequestDetails(messageContext.id, {
       statusCode: statusCode,
       ...(errorMessage ? { errorMessage } : {}),
-      ttfbMs: session.ttfbMs ?? duration,
+      ttfbMs: session.ttfbMs,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       actualResponseModel: extractActualResponseModelForProvider(
@@ -3879,7 +3879,7 @@ export async function finalizeRequestStats(
     statusCode: statusCode,
     inputTokens: normalizedUsage.input_tokens,
     outputTokens: normalizedUsage.output_tokens,
-    ttfbMs: session.ttfbMs ?? duration,
+    ttfbMs: session.ttfbMs,
     cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
     cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,
     cacheCreation5mInputTokens: normalizedUsage.cache_creation_5m_input_tokens,
@@ -4102,7 +4102,7 @@ async function persistRequestFailure(options: {
       errorMessage,
       errorStack,
       errorCause,
-      ttfbMs: phase === "non-stream" ? (session.ttfbMs ?? duration) : session.ttfbMs,
+      ttfbMs: session.ttfbMs,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）

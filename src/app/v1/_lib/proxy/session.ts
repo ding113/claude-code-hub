@@ -101,7 +101,7 @@ export class ProxySession {
   provider: Provider | null;
   messageContext: MessageContext | null;
 
-  // Time To First Byte (ms). Streaming: first chunk. Non-stream: equals durationMs.
+  // Time To First Byte (ms). Streaming: first body chunk. Non-stream: upstream response headers.
   ttfbMs: number | null = null;
 
   // Timestamp when guard pipeline finished and forwarding started (epoch ms).
@@ -444,17 +444,25 @@ export class ProxySession {
   }
 
   /**
-   * Record Time To First Byte (TTFB) for streaming responses.
+   * Record Time To First Byte (TTFB) at the current time.
    *
-   * Definition: first body chunk received.
-   * Non-stream responses should persist TTFB as `durationMs` at finalize time.
+   * Streaming callers use this when the first body chunk arrives.
    */
   recordTtfb(): number {
-    if (this.ttfbMs !== null) {
+    return this.recordTtfbAt(Date.now());
+  }
+
+  /**
+   * Record Time To First Byte (TTFB) at a known timestamp.
+   *
+   * Non-stream callers use this when upstream response headers arrive.
+   */
+  recordTtfbAt(timestampMs: number): number {
+    if (this.ttfbMs !== null && this.ttfbMs !== undefined) {
       return this.ttfbMs;
     }
 
-    const value = Math.max(0, Date.now() - this.startTime);
+    const value = Math.max(0, timestampMs - this.startTime);
     this.ttfbMs = value;
     this.persistLiveChain();
     return value;

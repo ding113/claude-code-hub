@@ -98,6 +98,8 @@ function createRawPassthroughSession(bodyText: string, extraHeaders?: HeadersIni
     getContext1mApplied: vi.fn(() => false),
     getGroupCostMultiplier: vi.fn(() => 1),
     getEndpointPolicy: vi.fn(() => resolveEndpointPolicy("/v1/responses/compact")),
+    recordTtfbAt: vi.fn(() => 0),
+    ttfbMs: null,
     addSpecialSetting: vi.fn((setting: unknown) => {
       specialSettings.push(setting);
     }),
@@ -175,5 +177,28 @@ describe("ProxyForwarder raw passthrough regression", () => {
 
     expect(capturedHeaders?.get("connection")).toBeNull();
     expect(capturedHeaders?.get("transfer-encoding")).toBeNull();
+  });
+
+  it("records non-stream TTFB when upstream response headers are available", async () => {
+    const body = '{"model":"gpt-5.4","input":[]}';
+    const session = createRawPassthroughSession(body);
+    const provider = createProvider();
+
+    const fetchWithoutAutoDecode = vi.spyOn(ProxyForwarder as any, "fetchWithoutAutoDecode");
+    fetchWithoutAutoDecode.mockImplementationOnce(async () => {
+      return new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json", "content-length": "2" },
+      });
+    });
+
+    const { doForward } = ProxyForwarder as unknown as {
+      doForward: (session: ProxySession, provider: Provider, baseUrl: string) => Promise<Response>;
+    };
+
+    await doForward(session, provider, provider.url);
+
+    expect(session.recordTtfbAt).toHaveBeenCalledTimes(1);
+    expect(session.recordTtfbAt).toHaveBeenCalledWith(expect.any(Number));
   });
 });

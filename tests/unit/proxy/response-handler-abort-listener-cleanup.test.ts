@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import { updateMessageRequestDetails } from "@/repository/message";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
 
@@ -203,6 +204,7 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     testState.cancelTask.mockClear();
     testState.cleanupTask.mockClear();
     vi.restoreAllMocks();
+    vi.mocked(updateMessageRequestDetails).mockClear();
   });
 
   it("removes non-stream client abort listener after response processing completes", async () => {
@@ -260,6 +262,23 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     await drainAsyncTasks();
 
     expect(testState.cancelTask).not.toHaveBeenCalled();
+  });
+
+  it("does not persist non-stream duration as TTFB when no header TTFB was recorded", async () => {
+    const session = makeSession(null, false);
+    session.ttfbMs = null;
+    const upstreamResponse = new Response(JSON.stringify({ choices: [] }), {
+      headers: { "content-type": "application/json" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await response.text();
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({ ttfbMs: null })
+    );
   });
 
   it("invokes cancel synchronously when client signal is already aborted", async () => {
