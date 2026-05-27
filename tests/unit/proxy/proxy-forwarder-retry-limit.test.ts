@@ -894,6 +894,41 @@ describe("ProxyForwarder - retry limit enforcement", () => {
   });
 });
 
+describe("ProxyForwarder - client request upstream errors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
+  });
+
+  test("upstream 400 should not retry or count against provider circuit breaker", async () => {
+    const session = createSession();
+    const provider = createProvider({
+      providerVendorId: null,
+      maxRetryAttempts: 4,
+    });
+    session.setProvider(provider);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    doForward.mockImplementationOnce(async () => {
+      throw new ProxyError("Provider returned 400: Bad Request", 400, {
+        body: '{"detail":"Bad Request"}',
+        providerId: provider.id,
+        providerName: provider.name,
+      });
+    });
+
+    await expect(ProxyForwarder.send(session)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+
+    expect(doForward).toHaveBeenCalledTimes(1);
+    expect(mocks.recordFailure).not.toHaveBeenCalled();
+  });
+});
+
 describe("ProxyForwarder - endpoint stickiness on retry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
