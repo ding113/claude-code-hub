@@ -44,6 +44,7 @@ import type { GeminiResponse } from "../gemini/types";
 import { extractActualResponseModelForProvider } from "./actual-response-model";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { isClientAbortError, isTransportError } from "./errors";
+import { normalizeResponseOutput } from "./response-output-normalizer";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
 
@@ -896,7 +897,10 @@ export class ProxyResponseHandler {
     const isSSE = contentType.includes("text/event-stream");
 
     if (!isSSE) {
-      return await ProxyResponseHandler.handleNonStream(session, fixedResponse);
+      const normalizedResponse = session.getEndpointPolicy().bypassResponseRectifier
+        ? fixedResponse
+        : await normalizeResponseOutput(session, fixedResponse);
+      return await ProxyResponseHandler.handleNonStream(session, normalizedResponse);
     }
 
     return await ProxyResponseHandler.handleStream(session, fixedResponse);
