@@ -130,10 +130,10 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
   const provider = makeProvider();
   const session = {
     request: {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       log: "",
       message: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         stream,
         messages: [{ role: "user", content: "hello" }],
       },
@@ -167,7 +167,7 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
     requestSequence: 1,
     originalFormat: "openai",
     providerType: "openai",
-    originalModelName: "gpt-5.4",
+    originalModelName: "gpt-5.5",
     originalUrlPathname: "/v1/chat/completions",
     providerChain: [],
     cacheTtlResolved: null,
@@ -180,8 +180,8 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
     getEndpointPolicy: () => endpointPolicy,
     getContext1mApplied: () => false,
     getGroupCostMultiplier: () => 1,
-    getOriginalModel: () => "gpt-5.4",
-    getCurrentModel: () => "gpt-5.4",
+    getOriginalModel: () => "gpt-5.5",
+    getCurrentModel: () => "gpt-5.5",
     getProviderChain: () => [],
     getSpecialSettings: () => [],
     shouldPersistSessionDebugArtifacts: () => false,

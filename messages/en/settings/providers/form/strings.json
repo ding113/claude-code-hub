@@ -82,7 +82,7 @@
   "modelWhitelistLoading": "Loading...",
   "modelWhitelistManualAdd": "Manually Add Model",
   "modelWhitelistManualDesc": "Support adding any model name (not limited to price table)",
-  "modelWhitelistManualPlaceholder": "Enter model name (e.g. gpt-5.4-pro)",
+  "modelWhitelistManualPlaceholder": "Enter model name (e.g. gpt-5.5-pro)",
   "modelWhitelistNotFound": "Model not found",
   "modelWhitelistSearchPlaceholder": "Search model name...",
   "modelWhitelistSelectAll": "Select All ({count})",

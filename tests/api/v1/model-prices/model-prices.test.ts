@@ -38,7 +38,7 @@ const adminSession = {
 
 const price = {
   id: 1,
-  modelName: "gpt-5.4",
+  modelName: "gpt-5.5",
   priceData: { mode: "chat", input_cost_per_token: 0.000001 },
   source: "manual",
   createdAt: new Date("2026-04-28T00:00:00.000Z"),
@@ -46,7 +46,7 @@ const price = {
 };
 
 const updateResult = {
-  added: ["gpt-5.4"],
+  added: ["gpt-5.5"],
   updated: [],
   unchanged: [],
   failed: [],
@@ -63,7 +63,7 @@ describe("v1 model price endpoints", () => {
       data: { data: [price], total: 1, page: 1, pageSize: 10, totalPages: 1 },
     });
     getAvailableModelCatalogMock.mockResolvedValue([
-      { modelName: "gpt-5.4", litellmProvider: "openai", updatedAt: "2026-04-28T00:00:00.000Z" },
+      { modelName: "gpt-5.5", litellmProvider: "openai", updatedAt: "2026-04-28T00:00:00.000Z" },
     ]);
     hasPriceTableMock.mockResolvedValue(true);
     uploadPriceTableMock.mockResolvedValue({ ok: true, data: updateResult });
@@ -86,7 +86,7 @@ describe("v1 model price endpoints", () => {
     });
     expect(list.response.status).toBe(200);
     expect(list.json).toMatchObject({
-      items: [{ modelName: "gpt-5.4", updatedAt: "2026-04-28T00:00:00.000Z" }],
+      items: [{ modelName: "gpt-5.5", updatedAt: "2026-04-28T00:00:00.000Z" }],
       total: 1,
     });
     expect(getModelPricesPaginatedMock).toHaveBeenCalledWith({
@@ -103,7 +103,7 @@ describe("v1 model price endpoints", () => {
       headers,
     });
     expect(catalog.response.status).toBe(200);
-    expect(catalog.json).toMatchObject({ items: [{ modelName: "gpt-5.4" }] });
+    expect(catalog.json).toMatchObject({ items: [{ modelName: "gpt-5.5" }] });
     expect(getAvailableModelCatalogMock).toHaveBeenCalledWith({ scope: "all" });
 
     const exists = await callV1Route({
@@ -121,10 +121,10 @@ describe("v1 model price endpoints", () => {
       method: "POST",
       pathname: "/api/v1/model-prices:upload",
       headers,
-      body: { content: "{}", overwriteManual: ["gpt-5.4"] },
+      body: { content: "{}", overwriteManual: ["gpt-5.5"] },
     });
     expect(upload.response.status).toBe(200);
-    expect(uploadPriceTableMock).toHaveBeenCalledWith("{}", ["gpt-5.4"]);
+    expect(uploadPriceTableMock).toHaveBeenCalledWith("{}", ["gpt-5.5"]);
 
     const check = await callV1Route({
       method: "POST",
@@ -138,23 +138,23 @@ describe("v1 model price endpoints", () => {
       method: "POST",
       pathname: "/api/v1/model-prices:syncLitellm",
       headers,
-      body: { overwriteManual: ["gpt-5.4"] },
+      body: { overwriteManual: ["gpt-5.5"] },
     });
     expect(sync.response.status).toBe(200);
-    expect(syncLiteLLMPricesMock).toHaveBeenCalledWith(["gpt-5.4"]);
+    expect(syncLiteLLMPricesMock).toHaveBeenCalledWith(["gpt-5.5"]);
   });
 
   test("upserts deletes and pins one model price", async () => {
     const headers = { Authorization: "Bearer admin-token" };
     const body = {
-      modelName: "gpt-5.4",
+      modelName: "gpt-5.5",
       mode: "chat",
       litellmProvider: "openai",
       inputCostPerToken: 0.000001,
     };
     const upsert = await callV1Route({
       method: "PUT",
-      pathname: "/api/v1/model-prices/gpt-5.4",
+      pathname: "/api/v1/model-prices/gpt-5.5",
       headers,
       body,
     });
@@ -163,31 +163,31 @@ describe("v1 model price endpoints", () => {
 
     const pin = await callV1Route({
       method: "POST",
-      pathname: "/api/v1/model-prices/gpt-5.4/pricing:pinManual",
+      pathname: "/api/v1/model-prices/gpt-5.5/pricing:pinManual",
       headers,
       body: { pricingProviderKey: "openai" },
     });
     expect(pin.response.status).toBe(200);
     expect(pinModelPricingProviderAsManualMock).toHaveBeenCalledWith({
-      modelName: "gpt-5.4",
+      modelName: "gpt-5.5",
       pricingProviderKey: "openai",
     });
 
     const deleted = await callV1Route({
       method: "DELETE",
-      pathname: "/api/v1/model-prices/gpt-5.4",
+      pathname: "/api/v1/model-prices/gpt-5.5",
       headers,
     });
     expect(deleted.response.status).toBe(204);
-    expect(deleteSingleModelPriceMock).toHaveBeenCalledWith("gpt-5.4");
+    expect(deleteSingleModelPriceMock).toHaveBeenCalledWith("gpt-5.5");
   });
 
   test("returns problem+json for invalid writes and action failures", async () => {
     const invalid = await callV1Route({
       method: "PUT",
-      pathname: "/api/v1/model-prices/gpt-5.4",
+      pathname: "/api/v1/model-prices/gpt-5.5",
       headers: { Authorization: "Bearer admin-token" },
-      body: { modelName: "gpt-5.4", mode: "chat", inputCostPerToken: -1 },
+      body: { modelName: "gpt-5.5", mode: "chat", inputCostPerToken: -1 },
     });
     expect(invalid.response.status).toBe(400);
     expect(invalid.response.headers.get("content-type")).toContain("application/problem+json");

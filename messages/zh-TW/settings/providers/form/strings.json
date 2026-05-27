@@ -82,7 +82,7 @@
   "modelWhitelistLoading": "載入中...",
   "modelWhitelistManualAdd": "手動新增模型",
   "modelWhitelistManualDesc": "支援新增任意模型名稱（不限於價格表中的模型）",
-  "modelWhitelistManualPlaceholder": "輸入模型名稱（例如 gpt-5.4）",
+  "modelWhitelistManualPlaceholder": "輸入模型名稱（例如 gpt-5.5）",
   "modelWhitelistNotFound": "未找到模型",
   "modelWhitelistSearchPlaceholder": "搜尋模型名稱...",
   "modelWhitelistSelectAll": "全選（{count}）",

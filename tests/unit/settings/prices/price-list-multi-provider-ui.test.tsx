@@ -36,10 +36,10 @@ describe("PriceList multi-provider pricing", () => {
     const prices: ModelPrice[] = [
       {
         id: 1,
-        modelName: "gpt-5.4",
+        modelName: "gpt-5.5",
         priceData: {
           mode: "responses",
-          display_name: "GPT-5.4",
+          display_name: "GPT-5.5",
           model_family: "gpt",
           litellm_provider: "chatgpt",
           pricing: {

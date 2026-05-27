@@ -287,7 +287,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "hi" }));
 
     await waitForMessageCount(
       client.messages,
@@ -320,7 +320,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "hi" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1011);
@@ -348,7 +348,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "hi" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1011);
@@ -373,7 +373,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "hi" }));
 
     await waitForMessageCount(client.messages, 1, 3000, "HTTP error was not forwarded");
     expect(client.ws.readyState).toBe(WebSocket.OPEN);
@@ -403,7 +403,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
 
     const client = connectClient(harness.port);
     await client.opened;
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "hi" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "hi" }));
 
     await waitForMessageCount(client.messages, 1, 3000, "terminal error was not forwarded");
     expect(client.ws.readyState).toBe(WebSocket.OPEN);
@@ -431,7 +431,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     // caused tungstenite to surface "Connection reset without closing
     // handshake".
     const bigInput = "x".repeat(4 * 1024 * 1024);
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: bigInput }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: bigInput }));
 
     await waitForMessageCount(client.messages, 1, 3000, "large response was not forwarded");
     expect(client.ws.readyState).toBe(WebSocket.OPEN);
@@ -466,8 +466,8 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     // Pipeline two frames before the first response completes. A compliant
     // Responses WS bridge keeps the client socket open and drains them
     // sequentially.
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "first" }));
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "second" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "first" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "second" }));
 
     await waitForMessageCount(client.messages, 2, 3000, "both queued responses were not forwarded");
     expect(client.ws.readyState).toBe(WebSocket.OPEN);
@@ -503,7 +503,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
     await client.opened;
     const queuedFrameObserved = serverConnection.waitForMessageCount(2);
     client.ws.send(Buffer.from("not a text frame"), { binary: true });
-    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "queued" }));
+    client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "queued" }));
 
     const close = await client.closeEvent;
     expect(close.code).toBe(1003);
@@ -556,7 +556,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
         "server WebSocket did not accept the overflow test connection"
       );
       await client.opened;
-      client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.4", input: "first" }));
+      client.ws.send(JSON.stringify({ type: "response.create", model: "gpt-5.5", input: "first" }));
       await withTimeout(
         firstRequestStarted.promise,
         3000,
@@ -564,7 +564,7 @@ describe("server.js WebSocket close-handshake (issue #1150)", () => {
       );
       for (let i = 0; i < 70; i += 1) {
         client.ws.send(
-          JSON.stringify({ type: "response.create", model: "gpt-5.4", input: `queued-${i}` })
+          JSON.stringify({ type: "response.create", model: "gpt-5.5", input: `queued-${i}` })
         );
       }
 

@@ -82,7 +82,7 @@
   "modelWhitelistLoading": "Загрузка...",
   "modelWhitelistManualAdd": "Добавить модель вручную",
   "modelWhitelistManualDesc": "Поддерживает добавление любого имени модели (не ограничено прайс-листом)",
-  "modelWhitelistManualPlaceholder": "Введите имя модели (например, gpt-5.4)",
+  "modelWhitelistManualPlaceholder": "Введите имя модели (например, gpt-5.5)",
   "modelWhitelistNotFound": "Модели не найдены",
   "modelWhitelistSearchPlaceholder": "Поиск по имени модели...",
   "modelWhitelistSelectAll": "Выбрать все ({count})",
