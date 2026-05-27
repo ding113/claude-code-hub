@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   normalizeResponseOutput,
   normalizeResponseOutputPayload,
@@ -8,6 +8,10 @@ import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function createResponseSession(): ProxySession {
   return {
@@ -130,8 +134,9 @@ describe("normalizeResponseOutput", () => {
       {
         status: 200,
         headers: {
-          "content-type": "application/json",
+          "content-type": "Application/JSON",
           "content-length": "999",
+          "content-encoding": "gzip",
         },
       }
     );
@@ -140,6 +145,7 @@ describe("normalizeResponseOutput", () => {
     const body = await normalized.json();
 
     expect(normalized.headers.has("content-length")).toBe(false);
+    expect(normalized.headers.has("content-encoding")).toBe(false);
     expect(body.output[0].content[0]).toMatchObject({ text: "", annotations: [] });
   });
 
@@ -154,6 +160,66 @@ describe("normalizeResponseOutput", () => {
     } as unknown as ProxySession;
 
     const normalized = await normalizeResponseOutput(session, response);
+
+    expect(normalized).toBe(response);
+  });
+
+  it("returns the original response when no normalization is needed", async () => {
+    const response = new Response(
+      JSON.stringify({
+        id: "resp_test",
+        object: "response",
+        status: "completed",
+        output: [
+          {
+            id: "msg_1",
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [],
+          },
+        ],
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }
+    );
+
+    const normalized = await normalizeResponseOutput(createResponseSession(), response);
+
+    expect(normalized).toBe(response);
+  });
+
+  it("skips non-2xx responses", async () => {
+    const response = new Response('{"object":"response","output":null}', {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+
+    const normalized = await normalizeResponseOutput(createResponseSession(), response);
+
+    expect(normalized).toBe(response);
+  });
+
+  it("skips non-JSON content types", async () => {
+    const response = new Response("text", {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+    });
+
+    const normalized = await normalizeResponseOutput(createResponseSession(), response);
+
+    expect(normalized).toBe(response);
+  });
+
+  it("returns the original response when JSON parsing fails", async () => {
+    const response = new Response("not json", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+    const normalized = await normalizeResponseOutput(createResponseSession(), response);
 
     expect(normalized).toBe(response);
   });

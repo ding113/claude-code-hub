@@ -76,14 +76,29 @@ describe("ResponseFixer", () => {
     });
 
     const session = createSession();
-    const response = new Response('{"a":1}', {
+    session.originalFormat = "response";
+    const response = new Response('{"object":"response","output":null}', {
       headers: { "content-type": "application/json" },
     });
 
     const fixed = await ResponseFixer.process(session, response);
-    expect(await fixed.text()).toBe('{"a":1}');
+    expect(await fixed.text()).toBe('{"object":"response","output":null}');
     expect(fixed.headers.get("x-cch-response-fixer")).toBeNull();
     expect(session.getSpecialSettings()).toBeNull();
+  });
+
+  test("非流式 Responses 响应：启用时应执行输出归一化", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const response = new Response('{"object":"response","output":null}', {
+      headers: { "content-type": "application/json" },
+    });
+
+    const fixed = await ResponseFixer.process(session, response);
+
+    expect(await fixed.json()).toMatchObject({ object: "response", output: [] });
   });
 
   test("非流式响应：命中编码修复时应写入 specialSettings 并持久化", async () => {

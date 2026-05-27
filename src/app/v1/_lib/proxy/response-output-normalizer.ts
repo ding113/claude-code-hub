@@ -14,13 +14,15 @@ function isRecord(value: unknown): value is JsonRecord {
 }
 
 function isJsonContentType(contentType: string): boolean {
-  return contentType.includes("application/json") || contentType.includes("+json");
+  const normalized = contentType.toLowerCase();
+  return normalized.includes("application/json") || normalized.includes("+json");
 }
 
 function cleanResponseHeaders(headers: Headers): Headers {
   const cleaned = new Headers(headers);
   cleaned.delete("transfer-encoding");
   cleaned.delete("content-length");
+  cleaned.delete("content-encoding");
   return cleaned;
 }
 
