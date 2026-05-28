@@ -4,6 +4,29 @@
 
 ---
 
+## v0.8.3 (2026-05-28)
+
+### 新增
+
+- 从 Anthropic 流式响应中的 thinking signature 解析实际模型，避免上游中转层改写模型名导致的计费偏差 (#1223)
+
+### 优化
+
+- 公开状态页 Redis 聚合与轮询性能优化：引入 Redis 预聚合和增量更新机制，大幅降低状态页重建开销 (#1211) [@tesgth032](https://github.com/tesgth032)
+
+### 修复
+
+- 修复 getSelf 用户列表返回数据形状不完整的问题 (#1213)
+- 修复代理层 Responses API 输出中 nullable 字段（content、summary、annotations、logprobs 等）未正确规范化的问题 (#1220)
+
+### 其他
+
+- 将 Codex 测试模型升级到 GPT-5.5 (#1221) [@tesgth032](https://github.com/tesgth032)
+- 新增大量单元测试覆盖：thinking signature 模型解析、Responses 输出规范化、公开状态页聚合逻辑、Codex 供应商覆写等
+- i18n 翻译文件更新
+
+---
+
 ## v0.7.4 (2026-04-28)
 
 ### 修复
