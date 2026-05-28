@@ -45,7 +45,7 @@ import { extractActualResponseModelForProvider } from "./actual-response-model";
 import {
   isThinkingEnabled,
   resolveAnthropicStreamActualResponseModel,
-} from "./anthropic-actual-response-model";
+} from "@/app/v1/_lib/proxy/anthropic-actual-response-model";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";

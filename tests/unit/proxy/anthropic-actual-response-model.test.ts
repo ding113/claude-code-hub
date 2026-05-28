@@ -34,12 +34,24 @@ function buildSignatureDeltaChunk(signature: string): string {
   ].join("\n");
 }
 
+/** Protobuf varint:7 bits/byte,MSB=continuation,LSB first。长度 ≥128 时必须多字节。 */
+function encodeVarint(value: number): Buffer {
+  const out: number[] = [];
+  let v = value >>> 0;
+  while (v >= 0x80) {
+    out.push((v & 0x7f) | 0x80);
+    v >>>= 7;
+  }
+  out.push(v);
+  return Buffer.from(out);
+}
+
 /** 构造一个会被 protobuf [2,1,6] 解出 modelText 的合法签名 base64。 */
 function buildSignatureBase64ForModel(modelText: string): string {
   const utf8 = Buffer.from(modelText, "utf8");
-  const terminal = Buffer.concat([Buffer.from([0x32, utf8.length]), utf8]);
-  const middle = Buffer.concat([Buffer.from([0x0a, terminal.length]), terminal]);
-  const outer = Buffer.concat([Buffer.from([0x12, middle.length]), middle]);
+  const terminal = Buffer.concat([Buffer.from([0x32]), encodeVarint(utf8.length), utf8]);
+  const middle = Buffer.concat([Buffer.from([0x0a]), encodeVarint(terminal.length), terminal]);
+  const outer = Buffer.concat([Buffer.from([0x12]), encodeVarint(middle.length), middle]);
   return outer.toString("base64");
 }
 

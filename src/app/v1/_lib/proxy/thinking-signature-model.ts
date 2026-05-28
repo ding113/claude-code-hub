@@ -11,7 +11,7 @@
  * 字段路径作为可配参数,便于未来 Anthropic 调整 schema 时只改一行。
  */
 
-import { extractJsonChunks } from "./actual-response-model";
+import { extractJsonChunks } from "@/app/v1/_lib/proxy/actual-response-model";
 
 const DEFAULT_FIELD_PATH: readonly number[] = [2, 1, 6];
 
@@ -95,9 +95,11 @@ function decodeBase64Strict(input: string): Buffer {
     throw new Error("invalid base64 alphabet");
   }
   // 长度 ≡ 1 (mod 4) 是唯一非法的余数(6 bits 不够编码一字节);0/2/3 都合法
-  // (含 padded 与 unpadded)。
-  if (trimmed.length % 4 === 1) throw new Error("invalid base64 length");
-  const normalized = trimmed.replace(/-/g, "+").replace(/_/g, "/");
+  // (含 padded 与 unpadded)。先去掉尾部 padding,避免 "xxxxx=" 这种残缺 padded
+  // 输入(实际 6 bytes,unpadded 后 5 → mod 4 === 1)被误判为合法。
+  const unpadded = trimmed.replace(/=+$/, "");
+  if (unpadded.length % 4 === 1) throw new Error("invalid base64 length");
+  const normalized = unpadded.replace(/-/g, "+").replace(/_/g, "/");
   return Buffer.from(normalized, "base64");
 }
 

@@ -20,9 +20,9 @@
  * 调用方应自己走 `extractActualResponseModelForProvider`(原始逻辑)。
  */
 
+import { extractActualResponseModelForProvider } from "@/app/v1/_lib/proxy/actual-response-model";
+import { extractThinkingSignatureModelFromStream } from "@/app/v1/_lib/proxy/thinking-signature-model";
 import type { ProviderType } from "@/types/provider";
-import { extractActualResponseModelForProvider } from "./actual-response-model";
-import { extractThinkingSignatureModelFromStream } from "./thinking-signature-model";
 
 export type ResponseModelSource =
   | "signature"
