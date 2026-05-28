@@ -881,6 +881,7 @@ export class ProxyResponseHandler {
     let fixedResponse = response;
     if (!session.getEndpointPolicy().bypassResponseRectifier) {
       try {
+        // raw passthrough 端点跳过 ResponseFixer，也跳过其中的 Responses 输出归一化。
         fixedResponse = await ResponseFixer.process(session, response);
       } catch (error) {
         logger.error(
