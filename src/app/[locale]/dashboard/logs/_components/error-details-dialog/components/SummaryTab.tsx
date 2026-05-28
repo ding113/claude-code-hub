@@ -632,7 +632,7 @@ export function SummaryTab({
       )}
 
       {/* Request / Actual Response Model (audit) */}
-      {hasAnyModel && (
+      {(hasAnyModel || showNoSignatureBadge) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold flex items-center gap-2 flex-wrap">
             <Settings2 className="h-4 w-4 text-slate-600" />

@@ -89,12 +89,16 @@ function readSignatureFromContentBlockDelta(obj: unknown): string | null {
 function decodeBase64Strict(input: string): Buffer {
   const trimmed = input.trim();
   if (trimmed.length === 0) throw new Error("empty");
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed)) {
+  // 接受标准 base64 (`+/`) 和 base64url (`-_`) 两种字母表,适配 Anthropic / 中转层
+  // 任一编码变体。统一在 Buffer.from 之前把 URL-safe 字符替换为标准字符。
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(trimmed)) {
     throw new Error("invalid base64 alphabet");
   }
-  // base64 长度必须是 4 的倍数(去 padding 后允许 2/3 位余数,标准 base64 一般要 padding)
-  if (trimmed.length % 4 !== 0) throw new Error("invalid base64 length");
-  return Buffer.from(trimmed, "base64");
+  // 长度 ≡ 1 (mod 4) 是唯一非法的余数(6 bits 不够编码一字节);0/2/3 都合法
+  // (含 padded 与 unpadded)。
+  if (trimmed.length % 4 === 1) throw new Error("invalid base64 length");
+  const normalized = trimmed.replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(normalized, "base64");
 }
 
 function safeUtf8(bytes: Buffer): string | null {

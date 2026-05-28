@@ -255,7 +255,7 @@
         "secondaryLineAriaLabel": "实际响应模型：{model}",
         "arrowPrefix": "↳",
         "noSignatureBadge": "无思考签名",
-        "noSignatureTooltip": "请求开启了思考但响应流中没有 thinking signature,实际响应模型回退到 message_start 明文字段。"
+        "noSignatureTooltip": "请求开启了思考但响应流中没有 thinking signature，实际响应模型回退到 message_start 明文字段。"
       },
       "errorMessage": "错误信息",
       "fake200ForwardedNotice": "提示：对于流式请求，该失败可能在流结束后才被识别；响应内容可能已原样透传给客户端。",

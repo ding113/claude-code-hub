@@ -7,6 +7,10 @@ import {
 const REAL_SIGNATURE_BASE64 =
   "EqsDCmMIDhgCKkCrnWTbZMEF0r5uok/aYSgRICLVbOUhwZJhOfCxigdcVkbcTEAsm/33aCjav1PGuQPRqeZ3RAn4VTYmOZUnQHZOMg9jbGF1ZGUtb3B1cy00LTc4AEIIdGhpbmtpbmcSDH4eDs/asAFTgfDkVRoMkNlw68oKoopYj9TnIjCDgiWGjzG1woio60hvwVQRMb0ASwJyYMjZQWqCXTubppc6YpvGLIrhjtJsMfSCC/Qq9QGlGbLsHHRN4ulPmTANpxm1H83mRvzzpkYd96OGTFq/RIjHIA+CVdkiQu57eR0tj/egvnKiD0F0aYp//vOQR7dweMU75+LpNAJKuL6hIR0AwlU92NOp5EaSvO1JBIkzmcgpZyANjMKHwmTziKIqJ3nP8JRaaF/9Zi/xWKymHki7ThrD6hRbY6Kc6UXvFIo44ZmOKQOBlhtau+8ze87cKZVGWa1QyqJfFZgB0dPnD9jEjTLh6hPz9XHKPQsMEz9OZ+DYHs6oJPCms9QxssaqcTpQK4aRh04LMIU+UvkZIPCI7KEzQOXHfRLNZ2uV/EF3n0hbGzVPzRgB";
 
+/**
+ * 单事件结尾需要空行(\n\n)来满足 W3C SSE 边界规范;join("\n") 在数组项之间插
+ * \n,与每个 chunk 末尾自带的 \n 合并为 \n\n,实现真实事件边界。
+ */
 function buildMessageStartChunk(model: string): string {
   return [
     "event: message_start",
@@ -28,6 +32,15 @@ function buildSignatureDeltaChunk(signature: string): string {
     })}`,
     "",
   ].join("\n");
+}
+
+/** 构造一个会被 protobuf [2,1,6] 解出 modelText 的合法签名 base64。 */
+function buildSignatureBase64ForModel(modelText: string): string {
+  const utf8 = Buffer.from(modelText, "utf8");
+  const terminal = Buffer.concat([Buffer.from([0x32, utf8.length]), utf8]);
+  const middle = Buffer.concat([Buffer.from([0x0a, terminal.length]), terminal]);
+  const outer = Buffer.concat([Buffer.from([0x12, middle.length]), middle]);
+  return outer.toString("base64");
 }
 
 describe("isThinkingEnabled", () => {
@@ -62,66 +75,72 @@ describe("isThinkingEnabled", () => {
 });
 
 describe("resolveAnthropicStreamActualResponseModel", () => {
-  it("providerType 不是 Anthropic → source=null,actualResponseModel=null(调用方自处理)", () => {
+  it("providerType 不是 Anthropic → source=null(调用方走旧 fallback)", () => {
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "openai-compatible",
-      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
     });
     expect(result).toEqual({ actualResponseModel: null, source: null });
   });
 
-  it("requestedModel 不以 claude- 开头 → source=null", () => {
-    const result = resolveAnthropicStreamActualResponseModel({
-      providerType: "claude",
-      requestedModel: "gpt-4",
-      thinkingEnabled: true,
-      responseStreamText: buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
-    });
-    expect(result).toEqual({ actualResponseModel: null, source: null });
+  it("providerType=null/undefined → source=null", () => {
+    expect(
+      resolveAnthropicStreamActualResponseModel({
+        providerType: null,
+        thinkingEnabled: true,
+        responseStreamText: "",
+      })
+    ).toEqual({ actualResponseModel: null, source: null });
+    expect(
+      resolveAnthropicStreamActualResponseModel({
+        providerType: undefined,
+        thinkingEnabled: false,
+        responseStreamText: "",
+      })
+    ).toEqual({ actualResponseModel: null, source: null });
   });
 
-  it("requestedModel 为 null → source=null(无从判断)", () => {
-    const result = resolveAnthropicStreamActualResponseModel({
-      providerType: "claude",
-      requestedModel: null,
-      thinkingEnabled: true,
-      responseStreamText: buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
-    });
-    expect(result).toEqual({ actualResponseModel: null, source: null });
-  });
-
-  it("Anthropic + claude- + 签名命中 → source='signature',模型取签名结果(即使 message_start 明文不同)", () => {
+  it("Anthropic + 签名命中 → source='signature',模型取签名结果(即使 message_start 明文不同)", () => {
     const stream = [
-      buildMessageStartChunk("claude-haiku-4-5"), // 故意与签名不同
+      buildMessageStartChunk("claude-haiku-4-5"),
       buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
-    ].join("");
+    ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
-      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
     expect(result).toEqual({ actualResponseModel: "claude-opus-4-7", source: "signature" });
   });
 
-  it("claude-auth 类型也走相同分支", () => {
+  it("claude-auth 类型同样走 Anthropic 分支", () => {
     const stream = buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64);
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude-auth",
-      requestedModel: "claude-opus-4-7",
-      thinkingEnabled: false, // 即使关了 thinking,但既然有签名,直接取签名
+      thinkingEnabled: false,
       responseStreamText: stream,
     });
     expect(result).toEqual({ actualResponseModel: "claude-opus-4-7", source: "signature" });
   });
 
-  it("无 signature_delta + thinkingEnabled=true → source='fallback_no_signature_with_thinking',模型取 message_start 明文", () => {
+  it("Anthropic + 上游模型被 redirect 为非 claude 名字(如 glm-4.6) + 签名命中 → 仍解出 claude-opus-4-7", () => {
+    const stream = [
+      buildMessageStartChunk("glm-4.6"),
+      buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
+    ].join("\n");
+    const result = resolveAnthropicStreamActualResponseModel({
+      providerType: "claude",
+      thinkingEnabled: true,
+      responseStreamText: stream,
+    });
+    expect(result).toEqual({ actualResponseModel: "claude-opus-4-7", source: "signature" });
+  });
+
+  it("无 signature_delta + thinkingEnabled=true + message_start 有效 → fallback_no_signature_with_thinking", () => {
     const stream = buildMessageStartChunk("claude-opus-4-5");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
-      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
@@ -131,11 +150,10 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     });
   });
 
-  it("无 signature_delta + thinkingEnabled=false → source='fallback_no_thinking',模型取 message_start 明文", () => {
+  it("无 signature_delta + thinkingEnabled=false + message_start 有效 → fallback_no_thinking", () => {
     const stream = buildMessageStartChunk("claude-haiku-4-5");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
-      requestedModel: "claude-opus-4-7",
       thinkingEnabled: false,
       responseStreamText: stream,
     });
@@ -145,14 +163,13 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     });
   });
 
-  it("损坏的 signature base64 + thinkingEnabled=true → 合并归到 fallback_no_signature_with_thinking", () => {
+  it("损坏的 signature base64 + thinkingEnabled=true + message_start 有效 → fallback_no_signature_with_thinking", () => {
     const stream = [
       buildMessageStartChunk("claude-opus-4-5"),
       buildSignatureDeltaChunk("###corrupt!!!"),
-    ].join("");
+    ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
-      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
@@ -168,10 +185,9 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     const stream = [
       buildMessageStartChunk("claude-opus-4-5"),
       buildSignatureDeltaChunk(decoyB64),
-    ].join("");
+    ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
-      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
@@ -181,36 +197,65 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     });
   });
 
-  it("响应流为空且 thinkingEnabled=true → fallback_no_signature_with_thinking,模型为 null", () => {
+  it("签名解出的字符串不含 'claude' → 不信任,fallback 到 message_start", () => {
+    const spoofedB64 = buildSignatureBase64ForModel("evil-injection-xyz");
+    const stream = [
+      buildMessageStartChunk("claude-opus-4-5"),
+      buildSignatureDeltaChunk(spoofedB64),
+    ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
-      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
-      responseStreamText: "",
+      responseStreamText: stream,
     });
     expect(result).toEqual({
-      actualResponseModel: null,
+      actualResponseModel: "claude-opus-4-5",
       source: "fallback_no_signature_with_thinking",
     });
   });
 
-  it("响应流为空且 thinkingEnabled=false → fallback_no_thinking,模型为 null", () => {
+  it("签名解出的字符串超过 128 字符 → 不信任,fallback 到 message_start", () => {
+    const oversized = `claude-${"x".repeat(200)}`;
+    const oversizedB64 = buildSignatureBase64ForModel(oversized);
+    const stream = [
+      buildMessageStartChunk("claude-opus-4-5"),
+      buildSignatureDeltaChunk(oversizedB64),
+    ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
-      requestedModel: "claude-opus-4-7",
+      thinkingEnabled: true,
+      responseStreamText: stream,
+    });
+    expect(result).toEqual({
+      actualResponseModel: "claude-opus-4-5",
+      source: "fallback_no_signature_with_thinking",
+    });
+  });
+
+  it("响应流为空 + thinkingEnabled=true → fallback_no_thinking(无 message_start 不算异常,避免误告警)", () => {
+    const result = resolveAnthropicStreamActualResponseModel({
+      providerType: "claude",
+      thinkingEnabled: true,
+      responseStreamText: "",
+    });
+    expect(result).toEqual({ actualResponseModel: null, source: "fallback_no_thinking" });
+  });
+
+  it("响应流为空 + thinkingEnabled=false → fallback_no_thinking,模型为 null", () => {
+    const result = resolveAnthropicStreamActualResponseModel({
+      providerType: "claude",
       thinkingEnabled: false,
       responseStreamText: "",
     });
     expect(result).toEqual({ actualResponseModel: null, source: "fallback_no_thinking" });
   });
 
-  it("requestedModel 大小写敏感:Claude- 开头(大写 C) → source=null,不触发", () => {
+  it("responseStreamText=null 安全处理", () => {
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
-      requestedModel: "Claude-opus-4-7",
       thinkingEnabled: true,
-      responseStreamText: buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
+      responseStreamText: null,
     });
-    expect(result).toEqual({ actualResponseModel: null, source: null });
+    expect(result).toEqual({ actualResponseModel: null, source: "fallback_no_thinking" });
   });
 });

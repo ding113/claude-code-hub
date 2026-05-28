@@ -2542,10 +2542,10 @@ export class ProxyResponseHandler {
 
         // Anthropic 流式 thinking signature 模型检测(优先于明文 model 字段)
         const currentRequestedModel = session.getCurrentModel();
+        const thinkingActuallyEnabled = isThinkingEnabled(session.request.message);
         const anthropicModelDetection = resolveAnthropicStreamActualResponseModel({
           providerType: provider.providerType,
-          requestedModel: currentRequestedModel,
-          thinkingEnabled: isThinkingEnabled(session.request.message),
+          thinkingEnabled: thinkingActuallyEnabled,
           responseStreamText: allContent,
         });
         if (anthropicModelDetection.source) {
@@ -2556,7 +2556,7 @@ export class ProxyResponseHandler {
             source: anthropicModelDetection.source,
             extractedModel: anthropicModelDetection.actualResponseModel,
             signatureFound: anthropicModelDetection.source === "signature",
-            thinkingEnabled: anthropicModelDetection.source !== "fallback_no_thinking",
+            thinkingEnabled: thinkingActuallyEnabled,
             requestedModel: currentRequestedModel,
           });
         }
