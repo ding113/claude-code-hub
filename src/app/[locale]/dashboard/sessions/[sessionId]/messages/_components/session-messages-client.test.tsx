@@ -55,7 +55,7 @@ function createSnapshots(): SessionDetailSnapshots {
     defaultView: DEFAULT_SESSION_DETAIL_VIEW_MODE,
     request: {
       before: {
-        body: { model: "gpt-5.4", instructions: "before body" },
+        body: { model: "gpt-5.5", instructions: "before body" },
         messages: { role: "user", content: "before hi" },
         headers: { "x-before-request": "1" },
         meta: {
@@ -65,7 +65,7 @@ function createSnapshots(): SessionDetailSnapshots {
         },
       },
       after: {
-        body: { model: "gpt-5.4", instructions: "after body" },
+        body: { model: "gpt-5.5", instructions: "after body" },
         messages: { role: "user", content: "after hi" },
         headers: { "x-after-request": "1" },
         meta: {
@@ -197,7 +197,7 @@ describe("SessionMessagesDetailsTabs", () => {
       throw new Error("after snapshot missing");
     }
     snapshots.request.after.body = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [{ role: "user", content: "hi" }],
     };
     snapshots.request.after.messages = null;

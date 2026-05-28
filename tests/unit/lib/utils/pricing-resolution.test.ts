@@ -19,8 +19,8 @@ function makeRecord(
 }
 
 describe("resolvePricingForModelRecords", () => {
-  test("falls back from chatgpt to openai pricing for gpt-5.4 alias models", () => {
-    const aliasRecord = makeRecord("gpt-5.4", {
+  test("falls back from chatgpt to openai pricing for gpt-5.5 alias models", () => {
+    const aliasRecord = makeRecord("gpt-5.5", {
       mode: "responses",
       model_family: "gpt",
       litellm_provider: "chatgpt",
@@ -44,7 +44,7 @@ describe("resolvePricingForModelRecords", () => {
         name: "ChatGPT",
         url: "https://chatgpt.com/backend-api/codex",
       } as never,
-      primaryModelName: "gpt-5.4",
+      primaryModelName: "gpt-5.5",
       fallbackModelName: null,
       primaryRecord: aliasRecord,
       fallbackRecord: null,
@@ -57,7 +57,7 @@ describe("resolvePricingForModelRecords", () => {
   });
 
   test("falls back from redirected date model to alias model for provider-specific pricing", () => {
-    const datedRecord = makeRecord("gpt-5.4-2026-03-05", {
+    const datedRecord = makeRecord("gpt-5.5-2026-06-02", {
       mode: "responses",
       model_family: "gpt",
       litellm_provider: "openai",
@@ -73,7 +73,7 @@ describe("resolvePricingForModelRecords", () => {
       },
     });
 
-    const aliasRecord = makeRecord("gpt-5.4", {
+    const aliasRecord = makeRecord("gpt-5.5", {
       mode: "responses",
       model_family: "gpt",
       litellm_provider: "chatgpt",
@@ -92,21 +92,21 @@ describe("resolvePricingForModelRecords", () => {
         name: "OpenRouter",
         url: "https://openrouter.ai/api/v1",
       } as never,
-      primaryModelName: "gpt-5.4-2026-03-05",
-      fallbackModelName: "gpt-5.4",
+      primaryModelName: "gpt-5.5-2026-06-02",
+      fallbackModelName: "gpt-5.5",
       primaryRecord: datedRecord,
       fallbackRecord: aliasRecord,
     });
 
     expect(resolved).not.toBeNull();
-    expect(resolved?.resolvedModelName).toBe("gpt-5.4");
+    expect(resolved?.resolvedModelName).toBe("gpt-5.5");
     expect(resolved?.resolvedPricingProviderKey).toBe("openrouter");
     expect(resolved?.source).toBe("cloud_model_fallback");
   });
 
   test("prefers local manual prices over cloud multi-provider pricing", () => {
     const manualRecord = makeRecord(
-      "gpt-5.4",
+      "gpt-5.5",
       {
         mode: "responses",
         input_cost_per_token: 0.0000099,
@@ -116,7 +116,7 @@ describe("resolvePricingForModelRecords", () => {
       "manual"
     );
 
-    const cloudRecord = makeRecord("gpt-5.4", {
+    const cloudRecord = makeRecord("gpt-5.5", {
       mode: "responses",
       pricing: {
         openai: {
@@ -132,7 +132,7 @@ describe("resolvePricingForModelRecords", () => {
         name: "ChatGPT",
         url: "https://chatgpt.com/backend-api/codex",
       } as never,
-      primaryModelName: "gpt-5.4",
+      primaryModelName: "gpt-5.5",
       fallbackModelName: null,
       primaryRecord: manualRecord,
       fallbackRecord: cloudRecord,
@@ -184,7 +184,7 @@ describe("resolvePricingForModelRecords", () => {
   });
 
   test("provider merge keeps shared top-level request fees and long_context_pricing", () => {
-    const cloudRecord = makeRecord("gpt-5.4", {
+    const cloudRecord = makeRecord("gpt-5.5", {
       mode: "responses",
       model_family: "gpt",
       litellm_provider: "azure",
@@ -211,7 +211,7 @@ describe("resolvePricingForModelRecords", () => {
         name: "OpenAI",
         url: "https://api.openai.com/v1/responses",
       } as never,
-      primaryModelName: "gpt-5.4",
+      primaryModelName: "gpt-5.5",
       fallbackModelName: null,
       primaryRecord: cloudRecord,
       fallbackRecord: null,

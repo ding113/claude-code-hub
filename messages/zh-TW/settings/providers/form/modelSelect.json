@@ -10,7 +10,7 @@
   "loading": "載入中...",
   "manualAdd": "手動新增模型",
   "manualDesc": "支援新增任意模型名稱（不限於價格表中的模型）",
-  "manualPlaceholder": "輸入模型名稱（例如 gpt-5.4）",
+  "manualPlaceholder": "輸入模型名稱（例如 gpt-5.5）",
   "notFound": "找不到模型",
   "openai": "OpenAI",
   "providerFilterAll": "全部供應商",

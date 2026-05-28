@@ -96,7 +96,7 @@ export const PRESETS: Record<string, PresetConfig> = {
     providerTypes: ["codex"],
     payload: cxCodexBasic,
     defaultSuccessContains: "pong",
-    defaultModel: "gpt-5.4",
+    defaultModel: "gpt-5.5",
     path: "/v1/responses",
     userAgent: "Codex-CLI/1.0",
     extraHeaders: {
@@ -111,7 +111,7 @@ export const PRESETS: Record<string, PresetConfig> = {
     providerTypes: ["codex"],
     payload: cxGptBasic,
     defaultSuccessContains: "pong",
-    defaultModel: "gpt-5.4",
+    defaultModel: "gpt-5.5",
     path: "/v1/responses",
     userAgent: "Codex-CLI/1.0",
     extraHeaders: {

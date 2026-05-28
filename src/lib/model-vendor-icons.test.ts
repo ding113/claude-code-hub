@@ -8,7 +8,7 @@ describe("getModelVendor", () => {
     { modelId: "claude-3-opus-20240229", expectedKey: "anthropic" },
     // OpenAI - gpt prefix
     { modelId: "gpt-4o-mini", expectedKey: "openai" },
-    { modelId: "gpt-5.4", expectedKey: "openai" },
+    { modelId: "gpt-5.5", expectedKey: "openai" },
     // OpenAI - chatgpt prefix
     { modelId: "chatgpt-4o-latest", expectedKey: "openai" },
     // OpenAI - o1/o3/o4 prefix

@@ -76,7 +76,7 @@ describe("SessionManager detail snapshots", () => {
       "before",
       {
         body: {
-          model: "gpt-5.4",
+          model: "gpt-5.5",
           messages: [{ role: "user", content: "top secret request" }],
         },
         messages: [{ role: "user", content: "top secret request" }],
@@ -98,7 +98,7 @@ describe("SessionManager detail snapshots", () => {
       "after",
       {
         body: JSON.stringify({
-          model: "gpt-5.4",
+          model: "gpt-5.5",
           messages: [{ role: "user", content: "processed request body" }],
         }),
         headers: new Headers({
@@ -175,7 +175,7 @@ describe("SessionManager detail snapshots", () => {
 
     expect(requestBefore).toEqual({
       body: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         messages: [{ role: "user", content: "[REDACTED]" }],
       },
       messages: [{ role: "user", content: "[REDACTED]" }],
@@ -192,7 +192,7 @@ describe("SessionManager detail snapshots", () => {
 
     expect(requestAfter).toEqual({
       body: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         messages: [{ role: "user", content: "[REDACTED]" }],
       },
       messages: null,
@@ -312,7 +312,7 @@ describe("SessionManager detail snapshots", () => {
       "sess_empty_headers",
       "after",
       {
-        body: { model: "gpt-5.4" },
+        body: { model: "gpt-5.5" },
         headers: new Headers(),
         meta: {
           clientUrl: null,
@@ -326,7 +326,7 @@ describe("SessionManager detail snapshots", () => {
     expect(
       await SessionManager.getSessionRequestPhaseSnapshot("sess_empty_headers", "after", 1)
     ).toEqual({
-      body: { model: "gpt-5.4" },
+      body: { model: "gpt-5.5" },
       messages: null,
       headers: null,
       meta: {

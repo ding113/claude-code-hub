@@ -115,7 +115,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       provider: codexProvider(),
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
-      body: { model: "gpt-5.4", input: [{ role: "user", content: "hi" }] },
+      body: { model: "gpt-5.5", input: [{ role: "user", content: "hi" }] },
     });
 
     expect("response" in result).toBe(true);
@@ -146,7 +146,7 @@ describe("tryResponsesWebsocketUpstream", () => {
         provider: codexProvider(),
         upstreamUrl: `http://127.0.0.1:${addr.port}/v1/responses`,
         upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
-        body: { model: "gpt-5.4", input: "hi" },
+        body: { model: "gpt-5.5", input: "hi" },
       });
 
       expect("failed" in result).toBe(true);
@@ -168,7 +168,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       provider: codexProvider(),
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
-      body: { model: "gpt-5.4", input: "hi" },
+      body: { model: "gpt-5.5", input: "hi" },
     });
 
     expect("failed" in result).toBe(true);
@@ -202,7 +202,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
       body: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         input: "hi",
         stream: true,
         background: false,
@@ -251,7 +251,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       provider: codexProvider(),
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: plainHeaders,
-      body: { model: "gpt-5.4", input: "hi" },
+      body: { model: "gpt-5.5", input: "hi" },
     });
 
     expect("response" in result).toBe(true);
@@ -303,7 +303,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
       body: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         store: false,
         prompt_cache_key: "tenantA:s1",
         input: [{ role: "user", content: "hello" }],
@@ -321,7 +321,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
       body: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         store: false,
         prompt_cache_key: "tenantA:s1",
         previous_response_id: "resp_1",
@@ -382,7 +382,7 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     const turn1 = await tryResponsesWebsocketUpstream({
       ...common,
-      body: { model: "gpt-5.4", store: false, input: "first" },
+      body: { model: "gpt-5.5", store: false, input: "first" },
     });
     expect("response" in turn1).toBe(true);
     if (!("response" in turn1)) return;
@@ -392,7 +392,7 @@ describe("tryResponsesWebsocketUpstream", () => {
     const turn2 = await tryResponsesWebsocketUpstream({
       ...common,
       body: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         store: false,
         previous_response_id: "resp_1",
         input: [{ type: "function_call_output", call_id: "call_1", output: "ok" }],
@@ -433,7 +433,7 @@ describe("tryResponsesWebsocketUpstream", () => {
     const warmup = await tryResponsesWebsocketUpstream({
       ...common,
       body: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         store: false,
         generate: false,
         input: "warm up",
@@ -446,7 +446,7 @@ describe("tryResponsesWebsocketUpstream", () => {
     const generated = await tryResponsesWebsocketUpstream({
       ...common,
       body: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         store: false,
         previous_response_id: "resp_warmup",
         input: "continue",
@@ -494,7 +494,7 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     const first = await tryResponsesWebsocketUpstream({
       ...common,
-      body: { model: "gpt-5.4", input: "first" },
+      body: { model: "gpt-5.5", input: "first" },
     });
     expect("response" in first).toBe(true);
     if (!("response" in first)) return;
@@ -502,7 +502,7 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     const second = await tryResponsesWebsocketUpstream({
       ...common,
-      body: { model: "gpt-5.4", input: "after reconnect" },
+      body: { model: "gpt-5.5", input: "after reconnect" },
     });
     expect("response" in second).toBe(true);
     if (!("response" in second)) return;
@@ -533,7 +533,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
       sessionId: "client-ws-session-cleanup",
-      body: { model: "gpt-5.4", input: "hi" },
+      body: { model: "gpt-5.5", input: "hi" },
     });
     expect("response" in result).toBe(true);
     if (!("response" in result)) return;
@@ -567,7 +567,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
       sessionId,
-      body: { model: "gpt-5.4", input: "hi" },
+      body: { model: "gpt-5.5", input: "hi" },
     });
     expect("response" in result).toBe(true);
     if (!("response" in result)) return;
@@ -638,7 +638,7 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     const first = await tryResponsesWebsocketUpstream({
       ...common,
-      body: { model: "gpt-5.4", input: "first" },
+      body: { model: "gpt-5.5", input: "first" },
     });
     expect("response" in first).toBe(true);
     if (!("response" in first)) return;
@@ -646,7 +646,7 @@ describe("tryResponsesWebsocketUpstream", () => {
 
     const second = await tryResponsesWebsocketUpstream({
       ...common,
-      body: { model: "gpt-5.4", input: "second" },
+      body: { model: "gpt-5.5", input: "second" },
     });
     expect("response" in second).toBe(true);
     if (!("response" in second)) return;
@@ -735,14 +735,14 @@ describe("tryResponsesWebsocketUpstream", () => {
 
       const first = await tryResponsesWebsocketUpstream({
         ...common,
-        body: { model: "gpt-5.4", input: "first" },
+        body: { model: "gpt-5.5", input: "first" },
       });
       expect("response" in first).toBe(true);
       if (!("response" in first)) return;
 
       const second = await tryResponsesWebsocketUpstream({
         ...common,
-        body: { model: "gpt-5.4", input: "second" },
+        body: { model: "gpt-5.5", input: "second" },
       });
       expect("response" in second).toBe(true);
       if (!("response" in second)) return;
@@ -800,7 +800,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
       sessionId: "client-ws-session-aborted-before-first-event",
       abortSignal: abortController.signal,
-      body: { model: "gpt-5.4", input: "hi" },
+      body: { model: "gpt-5.5", input: "hi" },
     });
 
     await withTimeout(messageReceived, 1_000, "upstream did not receive the WS request frame");
@@ -852,7 +852,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
       sessionId: "client-ws-session-cap-active-1",
-      body: { model: "gpt-5.4", input: "first" },
+      body: { model: "gpt-5.5", input: "first" },
     });
     expect("response" in first).toBe(true);
     if (!("response" in first)) return;
@@ -863,7 +863,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
       sessionId: "client-ws-session-cap-active-2",
-      body: { model: "gpt-5.4", input: "second" },
+      body: { model: "gpt-5.5", input: "second" },
     });
     expect("response" in second).toBe(true);
     if (!("response" in second)) return;
@@ -888,7 +888,7 @@ describe("tryResponsesWebsocketUpstream", () => {
           provider: codexProvider(),
           upstreamUrl: `http://127.0.0.1:${addr.port}/v1/responses`,
           upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
-          body: { model: "gpt-5.4", input: "hi" },
+          body: { model: "gpt-5.5", input: "hi" },
         });
         expect("failed" in result).toBe(true);
         if (!("failed" in result)) continue;
@@ -913,7 +913,7 @@ describe("tryResponsesWebsocketUpstream", () => {
           provider: codexProvider(),
           upstreamUrl: `http://127.0.0.1:${addr.port}/v1/responses`,
           upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
-          body: { model: "gpt-5.4", input: "hi" },
+          body: { model: "gpt-5.5", input: "hi" },
         });
         expect("failed" in result).toBe(true);
         if (!("failed" in result)) continue;
@@ -943,7 +943,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       provider: codexProvider(),
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
-      body: { model: "gpt-5.4", input: "hi" },
+      body: { model: "gpt-5.5", input: "hi" },
     });
 
     expect("response" in result).toBe(true);
@@ -985,7 +985,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       provider: codexProvider(),
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
-      body: { model: "gpt-5.4", input: "hi" },
+      body: { model: "gpt-5.5", input: "hi" },
     });
 
     expect("response" in result).toBe(true);
@@ -1018,7 +1018,7 @@ describe("tryResponsesWebsocketUpstream", () => {
       provider: codexProvider(),
       upstreamUrl: `http://127.0.0.1:${server.port}/v1/responses`,
       upstreamHeaders: new Headers({ authorization: "Bearer sk-mock" }),
-      body: { model: "gpt-5.4", input: "hi" },
+      body: { model: "gpt-5.5", input: "hi" },
     });
 
     expect("response" in result).toBe(true);

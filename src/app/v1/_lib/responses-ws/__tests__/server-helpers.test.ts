@@ -15,7 +15,7 @@ describe("server.js sanitizedRequestPath", () => {
   });
 
   it("preserves the model query parameter (allow-listed)", () => {
-    expect(sanitizedRequestPath("/v1/responses?model=gpt-5.4")).toBe("/v1/responses?model=gpt-5.4");
+    expect(sanitizedRequestPath("/v1/responses?model=gpt-5.5")).toBe("/v1/responses?model=gpt-5.5");
   });
 
   it("masks unknown / sensitive query parameters", () => {

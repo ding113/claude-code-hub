@@ -348,7 +348,7 @@ describe("non-chat endpoint session context", () => {
     const rawCompactSession = createProxySession(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
     rawCompactSession.originalFormat = "response";
     rawCompactSession.request.message = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [{ role: "user", content: "compact me" }],
     };
     rawCompactSession.sessionId = "sess_compact";
@@ -391,7 +391,7 @@ describe("non-chat endpoint session context", () => {
     const compactSession = createProxySession(V1_ENDPOINT_PATHS.RESPONSES_COMPACT);
     compactSession.originalFormat = "response";
     compactSession.request.message = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [{ role: "user", content: "compact me" }],
     };
     const compactBefore = structuredClone(compactSession.request.message);

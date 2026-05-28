@@ -172,10 +172,10 @@
   "deleteConfirm": "モデル {name} を削除してもよろしいですか？この操作は元に戻せません。",
   "form": {
     "modelName": "モデルID",
-    "modelNamePlaceholder": "例: gpt-5.4",
+    "modelNamePlaceholder": "例: gpt-5.5",
     "modelNameRequired": "モデルIDは必須です",
     "displayName": "表示名 (任意)",
-    "displayNamePlaceholder": "例: GPT-5.4 Codex",
+    "displayNamePlaceholder": "例: GPT-5.5 Codex",
     "type": "タイプ",
     "provider": "プロバイダー",
     "providerPlaceholder": "例: openai",

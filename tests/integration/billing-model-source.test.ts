@@ -492,7 +492,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(vi.mocked(SessionManager.updateSessionProvider)).not.toHaveBeenCalled();
   });
 
-  it("nested pricing: gpt-5.4 alias model should bill from pricing.openai when provider is chatgpt", async () => {
+  it("nested pricing: gpt-5.5 alias model should bill from pricing.openai when provider is chatgpt", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
     vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
@@ -501,7 +501,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -535,9 +535,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     );
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-chatgpt",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-chatgpt",
       messageId: 3100,
       providerOverrides: {
         name: "ChatGPT",
@@ -563,7 +563,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -599,9 +599,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     );
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-priority-actual",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-actual",
       messageId: 3200,
       providerOverrides: {
         name: "ChatGPT",
@@ -632,7 +632,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -659,9 +659,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-priority-requested",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-requested",
       messageId: 3201,
       providerOverrides: {
         name: "ChatGPT",
@@ -688,7 +688,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -728,9 +728,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     );
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-priority-requested-long-context",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-requested-long-context",
       messageId: 3203,
       providerOverrides: {
         name: "ChatGPT",
@@ -758,7 +758,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -785,9 +785,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-priority-downgraded",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-downgraded",
       messageId: 3202,
       providerOverrides: {
         name: "ChatGPT",
@@ -817,7 +817,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -844,9 +844,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-priority-actual-mode-upgrade",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-actual-mode-upgrade",
       messageId: 3204,
       providerOverrides: {
         name: "ChatGPT",
@@ -876,7 +876,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -903,9 +903,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-priority-actual-mode-downgrade",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-actual-mode-downgrade",
       messageId: 3205,
       providerOverrides: {
         name: "ChatGPT",
@@ -935,7 +935,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -962,9 +962,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-priority-actual-mode-fallback",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-actual-mode-fallback",
       messageId: 3206,
       providerOverrides: {
         name: "ChatGPT",
@@ -994,7 +994,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
 
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
-      if (modelName === "gpt-5.4") {
+      if (modelName === "gpt-5.5") {
         return makePriceRecord(modelName, {
           mode: "responses",
           model_family: "gpt",
@@ -1021,9 +1021,9 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
-      originalModel: "gpt-5.4",
-      redirectedModel: "gpt-5.4",
-      sessionId: "sess-gpt54-priority-actual-mode-cached-settings",
+      originalModel: "gpt-5.5",
+      redirectedModel: "gpt-5.5",
+      sessionId: "sess-gpt55-priority-actual-mode-cached-settings",
       messageId: 3207,
       providerOverrides: {
         name: "ChatGPT",

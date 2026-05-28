@@ -39,7 +39,7 @@ export interface ModelPriceData {
   output_cost_per_token_above_200k_tokens_priority?: number;
   cache_read_input_token_cost_above_200k_tokens_priority?: number;
 
-  // 272K 分层价格（GPT-5.4 等模型保留扩展）
+  // 272K 分层价格（GPT-5.5 等模型保留扩展）
   input_cost_per_token_above_272k_tokens?: number;
   output_cost_per_token_above_272k_tokens?: number;
   cache_creation_input_token_cost_above_272k_tokens?: number;
@@ -70,7 +70,7 @@ export interface ModelPriceData {
     search_context_size_medium?: number;
   };
 
-  // 长上下文价格（例如 GPT-5.4 超过 272K 后的 premium 费率）
+  // 长上下文价格（例如 GPT-5.5 超过 272K 后的 premium 费率）
   long_context_pricing?: LongContextPricing;
 
   // 模型能力信息
