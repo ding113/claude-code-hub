@@ -21,7 +21,8 @@ export type SpecialSetting =
   | GeminiGoogleSearchOverrideSpecialSetting
   | PricingResolutionSpecialSetting
   | CodexServiceTierResultSpecialSetting
-  | ResponseInputRectifierSpecialSetting;
+  | ResponseInputRectifierSpecialSetting
+  | ThinkingSignatureModelDetectionSpecialSetting;
 
 export type SpecialSettingChangeValue = string | number | boolean | null;
 
@@ -269,4 +270,31 @@ export type ResponseInputRectifierSpecialSetting = {
   hit: boolean;
   action: "string_to_array" | "object_to_array" | "empty_string_to_empty_array" | "passthrough";
   originalType: "string" | "object" | "array" | "other";
+};
+
+/**
+ * Anthropic 思考签名模型检测审计
+ *
+ * 在 Anthropic 流式响应中,优先用 `signature_delta` 的 protobuf payload
+ * (字段路径 [2, 1, 6])解出实际响应模型,比 `message_start` 明文 model 更准确。
+ *
+ * `source` 三态:
+ * - `signature`: 成功从签名解出模型(最理想路径)
+ * - `fallback_no_signature_with_thinking`: 请求开启了思考但流中没拿到可用签名
+ *   (无 signature_delta 事件 / base64 损坏 / protobuf 字段路径解不出),
+ *   退化到 message_start 明文 model。UI 在此 source 下亮"无思考签名"badge。
+ * - `fallback_no_thinking`: 请求未开启思考(正常路径,无 badge)
+ *
+ * `hit` 仅在 `fallback_no_signature_with_thinking` 时为 true(异常告警语义),
+ * 与现有 rectifier hit 语义一致。
+ */
+export type ThinkingSignatureModelDetectionSpecialSetting = {
+  type: "thinking_signature_model_detection";
+  scope: "response";
+  hit: boolean;
+  source: "signature" | "fallback_no_signature_with_thinking" | "fallback_no_thinking";
+  extractedModel: string | null;
+  signatureFound: boolean;
+  thinkingEnabled: boolean;
+  requestedModel: string | null;
 };

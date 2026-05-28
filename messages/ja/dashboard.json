@@ -253,7 +253,9 @@
         "responseModelLabel": "実際の応答モデル",
         "mismatchTooltip": "上流プロバイダが返したモデルがリクエストされたモデルと異なります。課金は引き続きリクエストモデルを基準とします。",
         "secondaryLineAriaLabel": "実際の応答モデル: {model}",
-        "arrowPrefix": "\u21b3"
+        "arrowPrefix": "↳",
+        "noSignatureBadge": "思考署名なし",
+        "noSignatureTooltip": "思考が有効ですが、応答ストリームに thinking signature が含まれていないため、実際の応答モデルは message_start の平文モデル名にフォールバックしました。"
       },
       "errorMessage": "エラーメッセージ",
       "fake200ForwardedNotice": "注意：ストリーミング要求では、失敗判定がストリーム終了後になる場合があります。応答内容は既にクライアントへ転送されている可能性があります。",

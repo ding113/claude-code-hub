@@ -253,7 +253,9 @@
         "responseModelLabel": "實際回應模型",
         "mismatchTooltip": "上游供應商實際回傳的模型與請求的模型不一致。計費仍然依據請求模型。",
         "secondaryLineAriaLabel": "實際回應模型：{model}",
-        "arrowPrefix": "\u21b3"
+        "arrowPrefix": "↳",
+        "noSignatureBadge": "無思考簽名",
+        "noSignatureTooltip": "請求啟用了思考但回應流中沒有 thinking signature，實際回應模型回退到 message_start 明文欄位。"
       },
       "errorMessage": "錯誤訊息",
       "fake200ForwardedNotice": "提示：對於串流請求，此失敗可能在串流結束後才被識別；回應內容可能已原樣透傳給用戶端。",
