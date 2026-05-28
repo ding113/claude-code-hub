@@ -185,6 +185,135 @@ function canExposeFullKey(
   return session.key.canLoginWebUi && (isAdmin || session.user.id === targetUser.id);
 }
 
+async function buildUserDisplays(
+  users: User[],
+  session: UserActionSession,
+  isAdmin: boolean
+): Promise<UserDisplay[]> {
+  if (users.length === 0) {
+    return [];
+  }
+
+  const locale = await getLocale();
+  const t = await getTranslations("users");
+  const userIds = users.map((u) => u.id);
+  const [keysMap, usageMap] = await Promise.all([
+    findKeyListBatch(userIds),
+    findKeyUsageTodayBatch(userIds),
+  ]);
+  const statisticsMap = await findKeysStatisticsBatchFromKeys(keysMap);
+
+  return users.map((user) => {
+    try {
+      const keys = keysMap.get(user.id) || [];
+      const usageRecords = usageMap.get(user.id) || [];
+      const keyStatistics = statisticsMap.get(user.id) || [];
+      const canUserManageKey = canExposeFullKey(session, user, isAdmin);
+
+      const usageLookup = new Map(
+        usageRecords.map((item) => [
+          item.keyId,
+          { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 },
+        ])
+      );
+      const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
+
+      return {
+        id: user.id,
+        name: user.name,
+        note: user.description || undefined,
+        role: user.role,
+        rpm: user.rpm,
+        dailyQuota: user.dailyQuota,
+        providerGroup: user.providerGroup || undefined,
+        tags: user.tags || [],
+        limit5hUsd: user.limit5hUsd ?? null,
+        limit5hResetMode: user.limit5hResetMode,
+        limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+        limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+        limitTotalUsd: user.limitTotalUsd ?? null,
+        costResetAt: user.costResetAt ?? null,
+        limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+        dailyResetMode: user.dailyResetMode,
+        dailyResetTime: user.dailyResetTime,
+        isEnabled: user.isEnabled,
+        expiresAt: user.expiresAt ?? null,
+        allowedClients: user.allowedClients || [],
+        blockedClients: user.blockedClients || [],
+        allowedModels: user.allowedModels ?? [],
+        keys: keys.map((key) => {
+          const stats = statisticsLookup.get(key.id);
+          return {
+            id: key.id,
+            name: key.name,
+            maskedKey: maskKey(key.key),
+            canReveal: canUserManageKey,
+            canCopy: canUserManageKey,
+            expiresAt: key.expiresAt
+              ? key.expiresAt.toISOString().split("T")[0]
+              : t("neverExpires"),
+            status: key.isEnabled ? "enabled" : ("disabled" as const),
+            createdAt: key.createdAt,
+            createdAtFormatted: key.createdAt.toLocaleString(locale, {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            }),
+            todayUsage: usageLookup.get(key.id)?.totalCost ?? 0,
+            todayTokens: usageLookup.get(key.id)?.totalTokens ?? 0,
+            todayCallCount: stats?.todayCallCount ?? 0,
+            lastUsedAt: stats?.lastUsedAt ?? null,
+            lastProviderName: stats?.lastProviderName ?? null,
+            modelStats: stats?.modelStats ?? [],
+            canLoginWebUi: key.canLoginWebUi,
+            limit5hUsd: key.limit5hUsd,
+            limit5hResetMode: key.limit5hResetMode,
+            limitDailyUsd: key.limitDailyUsd,
+            dailyResetMode: key.dailyResetMode,
+            dailyResetTime: key.dailyResetTime,
+            limitWeeklyUsd: key.limitWeeklyUsd,
+            limitMonthlyUsd: key.limitMonthlyUsd,
+            limitTotalUsd: key.limitTotalUsd,
+            limitConcurrentSessions: key.limitConcurrentSessions || 0,
+            costResetAt: key.costResetAt?.toISOString() ?? null,
+            providerGroup: key.providerGroup,
+          };
+        }),
+      };
+    } catch (error) {
+      logger.error(`Failed to process keys for user ${user.id}:`, error);
+      return {
+        id: user.id,
+        name: user.name,
+        note: user.description || undefined,
+        role: user.role,
+        rpm: user.rpm,
+        dailyQuota: user.dailyQuota,
+        providerGroup: user.providerGroup || undefined,
+        tags: user.tags || [],
+        limit5hUsd: user.limit5hUsd ?? null,
+        limit5hResetMode: user.limit5hResetMode,
+        limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+        limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+        limitTotalUsd: user.limitTotalUsd ?? null,
+        costResetAt: user.costResetAt ?? null,
+        limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+        dailyResetMode: user.dailyResetMode,
+        dailyResetTime: user.dailyResetTime,
+        isEnabled: user.isEnabled,
+        expiresAt: user.expiresAt ?? null,
+        allowedClients: user.allowedClients || [],
+        blockedClients: user.blockedClients || [],
+        allowedModels: user.allowedModels ?? [],
+        keys: [],
+      };
+    }
+  });
+}
+
 /**
  * 批量获取用户列表的返回结果。
  */
@@ -334,10 +463,6 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
       return [];
     }
 
-    // Get current locale and translations
-    const locale = await getLocale();
-    const t = await getTranslations("users");
-
     // Treat any non-admin role as non-admin for safety.
     const isAdmin = session.user.role === "admin";
     const normalizedParams = normalizeUserListParams(params);
@@ -361,134 +486,47 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
       return [];
     }
 
-    // 管理员可以看到完整Key，普通用户只能看到自己的 Key
-
-    // === Batch queries optimization ===
-    // Instead of N*3 queries (one per user for keys, usage, statistics),
-    // we now do 3 batch queries total
-    const userIds = users.map((u) => u.id);
-    const [keysMap, usageMap] = await Promise.all([
-      findKeyListBatch(userIds),
-      findKeyUsageTodayBatch(userIds),
-    ]);
-    const statisticsMap = await findKeysStatisticsBatchFromKeys(keysMap);
-
-    const userDisplays: UserDisplay[] = users.map((user) => {
-      try {
-        const keys = keysMap.get(user.id) || [];
-        const usageRecords = usageMap.get(user.id) || [];
-        const keyStatistics = statisticsMap.get(user.id) || [];
-
-        const usageLookup = new Map(
-          usageRecords.map((item) => [
-            item.keyId,
-            { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 },
-          ])
-        );
-        const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
-
-        return {
-          id: user.id,
-          name: user.name,
-          note: user.description || undefined,
-          role: user.role,
-          rpm: user.rpm,
-          dailyQuota: user.dailyQuota,
-          providerGroup: user.providerGroup || undefined,
-          tags: user.tags || [],
-          limit5hUsd: user.limit5hUsd ?? null,
-          limit5hResetMode: user.limit5hResetMode,
-          limitWeeklyUsd: user.limitWeeklyUsd ?? null,
-          limitMonthlyUsd: user.limitMonthlyUsd ?? null,
-          limitTotalUsd: user.limitTotalUsd ?? null,
-          costResetAt: user.costResetAt ?? null,
-          limitConcurrentSessions: user.limitConcurrentSessions ?? null,
-          dailyResetMode: user.dailyResetMode,
-          dailyResetTime: user.dailyResetTime,
-          isEnabled: user.isEnabled,
-          expiresAt: user.expiresAt ?? null,
-          allowedClients: user.allowedClients || [],
-          blockedClients: user.blockedClients || [],
-          allowedModels: user.allowedModels ?? [],
-          keys: keys.map((key) => {
-            const stats = statisticsLookup.get(key.id);
-            const canUserManageKey = canExposeFullKey(session, user, isAdmin);
-            return {
-              id: key.id,
-              name: key.name,
-              maskedKey: maskKey(key.key),
-              canReveal: canUserManageKey,
-              canCopy: canUserManageKey,
-              expiresAt: key.expiresAt
-                ? key.expiresAt.toISOString().split("T")[0]
-                : t("neverExpires"),
-              status: key.isEnabled ? "enabled" : ("disabled" as const),
-              createdAt: key.createdAt,
-              createdAtFormatted: key.createdAt.toLocaleString(locale, {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              }),
-              todayUsage: usageLookup.get(key.id)?.totalCost ?? 0,
-              todayTokens: usageLookup.get(key.id)?.totalTokens ?? 0,
-              todayCallCount: stats?.todayCallCount ?? 0,
-              lastUsedAt: stats?.lastUsedAt ?? null,
-              lastProviderName: stats?.lastProviderName ?? null,
-              modelStats: stats?.modelStats ?? [],
-              // Web UI 登录权限控制
-              canLoginWebUi: key.canLoginWebUi,
-              // 限额配置
-              limit5hUsd: key.limit5hUsd,
-              limit5hResetMode: key.limit5hResetMode,
-              limitDailyUsd: key.limitDailyUsd,
-              dailyResetMode: key.dailyResetMode,
-              dailyResetTime: key.dailyResetTime,
-              limitWeeklyUsd: key.limitWeeklyUsd,
-              limitMonthlyUsd: key.limitMonthlyUsd,
-              limitTotalUsd: key.limitTotalUsd,
-              limitConcurrentSessions: key.limitConcurrentSessions || 0,
-              costResetAt: key.costResetAt?.toISOString() ?? null,
-              providerGroup: key.providerGroup,
-            };
-          }),
-        };
-      } catch (error) {
-        logger.error(`Failed to process keys for user ${user.id}:`, error);
-        return {
-          id: user.id,
-          name: user.name,
-          note: user.description || undefined,
-          role: user.role,
-          rpm: user.rpm,
-          dailyQuota: user.dailyQuota,
-          providerGroup: user.providerGroup || undefined,
-          tags: user.tags || [],
-          limit5hUsd: user.limit5hUsd ?? null,
-          limit5hResetMode: user.limit5hResetMode,
-          limitWeeklyUsd: user.limitWeeklyUsd ?? null,
-          limitMonthlyUsd: user.limitMonthlyUsd ?? null,
-          limitTotalUsd: user.limitTotalUsd ?? null,
-          costResetAt: user.costResetAt ?? null,
-          limitConcurrentSessions: user.limitConcurrentSessions ?? null,
-          dailyResetMode: user.dailyResetMode,
-          dailyResetTime: user.dailyResetTime,
-          isEnabled: user.isEnabled,
-          expiresAt: user.expiresAt ?? null,
-          allowedClients: user.allowedClients || [],
-          blockedClients: user.blockedClients || [],
-          allowedModels: user.allowedModels ?? [],
-          keys: [],
-        };
-      }
-    });
-
-    return userDisplays;
+    return await buildUserDisplays(users, session, isAdmin);
   } catch (error) {
     logger.error("Failed to fetch user data:", error);
     return [];
+  }
+}
+
+/**
+ * 获取当前登录用户的用户管理页显示数据。
+ *
+ * 与 getUsers() 的非管理员路径保持同一返回形状，但不让管理员 self endpoint
+ * 退化为全量用户列表扫描。
+ */
+export async function getCurrentUserDisplay(): Promise<ActionResult<UserDisplay>> {
+  try {
+    const tError = await getTranslations("errors");
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    const user = await findUserById(session.user.id);
+    if (!user) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const [displayUser] = await buildUserDisplays([user], session, session.user.role === "admin");
+    return { ok: true, data: displayUser };
+  } catch (error) {
+    logger.error("Failed to fetch current user display data:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch current user display data";
+    return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
   }
 }
 

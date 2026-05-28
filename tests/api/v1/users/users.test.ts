@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const validateAuthTokenMock = vi.hoisted(() => vi.fn());
 const getUsersMock = vi.hoisted(() => vi.fn());
+const getCurrentUserDisplayMock = vi.hoisted(() => vi.fn());
 const getUserByIdMock = vi.hoisted(() => vi.fn());
 const getUsersBatchCoreMock = vi.hoisted(() => vi.fn());
 const getUsersUsageBatchMock = vi.hoisted(() => vi.fn());
@@ -29,6 +30,7 @@ vi.mock("@/lib/auth", async (importOriginal) => {
 
 vi.mock("@/actions/users", () => ({
   getUsers: getUsersMock,
+  getCurrentUserDisplay: getCurrentUserDisplayMock,
   getUserById: getUserByIdMock,
   getUsersBatchCore: getUsersBatchCoreMock,
   getUsersUsageBatch: getUsersUsageBatchMock,
@@ -84,6 +86,7 @@ describe("v1 users endpoints", () => {
       data: { users: [user(1)], nextCursor: "next", hasMore: true },
     });
     getUsersMock.mockResolvedValue([user(1), user(250)]);
+    getCurrentUserDisplayMock.mockResolvedValue({ ok: true, data: user(1) });
     getUserByIdMock.mockImplementation(async (id: number) => {
       if (id === 404) {
         return { ok: false, error: "Not found", errorCode: "NOT_FOUND" };
@@ -161,6 +164,23 @@ describe("v1 users endpoints", () => {
 
   test("returns the current user from a read-tier self list endpoint", async () => {
     validateAuthTokenMock.mockResolvedValueOnce(userSession);
+    getCurrentUserDisplayMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        ...user(9),
+        expiresAt: new Date("2026-05-07T07:41:10.000Z"),
+        costResetAt: new Date("2026-04-30T00:00:00.000Z"),
+        keys: [
+          {
+            id: 10,
+            name: "default",
+            maskedKey: "sk-...cret",
+            fullKey: "sk-user-secret",
+            createdAt: new Date("2026-04-30T07:41:10.000Z"),
+          },
+        ],
+      },
+    });
 
     const self = await callV1Route({
       method: "GET",
@@ -170,16 +190,28 @@ describe("v1 users endpoints", () => {
 
     expect(self.response.status).toBe(200);
     expect(self.json).toMatchObject({
-      items: [{ id: 9, name: "user-9" }],
+      items: [
+        {
+          id: 9,
+          name: "user-9",
+          keys: [{ id: 10, name: "default", maskedKey: "sk-...cret" }],
+        },
+      ],
       pageInfo: {
         nextCursor: null,
         hasMore: false,
         limit: 1,
       },
     });
+    expect(Array.isArray(self.json.items[0].keys)).toBe(true);
+    expect(self.json.items[0].expiresAt).toBe("2026-05-07T07:41:10.000Z");
+    expect(self.json.items[0].costResetAt).toBe("2026-04-30T00:00:00.000Z");
+    expect(self.json.items[0].keys[0].createdAt).toBe("2026-04-30T07:41:10.000Z");
     expect(JSON.stringify(self.json)).not.toContain("sk-user-secret");
-    expect(getUserByIdMock).toHaveBeenCalledWith(9);
+    expect(JSON.stringify(self.json)).not.toContain("fullKey");
+    expect(getCurrentUserDisplayMock).toHaveBeenCalledWith();
     expect(getUsersMock).not.toHaveBeenCalled();
+    expect(getUserByIdMock).not.toHaveBeenCalled();
     expect(validateAuthTokenMock).toHaveBeenCalledWith("user-token", {
       allowReadOnlyAccess: true,
     });
@@ -196,12 +228,15 @@ describe("v1 users endpoints", () => {
 
     expect(self.response.status).toBe(200);
     expect(self.json).toMatchObject({
-      items: [{ id: 1, name: "user-1" }],
+      items: [{ id: 1, name: "user-1", keys: [{ id: 10, name: "default" }] }],
       pageInfo: { nextCursor: null, hasMore: false, limit: 1 },
     });
+    expect(Array.isArray(self.json.items[0].keys)).toBe(true);
     expect(JSON.stringify(self.json)).not.toContain("user-250");
-    expect(getUserByIdMock).toHaveBeenCalledWith(1);
+    expect(JSON.stringify(self.json)).not.toContain("fullKey");
+    expect(getCurrentUserDisplayMock).toHaveBeenCalledWith();
     expect(getUsersMock).not.toHaveBeenCalled();
+    expect(getUserByIdMock).not.toHaveBeenCalled();
   });
 
   test("reads user detail from an id-capable action instead of the first list page", async () => {
