@@ -29,6 +29,7 @@ import { formatCurrency } from "@/lib/utils/currency";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
 import {
   getPricingResolutionSpecialSetting,
+  getThinkingSignatureModelDetectionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
 import { getFake200ReasonKey } from "../../fake200-reason";
@@ -97,6 +98,10 @@ export function SummaryTab({
     ? t(`billingDetails.pricingSource.${pricingResolution.source}`)
     : null;
   const hasPriorityServiceTier = hasPriorityServiceTierSpecialSetting(specialSettings);
+  const thinkingSignatureDetection =
+    getThinkingSignatureModelDetectionSpecialSetting(specialSettings);
+  const showNoSignatureBadge =
+    thinkingSignatureDetection?.source === "fallback_no_signature_with_thinking";
   const effortInfo = extractAnthropicEffortInfo(specialSettings);
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
@@ -629,7 +634,7 @@ export function SummaryTab({
       {/* Request / Actual Response Model (audit) */}
       {hasAnyModel && (
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold flex items-center gap-2">
+          <h4 className="text-sm font-semibold flex items-center gap-2 flex-wrap">
             <Settings2 className="h-4 w-4 text-slate-600" />
             {t("modelAudit.unifiedLabel")}
             {modelAudit.hasActualMismatch && (
@@ -643,6 +648,23 @@ export function SummaryTab({
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="text-xs max-w-xs">{t("modelAudit.mismatchTooltip")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {showNoSignatureBadge && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="ml-1 text-xs border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-300 cursor-help"
+                    >
+                      {t("modelAudit.noSignatureBadge")}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs max-w-xs">{t("modelAudit.noSignatureTooltip")}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>

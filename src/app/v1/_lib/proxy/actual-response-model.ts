@@ -188,7 +188,11 @@ function scanStream(text: string, reader: (obj: unknown) => string | null): stri
   return null;
 }
 
-function* extractJsonChunks(text: string): Generator<string, void, void> {
+/**
+ * 内部导出:供 `thinking-signature-model.ts` 等同包模块复用 SSE/NDJSON 解析能力,
+ * 避免重复实现多 `data:` 行合并、`[DONE]`、`event:` 边界等细节。
+ */
+export function* extractJsonChunks(text: string): Generator<string, void, void> {
   // SSE 多行 `data:` 合并规则(W3C EventSource):同一事件内多个 `data:` 行
   // 按 `\n` 连接;事件边界是空行或新事件开始。因此这里把 `data:` 行累积到
   // sseDataBuffer,遇到空行/event: 头时再 flush。

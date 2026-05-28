@@ -42,6 +42,10 @@ import type { LongContextPricingSpecialSetting } from "@/types/special-settings"
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { extractActualResponseModelForProvider } from "./actual-response-model";
+import {
+  isThinkingEnabled,
+  resolveAnthropicStreamActualResponseModel,
+} from "./anthropic-actual-response-model";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
@@ -2536,6 +2540,30 @@ export class ProxyResponseHandler {
           }
         }
 
+        // Anthropic 流式 thinking signature 模型检测(优先于明文 model 字段)
+        const currentRequestedModel = session.getCurrentModel();
+        const anthropicModelDetection = resolveAnthropicStreamActualResponseModel({
+          providerType: provider.providerType,
+          requestedModel: currentRequestedModel,
+          thinkingEnabled: isThinkingEnabled(session.request.message),
+          responseStreamText: allContent,
+        });
+        if (anthropicModelDetection.source) {
+          session.addSpecialSetting({
+            type: "thinking_signature_model_detection",
+            scope: "response",
+            hit: anthropicModelDetection.source === "fallback_no_signature_with_thinking",
+            source: anthropicModelDetection.source,
+            extractedModel: anthropicModelDetection.actualResponseModel,
+            signatureFound: anthropicModelDetection.source === "signature",
+            thinkingEnabled: anthropicModelDetection.source !== "fallback_no_thinking",
+            requestedModel: currentRequestedModel,
+          });
+        }
+        const finalActualResponseModel = anthropicModelDetection.source
+          ? anthropicModelDetection.actualResponseModel
+          : extractActualResponseModelForProvider(provider.providerType, true, allContent);
+
         // 保存扩展信息（status code, tokens, provider chain）
         await updateMessageRequestDetails(messageContext.id, {
           statusCode: effectiveStatusCode,
@@ -2549,12 +2577,8 @@ export class ProxyResponseHandler {
           cacheTtlApplied: usageForCost?.cache_ttl ?? null,
           providerChain: session.getProviderChain(),
           ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
-          model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
-          actualResponseModel: extractActualResponseModelForProvider(
-            provider.providerType,
-            true,
-            allContent
-          ),
+          model: currentRequestedModel ?? undefined, // 更新重定向后的模型
+          actualResponseModel: finalActualResponseModel,
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
           swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
