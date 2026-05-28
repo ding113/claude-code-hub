@@ -90,6 +90,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
   it("providerType 不是 Anthropic → source=null(调用方走旧 fallback)", () => {
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "openai-compatible",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
     });
@@ -100,6 +101,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     expect(
       resolveAnthropicStreamActualResponseModel({
         providerType: null,
+        requestedModel: "claude-opus-4-7",
         thinkingEnabled: true,
         responseStreamText: "",
       })
@@ -107,19 +109,54 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     expect(
       resolveAnthropicStreamActualResponseModel({
         providerType: undefined,
+        requestedModel: "claude-opus-4-7",
         thinkingEnabled: false,
         responseStreamText: "",
       })
     ).toEqual({ actualResponseModel: null, source: null });
   });
 
-  it("Anthropic + 签名命中 → source='signature',模型取签名结果(即使 message_start 明文不同)", () => {
+  it("Anthropic provider + requestedModel 非 Anthropic 模型族(如 glm-4.6) → source=null", () => {
+    // GLM 等供应商通过 Anthropic API 协议接入,但响应里没有 thinking signature,
+    // 不应触发签名检测,以免错误归类为 fallback_no_signature_with_thinking。
+    const result = resolveAnthropicStreamActualResponseModel({
+      providerType: "claude",
+      requestedModel: "glm-4.6",
+      thinkingEnabled: true,
+      responseStreamText: buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
+    });
+    expect(result).toEqual({ actualResponseModel: null, source: null });
+  });
+
+  it("requestedModel=null → source=null", () => {
+    const result = resolveAnthropicStreamActualResponseModel({
+      providerType: "claude",
+      requestedModel: null,
+      thinkingEnabled: true,
+      responseStreamText: buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
+    });
+    expect(result).toEqual({ actualResponseModel: null, source: null });
+  });
+
+  it("requestedModel='claude-opus-4-7' + 签名命中 → source='signature'(即使 message_start 明文不同)", () => {
     const stream = [
       buildMessageStartChunk("claude-haiku-4-5"),
       buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
     ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
+      thinkingEnabled: true,
+      responseStreamText: stream,
+    });
+    expect(result).toEqual({ actualResponseModel: "claude-opus-4-7", source: "signature" });
+  });
+
+  it("requestedModel='anthropic/claude-opus-4' 前缀(聚合供应商命名) → 命中触发", () => {
+    const stream = buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64);
+    const result = resolveAnthropicStreamActualResponseModel({
+      providerType: "claude",
+      requestedModel: "anthropic/claude-opus-4",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
@@ -130,20 +167,8 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     const stream = buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64);
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude-auth",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: false,
-      responseStreamText: stream,
-    });
-    expect(result).toEqual({ actualResponseModel: "claude-opus-4-7", source: "signature" });
-  });
-
-  it("Anthropic + 上游模型被 redirect 为非 claude 名字(如 glm-4.6) + 签名命中 → 仍解出 claude-opus-4-7", () => {
-    const stream = [
-      buildMessageStartChunk("glm-4.6"),
-      buildSignatureDeltaChunk(REAL_SIGNATURE_BASE64),
-    ].join("\n");
-    const result = resolveAnthropicStreamActualResponseModel({
-      providerType: "claude",
-      thinkingEnabled: true,
       responseStreamText: stream,
     });
     expect(result).toEqual({ actualResponseModel: "claude-opus-4-7", source: "signature" });
@@ -153,6 +178,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     const stream = buildMessageStartChunk("claude-opus-4-5");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
@@ -166,6 +192,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     const stream = buildMessageStartChunk("claude-haiku-4-5");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: false,
       responseStreamText: stream,
     });
@@ -182,6 +209,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
@@ -200,6 +228,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
@@ -209,24 +238,23 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     });
   });
 
-  it("签名解出的字符串不含 'claude' → 不信任,fallback 到 message_start", () => {
-    const spoofedB64 = buildSignatureBase64ForModel("evil-injection-xyz");
+  it("签名解出非 claude 字符串(如未来模型家族变革) → 仍然信任(只校验长度)", () => {
+    // 例如未来 Anthropic 推 'opus-5-2030' 不再带 claude- 前缀,我们不应误拒
+    const futureModelB64 = buildSignatureBase64ForModel("opus-5-2030");
     const stream = [
-      buildMessageStartChunk("claude-opus-4-5"),
-      buildSignatureDeltaChunk(spoofedB64),
+      buildMessageStartChunk("claude-haiku-4-5"),
+      buildSignatureDeltaChunk(futureModelB64),
     ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
-    expect(result).toEqual({
-      actualResponseModel: "claude-opus-4-5",
-      source: "fallback_no_signature_with_thinking",
-    });
+    expect(result).toEqual({ actualResponseModel: "opus-5-2030", source: "signature" });
   });
 
-  it("签名解出的字符串超过 128 字符 → 不信任,fallback 到 message_start", () => {
+  it("签名解出的字符串超过 128 字符 → 拒绝(varchar 128 入库限制),fallback 到 message_start", () => {
     const oversized = `claude-${"x".repeat(200)}`;
     const oversizedB64 = buildSignatureBase64ForModel(oversized);
     const stream = [
@@ -235,6 +263,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
     ].join("\n");
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: stream,
     });
@@ -247,6 +276,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
   it("响应流为空 + thinkingEnabled=true → fallback_no_thinking(无 message_start 不算异常,避免误告警)", () => {
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: "",
     });
@@ -256,6 +286,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
   it("响应流为空 + thinkingEnabled=false → fallback_no_thinking,模型为 null", () => {
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: false,
       responseStreamText: "",
     });
@@ -265,6 +296,7 @@ describe("resolveAnthropicStreamActualResponseModel", () => {
   it("responseStreamText=null 安全处理", () => {
     const result = resolveAnthropicStreamActualResponseModel({
       providerType: "claude",
+      requestedModel: "claude-opus-4-7",
       thinkingEnabled: true,
       responseStreamText: null,
     });

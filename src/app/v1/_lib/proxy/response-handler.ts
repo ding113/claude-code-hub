@@ -1,3 +1,7 @@
+import {
+  isThinkingEnabled,
+  resolveAnthropicStreamActualResponseModel,
+} from "@/app/v1/_lib/proxy/anthropic-actual-response-model";
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -42,10 +46,6 @@ import type { LongContextPricingSpecialSetting } from "@/types/special-settings"
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { extractActualResponseModelForProvider } from "./actual-response-model";
-import {
-  isThinkingEnabled,
-  resolveAnthropicStreamActualResponseModel,
-} from "@/app/v1/_lib/proxy/anthropic-actual-response-model";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
@@ -2545,6 +2545,7 @@ export class ProxyResponseHandler {
         const thinkingActuallyEnabled = isThinkingEnabled(session.request.message);
         const anthropicModelDetection = resolveAnthropicStreamActualResponseModel({
           providerType: provider.providerType,
+          requestedModel: currentRequestedModel,
           thinkingEnabled: thinkingActuallyEnabled,
           responseStreamText: allContent,
         });
