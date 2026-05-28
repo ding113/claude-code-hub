@@ -1,6 +1,6 @@
 "use client";
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { FilledTimelineCell } from "../_lib/fill-display-timeline";
 import { formatTtfb } from "../_lib/format-ttfb";
@@ -74,8 +74,36 @@ export function PublicStatusTimeline({
   locale,
   labels,
 }: PublicStatusTimelineProps) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const activeCell = activeIndex === null ? null : (cells[activeIndex] ?? null);
+  const activeBucket = activeCell?.bucket ?? null;
+  const activeIsPlaceholder = activeBucket?.bucketStart.startsWith("empty-") ?? false;
+  const activeSummary = useMemo(() => {
+    if (!activeBucket) {
+      return null;
+    }
+
+    return {
+      range: activeIsPlaceholder
+        ? null
+        : formatRange(activeBucket.bucketStart, activeBucket.bucketEnd, locale, timeZone),
+      availability:
+        activeBucket.availabilityPct === null ? "—" : `${activeBucket.availabilityPct.toFixed(2)}%`,
+      ttfb: formatTtfb(activeBucket.ttfbMs),
+      tps: activeBucket.tps === null ? "—" : activeBucket.tps.toFixed(1),
+    };
+  }, [activeBucket, activeIsPlaceholder, locale, timeZone]);
+
   return (
-    <TooltipProvider delayDuration={80}>
+    <div
+      className="space-y-2"
+      onMouseLeave={() => setActiveIndex(null)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setActiveIndex(null);
+        }
+      }}
+    >
       <div
         className="flex w-full items-center gap-[2px]"
         role="list"
@@ -83,48 +111,41 @@ export function PublicStatusTimeline({
       >
         {cells.map((cell, index) => {
           const { bucket } = cell;
-          const isPlaceholder = bucket.bucketStart.startsWith("empty-");
           return (
-            <Tooltip key={`${bucket.bucketStart}-${index}`}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  role="listitem"
-                  aria-label={`${labels.availability}: ${bucket.availabilityPct ?? "—"}`}
-                  className={cn(
-                    "h-6 flex-1 rounded-[2px] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring",
-                    cellColor(cell)
-                  )}
-                />
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                className="max-w-xs space-y-1 rounded-md bg-popover px-3 py-2 text-popover-foreground shadow-md"
-              >
-                {!isPlaceholder ? (
-                  <p className="font-medium tabular-nums">
-                    {formatRange(bucket.bucketStart, bucket.bucketEnd, locale, timeZone)}
-                  </p>
-                ) : null}
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono">
-                  <span className="text-muted-foreground">{labels.availability}</span>
-                  <span className="text-right">
-                    {bucket.availabilityPct === null
-                      ? "—"
-                      : `${bucket.availabilityPct.toFixed(2)}%`}
-                  </span>
-                  <span className="text-muted-foreground">{labels.ttfb}</span>
-                  <span className="text-right">{formatTtfb(bucket.ttfbMs)}</span>
-                  <span className="text-muted-foreground">{labels.tps}</span>
-                  <span className="text-right">
-                    {bucket.tps === null ? "—" : bucket.tps.toFixed(1)}
-                  </span>
-                </div>
-              </TooltipContent>
-            </Tooltip>
+            <button
+              key={`${bucket.bucketStart}-${index}`}
+              type="button"
+              role="listitem"
+              aria-label={`${labels.availability}: ${bucket.availabilityPct ?? "—"}`}
+              className={cn(
+                "h-6 flex-1 rounded-[2px] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring",
+                cellColor(cell)
+              )}
+              onFocus={() => setActiveIndex(index)}
+              onMouseEnter={() => setActiveIndex(index)}
+            />
           );
         })}
       </div>
-    </TooltipProvider>
+      {activeSummary ? (
+        <div className="rounded-md border border-border/50 bg-popover px-3 py-2 text-xs text-popover-foreground shadow-sm">
+          {activeSummary.range ? (
+            <p className="mb-1 font-medium tabular-nums">{activeSummary.range}</p>
+          ) : null}
+          <div className="grid grid-cols-3 gap-2 font-mono">
+            <span>
+              <span className="text-muted-foreground">{labels.availability}</span>{" "}
+              {activeSummary.availability}
+            </span>
+            <span>
+              <span className="text-muted-foreground">{labels.ttfb}</span> {activeSummary.ttfb}
+            </span>
+            <span>
+              <span className="text-muted-foreground">{labels.tps}</span> {activeSummary.tps}
+            </span>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

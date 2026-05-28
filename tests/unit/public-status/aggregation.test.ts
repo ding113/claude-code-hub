@@ -183,6 +183,92 @@ describe("public-status aggregation", () => {
     expect(model?.timeline.every((bucket) => bucket.sampleCount === 0)).toBe(true);
   });
 
+  it("attributes latency and throughput only to the successful fallback group", () => {
+    const result = buildPublicStatusPayloadFromRequests({
+      rangeHours: 1,
+      intervalMinutes: 15,
+      now: "2026-04-21T11:00:00.000Z",
+      groups: [
+        {
+          sourceGroupName: "openai",
+          publicGroupSlug: "openai",
+          displayName: "OpenAI",
+          explanatoryCopy: null,
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+        {
+          sourceGroupName: "backup",
+          publicGroupSlug: "backup",
+          displayName: "Backup",
+          explanatoryCopy: null,
+          sortOrder: 2,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+      requests: [
+        {
+          id: 40,
+          createdAt: "2026-04-21T10:10:00.000Z",
+          originalModel: "gpt-4.1",
+          durationMs: 1200,
+          ttfbMs: 200,
+          outputTokens: 50,
+          providerChain: [
+            {
+              id: 401,
+              name: "failed-provider",
+              groupTag: "openai",
+              reason: "retry_failed",
+              statusCode: 500,
+            },
+            {
+              id: 402,
+              name: "successful-provider",
+              groupTag: "backup",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ],
+        },
+      ],
+    });
+
+    const failedModel = result.groups[0]?.models[0];
+    const successfulModel = result.groups[1]?.models[0];
+
+    expect(failedModel?.availabilityPct).toBe(0);
+    expect(failedModel?.latestTtfbMs).toBeNull();
+    expect(failedModel?.latestTps).toBeNull();
+    expect(failedModel?.timeline.find((bucket) => bucket.sampleCount > 0)).toMatchObject({
+      sampleCount: 1,
+      ttfbMs: null,
+      tps: null,
+    });
+    expect(successfulModel?.availabilityPct).toBe(100);
+    expect(successfulModel?.latestTtfbMs).toBe(200);
+    expect(successfulModel?.latestTps).toBe(50);
+    expect(successfulModel?.timeline.find((bucket) => bucket.sampleCount > 0)).toMatchObject({
+      sampleCount: 1,
+      ttfbMs: 200,
+      tps: 50,
+    });
+  });
+
   it("uses originalModel before redirected model for grouping", () => {
     const result = buildPublicStatusPayloadFromRequests({
       rangeHours: 1,

@@ -1,3 +1,7 @@
+import {
+  isThinkingEnabled,
+  resolveAnthropicStreamActualResponseModel,
+} from "@/app/v1/_lib/proxy/anthropic-actual-response-model";
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -877,6 +881,7 @@ export class ProxyResponseHandler {
     let fixedResponse = response;
     if (!session.getEndpointPolicy().bypassResponseRectifier) {
       try {
+        // raw passthrough 端点跳过 ResponseFixer，也跳过其中的 Responses 输出归一化。
         fixedResponse = await ResponseFixer.process(session, response);
       } catch (error) {
         logger.error(
@@ -2536,6 +2541,31 @@ export class ProxyResponseHandler {
           }
         }
 
+        // Anthropic 流式 thinking signature 模型检测(优先于明文 model 字段)
+        const currentRequestedModel = session.getCurrentModel();
+        const thinkingActuallyEnabled = isThinkingEnabled(session.request.message);
+        const anthropicModelDetection = resolveAnthropicStreamActualResponseModel({
+          providerType: provider.providerType,
+          requestedModel: currentRequestedModel,
+          thinkingEnabled: thinkingActuallyEnabled,
+          responseStreamText: allContent,
+        });
+        if (anthropicModelDetection.source) {
+          session.addSpecialSetting({
+            type: "thinking_signature_model_detection",
+            scope: "response",
+            hit: anthropicModelDetection.source === "fallback_no_signature_with_thinking",
+            source: anthropicModelDetection.source,
+            extractedModel: anthropicModelDetection.actualResponseModel,
+            signatureFound: anthropicModelDetection.source === "signature",
+            thinkingEnabled: thinkingActuallyEnabled,
+            requestedModel: currentRequestedModel,
+          });
+        }
+        const finalActualResponseModel = anthropicModelDetection.source
+          ? anthropicModelDetection.actualResponseModel
+          : extractActualResponseModelForProvider(provider.providerType, true, allContent);
+
         // 保存扩展信息（status code, tokens, provider chain）
         await updateMessageRequestDetails(messageContext.id, {
           statusCode: effectiveStatusCode,
@@ -2549,12 +2579,8 @@ export class ProxyResponseHandler {
           cacheTtlApplied: usageForCost?.cache_ttl ?? null,
           providerChain: session.getProviderChain(),
           ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
-          model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
-          actualResponseModel: extractActualResponseModelForProvider(
-            provider.providerType,
-            true,
-            allContent
-          ),
+          model: currentRequestedModel ?? undefined, // 更新重定向后的模型
+          actualResponseModel: finalActualResponseModel,
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
           swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,

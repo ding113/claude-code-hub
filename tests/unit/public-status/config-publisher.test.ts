@@ -255,6 +255,7 @@ describe("public-status config publisher", () => {
         snapshot: expect.objectContaining({
           groups: [
             expect.objectContaining({
+              sourceGroupId: 2,
               sourceGroupName: "default",
               slug: "platform",
               displayName: "Platform",

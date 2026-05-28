@@ -137,6 +137,15 @@ function buildSettingKey(setting: SpecialSetting): string {
       ]);
     case "response_input_rectifier":
       return JSON.stringify([setting.type, setting.hit, setting.action, setting.originalType]);
+    case "thinking_signature_model_detection":
+      return JSON.stringify([
+        setting.type,
+        setting.source,
+        setting.signatureFound,
+        setting.thinkingEnabled,
+        setting.extractedModel,
+        setting.requestedModel,
+      ]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
       const _exhaustive: never = setting;
@@ -255,6 +264,23 @@ export function getPricingResolutionSpecialSetting(
     specialSettings.find(
       (setting): setting is Extract<SpecialSetting, { type: "pricing_resolution" }> =>
         setting.type === "pricing_resolution"
+    ) ?? null
+  );
+}
+
+export function getThinkingSignatureModelDetectionSpecialSetting(
+  specialSettings?: SpecialSetting[] | null
+): Extract<SpecialSetting, { type: "thinking_signature_model_detection" }> | null {
+  if (!Array.isArray(specialSettings) || specialSettings.length === 0) {
+    return null;
+  }
+
+  return (
+    specialSettings.find(
+      (
+        setting
+      ): setting is Extract<SpecialSetting, { type: "thinking_signature_model_detection" }> =>
+        setting.type === "thinking_signature_model_detection"
     ) ?? null
   );
 }

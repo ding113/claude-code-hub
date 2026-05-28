@@ -78,19 +78,23 @@ export async function listCurrentUser(c: Context): Promise<Response> {
     });
   }
   const actions = await import("@/actions/users");
-  const result = await callAction(
-    c,
-    actions.getUserById,
-    [currentUserId] as never[],
-    c.get("auth")
-  );
+  const result = await callAction(c, actions.getCurrentUserDisplay, [] as never[], c.get("auth"));
   if (!result.ok) return actionError(c, result);
+  if (result.data.id !== currentUserId) {
+    return createProblemResponse({
+      status: 404,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "resource.not_found",
+      detail: "Current user was not found.",
+    });
+  }
+  const items = [redactUserKeys(result.data)];
   return jsonResponse({
-    items: [redactUserKeys(result.data)],
+    items,
     pageInfo: {
       nextCursor: null,
       hasMore: false,
-      limit: 1,
+      limit: items.length,
     },
   });
 }
@@ -351,6 +355,9 @@ function redactUserKeys(value: unknown): unknown {
     return value.map((item) => redactUserKeys(item));
   }
   if (!value || typeof value !== "object") {
+    return value;
+  }
+  if (value instanceof Date) {
     return value;
   }
 

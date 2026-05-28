@@ -1,19 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  PUBLIC_STATUS_REDIS_PREFIX,
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
   buildPublicStatusRebuildHintKey,
+  buildPublicStatusRollupCoverageStartKey,
+  buildPublicStatusRollupKey,
 } from "@/lib/public-status/redis-contract";
+import { buildPublicStatusRollupField } from "@/lib/public-status/rollup-store";
 import { importPublicStatusModule } from "../../helpers/public-status-test-helpers";
 
 const mockRedisSet = vi.hoisted(() => vi.fn());
 const mockRedisDel = vi.hoisted(() => vi.fn());
 const mockRedisGet = vi.hoisted(() => vi.fn());
+const mockRedisHgetall = vi.hoisted(() => vi.fn());
 const mockRedisEval = vi.hoisted(() => vi.fn());
 const mockRedisPttl = vi.hoisted(() => vi.fn());
 const mockReadCurrentInternalPublicStatusConfigSnapshot = vi.hoisted(() => vi.fn());
-const mockQueryPublicStatusRequests = vi.hoisted(() => vi.fn());
-const mockBuildPublicStatusPayloadFromRequests = vi.hoisted(() => vi.fn());
 const mockPublishCurrentPublicStatusConfigProjection = vi.hoisted(() => vi.fn());
 
 async function importAggregationModule() {
@@ -79,6 +82,7 @@ async function importRebuildWorkerModule() {
   vi.doMock("@/lib/redis", () => ({
     getRedisClient: () => ({
       get: mockRedisGet,
+      hgetall: mockRedisHgetall,
       pttl: mockRedisPttl,
       set: mockRedisSet,
       del: mockRedisDel,
@@ -95,8 +99,6 @@ async function importRebuildWorkerModule() {
   }));
   vi.doMock("@/lib/public-status/aggregation", () => ({
     getConfiguredPublicStatusGroups: (snapshot: { groups: unknown[] }) => snapshot.groups,
-    queryPublicStatusRequests: mockQueryPublicStatusRequests,
-    buildPublicStatusPayloadFromRequests: mockBuildPublicStatusPayloadFromRequests,
   }));
 
   return importPublicStatusModule<{
@@ -127,6 +129,7 @@ async function importRebuildHintsModule() {
   vi.doMock("@/lib/redis", () => ({
     getRedisClient: () => ({
       get: mockRedisGet,
+      hgetall: mockRedisHgetall,
       pttl: mockRedisPttl,
       set: mockRedisSet,
       del: mockRedisDel,
@@ -156,6 +159,7 @@ describe("public-status rebuild worker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRedisGet.mockResolvedValue(null);
+    mockRedisHgetall.mockResolvedValue({});
     mockRedisEval.mockResolvedValue(1);
     mockRedisPttl.mockResolvedValue(-1);
     mockPublishCurrentPublicStatusConfigProjection.mockResolvedValue({
@@ -422,13 +426,20 @@ describe("public-status rebuild worker", () => {
         },
       ],
     });
-    mockQueryPublicStatusRequests.mockResolvedValue([]);
-    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
-      generatedAt: "2026-04-21T10:00:00.000Z",
-      coveredFrom: "2026-04-20T10:00:00.000Z",
-      coveredTo: "2026-04-21T10:00:00.000Z",
-      groups: [],
+    const rollupKey = buildPublicStatusRollupKey({
+      bucketStartIso: "2026-04-21T09:55:00.000Z",
     });
+    mockRedisHgetall.mockImplementation(async (key: string) =>
+      key === rollupKey
+        ? {
+            [buildPublicStatusRollupField({
+              groupId: "openai",
+              modelKey: "gpt-4.1",
+              metric: "success",
+            })]: "1",
+          }
+        : {}
+    );
     mockRedisSet.mockReset();
     mockRedisSet.mockResolvedValueOnce("OK");
 
@@ -453,10 +464,12 @@ describe("public-status rebuild worker", () => {
     const manifestValue = JSON.parse(String(versionedManifestCall?.[1]));
     expect(manifestValue.configVersion).toBe("cfg-1");
     expect(manifestValue.lastCompleteGeneration).toBeTruthy();
+    expect(manifestValue.rollupCoverageComplete).toBe(false);
+    expect(manifestValue.rollupSampleCount).toBe(1);
     expect(mockRedisEval).toHaveBeenCalledWith(
       expect.stringContaining("redis.call('DEL', KEYS[1])"),
       1,
-      expect.stringContaining("public-status:v1:rebuild-lock:"),
+      expect.stringContaining(`${PUBLIC_STATUS_REDIS_PREFIX}:rebuild-lock:`),
       expect.any(String)
     );
     expect(mockRedisDel).toHaveBeenCalled();
@@ -472,6 +485,63 @@ describe("public-status rebuild worker", () => {
       "EX",
       60 * 60 * 24 * 30
     );
+  });
+
+  it("marks rebuilt generations as fully covered once rollups cover the whole window", async () => {
+    const mod = await importRebuildWorkerModule();
+
+    mockReadCurrentInternalPublicStatusConfigSnapshot.mockResolvedValue({
+      configVersion: "cfg-1",
+      generatedAt: "2026-04-21T10:00:00.000Z",
+      siteTitle: "Claude Code Hub Status",
+      siteDescription: "Request-derived public status",
+      defaultIntervalMinutes: 5,
+      defaultRangeHours: 24,
+      groups: [
+        {
+          sourceGroupId: 42,
+          sourceGroupName: "openai",
+          slug: "openai",
+          displayName: "OpenAI",
+          description: "Primary fleet",
+          sortOrder: 1,
+          models: [
+            {
+              publicModelKey: "gpt-4.1",
+              label: "GPT-4.1",
+              vendorIconKey: "openai",
+              requestTypeBadge: "openaiCompatible",
+            },
+          ],
+        },
+      ],
+    });
+    mockRedisGet.mockImplementation(async (key: string) =>
+      key === buildPublicStatusRollupCoverageStartKey() ? "2026-04-20T10:00:00.000Z" : null
+    );
+    mockRedisHgetall.mockResolvedValue({});
+    mockRedisSet.mockReset();
+    mockRedisSet.mockResolvedValueOnce("OK");
+
+    const result = await mod.rebuildPublicStatusProjection({
+      intervalMinutes: 5,
+      rangeHours: 24,
+      now: new Date("2026-04-21T10:02:00.000Z"),
+    });
+
+    expect(result.status).toBe("updated");
+    const versionedManifestCall = mockRedisSet.mock.calls.find(
+      (call) =>
+        call[0] ===
+        buildPublicStatusManifestKey({
+          configVersion: "cfg-1",
+          intervalMinutes: 5,
+          rangeHours: 24,
+        })
+    );
+    const manifestValue = JSON.parse(String(versionedManifestCall?.[1]));
+    expect(manifestValue.rollupCoverageComplete).toBe(true);
+    expect(manifestValue.rollupCoverageStartedAt).toBe("2026-04-20T10:00:00.000Z");
   });
 
   it("re-publishes config projection before rebuild when redis config keys are missing", async () => {
@@ -504,13 +574,6 @@ describe("public-status rebuild worker", () => {
           },
         ],
       });
-    mockQueryPublicStatusRequests.mockResolvedValue([]);
-    mockBuildPublicStatusPayloadFromRequests.mockReturnValue({
-      generatedAt: "2026-04-21T10:00:00.000Z",
-      coveredFrom: "2026-04-20T10:00:00.000Z",
-      coveredTo: "2026-04-21T10:00:00.000Z",
-      groups: [],
-    });
     mockRedisSet.mockReset();
     mockRedisSet.mockResolvedValueOnce("OK");
 
@@ -523,6 +586,14 @@ describe("public-status rebuild worker", () => {
     expect(result.status).toBe("updated");
     expect(mockPublishCurrentPublicStatusConfigProjection).toHaveBeenCalledWith({
       reason: "rebuild-bootstrap",
+    });
+    expect(mockReadCurrentInternalPublicStatusConfigSnapshot).toHaveBeenNthCalledWith(1, {
+      redis: expect.any(Object),
+      allowLegacyFallback: false,
+    });
+    expect(mockReadCurrentInternalPublicStatusConfigSnapshot).toHaveBeenNthCalledWith(2, {
+      redis: expect.any(Object),
+      allowLegacyFallback: false,
     });
   });
 
@@ -547,6 +618,30 @@ describe("public-status rebuild worker", () => {
     );
   });
 
+  it("does not rewrite rebuild hints while an existing hint is still live", async () => {
+    const mod = await importRebuildHintsModule();
+
+    mockRedisPttl.mockResolvedValueOnce(120_000);
+
+    await expect(
+      mod.schedulePublicStatusRebuild({
+        intervalMinutes: 15,
+        rangeHours: 48,
+        reason: "stale-generation",
+      })
+    ).resolves.toMatchObject({
+      accepted: true,
+      rebuildState: "rebuilding",
+      key: buildPublicStatusRebuildHintKey({
+        intervalMinutes: 15,
+        rangeHours: 48,
+      }),
+    });
+
+    expect(mockRedisSet).not.toHaveBeenCalled();
+    expect(mockRedisGet).not.toHaveBeenCalled();
+  });
+
   it("preserves manifest ttl when marking rebuildState as rebuilding", async () => {
     const mod = await importRebuildHintsModule();
 
@@ -566,7 +661,10 @@ describe("public-status rebuild worker", () => {
           rebuildState: "idle",
         })
       );
-    mockRedisPttl.mockResolvedValueOnce(2_592_000_000).mockResolvedValueOnce(-1);
+    mockRedisPttl
+      .mockResolvedValueOnce(-1)
+      .mockResolvedValueOnce(2_592_000_000)
+      .mockResolvedValueOnce(-1);
 
     await mod.schedulePublicStatusRebuild({
       intervalMinutes: 5,
@@ -575,13 +673,21 @@ describe("public-status rebuild worker", () => {
     });
 
     expect(mockRedisSet).toHaveBeenCalledWith(
-      "public-status:v1:manifest:cfg-1:5m:24h",
+      buildPublicStatusManifestKey({
+        configVersion: "cfg-1",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      }),
       expect.stringContaining('"rebuildState":"rebuilding"'),
       "PX",
       2_592_000_000
     );
     expect(mockRedisSet).toHaveBeenCalledWith(
-      "public-status:v1:manifest:current:5m:24h",
+      buildPublicStatusManifestKey({
+        configVersion: "current",
+        intervalMinutes: 5,
+        rangeHours: 24,
+      }),
       expect.stringContaining('"rebuildState":"rebuilding"')
     );
   });

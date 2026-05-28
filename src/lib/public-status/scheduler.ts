@@ -10,12 +10,12 @@ import { getRedisClient } from "@/lib/redis";
 import { scanPattern } from "@/lib/redis/scan-helper";
 import { readCurrentInternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import { rebuildPublicStatusProjection } from "./rebuild-worker";
-import { buildPublicStatusManifestKey } from "./redis-contract";
+import { buildPublicStatusManifestKey, PUBLIC_STATUS_REDIS_PREFIX } from "./redis-contract";
 
 const LOCK_KEY = "locks:public-status-rebuild-scheduler";
 const TICK_INTERVAL_MS = 30_000;
 const LOCK_TTL_MS = 30_000;
-const REBUILD_HINT_PATTERN = "public-status:v1:rebuild-hint:*";
+const REBUILD_HINT_PATTERN = `${PUBLIC_STATUS_REDIS_PREFIX}:rebuild-hint:*`;
 
 const schedulerState = globalThis as unknown as {
   __CCH_PUBLIC_STATUS_REBUILD_SCHEDULER_STARTED__?: boolean;

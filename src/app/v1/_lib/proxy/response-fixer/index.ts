@@ -4,6 +4,7 @@ import { SessionManager } from "@/lib/session-manager";
 import { updateMessageRequestDetails } from "@/repository/message";
 import type { ResponseFixerSpecialSetting } from "@/types/special-settings";
 import type { ResponseFixerConfig } from "@/types/system-config";
+import { normalizeResponseOutput } from "../response-output-normalizer";
 import type { ProxySession } from "../session";
 import { EncodingFixer } from "./encoding-fixer";
 import { JsonFixer } from "./json-fixer";
@@ -287,11 +288,12 @@ export class ResponseFixer {
 
     const headers = cleanResponseHeaders(response.headers);
 
-    return new Response(toArrayBufferUint8Array(data), {
+    const fixedResponse = new Response(toArrayBufferUint8Array(data), {
       status: response.status,
       statusText: response.statusText,
       headers,
     });
+    return await normalizeResponseOutput(session, fixedResponse);
   }
 
   private static processStream(

@@ -45,10 +45,10 @@ describe("extractActualResponseModel - 8 happy-path cases", () => {
       id: "chatcmpl-abc",
       object: "chat.completion",
       created: 1710000000,
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       choices: [{ index: 0, message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }],
     });
-    expect(extractActualResponseModel("openai-chat/non-stream", body)).toBe("gpt-5.4");
+    expect(extractActualResponseModel("openai-chat/non-stream", body)).toBe("gpt-5.5");
   });
 
   it("openai-chat/stream: reads first chunk $.model", () => {

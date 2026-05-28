@@ -4,13 +4,14 @@ import {
   buildPublicStatusConfigSnapshotKey,
   buildPublicStatusConfigVersionPointerKey,
   buildPublicStatusInternalConfigSnapshotKey,
+  LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
 } from "./redis-contract";
 
 export const DEFAULT_PUBLIC_STATUS_SITE_DESCRIPTION = "Request-derived public status";
 
 /**
  * TTL (seconds) applied to *versioned* config snapshot keys written by this
- * module — i.e. `public-status:v1:config:<version>` and the internal variant.
+ * module — i.e. versioned public-status config keys and the internal variant.
  *
  * 30 days matches `GENERATION_PROJECTION_TTL_SECONDS` in `rebuild-worker.ts`,
  * which already governs the manifest / series / snapshot keys for this
@@ -45,6 +46,7 @@ export interface PublicStatusGroupSnapshot {
 }
 
 export interface InternalPublicStatusGroupSnapshot extends PublicStatusGroupSnapshot {
+  sourceGroupId?: number | null;
   sourceGroupName: string;
 }
 
@@ -100,6 +102,11 @@ interface RedisWriter {
 interface RedisReader {
   get(key: string): Promise<string | null> | string | null;
   status?: string;
+}
+
+interface ReadCurrentSnapshotOptions {
+  redis?: RedisReader | null;
+  allowLegacyFallback?: boolean;
 }
 
 function normalizePublicSiteDescription(value: unknown): string | null {
@@ -162,7 +169,7 @@ function extractCurrentConfigVersion(pointerRaw: string | null): string | null {
     return pointer.configVersion;
   }
   if (pointer?.key) {
-    const match = pointer.key.match(/:config(?::internal)?:([^:]+)$/);
+    const match = pointer.key.match(/:config(?:-internal)?:([^:]+)$/);
     if (match?.[1]) {
       return decodeURIComponent(match[1]);
     }
@@ -329,55 +336,93 @@ export async function publishCurrentPublicStatusConfigPointers(input: {
 
 export async function readCurrentPublicStatusConfigSnapshot(input?: {
   redis?: RedisReader | null;
+  allowLegacyFallback?: boolean;
 }): Promise<PublicStatusConfigSnapshot | null> {
   const redis = input?.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
   if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
     return null;
   }
 
-  const currentVersion = extractCurrentConfigVersion(
-    await safeGet(redis, buildPublicStatusConfigVersionPointerKey())
-  );
-  if (currentVersion) {
-    const snapshotRaw = await safeGet(redis, buildPublicStatusConfigSnapshotKey(currentVersion));
-    return safeParseJson<PublicStatusConfigSnapshot>(snapshotRaw);
+  const prefixes =
+    input?.allowLegacyFallback === false
+      ? [undefined]
+      : [undefined, LEGACY_PUBLIC_STATUS_REDIS_PREFIX];
+  for (const prefix of prefixes) {
+    const currentVersion = extractCurrentConfigVersion(
+      await safeGet(redis, buildPublicStatusConfigVersionPointerKey({ prefix }))
+    );
+    if (currentVersion) {
+      const snapshotRaw = await safeGet(
+        redis,
+        buildPublicStatusConfigSnapshotKey(currentVersion, { prefix })
+      );
+      const snapshot = safeParseJson<PublicStatusConfigSnapshot>(snapshotRaw);
+      if (snapshot) {
+        return snapshot;
+      }
+    }
+
+    const pointerRaw = await safeGet(
+      redis,
+      buildPublicStatusConfigSnapshotKey("current", { prefix })
+    );
+    const pointer = safeParseJson<{ key?: string }>(pointerRaw);
+    if (!pointer?.key) {
+      continue;
+    }
+    const snapshot = safeParseJson<PublicStatusConfigSnapshot>(await safeGet(redis, pointer.key));
+    if (snapshot) {
+      return snapshot;
+    }
   }
 
-  const pointerRaw = await safeGet(redis, buildPublicStatusConfigSnapshotKey());
-  const pointer = safeParseJson<{ key?: string }>(pointerRaw);
-  if (!pointer?.key) {
-    return null;
-  }
-  const snapshotRaw = await safeGet(redis, pointer.key);
-  return safeParseJson<PublicStatusConfigSnapshot>(snapshotRaw);
+  return null;
 }
 
-export async function readCurrentInternalPublicStatusConfigSnapshot(input?: {
-  redis?: RedisReader | null;
-}): Promise<InternalPublicStatusConfigSnapshot | null> {
+export async function readCurrentInternalPublicStatusConfigSnapshot(
+  input?: ReadCurrentSnapshotOptions
+): Promise<InternalPublicStatusConfigSnapshot | null> {
   const redis = input?.redis ?? getRedisClient({ allowWhenRateLimitDisabled: true });
   if (!redis || ("status" in redis && redis.status && redis.status !== "ready")) {
     return null;
   }
 
-  const currentVersion = extractCurrentConfigVersion(
-    await safeGet(redis, buildPublicStatusConfigVersionPointerKey())
-  );
-  if (currentVersion) {
-    const snapshotRaw = await safeGet(
-      redis,
-      buildPublicStatusInternalConfigSnapshotKey(currentVersion)
+  const prefixes =
+    input?.allowLegacyFallback === false
+      ? [undefined]
+      : [undefined, LEGACY_PUBLIC_STATUS_REDIS_PREFIX];
+  for (const prefix of prefixes) {
+    const currentVersion = extractCurrentConfigVersion(
+      await safeGet(redis, buildPublicStatusConfigVersionPointerKey({ prefix }))
     );
-    return safeParseJson<InternalPublicStatusConfigSnapshot>(snapshotRaw);
+    if (currentVersion) {
+      const snapshotRaw = await safeGet(
+        redis,
+        buildPublicStatusInternalConfigSnapshotKey(currentVersion, { prefix })
+      );
+      const snapshot = safeParseJson<InternalPublicStatusConfigSnapshot>(snapshotRaw);
+      if (snapshot) {
+        return snapshot;
+      }
+    }
+
+    const pointerRaw = await safeGet(
+      redis,
+      buildPublicStatusInternalConfigSnapshotKey("current", { prefix })
+    );
+    const pointer = safeParseJson<{ key?: string }>(pointerRaw);
+    if (!pointer?.key) {
+      continue;
+    }
+    const snapshot = safeParseJson<InternalPublicStatusConfigSnapshot>(
+      await safeGet(redis, pointer.key)
+    );
+    if (snapshot) {
+      return snapshot;
+    }
   }
 
-  const pointerRaw = await safeGet(redis, buildPublicStatusInternalConfigSnapshotKey());
-  const pointer = safeParseJson<{ key?: string }>(pointerRaw);
-  if (!pointer?.key) {
-    return null;
-  }
-  const snapshotRaw = await safeGet(redis, pointer.key);
-  return safeParseJson<InternalPublicStatusConfigSnapshot>(snapshotRaw);
+  return null;
 }
 
 export async function readPublicStatusSiteMetadata(input?: {

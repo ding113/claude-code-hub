@@ -164,7 +164,7 @@ run("non-chat endpoint fallback observability", () => {
       key: key.key,
       endpoint: "/v1/responses/compact",
       sessionId: `${KEY_PREFIX}-session-compact`,
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       providerChain: [
         { id: 21, name: "provider-c", reason: "retry_failed", statusCode: 500 },
         { id: 22, name: "provider-d", reason: "retry_success", statusCode: 200 },

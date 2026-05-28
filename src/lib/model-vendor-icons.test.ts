@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getModelVendor, PRICE_FILTER_VENDORS } from "./model-vendor-icons";
 
 describe("getModelVendor", () => {
@@ -8,7 +8,7 @@ describe("getModelVendor", () => {
     { modelId: "claude-3-opus-20240229", expectedKey: "anthropic" },
     // OpenAI - gpt prefix
     { modelId: "gpt-4o-mini", expectedKey: "openai" },
-    { modelId: "gpt-5.4", expectedKey: "openai" },
+    { modelId: "gpt-5.5", expectedKey: "openai" },
     // OpenAI - chatgpt prefix
     { modelId: "chatgpt-4o-latest", expectedKey: "openai" },
     // OpenAI - o1/o3/o4 prefix
@@ -118,6 +118,35 @@ describe("getModelVendor", () => {
     expect(getModelVendor("gpt")?.i18nKey).toBe("openai");
     expect(getModelVendor("o1")?.i18nKey).toBe("openai");
     expect(getModelVendor("yi")?.i18nKey).toBe("yi");
+  });
+
+  it("warns in development when a vendor rule has no registered icon", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    vi.resetModules();
+    vi.doMock("@/lib/model-vendor-rules", () => ({
+      getModelVendor: () => ({
+        prefix: "missing",
+        hasColor: false,
+        i18nKey: "missing-vendor",
+      }),
+    }));
+    vi.stubEnv("NODE_ENV", "development");
+
+    try {
+      const { getModelVendor: getMockedModelVendor } = await import("./model-vendor-icons");
+      const result = getMockedModelVendor("missing-model");
+
+      expect(result?.i18nKey).toBe("missing-vendor");
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[model-vendor-icons] No icon registered for i18nKey "missing-vendor"'
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      warnSpy.mockRestore();
+      vi.doUnmock("@/lib/model-vendor-rules");
+      vi.resetModules();
+    }
   });
 });
 

@@ -79,6 +79,7 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
     settings.publicStatusAggregationIntervalMinutes
   );
   const defaultRangeHours = normalizePublicRange(settings.publicStatusWindowHours);
+  const providerGroupIdByName = new Map(providerGroups.map((group) => [group.name, group.id]));
 
   const snapshot = buildPublicStatusConfigSnapshot({
     configVersion: input.configVersion ?? `cfg-${Date.now()}`,
@@ -119,6 +120,7 @@ export async function publishCurrentPublicStatusConfigProjection(input: {
     defaultIntervalMinutes: snapshot.defaultIntervalMinutes,
     defaultRangeHours: snapshot.defaultRangeHours,
     groups: enabledGroups.map((group) => ({
+      sourceGroupId: providerGroupIdByName.get(group.groupName) ?? null,
       sourceGroupName: group.groupName,
       slug: group.publicGroupSlug,
       displayName: group.displayName,

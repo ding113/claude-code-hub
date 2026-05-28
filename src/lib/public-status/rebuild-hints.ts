@@ -58,6 +58,15 @@ export async function schedulePublicStatusRebuild(input: {
     intervalMinutes: input.intervalMinutes,
     rangeHours: input.rangeHours,
   });
+  const existingHintTtlMs = typeof redis.pttl === "function" ? Number(await redis.pttl(key)) : -1;
+  if (Number.isFinite(existingHintTtlMs) && existingHintTtlMs > 0) {
+    return {
+      accepted: true,
+      rebuildState: "rebuilding",
+      key,
+    };
+  }
+
   await redis.set(
     key,
     JSON.stringify({

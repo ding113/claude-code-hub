@@ -303,7 +303,7 @@ describe("non-chat endpoint fallback", () => {
     session.originalFormat = "response";
     session.setRawCrossProviderFallbackEnabled(false);
     session.request.message = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [{ role: "user", content: "compact me" }],
     };
     session.setProvider(providerA);
@@ -329,7 +329,7 @@ describe("non-chat endpoint fallback", () => {
     session.originalFormat = "response";
     session.setRawCrossProviderFallbackEnabled(false);
     session.request.message = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [{ role: "user", content: "compact me" }],
     };
     session.setProvider(providerA);
@@ -356,7 +356,7 @@ describe("non-chat endpoint fallback", () => {
     session.originalFormat = "response";
     session.setRawCrossProviderFallbackEnabled(false);
     session.request.message = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [{ role: "user", content: "compact me" }],
     };
     session.setProvider(providerA);
@@ -383,7 +383,7 @@ describe("non-chat endpoint fallback", () => {
     session.originalFormat = "response";
     session.setRawCrossProviderFallbackEnabled(false);
     session.request.message = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [{ role: "user", content: "compact me" }],
     };
     session.setProvider(providerA);

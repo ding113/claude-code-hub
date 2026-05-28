@@ -10,7 +10,7 @@
   "loading": "Loading...",
   "manualAdd": "Manually Add Model",
   "manualDesc": "Support adding any model name (not limited to price table)",
-  "manualPlaceholder": "Enter model name (e.g. gpt-5.4)",
+  "manualPlaceholder": "Enter model name (e.g. gpt-5.5)",
   "notFound": "Model not found",
   "openai": "OpenAI",
   "providerFilterAll": "All Providers",

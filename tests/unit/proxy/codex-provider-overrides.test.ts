@@ -13,7 +13,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       parallel_tool_calls: true,
       reasoning: { effort: "low", summary: "auto" },
@@ -34,7 +34,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       parallel_tool_calls: false,
       reasoning: { effort: "low", summary: "auto" },
@@ -58,7 +58,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       parallel_tool_calls: false,
       reasoning: { effort: "low", summary: "auto" },
@@ -79,7 +79,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       parallel_tool_calls: true,
     };
@@ -97,7 +97,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       reasoning: { effort: "low", summary: "auto", extra: "keep" },
     };
@@ -116,7 +116,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
     };
 
@@ -132,7 +132,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       service_tier: "default",
     };
@@ -152,7 +152,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       parallel_tool_calls: true,
     };
@@ -172,7 +172,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       parallel_tool_calls: false,
       reasoning: { effort: "low", summary: "auto" },
@@ -193,7 +193,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       parallel_tool_calls: false,
     };
@@ -226,7 +226,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       parallel_tool_calls: false,
       reasoning: { effort: "low", summary: "auto" },
@@ -260,7 +260,7 @@ describe("Codex 供应商级参数覆写", () => {
     };
 
     const input: Record<string, unknown> = {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       input: [],
       service_tier: "priority",
     };

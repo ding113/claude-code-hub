@@ -136,7 +136,7 @@ describe("Model Price Actions", () => {
 
   describe("upsertSingleModelPrice", () => {
     it("should create a new model price for admin", async () => {
-      const mockResult = makeMockPrice("gpt-5.4", {
+      const mockResult = makeMockPrice("gpt-5.5", {
         mode: "chat",
         input_cost_per_token: 0.000015,
         output_cost_per_token: 0.00006,
@@ -145,7 +145,7 @@ describe("Model Price Actions", () => {
 
       const { upsertSingleModelPrice } = await import("@/actions/model-prices");
       const result = await upsertSingleModelPrice({
-        modelName: "gpt-5.4",
+        modelName: "gpt-5.5",
         mode: "chat",
         litellmProvider: "openai",
         inputCostPerToken: 0.000015,
@@ -153,9 +153,9 @@ describe("Model Price Actions", () => {
       });
 
       expect(result.ok).toBe(true);
-      expect(result.data?.modelName).toBe("gpt-5.4");
+      expect(result.data?.modelName).toBe("gpt-5.5");
       expect(upsertModelPriceMock).toHaveBeenCalledWith(
-        "gpt-5.4",
+        "gpt-5.5",
         expect.objectContaining({
           mode: "chat",
           litellm_provider: "openai",
@@ -309,10 +309,10 @@ describe("Model Price Actions", () => {
       deleteModelPriceByNameMock.mockResolvedValue(undefined);
 
       const { deleteSingleModelPrice } = await import("@/actions/model-prices");
-      const result = await deleteSingleModelPrice("gpt-5.4");
+      const result = await deleteSingleModelPrice("gpt-5.5");
 
       expect(result.ok).toBe(true);
-      expect(deleteModelPriceByNameMock).toHaveBeenCalledWith("gpt-5.4");
+      expect(deleteModelPriceByNameMock).toHaveBeenCalledWith("gpt-5.5");
     });
 
     it("should reject empty model name", async () => {
@@ -614,10 +614,10 @@ describe("Model Price Actions", () => {
     it("should pin a cloud provider pricing node as a local manual model price", async () => {
       findLatestPriceByModelAndSourceMock.mockResolvedValue(
         makeMockPrice(
-          "gpt-5.4",
+          "gpt-5.5",
           {
             mode: "responses",
-            display_name: "GPT-5.4",
+            display_name: "GPT-5.5",
             model_family: "gpt",
             pricing: {
               openrouter: {
@@ -632,7 +632,7 @@ describe("Model Price Actions", () => {
       );
       upsertModelPriceMock.mockResolvedValue(
         makeMockPrice(
-          "gpt-5.4",
+          "gpt-5.5",
           {
             mode: "responses",
             input_cost_per_token: 0.0000025,
@@ -646,21 +646,21 @@ describe("Model Price Actions", () => {
 
       const { pinModelPricingProviderAsManual } = await import("@/actions/model-prices");
       const result = await pinModelPricingProviderAsManual({
-        modelName: "gpt-5.4",
+        modelName: "gpt-5.5",
         pricingProviderKey: "openrouter",
       });
 
       expect(result.ok).toBe(true);
-      expect(findLatestPriceByModelAndSourceMock).toHaveBeenCalledWith("gpt-5.4", "litellm");
+      expect(findLatestPriceByModelAndSourceMock).toHaveBeenCalledWith("gpt-5.5", "litellm");
       expect(upsertModelPriceMock).toHaveBeenCalledWith(
-        "gpt-5.4",
+        "gpt-5.5",
         expect.objectContaining({
           mode: "responses",
           input_cost_per_token: 0.0000025,
           output_cost_per_token: 0.000015,
           cache_read_input_token_cost: 2.5e-7,
           selected_pricing_provider: "openrouter",
-          selected_pricing_source_model: "gpt-5.4",
+          selected_pricing_source_model: "gpt-5.5",
           selected_pricing_resolution: "manual_pin",
         })
       );

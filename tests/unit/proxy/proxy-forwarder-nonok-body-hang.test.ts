@@ -103,10 +103,10 @@ function createSession(params?: { clientAbortSignal?: AbortSignal | null }): Pro
     originalHeaders: new Headers(headers),
     headerLog: JSON.stringify(Object.fromEntries(headers.entries())),
     request: {
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       log: "(test)",
       message: {
-        model: "gpt-5.4",
+        model: "gpt-5.5",
         messages: [{ role: "user", content: "hi" }],
       },
     },
