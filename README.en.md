@@ -108,6 +108,21 @@ Register now via <a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">this link
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://astraflow.ucloud-global.com">
+<img src="https://astraflow.ucloud-global.com/favicon.ico" alt="Astraflow Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>🌐 Recommended Provider</b>: <a href="https://astraflow.ucloud-global.com">Astraflow</a> by UCloud is an OpenAI-compatible AI model aggregation platform supporting 200+ leading models — access them all with a single API key.<br/>
+Offers both a global endpoint (<code>https://api-us-ca.umodelverse.ai/v1</code>) and a China endpoint (<code>https://api.modelverse.cn/v1</code>) to serve users worldwide.<br/>
+Global sign-up &amp; API key → <a href="https://astraflow.ucloud-global.com">Visit Now (Global)</a> | China users → <a href="https://astraflow.ucloud.cn">Visit Now (China)</a>
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.
