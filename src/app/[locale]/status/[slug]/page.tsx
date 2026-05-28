@@ -46,7 +46,7 @@ export default async function PublicStatusGroupPage({
     targetGroup,
   } = await loadGroupContext(slug);
   if (!targetGroup) {
-    notFound();
+    return notFound();
   }
 
   const filteredPayload = { ...initialPayload, groups: [targetGroup] };

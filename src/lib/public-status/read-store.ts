@@ -9,6 +9,7 @@ import type {
 import {
   buildPublicStatusCurrentSnapshotKey,
   buildPublicStatusManifestKey,
+  LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
   type PublicStatusManifest,
   resolvePublicStatusManifestState,
 } from "./redis-contract";
@@ -24,6 +25,21 @@ interface PublicStatusSnapshotRecord {
   freshUntil: string;
   groups: unknown;
 }
+
+interface ProjectionReadResult {
+  prefix?: string;
+  selectedManifest: PublicStatusManifest;
+  resolution: ReturnType<typeof resolvePublicStatusManifestState>;
+  snapshot: PublicStatusSnapshotRecord;
+}
+
+interface ProjectionReadMiss {
+  reason: "manifest-missing" | "snapshot-missing";
+}
+
+type ProjectionReadOutcome =
+  | { ok: true; projection: ProjectionReadResult }
+  | { ok: false; miss: ProjectionReadMiss };
 
 async function safeGet(redis: RedisReader, key: string): Promise<string | null> {
   try {
@@ -178,6 +194,92 @@ function sanitizeGroupSnapshots(input: unknown): PublicStatusGroupSnapshot[] {
   });
 }
 
+async function readProjection(input: {
+  redis: RedisReader;
+  intervalMinutes: number;
+  rangeHours: number;
+  nowIso: string;
+  configVersion?: string;
+  prefix?: string;
+}): Promise<ProjectionReadOutcome> {
+  const manifestConfigVersion = input.configVersion ?? "current";
+  const manifest = parseJson<PublicStatusManifest>(
+    await safeGet(
+      input.redis,
+      buildPublicStatusManifestKey({
+        configVersion: manifestConfigVersion,
+        intervalMinutes: input.intervalMinutes,
+        rangeHours: input.rangeHours,
+        prefix: input.prefix,
+      })
+    )
+  );
+  const currentManifest =
+    manifestConfigVersion === "current"
+      ? manifest
+      : parseJson<PublicStatusManifest>(
+          await safeGet(
+            input.redis,
+            buildPublicStatusManifestKey({
+              configVersion: "current",
+              intervalMinutes: input.intervalMinutes,
+              rangeHours: input.rangeHours,
+              prefix: input.prefix,
+            })
+          )
+        );
+
+  let selectedManifest = manifest;
+  let resolution = resolvePublicStatusManifestState(selectedManifest, input.nowIso);
+
+  if (!resolution.sourceGeneration && currentManifest) {
+    selectedManifest = currentManifest;
+    resolution = {
+      ...resolvePublicStatusManifestState(currentManifest, input.nowIso),
+      rebuildState: "stale",
+    };
+  }
+
+  if (!selectedManifest || !resolution.sourceGeneration) {
+    return { ok: false, miss: { reason: "manifest-missing" } };
+  }
+
+  const snapshotKey = buildPublicStatusCurrentSnapshotKey({
+    intervalMinutes: input.intervalMinutes,
+    rangeHours: input.rangeHours,
+    generation: resolution.sourceGeneration,
+    prefix: input.prefix,
+  });
+  const snapshot = parseJson<PublicStatusSnapshotRecord>(await safeGet(input.redis, snapshotKey));
+
+  if (!snapshot) {
+    return { ok: false, miss: { reason: "snapshot-missing" } };
+  }
+
+  return {
+    ok: true,
+    projection: {
+      prefix: input.prefix,
+      selectedManifest,
+      resolution,
+      snapshot,
+    },
+  };
+}
+
+function projectionToPayload(input: {
+  projection: ProjectionReadResult;
+  rebuildState?: PublicStatusPayload["rebuildState"];
+}): PublicStatusPayload {
+  return {
+    rebuildState: input.rebuildState ?? input.projection.resolution.rebuildState,
+    sourceGeneration: input.projection.snapshot.sourceGeneration,
+    generatedAt: input.projection.snapshot.generatedAt,
+    freshUntil: input.projection.snapshot.freshUntil,
+    groups: sanitizeGroupSnapshots(input.projection.snapshot.groups),
+  };
+}
+
 export async function readPublicStatusPayload(input: {
   intervalMinutes: number;
   rangeHours: number;
@@ -197,64 +299,99 @@ export async function readPublicStatusPayload(input: {
     return buildRebuildingPayload();
   }
 
-  const manifestKey = buildPublicStatusManifestKey({
-    configVersion: input.configVersion ?? "current",
+  const primaryRead = await readProjection({
+    redis,
     intervalMinutes: input.intervalMinutes,
     rangeHours: input.rangeHours,
+    nowIso: input.nowIso,
+    configVersion: input.configVersion,
   });
-  const manifest = parseJson<PublicStatusManifest>(await safeGet(redis, manifestKey));
-  const currentManifestKey = buildPublicStatusManifestKey({
-    configVersion: "current",
-    intervalMinutes: input.intervalMinutes,
-    rangeHours: input.rangeHours,
-  });
-  const currentManifest = parseJson<PublicStatusManifest>(await safeGet(redis, currentManifestKey));
 
-  let selectedManifest = manifest;
-  let resolution = resolvePublicStatusManifestState(selectedManifest, input.nowIso);
+  let projection = primaryRead.ok ? primaryRead.projection : null;
+  let miss = primaryRead.ok ? null : primaryRead.miss;
 
-  if (!resolution.sourceGeneration && currentManifest) {
-    selectedManifest = currentManifest;
-    resolution = {
-      ...resolvePublicStatusManifestState(currentManifest, input.nowIso),
+  if (!projection) {
+    const legacyRead = await readProjection({
+      redis,
+      intervalMinutes: input.intervalMinutes,
+      rangeHours: input.rangeHours,
+      nowIso: input.nowIso,
+      configVersion: input.configVersion,
+      prefix: LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
+    });
+    projection = legacyRead.ok ? legacyRead.projection : null;
+    if (!legacyRead.ok && miss?.reason !== "snapshot-missing") {
+      miss = legacyRead.miss;
+    }
+  }
+
+  if (!projection) {
+    await input.triggerRebuildHint(miss?.reason ?? "manifest-missing");
+    return buildRebuildingPayload();
+  }
+
+  if (
+    projection.prefix !== LEGACY_PUBLIC_STATUS_REDIS_PREFIX &&
+    projection.selectedManifest.rollupCoverageComplete === false
+  ) {
+    const legacyRead = await readProjection({
+      redis,
+      intervalMinutes: input.intervalMinutes,
+      rangeHours: input.rangeHours,
+      nowIso: input.nowIso,
+      configVersion: input.configVersion,
+      prefix: LEGACY_PUBLIC_STATUS_REDIS_PREFIX,
+    });
+
+    if (legacyRead.ok) {
+      await input.triggerRebuildHint("rollup-coverage-incomplete");
+      await input.triggerRebuildHint("legacy-generation");
+      if (
+        input.configVersion &&
+        legacyRead.projection.selectedManifest.configVersion !== input.configVersion
+      ) {
+        await input.triggerRebuildHint("config-version-mismatch");
+      }
+      return projectionToPayload({
+        projection: legacyRead.projection,
+        rebuildState: "stale",
+      });
+    }
+
+    await input.triggerRebuildHint("rollup-coverage-incomplete");
+    if (input.configVersion && projection.selectedManifest.configVersion !== input.configVersion) {
+      await input.triggerRebuildHint("config-version-mismatch");
+    }
+    return projectionToPayload({
+      projection,
       rebuildState: "stale",
-    };
+    });
   }
 
-  if (!resolution.sourceGeneration) {
-    await input.triggerRebuildHint("manifest-missing");
-    return buildRebuildingPayload();
-  }
-
-  const snapshotKey = buildPublicStatusCurrentSnapshotKey({
-    intervalMinutes: input.intervalMinutes,
-    rangeHours: input.rangeHours,
-    generation: resolution.sourceGeneration,
-  });
-  const snapshot = parseJson<PublicStatusSnapshotRecord>(await safeGet(redis, snapshotKey));
-
-  if (!snapshot) {
-    await input.triggerRebuildHint("snapshot-missing");
-    return buildRebuildingPayload();
-  }
-
-  if (resolution.rebuildState !== "fresh") {
+  if (
+    projection.resolution.rebuildState !== "fresh" ||
+    projection.prefix === LEGACY_PUBLIC_STATUS_REDIS_PREFIX
+  ) {
     await input.triggerRebuildHint("stale-generation");
   }
 
-  if (input.configVersion && selectedManifest?.configVersion !== input.configVersion) {
-    await input.triggerRebuildHint("config-version-mismatch");
-    resolution = {
-      ...resolution,
-      rebuildState: "stale",
-    };
+  if (projection.prefix === LEGACY_PUBLIC_STATUS_REDIS_PREFIX) {
+    await input.triggerRebuildHint("legacy-generation");
   }
 
-  return {
-    rebuildState: resolution.rebuildState,
-    sourceGeneration: snapshot.sourceGeneration,
-    generatedAt: snapshot.generatedAt,
-    freshUntil: snapshot.freshUntil,
-    groups: sanitizeGroupSnapshots(snapshot.groups),
-  };
+  if (input.configVersion && projection.selectedManifest.configVersion !== input.configVersion) {
+    await input.triggerRebuildHint("config-version-mismatch");
+    return projectionToPayload({
+      projection,
+      rebuildState: "stale",
+    });
+  }
+
+  return projectionToPayload({
+    projection,
+    rebuildState:
+      projection.prefix === LEGACY_PUBLIC_STATUS_REDIS_PREFIX
+        ? "stale"
+        : projection.resolution.rebuildState,
+  });
 }

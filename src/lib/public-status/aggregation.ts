@@ -8,6 +8,7 @@ import {
 import { resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import type { ProviderChainItem } from "@/types/message";
+import { computeTokensPerSecond, type PublicStatusConfiguredGroup } from "./aggregation-core";
 import type { InternalPublicStatusConfigSnapshot } from "./config-snapshot";
 import type { PublicStatusPayload, PublicStatusTimelineBucket } from "./payload";
 
@@ -43,19 +44,7 @@ export interface PublicStatusRequestRow {
   providerChain?: PublicStatusRequestChainItem[] | null;
 }
 
-export interface PublicStatusConfiguredGroup {
-  sourceGroupName: string;
-  publicGroupSlug: string;
-  displayName: string;
-  explanatoryCopy: string | null;
-  sortOrder: number;
-  models: Array<{
-    publicModelKey: string;
-    label: string;
-    vendorIconKey: string;
-    requestTypeBadge: string;
-  }>;
-}
+export type { PublicStatusConfiguredGroup } from "./aggregation-core";
 
 export interface PublicStatusAggregationResult {
   generatedAt: string;
@@ -84,6 +73,7 @@ export function getConfiguredPublicStatusGroups(
         group.models.length > 0
     )
     .map((group) => ({
+      sourceGroupId: group.sourceGroupId ?? null,
       sourceGroupName: group.sourceGroupName!.trim(),
       publicGroupSlug: group.slug,
       displayName: group.displayName,
@@ -102,26 +92,7 @@ export function getConfiguredPublicStatusGroups(
     );
 }
 
-export function computeTokensPerSecond(input: {
-  outputTokens?: number | null;
-  durationMs?: number | null;
-  ttfbMs?: number | null;
-}): number | null {
-  if (!input.outputTokens || input.outputTokens <= 0) {
-    return null;
-  }
-
-  if (!input.durationMs || input.durationMs <= 0) {
-    return null;
-  }
-
-  const generationMs = input.durationMs - (input.ttfbMs ?? 0);
-  if (generationMs <= 0) {
-    return null;
-  }
-
-  return Number((input.outputTokens / (generationMs / 1000)).toFixed(4));
-}
+export { computeTokensPerSecond } from "./aggregation-core";
 
 export function isExcludedFromPublicStatusFailure(signal: PublicStatusFailureSignal): boolean {
   return (
@@ -352,10 +323,10 @@ export function buildPublicStatusPayloadFromRequests(input: {
         bucket.failureCount += 1;
       }
 
-      if (typeof request.ttfbMs === "number") {
+      if (outcome === "success" && typeof request.ttfbMs === "number") {
         bucket.ttfbValues.push(request.ttfbMs);
       }
-      if (typeof tps === "number") {
+      if (outcome === "success" && typeof tps === "number") {
         bucket.tpsValues.push(tps);
       }
     }

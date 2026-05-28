@@ -287,40 +287,46 @@ describe("public-status view", () => {
     }));
     global.fetch = fetchMock as typeof global.fetch;
 
-    const { container, unmount } = render(
-      <PublicStatusView
-        initialPayload={buildPayload({
-          rebuildState: "rebuilding",
-          groups: [],
-        })}
-        initialStatus="no_snapshot"
-        intervalMinutes={5}
-        rangeHours={24}
-        locale="en"
-        timeZone="UTC"
-        labels={buildLabels()}
-        siteTitle="Acme AI Hub"
-      />
-    );
+    let unmount: (() => void) | undefined;
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    try {
+      const { container, unmount: cleanup } = render(
+        <PublicStatusView
+          initialPayload={buildPayload({
+            rebuildState: "rebuilding",
+            groups: [],
+          })}
+          initialStatus="no_snapshot"
+          intervalMinutes={5}
+          rangeHours={24}
+          locale="en"
+          timeZone="UTC"
+          labels={buildLabels()}
+          siteTitle="Acme AI Hub"
+        />
+      );
+      unmount = cleanup;
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/public-status?interval=5&rangeHours=24", {
-      cache: "no-store",
-    });
+      await act(async () => {
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      vi.advanceTimersByTime(30_000);
-      await Promise.resolve();
-    });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/public-status?interval=5&rangeHours=24&include=meta%2Cdefaults%2Cgroups",
+        { cache: "no-store" }
+      );
 
-    expect(container.textContent).toContain("Refresh delayed");
-    expect(container.textContent).toContain("Preparing first snapshot");
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
 
-    vi.useRealTimers();
-    unmount();
+      expect(container.textContent).toContain("Refresh delayed");
+      expect(container.textContent).toContain("Preparing first snapshot");
+    } finally {
+      vi.useRealTimers();
+      unmount?.();
+    }
   });
 
   it("falls back to shared model-prefix vendor icons when payload vendorIconKey is generic", () => {
@@ -452,25 +458,130 @@ describe("public-status view", () => {
     }));
     global.fetch = fetchMock as typeof global.fetch;
 
+    let unmount: (() => void) | undefined;
+
+    try {
+      const { container, unmount: cleanup } = render(
+        <PublicStatusView
+          initialPayload={buildPayload({
+            groups: [
+              {
+                publicGroupSlug: "platform",
+                displayName: "Platform",
+                explanatoryCopy: "Default group",
+                models: [
+                  {
+                    publicModelKey: "platform-model",
+                    label: "Platform Model",
+                    vendorIconKey: "openai",
+                    requestTypeBadge: "openaiCompatible",
+                    latestState: "operational",
+                    availabilityPct: 99.9,
+                    latestTtfbMs: 420,
+                    latestTps: null,
+                    timeline: [],
+                  },
+                ],
+              },
+            ],
+          })}
+          initialStatus="ready"
+          intervalMinutes={5}
+          rangeHours={24}
+          followServerDefaults={true}
+          filterSlug="platform"
+          locale="en"
+          timeZone="UTC"
+          labels={buildLabels()}
+          siteTitle="Acme AI Hub"
+        />
+      );
+      unmount = cleanup;
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/public-status?groupSlug=platform&include=meta%2Cdefaults%2Cgroups",
+        { cache: "no-store" }
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
+
+      const text = container.textContent || "";
+      expect(text).toContain("Platform Model");
+      expect(text).not.toContain("OpenAI Model");
+      expect(container.querySelectorAll('[data-testid="sortable-group-panel"]')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+      unmount?.();
+    }
+  });
+
+  it("updates summary state from polling payload even when timeline is reused", async () => {
+    vi.useFakeTimers();
+
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      json: async () =>
+        buildRouteResponse({
+          groups: [
+            {
+              publicGroupSlug: "openai",
+              displayName: "OpenAI",
+              explanatoryCopy: "Primary models",
+              models: [
+                {
+                  publicModelKey: "gpt-4.1",
+                  label: "GPT-4.1",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "failed",
+                  availabilityPct: 0,
+                  latestTtfbMs: null,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+          ],
+        }),
+    }));
+    global.fetch = fetchMock as typeof global.fetch;
+
     const { container, unmount } = render(
       <PublicStatusView
         initialPayload={buildPayload({
           groups: [
             {
-              publicGroupSlug: "platform",
-              displayName: "Platform",
-              explanatoryCopy: "Default group",
+              publicGroupSlug: "openai",
+              displayName: "OpenAI",
+              explanatoryCopy: "Primary models",
               models: [
                 {
-                  publicModelKey: "platform-model",
-                  label: "Platform Model",
+                  publicModelKey: "gpt-4.1",
+                  label: "GPT-4.1",
                   vendorIconKey: "openai",
                   requestTypeBadge: "openaiCompatible",
                   latestState: "operational",
-                  availabilityPct: 99.9,
+                  availabilityPct: 100,
                   latestTtfbMs: 420,
                   latestTps: null,
-                  timeline: [],
+                  timeline: [
+                    {
+                      bucketStart: "2026-04-21T09:55:00.000Z",
+                      bucketEnd: "2026-04-21T10:00:00.000Z",
+                      state: "operational",
+                      availabilityPct: 100,
+                      ttfbMs: 420,
+                      tps: null,
+                      sampleCount: 1,
+                    },
+                  ],
                 },
               ],
             },
@@ -479,8 +590,6 @@ describe("public-status view", () => {
         initialStatus="ready"
         intervalMinutes={5}
         rangeHours={24}
-        followServerDefaults={true}
-        filterSlug="platform"
         locale="en"
         timeZone="UTC"
         labels={buildLabels()}
@@ -488,25 +597,96 @@ describe("public-status view", () => {
       />
     );
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    expect(container.textContent).toContain("Operational");
+    expect(container.querySelector('[data-testid="public-status-timeline"]')?.textContent).toBe(
+      "1"
+    );
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/public-status?groupSlug=platform", {
-      cache: "no-store",
-    });
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      vi.advanceTimersByTime(30_000);
-      await Promise.resolve();
-    });
+      expect(container.textContent).toContain("Failed");
+      expect(container.textContent).toContain("0.00%");
+      expect(container.querySelector('[data-testid="public-status-timeline"]')?.textContent).toBe(
+        "1"
+      );
+    } finally {
+      vi.useRealTimers();
+      unmount();
+    }
+  });
 
-    const text = container.textContent || "";
-    expect(text).toContain("Platform Model");
-    expect(text).not.toContain("OpenAI Model");
-    expect(container.querySelectorAll('[data-testid="sortable-group-panel"]')).toHaveLength(1);
+  it("uses server summary metrics when polling returns a new model without timeline", async () => {
+    vi.useFakeTimers();
 
-    vi.useRealTimers();
-    unmount();
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      json: async () =>
+        buildRouteResponse({
+          groups: [
+            {
+              publicGroupSlug: "openai",
+              displayName: "OpenAI",
+              explanatoryCopy: "Primary models",
+              models: [
+                {
+                  publicModelKey: "gpt-4.1",
+                  label: "GPT-4.1",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "operational",
+                  availabilityPct: 100,
+                  latestTtfbMs: 420,
+                  latestTps: null,
+                  timeline: [],
+                },
+                {
+                  publicModelKey: "gpt-4.2",
+                  label: "GPT-4.2",
+                  vendorIconKey: "openai",
+                  requestTypeBadge: "openaiCompatible",
+                  latestState: "failed",
+                  availabilityPct: 0,
+                  latestTtfbMs: null,
+                  latestTps: null,
+                  timeline: [],
+                },
+              ],
+            },
+          ],
+        }),
+    }));
+    global.fetch = fetchMock as typeof global.fetch;
+
+    const { container, unmount } = render(
+      <PublicStatusView
+        initialPayload={buildPayload()}
+        initialStatus="ready"
+        intervalMinutes={5}
+        rangeHours={24}
+        locale="en"
+        timeZone="UTC"
+        labels={buildLabels()}
+        siteTitle="Acme AI Hub"
+      />
+    );
+
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
+
+      const text = container.textContent || "";
+      expect(text).toContain("GPT-4.2");
+      expect(text).toContain("Failed");
+      expect(text).toContain("0.00%");
+    } finally {
+      vi.useRealTimers();
+      unmount();
+    }
   });
 });
