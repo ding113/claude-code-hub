@@ -371,15 +371,30 @@ export function formatOpenAIResponse(models: FetchedModel[]): OpenAIModelsRespon
 }
 
 /**
+ * 将时间戳归一化为 Anthropic API 规范格式(秒级精度,不含毫秒)。
+ *
+ * 官方 Anthropic /v1/models 的 created_at 形如 `2026-05-29T09:22:44Z`,不含毫秒;
+ * 而 Date.toISOString() 始终输出 `.SSSZ`,部分上游也会带毫秒,因此统一去除。
+ * 无法解析的上游时间戳原样返回,避免抛错。
+ */
+function normalizeAnthropicTimestamp(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/**
  * 格式化为 Anthropic 响应
  */
 export function formatAnthropicResponse(models: FetchedModel[]): AnthropicModelsResponse {
-  const now = new Date().toISOString();
+  const now = normalizeAnthropicTimestamp(new Date().toISOString());
   const data = models.map((m) => ({
     id: m.id,
     type: "model" as const,
     display_name: m.displayName || m.id,
-    created_at: m.createdAt || now,
+    created_at: m.createdAt ? normalizeAnthropicTimestamp(m.createdAt) : now,
   }));
 
   return { data, has_more: false };
