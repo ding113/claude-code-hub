@@ -1771,6 +1771,13 @@ export class ProxyResponseHandler {
           let streamEndedNormally = false;
           let responseTimeoutCleared = false;
           let abortReason: string | undefined;
+          let durationPersisted = false;
+
+          const persistDurationOnce = async (duration: number) => {
+            if (durationPersisted) return;
+            await updateMessageRequestDuration(messageContext.id, duration);
+            durationPersisted = true;
+          };
 
           // 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
           const idleTimeoutMs =
@@ -1944,6 +1951,7 @@ export class ProxyResponseHandler {
 
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
+            await persistDurationOnce(duration);
             const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
               session,
               allContent,
@@ -2007,6 +2015,7 @@ export class ProxyResponseHandler {
               clearIdleTimer();
               const allContent = flushAndJoin();
               const duration = Date.now() - session.startTime;
+              await persistDurationOnce(duration);
 
               const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
                 session,

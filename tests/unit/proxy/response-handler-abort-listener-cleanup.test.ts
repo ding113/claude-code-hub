@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
-import { updateMessageRequestDetails } from "@/repository/message";
+import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
 
@@ -205,6 +205,7 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     testState.cleanupTask.mockClear();
     vi.restoreAllMocks();
     vi.mocked(updateMessageRequestDetails).mockClear();
+    vi.mocked(updateMessageRequestDuration).mockClear();
   });
 
   it("removes non-stream client abort listener after response processing completes", async () => {
@@ -228,6 +229,10 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     const abortAddCalls = addSpy.mock.calls.filter(([type]) => type === "abort");
     expect(abortAddCalls).toHaveLength(1);
     expect(removeSpy).toHaveBeenCalledWith("abort", abortAddCalls[0][1]);
+    expect(updateMessageRequestDuration).toHaveBeenCalledWith(123, expect.any(Number));
+    expect(vi.mocked(updateMessageRequestDuration).mock.calls.at(-1)?.[1]).toBeGreaterThanOrEqual(
+      0
+    );
   });
 
   it("removes stream client abort listener after stream processing completes", async () => {
