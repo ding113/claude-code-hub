@@ -2,6 +2,7 @@
   "header": {
     "title": "我的用量",
     "welcome": "欢迎，{name}",
+    "documentation": "使用文档",
     "logout": "退出登录",
     "keyLabel": "密钥",
     "userLabel": "用户",

@@ -1,9 +1,9 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import { BookOpen, LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "@/i18n/routing";
+import { Link, useRouter } from "@/i18n/routing";
 
 interface MyUsageHeaderProps {
   onLogout?: () => Promise<void> | void;
@@ -27,7 +27,7 @@ export function MyUsageHeader({ onLogout, keyName, userName }: MyUsageHeaderProp
   };
 
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold leading-tight">
@@ -45,7 +45,13 @@ export function MyUsageHeader({ onLogout, keyName, userName }: MyUsageHeaderProp
           </span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
+        <Button asChild variant="outline" size="sm" className="gap-2">
+          <Link href="/usage-doc">
+            <BookOpen className="h-4 w-4" />
+            {t("documentation")}
+          </Link>
+        </Button>
         <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
           <LogOut className="h-4 w-4" />
           {t("logout")}

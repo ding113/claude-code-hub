@@ -2,6 +2,7 @@
   "header": {
     "title": "マイ利用状況",
     "welcome": "ようこそ、{name}さん",
+    "documentation": "利用ドキュメント",
     "logout": "ログアウト",
     "keyLabel": "キー",
     "userLabel": "ユーザー",

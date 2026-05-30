@@ -1,10 +1,10 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import { BookOpen, LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "@/i18n/routing";
+import { Link, useRouter } from "@/i18n/routing";
 
 interface UserMenuProps {
   user: {
@@ -46,6 +46,18 @@ export function UserMenu({ user }: UserMenuProps) {
         </Avatar>
         <span className="text-sm font-medium text-foreground/90">{user.name}</span>
       </div>
+      <Button
+        asChild
+        variant="ghost"
+        size="icon"
+        className="h-9 w-9 rounded-full transition-all duration-200"
+        title={t("documentation")}
+        aria-label={t("documentation")}
+      >
+        <Link href="/usage-doc">
+          <BookOpen className="h-4 w-4" />
+        </Link>
+      </Button>
       <Button
         variant="ghost"
         size="icon"
