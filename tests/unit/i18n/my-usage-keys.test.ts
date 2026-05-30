@@ -33,6 +33,19 @@ const locales: Record<string, Record<string, unknown>> = {
 
 const baselineKeys = extractKeys(enMyUsage);
 
+type MyUsageMessages = Record<string, unknown> & {
+  header?: Record<string, unknown>;
+};
+
+function getHeaderDocumentation(data: Record<string, unknown>) {
+  const header = (data as MyUsageMessages).header;
+  if (header === null || typeof header !== "object" || Array.isArray(header)) {
+    return undefined;
+  }
+
+  return header.documentation;
+}
+
 describe("myUsage.json locale key parity", () => {
   for (const [locale, data] of Object.entries(locales)) {
     it(`${locale} matches the English key set`, () => {
@@ -42,7 +55,7 @@ describe("myUsage.json locale key parity", () => {
 
   it("defines a documentation label for the readonly usage header", () => {
     for (const [locale, data] of Object.entries(locales)) {
-      const documentation = data.header?.documentation;
+      const documentation = getHeaderDocumentation(data);
       expect(typeof documentation, `${locale} header.documentation`).toBe("string");
       expect((documentation as string).trim(), `${locale} header.documentation`).not.toBe("");
     }

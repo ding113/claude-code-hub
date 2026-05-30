@@ -39,7 +39,10 @@ export default async function UsageDocLayout({
   params: Promise<UsageDocParams> | UsageDocParams;
 }) {
   const { locale } = await params;
-  const [session, t] = await Promise.all([getSession(), getUsageTranslations(locale)]);
+  const [session, t] = await Promise.all([
+    getSession({ allowReadOnlyAccess: true }),
+    getUsageTranslations(locale),
+  ]);
 
   return (
     <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">

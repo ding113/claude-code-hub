@@ -122,5 +122,6 @@ describe("usage-doc auth state - HttpOnly cookie alignment", () => {
     );
     expect(srcContent).toContain("UsageDocAuthProvider");
     expect(srcContent).toContain("isLoggedIn={!!session}");
+    expect(srcContent).toContain("getSession({ allowReadOnlyAccess: true })");
   });
 });
