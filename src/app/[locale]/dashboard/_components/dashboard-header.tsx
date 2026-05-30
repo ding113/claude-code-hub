@@ -17,6 +17,7 @@ interface DashboardHeaderProps {
 export async function DashboardHeader({ session, locale }: DashboardHeaderProps) {
   const t = await getTranslations({ locale, namespace: "dashboard.nav" });
   const isAdmin = session?.user.role === "admin";
+  const canUseDashboard = !!session && (isAdmin || session.key.canLoginWebUi);
 
   const NAV_ITEMS: (DashboardNavItem & { adminOnly?: boolean })[] = [
     { href: "/dashboard", label: t("dashboard") },
@@ -32,7 +33,10 @@ export async function DashboardHeader({ session, locale }: DashboardHeaderProps)
     { href: "/settings", label: t("systemSettings"), adminOnly: true },
   ];
 
-  const items = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const items =
+    session && !canUseDashboard
+      ? [{ href: "/usage-doc", label: t("documentation") }]
+      : NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
