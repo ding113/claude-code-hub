@@ -124,7 +124,7 @@ export function VirtualizedLogsTable({
   hideScrollToTop = false,
   hiddenColumns,
   bodyClassName,
-  serverTimeZone: _serverTimeZone,
+  serverTimeZone,
   fetchFn,
   queryKeyPrefix = "usage-logs-batch",
   disableDetailDialog = false,
@@ -717,7 +717,12 @@ export function VirtualizedLogsTable({
                   >
                     {/* Time */}
                     <div className="flex-[0.6] min-w-[56px] font-mono text-xs truncate pl-3">
-                      <RelativeTime date={log.createdAt} fallback="-" format="short" />
+                      <RelativeTime
+                        date={log.createdAt}
+                        fallback="-"
+                        format="short"
+                        timeZone={serverTimeZone}
+                      />
                     </div>
 
                     {/* User */}

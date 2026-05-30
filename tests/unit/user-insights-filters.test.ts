@@ -12,6 +12,23 @@ describe("resolveTimePresetDates", () => {
     expect(startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
+  it("uses the configured timezone when resolving presets", () => {
+    const now = new Date("2026-05-30T02:00:00Z");
+
+    expect(resolveTimePresetDates("today", "America/New_York", now)).toEqual({
+      startDate: "2026-05-29",
+      endDate: "2026-05-29",
+    });
+    expect(resolveTimePresetDates("today", "Asia/Shanghai", now)).toEqual({
+      startDate: "2026-05-30",
+      endDate: "2026-05-30",
+    });
+    expect(resolveTimePresetDates("7days", "America/New_York", now)).toEqual({
+      startDate: "2026-05-23",
+      endDate: "2026-05-29",
+    });
+  });
+
   it("returns 7-day range for '7days' preset", () => {
     const { startDate, endDate } = resolveTimePresetDates("7days");
 

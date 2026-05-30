@@ -350,6 +350,7 @@ export function UsageLogsFilters({
         onClearAll={handleReset}
         displayNames={displayNames}
         isAdmin={isAdmin}
+        serverTimeZone={serverTimeZone}
       />
 
       {/* Filter Sections */}

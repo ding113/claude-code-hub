@@ -2,6 +2,11 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import {
+  invalidateAllLeaderboardCaches,
+  invalidateAllOverviewCaches,
+  invalidateAllStatisticsCaches,
+} from "@/lib/redis";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 
@@ -99,6 +104,17 @@ export async function POST(req: Request) {
       "@/app/v1/_lib/proxy/provider-selector-settings-cache"
     );
     invalidateProviderSelectorSystemSettingsCache();
+    if (validated.timezone !== undefined) {
+      await Promise.all([
+        invalidateAllOverviewCaches(),
+        invalidateAllStatisticsCaches(),
+        invalidateAllLeaderboardCaches(),
+      ]).catch((error) => {
+        logger.warn("[SystemSettings] Failed to invalidate timezone-sensitive dashboard caches", {
+          error,
+        });
+      });
+    }
 
     return Response.json(updated);
   } catch (error) {
