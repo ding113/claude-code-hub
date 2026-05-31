@@ -127,8 +127,8 @@ function getTimeRangeSqlConfig(timeRange: TimeRange, timezone: string): SqlTimeR
         bucketExpr: sql`DATE_TRUNC('day', usage_ledger.created_at AT TIME ZONE ${timezone})`,
         bucketSeriesQuery: sql`
           SELECT generate_series(
-            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
+            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}),
+            DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}),
             '1 day'::interval
           ) AS bucket
         `,
@@ -157,7 +157,9 @@ function normalizeBucketInstant(value: TimeBucketValue, timezone: string): Date 
     localDateTime = formatLocalDateTime(value);
   } else {
     const match =
-      /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/.exec(value);
+      /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}(?::?\d{2})?)?$/.exec(
+        value
+      );
     if (!match) return null;
     localDateTime = `${match[1]}T${match[2]}`;
   }
