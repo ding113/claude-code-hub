@@ -1,6 +1,16 @@
 "use client";
 
-import { addDays, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from "date-fns";
+import {
+  addDays,
+  addMonths,
+  differenceInCalendarDays,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
@@ -70,7 +80,16 @@ function shiftDateRange(
 ): { startDate: string; endDate: string } {
   const start = parseDate(range.startDate);
   const end = parseDate(range.endDate);
-  const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  if (isSameDay(start, startOfMonth(start)) && isSameDay(end, endOfMonth(start))) {
+    const month = addMonths(start, direction === "prev" ? -1 : 1);
+    return {
+      startDate: formatDate(startOfMonth(month)),
+      endDate: formatDate(endOfMonth(month)),
+    };
+  }
+
+  const days = differenceInCalendarDays(end, start) + 1;
   const shift = direction === "prev" ? -days : days;
 
   return {
