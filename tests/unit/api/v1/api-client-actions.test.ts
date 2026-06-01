@@ -394,7 +394,11 @@ describe("v1 action compatibility client", () => {
 
   test("maps a failed provider group counts request to a failed ActionResult", async () => {
     getMock.mockRejectedValue(
-      new ApiError({ status: 403, errorCode: "auth.forbidden", detail: "Admin access is required." })
+      new ApiError({
+        status: 403,
+        errorCode: "auth.forbidden",
+        detail: "Admin access is required.",
+      })
     );
 
     const result = await providers.getProviderGroupsWithCount();
