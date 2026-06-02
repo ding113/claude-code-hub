@@ -431,6 +431,13 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           // 动态生成排行榜数据
           const { getNotificationSettings } = await import("@/repository/notifications");
           const settings = await getNotificationSettings();
+
+          // 执行期再次校验开关：总开关或子开关关闭后，遗留的 repeatable 作业不应继续发送
+          if (!settings.enabled || !settings.dailyLeaderboardEnabled) {
+            logger.info({ action: "daily_leaderboard_disabled", jobId: job.id });
+            return { success: true, skipped: true };
+          }
+
           const leaderboardData = await generateDailyLeaderboard(
             settings.dailyLeaderboardTopN || 5
           );
@@ -451,6 +458,13 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           // 动态生成成本预警数据
           const { getNotificationSettings } = await import("@/repository/notifications");
           const settings = await getNotificationSettings();
+
+          // 执行期再次校验开关：总开关或子开关关闭后，遗留的 repeatable 作业不应继续发送
+          if (!settings.enabled || !settings.costAlertEnabled) {
+            logger.info({ action: "cost_alert_disabled", jobId: job.id });
+            return { success: true, skipped: true };
+          }
+
           const alerts = await generateCostAlerts(
             parseFloat(settings.costAlertThreshold || "0.80")
           );
@@ -706,6 +720,25 @@ export async function addNotificationJobForTarget(
 }
 
 /**
+ * 移除队列中所有 repeatable 定时任务。
+ * 单个 key 移除失败（如 Redis 瞬时错误）不应中断整个重调度流程，否则会残留旧任务。
+ */
+async function removeAllRepeatableJobs(queue: Queue.Queue<NotificationJobData>): Promise<void> {
+  const repeatableJobs = await queue.getRepeatableJobs();
+  for (const job of repeatableJobs) {
+    try {
+      await queue.removeRepeatableByKey(job.key);
+    } catch (error) {
+      logger.warn({
+        action: "notification_repeatable_remove_failed",
+        key: job.key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+/**
  * 调度定时通知任务
  */
 export async function scheduleNotifications() {
@@ -719,20 +752,14 @@ export async function scheduleNotifications() {
     if (!settings.enabled) {
       logger.info({ action: "notifications_disabled" });
 
-      // 移除所有已存在的定时任务
-      const repeatableJobs = await queue.getRepeatableJobs();
-      for (const job of repeatableJobs) {
-        await queue.removeRepeatableByKey(job.key);
-      }
+      // 总开关关闭：移除所有已存在的定时任务
+      await removeAllRepeatableJobs(queue);
 
       return;
     }
 
-    // 移除旧的定时任务
-    const repeatableJobs = await queue.getRepeatableJobs();
-    for (const job of repeatableJobs) {
-      await queue.removeRepeatableByKey(job.key);
-    }
+    // 移除旧的定时任务，避免改时间/改配置后旧任务残留导致重复或错误时间触发
+    await removeAllRepeatableJobs(queue);
 
     if (settings.useLegacyMode) {
       // legacy 模式：单 URL
@@ -764,8 +791,11 @@ export async function scheduleNotifications() {
       }
 
       if (settings.costAlertEnabled && settings.costAlertWebhook) {
-        const interval = settings.costAlertCheckInterval ?? 60; // 分钟
-        const cron = `*/${interval} * * * *`; // 每 N 分钟
+        const intervalRaw = settings.costAlertCheckInterval ?? 60; // 分钟
+        const interval = Math.min(Math.max(1, Math.trunc(intervalRaw)), 24 * 60);
+        // Bull cron 分钟字段只有 0-59，`*/60` 会塌缩成“每小时第 0 分”，所以 >=60 分钟改用固定间隔
+        const repeat =
+          interval <= 59 ? { cron: `*/${interval} * * * *` } : { every: interval * 60 * 1000 };
 
         await queue.add(
           {
@@ -774,14 +804,14 @@ export async function scheduleNotifications() {
             // data 字段省略，任务执行时动态生成
           },
           {
-            repeat: { cron },
+            repeat,
             jobId: "cost-alert-scheduled",
           }
         );
 
         logger.info({
           action: "cost_alert_scheduled",
-          schedule: cron,
+          schedule: "cron" in repeat ? repeat.cron : `every:${interval}m`,
           intervalMinutes: interval,
           mode: "legacy",
         });
@@ -848,12 +878,18 @@ export async function scheduleNotifications() {
 
       if (settings.costAlertEnabled) {
         const bindings = await getEnabledBindingsByType("cost_alert");
-        const interval = settings.costAlertCheckInterval ?? 60;
-        const defaultCron = `*/${interval} * * * *`;
+        const intervalRaw = settings.costAlertCheckInterval ?? 60;
+        const interval = Math.min(Math.max(1, Math.trunc(intervalRaw)), 24 * 60);
 
         for (const binding of bindings) {
-          const cron = binding.scheduleCron ?? defaultCron;
           const tz = binding.scheduleTimezone ?? systemTimezone;
+          // 优先级：绑定自定义 cron（支持 tz）> 默认间隔。
+          // Bull cron 分钟字段只有 0-59，默认间隔 >=60 分钟改用固定 every（不支持 tz）。
+          const repeat = binding.scheduleCron
+            ? { cron: binding.scheduleCron, tz }
+            : interval <= 59
+              ? { cron: `*/${interval} * * * *`, tz }
+              : { every: interval * 60 * 1000 };
 
           await queue.add(
             {
@@ -862,7 +898,7 @@ export async function scheduleNotifications() {
               bindingId: binding.id,
             },
             {
-              repeat: { cron, tz },
+              repeat,
               jobId: `cost-alert:${binding.id}`,
             }
           );
@@ -870,7 +906,7 @@ export async function scheduleNotifications() {
 
         logger.info({
           action: "cost_alert_scheduled",
-          schedule: defaultCron,
+          schedule: interval <= 59 ? `*/${interval} * * * *` : `every:${interval}m`,
           intervalMinutes: interval,
           targets: bindings.length,
           mode: "targets",
