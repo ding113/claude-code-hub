@@ -424,9 +424,19 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         | undefined = data;
       let cooldownCommit: { keys: string[]; cooldownMinutes: number } | undefined;
       switch (type) {
-        case "circuit-breaker":
+        case "circuit-breaker": {
+          // 执行期再次校验开关：入队后若开关被关闭，遗留作业不应继续发送
+          const { getNotificationSettings } = await import("@/repository/notifications");
+          const settings = await getNotificationSettings();
+
+          if (!settings.enabled || !settings.circuitBreakerEnabled) {
+            logger.info({ action: "circuit_breaker_disabled", jobId: job.id });
+            return { success: true, skipped: true };
+          }
+
           message = buildCircuitBreakerMessage(data as CircuitBreakerAlertData, timezone);
           break;
+        }
         case "daily-leaderboard": {
           // 动态生成排行榜数据
           const { getNotificationSettings } = await import("@/repository/notifications");
@@ -721,14 +731,28 @@ export async function addNotificationJobForTarget(
 
 /**
  * 移除队列中所有 repeatable 定时任务。
- * 单个 key 移除失败（如 Redis 瞬时错误）不应中断整个重调度流程，否则会残留旧任务。
+ * 逐个尝试移除（单个 key 失败不影响其余 key），返回是否全部成功。
+ * 调用方应在“仍要新增任务”的场景下检查返回值：若有旧任务未能移除，
+ * 继续新增会导致旧任务与新任务同时触发（重复发送），应中止本次重调度等待重试。
  */
-async function removeAllRepeatableJobs(queue: Queue.Queue<NotificationJobData>): Promise<void> {
-  const repeatableJobs = await queue.getRepeatableJobs();
+async function removeAllRepeatableJobs(queue: Queue.Queue<NotificationJobData>): Promise<boolean> {
+  let repeatableJobs: Awaited<ReturnType<typeof queue.getRepeatableJobs>>;
+  try {
+    repeatableJobs = await queue.getRepeatableJobs();
+  } catch (error) {
+    logger.warn({
+      action: "notification_repeatable_list_failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+
+  let allRemoved = true;
   for (const job of repeatableJobs) {
     try {
       await queue.removeRepeatableByKey(job.key);
     } catch (error) {
+      allRemoved = false;
       logger.warn({
         action: "notification_repeatable_remove_failed",
         key: job.key,
@@ -736,6 +760,35 @@ async function removeAllRepeatableJobs(queue: Queue.Queue<NotificationJobData>):
       });
     }
   }
+  return allRemoved;
+}
+
+/** 将“每 N 分钟”归一化到 [1, 1440] 分钟。 */
+function clampIntervalMinutes(rawMinutes: number): number {
+  return Math.min(Math.max(1, Math.trunc(rawMinutes)), 24 * 60);
+}
+
+/**
+ * 将“每 N 分钟”间隔映射为 Bull 的 repeat 选项。
+ * Bull cron 的分钟字段仅 0-59，且分钟步进表达式在 N 不整除 60 时（如 45）会在整点边界产生不均匀间隔，
+ * 因此仅当 N<=59 且能整除 60 时使用 cron（可携带时区）；否则退化为固定毫秒间隔
+ * （every 按固定节奏触发，不对齐整点、不支持时区，这是 Bull 的限制）。
+ */
+function intervalToRepeat(
+  intervalMinutes: number,
+  tz?: string
+): { cron: string; tz?: string } | { every: number } {
+  if (intervalMinutes <= 59 && 60 % intervalMinutes === 0) {
+    return tz
+      ? { cron: `*/${intervalMinutes} * * * *`, tz }
+      : { cron: `*/${intervalMinutes} * * * *` };
+  }
+  return { every: intervalMinutes * 60 * 1000 };
+}
+
+/** 生成 repeat 选项的可读日志标签。 */
+function describeRepeat(repeat: { cron: string } | { every: number }): string {
+  return "cron" in repeat ? repeat.cron : `every:${Math.round(repeat.every / 60000)}m`;
 }
 
 /**
@@ -752,14 +805,22 @@ export async function scheduleNotifications() {
     if (!settings.enabled) {
       logger.info({ action: "notifications_disabled" });
 
-      // 总开关关闭：移除所有已存在的定时任务
+      // 总开关关闭：移除所有已存在的定时任务（此处无需新增任务，移除失败不阻断）
       await removeAllRepeatableJobs(queue);
 
       return;
     }
 
-    // 移除旧的定时任务，避免改时间/改配置后旧任务残留导致重复或错误时间触发
-    await removeAllRepeatableJobs(queue);
+    // 移除旧的定时任务，避免改时间/改配置后旧任务残留导致重复或错误时间触发。
+    // 若移除未全部成功，则不再新增任务——否则旧任务会与新任务同时触发（重复发送），等待下次重调度重试。
+    const removedAll = await removeAllRepeatableJobs(queue);
+    if (!removedAll) {
+      logger.error({
+        action: "schedule_notifications_aborted",
+        reason: "stale_repeatable_remove_failed",
+      });
+      return;
+    }
 
     if (settings.useLegacyMode) {
       // legacy 模式：单 URL
@@ -791,11 +852,8 @@ export async function scheduleNotifications() {
       }
 
       if (settings.costAlertEnabled && settings.costAlertWebhook) {
-        const intervalRaw = settings.costAlertCheckInterval ?? 60; // 分钟
-        const interval = Math.min(Math.max(1, Math.trunc(intervalRaw)), 24 * 60);
-        // Bull cron 分钟字段只有 0-59，`*/60` 会塌缩成“每小时第 0 分”，所以 >=60 分钟改用固定间隔
-        const repeat =
-          interval <= 59 ? { cron: `*/${interval} * * * *` } : { every: interval * 60 * 1000 };
+        const interval = clampIntervalMinutes(settings.costAlertCheckInterval ?? 60);
+        const repeat = intervalToRepeat(interval);
 
         await queue.add(
           {
@@ -811,20 +869,15 @@ export async function scheduleNotifications() {
 
         logger.info({
           action: "cost_alert_scheduled",
-          schedule: "cron" in repeat ? repeat.cron : `every:${interval}m`,
+          schedule: describeRepeat(repeat),
           intervalMinutes: interval,
           mode: "legacy",
         });
       }
 
       if (settings.cacheHitRateAlertEnabled && settings.cacheHitRateAlertWebhook) {
-        const intervalMinutesRaw = settings.cacheHitRateAlertCheckInterval ?? 5;
-        const intervalMinutes = Math.max(1, Math.trunc(intervalMinutesRaw));
-        const clampedIntervalMinutes = Math.min(intervalMinutes, 24 * 60);
-        const repeat =
-          clampedIntervalMinutes <= 59
-            ? { cron: `*/${clampedIntervalMinutes} * * * *` }
-            : { every: clampedIntervalMinutes * 60 * 1000 };
+        const interval = clampIntervalMinutes(settings.cacheHitRateAlertCheckInterval ?? 5);
+        const repeat = intervalToRepeat(interval);
 
         await queue.add(
           {
@@ -836,8 +889,8 @@ export async function scheduleNotifications() {
 
         logger.info({
           action: "cache_hit_rate_alert_scheduled",
-          schedule: "cron" in repeat ? repeat.cron : `every:${clampedIntervalMinutes}m`,
-          intervalMinutes: clampedIntervalMinutes,
+          schedule: describeRepeat(repeat),
+          intervalMinutes: interval,
           mode: "legacy",
         });
       }
@@ -878,18 +931,14 @@ export async function scheduleNotifications() {
 
       if (settings.costAlertEnabled) {
         const bindings = await getEnabledBindingsByType("cost_alert");
-        const intervalRaw = settings.costAlertCheckInterval ?? 60;
-        const interval = Math.min(Math.max(1, Math.trunc(intervalRaw)), 24 * 60);
+        const interval = clampIntervalMinutes(settings.costAlertCheckInterval ?? 60);
 
         for (const binding of bindings) {
           const tz = binding.scheduleTimezone ?? systemTimezone;
-          // 优先级：绑定自定义 cron（支持 tz）> 默认间隔。
-          // Bull cron 分钟字段只有 0-59，默认间隔 >=60 分钟改用固定 every（不支持 tz）。
+          // 优先级：绑定自定义 cron（支持 tz）> 默认间隔（按 N 是否整除 60 选择 cron 或固定 every）。
           const repeat = binding.scheduleCron
             ? { cron: binding.scheduleCron, tz }
-            : interval <= 59
-              ? { cron: `*/${interval} * * * *`, tz }
-              : { every: interval * 60 * 1000 };
+            : intervalToRepeat(interval, tz);
 
           await queue.add(
             {
@@ -906,7 +955,7 @@ export async function scheduleNotifications() {
 
         logger.info({
           action: "cost_alert_scheduled",
-          schedule: interval <= 59 ? `*/${interval} * * * *` : `every:${interval}m`,
+          schedule: describeRepeat(intervalToRepeat(interval)),
           intervalMinutes: interval,
           targets: bindings.length,
           mode: "targets",
@@ -915,19 +964,12 @@ export async function scheduleNotifications() {
 
       if (settings.cacheHitRateAlertEnabled) {
         const bindings = await getEnabledBindingsByType("cache_hit_rate_alert");
-        const intervalMinutesRaw = settings.cacheHitRateAlertCheckInterval ?? 5;
-        const intervalMinutes = Math.max(1, Math.trunc(intervalMinutesRaw));
-        const clampedIntervalMinutes = Math.min(intervalMinutes, 24 * 60);
-        const defaultCron = `*/${clampedIntervalMinutes} * * * *`;
-        const repeat =
-          clampedIntervalMinutes <= 59
-            ? { cron: defaultCron, tz: systemTimezone }
-            : { every: clampedIntervalMinutes * 60 * 1000 };
+        const interval = clampIntervalMinutes(settings.cacheHitRateAlertCheckInterval ?? 5);
+        const repeat = intervalToRepeat(interval, systemTimezone);
 
         if (bindings.length > 0) {
           // 注意：这里刻意只调度一个共享的 repeat 作业，然后在处理器内 fan-out 到所有 bindings。
           // 这样可以避免对每个 binding 重复计算同一份 payload；代价是 binding 的 scheduleCron/scheduleTimezone 将被忽略。
-          // 另外：interval > 59 分钟会使用 repeat.every（固定间隔，不对齐整点，也不支持 tz），这是 Bull cron 分钟字段的限制。
           // 若未来需要支持 per-binding 的 cron/timezone，需要改为“每个 binding 一个 repeat 作业”或引入更细粒度的调度层。
           await queue.add(
             {
@@ -940,17 +982,16 @@ export async function scheduleNotifications() {
           );
           logger.info({
             action: "cache_hit_rate_alert_scheduled",
-            schedule: "cron" in repeat ? repeat.cron : `every:${clampedIntervalMinutes}m`,
-            intervalMinutes: clampedIntervalMinutes,
+            schedule: describeRepeat(repeat),
+            intervalMinutes: interval,
             targets: bindings.length,
             mode: "targets",
           });
         } else {
           logger.info({
             action: "cache_hit_rate_alert_schedule_skipped",
-            schedule:
-              clampedIntervalMinutes <= 59 ? defaultCron : `every:${clampedIntervalMinutes}m`,
-            intervalMinutes: clampedIntervalMinutes,
+            schedule: describeRepeat(repeat),
+            intervalMinutes: interval,
             reason: "no_bindings",
             mode: "targets",
           });

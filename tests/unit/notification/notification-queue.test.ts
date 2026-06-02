@@ -130,6 +130,7 @@ beforeEach(() => {
   mockSendWebhookMessage.mockResolvedValue({ success: true });
   mockGenerateDailyLeaderboard.mockResolvedValue({ date: "2026-06-02", entries: [] });
   mockGenerateCostAlerts.mockResolvedValue([{ providerName: "p" }]);
+  mockGetEnabledBindingsByType.mockResolvedValue([]);
   queueGetRepeatableJobs.mockResolvedValue([]);
 });
 
@@ -230,6 +231,58 @@ describe("notification queue processor - cost-alert", () => {
     expect(result).toEqual({ success: true, skipped: true });
     expect(mockSendWebhookMessage).not.toHaveBeenCalled();
   });
+
+  it("sends when both master and sub-switch are enabled", async () => {
+    mockGetNotificationSettings.mockResolvedValue(
+      makeSettings({ enabled: true, costAlertEnabled: true })
+    );
+
+    const handler = await loadProcessor();
+    const result = await handler(
+      makeJob({ type: "cost-alert", webhookUrl: "https://example.com/hook" })
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(mockGenerateCostAlerts).toHaveBeenCalledTimes(1);
+    expect(mockSendWebhookMessage).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("notification queue processor - circuit-breaker", () => {
+  const data = {
+    providerName: "OpenAI",
+    providerId: 1,
+    failureCount: 5,
+    retryAt: "2026-06-02T12:30:00Z",
+  };
+
+  it("skips sending when the master switch is off", async () => {
+    mockGetNotificationSettings.mockResolvedValue(
+      makeSettings({ enabled: false, circuitBreakerEnabled: true })
+    );
+
+    const handler = await loadProcessor();
+    const result = await handler(
+      makeJob({ type: "circuit-breaker", webhookUrl: "https://example.com/hook", data })
+    );
+
+    expect(result).toEqual({ success: true, skipped: true });
+    expect(mockSendWebhookMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends when both master and sub-switch are enabled", async () => {
+    mockGetNotificationSettings.mockResolvedValue(
+      makeSettings({ enabled: true, circuitBreakerEnabled: true })
+    );
+
+    const handler = await loadProcessor();
+    const result = await handler(
+      makeJob({ type: "circuit-breaker", webhookUrl: "https://example.com/hook", data })
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(mockSendWebhookMessage).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("scheduleNotifications", () => {
@@ -245,7 +298,7 @@ describe("scheduleNotifications", () => {
     expect(queueAdd).not.toHaveBeenCalled();
   });
 
-  it("keeps rescheduling other jobs when one repeatable removal fails", async () => {
+  it("attempts to remove every repeatable job even when one removal fails (master off)", async () => {
     mockGetNotificationSettings.mockResolvedValue(makeSettings({ enabled: false }));
     queueGetRepeatableJobs.mockResolvedValue([{ key: "k1" }, { key: "k2" }]);
     queueRemoveRepeatableByKey.mockRejectedValueOnce(new Error("redis down"));
@@ -254,6 +307,97 @@ describe("scheduleNotifications", () => {
     await expect(scheduleNotifications()).resolves.toBeUndefined();
 
     expect(queueRemoveRepeatableByKey).toHaveBeenCalledTimes(2);
+  });
+
+  it("aborts adding new jobs when an old repeatable cannot be removed (avoids double-firing)", async () => {
+    mockGetNotificationSettings.mockResolvedValue(
+      makeSettings({
+        enabled: true,
+        useLegacyMode: true,
+        costAlertEnabled: true,
+        costAlertWebhook: "https://example.com/hook",
+      })
+    );
+    queueGetRepeatableJobs.mockResolvedValue([{ key: "stale" }]);
+    queueRemoveRepeatableByKey.mockRejectedValueOnce(new Error("redis down"));
+
+    const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
+    await scheduleNotifications();
+
+    // 旧任务未能移除时不得新增任务，否则新旧任务会同时触发
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("uses {every} for an interval that does not divide 60 (legacy)", async () => {
+    mockGetNotificationSettings.mockResolvedValue(
+      makeSettings({
+        enabled: true,
+        useLegacyMode: true,
+        costAlertEnabled: true,
+        costAlertWebhook: "https://example.com/hook",
+        costAlertCheckInterval: 45,
+      })
+    );
+
+    const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
+    await scheduleNotifications();
+
+    const costCall = queueAdd.mock.calls.find(
+      (c) => (c[0] as { type?: string })?.type === "cost-alert"
+    );
+    expect((costCall?.[1] as { repeat?: unknown })?.repeat).toEqual({ every: 45 * 60 * 1000 });
+  });
+
+  it("schedules targets-mode cost-alert with binding jobId and tz (cron path)", async () => {
+    mockGetNotificationSettings.mockResolvedValue(
+      makeSettings({
+        enabled: true,
+        useLegacyMode: false,
+        costAlertEnabled: true,
+        costAlertCheckInterval: 30,
+      })
+    );
+    mockGetEnabledBindingsByType.mockImplementation(async (type: string) =>
+      type === "cost_alert"
+        ? [{ id: 7, targetId: 3, scheduleCron: null, scheduleTimezone: "Asia/Tokyo" }]
+        : []
+    );
+
+    const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
+    await scheduleNotifications();
+
+    const costCall = queueAdd.mock.calls.find(
+      (c) => (c[0] as { type?: string })?.type === "cost-alert"
+    );
+    expect(costCall?.[0]).toMatchObject({ type: "cost-alert", targetId: 3, bindingId: 7 });
+    expect(costCall?.[1]).toMatchObject({
+      repeat: { cron: "*/30 * * * *", tz: "Asia/Tokyo" },
+      jobId: "cost-alert:7",
+    });
+  });
+
+  it("schedules targets-mode cost-alert with {every} for interval >= 60 (drops tz)", async () => {
+    mockGetNotificationSettings.mockResolvedValue(
+      makeSettings({
+        enabled: true,
+        useLegacyMode: false,
+        costAlertEnabled: true,
+        costAlertCheckInterval: 120,
+      })
+    );
+    mockGetEnabledBindingsByType.mockImplementation(async (type: string) =>
+      type === "cost_alert"
+        ? [{ id: 9, targetId: 4, scheduleCron: null, scheduleTimezone: "Asia/Tokyo" }]
+        : []
+    );
+
+    const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
+    await scheduleNotifications();
+
+    const costCall = queueAdd.mock.calls.find(
+      (c) => (c[0] as { type?: string })?.type === "cost-alert"
+    );
+    expect((costCall?.[1] as { repeat?: unknown })?.repeat).toEqual({ every: 120 * 60 * 1000 });
   });
 
   it("uses {every} instead of */60 cron for cost-alert interval >= 60 (legacy)", async () => {
