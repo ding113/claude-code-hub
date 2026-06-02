@@ -373,4 +373,56 @@ describe("v1 action compatibility client", () => {
     expect(result).not.toHaveProperty("data");
     expect(result[1]?.circuitState).toBe("open");
   });
+
+  test("wraps provider group counts in ActionResult for the dashboard consumer", async () => {
+    // 后端 listProviderGroups 经 actionJson() 解包，直接返回裸数组；
+    // provider-group-select.tsx 却按 `{ ok, data }` 消费。若 api-client 不再包一层，
+    // `res.ok` 永远 undefined，每次展开用户编辑面板都会误报 "获取供应商分组统计失败"。
+    const groupCounts = [
+      { group: "default", providerCount: 2 },
+      { group: "prod", providerCount: 1 },
+    ];
+    getMock.mockResolvedValue(groupCounts);
+
+    const result = await providers.getProviderGroupsWithCount();
+
+    expect(getMock).toHaveBeenCalledWith("/api/v1/providers/groups?include=count", {
+      headers: { [DASHBOARD_COMPAT_HEADER]: "1" },
+    });
+    expect(result).toEqual({ ok: true, data: groupCounts });
+  });
+
+  test("maps a failed provider group counts request to a failed ActionResult", async () => {
+    getMock.mockRejectedValue(
+      new ApiError({
+        status: 403,
+        errorCode: "auth.forbidden",
+        detail: "Admin access is required.",
+      })
+    );
+
+    const result = await providers.getProviderGroupsWithCount();
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Admin access is required.",
+      errorCode: "auth.forbidden",
+      errorParams: undefined,
+    });
+  });
+
+  test("wraps model suggestions in ActionResult for the autocomplete consumer", async () => {
+    // 与分组统计同源：use-model-suggestions.ts 检查 `res.ok && res.data`，
+    // 裸数组会让自动补全静默失效（不报错但永远拿不到建议模型）。
+    const suggestions = ["claude-3-opus", "claude-3-sonnet"];
+    getMock.mockResolvedValue(suggestions);
+
+    const result = await providers.getModelSuggestionsByProviderGroup("default");
+
+    expect(getMock).toHaveBeenCalledWith(
+      "/api/v1/providers/model-suggestions?providerGroup=default",
+      { headers: { [DASHBOARD_COMPAT_HEADER]: "1" } }
+    );
+    expect(result).toEqual({ ok: true, data: suggestions });
+  });
 });
