@@ -488,8 +488,7 @@ describe("Model Price Actions", () => {
 
       findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
       findAllLatestPricesMock.mockResolvedValue([manualPrice]);
-      deleteModelPriceByNameMock.mockResolvedValue(undefined);
-      createModelPriceMock.mockResolvedValue(
+      upsertModelPriceMock.mockResolvedValue(
         makeMockPrice(
           "custom-model",
           {
@@ -513,8 +512,12 @@ describe("Model Price Actions", () => {
 
       expect(result.ok).toBe(true);
       expect(result.data?.updated).toContain("custom-model");
-      expect(deleteModelPriceByNameMock).toHaveBeenCalledWith("custom-model");
-      expect(createModelPriceMock).toHaveBeenCalled();
+      // The overwrite is an atomic replace (delete + insert in one transaction).
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "custom-model",
+        expect.any(Object),
+        "litellm"
+      );
     });
 
     it("should add new models with litellm source", async () => {
@@ -649,7 +652,7 @@ describe("Model Price Actions", () => {
       expect(deleteModelPriceByNameMock).not.toHaveBeenCalled();
     });
 
-    it("should delete stale rows before inserting when a cloud price changes (no orphan rows)", async () => {
+    it("should atomically replace a changed cloud price via upsert (no orphan rows)", async () => {
       const existing = makeMockPrice(
         "cloud-model",
         { mode: "chat", input_cost_per_token: 0.001 },
@@ -657,8 +660,7 @@ describe("Model Price Actions", () => {
       );
       findAllManualPricesMock.mockResolvedValue(new Map());
       findAllLatestPricesMock.mockResolvedValue([existing]);
-      deleteModelPriceByNameMock.mockResolvedValue(undefined);
-      createModelPriceMock.mockResolvedValue(
+      upsertModelPriceMock.mockResolvedValue(
         makeMockPrice("cloud-model", { mode: "chat", input_cost_per_token: 0.002 }, "litellm")
       );
 
@@ -669,12 +671,13 @@ describe("Model Price Actions", () => {
 
       expect(result.ok).toBe(true);
       expect(result.data?.updated).toContain("cloud-model");
-      expect(deleteModelPriceByNameMock).toHaveBeenCalledWith("cloud-model");
-      expect(createModelPriceMock).toHaveBeenCalledWith(
+      // Transactional replace, not a separate delete + insert.
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
         "cloud-model",
         expect.any(Object),
         "litellm"
       );
+      expect(createModelPriceMock).not.toHaveBeenCalled();
     });
 
     it("should convert an existing cloud (litellm) model to manual on local upload", async () => {
@@ -685,8 +688,7 @@ describe("Model Price Actions", () => {
       );
       findAllManualPricesMock.mockResolvedValue(new Map());
       findAllLatestPricesMock.mockResolvedValue([existing]);
-      deleteModelPriceByNameMock.mockResolvedValue(undefined);
-      createModelPriceMock.mockResolvedValue(
+      upsertModelPriceMock.mockResolvedValue(
         makeMockPrice("shared-model", { mode: "chat", input_cost_per_token: 0.001 }, "manual")
       );
 
@@ -699,12 +701,34 @@ describe("Model Price Actions", () => {
 
       expect(result.ok).toBe(true);
       expect(result.data?.updated).toContain("shared-model");
-      expect(deleteModelPriceByNameMock).toHaveBeenCalledWith("shared-model");
-      expect(createModelPriceMock).toHaveBeenCalledWith(
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
         "shared-model",
         expect.any(Object),
         "manual"
       );
+    });
+
+    it("should update an existing manual model on local re-upload (manual source bypasses skip)", async () => {
+      // Regression: re-uploading a price file to revise a user's own model must apply,
+      // not be silently skipped as a conflict.
+      const manualPrice = makeMockPrice("my-model", { mode: "chat", input_cost_per_token: 0.1 });
+      findAllManualPricesMock.mockResolvedValue(new Map([["my-model", manualPrice]]));
+      findAllLatestPricesMock.mockResolvedValue([manualPrice]);
+      upsertModelPriceMock.mockResolvedValue(
+        makeMockPrice("my-model", { mode: "chat", input_cost_per_token: 0.2 }, "manual")
+      );
+
+      const { processPriceTableInternal } = await import("@/actions/model-prices");
+      const result = await processPriceTableInternal(
+        JSON.stringify({ "my-model": { mode: "chat", input_cost_per_token: 0.2 } }),
+        undefined,
+        "manual"
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data?.updated).toContain("my-model");
+      expect(result.data?.skippedConflicts).not.toContain("my-model");
+      expect(upsertModelPriceMock).toHaveBeenCalledWith("my-model", expect.any(Object), "manual");
     });
 
     it("should normalize whitespace in cloud model names before manual protection", async () => {

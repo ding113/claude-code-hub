@@ -180,11 +180,11 @@ export async function processPriceTableInternal(
           continue;
         }
 
-        // 本地优先：当本次写入来自云端/自动同步（source='litellm'）时，
-        // 跳过用户手动维护的模型，除非显式列入覆盖列表。
-        // 用户显式上传（source='manual'）属于权威导入，不受此保护跳过。
+        // 本地优先：仅当本次写入来自云端/自动同步（source='litellm'）时，
+        // 才跳过用户手动维护的模型，除非显式列入覆盖列表。
+        // 用户显式上传（source='manual'）属于权威导入，不受此保护跳过，可正常覆盖。
         const isManualPrice = manualPrices.has(modelName);
-        if (isManualPrice && !overwriteSet.has(modelName)) {
+        if (source === "litellm" && isManualPrice && !overwriteSet.has(modelName)) {
           // 跳过手动添加的模型，记录到 skippedConflicts
           result.skippedConflicts?.push(modelName);
           result.unchanged.push(modelName);
@@ -202,10 +202,9 @@ export async function processPriceTableInternal(
           existingPrice.source !== source ||
           !isPriceDataEqual(existingPrice.priceData, priceData)
         ) {
-          // 价格或来源发生变化：先删除该模型的所有旧记录再写入新记录，
-          // 避免同名记录在表中堆积（litellm 孤儿行，或 manual + litellm 并存）。
-          await deleteModelPriceByName(modelName);
-          await createModelPrice(modelName, priceData, source);
+          // 价格或来源发生变化：用事务原子地“删旧 + 插新”替换该模型的所有记录，
+          // 既保证不会在崩溃时丢失价格，又避免同名记录堆积（litellm 孤儿行，或 manual + litellm 并存）。
+          await upsertModelPrice(modelName, priceData, source);
           result.updated.push(modelName);
         } else {
           // 价格未发生变化，不需要更新
