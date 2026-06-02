@@ -488,8 +488,7 @@ describe("Model Price Actions", () => {
 
       findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
       findAllLatestPricesMock.mockResolvedValue([manualPrice]);
-      deleteModelPriceByNameMock.mockResolvedValue(undefined);
-      createModelPriceMock.mockResolvedValue(
+      upsertModelPriceMock.mockResolvedValue(
         makeMockPrice(
           "custom-model",
           {
@@ -513,8 +512,12 @@ describe("Model Price Actions", () => {
 
       expect(result.ok).toBe(true);
       expect(result.data?.updated).toContain("custom-model");
-      expect(deleteModelPriceByNameMock).toHaveBeenCalledWith("custom-model");
-      expect(createModelPriceMock).toHaveBeenCalled();
+      // The overwrite is an atomic replace (delete + insert in one transaction).
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "custom-model",
+        expect.any(Object),
+        "litellm"
+      );
     });
 
     it("should add new models with litellm source", async () => {
@@ -606,6 +609,173 @@ describe("Model Price Actions", () => {
 
       expect(result.ok).toBe(true);
       expect(result.data?.unchanged).toContain("safe-model");
+      expect(createModelPriceMock).not.toHaveBeenCalled();
+    });
+
+    it("should persist models with the manual source when source='manual' (local upload)", async () => {
+      findAllManualPricesMock.mockResolvedValue(new Map());
+      findAllLatestPricesMock.mockResolvedValue([]);
+      createModelPriceMock.mockResolvedValue(
+        makeMockPrice("new-model", { mode: "chat" }, "manual")
+      );
+
+      const { processPriceTableInternal } = await import("@/actions/model-prices");
+      const result = await processPriceTableInternal(
+        JSON.stringify({ "new-model": { mode: "chat", input_cost_per_token: 0.000001 } }),
+        undefined,
+        "manual"
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data?.added).toContain("new-model");
+      expect(createModelPriceMock).toHaveBeenCalledWith("new-model", expect.any(Object), "manual");
+    });
+
+    it("should protect a locally-uploaded (manual) model from later auto-sync overwrite", async () => {
+      // Regression: a user-created local model must survive an unattended cloud sync.
+      const manualPrice = makeMockPrice("my-custom-model", {
+        mode: "chat",
+        input_cost_per_token: 0.123,
+      });
+      findAllManualPricesMock.mockResolvedValue(new Map([["my-custom-model", manualPrice]]));
+      findAllLatestPricesMock.mockResolvedValue([manualPrice]);
+
+      const { processPriceTableInternal } = await import("@/actions/model-prices");
+      // Auto-sync writes 'litellm' (default) with a different cloud price and no overwrite list.
+      const result = await processPriceTableInternal(
+        JSON.stringify({ "my-custom-model": { mode: "chat", input_cost_per_token: 0.999 } })
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data?.skippedConflicts).toContain("my-custom-model");
+      expect(createModelPriceMock).not.toHaveBeenCalled();
+      expect(deleteModelPriceByNameMock).not.toHaveBeenCalled();
+    });
+
+    it("should atomically replace a changed cloud price via upsert (no orphan rows)", async () => {
+      const existing = makeMockPrice(
+        "cloud-model",
+        { mode: "chat", input_cost_per_token: 0.001 },
+        "litellm"
+      );
+      findAllManualPricesMock.mockResolvedValue(new Map());
+      findAllLatestPricesMock.mockResolvedValue([existing]);
+      upsertModelPriceMock.mockResolvedValue(
+        makeMockPrice("cloud-model", { mode: "chat", input_cost_per_token: 0.002 }, "litellm")
+      );
+
+      const { processPriceTableInternal } = await import("@/actions/model-prices");
+      const result = await processPriceTableInternal(
+        JSON.stringify({ "cloud-model": { mode: "chat", input_cost_per_token: 0.002 } })
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data?.updated).toContain("cloud-model");
+      // Transactional replace, not a separate delete + insert.
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "cloud-model",
+        expect.any(Object),
+        "litellm"
+      );
+      expect(createModelPriceMock).not.toHaveBeenCalled();
+    });
+
+    it("should convert an existing cloud (litellm) model to manual on local upload", async () => {
+      const existing = makeMockPrice(
+        "shared-model",
+        { mode: "chat", input_cost_per_token: 0.001 },
+        "litellm"
+      );
+      findAllManualPricesMock.mockResolvedValue(new Map());
+      findAllLatestPricesMock.mockResolvedValue([existing]);
+      upsertModelPriceMock.mockResolvedValue(
+        makeMockPrice("shared-model", { mode: "chat", input_cost_per_token: 0.001 }, "manual")
+      );
+
+      const { processPriceTableInternal } = await import("@/actions/model-prices");
+      const result = await processPriceTableInternal(
+        JSON.stringify({ "shared-model": { mode: "chat", input_cost_per_token: 0.001 } }),
+        undefined,
+        "manual"
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data?.updated).toContain("shared-model");
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "shared-model",
+        expect.any(Object),
+        "manual"
+      );
+    });
+
+    it("should update an existing manual model on local re-upload (manual source bypasses skip)", async () => {
+      // Regression: re-uploading a price file to revise a user's own model must apply,
+      // not be silently skipped as a conflict.
+      const manualPrice = makeMockPrice("my-model", { mode: "chat", input_cost_per_token: 0.1 });
+      findAllManualPricesMock.mockResolvedValue(new Map([["my-model", manualPrice]]));
+      findAllLatestPricesMock.mockResolvedValue([manualPrice]);
+      upsertModelPriceMock.mockResolvedValue(
+        makeMockPrice("my-model", { mode: "chat", input_cost_per_token: 0.2 }, "manual")
+      );
+
+      const { processPriceTableInternal } = await import("@/actions/model-prices");
+      const result = await processPriceTableInternal(
+        JSON.stringify({ "my-model": { mode: "chat", input_cost_per_token: 0.2 } }),
+        undefined,
+        "manual"
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data?.updated).toContain("my-model");
+      expect(result.data?.skippedConflicts).not.toContain("my-model");
+      expect(upsertModelPriceMock).toHaveBeenCalledWith("my-model", expect.any(Object), "manual");
+    });
+
+    it("should normalize whitespace in cloud model names before manual protection", async () => {
+      const manualPrice = makeMockPrice("claude-3", { mode: "chat", input_cost_per_token: 0.123 });
+      findAllManualPricesMock.mockResolvedValue(new Map([["claude-3", manualPrice]]));
+      findAllLatestPricesMock.mockResolvedValue([manualPrice]);
+
+      const { processPriceTableInternal } = await import("@/actions/model-prices");
+      const result = await processPriceTableInternal(
+        JSON.stringify({ "  claude-3  ": { mode: "chat", input_cost_per_token: 0.999 } })
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data?.skippedConflicts).toContain("claude-3");
+      expect(createModelPriceMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("uploadPriceTable - local-first", () => {
+    it("should store uploaded models with manual source so auto-sync cannot overwrite them", async () => {
+      findAllManualPricesMock.mockResolvedValue(new Map());
+      findAllLatestPricesMock.mockResolvedValue([]);
+      createModelPriceMock.mockResolvedValue(
+        makeMockPrice("my-custom-model", { mode: "chat", input_cost_per_token: 0.001 }, "manual")
+      );
+
+      const { uploadPriceTable } = await import("@/actions/model-prices");
+      const result = await uploadPriceTable(
+        JSON.stringify({ "my-custom-model": { mode: "chat", input_cost_per_token: 0.001 } })
+      );
+
+      expect(result.ok).toBe(true);
+      expect(createModelPriceMock).toHaveBeenCalledWith(
+        "my-custom-model",
+        expect.any(Object),
+        "manual"
+      );
+    });
+
+    it("should reject non-admin users", async () => {
+      getSessionMock.mockResolvedValue({ user: { id: 2, role: "user" } });
+
+      const { uploadPriceTable } = await import("@/actions/model-prices");
+      const result = await uploadPriceTable(JSON.stringify({ x: { mode: "chat" } }));
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("无权限");
       expect(createModelPriceMock).not.toHaveBeenCalled();
     });
   });

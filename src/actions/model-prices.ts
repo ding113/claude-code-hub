@@ -25,6 +25,7 @@ import {
 import type {
   ModelPrice,
   ModelPriceData,
+  ModelPriceSource,
   PriceTableJson,
   PriceUpdateResult,
   SyncConflict,
@@ -98,13 +99,17 @@ function buildManualPriceDataFromProviderPricing(
 
 /**
  * 价格表处理核心逻辑（内部函数，无权限检查）
- * 用于系统初始化和 Web UI 上传
+ * 用于系统初始化、云端自动同步和 Web UI 上传
  * @param jsonContent - 价格表 JSON 内容
  * @param overwriteManual - 可选，要覆盖的手动添加模型名称列表
+ * @param source - 写入记录的来源。云端/自动同步为 'litellm'（默认）；
+ *   用户在本地显式上传的价格表为 'manual'，使其遵循“本地优先”原则、
+ *   不被后续云端自动同步覆盖。
  */
 export async function processPriceTableInternal(
   jsonContent: string,
-  overwriteManual?: string[]
+  overwriteManual?: string[],
+  source: ModelPriceSource = "litellm"
 ): Promise<ActionResult<PriceUpdateResult>> {
   try {
     // 解析JSON内容
@@ -156,7 +161,10 @@ export async function processPriceTableInternal(
     };
 
     // 处理每个模型的价格
-    for (const [modelName, priceData] of entries) {
+    for (const [rawModelName, priceData] of entries) {
+      // 与 manual 记录入库时（upsertModelPrice 使用 trim 后的名称）保持一致地归一化，
+      // 避免云端表里带空白的同名键绕过本地手动模型的保护检查。
+      const modelName = typeof rawModelName === "string" ? rawModelName.trim() : rawModelName;
       try {
         // 验证价格数据基本类型
         if (typeof priceData !== "object" || priceData === null) {
@@ -172,9 +180,11 @@ export async function processPriceTableInternal(
           continue;
         }
 
-        // 检查是否存在手动添加的价格且不在覆盖列表中
+        // 本地优先：仅当本次写入来自云端/自动同步（source='litellm'）时，
+        // 才跳过用户手动维护的模型，除非显式列入覆盖列表。
+        // 用户显式上传（source='manual'）属于权威导入，不受此保护跳过，可正常覆盖。
         const isManualPrice = manualPrices.has(modelName);
-        if (isManualPrice && !overwriteSet.has(modelName)) {
+        if (source === "litellm" && isManualPrice && !overwriteSet.has(modelName)) {
           // 跳过手动添加的模型，记录到 skippedConflicts
           result.skippedConflicts?.push(modelName);
           result.unchanged.push(modelName);
@@ -186,15 +196,15 @@ export async function processPriceTableInternal(
 
         if (!existingPrice) {
           // 模型不存在，新增记录
-          await createModelPrice(modelName, priceData, "litellm");
+          await createModelPrice(modelName, priceData, source);
           result.added.push(modelName);
-        } else if (!isPriceDataEqual(existingPrice.priceData, priceData)) {
-          // 模型存在但价格发生变化
-          // 如果是手动模型且在覆盖列表中，先删除旧记录
-          if (isManualPrice && overwriteSet.has(modelName)) {
-            await deleteModelPriceByName(modelName);
-          }
-          await createModelPrice(modelName, priceData, "litellm");
+        } else if (
+          existingPrice.source !== source ||
+          !isPriceDataEqual(existingPrice.priceData, priceData)
+        ) {
+          // 价格或来源发生变化：用事务原子地“删旧 + 插新”替换该模型的所有记录，
+          // 既保证不会在崩溃时丢失价格，又避免同名记录堆积（litellm 孤儿行，或 manual + litellm 并存）。
+          await upsertModelPrice(modelName, priceData, source);
           result.updated.push(modelName);
         } else {
           // 价格未发生变化，不需要更新
@@ -261,7 +271,9 @@ export async function uploadPriceTable(
     jsonContent = JSON.stringify(parseResult.data.models);
   }
 
-  const result = await processPriceTableInternal(jsonContent, overwriteManual);
+  // 用户显式上传的价格表视为“本地优先”的权威来源，标记为 manual，
+  // 使其不会被后续云端自动同步静默覆盖。
+  const result = await processPriceTableInternal(jsonContent, overwriteManual, "manual");
 
   if (result.ok) {
     emitActionAudit({
