@@ -28,6 +28,9 @@ ENV CI=true
 RUN bun run build
 
 # 运行阶段：使用 Node.js（避免 Bun 流式响应内存泄漏 Issue #18488）
+# 要求 Node >= 22.15（入站请求体 zstd 解压依赖 node:zlib 原生 zstd，见
+# src/app/v1/_lib/proxy/request-body-codec.ts 与 package.json engines）。
+# node:trixie-slim 基于 Debian Trixie，提供 Node 24+，满足该要求。
 FROM node:trixie-slim AS runner
 ENV NODE_ENV=production
 ENV PORT=3000

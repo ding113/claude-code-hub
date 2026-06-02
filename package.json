@@ -2,6 +2,9 @@
   "name": "claude-code-hub",
   "version": "0.8.0",
   "private": true,
+  "engines": {
+    "node": ">=22.15.0"
+  },
   "scripts": {
     "dev": "tsgo -p tsconfig.json --noEmit && next dev --port 13500",
     "dev:server": "NODE_ENV=development node server.js",
