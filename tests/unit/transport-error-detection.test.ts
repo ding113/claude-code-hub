@@ -39,6 +39,12 @@ describe("isTransportError", () => {
       expect(isTransportError(err)).toBe(true);
     });
 
+    it("should detect EPIPE (broken pipe on downstream disconnect, issue #1234)", () => {
+      const err = new Error("write EPIPE");
+      (err as NodeJS.ErrnoException).code = "EPIPE";
+      expect(isTransportError(err)).toBe(true);
+    });
+
     it("should not detect generic errors", () => {
       const err = new Error("Something went wrong");
       expect(isTransportError(err)).toBe(false);

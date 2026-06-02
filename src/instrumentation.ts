@@ -4,6 +4,7 @@
  */
 
 import { startCacheCleanup } from "@/lib/cache/session-cache";
+import { isBenignBrokenPipeError } from "@/lib/lifecycle/benign-errors";
 import { logger } from "@/lib/logger";
 import { CHANNEL_API_KEYS_UPDATED, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
 import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
@@ -36,7 +37,7 @@ const instrumentationState = globalThis as unknown as {
  *
  * 这两个 process.on(...) 不会与现有的 SIGTERM / SIGINT 处理器冲突。
  */
-function registerCrashDiagnostics(): void {
+export function registerCrashDiagnostics(): void {
   if (instrumentationState.__CCH_CRASH_HANDLERS_REGISTERED__) {
     return;
   }
@@ -80,6 +81,19 @@ function registerCrashDiagnostics(): void {
   };
 
   process.on("uncaughtException", (err: Error) => {
+    // 良性断管/客户端断连（EPIPE/ECONNRESET/ERR_STREAM_PREMATURE_CLOSE，issue #1234）：
+    // 流式响应写入由 Next.js 持有，下游断开会让 socket write 在本地 try/catch 之外
+    // 抛错并逃逸到此处。此类错误是请求级传输关闭，不应放大为整个进程退出/容器重启。
+    if (isBenignBrokenPipeError(err)) {
+      logger.warn("[Lifecycle] ignored uncaught client disconnect", {
+        error: err.message,
+        errorName: err.name,
+        errorCode: (err as NodeJS.ErrnoException).code,
+        stack: err.stack,
+      });
+      return;
+    }
+
     const reportPath = writeReport("uncaughtException", err);
     writeFatalStderr("uncaughtException", err, reportPath);
     logger.fatal("[Lifecycle] uncaughtException", {
@@ -98,6 +112,19 @@ function registerCrashDiagnostics(): void {
   // 因此：写诊断报告 + 同步落盘日志 + 主动 exit(1) 复现默认语义。
   process.on("unhandledRejection", (reason: unknown) => {
     const err = reason instanceof Error ? reason : new Error(String(reason));
+    // 同 uncaughtException：良性断连以 rejection 形式逃逸时同样不应使进程退出。
+    // 注意：对原始 reason 判定（而非 wrap 后的 err），否则 { code: "EPIPE" } 之类
+    // 非 Error 拒因在 new Error(String(reason)) 后会丢失 code。
+    if (isBenignBrokenPipeError(reason)) {
+      logger.warn("[Lifecycle] ignored unhandled client disconnect", {
+        error: err.message,
+        errorName: err.name,
+        errorCode: (reason as NodeJS.ErrnoException)?.code ?? (err as NodeJS.ErrnoException).code,
+        stack: err.stack,
+      });
+      return;
+    }
+
     const reportPath = writeReport("unhandledRejection", err);
     writeFatalStderr("unhandledRejection", err, reportPath);
     logger.fatal("[Lifecycle] unhandledRejection", {
