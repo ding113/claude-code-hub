@@ -7,8 +7,12 @@
  * 出站黑名单重算）。
  *
  * 运行时为 Node.js（route.ts: `runtime = "nodejs"`）。`node:zlib` 自 Node 22.15 起
- * 原生提供 zstd 同步解压（gzip/deflate/br 更早即有），无需第三方依赖。生产镜像的
- * 运行时已固定为 node:22-slim（见 Dockerfile），满足该要求。
+ * 原生提供 zstd 同步解压（gzip/deflate/br 更早即有），无需第三方依赖。该最低版本要求
+ * 由 package.json 的 `engines` 字段声明；生产镜像（deploy/Dockerfile 的 node:trixie-slim）
+ * 运行 Node 24+，满足要求。
+ *
+ * 注意：解压在 `ProxySession.fromContext` 内、鉴权 guard 之前同步执行（与既有的请求体
+ * `JSON.parse` 一致）。单层编码 + maxOutputBytes 输出上限将其最坏开销限定为单次有界解压。
  */
 import {
   brotliDecompressSync,
@@ -29,10 +33,12 @@ import { ProxyError } from "./errors";
 export const MAX_DECOMPRESSED_REQUEST_BYTES = 100 * 1024 * 1024;
 
 /**
- * content-encoding 编码链最大层数。真实客户端最多 1-2 层；层数过多只会放大同步解压的
- * CPU 开销（每层一次同步解压），无正当用途，直接按 400 拒绝以消除该放大面。
+ * content-encoding 编码链最大层数。真实客户端（含 Codex）只发单层编码；允许多层会让一个
+ * 很小的压缩体经多次同步解压放大 CPU 开销与峰值内存（每层最多解到 maxOutputBytes，层间
+ * 缓冲还会短暂共存），无正当用途。限制为单层后，峰值解压内存即由 maxOutputBytes 一档兜底；
+ * 超出按 400 拒绝。
  */
-export const MAX_CONTENT_ENCODING_LAYERS = 3;
+export const MAX_CONTENT_ENCODING_LAYERS = 1;
 
 const SUPPORTED_ENCODINGS = new Set(["zstd", "gzip", "x-gzip", "deflate", "br"]);
 

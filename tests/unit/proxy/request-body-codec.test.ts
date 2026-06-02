@@ -6,13 +6,13 @@ import {
   zstdCompressSync,
 } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { ProxyError } from "./errors";
+import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 import {
   decodeRequestBody,
   MAX_CONTENT_ENCODING_LAYERS,
   MAX_DECOMPRESSED_REQUEST_BYTES,
   parseContentEncoding,
-} from "./request-body-codec";
+} from "@/app/v1/_lib/proxy/request-body-codec";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -87,28 +87,16 @@ describe("decodeRequestBody", () => {
     expect(decodedText(result)).toBe(SAMPLE);
   });
 
-  it("decodes a multi-encoding chain in reverse order", () => {
-    // Applied gzip first, then brotli on top -> header "gzip, br".
-    const layered = brotliCompressSync(gzipSync(raw()));
-    const result = decodeRequestBody(layered, "gzip, br");
-    expect(result.decoded).toBe(true);
-    expect(result.encoding).toBe("br, gzip");
-    expect(decodedText(result)).toBe(SAMPLE);
+  it("caps content-encoding to a single layer", () => {
+    expect(MAX_CONTENT_ENCODING_LAYERS).toBe(1);
   });
 
-  it(`decodes up to the layer cap (${MAX_CONTENT_ENCODING_LAYERS} layers)`, () => {
-    const layered = gzipSync(gzipSync(gzipSync(raw()))); // 3 layers
-    const result = decodeRequestBody(layered, "gzip, gzip, gzip");
-    expect(result.decoded).toBe(true);
-    expect(decodedText(result)).toBe(SAMPLE);
-  });
-
-  it("rejects content-encoding chains exceeding the layer cap with ProxyError(400)", () => {
-    const header = Array(MAX_CONTENT_ENCODING_LAYERS + 1)
-      .fill("gzip")
-      .join(", ");
+  it("rejects multi-layer content-encoding chains with ProxyError(400)", () => {
+    // Even all-supported multi-layer chains are rejected: real clients never send them
+    // and they amplify synchronous decompression cost.
+    const layered = gzipSync(gzipSync(raw()));
     try {
-      decodeRequestBody(gzipSync(raw()), header);
+      decodeRequestBody(layered, "gzip, gzip");
       throw new Error("expected decodeRequestBody to throw");
     } catch (err) {
       expect(err).toBeInstanceOf(ProxyError);
@@ -140,11 +128,6 @@ describe("decodeRequestBody", () => {
     expect(result.decoded).toBe(false);
     expect(result.encoding).toBeNull();
     expect(decodedText(result)).toBe(SAMPLE);
-  });
-
-  it("does not decode when a chain contains an unsupported encoding", () => {
-    const result = decodeRequestBody(gzipSync(raw()), "gzip, snappy");
-    expect(result.decoded).toBe(false);
   });
 
   it("accepts ArrayBuffer input and returns an independent ArrayBuffer", () => {
