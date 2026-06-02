@@ -153,6 +153,8 @@ describe("decodeRequestBody", () => {
     const result = decodeRequestBody(ab, "gzip");
     expect(result.decoded).toBe(true);
     expect(result.buffer).toBeInstanceOf(ArrayBuffer);
+    // Decoded output is freshly allocated, never the input compressed buffer.
+    expect(result.buffer).not.toBe(ab);
     expect(decodedText(result)).toBe(SAMPLE);
   });
 

@@ -6,8 +6,9 @@
  * 解压后由上层剥离 `content-encoding` 头，并以明文转发给上游（content-length 会被
  * 出站黑名单重算）。
  *
- * 运行时为 Node.js（route.ts: `runtime = "nodejs"`），Node 24 的 `node:zlib`
- * 原生提供 zstd/gzip/deflate/br 同步解压，无需第三方依赖。
+ * 运行时为 Node.js（route.ts: `runtime = "nodejs"`）。`node:zlib` 自 Node 22.15 起
+ * 原生提供 zstd 同步解压（gzip/deflate/br 更早即有），无需第三方依赖。生产镜像的
+ * 运行时已固定为 node:22-slim（见 Dockerfile），满足该要求。
  */
 import {
   brotliDecompressSync,
@@ -41,7 +42,10 @@ export interface DecodeRequestBodyOptions {
 }
 
 export interface DecodedRequestBody {
-  /** 解压后的请求体；未解压时即原始字节（拷贝为独立 ArrayBuffer）。 */
+  /**
+   * 请求体明文字节。解压时为新分配的解压结果；未解压时即原始字节，可能与入参共享
+   * 底层内存（仅供只读消费，调用方不得改写）。
+   */
   buffer: ArrayBuffer;
   /** 是否实际执行了解压。 */
   decoded: boolean;
@@ -94,12 +98,20 @@ function decodeOne(buffer: Buffer, encoding: string, maxOutputLength: number): B
   }
 }
 
+// 返回的 buffer 仅被下游只读消费（TextDecoder / JSON.parse / 透传转发），不会被改写，
+// 故视图正好完整覆盖底层 ArrayBuffer 时直接复用、避免对最大 100MB 数据做无谓拷贝。
 function toArrayBuffer(input: ArrayBuffer | Uint8Array): ArrayBuffer {
   if (input instanceof ArrayBuffer) return input;
+  if (input.byteOffset === 0 && input.byteLength === input.buffer.byteLength) {
+    return input.buffer as ArrayBuffer;
+  }
   return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) as ArrayBuffer;
 }
 
 function bufferToArrayBuffer(buf: Buffer): ArrayBuffer {
+  if (buf.byteOffset === 0 && buf.byteLength === buf.buffer.byteLength) {
+    return buf.buffer as ArrayBuffer;
+  }
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
@@ -130,6 +142,18 @@ export function decodeRequestBody(
     };
   }
 
+  // 空体：不可能是有效压缩流，在层数/支持集校验之前直接透传，避免对安全的空请求误报 400。
+  if (originalByteLength === 0) {
+    const buffer = toArrayBuffer(input);
+    return {
+      buffer,
+      decoded: false,
+      encoding: null,
+      originalByteLength,
+      decodedByteLength: buffer.byteLength,
+    };
+  }
+
   if (encodings.length > MAX_CONTENT_ENCODING_LAYERS) {
     // 防御多层编码放大：每层都是一次同步解压，过多层数纯属攻击/异常。
     throw new ProxyError(
@@ -145,18 +169,6 @@ export function decodeRequestBody(
       contentEncoding,
       unsupported,
     });
-    const buffer = toArrayBuffer(input);
-    return {
-      buffer,
-      decoded: false,
-      encoding: null,
-      originalByteLength,
-      decodedByteLength: buffer.byteLength,
-    };
-  }
-
-  // 空体：无需解压（也避免对部分解码器喂空流报错）。
-  if (originalByteLength === 0) {
     const buffer = toArrayBuffer(input);
     return {
       buffer,

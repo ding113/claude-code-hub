@@ -128,4 +128,25 @@ describe("ProxySession.fromContext request body decompression", () => {
     // We could not decode it, so we must not strip the header: forward as-is.
     expect(session.headers.get("content-encoding")).toBe("snappy");
   });
+
+  it("surfaces a ProxyError(400) when a declared-compressed body is corrupt", async () => {
+    const ctx = makeContext(
+      "https://hub.test/v1/responses",
+      { "content-type": "application/json", "content-encoding": "gzip" },
+      encoder.encode("this is not a valid gzip stream")
+    );
+
+    await expect(ProxySession.fromContext(ctx)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it("surfaces a ProxyError(400) when the content-encoding chain has too many layers", async () => {
+    const payload = JSON.stringify({ model: "gpt-5-codex", input: "x" });
+    const ctx = makeContext(
+      "https://hub.test/v1/responses",
+      { "content-type": "application/json", "content-encoding": "gzip, gzip, gzip, gzip" },
+      gzipSync(encoder.encode(payload))
+    );
+
+    await expect(ProxySession.fromContext(ctx)).rejects.toMatchObject({ statusCode: 400 });
+  });
 });
