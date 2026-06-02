@@ -29,6 +29,7 @@ import {
   type OpenAIImageRequestMetadata,
   parseOpenAIImageMultipartMetadata,
 } from "./openai-image-compat";
+import { decodeRequestBody } from "./request-body-codec";
 
 /**
  * Classification of an auth failure, used to decide whether to record the
@@ -82,6 +83,12 @@ interface RequestBodyResult {
   contentLength?: number | null;
   actualBodyBytes?: number;
   imageRequestMetadata?: OpenAIImageRequestMetadata | null;
+  /**
+   * 入站请求体实际解压所用的 content-encoding（链）。
+   * 非空表示代理已解压请求体，调用方需剥离出站 `content-encoding` 头，
+   * 避免上游对明文再次解码。未解压时为 undefined。
+   */
+  decodedContentEncoding?: string;
 }
 
 export class ProxySession {
@@ -236,6 +243,12 @@ export class ProxySession {
     const headers = new Headers(c.req.header());
     const headerLog = formatHeadersForLog(headers);
     const bodyResult = await parseRequestBody(c);
+
+    // 已在代理内解压请求体：剥离 content-encoding，避免上游对明文再次解码
+    // （raw passthrough 也会转发解压后的字节；content-length 由出站黑名单重算）。
+    if (bodyResult.decodedContentEncoding) {
+      headers.delete("content-encoding");
+    }
 
     // 提取 User-Agent
     const userAgent = headers.get("user-agent") || null;
@@ -1157,27 +1170,29 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
 
   const contentLength = parseContentLengthHeader(c.req.header("content-length"));
   const contentType = c.req.header("content-type") ?? null;
+  const contentEncoding = c.req.header("content-encoding") ?? null;
   const pathname = new URL(c.req.url).pathname;
-  const requestBodyBuffer = await c.req.raw.clone().arrayBuffer();
-  const actualBodyBytes = requestBodyBuffer.byteLength;
-  const requestBodyText = new TextDecoder().decode(requestBodyBuffer);
+  // 原始（可能被压缩的）入站字节：用于截断检测与 multipart 透传。
+  const rawBodyBuffer = await c.req.raw.clone().arrayBuffer();
+  const receivedBodyBytes = rawBodyBuffer.byteLength;
 
   // Truncation detection: warn only when both conditions are met
   // 1. Absolute difference > 1MB (avoid false positives from minor discrepancies)
   // 2. Actual body < 80% of expected (significant truncation)
+  // 注意：基于「接收到的原始字节」与 content-length 比较（同为压缩域），不受解压影响。
   const MIN_TRUNCATION_DIFF_BYTES = 1024 * 1024; // 1MB
   const TRUNCATION_RATIO_THRESHOLD = 0.8;
   if (
     contentLength !== null &&
-    contentLength - actualBodyBytes > MIN_TRUNCATION_DIFF_BYTES &&
-    actualBodyBytes < contentLength * TRUNCATION_RATIO_THRESHOLD
+    contentLength - receivedBodyBytes > MIN_TRUNCATION_DIFF_BYTES &&
+    receivedBodyBytes < contentLength * TRUNCATION_RATIO_THRESHOLD
   ) {
     logger.warn("[parseRequestBody] Possible body truncation detected", {
-      pathname: new URL(c.req.url).pathname,
+      pathname,
       method,
       contentLength,
-      actualBodyBytes,
-      ratio: (actualBodyBytes / contentLength).toFixed(2),
+      actualBodyBytes: receivedBodyBytes,
+      ratio: (receivedBodyBytes / contentLength).toFixed(2),
     });
   }
 
@@ -1188,6 +1203,7 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
 
   if (getOpenAIImageEndpoint(pathname) && isOpenAIImageMultipartContentType(contentType)) {
     // 图片 multipart 请求保留 sidecar metadata，并为过滤/敏感词提供文本字段视图。
+    // multipart 请求体不会被 content-encoding 压缩，按原始字节透传。
     imageRequestMetadata = await parseOpenAIImageMultipartMetadata(
       c.req.raw,
       pathname,
@@ -1203,12 +1219,18 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
       requestMessage,
       requestBodyLog,
       requestBodyLogNote,
-      requestBodyBuffer,
+      requestBodyBuffer: rawBodyBuffer,
       contentLength,
-      actualBodyBytes,
+      actualBodyBytes: receivedBodyBytes,
       imageRequestMetadata,
     };
   }
+
+  // 非 multipart：按 content-encoding（zstd/gzip/deflate/br）解压请求体，
+  // 使下游模型解析、过滤、计费、日志与转发都基于明文。
+  const decodedBody = decodeRequestBody(rawBodyBuffer, contentEncoding);
+  const requestBodyBuffer = decodedBody.buffer;
+  const requestBodyText = new TextDecoder().decode(requestBodyBuffer);
 
   try {
     const parsedMessage = JSON.parse(requestBodyText) as Record<string, unknown>;
@@ -1226,7 +1248,10 @@ async function parseRequestBody(c: Context): Promise<RequestBodyResult> {
     requestBodyLogNote,
     requestBodyBuffer,
     contentLength,
-    actualBodyBytes,
+    // 维持原语义：actualBodyBytes 表示「接收到的原始（线上）字节」，供
+    // isLargeRequestBody 的截断提示判断使用，不受解压后体积影响。
+    actualBodyBytes: receivedBodyBytes,
     imageRequestMetadata,
+    decodedContentEncoding: decodedBody.encoding ?? undefined,
   };
 }
