@@ -270,6 +270,20 @@ describe("notification queue processor - circuit-breaker", () => {
     expect(mockSendWebhookMessage).not.toHaveBeenCalled();
   });
 
+  it("skips sending when the circuit-breaker sub-switch is off", async () => {
+    mockGetNotificationSettings.mockResolvedValue(
+      makeSettings({ enabled: true, circuitBreakerEnabled: false })
+    );
+
+    const handler = await loadProcessor();
+    const result = await handler(
+      makeJob({ type: "circuit-breaker", webhookUrl: "https://example.com/hook", data })
+    );
+
+    expect(result).toEqual({ success: true, skipped: true });
+    expect(mockSendWebhookMessage).not.toHaveBeenCalled();
+  });
+
   it("sends when both master and sub-switch are enabled", async () => {
     mockGetNotificationSettings.mockResolvedValue(
       makeSettings({ enabled: true, circuitBreakerEnabled: true })
