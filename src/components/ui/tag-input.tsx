@@ -175,6 +175,18 @@ export function TagInput({
     return () => document.removeEventListener("mousedown", handleClickOutside, true);
   }, [showSuggestions]);
 
+  // 建议列表「首次」异步加载完成时自动展开下拉。建议数据经网络请求获取时，
+  // 用户可能在数据返回前就已聚焦输入框；此时 focus 事件不会再次触发，下拉无法展开。
+  // 只处理首次由空变为非空，避免后续刷新（清空再填充）覆盖用户已手动关闭（Escape/点击外部）的下拉。
+  const didAutoOpenRef = React.useRef(false);
+  React.useEffect(() => {
+    if (didAutoOpenRef.current || suggestions.length === 0) return;
+    didAutoOpenRef.current = true;
+    if (!disabled && inputRef.current === document.activeElement) {
+      setShowSuggestions(true);
+    }
+  }, [disabled, suggestions.length]);
+
   const inputMinWidthClass = normalizedMaxVisible === undefined ? "min-w-[120px]" : "min-w-[60px]";
 
   // Normalize suggestions so callers can provide either strings or { value, label } objects.
