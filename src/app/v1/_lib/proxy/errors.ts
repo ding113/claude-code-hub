@@ -756,8 +756,6 @@ export function isTransportError(error: Error): boolean {
     "ETIMEDOUT",
     "ENOTFOUND",
     "EAI_AGAIN",
-    // 向已关闭的 socket 写入：下游客户端在流式响应写入期间断开（issue #1234）
-    "EPIPE",
     // Node.js HTTP/2 stream errors —— 常被 undici/fetch 包装后放到 cause 链上
     // 必须在这里登记，才能在 cause.code 分支里正确识别为 transport 错误
     "ERR_HTTP2_STREAM_ERROR",
