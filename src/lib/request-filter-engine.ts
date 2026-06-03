@@ -338,11 +338,16 @@ export class RequestFilterEngine {
     }
   }
 
-  async reload(): Promise<void> {
+  async reload(queue = true): Promise<void> {
     if (this.activeReloadPromise) {
-      // 已有 reload 在途时排队补跑一轮：保存规则后的显式 reload 不能被丢弃，
-      // 否则代理仍会命中旧的内存快照，必须等用户手动点"刷新缓存"才生效。
-      this.reloadRequestedWhileLoading = true;
+      // 已有 reload 在途：
+      // - queue=true（默认 / 事件驱动 / 手动刷新）排队补跑一轮，确保写库后的显式 reload
+      //   不被丢弃，否则代理仍命中旧快照、必须手动点"刷新缓存"才生效。
+      // - queue=false（action 在 emit 已触发 reload 之后调用）直接复用这次在途 reload，
+      //   避免对同一次写入做两次冗余的 DB 读、并让保存响应少等一轮。
+      if (queue) {
+        this.reloadRequestedWhileLoading = true;
+      }
       return this.activeReloadPromise;
     }
 
@@ -453,6 +458,11 @@ export class RequestFilterEngine {
     // loadFilters() 对各 bucket 做同步整体替换，请求读到的恒为某个一致快照；
     // 用户保存后的"即时生效"由 action 侧 await reload() 保证，无需并发代理请求陪跑一次 DB 读。
     if (this.isInitialized) return;
+    // 仅在「尚未初始化」且已有在途 reload 时复用它，避免冷启动期间重复打库。
+    if (this.activeReloadPromise) {
+      await this.activeReloadPromise;
+      return;
+    }
     if (!this.initializationPromise) {
       this.initializationPromise = this.reload().finally(() => {
         this.initializationPromise = null;

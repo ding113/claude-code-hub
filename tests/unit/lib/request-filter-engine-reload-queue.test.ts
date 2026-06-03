@@ -187,4 +187,30 @@ describe("RequestFilterEngine reload queue", () => {
     expect(mocks.getActiveRequestFilters).toHaveBeenCalledTimes(2);
     expect(requestFilterEngine.getStats().count).toBe(5);
   });
+
+  test("reload(false) reuses an in-flight reload without forcing a redundant rerun", async () => {
+    let resolveLoad: ((value: RequestFilter[]) => void) | undefined;
+
+    // Only ONE DB read should happen: the second reload(false) must reuse the
+    // in-flight load instead of queueing a second pass.
+    mocks.getActiveRequestFilters.mockImplementationOnce(
+      () =>
+        new Promise<RequestFilter[]>((resolve) => {
+          resolveLoad = resolve;
+        })
+    );
+
+    const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const first = requestFilterEngine.reload(false); // starts load #1
+    const second = requestFilterEngine.reload(false); // in-flight + queue=false -> reuse
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    resolveLoad?.(filters(2));
+    await Promise.all([first, second]);
+
+    expect(mocks.getActiveRequestFilters).toHaveBeenCalledTimes(1);
+    expect(requestFilterEngine.getStats().count).toBe(2);
+  });
 });

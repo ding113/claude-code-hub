@@ -171,10 +171,11 @@ class ErrorRuleDetector {
    */
   async reload(options: { queueIfRunning?: boolean } = {}): Promise<void> {
     if (this.activeReloadPromise) {
-      // 无论是事件驱动还是显式调用，只要有 in-flight reload 就排队补跑一轮，
-      // 确保调用方写库后的显式 reload 不会拿到旧快照。
-      this.reloadRequestedWhileLoading = true;
+      // queueIfRunning=true（事件驱动 / 手动刷新）排队补跑一轮，确保读到最新写入；
+      // 默认（action 在 emit 已触发 reload 之后调用）直接复用这次在途 reload，
+      // 避免对同一次写入做两次冗余 DB 读、并让保存响应少等一轮。
       if (options.queueIfRunning) {
+        this.reloadRequestedWhileLoading = true;
         logger.info("[ErrorRuleDetector] Reload already in progress, queueing another pass");
       }
       return this.activeReloadPromise;

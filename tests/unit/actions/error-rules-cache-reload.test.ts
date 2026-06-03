@@ -115,4 +115,21 @@ describe("error-rules actions reload the detector on mutation", () => {
     expect(res.ok).toBe(false);
     expect(reloadMock).not.toHaveBeenCalled();
   });
+
+  it("still returns ok:true when the detector reload throws (cache sync is best-effort)", async () => {
+    createErrorRuleMock.mockResolvedValue(baseRule);
+    reloadMock.mockRejectedValueOnce(new Error("boom"));
+
+    const { createErrorRuleAction } = await import("@/actions/error-rules");
+    const res = await createErrorRuleAction({
+      pattern: "boom",
+      category: "prompt_limit",
+      matchType: "contains",
+    });
+
+    // The DB write succeeded; a failed best-effort cache reload must NOT flip the
+    // action to failed (which would prompt the user to retry and double-create).
+    expect(res.ok).toBe(true);
+    expect(reloadMock).toHaveBeenCalled();
+  });
 });

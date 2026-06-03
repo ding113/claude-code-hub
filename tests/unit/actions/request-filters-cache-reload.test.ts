@@ -78,6 +78,28 @@ describe("request-filters actions reload the engine on mutation", () => {
 
     expect(res.ok).toBe(true);
     expect(reloadMock).toHaveBeenCalledTimes(1);
+    // reload(false): the repository emit already kicked off a fresh reload; the
+    // action reuses it instead of forcing a redundant second DB read.
+    expect(reloadMock).toHaveBeenCalledWith(false);
+  });
+
+  it("still returns ok:true when the engine reload throws (cache sync is best-effort)", async () => {
+    createRequestFilterMock.mockResolvedValue(baseFilter);
+    reloadMock.mockRejectedValueOnce(new Error("boom"));
+
+    const { createRequestFilterAction } = await import("@/actions/request-filters");
+    const res = await createRequestFilterAction({
+      name: "f",
+      scope: "header",
+      action: "remove",
+      target: "x-test",
+      bindingType: "global",
+    });
+
+    // The DB write succeeded; a failed best-effort cache reload must NOT flip the
+    // action to failed (which would prompt the user to retry and double-create).
+    expect(res.ok).toBe(true);
+    expect(reloadMock).toHaveBeenCalled();
   });
 
   it("updateRequestFilterAction reloads the engine after a successful update", async () => {
