@@ -449,11 +449,9 @@ export class RequestFilterEngine {
   }
 
   private async ensureInitialized(): Promise<void> {
-    // 有在途 reload（含排队补跑）时等待它完成，避免读到补跑前的旧快照。
-    if (this.activeReloadPromise) {
-      await this.activeReloadPromise;
-      return;
-    }
+    // 已初始化后立即返回，绝不让代理热路径阻塞等待在途 reload：
+    // loadFilters() 对各 bucket 做同步整体替换，请求读到的恒为某个一致快照；
+    // 用户保存后的"即时生效"由 action 侧 await reload() 保证，无需并发代理请求陪跑一次 DB 读。
     if (this.isInitialized) return;
     if (!this.initializationPromise) {
       this.initializationPromise = this.reload().finally(() => {

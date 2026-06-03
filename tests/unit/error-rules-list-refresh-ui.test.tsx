@@ -17,6 +17,10 @@ const refreshMock = vi.fn();
 const updateErrorRuleActionMock = vi.fn(async () => ({ ok: true }));
 const deleteErrorRuleActionMock = vi.fn(async () => ({ ok: true }));
 const createErrorRuleActionMock = vi.fn(async () => ({ ok: true }));
+const refreshCacheActionMock = vi.fn(async () => ({
+  ok: true,
+  data: { stats: { totalCount: 3 } },
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: refreshMock, push: vi.fn(), replace: vi.fn() }),
@@ -35,6 +39,7 @@ vi.mock("@/lib/api-client/v1/actions/error-rules", () => ({
   updateErrorRuleAction: updateErrorRuleActionMock,
   deleteErrorRuleAction: deleteErrorRuleActionMock,
   createErrorRuleAction: createErrorRuleActionMock,
+  refreshCacheAction: refreshCacheActionMock,
 }));
 
 // --- UI primitive stubs (Radix portals/providers are noise for this test) ---
@@ -80,10 +85,32 @@ vi.mock("@/components/ui/dialog", () => ({
 }));
 
 vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: any) => <div>{children}</div>,
-  SelectContent: ({ children }: any) => <div>{children}</div>,
-  SelectItem: ({ children }: any) => <div>{children}</div>,
-  SelectTrigger: ({ children }: any) => <div>{children}</div>,
+  // Drivable native <select> so tests can set the category and submit successfully.
+  Select: ({ value, onValueChange }: any) => (
+    <select
+      data-testid="category-select"
+      value={value ?? ""}
+      onChange={(e) => onValueChange?.(e.target.value)}
+    >
+      <option value="" />
+      {[
+        "prompt_limit",
+        "content_filter",
+        "pdf_limit",
+        "thinking_error",
+        "parameter_error",
+        "invalid_request",
+        "cache_limit",
+      ].map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  ),
+  SelectContent: () => null,
+  SelectItem: () => null,
+  SelectTrigger: () => null,
   SelectValue: () => null,
 }));
 
@@ -130,6 +157,19 @@ async function flush() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+// Sets a React-controlled element's value via the native setter, then fires the
+// event React listens to (input for text, change for select) so state updates.
+function setControlledValue(
+  el: HTMLInputElement | HTMLSelectElement,
+  proto: { prototype: object },
+  value: string,
+  eventName: "input" | "change"
+) {
+  const setter = Object.getOwnPropertyDescriptor(proto.prototype, "value")?.set;
+  setter?.call(el, value);
+  el.dispatchEvent(new Event(eventName, { bubbles: true }));
 }
 
 beforeEach(() => {
@@ -205,6 +245,60 @@ describe("error rules list refresh after mutation", () => {
     await flush();
 
     expect(updateErrorRuleActionMock).toHaveBeenCalled();
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  test("creating a rule refreshes the list", async () => {
+    const { AddRuleDialog } = await import(
+      "@/app/[locale]/settings/error-rules/_components/add-rule-dialog"
+    );
+
+    await mount(<AddRuleDialog />);
+
+    // Drive the controlled pattern input and category select, then submit.
+    await act(async () => {
+      setControlledValue(
+        container.querySelector("#pattern") as HTMLInputElement,
+        window.HTMLInputElement,
+        "boom",
+        "input"
+      );
+      setControlledValue(
+        container.querySelector('[data-testid="category-select"]') as HTMLSelectElement,
+        window.HTMLSelectElement,
+        "prompt_limit",
+        "change"
+      );
+    });
+
+    const form = container.querySelector("form") as HTMLFormElement;
+    expect(form).toBeTruthy();
+
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush();
+
+    expect(createErrorRuleActionMock).toHaveBeenCalled();
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  test("refreshing the cache refreshes the list", async () => {
+    const { RefreshCacheButton } = await import(
+      "@/app/[locale]/settings/error-rules/_components/refresh-cache-button"
+    );
+
+    await mount(<RefreshCacheButton stats={null} />);
+
+    const button = container.querySelector("button") as HTMLButtonElement;
+    expect(button).toBeTruthy();
+
+    await act(async () => {
+      button.click();
+    });
+    await flush();
+
+    expect(refreshCacheActionMock).toHaveBeenCalled();
     expect(refreshMock).toHaveBeenCalled();
   });
 });
