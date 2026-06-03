@@ -278,6 +278,8 @@ export class RequestFilterEngine {
   private isLoading = false;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
+  private activeReloadPromise: Promise<void> | null = null; // 合并并发 reload
+  private reloadRequestedWhileLoading = false; // reload 期间收到的补跑请求
 
   private eventEmitterCleanup: (() => void) | null = null;
   private redisPubSubCleanup: (() => void) | null = null;
@@ -337,18 +339,42 @@ export class RequestFilterEngine {
   }
 
   async reload(): Promise<void> {
-    if (this.isLoading) return;
-    this.isLoading = true;
-
-    try {
-      const { getActiveRequestFilters } = await import("@/repository/request-filters");
-      const filters = await getActiveRequestFilters();
-      this.loadFilters(filters);
-    } catch (error) {
-      logger.error("[RequestFilterEngine] Failed to reload filters", { error });
-    } finally {
-      this.isLoading = false;
+    if (this.activeReloadPromise) {
+      // 已有 reload 在途时排队补跑一轮：保存规则后的显式 reload 不能被丢弃，
+      // 否则代理仍会命中旧的内存快照，必须等用户手动点"刷新缓存"才生效。
+      this.reloadRequestedWhileLoading = true;
+      return this.activeReloadPromise;
     }
+
+    const reloadLoop = (async () => {
+      do {
+        // reload 期间若又收到补跑请求，本轮结束后立刻再跑一轮，避免新规则落库却没进缓存。
+        this.reloadRequestedWhileLoading = false;
+        this.isLoading = true;
+
+        try {
+          const { getActiveRequestFilters } = await import("@/repository/request-filters");
+          const filters = await getActiveRequestFilters();
+          this.loadFilters(filters);
+        } catch (error) {
+          logger.error("[RequestFilterEngine] Failed to reload filters", { error });
+        } finally {
+          this.isLoading = false;
+        }
+      } while (this.reloadRequestedWhileLoading);
+    })();
+
+    this.activeReloadPromise = reloadLoop.finally(() => {
+      // 极窄窗口：do/while 已判定无需继续，但 finally 微任务执行前又来了新请求，
+      // 此处再检查一次，避免晚到的补跑被静默吞掉。
+      const shouldRestart = this.reloadRequestedWhileLoading;
+      this.activeReloadPromise = null;
+      if (shouldRestart) {
+        return this.reload();
+      }
+    });
+
+    return this.activeReloadPromise;
   }
 
   /** Shared filter loading logic (used by reload and setFiltersForTest) */
@@ -423,6 +449,11 @@ export class RequestFilterEngine {
   }
 
   private async ensureInitialized(): Promise<void> {
+    // 有在途 reload（含排队补跑）时等待它完成，避免读到补跑前的旧快照。
+    if (this.activeReloadPromise) {
+      await this.activeReloadPromise;
+      return;
+    }
     if (this.isInitialized) return;
     if (!this.initializationPromise) {
       this.initializationPromise = this.reload().finally(() => {

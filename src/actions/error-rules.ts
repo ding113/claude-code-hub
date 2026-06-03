@@ -178,6 +178,8 @@ export async function createErrorRuleAction(data: {
 
     // 刷新缓存（事件广播，支持多 worker 同步）
     await emitErrorRulesUpdated();
+    // 本进程立即同步内存缓存，确保规则改动对代理请求即时生效，无需手动点"刷新缓存"。
+    await errorRuleDetector.reload();
 
     revalidatePath("/settings/error-rules");
 
@@ -311,6 +313,8 @@ export async function updateErrorRuleAction(
 
     // 刷新缓存（事件广播，支持多 worker 同步）
     await emitErrorRulesUpdated();
+    // 本进程立即同步内存缓存，确保规则改动对代理请求即时生效，无需手动点"刷新缓存"。
+    await errorRuleDetector.reload();
 
     revalidatePath("/settings/error-rules");
 
@@ -365,6 +369,8 @@ export async function deleteErrorRuleAction(id: number): Promise<ActionResult> {
 
     // 刷新缓存（事件广播，支持多 worker 同步）
     await emitErrorRulesUpdated();
+    // 本进程立即同步内存缓存，确保规则改动对代理请求即时生效，无需手动点"刷新缓存"。
+    await errorRuleDetector.reload();
 
     revalidatePath("/settings/error-rules");
 

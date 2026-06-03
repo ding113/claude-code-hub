@@ -2,6 +2,7 @@
 
 import { formatInTimeZone } from "date-fns-tz";
 import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ const categoryColors: Record<string, { bg: string; text: string }> = {
 
 export function RuleListTable({ rules }: RuleListTableProps) {
   const t = useTranslations("settings");
+  const router = useRouter();
   const timeZone = useTimeZone() ?? "UTC";
   const [selectedRule, setSelectedRule] = useState<ErrorRule | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -42,6 +44,7 @@ export function RuleListTable({ rules }: RuleListTableProps) {
 
     if (result.ok) {
       toast.success(isEnabled ? t("errorRules.enable") : t("errorRules.disable"));
+      router.refresh();
     } else {
       toast.error(result.error);
     }
@@ -61,6 +64,7 @@ export function RuleListTable({ rules }: RuleListTableProps) {
 
     if (result.ok) {
       toast.success(t("errorRules.deleteSuccess"));
+      router.refresh();
     } else {
       toast.error(result.error);
     }

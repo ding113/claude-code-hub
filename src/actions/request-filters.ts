@@ -253,6 +253,8 @@ export async function createRequestFilterAction(data: {
       operations: data.operations ?? null,
     });
 
+    // 立即同步内存缓存，确保新规则对代理请求即时生效，无需用户手动点"刷新缓存"。
+    await requestFilterEngine.reload();
     revalidatePath(SETTINGS_PATH);
     return { ok: true, data: created };
   } catch (error) {
@@ -378,6 +380,8 @@ export async function updateRequestFilterAction(
       return { ok: false, error: "记录不存在" };
     }
 
+    // 立即同步内存缓存，确保规则改动对代理请求即时生效，无需用户手动点"刷新缓存"。
+    await requestFilterEngine.reload();
     revalidatePath(SETTINGS_PATH);
     return { ok: true, data: updated };
   } catch (error) {
@@ -393,6 +397,8 @@ export async function deleteRequestFilterAction(id: number): Promise<ActionResul
   try {
     const ok = await deleteRequestFilter(id);
     if (!ok) return { ok: false, error: "记录不存在" };
+    // 立即同步内存缓存，确保删除对代理请求即时生效，无需用户手动点"刷新缓存"。
+    await requestFilterEngine.reload();
     revalidatePath(SETTINGS_PATH);
     return { ok: true };
   } catch (error) {
