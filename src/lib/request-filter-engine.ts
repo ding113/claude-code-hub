@@ -278,6 +278,8 @@ export class RequestFilterEngine {
   private isLoading = false;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
+  private activeReloadPromise: Promise<void> | null = null; // 合并并发 reload
+  private reloadRequestedWhileLoading = false; // reload 期间收到的补跑请求
 
   private eventEmitterCleanup: (() => void) | null = null;
   private redisPubSubCleanup: (() => void) | null = null;
@@ -336,19 +338,48 @@ export class RequestFilterEngine {
     }
   }
 
-  async reload(): Promise<void> {
-    if (this.isLoading) return;
-    this.isLoading = true;
-
-    try {
-      const { getActiveRequestFilters } = await import("@/repository/request-filters");
-      const filters = await getActiveRequestFilters();
-      this.loadFilters(filters);
-    } catch (error) {
-      logger.error("[RequestFilterEngine] Failed to reload filters", { error });
-    } finally {
-      this.isLoading = false;
+  async reload(queue = true): Promise<void> {
+    if (this.activeReloadPromise) {
+      // 已有 reload 在途：
+      // - queue=true（默认 / 事件驱动 / 手动刷新）排队补跑一轮，确保写库后的显式 reload
+      //   不被丢弃，否则代理仍命中旧快照、必须手动点"刷新缓存"才生效。
+      // - queue=false（action 在 emit 已触发 reload 之后调用）直接复用这次在途 reload，
+      //   避免对同一次写入做两次冗余的 DB 读、并让保存响应少等一轮。
+      if (queue) {
+        this.reloadRequestedWhileLoading = true;
+      }
+      return this.activeReloadPromise;
     }
+
+    const reloadLoop = (async () => {
+      do {
+        // reload 期间若又收到补跑请求，本轮结束后立刻再跑一轮，避免新规则落库却没进缓存。
+        this.reloadRequestedWhileLoading = false;
+        this.isLoading = true;
+
+        try {
+          const { getActiveRequestFilters } = await import("@/repository/request-filters");
+          const filters = await getActiveRequestFilters();
+          this.loadFilters(filters);
+        } catch (error) {
+          logger.error("[RequestFilterEngine] Failed to reload filters", { error });
+        } finally {
+          this.isLoading = false;
+        }
+      } while (this.reloadRequestedWhileLoading);
+    })();
+
+    this.activeReloadPromise = reloadLoop.finally(() => {
+      // 极窄窗口：do/while 已判定无需继续，但 finally 微任务执行前又来了新请求，
+      // 此处再检查一次，避免晚到的补跑被静默吞掉。
+      const shouldRestart = this.reloadRequestedWhileLoading;
+      this.activeReloadPromise = null;
+      if (shouldRestart) {
+        return this.reload();
+      }
+    });
+
+    return this.activeReloadPromise;
   }
 
   /** Shared filter loading logic (used by reload and setFiltersForTest) */
@@ -423,7 +454,15 @@ export class RequestFilterEngine {
   }
 
   private async ensureInitialized(): Promise<void> {
+    // 已初始化后立即返回，绝不让代理热路径阻塞等待在途 reload：
+    // loadFilters() 对各 bucket 做同步整体替换，请求读到的恒为某个一致快照；
+    // 用户保存后的"即时生效"由 action 侧 await reload() 保证，无需并发代理请求陪跑一次 DB 读。
     if (this.isInitialized) return;
+    // 仅在「尚未初始化」且已有在途 reload 时复用它，避免冷启动期间重复打库。
+    if (this.activeReloadPromise) {
+      await this.activeReloadPromise;
+      return;
+    }
     if (!this.initializationPromise) {
       this.initializationPromise = this.reload().finally(() => {
         this.initializationPromise = null;

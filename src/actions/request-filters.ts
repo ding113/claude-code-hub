@@ -253,6 +253,14 @@ export async function createRequestFilterAction(data: {
       operations: data.operations ?? null,
     });
 
+    // 立即同步内存缓存，确保新规则对代理请求即时生效，无需用户手动点"刷新缓存"。
+    // 仓储层已在写入后触发一次本进程 reload，这里 reload(false) 复用它（不补跑第二轮）；
+    // reload 仅为缓存同步，失败不应把已成功的写入误报为失败。
+    try {
+      await requestFilterEngine.reload(false);
+    } catch (reloadError) {
+      logger.warn("[RequestFiltersAction] Failed to reload engine after create", { reloadError });
+    }
     revalidatePath(SETTINGS_PATH);
     return { ok: true, data: created };
   } catch (error) {
@@ -378,6 +386,14 @@ export async function updateRequestFilterAction(
       return { ok: false, error: "记录不存在" };
     }
 
+    // 立即同步内存缓存，确保规则改动对代理请求即时生效，无需用户手动点"刷新缓存"。
+    // 仓储层已在写入后触发一次本进程 reload，这里 reload(false) 复用它（不补跑第二轮）；
+    // reload 仅为缓存同步，失败不应把已成功的写入误报为失败。
+    try {
+      await requestFilterEngine.reload(false);
+    } catch (reloadError) {
+      logger.warn("[RequestFiltersAction] Failed to reload engine after update", { reloadError });
+    }
     revalidatePath(SETTINGS_PATH);
     return { ok: true, data: updated };
   } catch (error) {
@@ -393,6 +409,14 @@ export async function deleteRequestFilterAction(id: number): Promise<ActionResul
   try {
     const ok = await deleteRequestFilter(id);
     if (!ok) return { ok: false, error: "记录不存在" };
+    // 立即同步内存缓存，确保删除对代理请求即时生效，无需用户手动点"刷新缓存"。
+    // 仓储层已在写入后触发一次本进程 reload，这里 reload(false) 复用它（不补跑第二轮）；
+    // reload 仅为缓存同步，失败不应把已成功的写入误报为失败。
+    try {
+      await requestFilterEngine.reload(false);
+    } catch (reloadError) {
+      logger.warn("[RequestFiltersAction] Failed to reload engine after delete", { reloadError });
+    }
     revalidatePath(SETTINGS_PATH);
     return { ok: true };
   } catch (error) {

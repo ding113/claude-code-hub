@@ -178,6 +178,13 @@ export async function createErrorRuleAction(data: {
 
     // 刷新缓存（事件广播，支持多 worker 同步）
     await emitErrorRulesUpdated();
+    // 上面的 emit 已在本进程触发一次携带最新数据的 reload，这里复用它即可（无需补跑第二轮）。
+    // reload 仅为本进程缓存同步（跨 worker 由 emit 覆盖），失败不应把已成功的写入误报为失败。
+    try {
+      await errorRuleDetector.reload();
+    } catch (reloadError) {
+      logger.warn("[ErrorRulesAction] Failed to reload detector after mutation", { reloadError });
+    }
 
     revalidatePath("/settings/error-rules");
 
@@ -311,6 +318,13 @@ export async function updateErrorRuleAction(
 
     // 刷新缓存（事件广播，支持多 worker 同步）
     await emitErrorRulesUpdated();
+    // 上面的 emit 已在本进程触发一次携带最新数据的 reload，这里复用它即可（无需补跑第二轮）。
+    // reload 仅为本进程缓存同步（跨 worker 由 emit 覆盖），失败不应把已成功的写入误报为失败。
+    try {
+      await errorRuleDetector.reload();
+    } catch (reloadError) {
+      logger.warn("[ErrorRulesAction] Failed to reload detector after mutation", { reloadError });
+    }
 
     revalidatePath("/settings/error-rules");
 
@@ -365,6 +379,13 @@ export async function deleteErrorRuleAction(id: number): Promise<ActionResult> {
 
     // 刷新缓存（事件广播，支持多 worker 同步）
     await emitErrorRulesUpdated();
+    // 上面的 emit 已在本进程触发一次携带最新数据的 reload，这里复用它即可（无需补跑第二轮）。
+    // reload 仅为本进程缓存同步（跨 worker 由 emit 覆盖），失败不应把已成功的写入误报为失败。
+    try {
+      await errorRuleDetector.reload();
+    } catch (reloadError) {
+      logger.warn("[ErrorRulesAction] Failed to reload detector after mutation", { reloadError });
+    }
 
     revalidatePath("/settings/error-rules");
 
@@ -412,8 +433,9 @@ export async function refreshCacheAction(): Promise<
     // 1. 同步默认规则到数据库
     const syncResult = await repo.syncDefaultErrorRules();
 
-    // 2. 重新加载缓存
-    await errorRuleDetector.reload();
+    // 2. 重新加载缓存：手动刷新必须读到刚同步的默认规则，
+    //    若已有在途 reload 则排队补跑一轮（queueIfRunning），确保拿到同步后的最新快照。
+    await errorRuleDetector.reload({ queueIfRunning: true });
 
     const stats = errorRuleDetector.getStats();
 

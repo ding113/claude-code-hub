@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ import { RegexTester } from "./regex-tester";
 
 export function AddRuleDialog() {
   const t = useTranslations("settings");
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pattern, setPattern] = useState("");
@@ -106,6 +108,7 @@ export function AddRuleDialog() {
       if (result.ok) {
         toast.success(t("errorRules.addSuccess"));
         setOpen(false);
+        router.refresh();
         // Reset form
         setPattern("");
         setCategory("");

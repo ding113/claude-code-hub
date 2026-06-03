@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ interface EditRuleDialogProps {
 
 export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps) {
   const t = useTranslations("settings");
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pattern, setPattern] = useState("");
   const [category, setCategory] = useState("");
@@ -127,6 +129,7 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
       if (result.ok) {
         toast.success(t("errorRules.editSuccess"));
         onOpenChange(false);
+        router.refresh();
       } else {
         toast.error(result.error);
       }
