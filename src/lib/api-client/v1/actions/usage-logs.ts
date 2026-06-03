@@ -61,7 +61,11 @@ export function getUsageLogSessionIdSuggestions(params: object) {
 }
 
 export function exportUsageLogs(params?: object) {
-  return toActionResult(apiPost("/api/v1/usage-logs/exports", params));
+  // Unwrap the REST `{ csv }` envelope so the result matches the server action
+  // contract (ActionResult<string>).
+  return toActionResult(
+    apiPost<{ csv: string }>("/api/v1/usage-logs/exports", params).then((body) => body.csv)
+  );
 }
 
 export function startUsageLogsExport(params?: object) {
@@ -78,13 +82,17 @@ export function getUsageLogsExportStatus(jobId: string) {
   );
 }
 
+export interface UsageLogsExportDownloadFile {
+  blob: Blob;
+}
+
 export function downloadUsageLogsExport(jobId: string) {
-  return toActionResult(
+  return toActionResult<UsageLogsExportDownloadFile>(
     fetch(`/api/v1/usage-logs/exports/${encodeURIComponent(jobId)}/download`, {
       credentials: "include",
     }).then(async (response) => {
       if (!response.ok) throw new Error(response.statusText || "Export download failed");
-      return response.text();
+      return { blob: await response.blob() };
     })
   );
 }

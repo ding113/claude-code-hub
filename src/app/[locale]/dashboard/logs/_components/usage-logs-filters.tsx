@@ -1,11 +1,17 @@
 "use client";
 
 import { format, startOfDay, startOfWeek } from "date-fns";
-import { Clock, Download, Network, Server, User } from "lucide-react";
+import { ChevronDown, Clock, Download, Network, Server, User } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import {
   downloadUsageLogsExport,
@@ -167,19 +173,18 @@ export function UsageLogsFilters({
     onReset();
   }, [onReset]);
 
-  const downloadCsv = useCallback((csv: string) => {
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const downloadBlob = useCallback((blob: Blob, extension: string) => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `usage-logs-${format(new Date(), "yyyy-MM-dd-HHmmss")}.csv`;
+    a.download = `usage-logs-${format(new Date(), "yyyy-MM-dd-HHmmss")}.${extension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   }, []);
 
-  const handleExport = async () => {
+  const handleExport = async (exportFormat: "csv" | "xlsx") => {
     const runId = exportRunIdRef.current + 1;
     exportRunIdRef.current = runId;
     setIsExporting(true);
@@ -189,11 +194,12 @@ export function UsageLogsFilters({
       processedRows: 0,
       totalRows: 0,
       progressPercent: 0,
+      format: exportFormat,
     });
 
     try {
       const exportFilters = sanitizeFilters(localFilters);
-      const startResult = await startUsageLogsExport(exportFilters);
+      const startResult = await startUsageLogsExport({ ...exportFilters, format: exportFormat });
       if (exportRunIdRef.current !== runId) {
         return;
       }
@@ -259,7 +265,7 @@ export function UsageLogsFilters({
         return;
       }
 
-      downloadCsv(downloadResult.data);
+      downloadBlob(downloadResult.data.blob, exportFormat === "xlsx" ? "xlsx" : "csv");
 
       toast.success(t("logs.filters.exportSuccess"));
     } catch (error) {
@@ -423,10 +429,23 @@ export function UsageLogsFilters({
         <Button variant="outline" onClick={handleReset}>
           {t("logs.filters.reset")}
         </Button>
-        <Button variant="outline" onClick={handleExport} disabled={isExporting}>
-          <Download className="mr-2 h-4 w-4" aria-hidden="true" />
-          {isExporting ? t("logs.filters.exporting") : t("logs.filters.export")}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" disabled={isExporting}>
+              <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+              {isExporting ? t("logs.filters.exporting") : t("logs.filters.export")}
+              <ChevronDown className="ml-2 h-4 w-4" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => handleExport("csv")} disabled={isExporting}>
+              {t("logs.filters.exportAsCsv")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleExport("xlsx")} disabled={isExporting}>
+              {t("logs.filters.exportAsXlsx")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {isExporting && exportStatus ? (
           <div className="min-w-[220px] flex-1 space-y-1 rounded-md border border-border/60 bg-muted/30 p-3">
             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">

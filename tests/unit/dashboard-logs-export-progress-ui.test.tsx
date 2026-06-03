@@ -41,6 +41,39 @@ vi.mock("sonner", () => ({
   },
 }));
 
+// Render the dropdown menu inline so its items are directly clickable in happy-dom.
+vi.mock("@/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({
+    children,
+    onSelect,
+    disabled,
+  }: {
+    children: ReactNode;
+    onSelect?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button type="button" disabled={disabled} onClick={() => onSelect?.()}>
+      {children}
+    </button>
+  ),
+}));
+
+function csvBlobResult() {
+  return {
+    ok: true as const,
+    data: { blob: new Blob(["﻿Time,User\n"], { type: "text/csv" }), filename: "usage-logs.csv" },
+  };
+}
+
+function findButtonByText(container: Element, text: string): Element | undefined {
+  return Array.from(container.querySelectorAll("button")).find(
+    (button) => (button.textContent || "").trim() === text
+  );
+}
+
 vi.mock("@/app/[locale]/dashboard/logs/_components/filters/active-filters-display", () => ({
   ActiveFiltersDisplay: () => <div data-testid="active-filters-display" />,
 }));
@@ -162,7 +195,7 @@ describe("UsageLogsFilters export progress UI", () => {
           progressPercent: 100,
         },
       });
-    downloadUsageLogsExportMock.mockResolvedValue({ ok: true, data: "\uFEFFTime,User\n" });
+    downloadUsageLogsExportMock.mockResolvedValue(csvBlobResult());
 
     const { container, unmount } = renderWithIntl(
       <UsageLogsFilters
@@ -175,11 +208,7 @@ describe("UsageLogsFilters export progress UI", () => {
       />
     );
 
-    const exportButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => (button.textContent || "").trim() === "Export"
-    );
-
-    await actClick(exportButton ?? null);
+    await actClick(findButtonByText(container, "Export as CSV") ?? null);
     await flushPromises();
 
     expect(container.textContent).toContain("Exported 50 / 200");
@@ -190,6 +219,7 @@ describe("UsageLogsFilters export progress UI", () => {
     });
     await flushPromises();
 
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({ format: "csv" });
     expect(downloadUsageLogsExportMock).toHaveBeenCalledWith("job-1");
     expect(toastSuccessMock).toHaveBeenCalledWith("Export completed successfully");
     expect(toastErrorMock).not.toHaveBeenCalled();
@@ -209,7 +239,7 @@ describe("UsageLogsFilters export progress UI", () => {
         progressPercent: 100,
       },
     });
-    downloadUsageLogsExportMock.mockResolvedValue({ ok: true, data: "\uFEFFTime,User\n" });
+    downloadUsageLogsExportMock.mockResolvedValue(csvBlobResult());
 
     const { container, unmount } = renderWithIntl(
       <UsageLogsFilters
@@ -224,14 +254,50 @@ describe("UsageLogsFilters export progress UI", () => {
 
     await actClick(container.querySelector("[data-testid='request-filters']"));
 
-    const exportButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => (button.textContent || "").trim() === "Export"
-    );
-
-    await actClick(exportButton ?? null);
+    await actClick(findButtonByText(container, "Export as CSV") ?? null);
     await flushPromises();
 
-    expect(startUsageLogsExportMock).toHaveBeenCalledWith({ sessionId: "draft-session" });
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({
+      sessionId: "draft-session",
+      format: "csv",
+    });
+
+    unmount();
+  });
+
+  test("exports as XLSX when the XLSX option is selected", async () => {
+    startUsageLogsExportMock.mockResolvedValue({ ok: true, data: { jobId: "job-3" } });
+    getUsageLogsExportStatusMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        jobId: "job-3",
+        status: "completed",
+        processedRows: 1,
+        totalRows: 1,
+        progressPercent: 100,
+        format: "xlsx",
+      },
+    });
+    downloadUsageLogsExportMock.mockResolvedValue({
+      ok: true,
+      data: { blob: new Blob(["PK"], { type: "application/octet-stream" }), filename: "u.xlsx" },
+    });
+
+    const { container, unmount } = renderWithIntl(
+      <UsageLogsFilters
+        isAdmin={true}
+        providers={[]}
+        initialKeys={[]}
+        filters={{}}
+        onChange={() => {}}
+        onReset={() => {}}
+      />
+    );
+
+    await actClick(findButtonByText(container, "Export as XLSX (with summary)") ?? null);
+    await flushPromises();
+
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({ format: "xlsx" });
 
     unmount();
   });

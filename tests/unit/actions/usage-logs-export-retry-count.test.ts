@@ -13,6 +13,10 @@ vi.mock("@/lib/auth", () => {
   };
 });
 
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: vi.fn(async () => "UTC"),
+}));
+
 vi.mock("@/lib/redis/redis-kv-store", () => ({
   RedisKVStore: class MockRedisKVStore<T> {
     private readonly prefix: string;
@@ -361,7 +365,11 @@ describe("Usage logs CSV export retryCount", () => {
 
     const downloadResult = await downloadUsageLogsExport(jobId);
     expect(downloadResult.ok).toBe(true);
-    expect(downloadResult.data).toContain("Session ID");
-    expect(downloadResult.data).toContain("job-session");
+    if (!downloadResult.ok) throw new Error("expected ok download");
+    expect(downloadResult.data.format).toBe("csv");
+    expect(downloadResult.data.encoding).toBe("utf8");
+    expect(downloadResult.data.filename).toMatch(/\.csv$/);
+    expect(downloadResult.data.content).toContain("Session ID");
+    expect(downloadResult.data.content).toContain("job-session");
   });
 });

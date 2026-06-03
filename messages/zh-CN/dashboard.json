@@ -97,6 +97,8 @@
       "exportError": "导出失败",
       "exportPreparing": "正在准备导出...",
       "exportProgress": "已导出 {current} / {total} 条",
+      "exportAsCsv": "导出为 CSV",
+      "exportAsXlsx": "导出为 XLSX（含汇总表）",
       "quickFilters": {
         "today": "今天",
         "thisWeek": "本周",

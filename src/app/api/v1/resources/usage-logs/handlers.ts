@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { ActionResult } from "@/actions/types";
+import type { UsageLogsExportDownload } from "@/actions/usage-logs";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
 import {
   createProblemResponse,
@@ -86,6 +87,18 @@ export async function createUsageLogsExport(c: Context): Promise<Response> {
   if (!body.ok) return body.response;
   const actions = await import("@/actions/usage-logs");
   const preferAsync = (c.req.header("prefer") ?? "").toLowerCase().includes("respond-async");
+
+  // XLSX is assembled in-memory from every matching row, so it is only offered
+  // via the async job flow (sync exports always return CSV).
+  if (!preferAsync && body.data.format === "xlsx") {
+    return createProblemResponse({
+      status: 400,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "usage_logs.xlsx_requires_async",
+      detail: "xlsx export requires asynchronous processing (set 'Prefer: respond-async').",
+    });
+  }
+
   const result = preferAsync
     ? await callAction(c, actions.startUsageLogsExport, [body.data] as never[], c.get("auth"))
     : await callAction(c, actions.exportUsageLogs, [body.data] as never[], c.get("auth"));
@@ -123,10 +136,17 @@ export async function downloadUsageLogsExport(c: Context): Promise<Response> {
     c.get("auth")
   );
   if (!result.ok) return actionError(c, result);
-  return new Response(String(result.data), {
+  const download = result.data as UsageLogsExportDownload;
+  const isXlsx = download.format === "xlsx";
+  const body =
+    download.encoding === "base64" ? Buffer.from(download.content, "base64") : download.content;
+  const contentType = isXlsx
+    ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    : "text/csv; charset=utf-8";
+  return new Response(body, {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="usage-logs-${params.jobId}.csv"`,
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${download.filename}"`,
     },
   });
 }
