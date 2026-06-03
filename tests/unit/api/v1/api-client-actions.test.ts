@@ -425,4 +425,42 @@ describe("v1 action compatibility client", () => {
     );
     expect(result).toEqual({ ok: true, data: suggestions });
   });
+
+  test("downloadUsageLogsExport returns the response body as a Blob", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(new Blob(["PKxlsx-bytes"]), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition": 'attachment; filename="usage-logs-job-9.xlsx"',
+          },
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await usageLogs.downloadUsageLogsExport("job-9");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/usage-logs/exports/job-9/download", {
+      credentials: "include",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.data.blob).toBeInstanceOf(Blob);
+    expect(await result.data.blob.text()).toBe("PKxlsx-bytes");
+
+    vi.unstubAllGlobals();
+  });
+
+  test("downloadUsageLogsExport surfaces a non-2xx download as an error result", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response("nope", { status: 404, statusText: "Not Found" })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await usageLogs.downloadUsageLogsExport("missing");
+
+    expect(result.ok).toBe(false);
+    vi.unstubAllGlobals();
+  });
 });

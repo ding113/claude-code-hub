@@ -97,6 +97,8 @@
       "exportError": "Ошибка экспорта",
       "exportPreparing": "Подготовка экспорта...",
       "exportProgress": "Экспортировано {current} / {total}",
+      "exportAsCsv": "Экспорт в CSV",
+      "exportAsXlsx": "Экспорт в XLSX (со сводкой)",
       "quickFilters": {
         "today": "Сегодня",
         "thisWeek": "Эта неделя",

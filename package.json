@@ -92,6 +92,7 @@
     "dotenv": "^17",
     "drizzle-orm": "^0.45",
     "fetch-socks": "^1",
+    "fflate": "^0.8.2",
     "framer-motion": "^12",
     "hono": "^4",
     "html2canvas": "^1",

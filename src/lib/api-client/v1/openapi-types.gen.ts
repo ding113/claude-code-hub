@@ -36126,6 +36126,12 @@ export interface operations {
                     startTime?: number | null;
                     /** @description End timestamp in milliseconds. */
                     endTime?: number | null;
+                    /**
+                     * @description Export format. xlsx is only available asynchronously (Prefer: respond-async).
+                     * @default csv
+                     * @enum {string}
+                     */
+                    format?: "csv" | "xlsx";
                 };
             };
         };

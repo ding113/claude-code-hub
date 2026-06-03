@@ -9,8 +9,11 @@ import {
 import { logger } from "@/lib/logger";
 import { readLiveChainBatch } from "@/lib/redis/live-chain-store";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
-import { getRetryCount } from "@/lib/utils/provider-chain-formatter";
+import { buildCsvHeaderLine, buildCsvRows, CSV_BOM } from "@/lib/usage-logs/export/csv";
+import { createSummaryAccumulator } from "@/lib/usage-logs/export/summary";
+import { assembleUsageLogsXlsx, buildDetailRowXml } from "@/lib/usage-logs/export/xlsx";
 import { isProviderFinalized } from "@/lib/utils/provider-display";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   findUsageLogSessionIdSuggestions,
   findUsageLogsBatch,
@@ -21,7 +24,6 @@ import {
   getUsedStatusCodes,
   type UsageLogBatchFilters,
   type UsageLogFilters,
-  type UsageLogRow,
   type UsageLogSummary,
   type UsageLogsBatchResult,
   type UsageLogsResult,
@@ -44,26 +46,7 @@ const USAGE_LOGS_EXPORT_BATCH_SIZE = 500;
 const USAGE_LOGS_EXPORT_JOB_TTL_MS = 15 * 60 * 1000;
 const USAGE_LOGS_EXPORT_JOB_TTL_SECONDS = Math.floor(USAGE_LOGS_EXPORT_JOB_TTL_MS / 1000);
 const USAGE_LOGS_EXPORT_PROGRESS_UPDATE_INTERVAL_MS = 800;
-const CSV_HEADERS = [
-  "Time",
-  "User",
-  "Key",
-  "Provider",
-  "Model",
-  "Original Model",
-  "Endpoint",
-  "Status Code",
-  "Input Tokens",
-  "Output Tokens",
-  "Cache Write 5m",
-  "Cache Write 1h",
-  "Cache Read",
-  "Total Tokens",
-  "Cost (USD)",
-  "Duration (ms)",
-  "Session ID",
-  "Retry Count",
-] as const;
+export type UsageLogsExportFormat = "csv" | "xlsx";
 
 type UsageLogsSession = NonNullable<Awaited<ReturnType<typeof getSession>>>;
 
@@ -73,7 +56,16 @@ export interface UsageLogsExportStatus {
   processedRows: number;
   totalRows: number;
   progressPercent: number;
+  format: UsageLogsExportFormat;
   error?: string;
+}
+
+export interface UsageLogsExportDownload {
+  /** CSV text (encoding "utf8") or base64-encoded XLSX bytes (encoding "base64"). */
+  content: string;
+  encoding: "utf8" | "base64";
+  format: UsageLogsExportFormat;
+  filename: string;
 }
 
 interface UsageLogsExportJobRecord extends UsageLogsExportStatus {
@@ -85,13 +77,21 @@ const usageLogsExportStatusStore = new RedisKVStore<UsageLogsExportJobRecord>({
   defaultTtlSeconds: USAGE_LOGS_EXPORT_JOB_TTL_SECONDS,
 });
 
-const usageLogsExportCsvStore = new RedisKVStore<string>({
-  prefix: "cch:usage-logs:export:csv:",
+const usageLogsExportResultStore = new RedisKVStore<string>({
+  prefix: "cch:usage-logs:export:result:",
   defaultTtlSeconds: USAGE_LOGS_EXPORT_JOB_TTL_SECONDS,
 });
 
-function usageLogsExportCsvKey(jobId: string): string {
-  return `${jobId}:csv`;
+function usageLogsExportResultKey(jobId: string): string {
+  return `${jobId}:result`;
+}
+
+function fileExtensionForFormat(format: UsageLogsExportFormat): string {
+  return format === "xlsx" ? "xlsx" : "csv";
+}
+
+function encodingForFormat(format: UsageLogsExportFormat): "utf8" | "base64" {
+  return format === "xlsx" ? "base64" : "utf8";
 }
 
 function resolveUsageLogFiltersForSession(
@@ -108,6 +108,7 @@ function toUsageLogsExportStatus(job: UsageLogsExportJobRecord): UsageLogsExport
     processedRows: job.processedRows,
     totalRows: job.totalRows,
     progressPercent: job.progressPercent,
+    format: job.format,
     error: job.error,
   };
 }
@@ -121,32 +122,6 @@ function getUsageLogsExportJob(
     return null;
   }
   return job;
-}
-
-function buildCsvRows(logs: UsageLogRow[]): string[] {
-  return logs.map((log) => {
-    const retryCount = log.providerChain ? getRetryCount(log.providerChain) : 0;
-    return [
-      log.createdAt ? new Date(log.createdAt).toISOString() : "",
-      escapeCsvField(log.userName),
-      escapeCsvField(log.keyName),
-      escapeCsvField(log.providerName ?? ""),
-      escapeCsvField(log.model ?? ""),
-      escapeCsvField(log.originalModel ?? ""),
-      escapeCsvField(log.endpoint ?? ""),
-      log.statusCode?.toString() ?? "",
-      log.inputTokens?.toString() ?? "0",
-      log.outputTokens?.toString() ?? "0",
-      log.cacheCreation5mInputTokens?.toString() ?? "0",
-      log.cacheCreation1hInputTokens?.toString() ?? "0",
-      log.cacheReadInputTokens?.toString() ?? "0",
-      log.totalTokens.toString(),
-      log.costUsd ?? "0",
-      log.durationMs?.toString() ?? "",
-      escapeCsvField(log.sessionId ?? ""),
-      retryCount.toString(),
-    ].join(",");
-  });
 }
 
 function buildUsageLogsExportProgress(
@@ -169,8 +144,15 @@ function buildUsageLogsExportProgress(
   };
 }
 
-async function buildUsageLogsExportCsv(
+/**
+ * Stream every matching usage log (in batches) and assemble the requested
+ * export format. Timestamps are rendered in `timezone` and numeric columns are
+ * normalized so Excel parses them as numbers (see @/lib/usage-logs/export).
+ */
+async function buildUsageLogsExport(
   filters: Omit<UsageLogFilters, "page" | "pageSize">,
+  format: UsageLogsExportFormat,
+  timezone: string,
   onProgress?: (
     progress: Pick<UsageLogsExportStatus, "processedRows" | "totalRows" | "progressPercent">
   ) => Promise<void> | void
@@ -183,7 +165,11 @@ async function buildUsageLogsExportCsv(
     estimatedTotalRows = stats.totalRequests;
   }
 
-  const csvLines = [CSV_HEADERS.join(",")];
+  // Both formats stream batch-by-batch into string buffers (CSV lines / XLSX row
+  // XML + an incremental summary) so the full UsageLogRow[] is never retained.
+  const csvLines = format === "csv" ? [buildCsvHeaderLine(timezone)] : [];
+  const xlsxDetailRows: string[] = [];
+  const xlsxSummary = format === "xlsx" ? createSummaryAccumulator(timezone) : null;
   let cursor: UsageLogBatchFilters["cursor"] | undefined;
   let processedRows = 0;
 
@@ -195,7 +181,14 @@ async function buildUsageLogsExportCsv(
     });
 
     if (batch.logs.length > 0) {
-      csvLines.push(...buildCsvRows(batch.logs));
+      if (format === "xlsx" && xlsxSummary) {
+        for (const log of batch.logs) {
+          xlsxDetailRows.push(buildDetailRowXml(log, xlsxDetailRows.length + 2, timezone));
+          xlsxSummary.add(log);
+        }
+      } else {
+        csvLines.push(...buildCsvRows(batch.logs, timezone));
+      }
       processedRows += batch.logs.length;
     }
 
@@ -210,12 +203,22 @@ async function buildUsageLogsExportCsv(
     cursor = batch.nextCursor;
   }
 
-  return `\uFEFF${csvLines.join("\n")}`;
+  if (format === "xlsx" && xlsxSummary) {
+    const bytes = await assembleUsageLogsXlsx({
+      detailRowsXml: xlsxDetailRows,
+      summary: xlsxSummary.finalize(),
+      timezone,
+    });
+    return Buffer.from(bytes).toString("base64");
+  }
+
+  return `${CSV_BOM}${csvLines.join("\n")}`;
 }
 
 async function runUsageLogsExportJob(
   jobId: string,
-  filters: Omit<UsageLogFilters, "page" | "pageSize">
+  filters: Omit<UsageLogFilters, "page" | "pageSize">,
+  format: UsageLogsExportFormat
 ): Promise<void> {
   const existingJob = await usageLogsExportStatusStore.get(jobId);
   if (!existingJob) {
@@ -229,8 +232,9 @@ async function runUsageLogsExportJob(
   });
 
   try {
+    const timezone = await resolveSystemTimezone();
     let lastProgressUpdateAt = 0;
-    const csv = await buildUsageLogsExportCsv(filters, async (progress) => {
+    const content = await buildUsageLogsExport(filters, format, timezone, async (progress) => {
       const now = Date.now();
       if (
         progress.progressPercent < 100 &&
@@ -257,13 +261,16 @@ async function runUsageLogsExportJob(
       return;
     }
 
-    const csvStored = await usageLogsExportCsvStore.set(usageLogsExportCsvKey(jobId), csv);
-    if (!csvStored) {
+    const resultStored = await usageLogsExportResultStore.set(
+      usageLogsExportResultKey(jobId),
+      content
+    );
+    if (!resultStored) {
       await usageLogsExportStatusStore.set(jobId, {
         ...currentJob,
         status: "failed",
         progressPercent: 0,
-        error: "Failed to persist CSV to Redis",
+        error: "Failed to persist export to Redis",
       });
       return;
     }
@@ -316,22 +323,26 @@ export async function getUsageLogs(
   }
 }
 
+export type UsageLogsExportInput = Omit<UsageLogFilters, "userId" | "page" | "pageSize"> & {
+  format?: UsageLogsExportFormat;
+};
+
 /**
- * 导出使用日志为 CSV 格式
+ * 同步导出使用日志为 CSV 格式（XLSX 仅支持异步任务）
  */
-export async function exportUsageLogs(
-  filters: Omit<UsageLogFilters, "userId" | "page" | "pageSize">
-): Promise<ActionResult<string>> {
+export async function exportUsageLogs(input: UsageLogsExportInput): Promise<ActionResult<string>> {
   try {
     const session = await getSession();
     if (!session) {
       return { ok: false, error: "未登录" };
     }
 
+    const { format: _format, ...filters } = input;
     const finalFilters = resolveUsageLogFiltersForSession(session, filters);
-    const csv = await buildUsageLogsExportCsv(finalFilters);
+    const timezone = await resolveSystemTimezone();
+    const content = await buildUsageLogsExport(finalFilters, "csv", timezone);
 
-    return { ok: true, data: csv };
+    return { ok: true, data: content };
   } catch (error) {
     logger.error("导出使用日志失败:", error);
     const message = error instanceof Error ? error.message : "导出使用日志失败";
@@ -340,7 +351,7 @@ export async function exportUsageLogs(
 }
 
 export async function startUsageLogsExport(
-  filters: Omit<UsageLogFilters, "userId" | "page" | "pageSize">
+  input: UsageLogsExportInput
 ): Promise<ActionResult<{ jobId: string }>> {
   try {
     const session = await getSession();
@@ -348,6 +359,7 @@ export async function startUsageLogsExport(
       return { ok: false, error: "未登录" };
     }
 
+    const { format = "csv", ...filters } = input;
     const jobId = crypto.randomUUID();
     const finalFilters = resolveUsageLogFiltersForSession(session, filters);
 
@@ -358,6 +370,7 @@ export async function startUsageLogsExport(
       processedRows: 0,
       totalRows: 0,
       progressPercent: 0,
+      format,
     });
 
     if (!stored) {
@@ -367,7 +380,7 @@ export async function startUsageLogsExport(
     // Defer to next tick so the action returns the jobId immediately.
     // Safe for self-hosted Bun server (long-lived process); NOT suitable for serverless.
     setTimeout(() => {
-      void runUsageLogsExportJob(jobId, finalFilters);
+      void runUsageLogsExportJob(jobId, finalFilters, format);
     }, 0);
 
     return { ok: true, data: { jobId } };
@@ -400,7 +413,9 @@ export async function getUsageLogsExportStatus(
   }
 }
 
-export async function downloadUsageLogsExport(jobId: string): Promise<ActionResult<string>> {
+export async function downloadUsageLogsExport(
+  jobId: string
+): Promise<ActionResult<UsageLogsExportDownload>> {
   try {
     const session = await getSession();
     if (!session) {
@@ -420,39 +435,25 @@ export async function downloadUsageLogsExport(jobId: string): Promise<ActionResu
       return { ok: false, error: "Export not yet completed" };
     }
 
-    const csv = await usageLogsExportCsvStore.get(usageLogsExportCsvKey(jobId));
-    if (!csv) {
+    const content = await usageLogsExportResultStore.get(usageLogsExportResultKey(jobId));
+    if (content === null) {
       return { ok: false, error: "Export file not found or expired" };
     }
 
-    return { ok: true, data: csv };
+    return {
+      ok: true,
+      data: {
+        content,
+        encoding: encodingForFormat(job.format),
+        format: job.format,
+        filename: `usage-logs-${jobId}.${fileExtensionForFormat(job.format)}`,
+      },
+    };
   } catch (error) {
     logger.error("Failed to download usage logs export:", error);
     const message = error instanceof Error ? error.message : "Failed to download export";
     return { ok: false, error: message };
   }
-}
-
-/**
- * 转义 CSV 字段（防止 CSV 公式注入攻击）
- */
-function escapeCsvField(field: string): string {
-  const dangerousChars = ["=", "+", "-", "@"];
-  const trimmedField = field.trimStart();
-  let safeField = field;
-  if (trimmedField && dangerousChars.some((char) => trimmedField.startsWith(char))) {
-    safeField = `'${field}`;
-  }
-
-  if (
-    safeField.includes(",") ||
-    safeField.includes('"') ||
-    safeField.includes("\n") ||
-    safeField.includes("\r")
-  ) {
-    return `"${safeField.replace(/"/g, '""')}"`;
-  }
-  return safeField;
 }
 
 /**
