@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { DASHBOARD_COMPAT_HEADER } from "@/lib/api/v1/_shared/constants";
 import { ApiError } from "@/lib/api-client/v1/errors";
 
@@ -37,6 +37,11 @@ const usageLogs = await vi.importActual<typeof import("@/lib/api-client/v1/actio
 describe("v1 action compatibility client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  // Always restore globals, even if a stubbed-fetch test throws mid-assertion.
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   test("preserves provider edit undo metadata from response headers", async () => {
@@ -448,8 +453,6 @@ describe("v1 action compatibility client", () => {
     if (!result.ok) throw new Error("expected ok");
     expect(result.data.blob).toBeInstanceOf(Blob);
     expect(await result.data.blob.text()).toBe("PKxlsx-bytes");
-
-    vi.unstubAllGlobals();
   });
 
   test("downloadUsageLogsExport surfaces a non-2xx download as an error result", async () => {
@@ -461,6 +464,5 @@ describe("v1 action compatibility client", () => {
     const result = await usageLogs.downloadUsageLogsExport("missing");
 
     expect(result.ok).toBe(false);
-    vi.unstubAllGlobals();
   });
 });
