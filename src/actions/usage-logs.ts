@@ -337,7 +337,15 @@ export async function exportUsageLogs(input: UsageLogsExportInput): Promise<Acti
       return { ok: false, error: "未登录" };
     }
 
-    const { format: _format, ...filters } = input;
+    const { format = "csv", ...filters } = input;
+    if (format !== "csv") {
+      // XLSX is assembled from every matching row in memory, so it is only
+      // offered via the async job flow.
+      return {
+        ok: false,
+        error: "Synchronous export only supports CSV; use the async job for XLSX.",
+      };
+    }
     const finalFilters = resolveUsageLogFiltersForSession(session, filters);
     const timezone = await resolveSystemTimezone();
     const content = await buildUsageLogsExport(finalFilters, "csv", timezone);

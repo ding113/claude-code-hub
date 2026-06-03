@@ -26,6 +26,9 @@ export function toFiniteNumber(value: string | number | null | undefined): numbe
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
+  if (typeof value !== "string") {
+    return null;
+  }
   const trimmed = value.trim();
   if (trimmed === "") {
     return null;

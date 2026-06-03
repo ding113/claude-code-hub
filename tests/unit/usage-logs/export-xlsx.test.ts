@@ -171,7 +171,29 @@ describe("buildUsageLogsXlsx", () => {
 
   test("does not crash on empty input", async () => {
     const files = unzip(await buildUsageLogsXlsx([], "UTC"));
-    expect(files["xl/worksheets/sheet1.xml"]).toContain("Usage Logs".length ? "Time (UTC)" : "");
+    expect(files["xl/worksheets/sheet1.xml"]).toContain("Time (UTC)");
     expect(files["xl/worksheets/sheet2.xml"]).toContain("Total");
+  });
+
+  test("invalid Date timestamp yields an empty cell (no crash)", async () => {
+    const files = unzip(
+      await buildUsageLogsXlsx([makeLog({ createdAt: new Date(Number.NaN) })], "UTC")
+    );
+    const timeCell = cell(files["xl/worksheets/sheet1.xml"], `${TIME_COL}2`) ?? "";
+    expect(timeCell).toBe(`<c r="${TIME_COL}2"/>`);
+  });
+
+  test("strips illegal XML characters from text cells", async () => {
+    const files = unzip(await buildUsageLogsXlsx([makeLog({ model: "gpt\uFFFE\uFFFF-x" })], "UTC"));
+    const modelCell = cell(files["xl/worksheets/sheet1.xml"], `${MODEL_COL}2`) ?? "";
+    expect(modelCell).toContain("gpt-x");
+    expect(modelCell).not.toContain("\uFFFE");
+    expect(modelCell).not.toContain("\uFFFF");
+  });
+
+  test("styles.xml declares the two OOXML-reserved fills", async () => {
+    const files = unzip(await buildUsageLogsXlsx([makeLog()], "UTC"));
+    expect(files["xl/styles.xml"]).toContain('<fills count="2">');
+    expect(files["xl/styles.xml"]).toContain('patternType="gray125"');
   });
 });

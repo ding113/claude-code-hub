@@ -10,6 +10,7 @@
 
 import { formatInTimeZone } from "date-fns-tz";
 import type { UsageLogRow } from "@/repository/usage-logs";
+import { isValidDate } from "./format";
 import { toFiniteNumber } from "./numeric";
 
 export type SummaryGranularity = "daily" | "hourly";
@@ -108,7 +109,7 @@ export function createSummaryAccumulator(timezone: string): SummaryAccumulator {
   return {
     add(log) {
       accumulate(total, log);
-      if (!log.createdAt) {
+      if (!isValidDate(log.createdAt)) {
         unknown ??= emptyRow(UNKNOWN_PERIOD);
         accumulate(unknown, log);
         return;

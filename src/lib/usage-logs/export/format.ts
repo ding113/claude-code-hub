@@ -11,6 +11,15 @@ import { formatInTimeZone } from "date-fns-tz";
 /** Excel-friendly local datetime, e.g. "2026-06-03 20:34:56". */
 export const EXPORT_DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
+/**
+ * Narrow to a usable Date. `new Date(NaN)` is still `instanceof Date`, so an
+ * `instanceof` check alone would let an invalid date reach `formatInTimeZone`
+ * and throw a RangeError mid-export.
+ */
+export function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && !Number.isNaN(value.getTime());
+}
+
 /** Render an instant as a wall-clock string in the given IANA timezone. */
 export function formatExportTimestamp(date: Date, timezone: string): string {
   return formatInTimeZone(date, timezone, EXPORT_DATETIME_FORMAT);

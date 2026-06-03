@@ -93,6 +93,11 @@ describe("buildCsvRows", () => {
     expect(row.split(",")[TIME_IDX]).toBe("");
   });
 
+  test("invalid Date timestamp renders empty (no RangeError crash)", () => {
+    const [row] = buildCsvRows([makeLog({ createdAt: new Date(Number.NaN) })], "UTC");
+    expect(row.split(",")[TIME_IDX]).toBe("");
+  });
+
   test("retry count is derived from the provider chain", () => {
     const retryIdx = HEADER.indexOf("Retry Count");
     const [row] = buildCsvRows(

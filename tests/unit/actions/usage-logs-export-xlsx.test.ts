@@ -157,14 +157,22 @@ describe("Usage logs XLSX export", () => {
     expect(sheet1).toContain("<v>1.5</v>");
   });
 
-  test("sync export ignores xlsx and still returns CSV text", async () => {
+  test("sync export rejects xlsx (async job only)", async () => {
+    const { exportUsageLogs } = await import("@/actions/usage-logs");
+    const result = await exportUsageLogs({ format: "xlsx" });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected rejection");
+    expect(result.error).toMatch(/XLSX/);
+  });
+
+  test("sync csv export returns CSV text", async () => {
     findUsageLogsBatchMock.mockResolvedValueOnce({
       logs: [log()],
       nextCursor: null,
       hasMore: false,
     });
     const { exportUsageLogs } = await import("@/actions/usage-logs");
-    const result = await exportUsageLogs({ format: "xlsx" });
+    const result = await exportUsageLogs({ format: "csv" });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("export failed");
     expect(result.data).toContain("Session ID");

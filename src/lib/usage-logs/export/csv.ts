@@ -6,7 +6,7 @@
 
 import type { UsageLogRow } from "@/repository/usage-logs";
 import { buildDetailHeaders, DETAIL_COLUMNS, isBlankValue } from "./columns";
-import { formatExportTimestamp } from "./format";
+import { formatExportTimestamp, isValidDate } from "./format";
 import { normalizeDecimalForSpreadsheet } from "./numeric";
 
 export const CSV_BOM = "﻿";
@@ -42,7 +42,7 @@ function renderCsvCell(
 ): string {
   switch (column.kind) {
     case "datetime":
-      return value instanceof Date ? formatExportTimestamp(value, timezone) : "";
+      return isValidDate(value) ? formatExportTimestamp(value, timezone) : "";
     case "number":
       if (isBlankValue(value) && !column.zeroWhenNull) {
         return "";

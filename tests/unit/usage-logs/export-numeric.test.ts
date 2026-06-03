@@ -17,6 +17,12 @@ describe("toFiniteNumber", () => {
     expect(toFiniteNumber(Number.NaN)).toBeNull();
     expect(toFiniteNumber(Number.POSITIVE_INFINITY)).toBeNull();
   });
+
+  test("returns null for unexpected non-string/number types (no .trim() crash)", () => {
+    expect(toFiniteNumber(true as unknown as string)).toBeNull();
+    expect(toFiniteNumber({} as unknown as string)).toBeNull();
+    expect(toFiniteNumber([] as unknown as string)).toBeNull();
+  });
 });
 
 describe("normalizeDecimalForSpreadsheet", () => {

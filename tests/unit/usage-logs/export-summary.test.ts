@@ -98,4 +98,19 @@ describe("buildUsageLogsSummary", () => {
     expect(summary.total.requests).toBe(0);
     expect(summary.total.cost).toBe(0);
   });
+
+  test("invalid Date rows fall into the Unknown bucket without crashing", () => {
+    const summary = buildUsageLogsSummary(
+      [
+        makeLog({ createdAt: new Date("2026-06-03T12:00:00.000Z") }),
+        makeLog({ createdAt: new Date(Number.NaN) }),
+        makeLog({ createdAt: null }),
+      ],
+      "UTC"
+    );
+    expect(summary.total.requests).toBe(3);
+    expect(summary.rows.some((r) => r.period === "Unknown")).toBe(true);
+    const unknown = summary.rows.find((r) => r.period === "Unknown");
+    expect(unknown?.requests).toBe(2);
+  });
 });

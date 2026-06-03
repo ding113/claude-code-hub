@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { ActionResult } from "@/actions/types";
+import type { UsageLogsExportDownload } from "@/actions/usage-logs";
 import { callAction } from "@/lib/api/v1/_shared/action-bridge";
 import {
   createProblemResponse,
@@ -135,12 +136,7 @@ export async function downloadUsageLogsExport(c: Context): Promise<Response> {
     c.get("auth")
   );
   if (!result.ok) return actionError(c, result);
-  const download = result.data as {
-    content: string;
-    encoding: "utf8" | "base64";
-    format: "csv" | "xlsx";
-    filename: string;
-  };
+  const download = result.data as UsageLogsExportDownload;
   const isXlsx = download.format === "xlsx";
   const body =
     download.encoding === "base64" ? Buffer.from(download.content, "base64") : download.content;
