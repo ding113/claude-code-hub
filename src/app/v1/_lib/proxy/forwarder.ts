@@ -4460,7 +4460,9 @@ export class ProxyForwarder {
         response: null,
         releaseAgent: null,
         agentReleased: false,
-        billAsLoser: billHedgeLosers,
+        // Only keep a loser alive for billing if there is a request row to bill back to;
+        // otherwise cancel it normally (no point holding the connection).
+        billAsLoser: billHedgeLosers && session.messageContext?.id != null,
         loserBillingStarted: false,
         firstChunk: null,
         billingSnapshot: null,

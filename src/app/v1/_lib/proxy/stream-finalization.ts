@@ -47,6 +47,18 @@ export function setDeferredStreamingFinalization(
   deferredMeta.set(session, meta);
 }
 
+/**
+ * Read the deferred finalization meta WITHOUT consuming it. Used by non-SSE
+ * finalization paths (e.g. Gemini passthrough via finalizeRequestStats) that do not
+ * run the deferred finalizer but still need to know whether this is a hedge winner
+ * with loser billing, so the winner cost write uses the loser-sum-aware mode.
+ */
+export function peekDeferredStreamingFinalization(
+  session: ProxySession
+): DeferredStreamingFinalization | null {
+  return deferredMeta.get(session) ?? null;
+}
+
 export function consumeDeferredStreamingFinalization(
   session: ProxySession
 ): DeferredStreamingFinalization | null {

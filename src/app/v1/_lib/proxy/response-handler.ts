@@ -51,7 +51,10 @@ import { extractActualResponseModelForProvider } from "./actual-response-model";
 import { bindClientAbortListener } from "./client-abort-listener";
 import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
-import { consumeDeferredStreamingFinalization } from "./stream-finalization";
+import {
+  consumeDeferredStreamingFinalization,
+  peekDeferredStreamingFinalization,
+} from "./stream-finalization";
 
 /**
  * Idempotent helper to release the agent pool reference count attached to a session.
@@ -3835,6 +3838,12 @@ export async function finalizeHedgeLoserBilling(params: {
     const priorityServiceTierApplied =
       (await resolveCodexPriorityBillingDecision(loserSession, actualServiceTier))
         ?.effectivePriority ?? false;
+    // Mirror the winner: a Codex loser with a large prompt must trigger the 1M context tier,
+    // else it under-bills. Only mutate for shadow-session losers (no snapshot) — the initial
+    // loser uses its pre-pollution snapshot and must not mutate the shared/original session.
+    if (!billingContext) {
+      maybeSetCodexContext1m(loserSession, provider, billableUsage.input_tokens);
+    }
     const context1mApplied = billingContext?.context1mApplied ?? loserSession.getContext1mApplied();
     const costMultiplier = provider.costMultiplier;
     const groupCostMultiplier =
@@ -3932,6 +3941,11 @@ export async function finalizeRequestStats(
   const resolvedIsStream = isStreaming ?? isSSEText(responseText);
 
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
+  // Hedge-path (e.g. Gemini passthrough) winners reach finalization here instead of via
+  // finalizeStream. Peek the deferred meta (without consuming it — commitWinner already did
+  // the binding/chain) so the winner cost write uses the loser-sum-aware mode and does not
+  // clobber concurrently-billed loser increments.
+  const winnerLoserAware = peekDeferredStreamingFinalization(session)?.billHedgeLosers === true;
   const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
   const actualServiceTier = parseServiceTierFromResponseText(responseText);
   const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
@@ -3961,7 +3975,8 @@ export async function finalizeRequestStats(
         provider.costMultiplier,
         session.getContext1mApplied(),
         priorityServiceTierApplied,
-        session.getGroupCostMultiplier()
+        session.getGroupCostMultiplier(),
+        winnerLoserAware
       );
       if (costUpdateResult.resolvedPricing) {
         ensurePricingResolutionSpecialSetting(session, costUpdateResult.resolvedPricing);
@@ -4038,7 +4053,8 @@ export async function finalizeRequestStats(
     provider.costMultiplier,
     session.getContext1mApplied(),
     priorityServiceTierApplied,
-    session.getGroupCostMultiplier()
+    session.getGroupCostMultiplier(),
+    winnerLoserAware
   );
   if (costUpdateResult.longContextPricingApplied) {
     ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
