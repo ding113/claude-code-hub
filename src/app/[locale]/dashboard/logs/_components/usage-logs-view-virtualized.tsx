@@ -72,6 +72,8 @@ function UsageLogsViewContent({
   const queryClientInstance = useQueryClient();
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  // 手动刷新计数器：统计汇总面板（非 react-query）依赖它来与列表的手动刷新联动重拉。
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fullscreen = useFullscreen();
@@ -182,6 +184,8 @@ function UsageLogsViewContent({
 
   const handleManualRefresh = useCallback(async () => {
     setIsManualRefreshing(true);
+    // 同时刷新底部调用历史（react-query）与顶部统计汇总（refreshKey 触发）。
+    setStatsRefreshKey((k) => k + 1);
     await queryClientInstance.invalidateQueries({ queryKey: ["usage-logs-batch"] });
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
@@ -272,7 +276,11 @@ function UsageLogsViewContent({
       <div className="space-y-3">
         {/* Stats Summary */}
         {hasStatsFilters && (
-          <UsageLogsStatsPanel filters={statsFilters} currencyCode={resolvedCurrencyCode} />
+          <UsageLogsStatsPanel
+            filters={statsFilters}
+            currencyCode={resolvedCurrencyCode}
+            refreshKey={statsRefreshKey}
+          />
         )}
 
         {/* Toolbar + Filter */}
