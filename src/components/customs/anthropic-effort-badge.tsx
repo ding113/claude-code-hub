@@ -7,6 +7,9 @@ const ANTHROPIC_EFFORT_BADGE_STYLES: Record<string, string> = {
   medium:
     "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300",
   high: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300",
+  // xhigh 介于 high 与 max 之间，需有独立样式，否则会落入灰色 DEFAULT 看起来比 high 还弱。
+  xhigh:
+    "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300",
   max: "border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200",
 };
 

@@ -361,7 +361,8 @@
       },
       "effort": {
         "label": "Effort",
-        "overridden": "Overridden by provider"
+        "overridden": "Overridden by provider",
+        "tooltip": "Thinking effort requested by the client (output_config.effort), shown verbatim. The proxy does not rename or convert levels."
       },
       "logicTrace": {
         "title": "Decision Chain",

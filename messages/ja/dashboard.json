@@ -361,7 +361,8 @@
       },
       "effort": {
         "label": "Effort",
-        "overridden": "プロバイダーにより上書き"
+        "overridden": "プロバイダーにより上書き",
+        "tooltip": "クライアントがリクエストボディで指定した思考強度 (output_config.effort)。プロキシは値をそのまま表示し、レベル名を変換しません。"
       },
       "logicTrace": {
         "title": "決定チェーン",

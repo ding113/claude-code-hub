@@ -313,10 +313,21 @@ export function SummaryTab({
               <div className="p-4">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-muted-foreground">{t("effort.label")}:</span>
-                  <AnthropicEffortBadge
-                    effort={effortInfo.originalEffort}
-                    label={effortInfo.originalEffort}
-                  />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <AnthropicEffortBadge
+                            effort={effortInfo.originalEffort}
+                            label={effortInfo.originalEffort}
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs max-w-xs">{t("effort.tooltip")}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                   {effortInfo.isOverridden && effortInfo.overriddenEffort && (
                     <>
                       <ArrowRight className="h-3 w-3 text-muted-foreground" />
