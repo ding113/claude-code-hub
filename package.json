@@ -126,6 +126,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2",
     "@tailwindcss/postcss": "^4.2.0",
+    "@types/geojson": "^7946.0.16",
     "@types/ioredis": "^5",
     "@types/node": "^25",
     "@types/pg": "^8",
