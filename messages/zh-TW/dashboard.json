@@ -97,6 +97,8 @@
       "exportError": "匯出失敗",
       "exportPreparing": "正在準備匯出...",
       "exportProgress": "已匯出 {current} / {total} 筆",
+      "exportAsCsv": "匯出為 CSV",
+      "exportAsXlsx": "匯出為 XLSX（含彙總表）",
       "quickFilters": {
         "today": "今天",
         "thisWeek": "本週",
@@ -359,7 +361,8 @@
       },
       "effort": {
         "label": "Effort",
-        "overridden": "已被供應商覆寫"
+        "overridden": "已被供應商覆寫",
+        "tooltip": "用戶端在請求體中宣告的思考強度（output_config.effort），按原值顯示，代理不會重新命名或轉換等級。"
       },
       "logicTrace": {
         "title": "決策鏈",

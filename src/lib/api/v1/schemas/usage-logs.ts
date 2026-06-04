@@ -36,7 +36,14 @@ export const UsageLogsExportCreateSchema = UsageLogsQuerySchema.omit({
   limit: true,
   page: true,
   pageSize: true,
-}).strict();
+})
+  .extend({
+    format: z
+      .enum(["csv", "xlsx"])
+      .default("csv")
+      .describe("Export format. xlsx is only available asynchronously (Prefer: respond-async)."),
+  })
+  .strict();
 
 export const UsageLogExportJobParamSchema = z.object({
   jobId: z.string().min(1).describe("Export job id."),

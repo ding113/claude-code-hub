@@ -85,7 +85,15 @@ describe("v1 usage log endpoints", () => {
         progressPercent: 100,
       },
     });
-    downloadUsageLogsExportMock.mockResolvedValue({ ok: true, data: "Time,Model\nnow,claude" });
+    downloadUsageLogsExportMock.mockResolvedValue({
+      ok: true,
+      data: {
+        content: "Time,Model\nnow,claude",
+        encoding: "utf8",
+        format: "csv",
+        filename: "usage-logs-job-1.csv",
+      },
+    });
   });
 
   test("lists usage logs with offset and cursor filters", async () => {
@@ -247,7 +255,7 @@ describe("v1 usage log endpoints", () => {
     });
     expect(sync.response.status).toBe(200);
     expect(sync.json).toEqual({ csv: "Time,Model\nnow,claude" });
-    expect(exportUsageLogsMock).toHaveBeenCalledWith({ model: "claude" });
+    expect(exportUsageLogsMock).toHaveBeenCalledWith({ model: "claude", format: "csv" });
 
     const asyncJob = await callV1Route({
       method: "POST",
@@ -257,7 +265,7 @@ describe("v1 usage log endpoints", () => {
     });
     expect(asyncJob.response.status).toBe(202);
     expect(asyncJob.response.headers.get("Location")).toBe("/api/v1/usage-logs/exports/job-1");
-    expect(startUsageLogsExportMock).toHaveBeenCalledWith({ model: "claude" });
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({ model: "claude", format: "csv" });
 
     const status = await callV1Route({
       method: "GET",
@@ -275,6 +283,46 @@ describe("v1 usage log endpoints", () => {
     expect(download.response.status).toBe(200);
     expect(download.response.headers.get("content-type")).toContain("text/csv");
     expect(download.text).toContain("Time,Model");
+  });
+
+  test("xlsx export requires async and downloads as a spreadsheet", async () => {
+    const syncXlsx = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/usage-logs/exports",
+      headers,
+      body: { model: "claude", format: "xlsx" },
+    });
+    expect(syncXlsx.response.status).toBe(400);
+    expect(startUsageLogsExportMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ format: "xlsx" })
+    );
+
+    const asyncXlsx = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/usage-logs/exports",
+      headers: { ...headers, Prefer: "respond-async" },
+      body: { model: "claude", format: "xlsx" },
+    });
+    expect(asyncXlsx.response.status).toBe(202);
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({ model: "claude", format: "xlsx" });
+
+    downloadUsageLogsExportMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        content: Buffer.from("PK-xlsx-bytes").toString("base64"),
+        encoding: "base64",
+        format: "xlsx",
+        filename: "usage-logs-job-1.xlsx",
+      },
+    });
+    const download = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs/exports/job-1/download",
+      headers,
+    });
+    expect(download.response.status).toBe(200);
+    expect(download.response.headers.get("content-type")).toContain("spreadsheetml.sheet");
+    expect(download.response.headers.get("content-disposition")).toContain(".xlsx");
   });
 
   test("returns problem+json for action failures and documents paths", async () => {

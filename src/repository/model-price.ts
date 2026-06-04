@@ -267,24 +267,24 @@ export async function createModelPrice(
 
 /**
  * 更新或插入模型价格（先删除旧记录，再插入新记录）
- * 用于手动维护单个模型价格，source 固定为 'manual'
+ * 用于手动维护单个模型价格或批量替换；source 默认为 'manual'。
  */
 export async function upsertModelPrice(
   modelName: string,
-  priceData: ModelPriceData
+  priceData: ModelPriceData,
+  source: ModelPriceSource = "manual"
 ): Promise<ModelPrice> {
   // 使用事务确保删除和插入的原子性
   return await db.transaction(async (tx) => {
     // 先删除该模型的所有旧记录
     await tx.delete(modelPrices).where(eq(modelPrices.modelName, modelName));
 
-    // 插入新记录，source 固定为 'manual'
     const [price] = await tx
       .insert(modelPrices)
       .values({
         modelName: modelName,
         priceData: priceData,
-        source: "manual",
+        source: source,
       })
       .returning();
     return toModelPrice(price);

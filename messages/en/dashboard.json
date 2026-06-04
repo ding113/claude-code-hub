@@ -97,6 +97,8 @@
       "exportError": "Export failed",
       "exportPreparing": "Preparing export...",
       "exportProgress": "Exported {current} / {total}",
+      "exportAsCsv": "Export as CSV",
+      "exportAsXlsx": "Export as XLSX (with summary)",
       "quickFilters": {
         "today": "Today",
         "thisWeek": "This Week",
@@ -359,7 +361,8 @@
       },
       "effort": {
         "label": "Effort",
-        "overridden": "Overridden by provider"
+        "overridden": "Overridden by provider",
+        "tooltip": "Thinking effort requested by the client (output_config.effort), shown verbatim. The proxy does not rename or convert levels."
       },
       "logicTrace": {
         "title": "Decision Chain",

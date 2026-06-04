@@ -42,7 +42,7 @@ const providersActionMocks = vi.hoisted(() => ({
   removeProvider: vi.fn(async (_providerId: number) => ({ ok: true })),
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: true, data: { key: "test-key" } })),
   getProviderTestPresets: vi.fn(async () => ({ ok: true, data: [] })),
-  getModelSuggestionsByProviderGroup: vi.fn(async () => []),
+  getModelSuggestionsByProviderGroup: vi.fn(async () => ({ ok: true, data: [] })),
   fetchUpstreamModels: vi.fn(async () => ({ ok: true, data: { models: [] } })),
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);

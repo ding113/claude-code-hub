@@ -3,7 +3,6 @@
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
-import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { WebhookNotifier } from "@/lib/webhook";
 import { buildTestMessage } from "@/lib/webhook/templates/test-messages";
@@ -41,18 +40,10 @@ export async function updateNotificationSettingsAction(
     const before = await getNotificationSettings();
     const updated = await updateNotificationSettings(payload);
 
-    // 重新调度通知任务（仅生产环境）
-    if (process.env.NODE_ENV === "production") {
-      // 动态导入避免 Turbopack 编译 Bull 模块
-      const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
-      await scheduleNotifications();
-    } else {
-      logger.warn({
-        action: "schedule_notifications_skipped",
-        reason: "development_mode",
-        message: "Notification scheduling is disabled in development mode",
-      });
-    }
+    // 重新调度通知任务，使总开关、子开关、时间/间隔等变更立即生效（添加/移除 repeatable 作业）。
+    // 动态导入避免静态加载 Bull；scheduleNotifications 内部已 fail-open，缺少 REDIS_URL 时不会影响设置保存。
+    const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
+    await scheduleNotifications();
 
     emitActionAudit({
       category: "notification",

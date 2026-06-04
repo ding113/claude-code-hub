@@ -1,6 +1,7 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ interface RefreshCacheButtonProps {
 
 export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
   const t = useTranslations("settings");
+  const router = useRouter();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -32,6 +34,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
       if (result.ok) {
         const count = result.data.stats.totalCount;
         toast.success(t("errorRules.refreshCacheSuccess", { count }));
+        router.refresh();
       } else {
         toast.error(result.error);
       }

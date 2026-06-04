@@ -25,14 +25,23 @@ interface UsageLogsStatsPanelProps {
     minRetryCount?: number;
   };
   currencyCode?: CurrencyCode;
+  /**
+   * 手动刷新计数器：每次递增都会触发一次统计汇总重新拉取（与列表的手动刷新联动）。
+   * 仅在值变化时生效，不影响按 filters 变化的常规重拉。
+   */
+  refreshKey?: number;
 }
 
 /**
  * Stats panel component with glass morphism UI
  * Always expanded (not collapsible), loads data asynchronously
- * Re-fetches when filters change
+ * Re-fetches when filters change or when refreshKey is bumped (manual refresh)
  */
-export function UsageLogsStatsPanel({ filters, currencyCode = "USD" }: UsageLogsStatsPanelProps) {
+export function UsageLogsStatsPanel({
+  filters,
+  currencyCode = "USD",
+  refreshKey = 0,
+}: UsageLogsStatsPanelProps) {
   const t = useTranslations("dashboard");
   const [stats, setStats] = useState<UsageLogSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,11 +70,11 @@ export function UsageLogsStatsPanel({ filters, currencyCode = "USD" }: UsageLogs
     }
   }, [filters, t]);
 
-  // Load data on mount and when filters change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: filtersKey is used to detect filter changes
+  // Load data on mount, when filters change, and on manual refresh (refreshKey bump)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filtersKey/refreshKey are the refetch triggers
   useEffect(() => {
     loadStats();
-  }, [filtersKey, loadStats]);
+  }, [filtersKey, refreshKey, loadStats]);
 
   return (
     <div

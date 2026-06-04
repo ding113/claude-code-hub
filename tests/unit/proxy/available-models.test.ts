@@ -204,6 +204,39 @@ describe("formatAnthropicResponse - Anthropic 格式响应", () => {
     const result: AnthropicModelsResponse = formatAnthropicResponse([{ id: "test-model" }]);
     expect(result.data[0].display_name).toBe("test-model");
   });
+
+  test("fallback created_at 不应包含毫秒(符合官方 API 规范)", () => {
+    const result: AnthropicModelsResponse = formatAnthropicResponse([{ id: "test-model" }]);
+    expect(result.data[0].created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  });
+
+  test("上游带毫秒的 created_at 应被归一化为秒级精度", () => {
+    const result: AnthropicModelsResponse = formatAnthropicResponse([
+      { id: "claude-3-opus", createdAt: "2026-05-29T09:22:44.350Z" },
+    ]);
+    expect(result.data[0].created_at).toBe("2026-05-29T09:22:44Z");
+  });
+
+  test("上游已是秒级精度的 created_at 应保持不变", () => {
+    const result: AnthropicModelsResponse = formatAnthropicResponse([
+      { id: "claude-3-opus", createdAt: "2024-02-29T00:00:00Z" },
+    ]);
+    expect(result.data[0].created_at).toBe("2024-02-29T00:00:00Z");
+  });
+
+  test("非 Z 时区偏移的 created_at 应被归一化为 UTC 秒级精度", () => {
+    const result: AnthropicModelsResponse = formatAnthropicResponse([
+      { id: "claude-3-opus", createdAt: "2026-05-29T17:22:44.350+08:00" },
+    ]);
+    expect(result.data[0].created_at).toBe("2026-05-29T09:22:44Z");
+  });
+
+  test("无法解析的 created_at 应原样返回,不抛错", () => {
+    const result: AnthropicModelsResponse = formatAnthropicResponse([
+      { id: "claude-3-opus", createdAt: "not-a-valid-date" },
+    ]);
+    expect(result.data[0].created_at).toBe("not-a-valid-date");
+  });
 });
 
 describe("formatGeminiResponse - Gemini 格式响应", () => {

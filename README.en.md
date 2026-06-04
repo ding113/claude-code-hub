@@ -124,7 +124,7 @@ Register now via <a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">this link
 ### Requirements
 
 - Docker and Docker Compose (latest version recommended)
-- Optional (for local development): Node.js ≥ 20, Bun ≥ 1.3
+- Optional (for local development): Node.js ≥ 22.15 (inbound zstd request-body decompression uses native `node:zlib` zstd), Bun ≥ 1.3
 
 ### 🚀 One-Click Deployment Script (✨ Recommended - Fully Automated)
 
