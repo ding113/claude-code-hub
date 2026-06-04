@@ -169,8 +169,12 @@ describe("decodeRequestBody", () => {
     expect(MAX_DECOMPRESSED_REQUEST_BYTES).toBe(100 * 1024 * 1024);
   });
 
-  it("exposes a sane default compressed-input cap", () => {
-    expect(MAX_COMPRESSED_REQUEST_BYTES).toBe(10 * 1024 * 1024);
+  it("defaults the compressed-input cap to the decompressed ceiling (regression-free)", () => {
+    // Real compression never grows the body, so a legitimate compressed request is always
+    // <= its decompressed size; matching the output ceiling avoids rejecting large compressed
+    // requests that the plaintext/output path would accept.
+    expect(MAX_COMPRESSED_REQUEST_BYTES).toBe(MAX_DECOMPRESSED_REQUEST_BYTES);
+    expect(MAX_COMPRESSED_REQUEST_BYTES).toBe(100 * 1024 * 1024);
   });
 
   it("throws ProxyError(413) when the compressed input exceeds the cap, before decompressing", () => {
@@ -236,6 +240,7 @@ describe("decodeRequestBody env-configurable limits", () => {
     vi.resetModules();
     const mod = await import("@/app/v1/_lib/proxy/request-body-codec");
     expect(mod.MAX_DECOMPRESSED_REQUEST_BYTES).toBe(100 * 1024 * 1024);
-    expect(mod.MAX_COMPRESSED_REQUEST_BYTES).toBe(10 * 1024 * 1024);
+    // Falls back to the decompressed default (100MB) since the compressed default tracks it.
+    expect(mod.MAX_COMPRESSED_REQUEST_BYTES).toBe(100 * 1024 * 1024);
   });
 });

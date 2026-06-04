@@ -48,17 +48,17 @@ export const MAX_DECOMPRESSED_REQUEST_BYTES = parseByteLimitEnv(
 
 /**
  * 压缩输入（线上字节）硬上限。解压在 `ProxySession.fromContext` 内、鉴权 guard 之前同步执行，
- * 且 /v1、/v1beta 路径不受 proxyClientMaxBodySize 钳制（见上）；若仅靠 maxOutputBytes 输出兜底，
- * 未鉴权客户端仍可反复发送「小压缩体 → 解到 100MB」来放大解压 CPU/事件循环开销。
- * 因此在解压前先按压缩体本身的字节数拒绝过大输入：既限制鉴权前需读取+解压的输入量，
- * 也把最大放大比收敛（10MB 压缩体最多解到 100MB 输出）。超过按 413 拒绝。
+ * 且 /v1、/v1beta 路径不受 proxyClientMaxBodySize 钳制（见上）。该上限在解压前先按压缩体本身
+ * 的字节数拒绝过大输入，作为鉴权前的结构性天花板（限制需读取+解压的输入量）。
  *
- * 默认 10MB（远高于任何真实压缩请求体：2M token 上下文 zstd 压缩通常仅数 MB）。
- * 可经环境变量 MAX_COMPRESSED_REQUEST_BYTES 覆盖（字节数）。
+ * 默认与 {@link MAX_DECOMPRESSED_REQUEST_BYTES} 一致：真实压缩比下合法请求的压缩体一定不超过其
+ * 解压体，故该默认不会误拒既有的大上下文/图片压缩请求（避免「明文 100MB 放行、压缩体却被拒」的
+ * 不对称）。内存受限部署下调 MAX_DECOMPRESSED_REQUEST_BYTES 时本上限随之收紧；也可经
+ * MAX_COMPRESSED_REQUEST_BYTES 单独覆盖。超过按 413 拒绝。
  */
 export const MAX_COMPRESSED_REQUEST_BYTES = parseByteLimitEnv(
   "MAX_COMPRESSED_REQUEST_BYTES",
-  10 * 1024 * 1024
+  MAX_DECOMPRESSED_REQUEST_BYTES
 );
 
 /**
