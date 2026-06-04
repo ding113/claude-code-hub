@@ -648,11 +648,18 @@ export function SummaryTab({
               );
             })()}
 
-            {/* Total Cost */}
+            {/* Total Cost — costBreakdown.total is the winner-only base; when hedge losers
+                were billed the grand total lives in costUsd, so prefer it then. */}
             <div className="pt-3 border-t flex justify-between items-center">
               <span className="font-medium">{t("billingDetails.totalCost")}:</span>
               <span className="font-mono text-lg font-semibold text-emerald-600">
-                {formatCurrency(costBreakdown?.total ?? costUsd, "USD", 6)}
+                {formatCurrency(
+                  hedgeLosers && hedgeLosers.length > 0
+                    ? costUsd
+                    : (costBreakdown?.total ?? costUsd),
+                  "USD",
+                  6
+                )}
               </span>
             </div>
           </div>

@@ -316,30 +316,20 @@ export async function updateMessageRequestCost(
 
 /**
  * Update cost with optional breakdown for billing detail display.
- *
- * When `options.additive` is true the cost is ADDED to the existing cost_usd
- * (cost_usd = cost_usd + value) instead of replacing it. This is used for hedge
- * (provider racing) winners so that the row's grand total starts at 0 and every
- * racing participant (winner + losers) accumulates independently without one
- * writer clobbering another. For a fresh row (cost_usd default '0') the additive
- * winner write yields exactly the same value as a replacement write.
  */
 export async function updateMessageRequestCostWithBreakdown(
   id: number,
   costUsd: CreateMessageRequestData["cost_usd"],
-  costBreakdown?: StoredCostBreakdown,
-  options?: { additive?: boolean }
+  costBreakdown?: StoredCostBreakdown
 ): Promise<void> {
   const formattedCost = formatCostForStorage(costUsd);
   if (!formattedCost) {
     return;
   }
 
-  const additive = options?.additive === true;
-
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
     enqueueMessageRequestUpdate(id, {
-      ...(additive ? { costUsdDelta: formattedCost } : { costUsd: formattedCost }),
+      costUsd: formattedCost,
       ...(costBreakdown ? { costBreakdown } : {}),
     });
     return;
@@ -348,13 +338,59 @@ export async function updateMessageRequestCostWithBreakdown(
   await db
     .update(messageRequest)
     .set({
-      costUsd: additive
-        ? sql`COALESCE(${messageRequest.costUsd}, 0) + ${formattedCost}::numeric`
-        : formattedCost,
+      costUsd: formattedCost,
       ...(costBreakdown ? { costBreakdown } : {}),
       updatedAt: new Date(),
     })
     .where(eq(messageRequest.id, id));
+}
+
+/**
+ * Write a hedge (provider racing) WINNER's cost in a way that coexists with the
+ * losers' independent additive writes WITHOUT a non-idempotent additive delta.
+ *
+ * cost_usd is set to `winnerCost + SUM(hedge_losers[].costUsd)` — i.e. the winner
+ * cost plus whatever losers have ALREADY landed in the jsonb array. Losers that
+ * land later still add themselves via addMessageRequestHedgeLoserCost's additive
+ * write, so the grand total is correct regardless of ordering:
+ *   - loser before winner: included in the winner's SUM (its own += is overwritten)
+ *   - loser after winner:  added by its own += on top of the winner base
+ * This is a REPLACEMENT (recomputed from the authoritative hedge_losers array), so
+ * it is idempotent under retry / ambiguous DB failure — unlike a bare additive delta.
+ * It is written directly (not via the async buffer) so it can never be dropped on
+ * queue overflow and never re-summed on flush-retry.
+ */
+export async function updateMessageRequestWinnerCost(
+  id: number,
+  winnerCost: CreateMessageRequestData["cost_usd"],
+  costBreakdown?: StoredCostBreakdown
+): Promise<void> {
+  const formattedCost = formatCostForStorage(winnerCost);
+  if (!formattedCost) {
+    return;
+  }
+
+  const MAX_ATTEMPTS = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      await db
+        .update(messageRequest)
+        .set({
+          costUsd: sql`${formattedCost}::numeric + COALESCE((SELECT SUM((entry->>'costUsd')::numeric) FROM jsonb_array_elements(COALESCE(${messageRequest.hedgeLosers}, '[]'::jsonb)) AS entry), 0)`,
+          ...(costBreakdown ? { costBreakdown } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(messageRequest.id, id));
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
 }
 
 /**

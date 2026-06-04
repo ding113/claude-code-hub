@@ -111,3 +111,35 @@ describe("addMessageRequestHedgeLoserCost (idempotent + retried direct write)", 
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+describe("updateMessageRequestWinnerCost (direct, idempotent, loser-sum-aware)", () => {
+  test("SET 为 winnerCost::numeric + SUM(hedge_losers[].costUsd)，幂等可重试", async () => {
+    vi.resetModules();
+    const { update, setArgs } = mockDbWithWhere(async () => []);
+
+    const { updateMessageRequestWinnerCost } = await import("@/repository/message");
+    await updateMessageRequestWinnerCost(1, "0.1");
+
+    expect(update).toHaveBeenCalledTimes(1);
+    const setSql = sqlToString(setArgs[0]).toLowerCase();
+    // 赢家费用 + 已落库的输家费用之和（重算式 -> 替换语义 -> 重试安全）。
+    expect(setSql).toContain("hedge_losers");
+    expect(setSql).toContain("jsonb_array_elements");
+    expect(setSql).toContain("sum");
+    expect(setSql).toContain("::numeric");
+  });
+
+  test("瞬时失败后重试，最终成功不抛错", async () => {
+    vi.resetModules();
+    let calls = 0;
+    const { update } = mockDbWithWhere(async () => {
+      calls++;
+      if (calls < 3) throw new Error("transient");
+      return [];
+    });
+
+    const { updateMessageRequestWinnerCost } = await import("@/repository/message");
+    await expect(updateMessageRequestWinnerCost(1, "0.1")).resolves.toBeUndefined();
+    expect(update).toHaveBeenCalledTimes(3);
+  });
+});

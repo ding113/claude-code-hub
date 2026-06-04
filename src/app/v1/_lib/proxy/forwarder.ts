@@ -209,6 +209,17 @@ type StreamingHedgeAttempt = {
    * usage lives in the first chunk).
    */
   firstChunk: Uint8Array | null;
+  /**
+   * Billing context snapshot for the INITIAL provider's losing attempt, captured BEFORE
+   * commitWinner overwrites the shared session's model/context with the winner's. Null for
+   * shadow-session attempts (which read their own un-polluted session at billing time).
+   */
+  billingSnapshot: {
+    originalModel: string | null;
+    redirectedModel: string | null;
+    context1mApplied: boolean;
+    groupCostMultiplier: number;
+  } | null;
 };
 
 type ReactiveRectifierRetryState = {
@@ -3725,6 +3736,7 @@ export class ProxyForwarder {
         const decoder = new TextDecoder();
         const chunks: string[] = [];
         let totalBytes = 0;
+        let drainComplete = false;
         const MAX_DRAIN_BYTES = 32 * 1024 * 1024;
         // 若落败前已读走首块（赢家先提交导致），先补回，避免丢失 message_start 的 usage。
         if (attempt.firstChunk) {
@@ -3735,12 +3747,15 @@ export class ProxyForwarder {
         try {
           while (true) {
             const { value, done } = await reader.read();
-            if (done) break;
+            if (done) {
+              drainComplete = true;
+              break;
+            }
             if (value) {
               chunks.push(decoder.decode(value, { stream: true }));
               totalBytes += value.byteLength;
               if (totalBytes > MAX_DRAIN_BYTES) {
-                logger.warn("ProxyForwarder: hedge loser drain exceeded cap, billing partial", {
+                logger.warn("ProxyForwarder: hedge loser drain exceeded cap, skipping bill", {
                   sessionId: attempt.session.sessionId ?? null,
                   providerId: attempt.provider.id,
                   providerName: attempt.provider.name,
@@ -3756,7 +3771,7 @@ export class ProxyForwarder {
             }
           }
         } catch (drainError) {
-          // 中止 / 网络错误：用已收到的内容尽力计费（通常拿不到末尾 usage -> 跳过）。
+          // 中止 / 网络错误：drain 未自然结束，drainComplete 保持 false（避免按 per-request fee 多计）。
           logger.debug("ProxyForwarder: hedge loser drain ended early", {
             error: drainError instanceof Error ? drainError.message : String(drainError),
             sessionId: attempt.session.sessionId ?? null,
@@ -3775,6 +3790,8 @@ export class ProxyForwarder {
           attemptNumber: attempt.sequence,
           upstreamStatusCode: response.status,
           allContent,
+          drainComplete,
+          billingContext: attempt.billingSnapshot ?? undefined,
         });
       })()
         .catch((billingError) => {
@@ -4038,22 +4055,27 @@ export class ProxyForwarder {
               firstChunkError instanceof Error
                 ? firstChunkError
                 : new Error(String(firstChunkError));
-            if (settled || winnerCommitted) return;
+            // 不提前 return：handleAttemptFailure 的首个守卫会兜底清理“已结算的计费输家”
+            // （否则赢家已提交时这里 return 会泄漏其 reader/agent）。
             await handleAttemptFailure(attempt, normalizedError);
           }
         })
         .catch(async (attemptError) => {
           const normalizedError =
             attemptError instanceof Error ? attemptError : new Error(String(attemptError));
-          if (settled || winnerCommitted) return;
           await handleAttemptFailure(attempt, normalizedError);
         });
     };
 
     const handleAttemptFailure = async (attempt: StreamingHedgeAttempt, error: Error) => {
-      // 已被标记为计费输家、billing 尚未启动、却在此失败（如首块读取出错）：
+      // 已被标记为计费输家、billing 尚未启动、却在此失败（如首块读取出错 / 赢家已提交）：
       // 此时 abortAttempt 已早退（未取消连接/未释放 agent），由这里兜底清理，避免 reader/agent 泄漏。
-      if (attempt.settled && attempt.billAsLoser && !attempt.loserBillingStarted) {
+      if (
+        attempt !== winnerAttempt &&
+        attempt.settled &&
+        attempt.billAsLoser &&
+        !attempt.loserBillingStarted
+      ) {
         const readerCancel = attempt.reader?.cancel("hedge_loser_failed");
         readerCancel?.catch(() => undefined);
         releaseAttemptAgent(attempt);
@@ -4258,6 +4280,19 @@ export class ProxyForwarder {
       }
 
       if (attempt.session !== session) {
+        // The winner is an alternative; syncWinningAttemptSession is about to overwrite the
+        // ORIGINAL session's model/context with the winner's. Snapshot the initial-provider
+        // loser's own billing context FIRST so it is priced against its own model, not the winner's.
+        for (const other of attempts) {
+          if (other !== attempt && other.session === session && other.billAsLoser) {
+            other.billingSnapshot = {
+              originalModel: session.getOriginalModel(),
+              redirectedModel: session.getCurrentModel(),
+              context1mApplied: session.getContext1mApplied(),
+              groupCostMultiplier: session.getGroupCostMultiplier(),
+            };
+          }
+        }
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
       }
       const detailSnapshotSession = attempt.session as ProxySessionWithDetailSnapshotRuntime;
@@ -4428,6 +4463,7 @@ export class ProxyForwarder {
         billAsLoser: billHedgeLosers,
         loserBillingStarted: false,
         firstChunk: null,
+        billingSnapshot: null,
       };
 
       attempts.add(attempt);

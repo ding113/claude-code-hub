@@ -39,6 +39,7 @@ import {
   updateMessageRequestCostWithBreakdown,
   updateMessageRequestDetails,
   updateMessageRequestDuration,
+  updateMessageRequestWinnerCost,
 } from "@/repository/message";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { Provider } from "@/types/provider";
@@ -2472,9 +2473,12 @@ export class ProxyResponseHandler {
           session.getContext1mApplied(),
           priorityServiceTierApplied,
           session.getGroupCostMultiplier(),
-          // Hedge winner with loser billing on: write additively from zero so the
-          // winner cost coexists with async loser deltas without clobbering.
-          finalized.isHedgeWinner && finalized.billHedgeLosers
+          // Any hedge-path winner with loser billing on uses the loser-sum-aware write.
+          // Gate on billHedgeLosers (not the racy isHedgeWinner/launchedProviderCount):
+          // an alternative can still be mid-launch when the initial provider commits, so
+          // isHedgeWinner may read false even though a loser will bill — using it would
+          // let the winner's replacement clobber that loser's additive write.
+          finalized.billHedgeLosers
         );
         if (costUpdateResult.longContextPricingApplied) {
           ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -3562,11 +3566,11 @@ async function updateRequestCostFromUsage(
   context1mApplied: boolean = false,
   priorityServiceTierApplied: boolean = false,
   groupCostMultiplier: number = 1.0,
-  // When true the cost is ADDED to the row (cost_usd = cost_usd + value) instead of
-  // replacing it. Used for hedge winners so the winner + async loser costs accumulate
-  // onto the same row without clobbering. From a fresh row (cost_usd '0') this yields
-  // the same value as a replacement write.
-  additive: boolean = false
+  // When true the winner cost is written via a direct, idempotent, loser-sum-aware
+  // replacement (cost_usd = winnerCost + SUM(hedge_losers[].costUsd)) so it coexists
+  // with losers' concurrent additive writes without clobbering or double-counting.
+  // Used for hedge-path winners when billHedgeLosers is on.
+  winnerLoserAware: boolean = false
 ): Promise<{
   costUsd: string | null;
   resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>> | null;
@@ -3683,7 +3687,11 @@ async function updateRequestCostFromUsage(
     });
 
     if (cost.gt(0)) {
-      await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown, { additive });
+      if (winnerLoserAware) {
+        await updateMessageRequestWinnerCost(messageId, cost, storedBreakdown);
+      } else {
+        await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown);
+      }
       return {
         costUsd: cost.toString(),
         resolvedPricing,
@@ -3737,15 +3745,34 @@ async function updateRequestCostFromUsage(
  */
 export async function finalizeHedgeLoserBilling(params: {
   messageRequestId: number;
-  /** Loser's (shadow) session — used for pricing/multiplier resolution only. */
+  /** Loser's session — used for pricing/multiplier resolution and Redis cost tracking. */
   loserSession: ProxySession;
   provider: Provider;
   /** Hedge attempt sequence number, for the audit entry. */
   attemptNumber: number;
   /** Upstream HTTP status of the loser's response. */
   upstreamStatusCode: number;
-  /** The fully-drained loser response body (SSE or JSON). */
+  /** The drained loser response body (SSE or JSON). */
   allContent: string;
+  /**
+   * Whether the loser stream was read to its natural end. When false (drain hit the
+   * timeout / size cap / a network abort), we only bill if real token usage was parsed
+   * — never the input_cost_per_request {0,0} sentinel, which would over-charge a phantom
+   * per-request fee for a truncated stream.
+   */
+  drainComplete: boolean;
+  /**
+   * Billing context captured BEFORE the shared session could be polluted by
+   * syncWinningAttemptSession (only set for the INITIAL provider's losing attempt, whose
+   * session is overwritten with the winner's model). Shadow-session losers leave this
+   * undefined and read their own (un-polluted) session.
+   */
+  billingContext?: {
+    originalModel: string | null;
+    redirectedModel: string | null;
+    context1mApplied: boolean;
+    groupCostMultiplier: number;
+  };
 }): Promise<string | null> {
   const {
     messageRequestId,
@@ -3754,6 +3781,8 @@ export async function finalizeHedgeLoserBilling(params: {
     attemptNumber,
     upstreamStatusCode,
     allContent,
+    drainComplete,
+    billingContext,
   } = params;
 
   try {
@@ -3771,6 +3800,12 @@ export async function finalizeHedgeLoserBilling(params: {
       );
     }
 
+    // Truncated drain (timeout / cap / abort) with no parsed usage: do NOT fall through to
+    // the per-request-fee sentinel — that would over-bill a phantom fee for an incomplete stream.
+    if (!drainComplete && !usageForCost) {
+      return null;
+    }
+
     // Same billable gate as the winner: status-code / fake-200 / non-billing checks.
     const billableUsage = await resolveBillableUsageMetricsForCost(
       loserSession,
@@ -3783,7 +3818,15 @@ export async function finalizeHedgeLoserBilling(params: {
       return null;
     }
 
-    const resolvedPricing = await loserSession.getResolvedPricingByBillingSource(provider);
+    const resolvedPricing = await loserSession.getResolvedPricingByBillingSource(
+      provider,
+      billingContext
+        ? {
+            originalModel: billingContext.originalModel,
+            redirectedModel: billingContext.redirectedModel,
+          }
+        : undefined
+    );
     if (!resolvedPricing?.priceData || !hasValidPriceData(resolvedPricing.priceData)) {
       return null;
     }
@@ -3792,9 +3835,10 @@ export async function finalizeHedgeLoserBilling(params: {
     const priorityServiceTierApplied =
       (await resolveCodexPriorityBillingDecision(loserSession, actualServiceTier))
         ?.effectivePriority ?? false;
-    const context1mApplied = loserSession.getContext1mApplied();
+    const context1mApplied = billingContext?.context1mApplied ?? loserSession.getContext1mApplied();
     const costMultiplier = provider.costMultiplier;
-    const groupCostMultiplier = loserSession.getGroupCostMultiplier();
+    const groupCostMultiplier =
+      billingContext?.groupCostMultiplier ?? loserSession.getGroupCostMultiplier();
 
     const longContextPricing =
       matchLongContextPricing(billableUsage, resolvedPricing.priceData)?.pricing ?? null;
@@ -3826,6 +3870,16 @@ export async function finalizeHedgeLoserBilling(params: {
     };
 
     await addMessageRequestHedgeLoserCost(messageRequestId, cost, loserEntry);
+
+    // Track the loser cost into the same Redis spend counters the winner uses, so the
+    // key/user/provider rate limits account for it (DB and limit enforcement stay in sync).
+    await trackCostToRedis(
+      loserSession,
+      billableUsage,
+      priorityServiceTierApplied,
+      resolvedPricing,
+      longContextPricing
+    );
 
     logger.info("[HedgeLoserBilling] Billed hedge loser", {
       messageRequestId,

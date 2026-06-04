@@ -514,7 +514,15 @@ export function VirtualizedLogsTable({
 
     const hasActiveMultipliers = activeMultiplierRows.length > 0;
     const baseTotal = formatCurrency(log.costBreakdown.base_total, currencyCode, 6);
-    const finalTotal = formatCurrency(log.costBreakdown.total, currencyCode, 6);
+    // costBreakdown.total is the winner-only base; when hedge losers were billed the grand
+    // total lives in costUsd, so prefer it then (keeps the tooltip total == sum of its rows).
+    const finalTotal = formatCurrency(
+      log.hedgeLosers && log.hedgeLosers.length > 0
+        ? (log.costUsd ?? log.costBreakdown.total)
+        : log.costBreakdown.total,
+      currencyCode,
+      6
+    );
 
     return (
       <TooltipContent align="end" className="max-w-[320px] p-3">

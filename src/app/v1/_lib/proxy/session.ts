@@ -921,10 +921,15 @@ export class ProxySession {
   }
 
   async getResolvedPricingByBillingSource(
-    provider?: Provider | null
+    provider?: Provider | null,
+    // Optional model override. Used by hedge-loser billing for the INITIAL provider's
+    // losing attempt, whose session has been overwritten with the WINNER's model by
+    // syncWinningAttemptSession — the override carries the loser's own model so it is
+    // priced correctly. The cache key already incorporates these resolved models.
+    modelOverride?: { originalModel?: string | null; redirectedModel?: string | null }
   ): Promise<ResolvedPricing | null> {
-    const originalModel = this.getOriginalModel();
-    const redirectedModel = this.request.model;
+    const originalModel = modelOverride?.originalModel ?? this.getOriginalModel();
+    const redirectedModel = modelOverride?.redirectedModel ?? this.request.model;
     if (!originalModel && !redirectedModel) {
       return null;
     }
