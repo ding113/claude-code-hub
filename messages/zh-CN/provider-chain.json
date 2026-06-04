@@ -47,6 +47,7 @@
     "hedgeLaunched": "Hedge 备选已启动",
     "hedgeWinner": "Hedge 竞速赢家",
     "hedgeLoserCancelled": "Hedge 竞速输家（已取消）",
+    "hedgeLoserBilled": "竞速落败（已拿回响应并计费）",
     "clientAbort": "客户端中断"
   },
   "reasons": {
@@ -67,6 +68,7 @@
     "hedge_launched": "Hedge 备选已启动",
     "hedge_winner": "Hedge 竞速赢家",
     "hedge_loser_cancelled": "Hedge 竞速输家（已取消）",
+    "hedge_loser_billed": "竞速输家（已计费）",
     "client_abort": "客户端中断"
   },
   "filterReasons": {
@@ -238,6 +240,7 @@
     "hedgeLaunched": "Hedge 备选供应商已启动",
     "hedgeWinner": "Hedge 竞速赢家（最先收到首字节）",
     "hedgeLoserCancelled": "Hedge 竞速输家（请求已取消）",
+    "hedgeLoserBilled": "竞速落败（已拿回响应并计费）",
     "clientAbort": "客户端已断开连接（请求中断）",
     "hedgeRace": "Hedge 竞速",
     "hedgeThresholdExceeded": "首字节超时，已启动备选供应商"

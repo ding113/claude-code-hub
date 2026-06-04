@@ -43,6 +43,7 @@ BEGIN
       'concurrent_limit_failed',
       'hedge_winner',
       'hedge_loser_cancelled',
+      'hedge_loser_billed',
       'client_abort'
     )
     OR last_status_code IS NOT NULL
@@ -103,6 +104,7 @@ BEGIN
     'resource_not_found',
     'concurrent_limit_failed',
     'hedge_loser_cancelled',
+    'hedge_loser_billed',
     'client_error_non_retryable',
     'client_abort'
   ) THEN

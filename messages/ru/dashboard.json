@@ -322,6 +322,10 @@
         "providerMultiplier": "Множитель поставщика",
         "groupMultiplier": "Множитель группы",
         "baseTotal": "Базовый итог",
+        "hedgeRacing": "Гонка провайдеров",
+        "hedgeWinner": "Победитель",
+        "hedgeLoser": "Проигравший",
+        "hedgeLosersTotal": "Проигравшие в гонке",
         "unitPricePer1M": "@ {price} / 1M",
         "unit": {
           "tokens": "токенов"
@@ -439,6 +443,10 @@
       "providerMultiplier": "Множитель поставщика",
       "groupMultiplier": "Множитель группы",
       "baseTotal": "Базовый итог",
+      "hedgeRacing": "Гонка провайдеров",
+      "hedgeWinner": "Победитель",
+      "hedgeLoser": "Проигравший",
+      "hedgeLosersTotal": "Проигравшие в гонке",
       "unit": {
         "tokens": "токенов"
       }

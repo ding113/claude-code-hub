@@ -29,6 +29,12 @@ export type DeferredStreamingFinalization = {
   upstreamStatusCode: number;
   /** When true, commitWinner() already performed session binding and chain logging; finalization should skip them. */
   isHedgeWinner?: boolean;
+  /**
+   * Whether hedge-loser billing was enabled for this request. When true and this
+   * is a hedge winner, the winner's cost is written additively (from zero) so it
+   * coexists with asynchronously accumulated loser costs without clobbering.
+   */
+  billHedgeLosers?: boolean;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();
@@ -39,6 +45,18 @@ export function setDeferredStreamingFinalization(
 ): void {
   // Forwarder 在识别到 SSE 时调用：标记该请求需要在流结束后“二次结算”。
   deferredMeta.set(session, meta);
+}
+
+/**
+ * Read the deferred finalization meta WITHOUT consuming it. Used by non-SSE
+ * finalization paths (e.g. Gemini passthrough via finalizeRequestStats) that do not
+ * run the deferred finalizer but still need to know whether this is a hedge winner
+ * with loser billing, so the winner cost write uses the loser-sum-aware mode.
+ */
+export function peekDeferredStreamingFinalization(
+  session: ProxySession
+): DeferredStreamingFinalization | null {
+  return deferredMeta.get(session) ?? null;
 }
 
 export function consumeDeferredStreamingFinalization(

@@ -148,6 +148,7 @@ function createFallbackSettings(): SystemSettings {
     billingModelSource: "original",
     codexPriorityBillingSource: "requested",
     billNonSuccessfulRequests: false,
+    billHedgeLosers: true,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -279,6 +280,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       updatedAt: systemSettings.updatedAt,
     };
     const fullSelection = {
+      billHedgeLosers: systemSettings.billHedgeLosers,
       billNonSuccessfulRequests: systemSettings.billNonSuccessfulRequests,
       passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
       fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
@@ -300,11 +302,33 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
-        // 最新降级：移除最近新增的 billNonSuccessfulRequests 列。
+        // 最新降级：移除最近新增的 billHedgeLosers 列。
+        const { billHedgeLosers: _omitBillHedgeLosers, ...selectionWithoutBillHedgeLosers } =
+          fullSelection;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutBillHedgeLosers)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (billHedgeLosersFallbackError) {
+          if (!isUndefinedColumnError(billHedgeLosersFallbackError)) {
+            throw billHedgeLosersFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 billHedgeLosers 外仍有列缺失，继续回退到上一代字段集。",
+            { error: billHedgeLosersFallbackError }
+          );
+        }
+
+        // 次新降级：移除 billNonSuccessfulRequests 列。
         const {
           billNonSuccessfulRequests: _omitBillNonSuccessful,
           ...selectionWithoutBillNonSuccessful
-        } = fullSelection;
+        } = selectionWithoutBillHedgeLosers;
 
         try {
           const [row] = await db
@@ -616,6 +640,7 @@ export async function updateSystemSettings(
     updatedAt: systemSettings.updatedAt,
   };
   const fullReturning = {
+    billHedgeLosers: systemSettings.billHedgeLosers,
     billNonSuccessfulRequests: systemSettings.billNonSuccessfulRequests,
     passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
     fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
@@ -655,6 +680,11 @@ export async function updateSystemSettings(
     // 非成功请求按 token 用量计费开关（如果提供）
     if (payload.billNonSuccessfulRequests !== undefined) {
       updates.billNonSuccessfulRequests = payload.billNonSuccessfulRequests;
+    }
+
+    // 供应商竞速输家计费开关（如果提供）
+    if (payload.billHedgeLosers !== undefined) {
+      updates.billHedgeLosers = payload.billHedgeLosers;
     }
 
     // 系统时区配置字段（如果提供）
@@ -816,30 +846,55 @@ export async function updateSystemSettings(
         error,
       });
 
-      // 最新降级：移除最近新增的 billNonSuccessfulRequests 列。
-      const {
-        billNonSuccessfulRequests: _omitUpdateBillNonSuccessful,
-        ...updatesWithoutBillNonSuccessful
-      } = updates;
-      const {
-        billNonSuccessfulRequests: _omitReturningBillNonSuccessful,
-        ...returningWithoutBillNonSuccessful
-      } = fullReturning;
+      // 最新降级：移除最近新增的 billHedgeLosers 列。
+      const { billHedgeLosers: _omitUpdateBillHedgeLosers, ...updatesWithoutBillHedgeLosers } =
+        updates;
+      const { billHedgeLosers: _omitReturningBillHedgeLosers, ...returningWithoutBillHedgeLosers } =
+        fullReturning;
 
       try {
         [updated] = await executor
           .update(systemSettings)
-          .set(updatesWithoutBillNonSuccessful)
+          .set(updatesWithoutBillHedgeLosers)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutBillNonSuccessful);
-      } catch (billNonSuccessfulFallbackError) {
-        if (!isUndefinedColumnError(billNonSuccessfulFallbackError)) {
-          throw billNonSuccessfulFallbackError;
+          .returning(returningWithoutBillHedgeLosers);
+      } catch (billHedgeLosersFallbackError) {
+        if (!isUndefinedColumnError(billHedgeLosersFallbackError)) {
+          throw billHedgeLosersFallbackError;
         }
 
-        logger.warn("system_settings 表除 billNonSuccessfulRequests 外仍有列缺失，继续降级更新。", {
-          error: billNonSuccessfulFallbackError,
+        logger.warn("system_settings 表除 billHedgeLosers 外仍有列缺失，继续降级更新。", {
+          error: billHedgeLosersFallbackError,
         });
+      }
+
+      // 次新降级：移除 billNonSuccessfulRequests 列。
+      const {
+        billNonSuccessfulRequests: _omitUpdateBillNonSuccessful,
+        ...updatesWithoutBillNonSuccessful
+      } = updatesWithoutBillHedgeLosers;
+      const {
+        billNonSuccessfulRequests: _omitReturningBillNonSuccessful,
+        ...returningWithoutBillNonSuccessful
+      } = returningWithoutBillHedgeLosers;
+
+      if (!updated) {
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(updatesWithoutBillNonSuccessful)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutBillNonSuccessful);
+        } catch (billNonSuccessfulFallbackError) {
+          if (!isUndefinedColumnError(billNonSuccessfulFallbackError)) {
+            throw billNonSuccessfulFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 billNonSuccessfulRequests 外仍有列缺失，继续降级更新。",
+            { error: billNonSuccessfulFallbackError }
+          );
+        }
       }
 
       // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列。

@@ -38,7 +38,7 @@ export type MessageRequestUpdatePatch = {
   costBreakdown?: StoredCostBreakdown | null;
 };
 
-type MessageRequestUpdateRecord = {
+export type MessageRequestUpdateRecord = {
   id: number;
   patch: MessageRequestUpdatePatch;
 };
@@ -95,7 +95,7 @@ function takeBatch(map: Map<number, MessageRequestUpdatePatch>, batchSize: numbe
   return items;
 }
 
-function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null {
+export function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null {
   if (updates.length === 0) {
     return null;
   }
@@ -160,6 +160,27 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
   `;
 }
 
+/**
+ * Merge `incoming` into `base`, returning a new patch (replacement semantics:
+ * non-undefined incoming fields win). Hedge cost writes do NOT flow through this
+ * buffer — the winner uses a direct loser-sum-aware replacement and losers use a
+ * direct idempotent additive write — so there is no additive field to accumulate.
+ */
+export function mergePatch(
+  base: MessageRequestUpdatePatch,
+  incoming: MessageRequestUpdatePatch
+): MessageRequestUpdatePatch {
+  const merged: MessageRequestUpdatePatch = { ...base };
+  for (const [k, v] of Object.entries(incoming) as Array<
+    [keyof MessageRequestUpdatePatch, MessageRequestUpdatePatch[keyof MessageRequestUpdatePatch]]
+  >) {
+    if (v !== undefined) {
+      merged[k] = v as never;
+    }
+  }
+  return merged;
+}
+
 function getPatchRetentionPriority(patch: MessageRequestUpdatePatch): number {
   if (patch.statusCode !== undefined) {
     return 3;
@@ -186,15 +207,8 @@ class MessageRequestWriteBuffer {
 
   enqueue(id: number, patch: MessageRequestUpdatePatch): void {
     const existing = this.pending.get(id) ?? {};
-    const merged: MessageRequestUpdatePatch = { ...existing };
-    for (const [k, v] of Object.entries(patch) as Array<
-      [keyof MessageRequestUpdatePatch, MessageRequestUpdatePatch[keyof MessageRequestUpdatePatch]]
-    >) {
-      if (v !== undefined) {
-        merged[k] = v as never;
-      }
-    }
-    this.pending.set(id, merged);
+    // existing is older, patch is newer -> for replacement fields newer wins.
+    this.pending.set(id, mergePatch(existing, patch));
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
@@ -296,10 +310,10 @@ class MessageRequestWriteBuffer {
             await db.execute(query);
           } catch (error) {
             // 失败重试：将 batch 放回队列
-            // 合并策略：保留“更新更晚”的字段（existing 优先），避免覆盖新数据
+            // 合并策略：保留“更新更晚”的字段（existing 优先），避免覆盖新数据。
             for (const item of batch) {
               const existing = this.pending.get(item.id) ?? {};
-              this.pending.set(item.id, { ...item.patch, ...existing });
+              this.pending.set(item.id, mergePatch(item.patch, existing));
             }
 
             logger.error("[MessageRequestWriteBuffer] Flush failed, will retry later", {

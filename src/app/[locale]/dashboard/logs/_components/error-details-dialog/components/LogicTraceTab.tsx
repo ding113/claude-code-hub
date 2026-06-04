@@ -24,6 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { getSessionOriginChain } from "@/lib/api-client/v1/actions/session-origin-chain";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils/currency";
+import { findHedgeLoserCost } from "@/lib/utils/hedge-billing";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
@@ -49,6 +51,7 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
     item.reason === "endpoint_pool_exhausted" ||
     item.reason === "concurrent_limit_failed" ||
     item.reason === "hedge_loser_cancelled" ||
+    item.reason === "hedge_loser_billed" ||
     item.reason === "client_abort"
   ) {
     return "failure";
@@ -64,6 +67,7 @@ export function LogicTraceTab({
   blockedBy,
   blockedReason,
   requestSequence,
+  hedgeLosers,
   initialExpandedChainIndex,
 }: LogicTraceTabProps) {
   const t = useTranslations("dashboard.logs.details");
@@ -718,12 +722,19 @@ export function LogicTraceTab({
             // Determine icon based on type
             const isHedgeTriggered = item.reason === "hedge_triggered";
             const isHedgeLoser = item.reason === "hedge_loser_cancelled";
+            const isHedgeLoserBilled = item.reason === "hedge_loser_billed";
             const isClientAbort = item.reason === "client_abort";
+            // Resolved hedge losers (cancelled or billed) carry billing detail when
+            // their reclaimed upstream response was charged to the request total.
+            const hedgeLoserBilling =
+              isHedgeLoser || isHedgeLoserBilled
+                ? findHedgeLoserCost(hedgeLosers, item.id, item.attemptNumber)
+                : null;
             const stepIcon = isSessionReuse
               ? Link2
               : isHedgeTriggered
                 ? GitBranch
-                : isHedgeLoser || isClientAbort
+                : isHedgeLoser || isHedgeLoserBilled || isClientAbort
                   ? XCircle
                   : isRetry
                     ? RefreshCw
@@ -741,13 +752,15 @@ export function LogicTraceTab({
                 ? tChain("timeline.hedgeTriggered")
                 : isHedgeLoser
                   ? tChain("timeline.hedgeLoserCancelled")
-                  : isClientAbort
-                    ? tChain("timeline.clientAbort")
-                    : isRetry
-                      ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
-                      : item.reason === "hedge_winner"
-                        ? tChain("timeline.hedgeWinner")
-                        : t("logicTrace.attemptProvider", { provider: item.name });
+                  : isHedgeLoserBilled
+                    ? tChain("timeline.hedgeLoserBilled")
+                    : isClientAbort
+                      ? tChain("timeline.clientAbort")
+                      : isRetry
+                        ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
+                        : item.reason === "hedge_winner"
+                          ? tChain("timeline.hedgeWinner")
+                          : t("logicTrace.attemptProvider", { provider: item.name });
 
             return (
               <StepCard
@@ -783,6 +796,19 @@ export function LogicTraceTab({
                 defaultExpanded={initialExpandedChainIndex === index}
                 details={
                   <div className="space-y-2 text-xs">
+                    {/* Hedge Loser Billed Cost */}
+                    {hedgeLoserBilling && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300"
+                        >
+                          {t("billingDetails.hedgeLoser")}:{" "}
+                          {formatCurrency(hedgeLoserBilling.costUsd, "USD", 6)}
+                        </Badge>
+                      </div>
+                    )}
+
                     {/* Session Reuse Info */}
                     {isSessionReuse && item.decisionContext && (
                       <div className="pb-2 border-b border-muted/50">

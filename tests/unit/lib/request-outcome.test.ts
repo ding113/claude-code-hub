@@ -22,6 +22,25 @@ describe("request outcome taxonomy", () => {
     });
   });
 
+  it("excludes both cancelled and billed hedge losers from success-rate", () => {
+    expect(
+      classifyRequestOutcomeSignal({
+        reason: "hedge_loser_cancelled",
+      })
+    ).toMatchObject({
+      outcome: "excluded",
+      exclusionFamily: "hedge_loser",
+    });
+    expect(
+      classifyRequestOutcomeSignal({
+        reason: "hedge_loser_billed",
+      })
+    ).toMatchObject({
+      outcome: "excluded",
+      exclusionFamily: "hedge_loser",
+    });
+  });
+
   it("marks matched rules as excluded", () => {
     expect(
       classifyRequestOutcomeSignal({

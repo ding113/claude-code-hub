@@ -322,6 +322,10 @@
         "providerMultiplier": "プロバイダー倍率",
         "groupMultiplier": "グループ倍率",
         "baseTotal": "基本合計",
+        "hedgeRacing": "プロバイダー競争",
+        "hedgeWinner": "勝者",
+        "hedgeLoser": "敗者",
+        "hedgeLosersTotal": "競争の敗者合計",
         "unitPricePer1M": "@ {price} / 1M",
         "unit": {
           "tokens": "トークン"
@@ -439,6 +443,10 @@
       "providerMultiplier": "プロバイダー倍率",
       "groupMultiplier": "グループ倍率",
       "baseTotal": "基本合計",
+      "hedgeRacing": "プロバイダー競争",
+      "hedgeWinner": "勝者",
+      "hedgeLoser": "敗者",
+      "hedgeLosersTotal": "競争の敗者合計",
       "unit": {
         "tokens": "トークン"
       }

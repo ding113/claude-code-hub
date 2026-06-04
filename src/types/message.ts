@@ -1,5 +1,6 @@
 import type { Numeric } from "decimal.js-light";
 import type { CacheTtlApplied } from "./cache";
+import type { HedgeLoserBilling } from "./cost-breakdown";
 import type { ProviderType } from "./provider";
 import type { SpecialSetting } from "./special-settings";
 
@@ -44,7 +45,8 @@ export interface ProviderChainItem {
     | "hedge_triggered" // Hedge 计时器触发，启动备选供应商
     | "hedge_launched" // Hedge 备选供应商已启动（信息性记录，不算实际请求）
     | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
-    | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消
+    | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未对输家计费）
+    | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其上游响应被后台拿回并计费
     | "client_abort"; // 客户端在响应完成前断开连接
 
   // === 选择方法（细化） ===
@@ -311,6 +313,9 @@ export interface MessageRequest {
 
   // 特殊设置（用于记录各类"特殊行为/覆写"的命中与生效情况，便于审计与展示）
   specialSettings?: SpecialSetting[] | null;
+
+  // Hedge 竞速输家计费明细（每个输家一条，费用已累加进 costUsd）
+  hedgeLosers?: HedgeLoserBilling[] | null;
 
   createdAt: Date;
   updatedAt: Date;

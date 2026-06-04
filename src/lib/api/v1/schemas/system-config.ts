@@ -93,6 +93,11 @@ export const SystemSettingsSchema = z
       .describe(
         "Whether non-2xx responses (e.g., 499) that report token usage should be billed normally."
       ),
+    billHedgeLosers: z
+      .boolean()
+      .describe(
+        "Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total)."
+      ),
     timezone: TimeZoneSchema.nullable().describe(
       "Configured system timezone, or null for default."
     ),

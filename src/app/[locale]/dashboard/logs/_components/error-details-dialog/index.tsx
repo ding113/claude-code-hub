@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hasSessionMessages } from "@/lib/api-client/v1/actions/active-sessions";
 import { cn } from "@/lib/utils";
-import type { StoredCostBreakdown } from "@/types/cost-breakdown";
+import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
@@ -44,6 +44,7 @@ interface ErrorDetailsDialogProps {
   costMultiplier?: string | null;
   groupCostMultiplier?: string | null;
   costBreakdown?: StoredCostBreakdown | null;
+  hedgeLosers?: HedgeLoserBilling[] | null;
   context1mApplied?: boolean | null;
   durationMs?: number | null;
   ttfbMs?: number | null;
@@ -87,6 +88,7 @@ export function ErrorDetailsDialog({
   costMultiplier,
   groupCostMultiplier,
   costBreakdown,
+  hedgeLosers,
   context1mApplied,
   durationMs,
   ttfbMs,
@@ -235,6 +237,7 @@ export function ErrorDetailsDialog({
     costMultiplier,
     groupCostMultiplier,
     costBreakdown,
+    hedgeLosers,
     context1mApplied,
     durationMs,
     ttfbMs,

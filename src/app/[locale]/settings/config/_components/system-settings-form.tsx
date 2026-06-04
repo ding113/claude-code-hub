@@ -14,6 +14,7 @@ import {
   Pencil,
   Terminal,
   Thermometer,
+  Trophy,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -63,6 +64,7 @@ interface SystemSettingsFormProps {
     | "billingModelSource"
     | "codexPriorityBillingSource"
     | "billNonSuccessfulRequests"
+    | "billHedgeLosers"
     | "timezone"
     | "verboseProviderError"
     | "passThroughUpstreamErrorMessage"
@@ -125,6 +127,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [billNonSuccessfulRequests, setBillNonSuccessfulRequests] = useState(
     initialSettings.billNonSuccessfulRequests
   );
+  const [billHedgeLosers, setBillHedgeLosers] = useState(initialSettings.billHedgeLosers);
   const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
@@ -300,6 +303,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         billingModelSource,
         codexPriorityBillingSource,
         billNonSuccessfulRequests,
+        billHedgeLosers,
         timezone,
         verboseProviderError,
         passThroughUpstreamErrorMessage,
@@ -339,6 +343,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setBillingModelSource(result.data.billingModelSource);
         setCodexPriorityBillingSource(result.data.codexPriorityBillingSource);
         setBillNonSuccessfulRequests(result.data.billNonSuccessfulRequests);
+        setBillHedgeLosers(result.data.billHedgeLosers);
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setPassThroughUpstreamErrorMessage(result.data.passThroughUpstreamErrorMessage);
@@ -580,6 +585,42 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             aria-label={t("billNonSuccessfulRequests")}
             checked={billNonSuccessfulRequests}
             onCheckedChange={(checked) => setBillNonSuccessfulRequests(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Bill Hedge (provider racing) Losers */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+              <Trophy className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-foreground">{t("billHedgeLosers")}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t("billHedgeLosersTooltip")}
+                      className={tooltipButtonClassName}
+                    >
+                      <CircleHelp className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-sm leading-relaxed">
+                    {t("billHedgeLosersTooltip")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("billHedgeLosersDesc")}</p>
+            </div>
+          </div>
+          <Switch
+            id="bill-hedge-losers"
+            aria-label={t("billHedgeLosers")}
+            checked={billHedgeLosers}
+            onCheckedChange={(checked) => setBillHedgeLosers(checked)}
             disabled={isPending}
           />
         </div>

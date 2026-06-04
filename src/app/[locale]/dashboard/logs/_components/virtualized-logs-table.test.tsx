@@ -140,6 +140,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     costMultiplier: null,
     groupCostMultiplier: null,
     costBreakdown: null,
+    hedgeLosers: null,
     durationMs: 100,
     ttfbMs: 50,
     errorMessage: null,

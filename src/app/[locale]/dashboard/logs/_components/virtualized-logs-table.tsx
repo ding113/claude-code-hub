@@ -29,6 +29,7 @@ import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { Decimal, formatCurrency, toDecimal } from "@/lib/utils/currency";
+import { summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
 import {
   calculateOutputRate,
   formatDuration,
@@ -433,6 +434,32 @@ export function VirtualizedLogsTable({
     const isActiveMultiplier = (value: number) =>
       Number.isFinite(value) && value > 0 && value !== 1;
 
+    const hedgeSummary = summarizeHedgeBilling(log.costUsd, log.hedgeLosers);
+    const hedgeSection = hedgeSummary ? (
+      <div className="space-y-2 border-t border-background/20 pt-2">
+        <span className="text-[11px] font-semibold text-background/80">
+          {t("logs.billingDetails.hedgeRacing")}
+        </span>
+        <div className="space-y-2">
+          {renderSummaryRow({
+            label: t("logs.billingDetails.hedgeWinner"),
+            primary: formatCurrency(hedgeSummary.winnerCost, currencyCode, 6),
+          })}
+          {hedgeSummary.losers.map((loser) => (
+            <div
+              key={`${loser.providerId}-${loser.attemptNumber}`}
+              className="flex items-start justify-between gap-3"
+            >
+              <span className="text-[11px] text-rose-300/80 truncate">{loser.providerName}</span>
+              <span className={cn(amountClassName, "text-rose-300/80")}>
+                {formatCurrency(loser.costUsd, currencyCode, 6)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
     if (!log.costBreakdown) {
       return (
         <TooltipContent align="end" className="max-w-[320px] p-3">
@@ -448,6 +475,7 @@ export function VirtualizedLogsTable({
                 emphasize: true,
               })}
             </div>
+            {hedgeSection}
           </div>
         </TooltipContent>
       );
@@ -486,7 +514,15 @@ export function VirtualizedLogsTable({
 
     const hasActiveMultipliers = activeMultiplierRows.length > 0;
     const baseTotal = formatCurrency(log.costBreakdown.base_total, currencyCode, 6);
-    const finalTotal = formatCurrency(log.costBreakdown.total, currencyCode, 6);
+    // costBreakdown.total is the winner-only base; when hedge losers were billed the grand
+    // total lives in costUsd, so prefer it then (keeps the tooltip total == sum of its rows).
+    const finalTotal = formatCurrency(
+      log.hedgeLosers && log.hedgeLosers.length > 0
+        ? (log.costUsd ?? log.costBreakdown.total)
+        : log.costBreakdown.total,
+      currencyCode,
+      6
+    );
 
     return (
       <TooltipContent align="end" className="max-w-[320px] p-3">
@@ -544,6 +580,8 @@ export function VirtualizedLogsTable({
               className: costRows.length > 0 ? "border-t border-background/20 pt-2" : undefined,
             })
           )}
+
+          {hedgeSection}
         </div>
       </TooltipContent>
     );
@@ -1148,6 +1186,7 @@ export function VirtualizedLogsTable({
                           costMultiplier={log.costMultiplier}
                           groupCostMultiplier={log.groupCostMultiplier}
                           costBreakdown={log.costBreakdown}
+                          hedgeLosers={log.hedgeLosers}
                           context1mApplied={log.context1mApplied}
                           durationMs={log.durationMs}
                           ttfbMs={log.ttfbMs}

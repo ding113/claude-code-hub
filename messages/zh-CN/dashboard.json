@@ -322,6 +322,10 @@
         "providerMultiplier": "供应商倍率",
         "groupMultiplier": "分组倍率",
         "baseTotal": "基础合计",
+        "hedgeRacing": "供应商竞速",
+        "hedgeWinner": "竞速赢家",
+        "hedgeLoser": "竞速输家",
+        "hedgeLosersTotal": "竞速输家合计",
         "unitPricePer1M": "@ {price} / 1M",
         "unit": {
           "tokens": "tokens"
@@ -439,6 +443,10 @@
       "providerMultiplier": "供应商倍率",
       "groupMultiplier": "分组倍率",
       "baseTotal": "基础合计",
+      "hedgeRacing": "供应商竞速",
+      "hedgeWinner": "竞速赢家",
+      "hedgeLoser": "竞速输家",
+      "hedgeLosersTotal": "竞速输家合计",
       "unit": {
         "tokens": "tokens"
       }
