@@ -133,6 +133,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       billingModelSource: "original",
       codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       billNonSuccessfulRequests: false,
+      billHedgeLosers: true,
       timezone: null,
       verboseProviderError: false,
       passThroughUpstreamErrorMessage: DEFAULT_SETTINGS.passThroughUpstreamErrorMessage,

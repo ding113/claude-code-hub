@@ -263,4 +263,126 @@ describe("message_request 异步批量写入", () => {
     expect(built.params).not.toContain(2000);
     expect(built.params).toContain(2099);
   });
+
+  it("costUsdDelta 应生成累加 SQL（cost_usd = ... + ...::numeric）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    enqueueMessageRequestUpdate(7, { costUsdDelta: "0.5" });
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(built.sql).toContain("cost_usd");
+    expect(built.sql).toContain("+");
+    expect(built.sql).toContain("::numeric");
+    expect(built.sql).toContain("COALESCE");
+  });
+
+  it("同一 id 的多次 costUsdDelta 应求和（不覆盖）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    enqueueMessageRequestUpdate(5, { costUsdDelta: "0.001" });
+    enqueueMessageRequestUpdate(5, { costUsdDelta: "0.002" });
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    // 累加后的 delta 应为 0.003（而非任何单值覆盖）。
+    expect(built.params.some((p) => Number(p) === 0.003)).toBe(true);
+    expect(built.params.some((p) => Number(p) === 0.001)).toBe(false);
+  });
+
+  it("DB 失败重试时 costUsdDelta 应求和（不丢失、不覆盖）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const firstExecute = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => firstExecute.promise);
+    executeMock.mockImplementationOnce(async () => []);
+
+    const {
+      enqueueMessageRequestUpdate,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+
+    enqueueMessageRequestUpdate(7, { costUsdDelta: "0.001" });
+    const flushPromise = flushMessageRequestWriteBuffer();
+    expect(executeMock).toHaveBeenCalledTimes(1);
+
+    // in-flight 期间又来了一个输家计费
+    enqueueMessageRequestUpdate(7, { costUsdDelta: "0.002" });
+    firstExecute.reject(new Error("db down"));
+    await flushPromise;
+
+    await flushMessageRequestWriteBuffer();
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    const built = toSqlText(executeMock.mock.calls[1]?.[0]);
+    // 失败 batch 的 0.001 + 新到的 0.002 = 0.003，必须求和而非择一。
+    expect(built.params.some((p) => Number(p) === 0.003)).toBe(true);
+  });
+
+  it("costUsd 替换与 costUsdDelta 累加可在同一 id 组合", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    enqueueMessageRequestUpdate(9, { costUsd: "0.1" });
+    enqueueMessageRequestUpdate(9, { costUsdDelta: "0.2" });
+    await stopMessageRequestWriteBuffer();
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    // 组合形态：COALESCE(<replacement>, cost_usd) + COALESCE(<delta>, 0)
+    expect(built.sql).toContain("+");
+    expect(built.params.some((p) => Number(p) === 0.1)).toBe(true);
+    expect(built.params.some((p) => Number(p) === 0.2)).toBe(true);
+  });
+
+  it("纯 costUsd 替换不应生成累加（保持旧行为）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    enqueueMessageRequestUpdate(11, { costUsd: "0.000123" });
+    await stopMessageRequestWriteBuffer();
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    expect(built.sql).toContain('"cost_usd" = CASE id');
+    expect(built.sql).not.toContain("COALESCE");
+  });
+});
+
+describe("mergePatch（加法合并语义）", () => {
+  it("costUsdDelta 求和、其余字段替换", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    process.env.DSN = "postgres://postgres:postgres@localhost:5432/claude_code_hub_test";
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        execute: vi.fn(async () => []),
+        select: () => ({ from: () => ({ where: async () => [] }) }),
+      },
+    }));
+    const { mergePatch } = await import("@/repository/message-write-buffer");
+
+    const merged = mergePatch(
+      { costUsdDelta: "0.001", statusCode: 200 },
+      { costUsdDelta: "0.002", statusCode: 500 }
+    );
+
+    expect(Number(merged.costUsdDelta)).toBe(0.003);
+    expect(merged.statusCode).toBe(500); // replacement: incoming wins
+  });
 });

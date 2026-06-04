@@ -322,6 +322,10 @@
         "providerMultiplier": "Provider Multiplier",
         "groupMultiplier": "Group Multiplier",
         "baseTotal": "Base Total",
+        "hedgeRacing": "Provider Racing",
+        "hedgeWinner": "Winner",
+        "hedgeLoser": "Loser",
+        "hedgeLosersTotal": "Racing Losers",
         "unitPricePer1M": "@ {price} / 1M",
         "unit": {
           "tokens": "tokens"
@@ -439,6 +443,10 @@
       "providerMultiplier": "Provider Multiplier",
       "groupMultiplier": "Group Multiplier",
       "baseTotal": "Base Total",
+      "hedgeRacing": "Provider Racing",
+      "hedgeWinner": "Winner",
+      "hedgeLoser": "Loser",
+      "hedgeLosersTotal": "Racing Losers",
       "unit": {
         "tokens": "tokens"
       }

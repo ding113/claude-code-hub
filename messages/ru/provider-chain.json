@@ -47,6 +47,7 @@
     "hedgeLaunched": "Hedge альтернатива запущена",
     "hedgeWinner": "Победитель Hedge-гонки",
     "hedgeLoserCancelled": "Проигравший Hedge-гонки (отменён)",
+    "hedgeLoserBilled": "Проигравший в гонке (ответ получен и тарифицирован)",
     "clientAbort": "Клиент прервал запрос"
   },
   "reasons": {
@@ -67,6 +68,7 @@
     "hedge_launched": "Hedge альтернатива запущена",
     "hedge_winner": "Победитель Hedge-гонки",
     "hedge_loser_cancelled": "Проигравший Hedge-гонки (отменён)",
+    "hedge_loser_billed": "Проигравший (тарифицирован)",
     "client_abort": "Клиент прервал запрос"
   },
   "filterReasons": {
@@ -238,6 +240,7 @@
     "hedgeLaunched": "Hedge альтернативный провайдер запущен",
     "hedgeWinner": "Победитель Hedge-гонки (первый получил начальный байт)",
     "hedgeLoserCancelled": "Проигравший Hedge-гонки (запрос отменён)",
+    "hedgeLoserBilled": "Проигравший в гонке (ответ получен и тарифицирован)",
     "clientAbort": "Клиент отключился (запрос прерван)",
     "hedgeRace": "Hedge-гонка",
     "hedgeThresholdExceeded": "Тайм-аут первого байта превышен, запущен альтернативный провайдер"

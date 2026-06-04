@@ -43,6 +43,11 @@ export interface SystemSettings {
   //         fake-200 上游错误识别仍生效，保证假成功响应不会被错误计费。
   billNonSuccessfulRequests: boolean;
 
+  // 供应商竞速（streaming hedge）输家计费（默认开启）
+  // 开启后：竞速落败的供应商不再被直接掐断，而是后台拿回其上游响应并按 token 用量计费，
+  //         其费用异步累加进该请求的总花费（与上游对多个供应商分别计费保持一致）。
+  billHedgeLosers: boolean;
+
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
   // null 表示使用环境变量 TZ 或默认 UTC
@@ -151,6 +156,9 @@ export interface UpdateSystemSettingsInput {
 
   // 非成功请求按 token 用量计费（可选）
   billNonSuccessfulRequests?: boolean;
+
+  // 供应商竞速输家计费（可选）
+  billHedgeLosers?: boolean;
 
   // 系统时区配置（可选）
   timezone?: string | null;

@@ -35,11 +35,12 @@ import {
   inferUpstreamErrorStatusCodeFromText,
 } from "@/lib/utils/upstream-error-detection";
 import {
+  addMessageRequestHedgeLoserCost,
   updateMessageRequestCostWithBreakdown,
   updateMessageRequestDetails,
   updateMessageRequestDuration,
 } from "@/repository/message";
-import type { StoredCostBreakdown } from "@/types/cost-breakdown";
+import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { Provider } from "@/types/provider";
 import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
@@ -501,6 +502,13 @@ type FinalizeDeferredStreamingResult = {
    * 该字段用于保证 DB 的 providerId 与 providerChain/熔断归因一致。
    */
   providerIdForPersistence: number | null;
+  /** 本次流是否为 hedge 竞速赢家（commitWinner 标记）。 */
+  isHedgeWinner: boolean;
+  /**
+   * 本次请求是否开启了竞速输家计费。开启时赢家费用以“从 0 累加”方式写入，
+   * 以便与异步累加的输家费用共存而互不覆盖。
+   */
+  billHedgeLosers: boolean;
 };
 
 /**
@@ -536,6 +544,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   };
 
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
+  const isHedgeWinner = meta?.isHedgeWinner === true;
+  const billHedgeLosers = meta?.billHedgeLosers === true;
 
   // 仅在“上游 HTTP=200 且流自然结束”时做“假 200”检测：
   // - 非 200：HTTP 已经表明失败（无需额外启发式）
@@ -594,7 +604,13 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 只返回“内部状态码 + 错误原因”，由调用方写入统计；
   // - 不在这里更新熔断/绑定（meta 缺失意味着 Forwarder 没有启用延迟结算；provider 缺失意味着无法归因）。
   if (!meta || !provider) {
-    return { effectiveStatusCode, errorMessage, providerIdForPersistence };
+    return {
+      effectiveStatusCode,
+      errorMessage,
+      providerIdForPersistence,
+      isHedgeWinner,
+      billHedgeLosers,
+    };
   }
 
   // meta 由 Forwarder 在“拿到 upstream Response 的那一刻”记录，代表真正产生本次流的 provider。
@@ -670,7 +686,13 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       errorMessage: errorMessage ?? undefined,
     });
 
-    return { effectiveStatusCode, errorMessage, providerIdForPersistence };
+    return {
+      effectiveStatusCode,
+      errorMessage,
+      providerIdForPersistence,
+      isHedgeWinner,
+      billHedgeLosers,
+    };
   }
 
   if (detected.isError) {
@@ -724,7 +746,13 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       errorMessage: detected.detail ? `${detected.code}: ${detected.detail}` : detected.code,
     });
 
-    return { effectiveStatusCode, errorMessage, providerIdForPersistence };
+    return {
+      effectiveStatusCode,
+      errorMessage,
+      providerIdForPersistence,
+      isHedgeWinner,
+      billHedgeLosers,
+    };
   }
 
   // ========== 非200状态码处理（流自然结束但HTTP状态码表示错误）==========
@@ -770,7 +798,13 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       errorMessage: errorMessage,
     });
 
-    return { effectiveStatusCode, errorMessage, providerIdForPersistence };
+    return {
+      effectiveStatusCode,
+      errorMessage,
+      providerIdForPersistence,
+      isHedgeWinner,
+      billHedgeLosers,
+    };
   }
 
   // ========== 真正成功（SSE 完整结束且未命中错误判定）==========
@@ -866,7 +900,13 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     statusCode: meta.upstreamStatusCode,
   });
 
-  return { effectiveStatusCode, errorMessage, providerIdForPersistence };
+  return {
+    effectiveStatusCode,
+    errorMessage,
+    providerIdForPersistence,
+    isHedgeWinner,
+    billHedgeLosers,
+  };
 }
 
 export class ProxyResponseHandler {
@@ -2431,7 +2471,10 @@ export class ProxyResponseHandler {
           provider.costMultiplier,
           session.getContext1mApplied(),
           priorityServiceTierApplied,
-          session.getGroupCostMultiplier()
+          session.getGroupCostMultiplier(),
+          // Hedge winner with loser billing on: write additively from zero so the
+          // winner cost coexists with async loser deltas without clobbering.
+          finalized.isHedgeWinner && finalized.billHedgeLosers
         );
         if (costUpdateResult.longContextPricingApplied) {
           ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
@@ -3518,7 +3561,12 @@ async function updateRequestCostFromUsage(
   costMultiplier: number = 1.0,
   context1mApplied: boolean = false,
   priorityServiceTierApplied: boolean = false,
-  groupCostMultiplier: number = 1.0
+  groupCostMultiplier: number = 1.0,
+  // When true the cost is ADDED to the row (cost_usd = cost_usd + value) instead of
+  // replacing it. Used for hedge winners so the winner + async loser costs accumulate
+  // onto the same row without clobbering. From a fresh row (cost_usd '0') this yields
+  // the same value as a replacement write.
+  additive: boolean = false
 ): Promise<{
   costUsd: string | null;
   resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>> | null;
@@ -3635,7 +3683,7 @@ async function updateRequestCostFromUsage(
     });
 
     if (cost.gt(0)) {
-      await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown);
+      await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown, { additive });
       return {
         costUsd: cost.toString(),
         resolvedPricing,
@@ -3671,6 +3719,132 @@ async function updateRequestCostFromUsage(
       longContextPricing: null,
       longContextPricingApplied: false,
     };
+  }
+}
+
+/**
+ * Bill a hedge (provider racing) loser whose upstream response was drained in the
+ * background by the forwarder.
+ *
+ * Mirrors the winner billing pipeline (parse usage -> normalize -> billable gate ->
+ * resolve pricing -> compute cost) but using the LOSER's provider/session for pricing
+ * and multipliers, then accumulates the cost onto the ORIGINAL request row via the
+ * additive write-back (cost_usd += delta, hedge_losers ||= [entry]).
+ *
+ * Best-effort: any failure is logged and swallowed so a loser-billing problem never
+ * affects the winner's response. Returns the billed cost string, or null if nothing
+ * was billed (no usage / non-billable / zero cost).
+ */
+export async function finalizeHedgeLoserBilling(params: {
+  messageRequestId: number;
+  /** Loser's (shadow) session — used for pricing/multiplier resolution only. */
+  loserSession: ProxySession;
+  provider: Provider;
+  /** Hedge attempt sequence number, for the audit entry. */
+  attemptNumber: number;
+  /** Upstream HTTP status of the loser's response. */
+  upstreamStatusCode: number;
+  /** The fully-drained loser response body (SSE or JSON). */
+  allContent: string;
+}): Promise<string | null> {
+  const {
+    messageRequestId,
+    loserSession,
+    provider,
+    attemptNumber,
+    upstreamStatusCode,
+    allContent,
+  } = params;
+
+  try {
+    if (isNonBillingUsageEndpoint(loserSession)) {
+      return null;
+    }
+
+    const { usageMetrics } = parseUsageFromResponseText(allContent, provider.providerType);
+    let usageForCost = usageMetrics;
+    if (usageForCost) {
+      usageForCost = normalizeUsageWithSwap(
+        usageForCost,
+        loserSession,
+        provider.swapCacheTtlBilling
+      );
+    }
+
+    // Same billable gate as the winner: status-code / fake-200 / non-billing checks.
+    const billableUsage = await resolveBillableUsageMetricsForCost(
+      loserSession,
+      provider,
+      usageForCost,
+      upstreamStatusCode,
+      allContent
+    );
+    if (!billableUsage) {
+      return null;
+    }
+
+    const resolvedPricing = await loserSession.getResolvedPricingByBillingSource(provider);
+    if (!resolvedPricing?.priceData || !hasValidPriceData(resolvedPricing.priceData)) {
+      return null;
+    }
+
+    const actualServiceTier = parseServiceTierFromResponseText(allContent);
+    const priorityServiceTierApplied =
+      (await resolveCodexPriorityBillingDecision(loserSession, actualServiceTier))
+        ?.effectivePriority ?? false;
+    const context1mApplied = loserSession.getContext1mApplied();
+    const costMultiplier = provider.costMultiplier;
+    const groupCostMultiplier = loserSession.getGroupCostMultiplier();
+
+    const longContextPricing =
+      matchLongContextPricing(billableUsage, resolvedPricing.priceData)?.pricing ?? null;
+    const cost = calculateRequestCost(
+      billableUsage,
+      resolvedPricing.priceData,
+      buildCostCalculationOptions(
+        costMultiplier,
+        context1mApplied,
+        priorityServiceTierApplied,
+        longContextPricing,
+        groupCostMultiplier
+      )
+    );
+
+    if (!cost.gt(0)) {
+      return null;
+    }
+
+    const loserEntry: HedgeLoserBilling = {
+      providerId: provider.id,
+      providerName: provider.name,
+      attemptNumber,
+      costUsd: cost.toString(),
+      inputTokens: billableUsage.input_tokens,
+      outputTokens: billableUsage.output_tokens,
+      cacheCreationInputTokens: billableUsage.cache_creation_input_tokens,
+      cacheReadInputTokens: billableUsage.cache_read_input_tokens,
+    };
+
+    await addMessageRequestHedgeLoserCost(messageRequestId, cost, loserEntry);
+
+    logger.info("[HedgeLoserBilling] Billed hedge loser", {
+      messageRequestId,
+      providerId: provider.id,
+      providerName: provider.name,
+      attemptNumber,
+      costUsd: cost.toString(),
+    });
+
+    return cost.toString();
+  } catch (error) {
+    logger.warn("[HedgeLoserBilling] Failed to bill hedge loser, skipping", {
+      messageRequestId,
+      providerId: provider.id,
+      providerName: provider.name,
+      attemptNumber,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
 }
 

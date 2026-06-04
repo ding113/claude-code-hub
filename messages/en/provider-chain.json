@@ -47,6 +47,7 @@
     "hedgeLaunched": "Hedge Alternative Launched",
     "hedgeWinner": "Hedge Winner",
     "hedgeLoserCancelled": "Hedge Loser (Cancelled)",
+    "hedgeLoserBilled": "Hedge Race Loser (response reclaimed & billed)",
     "clientAbort": "Client Aborted"
   },
   "reasons": {
@@ -67,6 +68,7 @@
     "hedge_launched": "Hedge Alternative Launched",
     "hedge_winner": "Hedge Winner",
     "hedge_loser_cancelled": "Hedge Loser (Cancelled)",
+    "hedge_loser_billed": "Hedge Loser (Billed)",
     "client_abort": "Client Aborted"
   },
   "filterReasons": {
@@ -238,6 +240,7 @@
     "hedgeLaunched": "Hedge Alternative Provider Launched",
     "hedgeWinner": "Hedge Race Winner (first byte received first)",
     "hedgeLoserCancelled": "Hedge Race Loser (request cancelled)",
+    "hedgeLoserBilled": "Hedge Race Loser (response reclaimed & billed)",
     "clientAbort": "Client Disconnected (request aborted)",
     "hedgeRace": "Hedge Race",
     "hedgeThresholdExceeded": "First-byte timeout exceeded, alternative provider launched"

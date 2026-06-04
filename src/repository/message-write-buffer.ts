@@ -5,12 +5,21 @@ import { sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { formatCostForStorage, sumCosts } from "@/lib/utils/currency";
 import type { StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData } from "@/types/message";
 
 export type MessageRequestUpdatePatch = {
   durationMs?: number;
+  /** Replacement cost (SET cost_usd = value). Used by the single (non-hedge) cost writer. */
   costUsd?: string;
+  /**
+   * Additive cost delta (SET cost_usd = cost_usd + value). Used by the hedge winner
+   * so its cost accumulates from zero and coexists with losers' (direct, idempotent)
+   * additive writes without clobbering. Merges by SUMMING (not replacing) and is summed
+   * again on flush-retry so a failed batch's delta is never lost.
+   */
+  costUsdDelta?: string;
   statusCode?: number;
   inputTokens?: number;
   outputTokens?: number;
@@ -38,7 +47,7 @@ export type MessageRequestUpdatePatch = {
   costBreakdown?: StoredCostBreakdown | null;
 };
 
-type MessageRequestUpdateRecord = {
+export type MessageRequestUpdateRecord = {
   id: number;
   patch: MessageRequestUpdatePatch;
 };
@@ -49,9 +58,11 @@ type WriterConfig = {
   maxPending: number;
 };
 
-const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
+// Generic replacement columns handled by the CASE-WHEN loop in buildBatchUpdateSql.
+// The cost columns (costUsd / costUsdDelta) and hedgeLosersAppend are handled
+// separately because they need additive / jsonb-append SQL semantics.
+const COLUMN_MAP: Partial<Record<keyof MessageRequestUpdatePatch, string>> = {
   durationMs: "duration_ms",
-  costUsd: "cost_usd",
   statusCode: "status_code",
   inputTokens: "input_tokens",
   outputTokens: "output_tokens",
@@ -95,7 +106,7 @@ function takeBatch(map: Map<number, MessageRequestUpdatePatch>, batchSize: numbe
   return items;
 }
 
-function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null {
+export function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null {
   if (updates.length === 0) {
     return null;
   }
@@ -123,12 +134,6 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
         continue;
       }
 
-      if (key === "costUsd") {
-        // numeric 类型，显式 cast 避免隐式类型推断异常
-        cases.push(sql`WHEN ${update.id} THEN ${value}::numeric`);
-        continue;
-      }
-
       cases.push(sql`WHEN ${update.id} THEN ${value}`);
     }
 
@@ -138,6 +143,37 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
 
     const col = sql.identifier(columnName);
     setClauses.push(sql`${col} = CASE id ${sql.join(cases, sql` `)} ELSE ${col} END`);
+  }
+
+  // cost_usd: combine replacement (costUsd) and additive (costUsdDelta).
+  // - Non-hedge path uses costUsd only -> identical CASE-WHEN replacement as before.
+  // - Hedge path uses costUsdDelta only -> cost_usd = cost_usd + delta.
+  // - If both ever appear for one row, replacement sets the base then the delta is added.
+  // The combined expression references cost_usd itself, so it is atomic per row
+  // (Postgres row lock) and commutative across concurrent additive contributors.
+  const replCases: SQL[] = [];
+  const deltaCases: SQL[] = [];
+  for (const update of updates) {
+    if (update.patch.costUsd !== undefined) {
+      replCases.push(sql`WHEN ${update.id} THEN ${update.patch.costUsd}::numeric`);
+    }
+    if (update.patch.costUsdDelta !== undefined) {
+      deltaCases.push(sql`WHEN ${update.id} THEN ${update.patch.costUsdDelta}::numeric`);
+    }
+  }
+  if (replCases.length > 0 || deltaCases.length > 0) {
+    const costCol = sql.identifier("cost_usd");
+    if (deltaCases.length === 0) {
+      // Pure replacement (legacy behavior, byte-identical SQL shape).
+      setClauses.push(sql`${costCol} = CASE id ${sql.join(replCases, sql` `)} ELSE ${costCol} END`);
+    } else {
+      const base =
+        replCases.length > 0
+          ? sql`COALESCE(CASE id ${sql.join(replCases, sql` `)} END, ${costCol})`
+          : sql`${costCol}`;
+      const delta = sql`COALESCE(CASE id ${sql.join(deltaCases, sql` `)} END, 0)`;
+      setClauses.push(sql`${costCol} = COALESCE(${base}, 0) + ${delta}`);
+    }
   }
 
   // 没有任何可更新字段时跳过（避免无意义写入）
@@ -160,12 +196,54 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
   `;
 }
 
+/**
+ * Merge `incoming` into `base`, returning a new patch.
+ *
+ * Most fields are replaced (incoming wins, matching the previous spread merge).
+ * The additive billing field is accumulated instead so concurrent / retried
+ * contributors never lose or double-count:
+ * - costUsdDelta: summed (Decimal-safe)
+ *
+ * Summation is commutative, so callers may pass arguments in either order; only
+ * the replacement fields depend on which side is "newer".
+ */
+export function mergePatch(
+  base: MessageRequestUpdatePatch,
+  incoming: MessageRequestUpdatePatch
+): MessageRequestUpdatePatch {
+  const merged: MessageRequestUpdatePatch = { ...base };
+  for (const [k, v] of Object.entries(incoming) as Array<
+    [keyof MessageRequestUpdatePatch, MessageRequestUpdatePatch[keyof MessageRequestUpdatePatch]]
+  >) {
+    if (v === undefined) {
+      continue;
+    }
+    if (k === "costUsdDelta") {
+      const summed = sumCosts([base.costUsdDelta ?? "0", v as string]);
+      merged.costUsdDelta = formatCostForStorage(summed) ?? (v as string);
+      continue;
+    }
+    merged[k] = v as never;
+  }
+  return merged;
+}
+
 function getPatchRetentionPriority(patch: MessageRequestUpdatePatch): number {
+  // Additive billing writes are irrecoverable (cannot be re-derived later) — never
+  // drop them before duration/metadata under pending-queue overflow.
+  if (patch.costUsdDelta !== undefined) {
+    return 4;
+  }
+
   if (patch.statusCode !== undefined) {
     return 3;
   }
 
   if (patch.durationMs !== undefined) {
+    return 2;
+  }
+
+  if (patch.costUsd !== undefined) {
     return 2;
   }
 
@@ -186,15 +264,8 @@ class MessageRequestWriteBuffer {
 
   enqueue(id: number, patch: MessageRequestUpdatePatch): void {
     const existing = this.pending.get(id) ?? {};
-    const merged: MessageRequestUpdatePatch = { ...existing };
-    for (const [k, v] of Object.entries(patch) as Array<
-      [keyof MessageRequestUpdatePatch, MessageRequestUpdatePatch[keyof MessageRequestUpdatePatch]]
-    >) {
-      if (v !== undefined) {
-        merged[k] = v as never;
-      }
-    }
-    this.pending.set(id, merged);
+    // existing is older, patch is newer -> for replacement fields newer wins.
+    this.pending.set(id, mergePatch(existing, patch));
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
@@ -296,10 +367,12 @@ class MessageRequestWriteBuffer {
             await db.execute(query);
           } catch (error) {
             // 失败重试：将 batch 放回队列
-            // 合并策略：保留“更新更晚”的字段（existing 优先），避免覆盖新数据
+            // 合并策略：replacement 字段保留“更新更晚”的字段（existing 优先，避免覆盖新数据）；
+            // 加法字段（costUsdDelta / hedgeLosersAppend）求和/拼接，确保失败 batch 的计费不丢失、不重复。
             for (const item of batch) {
               const existing = this.pending.get(item.id) ?? {};
-              this.pending.set(item.id, { ...item.patch, ...existing });
+              // base = failed batch (older), incoming = existing pending (newer) -> newer wins on replace.
+              this.pending.set(item.id, mergePatch(item.patch, existing));
             }
 
             logger.error("[MessageRequestWriteBuffer] Flush failed, will retry later", {

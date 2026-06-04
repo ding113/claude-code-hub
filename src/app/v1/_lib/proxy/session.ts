@@ -609,7 +609,8 @@ export class ProxySession {
         | "hedge_triggered" // Hedge 计时器触发，启动备选供应商
         | "hedge_launched" // Hedge 备选供应商已启动（信息性记录）
         | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
-        | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消
+        | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消（未计费）
+        | "hedge_loser_billed" // 该供应商输掉 Hedge 竞速，但其响应被后台拿回并计费
         | "client_abort"; // 客户端在响应完成前断开连接
       selectionMethod?:
         | "session_reuse"

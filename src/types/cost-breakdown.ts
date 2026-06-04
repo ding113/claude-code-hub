@@ -28,3 +28,27 @@ export interface StoredCostBreakdown {
   /** Final total cost after both multipliers */
   total: string;
 }
+
+/**
+ * Billing record for a single hedge (provider racing) loser whose upstream
+ * response was drained in the background and billed.
+ *
+ * Persisted as one element of the jsonb array `messageRequest.hedgeLosers`.
+ * Each loser's `costUsd` is already accumulated into the row's grand-total
+ * `costUsd`; this array only keeps the per-loser breakdown for display.
+ * All cost values are Decimal strings for precision.
+ */
+export interface HedgeLoserBilling {
+  /** Losing provider id */
+  providerId: number;
+  /** Losing provider name (snapshot, for display) */
+  providerName: string;
+  /** Hedge attempt sequence number (1 = initial provider) */
+  attemptNumber: number;
+  /** Billed cost (USD) for this loser, with multipliers applied */
+  costUsd: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
+}

@@ -26,6 +26,7 @@ import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { extractAnthropicEffortInfo } from "@/lib/utils/anthropic-effort";
 import { formatCurrency } from "@/lib/utils/currency";
+import { summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
 import {
   getPricingResolutionSpecialSetting,
@@ -61,6 +62,7 @@ export function SummaryTab({
   costMultiplier,
   groupCostMultiplier,
   costBreakdown,
+  hedgeLosers,
   context1mApplied,
   durationMs,
   ttfbMs,
@@ -615,6 +617,36 @@ export function SummaryTab({
                 );
               })()}
             </div>
+
+            {/* Provider Racing (hedge) split */}
+            {(() => {
+              const hedgeSummary = summarizeHedgeBilling(costUsd, hedgeLosers);
+              if (!hedgeSummary) return null;
+              return (
+                <div className="pt-3 border-t space-y-2 text-sm">
+                  <div className="font-medium text-muted-foreground">
+                    {t("billingDetails.hedgeRacing")}
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("billingDetails.hedgeWinner")}:
+                    </span>
+                    <span className="font-mono">
+                      {formatCurrency(hedgeSummary.winnerCost, "USD", 6)}
+                    </span>
+                  </div>
+                  {hedgeSummary.losers.map((loser) => (
+                    <div
+                      key={`${loser.providerId}-${loser.attemptNumber}`}
+                      className="flex justify-between text-rose-600 dark:text-rose-400"
+                    >
+                      <span className="truncate">{loser.providerName}:</span>
+                      <span className="font-mono">{formatCurrency(loser.costUsd, "USD", 6)}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Total Cost */}
             <div className="pt-3 border-t flex justify-between items-center">

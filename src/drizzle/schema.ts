@@ -15,7 +15,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
-import type { StoredCostBreakdown } from '@/types/cost-breakdown';
+import type { HedgeLoserBilling, StoredCostBreakdown } from '@/types/cost-breakdown';
 import type { ResponseFixerConfig } from '@/types/system-config';
 import type { AllowedModelRuleInput, ProviderModelRedirectRule, ProviderType } from "@/types/provider";
 import type { FilterOperation } from "@/lib/request-filter-types";
@@ -518,6 +518,9 @@ export const messageRequest = pgTable('message_request', {
   // 特殊设置（用于记录各类“特殊行为/覆写”的命中与生效情况，便于审计与展示）
   specialSettings: jsonb('special_settings').$type<SpecialSetting[]>(),
 
+  // Hedge 竞速输家计费明细（每个输家一条；其费用已累加进 cost_usd 总额，此处仅保留拆分用于展示）
+  hedgeLosers: jsonb('hedge_losers').$type<HedgeLoserBilling[]>(),
+
   // 错误信息
   errorMessage: text('error_message'),
   errorStack: text('error_stack'),  // 完整堆栈信息，用于排查 TypeError: terminated 等流错误
@@ -740,6 +743,12 @@ export const systemSettings = pgTable('system_settings', {
   // 关闭：返回 4xx/5xx 时即使上游回报了 token 用量也不计费（当前行为）
   // 开启：只要上游返回了正向 token 用量，无论响应状态码如何都按用量计费（fake-200 错误检测仍然生效）
   billNonSuccessfulRequests: boolean('bill_non_successful_requests').notNull().default(false),
+
+  // 供应商竞速（streaming hedge）输家计费（默认开启）
+  // 开启：竞速中落败的供应商不再被直接掐断，而是后台拿回其上游响应、抽取 token 用量并计费，
+  //       异步累加进该请求的 cost_usd 总额（与上游对多个供应商分别计费保持一致）
+  // 关闭：竞速输家直接取消连接，不计费（旧行为）
+  billHedgeLosers: boolean('bill_hedge_losers').notNull().default(true),
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示

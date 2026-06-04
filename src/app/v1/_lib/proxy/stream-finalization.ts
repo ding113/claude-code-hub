@@ -29,6 +29,12 @@ export type DeferredStreamingFinalization = {
   upstreamStatusCode: number;
   /** When true, commitWinner() already performed session binding and chain logging; finalization should skip them. */
   isHedgeWinner?: boolean;
+  /**
+   * Whether hedge-loser billing was enabled for this request. When true and this
+   * is a hedge winner, the winner's cost is written additively (from zero) so it
+   * coexists with asynchronously accumulated loser costs without clobbering.
+   */
+  billHedgeLosers?: boolean;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();

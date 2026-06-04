@@ -89,6 +89,7 @@ import {
   validateOpenAIImageRequest,
 } from "./openai-image-compat";
 import { ProxyProviderResolver } from "./provider-selector";
+import { finalizeHedgeLoserBilling } from "./response-handler";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
 import {
@@ -198,6 +199,16 @@ type StreamingHedgeAttempt = {
   response: Response | null;
   releaseAgent: (() => void) | null;
   agentReleased: boolean;
+  /** When true, this losing attempt is kept alive, drained, and billed instead of cancelled. */
+  billAsLoser: boolean;
+  /** Idempotency guard: ensures loser drain/billing runs at most once per attempt. */
+  loserBillingStarted: boolean;
+  /**
+   * First chunk already pulled from this attempt's reader before it lost the race.
+   * Preserved so loser billing can prepend it when draining (Claude's message_start
+   * usage lives in the first chunk).
+   */
+  firstChunk: Uint8Array | null;
 };
 
 type ReactiveRectifierRetryState = {
@@ -3620,10 +3631,13 @@ export class ProxyForwarder {
     }
 
     const rawCrossProviderFallbackEnabled = session.isRawCrossProviderFallbackEnabled();
+    // 竞速输家计费开关：开启时落败供应商不被直接掐断，而是后台 drain 并计费。
+    const billHedgeLosers = (await getCachedSystemSettings()).billHedgeLosers === true;
     const launchedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
     let settled = false;
     let winnerCommitted = false;
+    let winnerAttempt: StreamingHedgeAttempt | null = null;
     let noMoreProviders = false;
     let launchingAlternative: Promise<void> | null = null;
     let lastError: Error | null = null;
@@ -3679,6 +3693,104 @@ export class ProxyForwarder {
       }
     };
 
+    // 后台 drain 一个落败供应商的响应体以拿回 token 用量并计费。
+    // 不取消连接：读到流自然结束（或超时/容量上限）后，复用赢家相同的计费链，
+    // 把费用异步累加回原请求行。幂等（loserBillingStarted 守卫），失败静默。
+    const startLoserBilling = (attempt: StreamingHedgeAttempt) => {
+      if (attempt.loserBillingStarted) return;
+      attempt.loserBillingStarted = true;
+
+      const reader = attempt.reader;
+      const response = attempt.response;
+      const messageRequestId = session.messageContext?.id;
+      if (!reader || !response || messageRequestId == null) {
+        // 无可读响应或无请求行可归属 -> 无法计费，直接释放资源。
+        const cancel = reader?.cancel("hedge_loser_no_billing");
+        cancel?.catch(() => undefined);
+        releaseAttemptAgent(attempt);
+        return;
+      }
+
+      const controller = attempt.responseController;
+      const drainTimeoutMs = getEnvConfig().HEDGE_LOSER_DRAIN_TIMEOUT_MS;
+      const drainTimer = setTimeout(() => {
+        try {
+          controller?.abort(new Error("hedge_loser_drain_timeout"));
+        } catch {
+          /* ignore */
+        }
+      }, drainTimeoutMs);
+
+      void (async () => {
+        const decoder = new TextDecoder();
+        const chunks: string[] = [];
+        let totalBytes = 0;
+        const MAX_DRAIN_BYTES = 32 * 1024 * 1024;
+        // 若落败前已读走首块（赢家先提交导致），先补回，避免丢失 message_start 的 usage。
+        if (attempt.firstChunk) {
+          chunks.push(decoder.decode(attempt.firstChunk, { stream: true }));
+          totalBytes += attempt.firstChunk.byteLength;
+          attempt.firstChunk = null;
+        }
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (value) {
+              chunks.push(decoder.decode(value, { stream: true }));
+              totalBytes += value.byteLength;
+              if (totalBytes > MAX_DRAIN_BYTES) {
+                logger.warn("ProxyForwarder: hedge loser drain exceeded cap, billing partial", {
+                  sessionId: attempt.session.sessionId ?? null,
+                  providerId: attempt.provider.id,
+                  providerName: attempt.provider.name,
+                  totalBytes,
+                });
+                try {
+                  controller?.abort(new Error("hedge_loser_drain_cap"));
+                } catch {
+                  /* ignore */
+                }
+                break;
+              }
+            }
+          }
+        } catch (drainError) {
+          // 中止 / 网络错误：用已收到的内容尽力计费（通常拿不到末尾 usage -> 跳过）。
+          logger.debug("ProxyForwarder: hedge loser drain ended early", {
+            error: drainError instanceof Error ? drainError.message : String(drainError),
+            sessionId: attempt.session.sessionId ?? null,
+            providerId: attempt.provider.id,
+            providerName: attempt.provider.name,
+          });
+        }
+        const flushed = decoder.decode();
+        if (flushed) chunks.push(flushed);
+        const allContent = chunks.join("");
+
+        await finalizeHedgeLoserBilling({
+          messageRequestId,
+          loserSession: attempt.session,
+          provider: attempt.provider,
+          attemptNumber: attempt.sequence,
+          upstreamStatusCode: response.status,
+          allContent,
+        });
+      })()
+        .catch((billingError) => {
+          logger.debug("ProxyForwarder: hedge loser billing task failed", {
+            error: billingError instanceof Error ? billingError.message : String(billingError),
+            sessionId: attempt.session.sessionId ?? null,
+            providerId: attempt.provider.id,
+            providerName: attempt.provider.name,
+          });
+        })
+        .finally(() => {
+          clearTimeout(drainTimer);
+          releaseAttemptAgent(attempt);
+        });
+    };
+
     const abortAttempt = (attempt: StreamingHedgeAttempt, reason: string) => {
       if (attempt.settled) return;
       attempt.settled = true;
@@ -3687,6 +3799,24 @@ export class ProxyForwarder {
         attempt.thresholdTimer = null;
       }
       attempts.delete(attempt);
+
+      // 竞速输家计费开启：仅标记 + 记录决策链，不取消连接、不释放 agent。
+      // 实际的后台 drain 由 runAttempt 的 .then 流程发起（它独占 reader，避免并发读）。
+      if (reason === "hedge_loser" && attempt.billAsLoser) {
+        session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "hedge_loser_billed",
+          attemptNumber: attempt.sequence,
+          statusCode: attempt.response?.status,
+          modelRedirect: getAttemptModelRedirect(attempt),
+        });
+        ProxyForwarder.markProviderFailed(session, failedProviderIds, attempt.provider.id);
+        return;
+      }
+
+      // 因非竞速原因（client_abort / launch_failed 等）被取消：禁止后台计费，正常取消连接。
+      attempt.billAsLoser = false;
+
       if (reason === "hedge_loser") {
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
@@ -3823,6 +3953,20 @@ export class ProxyForwarder {
           if (settled || winnerCommitted || attempt.settled) {
             const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
             attempt.releaseAgent = attemptRuntime.releaseAgent ?? attempt.releaseAgent;
+
+            // 竞速输家计费：保活该响应并后台 drain 计费，而非取消。
+            if (attempt.billAsLoser && !attempt.loserBillingStarted && response.body) {
+              attempt.responseController =
+                attemptRuntime.responseController ?? attempt.responseController;
+              attempt.clearResponseTimeout =
+                attemptRuntime.clearResponseTimeout ?? attempt.clearResponseTimeout;
+              attempt.clearResponseTimeout?.();
+              attempt.response = response;
+              attempt.reader = response.body.getReader();
+              startLoserBilling(attempt);
+              return;
+            }
+
             try {
               attemptRuntime.responseController?.abort(new Error("hedge_loser"));
             } catch (abortError) {
@@ -3873,7 +4017,22 @@ export class ProxyForwarder {
               return;
             }
 
+            // 保留首块：若本 attempt 落败且需要计费，drain 时需要补回首块的 usage。
+            attempt.firstChunk = firstChunk.value;
             await commitWinner(attempt, firstChunk.value);
+
+            // 本 attempt 读到首块却落败（winner 已先提交，commitWinner 早退）：
+            // 若开启输家计费且本 attempt 不是赢家，在此发起后台 drain（此时已无并发读）。
+            if (
+              attempt !== winnerAttempt &&
+              attempt.billAsLoser &&
+              attempt.settled &&
+              !attempt.loserBillingStarted &&
+              attempt.response &&
+              attempt.reader
+            ) {
+              startLoserBilling(attempt);
+            }
           } catch (firstChunkError) {
             const normalizedError =
               firstChunkError instanceof Error
@@ -3892,6 +4051,14 @@ export class ProxyForwarder {
     };
 
     const handleAttemptFailure = async (attempt: StreamingHedgeAttempt, error: Error) => {
+      // 已被标记为计费输家、billing 尚未启动、却在此失败（如首块读取出错）：
+      // 此时 abortAttempt 已早退（未取消连接/未释放 agent），由这里兜底清理，避免 reader/agent 泄漏。
+      if (attempt.settled && attempt.billAsLoser && !attempt.loserBillingStarted) {
+        const readerCancel = attempt.reader?.cancel("hedge_loser_failed");
+        readerCancel?.catch(() => undefined);
+        releaseAttemptAgent(attempt);
+        return;
+      }
       if (settled || winnerCommitted || attempt.settled) return;
 
       lastError = error;
@@ -4076,6 +4243,7 @@ export class ProxyForwarder {
         return;
 
       winnerCommitted = true;
+      winnerAttempt = attempt;
 
       if (attempt.thresholdTimer) {
         clearTimeout(attempt.thresholdTimer);
@@ -4161,6 +4329,7 @@ export class ProxyForwarder {
         endpointUrl: attempt.endpointAudit.endpointUrl,
         upstreamStatusCode: attempt.response.status,
         isHedgeWinner: isActualHedgeWin,
+        billHedgeLosers,
       });
 
       const response = new Response(
@@ -4256,6 +4425,9 @@ export class ProxyForwarder {
         response: null,
         releaseAgent: null,
         agentReleased: false,
+        billAsLoser: billHedgeLosers,
+        loserBillingStarted: false,
+        firstChunk: null,
       };
 
       attempts.add(attempt);

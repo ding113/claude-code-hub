@@ -54,6 +54,7 @@ const EXCLUDED_REASONS = new Map<
   ["resource_not_found", "resource_not_found"],
   ["concurrent_limit_failed", "local_capacity"],
   ["hedge_loser_cancelled", "hedge_loser"],
+  ["hedge_loser_billed", "hedge_loser"],
   ["client_error_non_retryable", "local_non_retryable"],
   ["client_abort", "client_abort"],
 ]);
