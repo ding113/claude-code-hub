@@ -24,13 +24,42 @@ import {
 import { logger } from "@/lib/logger";
 import { ProxyError } from "./errors";
 
+/** 解析「字节数」环境变量；非法/缺省时回退到 fallback。 */
+function parseByteLimitEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : fallback;
+}
+
 /**
  * 解压输出硬上限，防御解压炸弹（decompression bomb）：很小的压缩体可能展开成数 GB
  * 导致 OOM。这是一个独立的内存兜底阈值——注意 /v1、/v1beta 代理路径并不受
  * next.config.ts 的 proxyClientMaxBodySize 钳制（见 proxy.matcher.ts），故入站压缩体
  * 体积本身不另设限。逐层解压按此上限增量限制，超过即按 413 拒绝。
+ *
+ * 默认 100MB（代理刻意支持大请求体，见 next.config.ts proxyClientMaxBodySize）。
+ * 可经环境变量 MAX_DECOMPRESSED_REQUEST_BYTES 覆盖（字节数），供内存受限部署下调上限。
  */
-export const MAX_DECOMPRESSED_REQUEST_BYTES = 100 * 1024 * 1024;
+export const MAX_DECOMPRESSED_REQUEST_BYTES = parseByteLimitEnv(
+  "MAX_DECOMPRESSED_REQUEST_BYTES",
+  100 * 1024 * 1024
+);
+
+/**
+ * 压缩输入（线上字节）硬上限。解压在 `ProxySession.fromContext` 内、鉴权 guard 之前同步执行，
+ * 且 /v1、/v1beta 路径不受 proxyClientMaxBodySize 钳制（见上）；若仅靠 maxOutputBytes 输出兜底，
+ * 未鉴权客户端仍可反复发送「小压缩体 → 解到 100MB」来放大解压 CPU/事件循环开销。
+ * 因此在解压前先按压缩体本身的字节数拒绝过大输入：既限制鉴权前需读取+解压的输入量，
+ * 也把最大放大比收敛（10MB 压缩体最多解到 100MB 输出）。超过按 413 拒绝。
+ *
+ * 默认 10MB（远高于任何真实压缩请求体：2M token 上下文 zstd 压缩通常仅数 MB）。
+ * 可经环境变量 MAX_COMPRESSED_REQUEST_BYTES 覆盖（字节数）。
+ */
+export const MAX_COMPRESSED_REQUEST_BYTES = parseByteLimitEnv(
+  "MAX_COMPRESSED_REQUEST_BYTES",
+  10 * 1024 * 1024
+);
 
 /**
  * content-encoding 编码链最大层数。真实客户端（含 Codex）只发单层编码；允许多层会让一个
@@ -45,6 +74,8 @@ const SUPPORTED_ENCODINGS = new Set(["zstd", "gzip", "x-gzip", "deflate", "br"])
 export interface DecodeRequestBodyOptions {
   /** 解压输出字节上限，默认 {@link MAX_DECOMPRESSED_REQUEST_BYTES}。主要用于测试。 */
   maxOutputBytes?: number;
+  /** 压缩输入字节上限，默认 {@link MAX_COMPRESSED_REQUEST_BYTES}。主要用于测试。 */
+  maxCompressedBytes?: number;
 }
 
 export interface DecodedRequestBody {
@@ -134,6 +165,7 @@ export function decodeRequestBody(
   options?: DecodeRequestBodyOptions
 ): DecodedRequestBody {
   const maxOutputBytes = options?.maxOutputBytes ?? MAX_DECOMPRESSED_REQUEST_BYTES;
+  const maxCompressedBytes = options?.maxCompressedBytes ?? MAX_COMPRESSED_REQUEST_BYTES;
   const originalByteLength = input.byteLength;
 
   const encodings = parseContentEncoding(contentEncoding);
@@ -183,6 +215,15 @@ export function decodeRequestBody(
       originalByteLength,
       decodedByteLength: buffer.byteLength,
     };
+  }
+
+  // 解压前先按压缩体本身字节数拒绝过大输入（鉴权前防放大，见 MAX_COMPRESSED_REQUEST_BYTES）。
+  // 仅对「支持的单层编码」生效：上面已确保 encodings 非空、层数合法且全部受支持。
+  if (originalByteLength > maxCompressedBytes) {
+    throw new ProxyError(
+      `Compressed request body exceeds the maximum allowed size (${maxCompressedBytes} bytes).`,
+      413
+    );
   }
 
   // 按 HTTP 语义反向逐层解码。
