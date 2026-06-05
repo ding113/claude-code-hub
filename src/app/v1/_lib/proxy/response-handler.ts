@@ -543,6 +543,9 @@ function getCodexResponsesTerminalState(allContent: string): CodexResponsesTermi
       event.data && typeof event.data === "object" && !Array.isArray(event.data)
         ? (event.data as { type?: unknown })
         : null;
+    // Intentional: fall back to event.event for events with non-JSON body (e.g. "error" events
+    // with plain-text data). This path processes complete events from allContent (post-tee),
+    // where the forwarded tracker already holds the terminal verdict — so truncation risk is nil.
     const eventType = typeof data?.type === "string" ? data.type : event.event;
     terminalState = applyCodexResponsesTerminalEvent(terminalState, eventType);
   }
@@ -551,16 +554,17 @@ function getCodexResponsesTerminalState(allContent: string): CodexResponsesTermi
 }
 
 function getCodexPromptCacheKeyFromSSEText(text: string): string | null {
+  let lastKey: string | null = null;
   for (const event of parseSSEData(text)) {
     if (!event.data || typeof event.data !== "object" || Array.isArray(event.data)) continue;
     const promptCacheKey = SessionManager.extractCodexPromptCacheKey(
       event.data as Record<string, unknown>
     );
     if (promptCacheKey) {
-      return promptCacheKey;
+      lastKey = promptCacheKey;
     }
   }
-  return null;
+  return lastKey;
 }
 
 function getCompleteSSEEventTexts(text: string): string[] {
@@ -612,7 +616,8 @@ function createCodexResponsesTerminalStateTracker(): {
       const completeText = bufferedText.slice(0, boundary);
       bufferedText = bufferedText.slice(boundary);
       for (const eventText of getCompleteSSEEventTexts(completeText)) {
-        terminalPromptCacheKey ??= getCodexPromptCacheKeyFromSSEText(eventText);
+        const keyFromEvent = getCodexPromptCacheKeyFromSSEText(eventText);
+        if (keyFromEvent) terminalPromptCacheKey = keyFromEvent;
         const parsedTerminalState = getCodexResponsesTerminalState(eventText);
         if (parsedTerminalState !== "none") {
           terminalState = parsedTerminalState;
@@ -628,14 +633,8 @@ function createCodexResponsesTerminalStateTracker(): {
       if (!remainder) return;
 
       bufferedText = "";
-      let eventType = "";
       const dataLines: string[] = [];
       for (const line of remainder.split(/\r?\n/)) {
-        if (line.startsWith("event:")) {
-          eventType = line.slice(6).trim();
-          continue;
-        }
-
         if (line.startsWith("data:")) {
           let value = line.slice(5);
           if (value.startsWith(" ")) {
@@ -657,14 +656,19 @@ function createCodexResponsesTerminalStateTracker(): {
         parsedData && typeof parsedData === "object" && !Array.isArray(parsedData)
           ? (parsedData as Record<string, unknown>)
           : null;
-      const resolvedType = typeof parsedObject?.type === "string" ? parsedObject.type : eventType;
-      const newState = applyCodexResponsesTerminalEvent(terminalState, resolvedType);
+      // Only classify terminal state when we have a valid JSON object with a string type field.
+      // If JSON parse failed (truncated mid-event), parsedObject is null and we skip classification
+      // to avoid misidentifying a partially-received event as a terminal state.
+      // Intentional contrast with push() which can rely on event.event for complete events.
+      const resolvedType = typeof parsedObject?.type === "string" ? parsedObject.type : null;
+      const newState = resolvedType
+        ? applyCodexResponsesTerminalEvent(terminalState, resolvedType)
+        : "none";
       if (newState !== "none" && newState !== terminalState) {
         terminalState = newState;
-        if (parsedObject) {
-          terminalUsageMetrics = parseUsageFromResponseText(remainder, "codex").usageMetrics;
-          terminalServiceTier = parseServiceTierFromResponseText(remainder);
-        }
+        // parsedObject is guaranteed non-null here (resolvedType is derived from it), guard is redundant.
+        terminalUsageMetrics = parseUsageFromResponseText(remainder, "codex").usageMetrics;
+        terminalServiceTier = parseServiceTierFromResponseText(remainder);
       }
 
       if (!terminalPromptCacheKey && parsedObject) {
@@ -751,16 +755,18 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   const streamCompletedForFinalization =
     !codexTerminalNonSuccess && (streamEndedNormally || codexTerminalFinished);
 
-  // 仅在“上游 HTTP=200 且流已完成”时做“假 200”检测：
+  // 仅在"上游 HTTP=200 且流正常结束"时做"假 200"检测：
   // - 非 200：HTTP 已经表明失败（无需额外启发式）
-  // - 未完成：内容可能是部分流/截断，启发式会显著提高误判风险
-  // - Codex terminal success 后的非正常结束：协议已给出 terminal result，可安全做最终检查
+  // - 未完成/客户端中断：allContent 可能被截断，空内容会被误判为 EMPTY_BODY→502；
+  //   此时已有 terminal-tracker 给出权威结果（completed→200，failed/error→502），
+  //   不需要也不能依赖对不完整 body 的启发式。
   //
-  // 此处返回 `{isError:false}` 仅表示“跳过检测”，最终仍会在下面按中断/超时视为失败结算。
-  const shouldDetectFake200 = streamCompletedForFinalization && upstreamStatusCode === 200;
-  const detected = shouldDetectFake200
-    ? detectUpstreamErrorFromSseOrJsonText(allContent)
-    : ({ isError: false } as const);
+  // 此处返回 `{isError:false}` 仅表示"跳过检测"，最终仍会在下面按中断/超时视为失败结算。
+  const shouldDetectFake200 = streamEndedNormally && upstreamStatusCode === 200;
+  const detected =
+    shouldDetectFake200 && !codexTerminalNonSuccess
+      ? detectUpstreamErrorFromSseOrJsonText(allContent)
+      : ({ isError: false } as const);
 
   // “内部结算用”的状态码（不会改变客户端实际 HTTP 状态码）。
   // - 假 200：优先映射为“推断得到的 4xx/5xx”（未命中则回退 502），确保内部统计/熔断/会话绑定把它当作失败。
@@ -2628,6 +2634,11 @@ export class ProxyResponseHandler {
         abortReason?: string
       ): Promise<void> => {
         if (shouldTrackForwardedCodexTerminalState) {
+          // Flush any pending multi-byte UTF-8 sequence from the decoder. On normal close,
+          // TransformStream flush() already drains it; on abort, flush() is never called.
+          // TextDecoder.decode() without {stream:true} flushes the internal state — idempotent.
+          const decoderTail = forwardedCodexTerminalDecoder.decode();
+          if (decoderTail) forwardedCodexTerminalTracker.push(decoderTail);
           forwardedCodexTerminalTracker.finalize();
         }
 
@@ -2726,10 +2737,10 @@ export class ProxyResponseHandler {
               const sseEvents = parseSSEData(allContent);
               for (const event of sseEvents) {
                 if (typeof event.data === "object" && event.data) {
-                  promptCacheKey = SessionManager.extractCodexPromptCacheKey(
+                  const key = SessionManager.extractCodexPromptCacheKey(
                     event.data as Record<string, unknown>
                   );
-                  if (promptCacheKey) break;
+                  if (key) promptCacheKey = key; // last-event-wins, no break
                 }
               }
             }

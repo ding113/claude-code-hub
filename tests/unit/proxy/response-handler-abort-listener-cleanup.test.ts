@@ -1487,4 +1487,44 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
       })
     );
   });
+
+  it("tracker: response.completed recognized even when allContent is empty (Fix 1 P1 regression)", () => {
+    const tracker = __codexResponsesTerminalStateTrackerForTests.create();
+    tracker.push(
+      'event: response.completed\ndata: {"type":"response.completed","usage":{"input_tokens":10,"output_tokens":5}}\n\n'
+    );
+    tracker.finalize();
+    expect(tracker.getTerminalState()).toBe("completed");
+    // Fix 1 ensures shouldDetectFake200 uses streamEndedNormally (not streamCompletedForFinalization)
+    // so empty allContent won't trigger EMPTY_BODY->502 when tracker shows completed
+  });
+
+  it("tracker finalize: truncated JSON event is not classified as terminal state (Fix 2)", () => {
+    const tracker = __codexResponsesTerminalStateTrackerForTests.create();
+    tracker.push('event: response.completed\ndata: {"type":"respon');
+    tracker.finalize();
+    expect(tracker.getTerminalState()).toBe("none");
+  });
+
+  it("tracker push: last prompt_cache_key wins over earlier ones (Fix 3)", () => {
+    const tracker = __codexResponsesTerminalStateTrackerForTests.create();
+    tracker.push(
+      [
+        "event: response.created",
+        'data: {"type":"response.created","response":{"prompt_cache_key":"key-first"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    tracker.push(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"prompt_cache_key":"key-last"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    tracker.finalize();
+    expect(tracker.getPromptCacheKey()).toBe("key-last");
+  });
 });
