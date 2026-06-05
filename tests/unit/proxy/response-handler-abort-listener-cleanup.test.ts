@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
-import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import {
+  __codexResponsesTerminalStateTrackerForTests,
+  ProxyResponseHandler,
+} from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
+import { recordFailure } from "@/lib/circuit-breaker";
+import { recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
+import { SessionManager } from "@/lib/session-manager";
+import { updateMessageRequestDetails } from "@/repository/message";
 import type { Provider } from "@/types/provider";
 
 const testState = vi.hoisted(() => ({
@@ -73,6 +81,25 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionRequestHeaders: vi.fn(),
     storeSessionResponseHeaders: vi.fn(),
     storeSessionUpstreamResponseMeta: vi.fn(),
+    extractCodexPromptCacheKey: vi.fn((responseData: Record<string, unknown>) => {
+      const response = responseData.response as Record<string, unknown> | undefined;
+      if (typeof response?.prompt_cache_key === "string" && response.prompt_cache_key.length > 0) {
+        return response.prompt_cache_key;
+      }
+      return typeof responseData.prompt_cache_key === "string" &&
+        responseData.prompt_cache_key.length > 0
+        ? responseData.prompt_cache_key
+        : null;
+    }),
+    updateSessionWithCodexCacheKey: vi.fn().mockResolvedValue({
+      sessionId: "codex-cache-session",
+      updated: true,
+    }),
+    updateSessionBindingSmart: vi.fn().mockResolvedValue({
+      updated: false,
+      reason: "test",
+      details: {},
+    }),
   },
 }));
 
@@ -125,9 +152,20 @@ function makeProvider(overrides: Partial<Provider> = {}): Provider {
   } as Provider;
 }
 
-function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): ProxySession {
-  const endpointPolicy = resolveEndpointPolicy("/v1/chat/completions");
-  const provider = makeProvider();
+function makeSession(
+  clientAbortSignal: AbortSignal | null,
+  stream: boolean,
+  overrides: {
+    provider?: Partial<Provider>;
+    pathname?: string;
+    originalFormat?: string;
+    providerType?: string;
+  } = {}
+): ProxySession {
+  const pathname = overrides.pathname ?? "/v1/chat/completions";
+  const endpointPolicy = resolveEndpointPolicy(pathname);
+  const provider = makeProvider(overrides.provider);
+  const specialSettings: unknown[] = [];
   const session = {
     request: {
       model: "gpt-5.5",
@@ -140,7 +178,7 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
     },
     startTime: Date.now(),
     method: "POST",
-    requestUrl: new URL("http://localhost/v1/chat/completions"),
+    requestUrl: new URL(`http://localhost${pathname}`),
     headers: new Headers(),
     headerLog: "",
     userAgent: null,
@@ -165,25 +203,30 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
     },
     sessionId: null,
     requestSequence: 1,
-    originalFormat: "openai",
-    providerType: "openai",
+    originalFormat: overrides.originalFormat ?? "openai",
+    providerType: overrides.providerType ?? provider.providerType,
     originalModelName: "gpt-5.5",
-    originalUrlPathname: "/v1/chat/completions",
+    originalUrlPathname: pathname,
     providerChain: [],
     cacheTtlResolved: null,
     context1mApplied: false,
-    specialSettings: [],
+    specialSettings,
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
     endpointPolicy,
     isHeaderModified: () => false,
     getEndpointPolicy: () => endpointPolicy,
+    getEndpoint: () => pathname,
     getContext1mApplied: () => false,
     getGroupCostMultiplier: () => 1,
     getOriginalModel: () => "gpt-5.5",
     getCurrentModel: () => "gpt-5.5",
     getProviderChain: () => [],
-    getSpecialSettings: () => [],
+    getSpecialSettings: () => specialSettings,
+    addSpecialSetting: (setting: unknown) => {
+      specialSettings.push(setting);
+    },
+    getCodexPriorityBillingSource: async () => "requested",
     shouldPersistSessionDebugArtifacts: () => false,
     shouldTrackSessionObservability: () => false,
     getResolvedPricingByBillingSource: async () => null,
@@ -197,12 +240,92 @@ function makeSession(clientAbortSignal: AbortSignal | null, stream: boolean): Pr
   return session as unknown as ProxySession;
 }
 
+function setDeferredMeta(session: ProxySession, providerType?: Provider["providerType"]): void {
+  const meta = {
+    providerId: 99,
+    providerName: "test-provider",
+    providerPriority: 1,
+    attemptNumber: 1,
+    totalProvidersAttempted: 1,
+    isFirstAttempt: true,
+    isFailoverSuccess: false,
+    endpointId: 42,
+    endpointUrl: "https://api.test.invalid/v1/responses",
+    upstreamStatusCode: 200,
+  };
+  setDeferredStreamingFinalization(session, providerType ? { ...meta, providerType } : meta);
+}
+
+function makeCodexResponsesSession(clientAbortSignal: AbortSignal | null = null): ProxySession {
+  return makeSession(clientAbortSignal, true, {
+    provider: { providerType: "codex" },
+    pathname: "/v1/responses",
+    originalFormat: "response",
+    providerType: "codex",
+  });
+}
+
+function createClosedStreamResponse(lines: string[]): Response {
+  return new Response(lines.join("\n"), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function createHangingStream(firstChunk: string): {
+  stream: ReadableStream<Uint8Array>;
+  controller: AbortController;
+  enqueue: (chunk: string) => void;
+  error: (error: unknown) => void;
+} {
+  const encoder = new TextEncoder();
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const abortController = new AbortController();
+
+  return {
+    stream: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controllerRef = controller;
+        controller.enqueue(encoder.encode(firstChunk));
+        abortController.signal.addEventListener(
+          "abort",
+          () => {
+            controller.error(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          },
+          { once: true }
+        );
+      },
+    }),
+    controller: abortController,
+    enqueue(chunk: string) {
+      controllerRef?.enqueue(encoder.encode(chunk));
+    },
+    error(error: unknown) {
+      controllerRef?.error(error);
+    },
+  };
+}
+
+async function readFirstClientChunk(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const { value } = await reader.read();
+  reader.releaseLock();
+  return value ? new TextDecoder().decode(value) : "";
+}
+
 describe("ProxyResponseHandler client abort listener cleanup", () => {
   beforeEach(() => {
     testState.asyncTasks = [];
+    vi.clearAllMocks();
     testState.cancelTask.mockClear();
     testState.cleanupTask.mockClear();
     vi.restoreAllMocks();
+    vi.mocked(SessionManager.updateSessionBindingSmart).mockResolvedValue({
+      updated: false,
+      reason: "test",
+      details: {},
+    });
   });
 
   it("removes non-stream client abort listener after response processing completes", async () => {
@@ -279,5 +402,1089 @@ describe("ProxyResponseHandler client abort listener cleanup", () => {
     expect(addSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
     expect(removeSpy.mock.calls.filter(([type]) => type === "abort")).toHaveLength(0);
     expect(testState.cancelTask).toHaveBeenCalled();
+  });
+
+  it("records normally closed Codex response.completed as successful", async () => {
+    const session = makeCodexResponsesSession();
+    setDeferredMeta(session);
+    const upstreamResponse = createClosedStreamResponse([
+      "event: response.completed",
+      'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+      "",
+      "",
+    ]);
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(response.text()).resolves.toContain("response.completed");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
+    expect(recordFailure).not.toHaveBeenCalled();
+    expect(recordEndpointSuccess).toHaveBeenCalledWith(42);
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "request_success",
+        statusCode: 200,
+      })
+    );
+  });
+
+  it("tracks Codex terminal usage with last-terminal-event semantics", () => {
+    const tracker = __codexResponsesTerminalStateTrackerForTests.create();
+
+    tracker.push(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"status":"completed","service_tier":"priority","usage":{"input_tokens":12,"output_tokens":4}}}',
+        "",
+        "",
+      ].join("\n")
+    );
+
+    expect(tracker.getTerminalState()).toBe("completed");
+    expect(tracker.getUsageMetrics()).toEqual({
+      input_tokens: 12,
+      output_tokens: 4,
+    });
+    expect(tracker.getServiceTier()).toBe("priority");
+
+    tracker.push(
+      [
+        "event: response.failed",
+        'data: {"type":"response.failed","response":{"status":"failed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+
+    expect(tracker.getTerminalState()).toBe("failed");
+    expect(tracker.getUsageMetrics()).toBeNull();
+    expect(tracker.getServiceTier()).toBeNull();
+  });
+
+  it("records normally closed Codex response.failed as terminal failure", async () => {
+    const session = makeCodexResponsesSession();
+    (session as ProxySession & { sessionId: string }).sessionId = "codex-session";
+    setDeferredMeta(session);
+    const upstreamResponse = createClosedStreamResponse([
+      "event: response.failed",
+      'data: {"type":"response.failed","response":{"id":"resp_1","status":"failed"}}',
+      "",
+      "",
+    ]);
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(response.text()).resolves.toContain("response.failed");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_FAILED",
+      })
+    );
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("codex-session");
+    expect(recordFailure).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({ message: "CODEX_RESPONSE_FAILED" })
+    );
+    expect(recordEndpointSuccess).not.toHaveBeenCalled();
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "retry_failed",
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_FAILED",
+      })
+    );
+  });
+
+  it("records normally closed Codex response.error as terminal failure", async () => {
+    const session = makeCodexResponsesSession();
+    setDeferredMeta(session);
+    const upstreamResponse = createClosedStreamResponse([
+      "event: response.error",
+      'data: {"type":"response.error","error":{"message":"boom"}}',
+      "",
+      "",
+    ]);
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(response.text()).resolves.toContain("response.error");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_ERROR",
+      })
+    );
+    expect(recordFailure).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({ message: "CODEX_RESPONSE_ERROR" })
+    );
+    expect(recordEndpointSuccess).not.toHaveBeenCalled();
+  });
+
+  it("lets a normally closed plain-text error event override response.completed", async () => {
+    const session = makeCodexResponsesSession();
+    setDeferredMeta(session);
+    const upstreamResponse = createClosedStreamResponse([
+      "event: response.completed",
+      'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+      "",
+      "event: error",
+      "data: upstream connection closed",
+      "",
+      "",
+    ]);
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(response.text()).resolves.toContain("response.completed");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_ERROR",
+      })
+    );
+    expect(recordFailure).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({ message: "CODEX_RESPONSE_ERROR" })
+    );
+    expect(recordEndpointSuccess).not.toHaveBeenCalled();
+  });
+
+  it("records normally closed Codex response.incomplete as successful terminal result", async () => {
+    const session = makeCodexResponsesSession();
+    (session as ProxySession & { sessionId: string }).sessionId = "codex-session";
+    setDeferredMeta(session);
+    const upstreamResponse = createClosedStreamResponse([
+      "event: response.incomplete",
+      'data: {"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete"}}',
+      "",
+      "",
+    ]);
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(response.text()).resolves.toContain("response.incomplete");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
+    expect(SessionManager.clearSessionProvider).not.toHaveBeenCalledWith("codex-session");
+    expect(recordFailure).not.toHaveBeenCalled();
+    expect(recordEndpointSuccess).toHaveBeenCalledWith(42);
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "request_success",
+        statusCode: 200,
+      })
+    );
+  });
+
+  it("keeps fake-200 detection after normally closed Codex response.completed", async () => {
+    const session = makeCodexResponsesSession();
+    setDeferredMeta(session);
+    const upstreamResponse = createClosedStreamResponse([
+      "event: response.completed",
+      'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+      "",
+      'data: {"error":{"message":"invalid api key"}}',
+      "",
+      "",
+    ]);
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(response.text()).resolves.toContain("response.completed");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 401,
+        errorMessage: expect.stringContaining("FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY"),
+      })
+    );
+    expect(recordFailure).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({ message: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY" })
+    );
+    expect(recordEndpointSuccess).not.toHaveBeenCalled();
+  });
+
+  it("does not apply Codex terminal-state rules to normally closed non-Codex streams", async () => {
+    const session = makeSession(null, true, {
+      provider: { providerType: "openai-compatible" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "openai",
+    });
+    setDeferredMeta(session);
+    const upstreamResponse = createClosedStreamResponse([
+      "event: response.failed",
+      'data: {"type":"response.failed","response":{"id":"resp_1","status":"failed"}}',
+      "",
+      "",
+    ]);
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(response.text()).resolves.toContain("response.failed");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
+    expect(recordFailure).not.toHaveBeenCalled();
+    expect(recordEndpointSuccess).toHaveBeenCalledWith(42);
+  });
+
+  it("records Codex Responses stream as successful when client aborts after response.completed", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    (
+      session as ProxySession & {
+        getCodexPriorityBillingSource: () => Promise<"actual">;
+      }
+    ).getCodexPriorityBillingSource = async () => "actual";
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","service_tier":"priority","usage":{"input_tokens":12,"output_tokens":4}}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_completed"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 12,
+        outputTokens: 4,
+        specialSettings: expect.arrayContaining([
+          expect.objectContaining({
+            type: "codex_service_tier_result",
+            actualServiceTier: "priority",
+            resolvedFrom: "actual",
+            effectivePriority: true,
+          }),
+        ]),
+      })
+    );
+    expect(updateMessageRequestDetails).not.toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    expect(session.addProviderToChain).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("preserves Codex prompt_cache_key when client aborts after response.completed", async () => {
+    const controller = new AbortController();
+    const session = makeCodexResponsesSession(controller.signal);
+    (session as ProxySession & { sessionId: string }).sessionId = "codex-session";
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","prompt_cache_key":"cache-key-1","usage":{"input_tokens":12,"output_tokens":4}}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_completed"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(SessionManager.updateSessionWithCodexCacheKey).toHaveBeenCalledWith(
+      "codex-session",
+      "cache-key-1",
+      99,
+      2
+    );
+  });
+
+  it("keeps terminal failure when Codex Responses stream aborts after response.failed", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.failed",
+        'data: {"type":"response.failed","response":{"id":"resp_1","status":"failed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.failed");
+
+    controller.abort(new Error("client_closed_after_failed"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_FAILED",
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "retry_failed",
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_FAILED",
+      })
+    );
+  });
+
+  it("does not update Codex prompt_cache_key after terminal failure", async () => {
+    const controller = new AbortController();
+    const session = makeCodexResponsesSession(controller.signal);
+    (session as ProxySession & { sessionId: string }).sessionId = "codex-session";
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.failed",
+        'data: {"type":"response.failed","response":{"id":"resp_1","status":"failed","prompt_cache_key":"cache-key-1"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.failed");
+
+    controller.abort(new Error("client_closed_after_failed"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(SessionManager.updateSessionWithCodexCacheKey).not.toHaveBeenCalled();
+  });
+
+  it("keeps 499 CLIENT_ABORTED when Codex Responses stream aborts before response.completed", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.output_text.delta",
+        'data: {"type":"response.output_text.delta","delta":"partial"}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("partial");
+
+    controller.abort(new Error("client_closed_before_completed"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 499,
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        statusCode: 499,
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("records Codex terminal response.completed as successful on non-execution response paths", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses/resp_123",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_completed_non_responses"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
+    expect(updateMessageRequestDetails).not.toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    expect(session.addProviderToChain).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("records data-only Codex response.completed SSE as successful after client abort", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_completed_response_resource"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
+    expect(updateMessageRequestDetails).not.toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    expect(session.addProviderToChain).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("uses deferred meta providerType when current session provider no longer looks like Codex", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "openai-compatible" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "openai",
+    });
+    setDeferredMeta(session, "codex");
+    const upstream = createHangingStream(
+      [
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":12,"output_tokens":4}}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_completed_meta_codex"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 12,
+        outputTokens: 4,
+      })
+    );
+    expect(updateMessageRequestDetails).not.toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    expect(session.addProviderToChain).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("does not use current session providerType to mark non-Codex meta as completed", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session, "openai-compatible");
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_completed_meta_non_codex"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 499,
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        statusCode: 499,
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("keeps 499 CLIENT_ABORTED for non-Codex streams after response.completed", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "openai-compatible" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "openai",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_completed_non_codex"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 499,
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        statusCode: 499,
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("records Codex response.incomplete as successful when client aborts after terminal result", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.incomplete",
+        'data: {"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.incomplete");
+
+    controller.abort(new Error("client_closed_after_incomplete"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "request_success",
+        statusCode: 200,
+      })
+    );
+    expect(updateMessageRequestDetails).not.toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("keeps terminal failure when a failure follows response.completed", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+        "",
+        "event: response.failed",
+        'data: {"type":"response.failed","response":{"id":"resp_1","status":"failed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_terminal_failure"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_FAILED",
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "retry_failed",
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_FAILED",
+      })
+    );
+  });
+
+  it("keeps terminal error when Codex stream aborts after response.error", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.error",
+        'data: {"type":"response.error","error":{"message":"boom"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.error");
+
+    controller.abort(new Error("client_closed_after_response_error"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_ERROR",
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "retry_failed",
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_ERROR",
+      })
+    );
+  });
+
+  it("keeps terminal error when a plain-text error event follows response.completed", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+        "",
+        "event: error",
+        "data: upstream connection closed",
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_plain_text_error"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_ERROR",
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "retry_failed",
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_ERROR",
+      })
+    );
+  });
+
+  it("records Codex response.completed as successful when upstream aborts after terminal success", async () => {
+    const session = makeSession(null, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    upstream.error(new Error("upstream_closed_after_completed"));
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
+    expect(updateMessageRequestDetails).not.toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        errorMessage: "STREAM_PROCESSING_ERROR",
+      })
+    );
+    expect(session.addProviderToChain).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        errorMessage: "STREAM_PROCESSING_ERROR",
+      })
+    );
+  });
+
+  it("records Codex Responses multiline completed event as successful after client abort", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.completed",
+        'data: {"type":"response.completed",',
+        'data: "response":{"id":"resp_1","status":"completed"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_multiline_completed"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
+    expect(updateMessageRequestDetails).not.toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    expect(session.addProviderToChain).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "system_error",
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("client abort after response.error terminal event — recorded as 502", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      [
+        "event: response.error",
+        'data: {"type":"response.error","error":{"message":"boom"}}',
+        "",
+        "",
+      ].join("\n")
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.error");
+
+    controller.abort(new Error("client_closed_after_response_error"));
+    upstream.enqueue(":\n\n");
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_ERROR",
+      })
+    );
+    expect(session.addProviderToChain).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reason: "retry_failed",
+        statusCode: 502,
+        errorMessage: "CODEX_RESPONSE_ERROR",
+      })
+    );
+  });
+
+  it("client abort after response.completed without trailing newline — recorded as 200", async () => {
+    const controller = new AbortController();
+    const session = makeSession(controller.signal, true, {
+      provider: { providerType: "codex" },
+      pathname: "/v1/responses",
+      originalFormat: "response",
+      providerType: "codex",
+    });
+    setDeferredMeta(session);
+    const upstream = createHangingStream(
+      'event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_test"}}\n'
+    );
+    const upstreamResponse = new Response(upstream.stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const response = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+    await expect(readFirstClientChunk(response)).resolves.toContain("response.completed");
+
+    controller.abort(new Error("client_closed_after_completed_without_trailing_newline"));
+    upstream.controller.abort();
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+      })
+    );
   });
 });

@@ -1,3 +1,4 @@
+import type { Provider } from "@/types/provider";
 import type { ProxySession } from "./session";
 
 /**
@@ -19,6 +20,7 @@ import type { ProxySession } from "./session";
 export type DeferredStreamingFinalization = {
   providerId: number;
   providerName: string;
+  providerType?: Provider["providerType"];
   providerPriority: number;
   attemptNumber: number;
   totalProvidersAttempted: number;
@@ -44,7 +46,8 @@ export function setDeferredStreamingFinalization(
   meta: DeferredStreamingFinalization
 ): void {
   // Forwarder 在识别到 SSE 时调用：标记该请求需要在流结束后“二次结算”。
-  deferredMeta.set(session, meta);
+  const providerType = meta.providerType ?? session.provider?.providerType;
+  deferredMeta.set(session, providerType ? { ...meta, providerType } : meta);
 }
 
 /**
