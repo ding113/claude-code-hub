@@ -29,7 +29,7 @@ import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { Decimal, formatCurrency, toDecimal } from "@/lib/utils/currency";
-import { summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
+import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import {
   calculateOutputRate,
   formatDuration,
@@ -434,28 +434,50 @@ export function VirtualizedLogsTable({
     const isActiveMultiplier = (value: number) =>
       Number.isFinite(value) && value > 0 && value !== 1;
 
-    const hedgeSummary = summarizeHedgeBilling(log.costUsd, log.hedgeLosers);
-    const hedgeSection = hedgeSummary ? (
+    const hedgeTable = buildHedgeBillingTable(log.costUsd, log.hedgeLosers, {
+      inputTokens: log.inputTokens,
+      outputTokens: log.outputTokens,
+      cacheCreationInputTokens: log.cacheCreationInputTokens,
+      cacheReadInputTokens: log.cacheReadInputTokens,
+    });
+    const hedgeSection = hedgeTable ? (
       <div className="space-y-2 border-t border-background/20 pt-2">
-        <span className="text-[11px] font-semibold text-background/80">
-          {t("logs.billingDetails.hedgeRacing")}
-        </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-semibold text-background/80">
+            {t("logs.billingDetails.hedgeRacing")}
+          </span>
+          <span className="rounded-full bg-background/15 px-1.5 py-0.5 text-[10px] text-background/80">
+            {t("logs.billingDetails.hedgeMergedCount", { count: hedgeTable.count })}
+          </span>
+        </div>
         <div className="space-y-2">
           {renderSummaryRow({
             label: t("logs.billingDetails.hedgeWinner"),
-            primary: formatCurrency(hedgeSummary.winnerCost, currencyCode, 6),
+            primary: formatCurrency(hedgeTable.winnerCost, currencyCode, 6),
           })}
-          {hedgeSummary.losers.map((loser) => (
-            <div
-              key={`${loser.providerId}-${loser.attemptNumber}`}
-              className="flex items-start justify-between gap-3"
-            >
-              <span className="text-[11px] text-rose-300/80 truncate">{loser.providerName}</span>
-              <span className={cn(amountClassName, "text-rose-300/80")}>
-                {formatCurrency(loser.costUsd, currencyCode, 6)}
-              </span>
-            </div>
-          ))}
+          {hedgeTable.attempts
+            .filter((attempt) => attempt.kind === "loser")
+            .map((loser) => (
+              <div
+                key={`${loser.providerId}-${loser.attemptNumber}`}
+                className="flex items-start justify-between gap-3"
+              >
+                <span className="text-[11px] text-rose-300/80 truncate">
+                  {loser.providerName ?? t("logs.billingDetails.hedgeLoserShort")}
+                </span>
+                <span className={cn(amountClassName, "text-rose-300/80")}>
+                  {formatCurrency(loser.costUsd, currencyCode, 6)}
+                </span>
+              </div>
+            ))}
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-background/20 pt-2 text-[11px] text-background/70">
+          <span>{t("logs.billingDetails.hedgeTokenTotal")}</span>
+          <span className="font-mono">
+            {formatTokenAmount(hedgeTable.tokenTotals.inputTokens)} {t("logs.billingDetails.input")}{" "}
+            · {formatTokenAmount(hedgeTable.tokenTotals.outputTokens)}{" "}
+            {t("logs.billingDetails.output")}
+          </span>
         </div>
       </div>
     ) : null;
