@@ -129,6 +129,50 @@ describe("usage-logs-table multiplier badge", () => {
     expect(html).toContain("0.20x");
   });
 
+  test("renders the hedge billing split with cache tokens in the cost tooltip", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            id: 1,
+            costUsd: "0.030000",
+            inputTokens: 100,
+            outputTokens: 50,
+            hedgeLosers: [
+              {
+                providerId: 2,
+                providerName: "loser-a",
+                attemptNumber: 2,
+                costUsd: "0.010000",
+                inputTokens: 80,
+                outputTokens: 20,
+                cacheCreationInputTokens: 0,
+                cacheReadInputTokens: 5000,
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain("logs.billingDetails.hedgeRacing");
+    expect(html).toContain("logs.billingDetails.hedgeMergedCount");
+    expect(html).toContain("logs.billingDetails.hedgeWinner");
+    expect(html).toContain("loser-a");
+    // winnerCost = costUsd - sum(losers) = 0.030 - 0.010
+    expect(html).toContain("$0.020000");
+    expect(html).toContain("$0.010000");
+    // Token-total line includes cache-read (present) but omits cache-write (zero).
+    expect(html).toContain("logs.billingDetails.hedgeTokenTotal");
+    expect(html).toContain("logs.billingDetails.hedgeColCacheRead");
+    expect(html).not.toContain("logs.billingDetails.hedgeColCacheWrite");
+  });
+
   test("renders warmup skipped and blocked labels", () => {
     const htmlWarmup = renderToStaticMarkup(
       <UsageLogsTable

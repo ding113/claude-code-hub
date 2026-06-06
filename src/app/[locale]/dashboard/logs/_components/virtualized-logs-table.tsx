@@ -474,9 +474,20 @@ export function VirtualizedLogsTable({
         <div className="flex items-center justify-between gap-3 border-t border-background/20 pt-2 text-[11px] text-background/70">
           <span>{t("logs.billingDetails.hedgeTokenTotal")}</span>
           <span className="font-mono">
-            {formatTokenAmount(hedgeTable.tokenTotals.inputTokens)} {t("logs.billingDetails.input")}{" "}
-            · {formatTokenAmount(hedgeTable.tokenTotals.outputTokens)}{" "}
-            {t("logs.billingDetails.output")}
+            {[
+              `${formatTokenAmount(hedgeTable.tokenTotals.inputTokens)} ${t("logs.billingDetails.input")}`,
+              `${formatTokenAmount(hedgeTable.tokenTotals.outputTokens)} ${t("logs.billingDetails.output")}`,
+              ...(hedgeTable.hasCacheWrite
+                ? [
+                    `${formatTokenAmount(hedgeTable.tokenTotals.cacheCreationInputTokens)} ${t("logs.billingDetails.hedgeColCacheWrite")}`,
+                  ]
+                : []),
+              ...(hedgeTable.hasCacheRead
+                ? [
+                    `${formatTokenAmount(hedgeTable.tokenTotals.cacheReadInputTokens)} ${t("logs.billingDetails.hedgeColCacheRead")}`,
+                  ]
+                : []),
+            ].join(" · ")}
           </span>
         </div>
       </div>
