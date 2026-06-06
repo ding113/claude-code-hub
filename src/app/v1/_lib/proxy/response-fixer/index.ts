@@ -24,11 +24,53 @@ const DEFAULT_CONFIG: ResponseFixerConfig = {
   maxFixSize: 1024 * 1024,
 };
 
+const UTF8_DECODER = new TextDecoder();
+const UTF8_ENCODER = new TextEncoder();
+
 function nowMs(): number {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
   }
   return Date.now();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasMeaningfulValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "string") return value.length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (isRecord(value)) return Object.keys(value).length > 0;
+  return true;
+}
+
+function isInertChatCompletionChoice(choice: unknown): boolean {
+  if (!isRecord(choice)) return false;
+  if (choice.finish_reason != null) return false;
+
+  const delta = choice.delta;
+  if (!isRecord(delta)) {
+    return true;
+  }
+
+  for (const [key, value] of Object.entries(delta)) {
+    if (key === "role") continue;
+    if (hasMeaningfulValue(value)) return false;
+  }
+
+  return true;
+}
+
+function isInertChatCompletionChunkPayload(payload: unknown): boolean {
+  if (!isRecord(payload)) return false;
+  if (payload.object !== "chat.completion.chunk") return false;
+  if (hasMeaningfulValue(payload.usage)) return false;
+
+  const choices = payload.choices;
+  if (!Array.isArray(choices) || choices.length === 0) return false;
+  return choices.every(isInertChatCompletionChoice);
 }
 
 function toArrayBufferUint8Array(input: Uint8Array): Uint8Array<ArrayBuffer> {
@@ -385,6 +427,13 @@ export class ResponseFixer {
           }
         }
 
+        const filtered = ResponseFixer.filterInertResponsesChatCompletionChunks(session, data);
+        if (filtered.applied) {
+          applied.sse.applied = true;
+          applied.sse.details ??= filtered.details;
+          data = filtered.data;
+        }
+
         controller.enqueue(data);
       },
       flush(controller) {
@@ -416,6 +465,13 @@ export class ResponseFixer {
               applied.json.details ??= res.details;
               data = res.data;
             }
+          }
+
+          const filtered = ResponseFixer.filterInertResponsesChatCompletionChunks(session, data);
+          if (filtered.applied) {
+            applied.sse.applied = true;
+            applied.sse.details ??= filtered.details;
+            data = filtered.data;
           }
 
           controller.enqueue(data);
@@ -524,6 +580,75 @@ export class ResponseFixer {
     }
 
     return { data: concatUint8Chunks(chunks), applied };
+  }
+
+  private static filterInertResponsesChatCompletionChunks(
+    session: ProxySession,
+    data: Uint8Array
+  ): { data: Uint8Array; applied: boolean; details?: string } {
+    if (session.originalFormat !== "response") {
+      return { data, applied: false };
+    }
+
+    const text = UTF8_DECODER.decode(data);
+    if (!text.includes('"chat.completion.chunk"')) {
+      return { data, applied: false };
+    }
+
+    const lines = text.split("\n");
+    const out: string[] = [];
+    let applied = false;
+    let skipNextBlankLine = false;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const hasLineBreak = i < lines.length - 1;
+
+      if (skipNextBlankLine && ResponseFixer.isBlankSseSeparatorLine(line)) {
+        skipNextBlankLine = false;
+        continue;
+      }
+      skipNextBlankLine = false;
+
+      if (ResponseFixer.isInertChatCompletionDataLine(line)) {
+        applied = true;
+        skipNextBlankLine = true;
+        continue;
+      }
+
+      out.push(line);
+      if (hasLineBreak) out.push("\n");
+    }
+
+    if (!applied) {
+      return { data, applied: false };
+    }
+
+    return {
+      data: UTF8_ENCODER.encode(out.join("")),
+      applied: true,
+      details: "filtered_inert_chat_completion_chunk",
+    };
+  }
+
+  private static isInertChatCompletionDataLine(line: string): boolean {
+    if (!line.startsWith("data:")) return false;
+
+    let payloadText = line.slice(5);
+    if (payloadText.startsWith(" ")) {
+      payloadText = payloadText.slice(1);
+    }
+    if (!payloadText.startsWith("{")) return false;
+
+    try {
+      return isInertChatCompletionChunkPayload(JSON.parse(payloadText));
+    } catch {
+      return false;
+    }
+  }
+
+  private static isBlankSseSeparatorLine(line: string): boolean {
+    return line === "" || line === "\r";
   }
 
   private static fixMaybeDataJsonLine(
