@@ -12,6 +12,8 @@ import {
   Loader2,
   Monitor,
   Settings2,
+  Trophy,
+  XCircle,
   Zap,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -26,7 +28,7 @@ import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { extractAnthropicEffortInfo } from "@/lib/utils/anthropic-effort";
 import { formatCurrency } from "@/lib/utils/currency";
-import { summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
+import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
 import {
   getPricingResolutionSpecialSetting,
@@ -63,6 +65,7 @@ export function SummaryTab({
   groupCostMultiplier,
   costBreakdown,
   hedgeLosers,
+  providerChain,
   context1mApplied,
   durationMs,
   ttfbMs,
@@ -618,32 +621,137 @@ export function SummaryTab({
               })()}
             </div>
 
-            {/* Provider Racing (hedge) split */}
+            {/* Provider Racing (hedge) per-attempt billing table. Each attempt
+                (winner + every billed loser) shows the token usage it reclaimed
+                and its billed cost, so the merged request total is fully itemized. */}
             {(() => {
-              const hedgeSummary = summarizeHedgeBilling(costUsd, hedgeLosers);
-              if (!hedgeSummary) return null;
+              const hedgeWinnerStep =
+                providerChain?.find((item) => item.reason === "hedge_winner") ?? null;
+              const hedgeTable = buildHedgeBillingTable(costUsd, hedgeLosers, {
+                providerId: hedgeWinnerStep?.id ?? null,
+                providerName: hedgeWinnerStep?.name ?? null,
+                attemptNumber: hedgeWinnerStep?.attemptNumber ?? null,
+                inputTokens,
+                outputTokens,
+                cacheCreationInputTokens,
+                cacheReadInputTokens,
+              });
+              if (!hedgeTable) return null;
+              const tokenCols =
+                2 + (hedgeTable.hasCacheWrite ? 1 : 0) + (hedgeTable.hasCacheRead ? 1 : 0);
               return (
-                <div className="pt-3 border-t space-y-2 text-sm">
-                  <div className="font-medium text-muted-foreground">
-                    {t("billingDetails.hedgeRacing")}
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      {t("billingDetails.hedgeWinner")}:
+                <div className="pt-3 border-t space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {t("billingDetails.hedgeRacing")}
                     </span>
-                    <span className="font-mono">
-                      {formatCurrency(hedgeSummary.winnerCost, "USD", 6)}
-                    </span>
+                    <Badge variant="outline" className="text-[10px]">
+                      {t("billingDetails.hedgeMergedCount", { count: hedgeTable.count })}
+                    </Badge>
                   </div>
-                  {hedgeSummary.losers.map((loser) => (
-                    <div
-                      key={`${loser.providerId}-${loser.attemptNumber}`}
-                      className="flex justify-between text-rose-600 dark:text-rose-400"
-                    >
-                      <span className="truncate">{loser.providerName}:</span>
-                      <span className="font-mono">{formatCurrency(loser.costUsd, "USD", 6)}</span>
-                    </div>
-                  ))}
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/40 text-muted-foreground">
+                          <th className="px-2 py-1.5 text-left font-medium">
+                            {t("billingDetails.hedgeColAttempt")}
+                          </th>
+                          <th className="px-2 py-1.5 text-right font-medium">
+                            {t("billingDetails.input")}
+                          </th>
+                          <th className="px-2 py-1.5 text-right font-medium">
+                            {t("billingDetails.output")}
+                          </th>
+                          {hedgeTable.hasCacheWrite && (
+                            <th className="px-2 py-1.5 text-right font-medium">
+                              {t("billingDetails.hedgeColCacheWrite")}
+                            </th>
+                          )}
+                          {hedgeTable.hasCacheRead && (
+                            <th className="px-2 py-1.5 text-right font-medium">
+                              {t("billingDetails.hedgeColCacheRead")}
+                            </th>
+                          )}
+                          <th className="px-2 py-1.5 text-right font-medium">
+                            {t("billingDetails.hedgeColCost")}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hedgeTable.attempts.map((attempt) => {
+                          const isWinner = attempt.kind === "winner";
+                          return (
+                            <tr
+                              key={`${attempt.kind}-${attempt.providerId ?? "na"}-${attempt.attemptNumber ?? 0}`}
+                              className="border-b last:border-0"
+                            >
+                              <td className="px-2 py-1.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {isWinner ? (
+                                    <Trophy className="h-3 w-3 shrink-0 text-emerald-600" />
+                                  ) : (
+                                    <XCircle className="h-3 w-3 shrink-0 text-rose-500" />
+                                  )}
+                                  <span
+                                    className={cn(
+                                      "truncate",
+                                      isWinner
+                                        ? "text-foreground"
+                                        : "text-rose-600 dark:text-rose-400"
+                                    )}
+                                  >
+                                    {attempt.providerName ??
+                                      (isWinner
+                                        ? t("billingDetails.hedgeWinnerShort")
+                                        : t("billingDetails.hedgeLoserShort"))}
+                                  </span>
+                                  {attempt.attemptNumber != null && (
+                                    <span className="shrink-0 text-muted-foreground">
+                                      #{attempt.attemptNumber}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-mono">
+                                {formatTokenAmount(attempt.inputTokens)}
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-mono">
+                                {formatTokenAmount(attempt.outputTokens)}
+                              </td>
+                              {hedgeTable.hasCacheWrite && (
+                                <td className="px-2 py-1.5 text-right font-mono">
+                                  {formatTokenAmount(attempt.cacheCreationInputTokens)}
+                                </td>
+                              )}
+                              {hedgeTable.hasCacheRead && (
+                                <td className="px-2 py-1.5 text-right font-mono">
+                                  {formatTokenAmount(attempt.cacheReadInputTokens)}
+                                </td>
+                              )}
+                              <td
+                                className={cn(
+                                  "px-2 py-1.5 text-right font-mono",
+                                  isWinner ? "" : "text-rose-600 dark:text-rose-400"
+                                )}
+                              >
+                                {formatCurrency(attempt.costUsd, "USD", 6)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t bg-muted/40 font-medium">
+                          <td className="px-2 py-1.5" colSpan={1 + tokenCols}>
+                            {t("billingDetails.hedgeMergedCount", { count: hedgeTable.count })}
+                          </td>
+                          <td className="px-2 py-1.5 text-right font-mono text-emerald-600">
+                            {formatCurrency(hedgeTable.total, "USD", 6)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
               );
             })()}
