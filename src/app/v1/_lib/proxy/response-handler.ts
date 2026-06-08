@@ -188,8 +188,11 @@ function ensurePricingResolutionSpecialSetting(
   });
 }
 
-function getRequestedCodexServiceTier(session: ProxySession): string | null {
-  if (session.provider?.providerType !== "codex") {
+function getRequestedCodexServiceTier(
+  session: ProxySession,
+  provider?: Provider | null
+): string | null {
+  if ((provider ?? session.provider)?.providerType !== "codex") {
     return null;
   }
 
@@ -248,13 +251,21 @@ type CodexPriorityBillingDecision = {
 
 async function resolveCodexPriorityBillingDecision(
   session: ProxySession,
-  actualServiceTier: string | null
+  actualServiceTier: string | null,
+  options?: {
+    provider?: Provider | null;
+    requestedServiceTier?: string | null;
+  }
 ): Promise<CodexPriorityBillingDecision | null> {
-  if (session.provider?.providerType !== "codex") {
+  const provider = options?.provider ?? session.provider;
+  if (provider?.providerType !== "codex") {
     return null;
   }
 
-  const requestedServiceTier = getRequestedCodexServiceTier(session);
+  const requestedServiceTier =
+    options && "requestedServiceTier" in options
+      ? (options.requestedServiceTier ?? null)
+      : getRequestedCodexServiceTier(session, provider);
   let billingSourcePreference: Awaited<ReturnType<ProxySession["getCodexPriorityBillingSource"]>> =
     "requested";
 
@@ -3773,6 +3784,7 @@ export async function finalizeHedgeLoserBilling(params: {
   billingContext?: {
     originalModel: string | null;
     redirectedModel: string | null;
+    requestedServiceTier: string | null;
     context1mApplied: boolean;
     groupCostMultiplier: number;
   };
@@ -3836,8 +3848,12 @@ export async function finalizeHedgeLoserBilling(params: {
 
     const actualServiceTier = parseServiceTierFromResponseText(allContent);
     const priorityServiceTierApplied =
-      (await resolveCodexPriorityBillingDecision(loserSession, actualServiceTier))
-        ?.effectivePriority ?? false;
+      (
+        await resolveCodexPriorityBillingDecision(loserSession, actualServiceTier, {
+          provider,
+          ...(billingContext ? { requestedServiceTier: billingContext.requestedServiceTier } : {}),
+        })
+      )?.effectivePriority ?? false;
     // Mirror the winner: a Codex loser with a large prompt must trigger the 1M context tier,
     // else it under-bills. Only mutate for shadow-session losers (no snapshot) — the initial
     // loser uses its pre-pollution snapshot and must not mutate the shared/original session.
