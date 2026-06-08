@@ -136,6 +136,10 @@ function decodeRequestBodyAsJson(body: BodyInit | undefined): Record<string, unk
   }
 }
 
+function isNonRetryableUpstreamRequestError(error: Error): error is ProxyError {
+  return error instanceof ProxyError && (error.statusCode === 400 || error.statusCode === 422);
+}
+
 const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = [
   "content-length",
   "connection",
@@ -1704,6 +1708,13 @@ export class ProxyForwarder {
               maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
               continue;
             }
+          }
+
+          if (
+            errorCategory === ErrorCategory.PROVIDER_ERROR &&
+            isNonRetryableUpstreamRequestError(lastError)
+          ) {
+            errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
           }
 
           // ⭐ 3. 不可重试的客户端输入错误处理（不计入熔断器，不重试，立即返回）
