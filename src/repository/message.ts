@@ -11,7 +11,7 @@ import {
   queuePublicStatusRollupWrite,
 } from "@/lib/public-status/rollup-store";
 import { formatCostForStorage } from "@/lib/utils/currency";
-import type { StoredCostBreakdown } from "@/types/cost-breakdown";
+import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
@@ -343,6 +343,119 @@ export async function updateMessageRequestCostWithBreakdown(
       updatedAt: new Date(),
     })
     .where(eq(messageRequest.id, id));
+}
+
+/**
+ * Write a hedge (provider racing) WINNER's cost in a way that coexists with the
+ * losers' independent additive writes WITHOUT a non-idempotent additive delta.
+ *
+ * cost_usd is set to `winnerCost + SUM(hedge_losers[].costUsd)` — i.e. the winner
+ * cost plus whatever losers have ALREADY landed in the jsonb array. Losers that
+ * land later still add themselves via addMessageRequestHedgeLoserCost's additive
+ * write, so the grand total is correct regardless of ordering:
+ *   - loser before winner: included in the winner's SUM (its own += is overwritten)
+ *   - loser after winner:  added by its own += on top of the winner base
+ * This is a REPLACEMENT (recomputed from the authoritative hedge_losers array), so
+ * it is idempotent under retry / ambiguous DB failure — unlike a bare additive delta.
+ * It is written directly (not via the async buffer) so it can never be dropped on
+ * queue overflow and never re-summed on flush-retry.
+ */
+export async function updateMessageRequestWinnerCost(
+  id: number,
+  winnerCost: CreateMessageRequestData["cost_usd"],
+  costBreakdown?: StoredCostBreakdown
+): Promise<void> {
+  const formattedCost = formatCostForStorage(winnerCost);
+  if (!formattedCost) {
+    return;
+  }
+
+  const MAX_ATTEMPTS = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      await db
+        .update(messageRequest)
+        .set({
+          costUsd: sql`${formattedCost}::numeric + COALESCE((SELECT SUM((entry->>'costUsd')::numeric) FROM jsonb_array_elements(COALESCE(${messageRequest.hedgeLosers}, '[]'::jsonb)) AS entry), 0)`,
+          ...(costBreakdown ? { costBreakdown } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(messageRequest.id, id));
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Accumulate a hedge (provider racing) loser's billed cost onto an existing
+ * request row, and append the loser's billing detail to the hedge_losers array.
+ *
+ * Both writes happen in ONE atomic, IDEMPOTENT statement:
+ * - cost_usd     += deltaCost
+ * - hedge_losers ||= [loserEntry]
+ * guarded by `NOT (hedge_losers @> [{providerId, attemptNumber}])` so the same
+ * loser is never billed twice — even if this write is retried after an ambiguous
+ * DB failure (statement applied but the client saw an error).
+ *
+ * This deliberately bypasses the async write buffer and writes directly, so a
+ * loser's cost can never be silently dropped during graceful shutdown (when the
+ * buffer stops accepting enqueues) and is retried on transient DB errors. The
+ * loser response is gone after the request, so its cost is irrecoverable if lost
+ * — exactly-once durability matters more than batching for this low-frequency path.
+ *
+ * cost_usd is additive and commutative, so this composes correctly with the
+ * winner's additive write and with other losers writing concurrently to the row.
+ */
+export async function addMessageRequestHedgeLoserCost(
+  id: number,
+  deltaCost: CreateMessageRequestData["cost_usd"],
+  loserEntry: HedgeLoserBilling
+): Promise<void> {
+  const formattedDelta = formatCostForStorage(deltaCost);
+  if (!formattedDelta) {
+    return;
+  }
+
+  const loserJson = JSON.stringify([loserEntry]);
+  // Partial-match dedup key: jsonb @> matches array elements containing these fields.
+  const guardJson = JSON.stringify([
+    { providerId: loserEntry.providerId, attemptNumber: loserEntry.attemptNumber },
+  ]);
+
+  const MAX_ATTEMPTS = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      await db
+        .update(messageRequest)
+        .set({
+          costUsd: sql`COALESCE(${messageRequest.costUsd}, 0) + ${formattedDelta}::numeric`,
+          hedgeLosers: sql`COALESCE(${messageRequest.hedgeLosers}, '[]'::jsonb) || ${loserJson}::jsonb`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(messageRequest.id, id),
+            sql`NOT (COALESCE(${messageRequest.hedgeLosers}, '[]'::jsonb) @> ${guardJson}::jsonb)`
+          )
+        );
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+      }
+    }
+  }
+  // Exhausted retries: surface to the caller (finalizeHedgeLoserBilling logs and swallows).
+  throw lastError;
 }
 
 /**

@@ -263,4 +263,44 @@ describe("message_request 异步批量写入", () => {
     expect(built.params).not.toContain(2000);
     expect(built.params).toContain(2099);
   });
+
+  it("costUsd 走纯替换语义（CASE id ... ::numeric，不累加）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    enqueueMessageRequestUpdate(11, { costUsd: "0.000123" });
+    await stopMessageRequestWriteBuffer();
+
+    const built = toSqlText(executeMock.mock.calls[0]?.[0]);
+    // 缓冲只承载非 hedge 的替换型 cost 写入（hedge 赢家/输家都走直接写）。
+    expect(built.sql).toContain('"cost_usd" = CASE id');
+    expect(built.sql).toContain("::numeric");
+    expect(built.sql).not.toContain("COALESCE");
+  });
+});
+
+describe("mergePatch（替换合并语义）", () => {
+  it("非 undefined 的 incoming 字段覆盖 base", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    process.env.DSN = "postgres://postgres:postgres@localhost:5432/claude_code_hub_test";
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        execute: vi.fn(async () => []),
+        select: () => ({ from: () => ({ where: async () => [] }) }),
+      },
+    }));
+    const { mergePatch } = await import("@/repository/message-write-buffer");
+
+    const merged = mergePatch(
+      { costUsd: "0.1", statusCode: 200, durationMs: 100 },
+      { statusCode: 500 }
+    );
+
+    expect(merged.statusCode).toBe(500); // incoming wins
+    expect(merged.costUsd).toBe("0.1"); // untouched (incoming undefined)
+    expect(merged.durationMs).toBe(100); // untouched
+  });
 });

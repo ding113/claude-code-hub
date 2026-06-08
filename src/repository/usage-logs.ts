@@ -8,7 +8,7 @@ import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { extractAnthropicEffortFromSpecialSettings } from "@/lib/utils/anthropic-effort";
 import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
-import type { StoredCostBreakdown } from "@/types/cost-breakdown";
+import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
@@ -67,6 +67,7 @@ export interface UsageLogRow {
   costMultiplier: string | null; // 供应商倍率
   groupCostMultiplier: string | null; // 分组倍率
   costBreakdown: StoredCostBreakdown | null; // 费用明细
+  hedgeLosers: HedgeLoserBilling[] | null; // 竞速输家计费明细（费用已计入 costUsd 总额）
   durationMs: number | null;
   ttfbMs: number | null;
   errorMessage: string | null;
@@ -202,6 +203,7 @@ export async function findUsageLogsBatch(
       costMultiplier: messageRequest.costMultiplier,
       groupCostMultiplier: messageRequest.groupCostMultiplier,
       costBreakdown: messageRequest.costBreakdown,
+      hedgeLosers: messageRequest.hedgeLosers,
       durationMs: messageRequest.durationMs,
       ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
@@ -262,6 +264,7 @@ export async function findUsageLogsBatch(
       costUsd: row.costUsd?.toString() ?? null,
       groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
       costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
+      hedgeLosers: Array.isArray(row.hedgeLosers) ? (row.hedgeLosers as HedgeLoserBilling[]) : null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
@@ -425,6 +428,7 @@ export async function findUsageLogsBatch(
       costMultiplier: row.costMultiplier?.toString() ?? null,
       groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
       costBreakdown: null,
+      hedgeLosers: null,
       durationMs: row.durationMs,
       ttfbMs: row.ttfbMs,
       errorMessage: null,
@@ -955,6 +959,7 @@ function mapUsageLogRowFromMessageResult(row: {
   costMultiplier: string | null | { toString(): string };
   groupCostMultiplier: string | null | { toString(): string };
   costBreakdown: StoredCostBreakdown | null;
+  hedgeLosers: HedgeLoserBilling[] | null;
   durationMs: number | null;
   ttfbMs: number | null;
   errorMessage: string | null;
@@ -992,6 +997,7 @@ function mapUsageLogRowFromMessageResult(row: {
     costMultiplier: row.costMultiplier?.toString() ?? null,
     groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
     costBreakdown: row.costBreakdown ?? null,
+    hedgeLosers: Array.isArray(row.hedgeLosers) ? row.hedgeLosers : null,
     providerChain: row.providerChain ?? null,
     specialSettings: unifiedSpecialSettings,
     anthropicEffort,
@@ -1072,6 +1078,8 @@ function mapUsageLogRowFromLedgerResult(row: {
     swapCacheTtlApplied: row.swapCacheTtlApplied ?? null,
     specialSettings: null,
     anthropicEffort: null,
+    // usage_ledger 没有 hedge_losers 列（竞速明细仅存于 message_request）
+    hedgeLosers: null,
   } satisfies UsageLogRow;
 }
 
@@ -1112,6 +1120,7 @@ export async function findReadonlyUsageLogsBatchForKey(
         costMultiplier: messageRequest.costMultiplier,
         groupCostMultiplier: messageRequest.groupCostMultiplier,
         costBreakdown: messageRequest.costBreakdown,
+        hedgeLosers: messageRequest.hedgeLosers,
         durationMs: messageRequest.durationMs,
         ttfbMs: messageRequest.ttfbMs,
         errorMessage: messageRequest.errorMessage,
@@ -1362,6 +1371,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       costMultiplier: messageRequest.costMultiplier, // 供应商倍率
       groupCostMultiplier: messageRequest.groupCostMultiplier, // 分组倍率
       costBreakdown: messageRequest.costBreakdown, // 费用明细
+      hedgeLosers: messageRequest.hedgeLosers, // 竞速输家计费明细
       durationMs: messageRequest.durationMs,
       ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
@@ -1427,6 +1437,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       costUsd: row.costUsd?.toString() ?? null,
       groupCostMultiplier: row.groupCostMultiplier?.toString() ?? null,
       costBreakdown: (row.costBreakdown as StoredCostBreakdown) ?? null,
+      hedgeLosers: Array.isArray(row.hedgeLosers) ? (row.hedgeLosers as HedgeLoserBilling[]) : null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,

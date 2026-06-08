@@ -37,6 +37,7 @@ export function inferPhase(chain: ProviderChainItem[]): string {
       return "hedge_racing";
     case "hedge_winner":
     case "hedge_loser_cancelled":
+    case "hedge_loser_billed":
       return "hedge_resolved";
     case "request_success":
     case "retry_success":

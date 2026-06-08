@@ -103,7 +103,7 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-indigo-50 dark:bg-indigo-950/30",
     };
   }
-  if (item.reason === "hedge_loser_cancelled") {
+  if (item.reason === "hedge_loser_cancelled" || item.reason === "hedge_loser_billed") {
     return {
       icon: XCircle,
       color: "text-slate-500",

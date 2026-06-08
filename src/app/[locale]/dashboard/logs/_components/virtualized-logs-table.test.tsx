@@ -140,6 +140,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     costMultiplier: null,
     groupCostMultiplier: null,
     costBreakdown: null,
+    hedgeLosers: null,
     durationMs: 100,
     ttfbMs: 50,
     errorMessage: null,
@@ -623,6 +624,42 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(tooltip.textContent).not.toContain("logs.billingDetails.baseTotal");
     expect(tooltip.textContent).not.toContain("logs.billingDetails.providerMultiplier");
     expect(tooltip.textContent).not.toContain("logs.billingDetails.pricingProvider");
+  });
+
+  test("renders the hedge billing split with cache tokens in the cost tooltip", () => {
+    const tooltip = renderCostTooltipWithLog({
+      costUsd: "0.030000",
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      costBreakdown: null,
+      hedgeLosers: [
+        {
+          providerId: 2,
+          providerName: "loser-a",
+          attemptNumber: 2,
+          costUsd: "0.010000",
+          inputTokens: 80,
+          outputTokens: 20,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 5000,
+        },
+      ],
+    });
+
+    // Merged-count badge + winner/loser split render for a hedged request.
+    expect(tooltip.textContent).toContain("logs.billingDetails.hedgeRacing");
+    expect(tooltip.textContent).toContain("logs.billingDetails.hedgeMergedCount");
+    expect(tooltip.textContent).toContain("logs.billingDetails.hedgeWinner");
+    expect(tooltip.textContent).toContain("loser-a");
+    // winnerCost = costUsd - sum(losers) = 0.030 - 0.010
+    expect(tooltip.textContent).toContain("$0.020000");
+    expect(tooltip.textContent).toContain("$0.010000");
+    // Token-total line includes cache-read (present) but omits cache-write (zero).
+    expect(tooltip.textContent).toContain("logs.billingDetails.hedgeTokenTotal");
+    expect(tooltip.textContent).toContain("logs.billingDetails.hedgeColCacheRead");
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.hedgeColCacheWrite");
   });
 });
 

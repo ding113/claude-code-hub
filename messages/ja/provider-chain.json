@@ -47,6 +47,7 @@
     "hedgeLaunched": "Hedge 代替起動済み",
     "hedgeWinner": "Hedge 競争勝者",
     "hedgeLoserCancelled": "Hedge 競争敗者（キャンセル）",
+    "hedgeLoserBilled": "競争の敗者（応答を回収し課金）",
     "clientAbort": "クライアント中断"
   },
   "reasons": {
@@ -67,6 +68,7 @@
     "hedge_launched": "Hedge 代替起動済み",
     "hedge_winner": "Hedge 競争勝者",
     "hedge_loser_cancelled": "Hedge 競争敗者（キャンセル）",
+    "hedge_loser_billed": "競争の敗者（課金済み）",
     "client_abort": "クライアント中断"
   },
   "filterReasons": {
@@ -238,6 +240,7 @@
     "hedgeLaunched": "Hedge 代替プロバイダー起動済み",
     "hedgeWinner": "Hedge 競争勝者（最初にファーストバイトを受信）",
     "hedgeLoserCancelled": "Hedge 競争敗者（リクエストキャンセル）",
+    "hedgeLoserBilled": "競争の敗者（応答を回収し課金）",
     "clientAbort": "クライアント切断（リクエスト中断）",
     "hedgeRace": "Hedge 競争",
     "hedgeThresholdExceeded": "ファーストバイトタイムアウト超過、代替プロバイダーを起動"

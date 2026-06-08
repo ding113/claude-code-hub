@@ -11625,6 +11625,8 @@ export interface operations {
                         codexPriorityBillingSource: "requested" | "actual";
                         /** @description Whether non-2xx responses (e.g., 499) that report token usage should be billed normally. */
                         billNonSuccessfulRequests: boolean;
+                        /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
+                        billHedgeLosers: boolean;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */
@@ -11881,6 +11883,8 @@ export interface operations {
                     codexPriorityBillingSource?: "requested" | "actual";
                     /** @description Whether non-2xx responses (e.g., 499) that report token usage should be billed normally. */
                     billNonSuccessfulRequests?: boolean;
+                    /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
+                    billHedgeLosers?: boolean;
                     /** @description System timezone, or null to use default. */
                     timezone?: string | null;
                     /** @description Whether usage-log cleanup is enabled. */
@@ -12010,6 +12014,8 @@ export interface operations {
                         codexPriorityBillingSource: "requested" | "actual";
                         /** @description Whether non-2xx responses (e.g., 499) that report token usage should be billed normally. */
                         billNonSuccessfulRequests: boolean;
+                        /** @description Whether streaming-hedge (provider racing) losers are kept alive, drained, and billed (their cost accumulates into the request total). */
+                        billHedgeLosers: boolean;
                         /** @description Configured system timezone, or null for default. */
                         timezone: string | null;
                         /** @description Whether usage-log cleanup is enabled. */

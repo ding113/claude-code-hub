@@ -21,6 +21,7 @@ import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import { buildHedgeBillingTable } from "@/lib/utils/hedge-billing";
 import {
   calculateOutputRate,
   formatDuration,
@@ -477,6 +478,76 @@ export function UsageLogsTable({
                                   {t("logs.billingDetails.multiplier")}: {multiplier.toFixed(2)}x
                                 </div>
                               )}
+                              {(() => {
+                                const hedgeTable = buildHedgeBillingTable(
+                                  log.costUsd,
+                                  log.hedgeLosers,
+                                  {
+                                    inputTokens: log.inputTokens,
+                                    outputTokens: log.outputTokens,
+                                    cacheCreationInputTokens: log.cacheCreationInputTokens,
+                                    cacheReadInputTokens: log.cacheReadInputTokens,
+                                  }
+                                );
+                                if (!hedgeTable) return null;
+                                return (
+                                  <div className="mt-1 border-t pt-1 space-y-0.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="font-medium">
+                                        {t("logs.billingDetails.hedgeRacing")}
+                                      </span>
+                                      <span className="rounded-full border px-1.5 text-[10px] text-muted-foreground">
+                                        {t("logs.billingDetails.hedgeMergedCount", {
+                                          count: hedgeTable.count,
+                                        })}
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between gap-3">
+                                      <span className="text-muted-foreground">
+                                        {t("logs.billingDetails.hedgeWinner")}
+                                      </span>
+                                      <span className="font-mono">
+                                        {formatCurrency(hedgeTable.winnerCost, currencyCode, 6)}
+                                      </span>
+                                    </div>
+                                    {hedgeTable.attempts
+                                      .filter((attempt) => attempt.kind === "loser")
+                                      .map((loser) => (
+                                        <div
+                                          key={`${loser.providerId}-${loser.attemptNumber}`}
+                                          className="flex justify-between gap-3 text-rose-600 dark:text-rose-400"
+                                        >
+                                          <span className="truncate">
+                                            {loser.providerName ??
+                                              t("logs.billingDetails.hedgeLoserShort")}
+                                          </span>
+                                          <span className="font-mono">
+                                            {formatCurrency(loser.costUsd, currencyCode, 6)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    <div className="flex justify-between gap-3 border-t pt-1 text-muted-foreground">
+                                      <span>{t("logs.billingDetails.hedgeTokenTotal")}</span>
+                                      <span className="font-mono">
+                                        {[
+                                          `${formatTokenAmount(hedgeTable.tokenTotals.inputTokens)} ${t("logs.billingDetails.input")}`,
+                                          `${formatTokenAmount(hedgeTable.tokenTotals.outputTokens)} ${t("logs.billingDetails.output")}`,
+                                          ...(hedgeTable.hasCacheWrite
+                                            ? [
+                                                `${formatTokenAmount(hedgeTable.tokenTotals.cacheCreationInputTokens)} ${t("logs.billingDetails.hedgeColCacheWrite")}`,
+                                              ]
+                                            : []),
+                                          ...(hedgeTable.hasCacheRead
+                                            ? [
+                                                `${formatTokenAmount(hedgeTable.tokenTotals.cacheReadInputTokens)} ${t("logs.billingDetails.hedgeColCacheRead")}`,
+                                              ]
+                                            : []),
+                                        ].join(" · ")}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -567,6 +638,7 @@ export function UsageLogsTable({
                         costMultiplier={log.costMultiplier}
                         groupCostMultiplier={log.groupCostMultiplier}
                         costBreakdown={log.costBreakdown}
+                        hedgeLosers={log.hedgeLosers}
                         context1mApplied={log.context1mApplied}
                         durationMs={log.durationMs}
                         ttfbMs={log.ttfbMs}

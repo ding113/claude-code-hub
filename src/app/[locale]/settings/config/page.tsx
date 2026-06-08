@@ -51,6 +51,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             billingModelSource: settings.billingModelSource,
             codexPriorityBillingSource: settings.codexPriorityBillingSource,
             billNonSuccessfulRequests: settings.billNonSuccessfulRequests,
+            billHedgeLosers: settings.billHedgeLosers,
             timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
             passThroughUpstreamErrorMessage: settings.passThroughUpstreamErrorMessage,

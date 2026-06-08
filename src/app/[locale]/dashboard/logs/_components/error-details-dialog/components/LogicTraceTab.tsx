@@ -23,7 +23,9 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { getSessionOriginChain } from "@/lib/api-client/v1/actions/session-origin-chain";
-import { cn } from "@/lib/utils";
+import { cn, formatTokenAmount } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils/currency";
+import { findHedgeLoserCost, summarizeHedgeBilling } from "@/lib/utils/hedge-billing";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
@@ -49,6 +51,7 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
     item.reason === "endpoint_pool_exhausted" ||
     item.reason === "concurrent_limit_failed" ||
     item.reason === "hedge_loser_cancelled" ||
+    item.reason === "hedge_loser_billed" ||
     item.reason === "client_abort"
   ) {
     return "failure";
@@ -64,10 +67,79 @@ export function LogicTraceTab({
   blockedBy,
   blockedReason,
   requestSequence,
+  hedgeLosers,
+  costUsd,
+  inputTokens,
+  outputTokens,
+  cacheCreationInputTokens,
+  cacheReadInputTokens,
   initialExpandedChainIndex,
 }: LogicTraceTabProps) {
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
+  // Winner cost is the request total minus every billed loser; only present
+  // when this request actually billed hedge losers.
+  const hedgeSummary = summarizeHedgeBilling(costUsd, hedgeLosers);
+
+  // Render the reclaimed token usage + billed cost for one hedge attempt
+  // (winner or loser) inside its decision-chain step.
+  const renderHedgeAttemptUsage = (params: {
+    accent: "winner" | "loser";
+    costUsd: string;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    cacheCreationInputTokens?: number | null;
+    cacheReadInputTokens?: number | null;
+  }) => {
+    const isLoser = params.accent === "loser";
+    const hasTokens =
+      (params.inputTokens ?? 0) > 0 ||
+      (params.outputTokens ?? 0) > 0 ||
+      (params.cacheCreationInputTokens ?? 0) > 0 ||
+      (params.cacheReadInputTokens ?? 0) > 0;
+    const tokenParts = [
+      `${t("billingDetails.input")} ${formatTokenAmount(params.inputTokens ?? 0)}`,
+      `${t("billingDetails.output")} ${formatTokenAmount(params.outputTokens ?? 0)}`,
+    ];
+    if ((params.cacheCreationInputTokens ?? 0) > 0) {
+      tokenParts.push(
+        `${t("billingDetails.hedgeColCacheWrite")} ${formatTokenAmount(params.cacheCreationInputTokens ?? 0)}`
+      );
+    }
+    if ((params.cacheReadInputTokens ?? 0) > 0) {
+      tokenParts.push(
+        `${t("billingDetails.hedgeColCacheRead")} ${formatTokenAmount(params.cacheReadInputTokens ?? 0)}`
+      );
+    }
+    return (
+      <div className="space-y-1">
+        {isLoser && (
+          <div className="text-[11px] text-muted-foreground">
+            {t("billingDetails.hedgeReclaimedNotDelivered")}
+          </div>
+        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {hasTokens && (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {tokenParts.join(" · ")}
+            </span>
+          )}
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px]",
+              isLoser
+                ? "bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300"
+                : "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
+            )}
+          >
+            {isLoser ? t("billingDetails.hedgeLoser") : t("billingDetails.hedgeWinner")}:{" "}
+            {formatCurrency(params.costUsd, "USD", 6)}
+          </Badge>
+        </div>
+      </div>
+    );
+  };
   const [timelineCopied, setTimelineCopied] = useState(false);
   const [originOpen, setOriginOpen] = useState(false);
   const [originChain, setOriginChain] = useState<ProviderChainItem[] | null | undefined>(undefined);
@@ -717,13 +789,21 @@ export function LogicTraceTab({
 
             // Determine icon based on type
             const isHedgeTriggered = item.reason === "hedge_triggered";
+            const isHedgeWinner = item.reason === "hedge_winner";
             const isHedgeLoser = item.reason === "hedge_loser_cancelled";
+            const isHedgeLoserBilled = item.reason === "hedge_loser_billed";
             const isClientAbort = item.reason === "client_abort";
+            // Resolved hedge losers (cancelled or billed) carry billing detail when
+            // their reclaimed upstream response was charged to the request total.
+            const hedgeLoserBilling =
+              isHedgeLoser || isHedgeLoserBilled
+                ? findHedgeLoserCost(hedgeLosers, item.id, item.attemptNumber)
+                : null;
             const stepIcon = isSessionReuse
               ? Link2
               : isHedgeTriggered
                 ? GitBranch
-                : isHedgeLoser || isClientAbort
+                : isHedgeLoser || isHedgeLoserBilled || isClientAbort
                   ? XCircle
                   : isRetry
                     ? RefreshCw
@@ -741,13 +821,15 @@ export function LogicTraceTab({
                 ? tChain("timeline.hedgeTriggered")
                 : isHedgeLoser
                   ? tChain("timeline.hedgeLoserCancelled")
-                  : isClientAbort
-                    ? tChain("timeline.clientAbort")
-                    : isRetry
-                      ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
-                      : item.reason === "hedge_winner"
-                        ? tChain("timeline.hedgeWinner")
-                        : t("logicTrace.attemptProvider", { provider: item.name });
+                  : isHedgeLoserBilled
+                    ? tChain("timeline.hedgeLoserBilled")
+                    : isClientAbort
+                      ? tChain("timeline.clientAbort")
+                      : isRetry
+                        ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
+                        : item.reason === "hedge_winner"
+                          ? tChain("timeline.hedgeWinner")
+                          : t("logicTrace.attemptProvider", { provider: item.name });
 
             return (
               <StepCard
@@ -783,6 +865,30 @@ export function LogicTraceTab({
                 defaultExpanded={initialExpandedChainIndex === index}
                 details={
                   <div className="space-y-2 text-xs">
+                    {/* Hedge winner reclaimed usage + billed cost (only on a race
+                        that actually billed losers, so non-hedge steps are unaffected) */}
+                    {isHedgeWinner &&
+                      hedgeSummary &&
+                      renderHedgeAttemptUsage({
+                        accent: "winner",
+                        costUsd: hedgeSummary.winnerCost,
+                        inputTokens,
+                        outputTokens,
+                        cacheCreationInputTokens,
+                        cacheReadInputTokens,
+                      })}
+
+                    {/* Hedge loser reclaimed usage + billed cost */}
+                    {hedgeLoserBilling &&
+                      renderHedgeAttemptUsage({
+                        accent: "loser",
+                        costUsd: hedgeLoserBilling.costUsd,
+                        inputTokens: hedgeLoserBilling.inputTokens,
+                        outputTokens: hedgeLoserBilling.outputTokens,
+                        cacheCreationInputTokens: hedgeLoserBilling.cacheCreationInputTokens,
+                        cacheReadInputTokens: hedgeLoserBilling.cacheReadInputTokens,
+                      })}
+
                     {/* Session Reuse Info */}
                     {isSessionReuse && item.decisionContext && (
                       <div className="pb-2 border-b border-muted/50">
