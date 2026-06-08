@@ -571,6 +571,61 @@ function extractErrorContentForDetection(error: Error): string {
 }
 
 /**
+ * 真正属于 "客户端输入错误" 的规则 category 白名单
+ *
+ * 仅当匹配的规则 category 落入此集合时，对应错误才被分类为
+ * NON_RETRYABLE_CLIENT_ERROR（不重试 + 不计入熔断器 + 直接返回）。
+ *
+ * 设计原因：
+ * - error_rules 表允许用户自定义规则，category 字段可以是任意字符串
+ * - 历史实现中，任何匹配规则都会被当作 NON_RETRYABLE_CLIENT_ERROR
+ * - 但 service_error / network_error / rate_limit 这类 category 实际是
+ *   供应商侧或网络侧的可恢复错误，应进入正常 failover/熔断器流程，而不是
+ *   被白名单化导致 "stopping immediately" 不再切换供应商
+ *
+ * 通过显式白名单，确保只有真正的客户端输入错误（如 prompt_limit、
+ * validation_error、content_filter 等）触发不可重试逻辑。
+ *
+ * 此集合的设计原则：
+ * - 仅包含官方默认规则（DEFAULT_ERROR_RULES）实际使用的客户端错误 category
+ * - 用户自定义规则若使用集合外的 category（如 service_error），将不再
+ *   被错误地白名单化；这些错误会回退到 ProxyError 的标准分类逻辑
+ */
+const NON_RETRYABLE_CLIENT_ERROR_CATEGORIES = new Set<string>([
+  "prompt_limit",
+  "input_limit",
+  "context_limit",
+  "token_limit",
+  "content_filter",
+  "validation_error",
+  "thinking_error",
+  "parameter_error",
+  "pdf_limit",
+  "media_limit",
+  "cache_limit",
+  "invalid_request",
+  "model_error",
+  "store_error",
+]);
+
+/**
+ * 判断已匹配的检测结果是否应触发 NON_RETRYABLE_CLIENT_ERROR 分类
+ *
+ * @param result - errorRuleDetector 返回的检测结果
+ * @returns true = 视为不可重试客户端错误；false = 不触发该分类（让标准分类逻辑处理）
+ */
+function shouldTreatMatchedRuleAsNonRetryable(result: ErrorDetectionResult): boolean {
+  if (!result.matched) {
+    return false;
+  }
+  // category 必须显式存在，且落在白名单集合内
+  return (
+    typeof result.category === "string" &&
+    NON_RETRYABLE_CLIENT_ERROR_CATEGORIES.has(result.category)
+  );
+}
+
+/**
  * 错误规则检测结果缓存
  *
  * 使用 WeakMap 避免内存泄漏，同一个 Error 对象只检测一次
@@ -623,7 +678,7 @@ export async function getErrorDetectionResultAsync(error: Error): Promise<ErrorD
 export function isNonRetryableClientError(error: Error): boolean {
   const cached = errorDetectionCache.get(error);
   if (cached) {
-    return cached.matched;
+    return shouldTreatMatchedRuleAsNonRetryable(cached);
   }
 
   const content = extractErrorContentForDetection(error);
@@ -637,7 +692,7 @@ export function isNonRetryableClientError(error: Error): boolean {
     void detectErrorRuleOnceAsync(error).catch(() => undefined);
   }
 
-  return result.matched;
+  return shouldTreatMatchedRuleAsNonRetryable(result);
 }
 
 /**
@@ -645,11 +700,25 @@ export function isNonRetryableClientError(error: Error): boolean {
  *
  * 此函数会确保错误规则已加载后再进行检测
  * 生产代码路径（forwarder、error-handler）应优先使用此版本
+ *
+ * 仅当匹配规则的 category 落入 NON_RETRYABLE_CLIENT_ERROR_CATEGORIES 白名单时
+ * 才返回 true。其他 category（如 service_error、network_error 等）即使匹配也
+ * 会回退到 ProxyError 的标准分类（PROVIDER_ERROR/SYSTEM_ERROR），从而保留
+ * 故障转移和熔断器逻辑。
  */
 export async function isNonRetryableClientErrorAsync(error: Error): Promise<boolean> {
   // 使用缓存的检测结果，避免重复执行规则匹配
   const result = await detectErrorRuleOnceAsync(error);
-  return result.matched;
+  return shouldTreatMatchedRuleAsNonRetryable(result);
+}
+
+/**
+ * 暴露内部白名单常量供测试使用
+ *
+ * 注意：这是只读副本，外部不应修改运行时白名单。
+ */
+export function getNonRetryableClientErrorCategoriesForTesting(): ReadonlySet<string> {
+  return NON_RETRYABLE_CLIENT_ERROR_CATEGORIES;
 }
 
 /**
