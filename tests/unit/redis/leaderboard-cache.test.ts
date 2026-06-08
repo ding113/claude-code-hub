@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getRedisClient } from "@/lib/redis/client";
 import { getLeaderboardWithCache } from "@/lib/redis/leaderboard-cache";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   findDailyUserCacheHitRateLeaderboard,
   type UserCacheHitRateLeaderboardEntry,
@@ -69,6 +70,7 @@ function createUserCacheHitRateRows(): UserCacheHitRateLeaderboardEntry[] {
 describe("getLeaderboardWithCache", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("UTC");
     vi.useRealTimers();
   });
 
@@ -100,7 +102,33 @@ describe("getLeaderboardWithCache", () => {
       true
     );
     expect(redis.setex).toHaveBeenCalledWith(
-      "leaderboard:userCacheHitRate:daily:2026-04-13:USD:includeModelStats:tags:team-a,vip:groups:group-1",
+      "leaderboard:userCacheHitRate:daily:2026-04-13:tz:UTC:USD:includeModelStats:tags:team-a,vip:groups:group-1",
+      60,
+      JSON.stringify(rows)
+    );
+  });
+
+  it("includes the resolved timezone in Redis keys", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-13T23:00:00Z"));
+    vi.mocked(resolveSystemTimezone).mockResolvedValueOnce("Asia/Shanghai");
+
+    const redis = createRedisMock();
+    const rows = createUserCacheHitRateRows();
+    redis.get.mockResolvedValueOnce(null);
+    redis.set.mockResolvedValueOnce("OK");
+    redis.setex.mockResolvedValueOnce("OK");
+    redis.del.mockResolvedValueOnce(1);
+
+    vi.mocked(getRedisClient).mockReturnValue(
+      redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+    );
+    vi.mocked(findDailyUserCacheHitRateLeaderboard).mockResolvedValueOnce(rows);
+
+    await getLeaderboardWithCache("daily", "USD", "userCacheHitRate");
+
+    expect(redis.setex).toHaveBeenCalledWith(
+      "leaderboard:userCacheHitRate:daily:2026-04-14:tz:Asia/Shanghai:USD",
       60,
       JSON.stringify(rows)
     );

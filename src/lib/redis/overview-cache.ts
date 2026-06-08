@@ -1,16 +1,21 @@
 import { logger } from "@/lib/logger";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   getOverviewMetricsWithComparison,
   type OverviewMetricsWithComparison,
 } from "@/repository/overview";
+import { buildOverviewCacheKey } from "@/types/dashboard-cache";
 import { getRedisClient } from "./client";
+import { scanPattern } from "./scan-helper";
 
 const CACHE_TTL = 10;
 const LOCK_TTL = 5;
 const LOCK_WAIT_MS = 100;
 
-function buildCacheKey(userId?: number): string {
-  return userId !== undefined ? `overview:user:${userId}` : "overview:global";
+function buildCacheKey(userId: number | undefined, timezone: string): string {
+  return userId !== undefined
+    ? buildOverviewCacheKey("user", userId, timezone)
+    : buildOverviewCacheKey("global", timezone);
 }
 
 /**
@@ -22,7 +27,8 @@ export async function getOverviewWithCache(
   userId?: number
 ): Promise<OverviewMetricsWithComparison> {
   const redis = getRedisClient();
-  const cacheKey = buildCacheKey(userId);
+  const timezone = await resolveSystemTimezone();
+  const cacheKey = buildCacheKey(userId, timezone);
   const lockKey = `${cacheKey}:lock`;
 
   if (!redis) {
@@ -84,11 +90,29 @@ export async function invalidateOverviewCache(userId?: number): Promise<void> {
   const redis = getRedisClient();
   if (!redis) return;
 
-  const cacheKey = buildCacheKey(userId);
+  const scopePattern = userId !== undefined ? `overview:user:${userId}` : "overview:global";
+  const pattern = `${scopePattern}:tz:*`;
   try {
-    await redis.del(cacheKey);
-    logger.info("[OverviewCache] Cache invalidated", { userId, cacheKey });
+    const matchedKeys = await scanPattern(redis, pattern);
+    const keysToDelete = [...matchedKeys, scopePattern];
+    await redis.del(...keysToDelete);
+    logger.info("[OverviewCache] Cache invalidated", { userId, keysToDelete });
   } catch (error) {
     logger.error("[OverviewCache] Failed to invalidate cache", { userId, error });
+  }
+}
+
+export async function invalidateAllOverviewCaches(): Promise<void> {
+  const redis = getRedisClient();
+  if (!redis) return;
+
+  try {
+    const keys = await scanPattern(redis, "overview:*");
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    logger.info("[OverviewCache] All caches invalidated", { deletedCount: keys.length });
+  } catch (error) {
+    logger.error("[OverviewCache] Failed to invalidate all caches", { error });
   }
 }

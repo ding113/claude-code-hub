@@ -341,6 +341,7 @@ export function UsageLogsSection({
                 ipLookupMode="my-usage"
                 autoRefreshEnabled={!!autoRefreshSeconds}
                 autoRefreshIntervalMs={autoRefreshSeconds ? autoRefreshSeconds * 1000 : undefined}
+                serverTimeZone={serverTimeZone}
               />
             </div>
           </div>

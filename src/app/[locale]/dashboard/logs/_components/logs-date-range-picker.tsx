@@ -87,6 +87,10 @@ export function LogsDateRangePicker({
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const hasDateRange = Boolean(startDate && endDate);
+  const today = useMemo(
+    () => getDateRangeForPeriod("today", serverTimeZone).endDate,
+    [serverTimeZone]
+  );
 
   const activeQuickPeriod = useMemo(() => {
     return detectQuickPeriod(startDate, endDate, serverTimeZone);
@@ -212,7 +216,7 @@ export function LogsDateRangePicker({
               selected={selectedRange}
               onSelect={handleDateRangeSelect}
               numberOfMonths={2}
-              disabled={{ after: new Date() }}
+              disabled={{ after: parseDate(today) }}
             />
             {hasDateRange && (
               <div className="border-t p-2">
@@ -228,7 +232,7 @@ export function LogsDateRangePicker({
           variant="outline"
           size="icon-sm"
           onClick={() => handleNavigate("next")}
-          disabled={!hasDateRange || (endDate !== undefined && endDate >= formatDate(new Date()))}
+          disabled={!hasDateRange || (endDate !== undefined && endDate >= today)}
           title={t("leaderboard.dateRange.nextPeriod")}
         >
           <ChevronRight className="h-4 w-4" />

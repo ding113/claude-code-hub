@@ -58,4 +58,14 @@ describe("dashboard logs time range utils", () => {
       endDate: "2023-12-31",
     });
   });
+
+  test("getQuickDateRange keeps the first hours of the server day in that day", () => {
+    const now = new Date("2024-01-02T08:30:00Z");
+    const tz = "America/Los_Angeles";
+
+    expect(getQuickDateRange("today", tz, now)).toEqual({
+      startDate: "2024-01-02",
+      endDate: "2024-01-02",
+    });
+  });
 });
