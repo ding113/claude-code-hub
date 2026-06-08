@@ -263,8 +263,8 @@ async function resolveCodexPriorityBillingDecision(
   }
 
   const requestedServiceTier =
-    options && "requestedServiceTier" in options
-      ? (options.requestedServiceTier ?? null)
+    options?.requestedServiceTier !== undefined
+      ? options.requestedServiceTier
       : getRequestedCodexServiceTier(session, provider);
   let billingSourcePreference: Awaited<ReturnType<ProxySession["getCodexPriorityBillingSource"]>> =
     "requested";
@@ -3903,7 +3903,12 @@ export async function finalizeHedgeLoserBilling(params: {
       billableUsage,
       priorityServiceTierApplied,
       resolvedPricing,
-      longContextPricing
+      longContextPricing,
+      {
+        provider,
+        context1mApplied,
+        groupCostMultiplier,
+      }
     );
 
     logger.info("[HedgeLoserBilling] Billed hedge loser", {
@@ -4171,6 +4176,12 @@ export async function finalizeRequestStats(
 /**
  * 追踪消费到 Redis（用于限流）
  */
+type TrackCostBillingOverrides = {
+  provider?: Provider | null;
+  context1mApplied?: boolean;
+  groupCostMultiplier?: number;
+};
+
 async function trackCostToRedis(
   session: ProxySession,
   usage: UsageMetrics | null,
@@ -4178,14 +4189,15 @@ async function trackCostToRedis(
   resolvedPricingOverride?: Awaited<
     ReturnType<ProxySession["getResolvedPricingByBillingSource"]>
   > | null,
-  longContextPricingOverride?: ResolvedLongContextPricing | null
+  longContextPricingOverride?: ResolvedLongContextPricing | null,
+  billingOverrides?: TrackCostBillingOverrides
 ): Promise<void> {
   if (!usage || !session.sessionId) return;
   if (isNonBillingUsageEndpoint(session)) return;
 
   try {
     const messageContext = session.messageContext;
-    const provider = session.provider;
+    const provider = billingOverrides?.provider ?? session.provider;
     const key = session.authState?.key;
     const user = session.authState?.user;
 
@@ -4211,10 +4223,10 @@ async function trackCostToRedis(
       resolvedPricing.priceData,
       buildCostCalculationOptions(
         provider.costMultiplier,
-        session.getContext1mApplied(),
+        billingOverrides?.context1mApplied ?? session.getContext1mApplied(),
         priorityServiceTierApplied,
         longContextPricing,
-        session.getGroupCostMultiplier()
+        billingOverrides?.groupCostMultiplier ?? session.getGroupCostMultiplier()
       )
     );
     if (cost.lte(0)) return;
