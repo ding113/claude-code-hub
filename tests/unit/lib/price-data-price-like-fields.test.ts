@@ -23,6 +23,18 @@ describe("hasValidPriceData: generic price-like fields", () => {
     ).toBe(true);
   });
 
+  test("treats service tier pricing as valid price data", () => {
+    expect(
+      hasValidPriceData({
+        service_tier_pricing: {
+          priority: {
+            input_cost_per_token: 0.0000125,
+          },
+        },
+      })
+    ).toBe(true);
+  });
+
   test("ignores non price-like numeric metadata", () => {
     expect(
       hasValidPriceData({

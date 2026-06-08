@@ -23,6 +23,13 @@ describe("model-price-fields", () => {
         threshold_tokens: 128000,
         input_cost_per_token: 0.000005,
       },
+      service_tier_pricing: {
+        priority: {
+          input_cost_per_token: 0.0000125,
+          output_cost_per_token: 0.000075,
+          cache_read_input_token_cost: 0.00000125,
+        },
+      },
       pricing: {
         openai: {
           input_cost_per_token: 0.0000025,
@@ -44,6 +51,10 @@ describe("model-price-fields", () => {
     ).toBe("unsupported");
     expect(
       entries.find((entry) => entry.path === "long_context_pricing.input_cost_per_token")?.kind
+    ).toBe("supported");
+    expect(
+      entries.find((entry) => entry.path === "service_tier_pricing.priority.input_cost_per_token")
+        ?.kind
     ).toBe("supported");
   });
 

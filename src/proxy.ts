@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
-import { type Locale, localeCookieName } from "@/i18n/config";
+import { defaultLocale, type Locale, localeCookieName } from "@/i18n/config";
 import { getLocaleFromValue, normalizePathnameForLocaleNavigation } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
@@ -18,6 +18,7 @@ const PUBLIC_PATH_PATTERNS = [
 ];
 
 const API_PROXY_PATH = "/v1";
+const SYSTEM_STATUS_ALIAS_PATH = "/system-status";
 
 function matchesPublicPath(pathname: string, pattern: string) {
   return pathname === pattern || pathname.startsWith(`${pattern}/`);
@@ -44,6 +45,21 @@ function proxyHandler(request: NextRequest) {
   // API 代理路由不需要 locale 处理和 Web 鉴权（使用自己的 Bearer token）
   if (pathname.startsWith(API_PROXY_PATH)) {
     return NextResponse.next();
+  }
+
+  if (pathname === SYSTEM_STATUS_ALIAS_PATH) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/${defaultLocale}/status`;
+    return NextResponse.redirect(url);
+  }
+
+  const localePrefixedSystemStatusAlias = routing.locales.find(
+    (locale) => pathname === `/${locale}${SYSTEM_STATUS_ALIAS_PATH}`
+  );
+  if (localePrefixedSystemStatusAlias) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/${localePrefixedSystemStatusAlias}/status`;
+    return NextResponse.redirect(url);
   }
 
   const isLocalePrefixedPublicStatusPath = routing.locales.some(

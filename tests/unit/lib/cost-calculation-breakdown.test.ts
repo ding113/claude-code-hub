@@ -134,6 +134,35 @@ describe("calculateRequestCostBreakdown", () => {
     expect(result.total).toBe(1904154);
   });
 
+  test("uses service_tier_pricing.priority in breakdown before legacy priority fields", () => {
+    const result = calculateRequestCostBreakdown(
+      {
+        input_tokens: 2,
+        output_tokens: 3,
+        cache_read_input_tokens: 5,
+      },
+      makePriceData({
+        input_cost_per_token_priority: 2,
+        output_cost_per_token_priority: 20,
+        cache_read_input_token_cost_priority: 0.2,
+        service_tier_pricing: {
+          priority: {
+            input_cost_per_token: 3,
+            output_cost_per_token: 30,
+            cache_read_input_token_cost: 0.3,
+          },
+        },
+      }),
+      false,
+      true
+    );
+
+    expect(result.input).toBe(6);
+    expect(result.output).toBe(90);
+    expect(result.cache_read).toBe(1.5);
+    expect(result.total).toBe(97.5);
+  });
+
   test("falls back to regular long-context pricing in breakdown when priority long-context fields are absent", () => {
     const result = calculateRequestCostBreakdown(
       {
