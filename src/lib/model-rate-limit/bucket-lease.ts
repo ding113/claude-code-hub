@@ -200,16 +200,29 @@ export class BucketLeaseService {
     params: DecrementBucketLeaseParams
   ): Promise<DecrementModelLeaseResult> {
     const { axis, scopeId, modelGroupId, window, cost, resetMode } = params;
-    const leaseKey = buildModelGroupLeaseKey(axis, scopeId, modelGroupId, window, resetMode);
-    // Reuse the shared atomic Redis decrement via a lease key override.
-    return ModelLeaseService.decrementLeaseBudget({
-      scopeType: axis,
-      scopeId,
-      model: "",
-      window,
-      cost,
-      resetMode,
-      leaseKeyOverride: leaseKey,
-    });
+    try {
+      const leaseKey = buildModelGroupLeaseKey(axis, scopeId, modelGroupId, window, resetMode);
+      // Reuse the shared atomic Redis decrement via a lease key override.
+      return await ModelLeaseService.decrementLeaseBudget({
+        scopeType: axis,
+        scopeId,
+        model: "",
+        window,
+        cost,
+        resetMode,
+        leaseKeyOverride: leaseKey,
+      });
+    } catch (error) {
+      // Fail-open like the sibling methods: a pre-delegation throw (e.g. key
+      // build) must not break the response handler's Promise.all of decrements.
+      logger.error("[BucketLease] decrementLeaseBudget failed, fail-open", {
+        axis,
+        scopeId,
+        modelGroupId,
+        window,
+        error,
+      });
+      return { success: true, newRemaining: -1, failOpen: true };
+    }
   }
 }

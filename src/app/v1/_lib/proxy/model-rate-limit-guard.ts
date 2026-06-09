@@ -1,4 +1,5 @@
 import { getLocale } from "next-intl/server";
+import { logger } from "@/lib/logger";
 import { BucketRateLimitService } from "@/lib/model-rate-limit/bucket-service";
 import { resolveModelLimits } from "@/lib/model-rate-limit/cache";
 import { isModelRateLimitEnabled, type LimitWindow } from "@/lib/model-rate-limit/types";
@@ -121,6 +122,18 @@ async function resolveAndApplyForCurrentProvider(
       // Re-resolve path: log only. The in-flight forwarder run already committed
       // to the new provider; the bucket lease decrement at settle will reflect
       // the overshoot. Mainline global gate stays in effect for safety.
+      const { bucket, result } = violation;
+      logger.warn(
+        "[ModelRateLimit] Bucket violation on re-resolve path (not enforced, in-flight request continues)",
+        {
+          axis: bucket.axis,
+          scopeId: bucket.scopeId,
+          modelGroupId: bucket.modelGroupId,
+          window: result.window,
+          currentUsage: result.currentUsage,
+          limitValue: result.limitValue,
+        }
+      );
       return;
     }
     const { result } = violation;

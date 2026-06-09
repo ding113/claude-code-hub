@@ -37,19 +37,21 @@ export interface DecrementModelLeaseResult {
  * Server-side Redis Lua script for atomic lease budget decrement.
  * This is a Redis EVAL operation (NOT JavaScript eval) — same approach as the
  * mainline LeaseService.
- * KEYS[1] = lease key, ARGV[1] = cost. Returns [newRemaining, success].
+ * KEYS[1] = lease key, ARGV[1] = cost. Returns [newRemaining, success] as
+ * strings — Redis Lua coerces numeric table values to integers, which would
+ * truncate fractional USD remainders (e.g. 0.75 -> 0) before they reach JS.
  */
 const DECREMENT_LUA_SCRIPT = `
   local key = KEYS[1]
   local cost = tonumber(ARGV[1])
   local leaseJson = redis.call('GET', key)
   if not leaseJson then
-    return {-1, 0}
+    return {"-1", "0"}
   end
   local lease = cjson.decode(leaseJson)
   local remaining = tonumber(lease.remainingBudget) or 0
   if remaining < cost then
-    return {0, 0}
+    return {"0", "0"}
   end
   local newRemaining = remaining - cost
   lease.remainingBudget = newRemaining
@@ -57,7 +59,7 @@ const DECREMENT_LUA_SCRIPT = `
   if ttl > 0 then
     redis.call('SETEX', key, ttl, cjson.encode(lease))
   end
-  return {newRemaining, 1}
+  return {tostring(newRemaining), "1"}
 `;
 
 export class ModelLeaseService {
@@ -78,13 +80,15 @@ export class ModelLeaseService {
       const leaseKey =
         params.leaseKeyOverride ?? buildModelLeaseKey(scopeType, scopeId, model, window, resetMode);
       // Redis EVAL (server-side Lua), not JavaScript eval — atomic decrement.
-      const result = (await redis.eval(DECREMENT_LUA_SCRIPT, 1, leaseKey, cost)) as [
-        number,
-        number,
+      // Returns string tuple to preserve fractional precision (see Lua above).
+      const result = (await redis.eval(DECREMENT_LUA_SCRIPT, 1, leaseKey, String(cost))) as [
+        string,
+        string,
       ];
-      const [newRemaining, success] = result;
+      const newRemaining = Number(result[0]);
+      const success = result[1] === "1";
 
-      if (success === 1) {
+      if (success) {
         return { success: true, newRemaining };
       }
       return { success: false, newRemaining };

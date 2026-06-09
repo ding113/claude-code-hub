@@ -2,6 +2,7 @@
 
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { publishModelLimitCacheInvalidation } from "@/lib/model-rate-limit/cache";
 import * as repo from "@/repository/quota-boost";
 import type { ActionResult } from "./types";
 
@@ -64,6 +65,10 @@ export async function createQuotaBoostGrantAction(input: {
       createdBy: session.user.id,
     });
 
+    // A boost grant feeds buildModelLimitSnapshot(); refresh + broadcast so an
+    // immediately-active grant takes effect without waiting for the snapshot TTL.
+    await publishModelLimitCacheInvalidation();
+
     logger.info("[QuotaBoostAction] Created quota boost grant", {
       grantId: row.id,
       userId: input.userId,
@@ -92,6 +97,10 @@ export async function deleteQuotaBoostGrantAction(id: number): Promise<ActionRes
     }
 
     await repo.deleteQuotaBoostGrant(id);
+
+    // Revoking a grant changes the snapshot; refresh + broadcast so the boost
+    // stops applying immediately instead of after the snapshot TTL.
+    await publishModelLimitCacheInvalidation();
 
     logger.info("[QuotaBoostAction] Revoked quota boost grant", {
       grantId: id,

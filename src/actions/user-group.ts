@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import type { UserGroupRow } from "@/repository/user-group";
 import {
+  countUsersByTags,
   countUsersInUserGroup,
   getUserGroupByTag,
   createUserGroup as repoCreateUserGroup,
@@ -43,12 +44,11 @@ export async function listUserGroups(): Promise<ActionResult<UserGroupWithCount[
     }
 
     const groups = await repoListUserGroups();
-    const data: UserGroupWithCount[] = await Promise.all(
-      groups.map(async (g) => ({
-        ...g,
-        memberCount: await countUsersInUserGroup(g.tag),
-      }))
-    );
+    const counts = await countUsersByTags(groups.map((g) => g.tag));
+    const data: UserGroupWithCount[] = groups.map((g) => ({
+      ...g,
+      memberCount: counts.get(g.tag) ?? 0,
+    }));
     return { ok: true, data };
   } catch (error) {
     logger.error("Failed to list user groups:", error);

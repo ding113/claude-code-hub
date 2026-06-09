@@ -36,7 +36,8 @@ describe("ModelLeaseService.decrementLeaseBudget — shared atomic Lua decrement
   });
 
   it("decrements atomically via the Lua script on success", async () => {
-    mockRedis.eval.mockResolvedValue([4.5, 1]);
+    // Lua returns string tuples to preserve fractional precision.
+    mockRedis.eval.mockResolvedValue(["4.5", "1"]);
     const { ModelLeaseService } = await import("@/lib/model-rate-limit/lease");
 
     const result = await ModelLeaseService.decrementLeaseBudget({
@@ -52,7 +53,7 @@ describe("ModelLeaseService.decrementLeaseBudget — shared atomic Lua decrement
   });
 
   it("uses the lease key override verbatim (group bucket reuse)", async () => {
-    mockRedis.eval.mockResolvedValue([2, 1]);
+    mockRedis.eval.mockResolvedValue(["2", "1"]);
     const { ModelLeaseService } = await import("@/lib/model-rate-limit/lease");
 
     await ModelLeaseService.decrementLeaseBudget({
@@ -68,7 +69,7 @@ describe("ModelLeaseService.decrementLeaseBudget — shared atomic Lua decrement
       expect.any(String),
       1,
       "lease:user-mg:7:1:daily:fixed",
-      1
+      "1"
     );
   });
 });

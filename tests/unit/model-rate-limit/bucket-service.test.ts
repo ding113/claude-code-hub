@@ -159,7 +159,7 @@ describe("BucketRateLimitService.checkCostLimits — total window (OPT-A)", () =
     sumScopeCost.mockResolvedValue(64);
     await BucketRateLimitService.checkCostLimits(makeBucket({ limitTotalUsd: 100 }));
     expect(sumScopeCost).toHaveBeenCalledTimes(1);
-    expect(redis.setex).toHaveBeenCalledWith("total_cost:model:user:7:42", 300, "64");
+    expect(redis.setex).toHaveBeenCalledWith("total_cost:model:user:7:42", 60, "64");
   });
 
   it("T-TA-3: a non-ready Redis client falls back to DB aggregation", async () => {

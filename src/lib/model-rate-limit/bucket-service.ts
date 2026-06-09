@@ -29,7 +29,11 @@ export interface BucketCheckResult {
   limitValue?: number;
 }
 
-const TOTAL_COST_CACHE_TTL_SECONDS = 300;
+// Kept short so the all-time total window cannot overshoot by much more than the
+// lease windows (which refresh on quotaDbRefreshIntervalSeconds, default 10s).
+// getModelGroupTotalUsage only runs when a total cap is configured, so the
+// extra full-history aggregation is opt-in and rare.
+const TOTAL_COST_CACHE_TTL_SECONDS = 60;
 
 interface WindowSpec {
   window: LeaseWindowType;
@@ -142,6 +146,7 @@ export class BucketRateLimitService {
         totalUsage !== null &&
         caps.limitTotalUsd !== null &&
         caps.limitTotalUsd !== undefined &&
+        caps.limitTotalUsd > 0 &&
         totalUsage >= caps.limitTotalUsd
       ) {
         return {

@@ -48,12 +48,25 @@ services:
   app:
     image: ghcr.io/ding113/claude-code-hub:latest
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     env_file:
       - ./.env
     environment:
+      NODE_ENV: production
+      # 容器内使用 Dockerfile 默认端口 3000，对外通过 APP_PORT 暴露（默认 23000）
+      DSN: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-claude_code_hub}
       REDIS_URL: redis://redis:6379
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
+      ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
+      SESSION_TTL: ${SESSION_TTL:-300}
+      DB_POOL_IDLE_TIMEOUT: ${DB_POOL_IDLE_TIMEOUT:-20}
+      DB_POOL_CONNECT_TIMEOUT: ${DB_POOL_CONNECT_TIMEOUT:-10}
+      MAX_RETRY_ATTEMPTS_DEFAULT: ${MAX_RETRY_ATTEMPTS_DEFAULT:-2}
+      LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
+      # 设置时区为上海
       TZ: Asia/Shanghai
     ports:
       - "${APP_PORT:-23000}:3000"

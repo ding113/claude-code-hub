@@ -37,6 +37,9 @@ export async function updateUserGroup(
   updates.updatedAt = new Date();
 
   const [row] = await db.update(userGroups).set(updates).where(eq(userGroups.id, id)).returning();
+  if (!row) {
+    throw new Error(`User group id=${id} not found`);
+  }
   return row;
 }
 
@@ -98,4 +101,29 @@ export async function countUsersInUserGroup(tag: string): Promise<number> {
     .from(users)
     .where(sql`${users.tags} @> ${JSON.stringify([tag])}::jsonb AND ${isNull(users.deletedAt)}`);
   return result?.count ?? 0;
+}
+
+/**
+ * Member counts for many tags in a single scan (avoids the N+1 of calling
+ * countUsersInUserGroup per group). Returns a tag -> count map; tags with no
+ * members are absent.
+ */
+export async function countUsersByTags(tags: string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (tags.length === 0) return counts;
+
+  const wanted = new Set(tags);
+  const tagConditions = tags.map((tag) => sql`${users.tags} @> ${JSON.stringify([tag])}::jsonb`);
+  const rows = await db
+    .select({ tags: users.tags })
+    .from(users)
+    .where(and(isNull(users.deletedAt), or(...tagConditions)));
+
+  for (const row of rows) {
+    const userTags = Array.isArray(row.tags) ? row.tags : [];
+    for (const tag of userTags) {
+      if (wanted.has(tag)) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+  return counts;
 }

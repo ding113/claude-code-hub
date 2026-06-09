@@ -376,6 +376,7 @@ describe("model-group repository", () => {
     it("creates a group and inserts a single member in a transaction", async () => {
       const txInsertResult = insertChain([{ ...sampleGroup, isSingleton: true }]);
       const tx = {
+        select: vi.fn().mockReturnValue(selectChain([])),
         insert: vi.fn().mockReturnValue(txInsertResult),
       };
 
@@ -394,6 +395,7 @@ describe("model-group repository", () => {
     it("uses model name as group name when no name provided", async () => {
       const txInsertResult = insertChain([{ ...sampleGroup, name: "my-model", isSingleton: true }]);
       const tx = {
+        select: vi.fn().mockReturnValue(selectChain([])),
         insert: vi.fn().mockReturnValue(txInsertResult),
       };
 
@@ -407,6 +409,30 @@ describe("model-group repository", () => {
       const firstInsertValues = (txInsertResult.values as ReturnType<typeof vi.fn>).mock
         .calls[0][0];
       expect(firstInsertValues.name).toBe("my-model");
+    });
+
+    it("throws ModelGroupMemberConflictError when the model already belongs to a group (D6)", async () => {
+      const txInsertResult = insertChain([{ ...sampleGroup, isSingleton: true }]);
+      const tx = {
+        select: vi
+          .fn()
+          .mockReturnValue(selectChain([{ modelGroupId: 9, groupName: "existing-group" }])),
+        insert: vi.fn().mockReturnValue(txInsertResult),
+      };
+
+      mockTransaction.mockImplementation(async (fn: (tx: typeof tx) => Promise<unknown>) => {
+        return fn(tx);
+      });
+
+      const { createSingletonModelGroup, ModelGroupMemberConflictError } = await import(
+        "@/repository/model-group"
+      );
+
+      await expect(createSingletonModelGroup("claude-3")).rejects.toBeInstanceOf(
+        ModelGroupMemberConflictError
+      );
+      // No group/member rows inserted when the model is already taken.
+      expect(tx.insert).not.toHaveBeenCalled();
     });
   });
 });

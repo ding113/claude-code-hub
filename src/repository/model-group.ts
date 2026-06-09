@@ -169,6 +169,24 @@ export async function createSingletonModelGroup(
   name?: string
 ): Promise<ModelGroupRow> {
   return db.transaction(async (tx) => {
+    // D6: a model may belong to exactly one group. Reject before creating an
+    // empty group; onConflictDoNothing would silently drop the membership and
+    // leave a phantom group behind.
+    const existing = await tx
+      .select({
+        modelGroupId: modelGroupMembers.modelGroupId,
+        groupName: modelGroups.name,
+      })
+      .from(modelGroupMembers)
+      .innerJoin(modelGroups, eq(modelGroupMembers.modelGroupId, modelGroups.id))
+      .where(eq(modelGroupMembers.model, model))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const { modelGroupId, groupName } = existing[0];
+      throw new ModelGroupMemberConflictError(model, modelGroupId, groupName);
+    }
+
     const groupName = name?.trim() ?? model;
 
     const [row] = await tx
@@ -176,10 +194,7 @@ export async function createSingletonModelGroup(
       .values({ name: groupName, isSingleton: true })
       .returning();
 
-    await tx
-      .insert(modelGroupMembers)
-      .values({ modelGroupId: row.id, model })
-      .onConflictDoNothing();
+    await tx.insert(modelGroupMembers).values({ modelGroupId: row.id, model });
 
     return row;
   });
