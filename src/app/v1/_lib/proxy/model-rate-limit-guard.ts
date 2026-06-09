@@ -2,7 +2,11 @@ import { getLocale } from "next-intl/server";
 import { logger } from "@/lib/logger";
 import { BucketRateLimitService } from "@/lib/model-rate-limit/bucket-service";
 import { resolveModelLimits } from "@/lib/model-rate-limit/cache";
-import { isModelRateLimitEnabled, type LimitWindow } from "@/lib/model-rate-limit/types";
+import {
+  isModelRateLimitEnabled,
+  isModelRateLimitFailOpen,
+  type LimitWindow,
+} from "@/lib/model-rate-limit/types";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { RateLimitError } from "./errors";
 import type { GuardStep } from "./guard-pipeline";
@@ -157,6 +161,25 @@ async function resolveAndApplyForCurrentProvider(
     );
   }
 
+  // Fail-closed (MODEL_RATE_LIMIT_FAIL_OPEN=false): a bucket that could not be
+  // evaluated (Redis/DB unavailable, result.failOpen) must DENY rather than pass
+  // through, because the model gate did not actually enforce. In the default
+  // fail-open mode this is skipped and the unevaluable bucket instead keeps the
+  // mainline global gate as backstop (the failOpen skip in the loop below).
+  if (!isModelRateLimitFailOpen() && checks.some(({ result }) => result.failOpen)) {
+    if (!options.throwOnViolation) {
+      logger.warn(
+        "[ModelRateLimit] fail-closed: bucket unevaluable on re-resolve path (in-flight request continues, mainline gate applies)"
+      );
+      return;
+    }
+    const locale = await getLocale();
+    const message = await getErrorMessageServer(locale, ERROR_CODES.MODEL_RATE_LIMIT_UNAVAILABLE, {
+      model,
+    });
+    throw new RateLimitError("rate_limit_error", message, "usd_total", 0, 0, null, null);
+  }
+
   for (const { bucket, result } of checks) {
     if (result.failOpen) continue;
     if (bucket.axis === "user") session.setBypassUserGlobalCost(true);
@@ -175,12 +198,21 @@ export const ModelRateLimitGuard: GuardStep = {
     // wiring: legacy unit-test fakes that don't expose the API are tolerated.
     const listenerSetter = (
       session as unknown as {
-        setProviderChangeListener?: (cb: (s: ProxySession) => Promise<void> | void) => void;
+        setProviderChangeListener?: (
+          cb: (s: ProxySession, opts?: { enforce?: boolean }) => Promise<void> | void
+        ) => void;
       }
     ).setProviderChangeListener;
     if (typeof listenerSetter === "function") {
-      listenerSetter.call(session, (s: ProxySession) =>
-        resolveAndApplyForCurrentProvider(s, { throwOnViolation: false, resetOnEmpty: true })
+      // `enforce` is set by the forwarder's non-hedge failover path (the next
+      // upstream attempt has not been sent yet, so a fallback-provider quota
+      // breach can still abort the request). The hedge-winner swap leaves it
+      // unset: that attempt is already committed, so a breach is only logged.
+      listenerSetter.call(session, (s: ProxySession, opts?: { enforce?: boolean }) =>
+        resolveAndApplyForCurrentProvider(s, {
+          throwOnViolation: opts?.enforce === true,
+          resetOnEmpty: true,
+        })
       );
     }
 

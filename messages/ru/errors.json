@@ -69,6 +69,7 @@
   "MODEL_RATE_LIMIT_WEEKLY_EXCEEDED": "Модель {model}: превышен недельный лимит расходов: ${current} USD (лимит: ${limit} USD)",
   "MODEL_RATE_LIMIT_MONTHLY_EXCEEDED": "Модель {model}: превышен месячный лимит расходов: ${current} USD (лимит: ${limit} USD)",
   "MODEL_RATE_LIMIT_TOTAL_EXCEEDED": "Модель {model}: превышен общий лимит расходов: ${current} / ${limit} USD",
+  "MODEL_RATE_LIMIT_UNAVAILABLE": "Проверка лимита для модели {model} временно недоступна; запрос отклонён (fail-closed)",
   "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "Превышен лимит одновременных сессий: {current} сессий (лимит: {limit}). Пожалуйста, дождитесь завершения активных сессий",
   "RESOURCE_BUSY": "Ресурс в настоящее время используется",
   "INVALID_STATE": "Операция не разрешена в текущем состоянии",

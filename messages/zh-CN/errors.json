@@ -69,6 +69,7 @@
   "MODEL_RATE_LIMIT_WEEKLY_EXCEEDED": "模型 {model} 周消费超限：当前 ${current} USD（限制：${limit} USD）",
   "MODEL_RATE_LIMIT_MONTHLY_EXCEEDED": "模型 {model} 月消费超限：当前 ${current} USD（限制：${limit} USD）",
   "MODEL_RATE_LIMIT_TOTAL_EXCEEDED": "模型 {model} 总消费上限已达到：${current} / ${limit} USD",
+  "MODEL_RATE_LIMIT_UNAVAILABLE": "模型 {model} 限额校验暂不可用，已按 fail-closed 策略拒绝请求",
   "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "并发 Session 超限：当前 {current} 个（限制：{limit} 个）。请等待活跃 Session 完成",
   "RESOURCE_BUSY": "资源正在使用中",
   "INVALID_STATE": "当前状态不允许此操作",

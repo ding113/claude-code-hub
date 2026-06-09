@@ -2181,7 +2181,10 @@ export class ProxyForwarder {
       // bugfix #02: changeProvider triggers the model-rate-limit guard's
       // re-resolve listener so buckets + bypass flags reflect the new
       // provider's redirect namespace before any ledger write.
-      await session.changeProvider(currentProvider);
+      // enforce: true — this is the non-hedge failover path and the next upstream
+      // attempt has not been sent yet, so a fallback-provider group-quota breach
+      // must abort the request rather than slip through unenforced.
+      await session.changeProvider(currentProvider, { enforce: true });
 
       logger.info("ProxyForwarder: Switched to alternative provider", {
         totalProvidersAttempted,

@@ -57,10 +57,39 @@ function leaseWindowSpecs(bucket: ModelLimitBucket): WindowSpec[] {
   ];
 }
 
+function totalCacheKey(bucket: ModelLimitBucket): string {
+  return `total_cost:model:${bucket.axis}:${bucket.scopeId}:${bucket.modelGroupId}`;
+}
+
+/**
+ * Conditionally fold settled spend into the OPT-A total cache. Only an EXISTING
+ * key is bumped (`INCRBYFLOAT` preserves its TTL) so we never seed a key without
+ * the DB-aggregated base — a missing key is left for the next read-through to
+ * re-aggregate (which already includes the settled row). Without this, a cached
+ * sub-cap total would be served for the whole TTL even after spend crosses the
+ * cap, allowing overspend during the window.
+ */
+async function bumpTotalUsageCache(bucket: ModelLimitBucket, cost: number): Promise<void> {
+  if (bucket.caps.limitTotalUsd === null || bucket.caps.limitTotalUsd === undefined) return;
+  if (!Number.isFinite(cost) || cost <= 0) return;
+  const redis = getRedisClient();
+  if (!redis || redis.status !== "ready") return;
+  try {
+    await redis.eval(
+      "if redis.call('EXISTS', KEYS[1]) == 1 then return redis.call('INCRBYFLOAT', KEYS[1], ARGV[1]) else return false end",
+      1,
+      totalCacheKey(bucket),
+      String(cost)
+    );
+  } catch (error) {
+    logger.debug("[BucketService] total cache bump failed", { error });
+  }
+}
+
 /** OPT-A: read-through cached all-time usage on the group's member models. */
 async function getModelGroupTotalUsage(bucket: ModelLimitBucket): Promise<number> {
   const { axis, scopeId, modelGroupId, models } = bucket;
-  const cacheKey = `total_cost:model:${axis}:${scopeId}:${modelGroupId}`;
+  const cacheKey = totalCacheKey(bucket);
   const redis = getRedisClient();
 
   if (redis && redis.status === "ready") {
@@ -169,11 +198,15 @@ export class BucketRateLimitService {
     }
   }
 
-  /** Decrement the lease budgets for a bucket after a request settles (total has no lease). */
+  /**
+   * Decrement the lease budgets for a bucket after a request settles. The total
+   * window has no lease; its read-through cache is folded forward here so it
+   * cannot serve a stale sub-cap value past the settled spend.
+   */
   static async decrementLease(bucket: ModelLimitBucket, cost: number): Promise<void> {
     const { axis, scopeId, modelGroupId } = bucket;
-    await Promise.all(
-      leaseWindowSpecs(bucket)
+    await Promise.all([
+      ...leaseWindowSpecs(bucket)
         .filter((spec) => spec.limit && spec.limit > 0)
         .map((spec) =>
           BucketLeaseService.decrementLeaseBudget({
@@ -184,7 +217,8 @@ export class BucketRateLimitService {
             cost,
             resetMode: spec.resetMode,
           })
-        )
-    );
+        ),
+      bumpTotalUsageCache(bucket, cost),
+    ]);
   }
 }

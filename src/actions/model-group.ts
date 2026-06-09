@@ -3,6 +3,7 @@
 import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { publishModelLimitCacheInvalidation } from "@/lib/model-rate-limit/cache";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import type { ModelGroupRow, ModelGroupWithMembers } from "@/repository/model-group";
 import {
@@ -169,6 +170,10 @@ export async function deleteModelGroup(id: number): Promise<ActionResult<void>> 
     }
 
     await repoDeleteModelGroup(id);
+    // Group removal (cascades members) changes the resolution snapshot's
+    // modelToGroupId / groupMembers; refresh + broadcast so the change applies
+    // immediately instead of after the 30s snapshot TTL.
+    await publishModelLimitCacheInvalidation();
     return { ok: true, data: undefined };
   } catch (error) {
     logger.error("deleteModelGroup failed", { id, error });
@@ -197,6 +202,9 @@ export async function addModelGroupMember(
     }
 
     await repoAddModelGroupMember(groupId, trimmedModel);
+    // Membership changes the snapshot's modelToGroupId / groupMembers; refresh +
+    // broadcast so the new per-model quota is enforced immediately (not after TTL).
+    await publishModelLimitCacheInvalidation();
     return { ok: true, data: undefined };
   } catch (error) {
     if (error instanceof ModelGroupMemberConflictError) {
@@ -235,6 +243,9 @@ export async function removeModelGroupMember(
 
   try {
     await repoRemoveModelGroupMember(groupId, model);
+    // Membership changes the snapshot's modelToGroupId / groupMembers; refresh +
+    // broadcast so the model reverts to ungrouped immediately (not after TTL).
+    await publishModelLimitCacheInvalidation();
     return { ok: true, data: undefined };
   } catch (error) {
     logger.error("removeModelGroupMember failed", { groupId, model, error });
@@ -303,6 +314,9 @@ export async function createSingletonModelGroup(
     }
 
     const data = await repoCreateSingletonModelGroup(trimmedModel, name?.trim());
+    // A singleton group registers a new model->group mapping; refresh + broadcast
+    // so the snapshot picks it up immediately instead of after the TTL.
+    await publishModelLimitCacheInvalidation();
     return { ok: true, data };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

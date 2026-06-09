@@ -197,4 +197,21 @@ describe("BucketRateLimitService.decrementLease", () => {
     await BucketRateLimitService.decrementLease(makeBucket(), 5);
     expect(decrementLeaseBudget).not.toHaveBeenCalled();
   });
+
+  it("folds settled spend into the total-usage cache when a total cap is configured", async () => {
+    const redis = { status: "ready", get: vi.fn(), setex: vi.fn(), eval: vi.fn() };
+    getRedis.mockReturnValue(redis as never);
+    await BucketRateLimitService.decrementLease(makeBucket({ limitTotalUsd: 100 }), 2.5);
+    expect(redis.eval).toHaveBeenCalledTimes(1);
+    const [, , key, cost] = redis.eval.mock.calls[0];
+    expect(key).toBe("total_cost:model:user:7:42");
+    expect(cost).toBe("2.5");
+  });
+
+  it("does not touch the total cache when no total cap is configured", async () => {
+    const redis = { status: "ready", get: vi.fn(), setex: vi.fn(), eval: vi.fn() };
+    getRedis.mockReturnValue(redis as never);
+    await BucketRateLimitService.decrementLease(makeBucket({ limit5hUsd: 10 }), 1);
+    expect(redis.eval).not.toHaveBeenCalled();
+  });
 });

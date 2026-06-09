@@ -45,6 +45,7 @@ interface FakeSession {
   setResolvedModelLimits: ReturnType<typeof vi.fn>;
   setBypassUserGlobalCost: ReturnType<typeof vi.fn>;
   setBypassKeyGlobalCost: ReturnType<typeof vi.fn>;
+  setProviderChangeListener: ReturnType<typeof vi.fn>;
 }
 
 function fakeSession(
@@ -58,6 +59,7 @@ function fakeSession(
     setResolvedModelLimits: vi.fn(),
     setBypassUserGlobalCost: vi.fn(),
     setBypassKeyGlobalCost: vi.fn(),
+    setProviderChangeListener: vi.fn(),
   };
 }
 
@@ -72,6 +74,7 @@ describe("ModelRateLimitGuard — group-rate-limit (§5.2)", () => {
   });
   afterEach(() => {
     process.env.ENABLE_MODEL_RATE_LIMIT = undefined;
+    process.env.MODEL_RATE_LIMIT_FAIL_OPEN = undefined;
   });
 
   it("flag off -> no-op, never resolves", async () => {
@@ -117,6 +120,55 @@ describe("ModelRateLimitGuard — group-rate-limit (§5.2)", () => {
     await run(s);
     expect(s.setBypassUserGlobalCost).not.toHaveBeenCalled();
     expect(s.setBypassKeyGlobalCost).not.toHaveBeenCalled();
+  });
+
+  it("fail-closed (MODEL_RATE_LIMIT_FAIL_OPEN=false): an unevaluable bucket is rejected", async () => {
+    process.env.MODEL_RATE_LIMIT_FAIL_OPEN = "false";
+    resolveMock.mockResolvedValue([bucket("user")]);
+    checkMock.mockResolvedValue({ allowed: true, failOpen: true });
+    const s = fakeSession();
+    await expect(run(s)).rejects.toBeInstanceOf(RateLimitError);
+    expect(s.setBypassUserGlobalCost).not.toHaveBeenCalled();
+  });
+
+  it("failover re-resolve (enforce:true) throws on a fallback-provider violation", async () => {
+    resolveMock.mockResolvedValue([bucket("user")]);
+    checkMock.mockResolvedValue({ allowed: true, failOpen: false });
+    const s = fakeSession();
+    await run(s); // initial clean pass; registers the provider-change listener
+    const listener = s.setProviderChangeListener.mock.calls[0][0] as (
+      s: ProxySession,
+      o?: { enforce?: boolean }
+    ) => Promise<void>;
+    checkMock.mockResolvedValue({
+      allowed: false,
+      window: "daily",
+      currentUsage: 31,
+      limitValue: 30,
+    });
+    await expect(listener(s as unknown as ProxySession, { enforce: true })).rejects.toBeInstanceOf(
+      RateLimitError
+    );
+  });
+
+  it("hedge-winner re-resolve (no enforce) logs only, never throws", async () => {
+    resolveMock.mockResolvedValue([bucket("user")]);
+    checkMock.mockResolvedValue({ allowed: true, failOpen: false });
+    const s = fakeSession();
+    await run(s);
+    const listener = s.setProviderChangeListener.mock.calls[0][0] as (
+      s: ProxySession,
+      o?: { enforce?: boolean }
+    ) => Promise<void>;
+    checkMock.mockResolvedValue({
+      allowed: false,
+      window: "daily",
+      currentUsage: 31,
+      limitValue: 30,
+    });
+    await expect(
+      listener(s as unknown as ProxySession, { enforce: false })
+    ).resolves.toBeUndefined();
   });
 
   it("violation throws a MODEL_* RateLimitError and sets no bypass", async () => {

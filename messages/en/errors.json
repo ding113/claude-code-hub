@@ -75,6 +75,7 @@
   "MODEL_RATE_LIMIT_WEEKLY_EXCEEDED": "Model {model} weekly cost limit exceeded: ${current} USD (limit: ${limit} USD)",
   "MODEL_RATE_LIMIT_MONTHLY_EXCEEDED": "Model {model} monthly cost limit exceeded: ${current} USD (limit: ${limit} USD)",
   "MODEL_RATE_LIMIT_TOTAL_EXCEEDED": "Model {model} total spending limit exceeded: ${current} / ${limit} USD",
+  "MODEL_RATE_LIMIT_UNAVAILABLE": "Model {model} rate-limit verification is temporarily unavailable; request rejected (fail-closed)",
 
   "USER_NOT_FOUND": "User not found",
   "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "Regular users cannot modify quota limits and provider groups",

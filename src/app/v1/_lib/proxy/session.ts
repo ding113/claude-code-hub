@@ -223,7 +223,9 @@ export class ProxySession {
   // bugfix #02: external listener notified whenever the bound provider changes.
   // The model rate-limit guard registers a re-resolution callback here so failover
   // / hedge winner swaps recompute buckets and per-axis bypass flags before settle.
-  private providerChangeListener: ((session: ProxySession) => Promise<void> | void) | null = null;
+  private providerChangeListener:
+    | ((session: ProxySession, opts?: { enforce?: boolean }) => Promise<void> | void)
+    | null = null;
 
   private constructor(init: {
     startTime: number;
@@ -399,7 +401,7 @@ export class ProxySession {
    * stale handlers.
    */
   setProviderChangeListener(
-    listener: ((session: ProxySession) => Promise<void> | void) | null
+    listener: ((session: ProxySession, opts?: { enforce?: boolean }) => Promise<void> | void) | null
   ): void {
     this.providerChangeListener = listener;
   }
@@ -409,13 +411,19 @@ export class ProxySession {
    * listener after the swap. Forwarder failover / hedge paths must call this
    * instead of `setProvider` so that buckets and bypass flags reflect the
    * final provider's redirect namespace.
+   *
+   * `opts.enforce` (failover path only) lets the listener throw to abort the
+   * request when the new provider's model breaches a group quota. The listener
+   * error is otherwise swallowed (hedge-winner swap is already committed), so a
+   * non-enforcing listener failure never breaks the swap.
    */
-  async changeProvider(provider: Provider | null): Promise<void> {
+  async changeProvider(provider: Provider | null, opts?: { enforce?: boolean }): Promise<void> {
     this.setProvider(provider);
     if (this.providerChangeListener) {
       try {
-        await this.providerChangeListener(this);
+        await this.providerChangeListener(this, opts);
       } catch (error) {
+        if (opts?.enforce) throw error;
         logger.warn("[Session] provider-change listener failed", { error });
       }
     }
