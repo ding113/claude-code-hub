@@ -1,0 +1,7 @@
+services:
+  app:
+    image: claude-code-hub:local
+    environment:
+      ENABLE_RATE_LIMIT: "true"
+      ENABLE_MODEL_RATE_LIMIT: "true"
+      AUTO_MIGRATE: "true"

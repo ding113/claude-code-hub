@@ -186,6 +186,11 @@ function createFallbackSettings(): SystemSettings {
     quotaLeasePercentWeekly: 0.05,
     quotaLeasePercentMonthly: 0.05,
     quotaLeaseCapUsd: null,
+    quotaModelLeasePercent5h: null,
+    quotaModelLeasePercentDaily: null,
+    quotaModelLeasePercentWeekly: null,
+    quotaModelLeasePercentMonthly: null,
+    quotaModelLeaseMinSliceUsd: null,
     publicStatusWindowHours: 24,
     publicStatusAggregationIntervalMinutes: 5,
     ipExtractionConfig: null,
@@ -285,6 +290,11 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
       fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
       enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
+      quotaModelLeasePercent5h: systemSettings.quotaModelLeasePercent5h,
+      quotaModelLeasePercentDaily: systemSettings.quotaModelLeasePercentDaily,
+      quotaModelLeasePercentWeekly: systemSettings.quotaModelLeasePercentWeekly,
+      quotaModelLeasePercentMonthly: systemSettings.quotaModelLeasePercentMonthly,
+      quotaModelLeaseMinSliceUsd: systemSettings.quotaModelLeaseMinSliceUsd,
       ...selectionWithoutPassThrough,
     };
 
@@ -302,9 +312,37 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
-        // 最新降级：移除最近新增的 billHedgeLosers 列。
+        // 最新降级（本 PR）：移除模型维度 lease 配置列（OPT-B）。
+        const {
+          quotaModelLeasePercent5h: _omitModelLease5h,
+          quotaModelLeasePercentDaily: _omitModelLeaseDaily,
+          quotaModelLeasePercentWeekly: _omitModelLeaseWeekly,
+          quotaModelLeasePercentMonthly: _omitModelLeaseMonthly,
+          quotaModelLeaseMinSliceUsd: _omitModelLeaseMinSlice,
+          ...selectionWithoutModelLease
+        } = fullSelection;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutModelLease)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (modelLeaseFallbackError) {
+          if (!isUndefinedColumnError(modelLeaseFallbackError)) {
+            throw modelLeaseFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除模型维度 lease 列外仍有列缺失，继续回退到上一代字段集。",
+            { error: modelLeaseFallbackError }
+          );
+        }
+
+        // 次新降级：移除 billHedgeLosers 列。
         const { billHedgeLosers: _omitBillHedgeLosers, ...selectionWithoutBillHedgeLosers } =
-          fullSelection;
+          selectionWithoutModelLease;
 
         try {
           const [row] = await db
@@ -324,7 +362,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           );
         }
 
-        // 次新降级：移除 billNonSuccessfulRequests 列。
+        // 第三新降级：移除 billNonSuccessfulRequests 列。
         const {
           billNonSuccessfulRequests: _omitBillNonSuccessful,
           ...selectionWithoutBillNonSuccessful
@@ -645,6 +683,11 @@ export async function updateSystemSettings(
     passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
     fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
     enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
+    quotaModelLeasePercent5h: systemSettings.quotaModelLeasePercent5h,
+    quotaModelLeasePercentDaily: systemSettings.quotaModelLeasePercentDaily,
+    quotaModelLeasePercentWeekly: systemSettings.quotaModelLeasePercentWeekly,
+    quotaModelLeasePercentMonthly: systemSettings.quotaModelLeasePercentMonthly,
+    quotaModelLeaseMinSliceUsd: systemSettings.quotaModelLeaseMinSliceUsd,
     ...returningWithoutPassThrough,
   };
 
@@ -809,6 +852,34 @@ export async function updateSystemSettings(
       updates.quotaLeaseCapUsd =
         payload.quotaLeaseCapUsd === null ? null : String(payload.quotaLeaseCapUsd);
     }
+    if (payload.quotaModelLeasePercent5h !== undefined) {
+      updates.quotaModelLeasePercent5h =
+        payload.quotaModelLeasePercent5h === null ? null : String(payload.quotaModelLeasePercent5h);
+    }
+    if (payload.quotaModelLeasePercentDaily !== undefined) {
+      updates.quotaModelLeasePercentDaily =
+        payload.quotaModelLeasePercentDaily === null
+          ? null
+          : String(payload.quotaModelLeasePercentDaily);
+    }
+    if (payload.quotaModelLeasePercentWeekly !== undefined) {
+      updates.quotaModelLeasePercentWeekly =
+        payload.quotaModelLeasePercentWeekly === null
+          ? null
+          : String(payload.quotaModelLeasePercentWeekly);
+    }
+    if (payload.quotaModelLeasePercentMonthly !== undefined) {
+      updates.quotaModelLeasePercentMonthly =
+        payload.quotaModelLeasePercentMonthly === null
+          ? null
+          : String(payload.quotaModelLeasePercentMonthly);
+    }
+    if (payload.quotaModelLeaseMinSliceUsd !== undefined) {
+      updates.quotaModelLeaseMinSliceUsd =
+        payload.quotaModelLeaseMinSliceUsd === null
+          ? null
+          : String(payload.quotaModelLeaseMinSliceUsd);
+    }
     if (payload.publicStatusWindowHours !== undefined) {
       updates.publicStatusWindowHours = payload.publicStatusWindowHours;
     }
@@ -846,29 +917,65 @@ export async function updateSystemSettings(
         error,
       });
 
-      // 最新降级：移除最近新增的 billHedgeLosers 列。
-      const { billHedgeLosers: _omitUpdateBillHedgeLosers, ...updatesWithoutBillHedgeLosers } =
-        updates;
-      const { billHedgeLosers: _omitReturningBillHedgeLosers, ...returningWithoutBillHedgeLosers } =
-        fullReturning;
+      // 最新降级（本 PR）：移除模型维度 lease 配置列（OPT-B）。
+      const {
+        quotaModelLeasePercent5h: _omitUpdateModelLease5h,
+        quotaModelLeasePercentDaily: _omitUpdateModelLeaseDaily,
+        quotaModelLeasePercentWeekly: _omitUpdateModelLeaseWeekly,
+        quotaModelLeasePercentMonthly: _omitUpdateModelLeaseMonthly,
+        quotaModelLeaseMinSliceUsd: _omitUpdateModelLeaseMinSlice,
+        ...updatesWithoutModelLease
+      } = updates;
+      const {
+        quotaModelLeasePercent5h: _omitReturningModelLease5h,
+        quotaModelLeasePercentDaily: _omitReturningModelLeaseDaily,
+        quotaModelLeasePercentWeekly: _omitReturningModelLeaseWeekly,
+        quotaModelLeasePercentMonthly: _omitReturningModelLeaseMonthly,
+        quotaModelLeaseMinSliceUsd: _omitReturningModelLeaseMinSlice,
+        ...returningWithoutModelLease
+      } = fullReturning;
 
       try {
         [updated] = await executor
           .update(systemSettings)
-          .set(updatesWithoutBillHedgeLosers)
+          .set(updatesWithoutModelLease)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutBillHedgeLosers);
-      } catch (billHedgeLosersFallbackError) {
-        if (!isUndefinedColumnError(billHedgeLosersFallbackError)) {
-          throw billHedgeLosersFallbackError;
+          .returning(returningWithoutModelLease);
+      } catch (modelLeaseFallbackError) {
+        if (!isUndefinedColumnError(modelLeaseFallbackError)) {
+          throw modelLeaseFallbackError;
         }
 
-        logger.warn("system_settings 表除 billHedgeLosers 外仍有列缺失，继续降级更新。", {
-          error: billHedgeLosersFallbackError,
+        logger.warn("system_settings 表除模型维度 lease 列外仍有列缺失，继续降级更新。", {
+          error: modelLeaseFallbackError,
         });
       }
 
-      // 次新降级：移除 billNonSuccessfulRequests 列。
+      // 次新降级：移除 billHedgeLosers 列。
+      const { billHedgeLosers: _omitUpdateBillHedgeLosers, ...updatesWithoutBillHedgeLosers } =
+        updatesWithoutModelLease;
+      const { billHedgeLosers: _omitReturningBillHedgeLosers, ...returningWithoutBillHedgeLosers } =
+        returningWithoutModelLease;
+
+      if (!updated) {
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(updatesWithoutBillHedgeLosers)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutBillHedgeLosers);
+        } catch (billHedgeLosersFallbackError) {
+          if (!isUndefinedColumnError(billHedgeLosersFallbackError)) {
+            throw billHedgeLosersFallbackError;
+          }
+
+          logger.warn("system_settings 表除 billHedgeLosers 外仍有列缺失，继续降级更新。", {
+            error: billHedgeLosersFallbackError,
+          });
+        }
+      }
+
+      // 第三新降级：移除 billNonSuccessfulRequests 列。
       const {
         billNonSuccessfulRequests: _omitUpdateBillNonSuccessful,
         ...updatesWithoutBillNonSuccessful

@@ -4,7 +4,7 @@ import { keys, providers } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import { getTimeRangeForPeriod } from "@/lib/rate-limit/time-utils";
 import type { CostAlertData } from "@/lib/webhook";
-import { sumKeyCostInTimeRange, sumProviderCostInTimeRange } from "@/repository/statistics";
+import { sumKeyCostSplitInTimeRange, sumProviderCostInTimeRange } from "@/repository/statistics";
 
 /**
  * 生成成本预警数据
@@ -88,20 +88,24 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
         const limit5h = parseFloat(keyData.limit5h);
         if (limit5h > 0) {
           // 使用 keyId 和标准统计函数（包含 warmup/deleted 过滤）
-          const cost5h = await sumKeyCostInTimeRange(
+          // group-rate-limit (§5.3/§10): alert on the global-counted spend so a model-split
+          // axis (excluded from the global gate) does not raise a false global-limit alert,
+          // and surface the model-group-only portion so total spend != gate value is clear.
+          const split5h = await sumKeyCostSplitInTimeRange(
             keyData.id,
             range5h.startTime,
             range5h.endTime
           );
-          if (cost5h >= limit5h * threshold) {
+          if (split5h.countedInGlobal >= limit5h * threshold) {
             alerts.push({
               targetType: "user",
               targetName: keyData.userName,
               targetId: keyData.id,
-              currentCost: cost5h,
+              currentCost: split5h.countedInGlobal,
               quotaLimit: limit5h,
               threshold,
               period: "5小时",
+              modelGroupOnlyCost: split5h.total - split5h.countedInGlobal,
             });
           }
         }
@@ -111,20 +115,21 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
       if (keyData.limitWeek) {
         const limitWeek = parseFloat(keyData.limitWeek);
         if (limitWeek > 0) {
-          const costWeek = await sumKeyCostInTimeRange(
+          const splitWeek = await sumKeyCostSplitInTimeRange(
             keyData.id,
             rangeWeekly.startTime,
             rangeWeekly.endTime
           );
-          if (costWeek >= limitWeek * threshold) {
+          if (splitWeek.countedInGlobal >= limitWeek * threshold) {
             alerts.push({
               targetType: "user",
               targetName: keyData.userName,
               targetId: keyData.id,
-              currentCost: costWeek,
+              currentCost: splitWeek.countedInGlobal,
               quotaLimit: limitWeek,
               threshold,
               period: "本周",
+              modelGroupOnlyCost: splitWeek.total - splitWeek.countedInGlobal,
             });
           }
         }
@@ -134,20 +139,21 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
       if (keyData.limitMonth) {
         const limitMonth = parseFloat(keyData.limitMonth);
         if (limitMonth > 0) {
-          const costMonth = await sumKeyCostInTimeRange(
+          const splitMonth = await sumKeyCostSplitInTimeRange(
             keyData.id,
             rangeMonthly.startTime,
             rangeMonthly.endTime
           );
-          if (costMonth >= limitMonth * threshold) {
+          if (splitMonth.countedInGlobal >= limitMonth * threshold) {
             alerts.push({
               targetType: "user",
               targetName: keyData.userName,
               targetId: keyData.id,
-              currentCost: costMonth,
+              currentCost: splitMonth.countedInGlobal,
               quotaLimit: limitMonth,
               threshold,
               period: "本月",
+              modelGroupOnlyCost: splitMonth.total - splitMonth.countedInGlobal,
             });
           }
         }

@@ -201,11 +201,14 @@ export function UserLimitBadge({
   const key = getLimitTypeKey(limitType);
   const typeData = usageData[key];
   const usage = typeData?.usage ?? 0;
+  // group-rate-limit (§5.3/§10): gauge compares countedInGlobalUsage against limit.
+  // When model-group-only spend is non-zero, raw usage would exceed the global gate value.
+  const gaugeUsage = typeData?.countedInGlobalUsage ?? usage;
 
   // Calculate percentage
-  const percentage = formatPercentage(usage, limit);
-  const colorClass = getPercentageColor(usage, limit);
-  const statusText = `${formatValue(usage, unit)} / ${formatValue(limit, unit)}`;
+  const percentage = formatPercentage(gaugeUsage, limit);
+  const colorClass = getPercentageColor(gaugeUsage, limit);
+  const statusText = `${formatValue(gaugeUsage, unit)} / ${formatValue(limit, unit)}`;
 
   const percentBadge = (
     <Badge

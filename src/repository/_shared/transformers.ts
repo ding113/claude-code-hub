@@ -292,6 +292,21 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       ? parseFloat(dbSettings.quotaLeasePercentMonthly)
       : 0.05,
     quotaLeaseCapUsd: dbSettings?.quotaLeaseCapUsd ? parseFloat(dbSettings.quotaLeaseCapUsd) : null,
+    quotaModelLeasePercent5h: dbSettings?.quotaModelLeasePercent5h
+      ? parseFloat(dbSettings.quotaModelLeasePercent5h)
+      : null,
+    quotaModelLeasePercentDaily: dbSettings?.quotaModelLeasePercentDaily
+      ? parseFloat(dbSettings.quotaModelLeasePercentDaily)
+      : null,
+    quotaModelLeasePercentWeekly: dbSettings?.quotaModelLeasePercentWeekly
+      ? parseFloat(dbSettings.quotaModelLeasePercentWeekly)
+      : null,
+    quotaModelLeasePercentMonthly: dbSettings?.quotaModelLeasePercentMonthly
+      ? parseFloat(dbSettings.quotaModelLeasePercentMonthly)
+      : null,
+    quotaModelLeaseMinSliceUsd: dbSettings?.quotaModelLeaseMinSliceUsd
+      ? parseFloat(dbSettings.quotaModelLeaseMinSliceUsd)
+      : null,
     publicStatusWindowHours: dbSettings?.publicStatusWindowHours ?? 24,
     publicStatusAggregationIntervalMinutes: dbSettings?.publicStatusAggregationIntervalMinutes ?? 5,
     ipExtractionConfig: dbSettings?.ipExtractionConfig ?? null,

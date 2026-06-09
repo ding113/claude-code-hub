@@ -85,6 +85,60 @@ export async function findKeyList(userId: number): Promise<Key[]> {
   return result.map(toKey);
 }
 
+export interface KeyFilterOption {
+  id: number;
+  keyPreview: string;
+  name: string;
+  userId: number;
+  userName: string;
+}
+
+export async function searchKeysForFilter(
+  searchTerm?: string,
+  limit = 200
+): Promise<KeyFilterOption[]> {
+  const conditions = [isNull(keys.deletedAt), isNull(users.deletedAt)];
+
+  const trimmedSearchTerm = searchTerm?.trim();
+  if (trimmedSearchTerm) {
+    const pattern = `%${trimmedSearchTerm}%`;
+    conditions.push(or(sql`${keys.name} ILIKE ${pattern}`, sql`${users.name} ILIKE ${pattern}`)!);
+  }
+
+  const rows = await db
+    .select({
+      id: keys.id,
+      key: keys.key,
+      name: keys.name,
+      userId: keys.userId,
+      userName: users.name,
+    })
+    .from(keys)
+    .innerJoin(users, eq(keys.userId, users.id))
+    .where(and(...conditions))
+    .orderBy(users.name, keys.name)
+    .limit(Math.max(1, Math.min(limit, 5000)));
+
+  return rows.map((r) => ({
+    id: r.id,
+    keyPreview:
+      r.key.length > 12 ? `${r.key.slice(0, 8)}...${r.key.slice(-4)}` : `${r.key.slice(0, 4)}...`,
+    name: r.name,
+    userId: r.userId,
+    userName: r.userName,
+  }));
+}
+
+export async function findKeyIdByValue(keyValue: string): Promise<number | null> {
+  const rows = await db
+    .select({ id: keys.id })
+    .from(keys)
+    .innerJoin(users, eq(keys.userId, users.id))
+    .where(and(eq(keys.key, keyValue), isNull(keys.deletedAt), isNull(users.deletedAt)))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
 /**
  * Batch version of findKeyList - fetches keys for multiple users in a single query
  * Returns a Map<userId, Key[]> for efficient lookup
@@ -667,6 +721,7 @@ export async function resolveApiKeyAuthOutcome(keyString: string): Promise<ApiKe
       userRpm: users.rpmLimit,
       userDailyQuota: users.dailyLimitUsd,
       userProviderGroup: users.providerGroup,
+      userTags: users.tags,
       userLimit5hUsd: users.limit5hUsd,
       userLimit5hResetMode: users.limit5hResetMode,
       userLimitWeeklyUsd: users.limitWeeklyUsd,
@@ -722,6 +777,7 @@ export async function resolveApiKeyAuthOutcome(keyString: string): Promise<ApiKe
     rpm: row.userRpm,
     dailyQuota: row.userDailyQuota,
     providerGroup: row.userProviderGroup,
+    tags: row.userTags,
     limit5hUsd: row.userLimit5hUsd,
     limit5hResetMode: row.userLimit5hResetMode,
     limitWeeklyUsd: row.userLimitWeeklyUsd,

@@ -16,11 +16,13 @@ describe("UpdateSystemSettingsSchema: quota lease settings", () => {
       expect(parsed.quotaDbRefreshIntervalSeconds).toBe(10);
     });
 
-    test("accepts minimum value (1)", () => {
+    // bugfix #05: minimum was raised from 1s to 5s so the display cache TTL
+    // never collapses into dashboard polling cadence.
+    test("accepts minimum value (5)", () => {
       const parsed = UpdateSystemSettingsSchema.parse({
-        quotaDbRefreshIntervalSeconds: 1,
+        quotaDbRefreshIntervalSeconds: 5,
       });
-      expect(parsed.quotaDbRefreshIntervalSeconds).toBe(1);
+      expect(parsed.quotaDbRefreshIntervalSeconds).toBe(5);
     });
 
     test("accepts maximum value (300)", () => {
@@ -30,7 +32,15 @@ describe("UpdateSystemSettingsSchema: quota lease settings", () => {
       expect(parsed.quotaDbRefreshIntervalSeconds).toBe(300);
     });
 
-    test("rejects value below minimum (0)", () => {
+    test("rejects value below new minimum (4)", () => {
+      expect(() =>
+        UpdateSystemSettingsSchema.parse({
+          quotaDbRefreshIntervalSeconds: 4,
+        })
+      ).toThrow();
+    });
+
+    test("rejects zero", () => {
       expect(() =>
         UpdateSystemSettingsSchema.parse({
           quotaDbRefreshIntervalSeconds: 0,
@@ -201,6 +211,59 @@ describe("UpdateSystemSettingsSchema: quota lease settings", () => {
     });
   });
 
+  describe("model-bucket lease settings (OPT-B)", () => {
+    test("accepts valid model lease percents", () => {
+      const parsed = UpdateSystemSettingsSchema.parse({
+        quotaModelLeasePercent5h: 0.1,
+        quotaModelLeasePercentDaily: 0.08,
+        quotaModelLeasePercentWeekly: 0.06,
+        quotaModelLeasePercentMonthly: 0.04,
+        quotaModelLeaseMinSliceUsd: 0.5,
+      });
+      expect(parsed.quotaModelLeasePercent5h).toBe(0.1);
+      expect(parsed.quotaModelLeasePercentDaily).toBe(0.08);
+      expect(parsed.quotaModelLeasePercentWeekly).toBe(0.06);
+      expect(parsed.quotaModelLeasePercentMonthly).toBe(0.04);
+      expect(parsed.quotaModelLeaseMinSliceUsd).toBe(0.5);
+    });
+
+    test("accepts null to clear the override (fall back to global)", () => {
+      const parsed = UpdateSystemSettingsSchema.parse({
+        quotaModelLeasePercent5h: null,
+        quotaModelLeasePercentDaily: null,
+        quotaModelLeasePercentWeekly: null,
+        quotaModelLeasePercentMonthly: null,
+        quotaModelLeaseMinSliceUsd: null,
+      });
+      expect(parsed.quotaModelLeasePercent5h).toBeNull();
+      expect(parsed.quotaModelLeasePercentDaily).toBeNull();
+      expect(parsed.quotaModelLeasePercentWeekly).toBeNull();
+      expect(parsed.quotaModelLeasePercentMonthly).toBeNull();
+      expect(parsed.quotaModelLeaseMinSliceUsd).toBeNull();
+    });
+
+    test("accepts edge percents (0 and 1)", () => {
+      expect(
+        UpdateSystemSettingsSchema.parse({ quotaModelLeasePercent5h: 0 }).quotaModelLeasePercent5h
+      ).toBe(0);
+      expect(
+        UpdateSystemSettingsSchema.parse({ quotaModelLeasePercentDaily: 1 })
+          .quotaModelLeasePercentDaily
+      ).toBe(1);
+    });
+
+    test("rejects out-of-range percents", () => {
+      expect(() => UpdateSystemSettingsSchema.parse({ quotaModelLeasePercent5h: -0.01 })).toThrow();
+      expect(() =>
+        UpdateSystemSettingsSchema.parse({ quotaModelLeasePercentDaily: 1.01 })
+      ).toThrow();
+    });
+
+    test("rejects negative min slice", () => {
+      expect(() => UpdateSystemSettingsSchema.parse({ quotaModelLeaseMinSliceUsd: -1 })).toThrow();
+    });
+  });
+
   describe("combined fields", () => {
     test("accepts all quota lease fields together", () => {
       const parsed = UpdateSystemSettingsSchema.parse({
@@ -228,6 +291,8 @@ describe("UpdateSystemSettingsSchema: quota lease settings", () => {
       expect(parsed.quotaLeasePercentWeekly).toBeUndefined();
       expect(parsed.quotaLeasePercentMonthly).toBeUndefined();
       expect(parsed.quotaLeaseCapUsd).toBeUndefined();
+      expect(parsed.quotaModelLeasePercent5h).toBeUndefined();
+      expect(parsed.quotaModelLeaseMinSliceUsd).toBeUndefined();
     });
   });
 });

@@ -4,8 +4,8 @@ const getSessionMock = vi.fn();
 const findUserByIdMock = vi.fn();
 const getTimeRangeForPeriodMock = vi.fn();
 const getTimeRangeForPeriodWithModeMock = vi.fn();
-const sumUserCostInTimeRangeMock = vi.fn();
-const sumUserTotalCostMock = vi.fn();
+const sumUserCostSplitInTimeRangeMock = vi.fn();
+const sumUserTotalCostSplitMock = vi.fn();
 const rateLimitGetCurrentCostMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
@@ -22,8 +22,8 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
 }));
 
 vi.mock("@/repository/statistics", () => ({
-  sumUserCostInTimeRange: (...args: unknown[]) => sumUserCostInTimeRangeMock(...args),
-  sumUserTotalCost: (...args: unknown[]) => sumUserTotalCostMock(...args),
+  sumUserCostSplitInTimeRange: (...args: unknown[]) => sumUserCostSplitInTimeRangeMock(...args),
+  sumUserTotalCostSplit: (...args: unknown[]) => sumUserTotalCostSplitMock(...args),
 }));
 
 vi.mock("@/lib/rate-limit/service", () => ({
@@ -91,8 +91,8 @@ describe("user 5h reset boundary", () => {
       endTime: now,
     });
 
-    sumUserCostInTimeRangeMock.mockResolvedValue(1);
-    sumUserTotalCostMock.mockResolvedValue(10);
+    sumUserCostSplitInTimeRangeMock.mockResolvedValue({ total: 1, countedInGlobal: 1 });
+    sumUserTotalCostSplitMock.mockResolvedValue({ total: 10, countedInGlobal: 10 });
     rateLimitGetCurrentCostMock.mockResolvedValue(2);
   });
 
@@ -119,7 +119,7 @@ describe("user 5h reset boundary", () => {
     const result = await getUserAllLimitUsage(1);
 
     expect(result.ok).toBe(true);
-    expect(sumUserCostInTimeRangeMock).toHaveBeenCalledWith(1, limit5hCostResetAt, now);
+    expect(sumUserCostSplitInTimeRangeMock).toHaveBeenCalledWith(1, limit5hCostResetAt, now);
   });
 
   it("rolling 5h falls back to the full reset marker when it is newer than the 5h marker", async () => {
@@ -142,7 +142,7 @@ describe("user 5h reset boundary", () => {
     const result = await getUserAllLimitUsage(1);
 
     expect(result.ok).toBe(true);
-    expect(sumUserCostInTimeRangeMock).toHaveBeenCalledWith(1, newerFullResetAt, now);
+    expect(sumUserCostSplitInTimeRangeMock).toHaveBeenCalledWith(1, newerFullResetAt, now);
   });
 
   it("fixed 5h remains redis authoritative", async () => {
@@ -165,7 +165,7 @@ describe("user 5h reset boundary", () => {
 
     expect(result.ok).toBe(true);
     expect(rateLimitGetCurrentCostMock).toHaveBeenCalledWith(1, "user", "5h", "00:00", "fixed");
-    expect(sumUserCostInTimeRangeMock).not.toHaveBeenCalledWith(1, limit5hCostResetAt, now);
+    expect(sumUserCostSplitInTimeRangeMock).not.toHaveBeenCalledWith(1, limit5hCostResetAt, now);
   });
 
   it("5h only reset leaves daily weekly monthly total intact", async () => {
@@ -188,14 +188,14 @@ describe("user 5h reset boundary", () => {
     const result = await getUserAllLimitUsage(1);
 
     expect(result.ok).toBe(true);
-    expect(sumUserCostInTimeRangeMock).toHaveBeenNthCalledWith(
+    expect(sumUserCostSplitInTimeRangeMock).toHaveBeenNthCalledWith(
       2,
       1,
       new Date("2026-04-22T00:00:00.000Z"),
       now
     );
-    expect(sumUserCostInTimeRangeMock).toHaveBeenNthCalledWith(3, 1, costResetAt, now);
-    expect(sumUserCostInTimeRangeMock).toHaveBeenNthCalledWith(4, 1, costResetAt, now);
-    expect(sumUserTotalCostMock).toHaveBeenCalledWith(1, Infinity, costResetAt);
+    expect(sumUserCostSplitInTimeRangeMock).toHaveBeenNthCalledWith(3, 1, costResetAt, now);
+    expect(sumUserCostSplitInTimeRangeMock).toHaveBeenNthCalledWith(4, 1, costResetAt, now);
+    expect(sumUserTotalCostSplitMock).toHaveBeenCalledWith(1, Infinity, costResetAt);
   });
 });

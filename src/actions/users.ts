@@ -2171,7 +2171,10 @@ export async function getUserAllLimitUsage(userId: number): Promise<
       "@/lib/rate-limit/time-utils"
     );
     const { RateLimitService } = await import("@/lib/rate-limit/service");
-    const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
+    const { sumUserCostSplitInTimeRange, sumUserTotalCostSplit } = await import(
+      "@/repository/statistics"
+    );
+    const { buildSplitWindow } = await import("@/lib/quota/limit-usage-split");
     const limit5hResetMode = user.limit5hResetMode ?? "rolling";
     const user5hCostResetAt = resolveUser5hCostResetAt(
       user.costResetAt ?? null,
@@ -2192,26 +2195,31 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const clipStart = (start: Date): Date => clipStartByResetAt(start, user.costResetAt ?? null);
     const clip5hStart = (start: Date): Date => clipStartByResetAt(start, user5hCostResetAt);
 
-    // 并行查询各时间范围的消费
-    // Note: sumUserTotalCost uses ALL_TIME_MAX_AGE_DAYS for all-time semantics
+    // 并行查询各时间范围的消费（group-rate-limit §5.3/§10：拆「计入全局 / 模型组单算」）
+    // Note: sumUserTotalCostSplit uses ALL_TIME_MAX_AGE_DAYS for all-time semantics
     const [usage5h, usageDaily, usageWeekly, usageMonthly, usageTotal] = await Promise.all([
       limit5hResetMode === "fixed"
-        ? RateLimitService.getCurrentCost(userId, "user", "5h", "00:00", limit5hResetMode)
-        : sumUserCostInTimeRange(userId, clip5hStart(range5h.startTime), range5h.endTime),
-      sumUserCostInTimeRange(userId, clipStart(rangeDaily.startTime), rangeDaily.endTime),
-      sumUserCostInTimeRange(userId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
-      sumUserCostInTimeRange(userId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
-      sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS, user.costResetAt),
+        ? RateLimitService.getCurrentCost(userId, "user", "5h", "00:00", limit5hResetMode).then(
+            // group-rate-limit (§5.3): after the 5h-fixed counter excludes split spend,
+            // getCurrentCost already returns the global-counted value; the fixed window does
+            // not expose a model-group-only breakdown (non-default mode), so total == counted.
+            (value) => ({ total: value, countedInGlobal: value })
+          )
+        : sumUserCostSplitInTimeRange(userId, clip5hStart(range5h.startTime), range5h.endTime),
+      sumUserCostSplitInTimeRange(userId, clipStart(rangeDaily.startTime), rangeDaily.endTime),
+      sumUserCostSplitInTimeRange(userId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
+      sumUserCostSplitInTimeRange(userId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
+      sumUserTotalCostSplit(userId, ALL_TIME_MAX_AGE_DAYS, user.costResetAt),
     ]);
 
     return {
       ok: true,
       data: {
-        limit5h: { usage: usage5h, limit: user.limit5hUsd ?? null },
-        limitDaily: { usage: usageDaily, limit: user.dailyQuota ?? null },
-        limitWeekly: { usage: usageWeekly, limit: user.limitWeeklyUsd ?? null },
-        limitMonthly: { usage: usageMonthly, limit: user.limitMonthlyUsd ?? null },
-        limitTotal: { usage: usageTotal, limit: user.limitTotalUsd ?? null },
+        limit5h: buildSplitWindow(usage5h, user.limit5hUsd ?? null),
+        limitDaily: buildSplitWindow(usageDaily, user.dailyQuota ?? null),
+        limitWeekly: buildSplitWindow(usageWeekly, user.limitWeeklyUsd ?? null),
+        limitMonthly: buildSplitWindow(usageMonthly, user.limitMonthlyUsd ?? null),
+        limitTotal: buildSplitWindow(usageTotal, user.limitTotalUsd ?? null),
       },
     };
   } catch (error) {

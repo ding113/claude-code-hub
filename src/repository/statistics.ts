@@ -1,9 +1,9 @@
 import "server-only";
 
 import type { SQL } from "drizzle-orm";
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, messageRequest, usageLedger } from "@/drizzle/schema";
+import { keys, messageRequest, providers, usageLedger } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
@@ -466,9 +466,13 @@ export async function sumUserCostToday(userId: number): Promise<number> {
 export async function sumKeyTotalCost(
   keyHash: string,
   maxAgeDays: number = 365,
-  resetAt?: Date | null
+  resetAt?: Date | null,
+  // group-rate-limit (§6.1): limit-check callers pass true to count only the key's
+  // global-counted spend. Default false -> byte-identical to mainline (display/alerts).
+  countedInGlobalOnly = false
 ): Promise<number> {
   const conditions = [eq(usageLedger.key, keyHash), LEDGER_BILLING_CONDITION];
+  if (countedInGlobalOnly) conditions.push(eq(usageLedger.countedInKeyGlobal, true));
 
   // Use the more recent of resetAt and maxAgeDays cutoff
   const maxAgeCutoff =
@@ -499,9 +503,13 @@ export async function sumKeyTotalCost(
 export async function sumUserTotalCost(
   userId: number,
   maxAgeDays: number = 365,
-  resetAt?: Date | null
+  resetAt?: Date | null,
+  // group-rate-limit (§6.1): limit-check callers pass true to count only the user's
+  // global-counted spend. Default false -> byte-identical to mainline (display/alerts).
+  countedInGlobalOnly = false
 ): Promise<number> {
   const conditions = [eq(usageLedger.userId, userId), LEDGER_BILLING_CONDITION];
+  if (countedInGlobalOnly) conditions.push(eq(usageLedger.countedInUserGlobal, true));
 
   // Use the more recent of resetAt and maxAgeDays cutoff
   const maxAgeCutoff =
@@ -522,6 +530,69 @@ export async function sumUserTotalCost(
     .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
+}
+
+/**
+ * group-rate-limit (§5.3 / §10): total-cost split variants (see CostGlobalSplit). Mirror
+ * sumUser/KeyTotalCost cutoff handling but additionally compute the global-counted sum in
+ * the same query, so the all-time quota card can show "counted-in-global / model-group-only".
+ */
+function resolveTotalCostCutoff(maxAgeDays: number, resetAt?: Date | null): Date | null {
+  const maxAgeCutoff =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
+  let cutoff = maxAgeCutoff;
+  if (resetAt instanceof Date && !Number.isNaN(resetAt.getTime())) {
+    cutoff = maxAgeCutoff && maxAgeCutoff > resetAt ? maxAgeCutoff : resetAt;
+  }
+  return cutoff;
+}
+
+export async function sumUserTotalCostSplit(
+  userId: number,
+  maxAgeDays: number = 365,
+  resetAt?: Date | null
+): Promise<CostGlobalSplit> {
+  const conditions = [eq(usageLedger.userId, userId), LEDGER_BILLING_CONDITION];
+  const cutoff = resolveTotalCostCutoff(maxAgeDays, resetAt);
+  if (cutoff) conditions.push(gte(usageLedger.createdAt, cutoff));
+
+  const result = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
+      counted: sql<number>`COALESCE(SUM(CASE WHEN ${usageLedger.countedInUserGlobal} THEN ${usageLedger.costUsd} ELSE 0 END), 0)`,
+    })
+    .from(usageLedger)
+    .where(and(...conditions));
+
+  return {
+    total: Number(result[0]?.total || 0),
+    countedInGlobal: Number(result[0]?.counted || 0),
+  };
+}
+
+export async function sumKeyTotalCostSplit(
+  keyHash: string,
+  maxAgeDays: number = 365,
+  resetAt?: Date | null
+): Promise<CostGlobalSplit> {
+  const conditions = [eq(usageLedger.key, keyHash), LEDGER_BILLING_CONDITION];
+  const cutoff = resolveTotalCostCutoff(maxAgeDays, resetAt);
+  if (cutoff) conditions.push(gte(usageLedger.createdAt, cutoff));
+
+  const result = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
+      counted: sql<number>`COALESCE(SUM(CASE WHEN ${usageLedger.countedInKeyGlobal} THEN ${usageLedger.costUsd} ELSE 0 END), 0)`,
+    })
+    .from(usageLedger)
+    .where(and(...conditions));
+
+  return {
+    total: Number(result[0]?.total || 0),
+    countedInGlobal: Number(result[0]?.counted || 0),
+  };
 }
 
 /**
@@ -702,7 +773,10 @@ export async function sumProviderTotalCost(
 export async function sumUserCostInTimeRange(
   userId: number,
   startTime: Date,
-  endTime: Date
+  endTime: Date,
+  // group-rate-limit (§6.1): lease seeding passes true so a split axis's spend is
+  // excluded from the user global window. Default false -> mainline parity.
+  countedInGlobalOnly = false
 ): Promise<number> {
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
@@ -712,7 +786,8 @@ export async function sumUserCostInTimeRange(
         eq(usageLedger.userId, userId),
         gte(usageLedger.createdAt, startTime),
         lt(usageLedger.createdAt, endTime),
-        LEDGER_BILLING_CONDITION
+        LEDGER_BILLING_CONDITION,
+        ...(countedInGlobalOnly ? [eq(usageLedger.countedInUserGlobal, true)] : [])
       )
     );
 
@@ -726,7 +801,10 @@ export async function sumUserCostInTimeRange(
 export async function sumKeyCostInTimeRange(
   keyId: number,
   startTime: Date,
-  endTime: Date
+  endTime: Date,
+  // group-rate-limit (§6.1): lease seeding passes true so a split axis's spend is
+  // excluded from the key global window. Default false -> mainline parity.
+  countedInGlobalOnly = false
 ): Promise<number> {
   const keyString = await getKeyStringByIdCached(keyId);
   if (!keyString) return 0;
@@ -737,6 +815,165 @@ export async function sumKeyCostInTimeRange(
     .where(
       and(
         eq(usageLedger.key, keyString), // 使用 key 字符串而非 ID
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION,
+        ...(countedInGlobalOnly ? [eq(usageLedger.countedInKeyGlobal, true)] : [])
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
+ * group-rate-limit (§5.3 / §10): a single-query split of spend into the portion that
+ * counts toward the mainline global gate (`countedInGlobal`) and the full total. The
+ * model-group-only portion shown in the UI is `total - countedInGlobal`. Used by the
+ * display surfaces (quota cards, my-usage) so the gauge reflects what the gate enforces
+ * while still surfacing the split-off spend.
+ */
+export type CostGlobalSplit = { total: number; countedInGlobal: number };
+
+export async function sumUserCostSplitInTimeRange(
+  userId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<CostGlobalSplit> {
+  const result = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
+      counted: sql<number>`COALESCE(SUM(CASE WHEN ${usageLedger.countedInUserGlobal} THEN ${usageLedger.costUsd} ELSE 0 END), 0)`,
+    })
+    .from(usageLedger)
+    .where(
+      and(
+        eq(usageLedger.userId, userId),
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
+      )
+    );
+
+  return {
+    total: Number(result[0]?.total || 0),
+    countedInGlobal: Number(result[0]?.counted || 0),
+  };
+}
+
+export async function sumKeyCostSplitInTimeRange(
+  keyId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<CostGlobalSplit> {
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) return { total: 0, countedInGlobal: 0 };
+
+  const result = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
+      counted: sql<number>`COALESCE(SUM(CASE WHEN ${usageLedger.countedInKeyGlobal} THEN ${usageLedger.costUsd} ELSE 0 END), 0)`,
+    })
+    .from(usageLedger)
+    .where(
+      and(
+        eq(usageLedger.key, keyString),
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
+      )
+    );
+
+  return {
+    total: Number(result[0]?.total || 0),
+    countedInGlobal: Number(result[0]?.counted || 0),
+  };
+}
+
+/**
+ * 查询用户在指定时间范围内、按模型维度的消费总和
+ * 用于 per-model 限额的 DB 权威聚合（lease 切片重建）
+ */
+export async function sumUserCostByModelInTimeRange(
+  userId: number,
+  model: string,
+  startTime: Date,
+  endTime: Date
+): Promise<number> {
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
+    .where(
+      and(
+        eq(usageLedger.userId, userId),
+        eq(usageLedger.model, model),
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
+ * 查询 Key 在指定时间范围内、按模型维度的消费总和
+ * 用于 per-model 限额的 DB 权威聚合（lease 切片重建）
+ */
+export async function sumKeyCostByModelInTimeRange(
+  keyId: number,
+  model: string,
+  startTime: Date,
+  endTime: Date
+): Promise<number> {
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) return 0;
+
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
+    .where(
+      and(
+        eq(usageLedger.key, keyString),
+        eq(usageLedger.model, model),
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
+ * 查询某主体（user 或 key）在指定时间范围内、跨一组模型（model IN (...)）的消费总和。
+ * 用于「模型组」维度限额的 DB 权威聚合（lease 切片重建 / total 兜底）。
+ * 模型桶统计组成员上的全部消费，与全局额是否旁路无关，故不按 counted_in_*_global 过滤。
+ */
+export async function sumScopeCostByModelsInTimeRange(
+  scope: "user" | "key",
+  scopeId: number,
+  models: string[],
+  startTime: Date,
+  endTime: Date
+): Promise<number> {
+  if (models.length === 0) return 0;
+
+  let scopeCondition: SQL;
+  if (scope === "user") {
+    scopeCondition = eq(usageLedger.userId, scopeId);
+  } else {
+    const keyString = await getKeyStringByIdCached(scopeId);
+    if (!keyString) return 0;
+    scopeCondition = eq(usageLedger.key, keyString);
+  }
+
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
+    .where(
+      and(
+        scopeCondition,
+        inArray(usageLedger.model, models),
         gte(usageLedger.createdAt, startTime),
         lt(usageLedger.createdAt, endTime),
         LEDGER_BILLING_CONDITION
@@ -759,6 +996,13 @@ interface QuotaCostSummary {
   costWeekly: number;
   costMonthly: number;
   costTotal: number;
+  // group-rate-limit (§5.3 / §10): per-window portion counted toward the mainline global
+  // gate. The model-group-only portion shown in the UI is `cost* - cost*Counted`.
+  cost5hCounted: number;
+  costDailyCounted: number;
+  costWeeklyCounted: number;
+  costMonthlyCounted: number;
+  costTotalCounted: number;
 }
 
 /**
@@ -809,6 +1053,9 @@ export async function sumUserQuotaCosts(
   const costTotal = cutoffDate
     ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate.toISOString()}), 0)`
     : sql<string>`COALESCE(SUM(${usageLedger.costUsd}), 0)`;
+  const costTotalCounted = cutoffDate
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate.toISOString()} AND ${usageLedger.countedInUserGlobal}), 0)`
+    : sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.countedInUserGlobal}), 0)`;
 
   const [row] = await db
     .select({
@@ -817,6 +1064,11 @@ export async function sumUserQuotaCosts(
       costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime.toISOString()}), 0)`,
       costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime.toISOString()}), 0)`,
       costTotal,
+      cost5hCounted: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime.toISOString()} AND ${usageLedger.countedInUserGlobal}), 0)`,
+      costDailyCounted: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime.toISOString()} AND ${usageLedger.countedInUserGlobal}), 0)`,
+      costWeeklyCounted: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime.toISOString()} AND ${usageLedger.countedInUserGlobal}), 0)`,
+      costMonthlyCounted: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime.toISOString()} AND ${usageLedger.countedInUserGlobal}), 0)`,
+      costTotalCounted,
     })
     .from(usageLedger)
     .where(
@@ -834,6 +1086,11 @@ export async function sumUserQuotaCosts(
     costWeekly: Number(row?.costWeekly ?? 0),
     costMonthly: Number(row?.costMonthly ?? 0),
     costTotal: Number(row?.costTotal ?? 0),
+    cost5hCounted: Number(row?.cost5hCounted ?? 0),
+    costDailyCounted: Number(row?.costDailyCounted ?? 0),
+    costWeeklyCounted: Number(row?.costWeeklyCounted ?? 0),
+    costMonthlyCounted: Number(row?.costMonthlyCounted ?? 0),
+    costTotalCounted: Number(row?.costTotalCounted ?? 0),
   };
 }
 
@@ -848,7 +1105,18 @@ export async function sumKeyQuotaCostsById(
 ): Promise<QuotaCostSummary> {
   const keyString = await getKeyStringByIdCached(keyId);
   if (!keyString) {
-    return { cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0, costTotal: 0 };
+    return {
+      cost5h: 0,
+      costDaily: 0,
+      costWeekly: 0,
+      costMonthly: 0,
+      costTotal: 0,
+      cost5hCounted: 0,
+      costDailyCounted: 0,
+      costWeeklyCounted: 0,
+      costMonthlyCounted: 0,
+      costTotalCounted: 0,
+    };
   }
 
   const maxAgeCutoff =
@@ -860,6 +1128,113 @@ export async function sumKeyQuotaCostsById(
   if (resetAt instanceof Date && !Number.isNaN(resetAt.getTime())) {
     cutoffDate = maxAgeCutoff && maxAgeCutoff > resetAt ? maxAgeCutoff : resetAt;
   }
+
+  const scanStart = cutoffDate
+    ? new Date(
+        Math.min(
+          ranges.range5h.startTime.getTime(),
+          ranges.rangeDaily.startTime.getTime(),
+          ranges.rangeWeekly.startTime.getTime(),
+          ranges.rangeMonthly.startTime.getTime(),
+          cutoffDate.getTime()
+        )
+      )
+    : null;
+  const scanEnd = new Date(
+    Math.max(
+      ranges.range5h.endTime.getTime(),
+      ranges.rangeDaily.endTime.getTime(),
+      ranges.rangeWeekly.endTime.getTime(),
+      ranges.rangeMonthly.endTime.getTime(),
+      Date.now()
+    )
+  );
+
+  const costTotal = cutoffDate
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate.toISOString()}), 0)`
+    : sql<string>`COALESCE(SUM(${usageLedger.costUsd}), 0)`;
+  const costTotalCounted = cutoffDate
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate.toISOString()} AND ${usageLedger.countedInKeyGlobal}), 0)`
+    : sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.countedInKeyGlobal}), 0)`;
+
+  const [row] = await db
+    .select({
+      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime.toISOString()}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime.toISOString()}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime.toISOString()}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime.toISOString()}), 0)`,
+      costTotal,
+      cost5hCounted: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime.toISOString()} AND ${usageLedger.countedInKeyGlobal}), 0)`,
+      costDailyCounted: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime.toISOString()} AND ${usageLedger.countedInKeyGlobal}), 0)`,
+      costWeeklyCounted: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime.toISOString()} AND ${usageLedger.countedInKeyGlobal}), 0)`,
+      costMonthlyCounted: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime.toISOString()} AND ${usageLedger.countedInKeyGlobal}), 0)`,
+      costTotalCounted,
+    })
+    .from(usageLedger)
+    .where(
+      and(
+        eq(usageLedger.key, keyString),
+        LEDGER_BILLING_CONDITION,
+        ...(scanStart ? [gte(usageLedger.createdAt, scanStart)] : []),
+        lt(usageLedger.createdAt, scanEnd)
+      )
+    );
+
+  return {
+    cost5h: Number(row?.cost5h ?? 0),
+    costDaily: Number(row?.costDaily ?? 0),
+    costWeekly: Number(row?.costWeekly ?? 0),
+    costMonthly: Number(row?.costMonthly ?? 0),
+    costTotal: Number(row?.costTotal ?? 0),
+    cost5hCounted: Number(row?.cost5hCounted ?? 0),
+    costDailyCounted: Number(row?.costDailyCounted ?? 0),
+    costWeeklyCounted: Number(row?.costWeeklyCounted ?? 0),
+    costMonthlyCounted: Number(row?.costMonthlyCounted ?? 0),
+    costTotalCounted: Number(row?.costTotalCounted ?? 0),
+  };
+}
+
+export interface ModelGroupCostSummary {
+  cost5h: number;
+  costDaily: number;
+  costWeekly: number;
+  costMonthly: number;
+  costTotal: number;
+}
+
+const EMPTY_MODEL_GROUP_COST_SUMMARY: ModelGroupCostSummary = {
+  cost5h: 0,
+  costDaily: 0,
+  costWeekly: 0,
+  costMonthly: 0,
+  costTotal: 0,
+};
+
+/**
+ * 合并查询：一次 SQL 返回某主体（user 或 key）在「一组模型」上各周期的消费与总消费。
+ * 用于 my-usage 的模型组配额展示。模型桶是独立预算，统计组成员上的全部消费，
+ * 不按 counted_in_*_global 过滤（与 sumScopeCostByModelsInTimeRange 口径一致）。
+ * total 为全时（可选 resetAt 下限），与 BucketRateLimitService 的 total 口径一致。
+ */
+export async function sumScopeQuotaCostsByModels(
+  scope: "user" | "key",
+  scopeId: number,
+  models: string[],
+  ranges: QuotaCostRanges,
+  resetAt?: Date | null
+): Promise<ModelGroupCostSummary> {
+  if (models.length === 0) return EMPTY_MODEL_GROUP_COST_SUMMARY;
+
+  let scopeCondition: SQL;
+  if (scope === "user") {
+    scopeCondition = eq(usageLedger.userId, scopeId);
+  } else {
+    const keyString = await getKeyStringByIdCached(scopeId);
+    if (!keyString) return EMPTY_MODEL_GROUP_COST_SUMMARY;
+    scopeCondition = eq(usageLedger.key, keyString);
+  }
+
+  const cutoffDate = resetAt instanceof Date && !Number.isNaN(resetAt.getTime()) ? resetAt : null;
 
   const scanStart = cutoffDate
     ? new Date(
@@ -897,7 +1272,8 @@ export async function sumKeyQuotaCostsById(
     .from(usageLedger)
     .where(
       and(
-        eq(usageLedger.key, keyString),
+        scopeCondition,
+        inArray(usageLedger.model, models),
         LEDGER_BILLING_CONDITION,
         ...(scanStart ? [gte(usageLedger.createdAt, scanStart)] : []),
         lt(usageLedger.createdAt, scanEnd)
@@ -1198,4 +1574,216 @@ export async function sumProviderCostInTimeRange(
     );
 
   return Number(result[0]?.total || 0);
+}
+
+/**
+ * bugfix #09: locate the earliest billable ledger row inside [startTime, endTime)
+ * for a given entity. The display cache uses this to clamp its TTL to the next
+ * boundary crossing — without it, "limit reached" can persist in cache for the
+ * full configured TTL after the oldest row has slid out of the rolling window.
+ *
+ * Returns the createdAt ms timestamp, or null if no rows match.
+ *
+ * For provider, `countedInGlobalOnly` is a no-op (no counted_in_provider_global
+ * column) but the parameter is kept for API parity with key/user.
+ */
+export async function findEarliestLedgerCreatedAtInWindow(
+  type: "key" | "user" | "provider",
+  id: number,
+  startTime: Date,
+  endTime: Date,
+  countedInGlobalOnly = false
+): Promise<number | null> {
+  const baseConditions: SQL[] = [
+    gte(usageLedger.createdAt, startTime),
+    lt(usageLedger.createdAt, endTime),
+    LEDGER_BILLING_CONDITION as SQL,
+  ];
+
+  let entityCondition: SQL | undefined;
+  if (type === "user") {
+    entityCondition = eq(usageLedger.userId, id);
+    if (countedInGlobalOnly) baseConditions.push(eq(usageLedger.countedInUserGlobal, true));
+  } else if (type === "provider") {
+    entityCondition = eq(usageLedger.finalProviderId, id);
+  } else {
+    const keyString = await getKeyStringByIdCached(id);
+    if (!keyString) return null;
+    entityCondition = eq(usageLedger.key, keyString);
+    if (countedInGlobalOnly) baseConditions.push(eq(usageLedger.countedInKeyGlobal, true));
+  }
+
+  const rows = await db
+    .select({ createdAt: usageLedger.createdAt })
+    .from(usageLedger)
+    .where(and(entityCondition, ...baseConditions))
+    .orderBy(asc(usageLedger.createdAt))
+    .limit(1);
+
+  const first = rows[0]?.createdAt;
+  if (!first) return null;
+  const ms = first instanceof Date ? first.getTime() : new Date(first).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * bugfix #07: batch-load provider cost reset timestamps so the caller can
+ * clip the window per provider (mirrors `clipStartByResetAt` semantics from
+ * the single-provider path).
+ */
+export async function getProviderCostResetAtMap(
+  providerIds: number[]
+): Promise<Map<number, Date | null>> {
+  const result = new Map<number, Date | null>();
+  if (providerIds.length === 0) return result;
+
+  const rows = await db
+    .select({
+      id: providers.id,
+      resetAt: providers.totalCostResetAt,
+    })
+    .from(providers)
+    .where(inArray(providers.id, providerIds));
+
+  for (const row of rows) {
+    result.set(row.id, row.resetAt ?? null);
+  }
+  return result;
+}
+
+/**
+ * bugfix #07: per-provider start time so each provider's costResetAt is honored.
+ * The legacy signature `(providerIds, startTime, endTime)` shares one window for
+ * every provider, which silently ignores admin-pushed reset boundaries.
+ */
+export interface ProviderCostBatchParam {
+  providerId: number;
+  startTime: Date;
+}
+
+// review L1: keep each chunk's bind-parameter count well under PostgreSQL's
+// 65535 ceiling. The object overload binds 2 parameters per provider
+// (id + start_at), so the practical cap is ~30k providers per statement.
+// 1000 leaves ample headroom for future schema growth without forcing
+// callers to think about chunking themselves.
+const PROVIDER_BATCH_CHUNK_SIZE = 1000;
+
+function mergeSumRows(
+  rows: Array<{ providerId: number; total: unknown }>,
+  into: Map<number, number>
+): void {
+  for (const row of rows) {
+    const parsed = Number(row.total ?? 0);
+    into.set(row.providerId, Number.isFinite(parsed) ? parsed : 0);
+  }
+}
+
+export function sumProviderCostBatchInTimeRange(
+  providerIds: number[],
+  startTime: Date,
+  endTime: Date
+): Promise<Map<number, number>>;
+export function sumProviderCostBatchInTimeRange(
+  params: ProviderCostBatchParam[],
+  endTime: Date
+): Promise<Map<number, number>>;
+/**
+ * 批量查询多个 Provider 在指定时间范围内的消费总和。
+ *
+ * - 旧重载：`(providerIds, startTime, endTime)` 所有 provider 共用同一窗口。
+ * - 新重载：`(params, endTime)` 每个 provider 独立窗口，调用方先 `clipStartByResetAt`。
+ *
+ * 新重载使用 `WITH params(provider_id, start_at) AS (VALUES ...)` 单次 SQL 完成
+ * per-provider 裁剪，仍走 idx_usage_ledger_provider_cost_cover 的覆盖索引。
+ *
+ * 两个重载都会按 `PROVIDER_BATCH_CHUNK_SIZE` 自动切片，单一调用即可承载任意 N。
+ * provider 维度不存在 `counted_in_provider_global` 列，因此与 sumKey/UserCost
+ * 不同，没有 `countedInGlobalOnly` 参数 — 调用方若需要这种过滤要走 key/user 维度。
+ */
+export async function sumProviderCostBatchInTimeRange(
+  arg1: number[] | ProviderCostBatchParam[],
+  arg2: Date,
+  arg3?: Date
+): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  if (arg1.length === 0) return result;
+
+  // review L2: positive `number` discriminator instead of `typeof "object"`.
+  // The previous check treated `null` (typeof null === "object") as the new
+  // overload and NPE'd on `.providerId`. Anchoring on `"number"` makes the
+  // legacy branch a strict subset and routes any bad input through the safer
+  // object branch where the existing `.providerId` access surfaces immediately.
+  const isLegacyOverload = typeof arg1[0] === "number";
+
+  if (!isLegacyOverload) {
+    const allParams = (arg1 as ProviderCostBatchParam[]).filter(
+      (p): p is ProviderCostBatchParam =>
+        p !== null && p !== undefined && typeof p.providerId === "number"
+    );
+    if (allParams.length === 0) return result;
+    const endTime = arg2;
+
+    for (let i = 0; i < allParams.length; i += PROVIDER_BATCH_CHUNK_SIZE) {
+      const params = allParams.slice(i, i + PROVIDER_BATCH_CHUNK_SIZE);
+      const providerIds = params.map((p) => p.providerId);
+
+      // Single SQL with CTE per chunk: each provider gets its own start_at.
+      // VALUES ($1::int, $2::timestamp), ($3::int, $4::timestamp), ...
+      const valuesSql = sql.join(
+        params.map(
+          (p) => sql`(${p.providerId}::int, ${p.startTime.toISOString()}::timestamp with time zone)`
+        ),
+        sql`, `
+      );
+
+      const rows = await db
+        .select({
+          providerId: usageLedger.finalProviderId,
+          total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
+        })
+        .from(usageLedger)
+        .innerJoin(
+          sql`(VALUES ${valuesSql}) AS reset_params(provider_id, start_at)`,
+          sql`reset_params.provider_id = ${usageLedger.finalProviderId} AND ${usageLedger.createdAt} >= reset_params.start_at`
+        )
+        .where(
+          and(
+            inArray(usageLedger.finalProviderId, providerIds),
+            lt(usageLedger.createdAt, endTime),
+            LEDGER_BILLING_CONDITION
+          )
+        )
+        .groupBy(usageLedger.finalProviderId);
+
+      mergeSumRows(rows, result);
+    }
+    return result;
+  }
+
+  const allProviderIds = arg1 as number[];
+  const startTime = arg2;
+  const endTime = arg3 as Date;
+
+  for (let i = 0; i < allProviderIds.length; i += PROVIDER_BATCH_CHUNK_SIZE) {
+    const providerIds = allProviderIds.slice(i, i + PROVIDER_BATCH_CHUNK_SIZE);
+
+    const rows = await db
+      .select({
+        providerId: usageLedger.finalProviderId,
+        total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
+      })
+      .from(usageLedger)
+      .where(
+        and(
+          inArray(usageLedger.finalProviderId, providerIds),
+          gte(usageLedger.createdAt, startTime),
+          lt(usageLedger.createdAt, endTime),
+          LEDGER_BILLING_CONDITION
+        )
+      )
+      .groupBy(usageLedger.finalProviderId);
+
+    mergeSumRows(rows, result);
+  }
+  return result;
 }

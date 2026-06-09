@@ -2,6 +2,7 @@
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   AlertTriangle,
+  Cpu,
   Filter,
   Layers,
   LayoutGrid,
@@ -44,6 +45,7 @@ import {
 import { ProviderForm } from "./forms/provider-form";
 import { ProviderGroupTab } from "./provider-group-tab";
 import { ProviderList } from "./provider-list";
+import { ProviderModelView } from "./provider-model-view";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
 import { ProviderVendorView } from "./provider-vendor-view";
@@ -94,7 +96,7 @@ export function ProviderManager({
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "vendor" | "groups">("list");
+  const [viewMode, setViewMode] = useState<"list" | "vendor" | "groups" | "models">("list");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   // Status and group filters
@@ -534,6 +536,16 @@ export function ProviderManager({
                 <Layers className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{tStrings("viewModeGroups")}</span>
               </Button>
+              <Button
+                variant={viewMode === "models" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 gap-1.5 text-xs"
+                onClick={() => setViewMode("models")}
+                title={tStrings("viewModeModels")}
+              >
+                <Cpu className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{tStrings("viewModeModels")}</span>
+              </Button>
             </div>
 
             <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} disabled={loading} />
@@ -646,12 +658,17 @@ export function ProviderManager({
         </div>
       </div>
 
-      {/* Provider list / vendor view / groups tab */}
+      {/* Provider list / vendor view / groups tab / models view */}
       {viewMode === "groups" ? (
         <ProviderGroupTab
           providers={providers}
           isAdmin={isAdmin}
           onRequestEditProvider={handleRequestEditProvider}
+        />
+      ) : viewMode === "models" ? (
+        <ProviderModelView
+          providers={filteredProviders}
+          onEditProvider={isAdmin ? handleOpenProviderEditor : undefined}
         />
       ) : loading && providers.length === 0 ? (
         <ProviderListSkeleton label={tCommon("loading")} />

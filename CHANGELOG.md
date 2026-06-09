@@ -4,6 +4,18 @@
 
 ---
 
+## 未发布 (Unreleased)
+
+### 新增
+
+- 用户组 × 模型组限额（Group Rate Limit）：将「按模型限额」重构为两维度模型——**模型组**（一组模型，全局互斥归属）× **限额主体**（用户 / 用户组 / 密钥），可为每个 (主体 × 模型组) 设置 5 小时/每日/每周/每月/总额成本上限。多来源（个人行 + 用户组上限）按**取最大值**合并，用户组限额为**人均上限**。支持**临时提额**授予（按用户 × 模型组 × 窗口，带有效期，到点即时生效/失效，叠加在有效上限之上）。
+  - **完全切分**：命中某轴（用户或密钥）模型组限额后，该轴消费既**跳过**主线全局成本闸门、也**不计入**该轴主线全局额（通过 `usage_ledger` 按轴打标 `counted_in_user_global` / `counted_in_key_global` 实现，DB 聚合、Redis 回填、展示分栏三处同源）；RPM 与并发护栏始终生效。Redis 故障时按 `MODEL_RATE_LIMIT_FAIL_OPEN` fail-open，且 fail-open **不**置旁路标记以防双重放行。
+  - 新增模块：schema 五表 + 两枚举 + `usage_ledger`/`message_request` 打标两列、解析快照缓存（SWR + pub/sub 失效）、桶 lease 计量、guard 接入、模型组/用户组/限额/提额 Admin REST API、Dashboard 管理界面（模型组、用户组、按模型限额含提额内嵌），5 语言 i18n。
+  - 通过 `ENABLE_MODEL_RATE_LIMIT` 开关控制，默认关闭，关闭时与主线逐字节一致。提额到点生效为内存精确判定；增删授予最长一个缓存 TTL 后对线上请求生效。
+  - 已知后续项：OPT-B 模型维度 lease 百分比（`quotaModelLeasePercent*` / `quotaModelLeaseMinSliceUsd`）当前未配置时回退主线百分比；真实 PG+Redis 的集成/E2E 测试待在具备数据库的环境中补充。
+
+---
+
 ## v0.8.5 (2026-06-08)
 
 ### 新增

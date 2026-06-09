@@ -202,7 +202,8 @@ BEGIN
     cache_creation_input_tokens, cache_read_input_tokens,
     cache_creation_5m_input_tokens, cache_creation_1h_input_tokens,
     cache_ttl_applied, context_1m_applied, swap_cache_ttl_applied,
-    duration_ms, ttfb_ms, client_ip, created_at
+    duration_ms, ttfb_ms, client_ip, created_at,
+    counted_in_user_global, counted_in_key_global
   ) VALUES (
     NEW.id, NEW.user_id, NEW.key, NEW.provider_id, v_final_provider_id,
     NEW.model, NEW.original_model, NEW.actual_response_model, NEW.endpoint, NEW.api_type, NEW.session_id,
@@ -212,7 +213,8 @@ BEGIN
     NEW.cache_creation_input_tokens, NEW.cache_read_input_tokens,
     NEW.cache_creation_5m_input_tokens, NEW.cache_creation_1h_input_tokens,
     NEW.cache_ttl_applied, NEW.context_1m_applied, NEW.swap_cache_ttl_applied,
-    NEW.duration_ms, NEW.ttfb_ms, NEW.client_ip, NEW.created_at
+    NEW.duration_ms, NEW.ttfb_ms, NEW.client_ip, NEW.created_at,
+    COALESCE(NEW.counted_in_user_global, true), COALESCE(NEW.counted_in_key_global, true)
   )
   ON CONFLICT (request_id) DO UPDATE SET
     user_id = EXCLUDED.user_id,
@@ -243,7 +245,9 @@ BEGIN
     swap_cache_ttl_applied = EXCLUDED.swap_cache_ttl_applied,
     duration_ms = EXCLUDED.duration_ms,
     ttfb_ms = EXCLUDED.ttfb_ms,
-    client_ip = EXCLUDED.client_ip;
+    client_ip = EXCLUDED.client_ip,
+    counted_in_user_global = EXCLUDED.counted_in_user_global,
+    counted_in_key_global = EXCLUDED.counted_in_key_global;
     -- created_at deliberately NOT updated on conflict: it represents the
     -- original insert time of the ledger row, which is immutable by design.
 

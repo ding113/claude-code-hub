@@ -40,11 +40,11 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
   getTimeRangeForPeriod: getTimeRangeForPeriodMock,
 }));
 
-const sumKeyCostInTimeRangeMock = vi.fn(async () => 0);
-const sumKeyTotalCostMock = vi.fn(async () => 0);
+const sumKeyCostSplitInTimeRangeMock = vi.fn(async () => ({ total: 0, countedInGlobal: 0 }));
+const sumKeyTotalCostSplitMock = vi.fn(async () => ({ total: 0, countedInGlobal: 0 }));
 vi.mock("@/repository/statistics", () => ({
-  sumKeyCostInTimeRange: sumKeyCostInTimeRangeMock,
-  sumKeyTotalCost: sumKeyTotalCostMock,
+  sumKeyCostSplitInTimeRange: sumKeyCostSplitInTimeRangeMock,
+  sumKeyTotalCostSplit: sumKeyTotalCostSplitMock,
 }));
 
 const limitMock = vi.fn();

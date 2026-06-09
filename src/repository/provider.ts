@@ -2,7 +2,7 @@ import "server-only";
 
 import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providerEndpoints, providers } from "@/drizzle/schema";
+import { providerEndpoints, providers, usageLedger } from "@/drizzle/schema";
 import { normalizeAllowedModelRules } from "@/lib/allowed-model-rules";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
@@ -1682,4 +1682,41 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
     });
     throw error;
   }
+}
+
+/**
+ * 返回管理员配置的供应商所支持的全部模型名称，用于模型组成员选择器。
+ *
+ * 来源优先级：
+ * 1. 所有已启用 provider 的 allowedModels 中 matchType==='exact' 的条目
+ * 2. usage_ledger 里实际出现过的 model 名（补充 allowedModels 为 null 的 provider）
+ */
+export async function findAllProviderSupportedModels(): Promise<string[]> {
+  const allProviders = await findAllProvidersFresh();
+  const models = new Set<string>();
+
+  for (const provider of allProviders) {
+    if (!provider.isEnabled) continue;
+    if (!provider.allowedModels) continue;
+
+    const rules = normalizeAllowedModelRules(provider.allowedModels);
+    if (!rules) continue;
+
+    for (const rule of rules) {
+      if (rule.matchType === "exact" && rule.pattern.trim()) {
+        models.add(rule.pattern.trim());
+      }
+    }
+  }
+
+  const ledgerRows = await db
+    .selectDistinct({ model: usageLedger.model })
+    .from(usageLedger)
+    .where(isNotNull(usageLedger.model));
+
+  for (const row of ledgerRows) {
+    if (row.model) models.add(row.model);
+  }
+
+  return Array.from(models).sort((a, b) => a.localeCompare(b));
 }

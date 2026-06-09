@@ -156,6 +156,46 @@ export const SystemSettingsSchema = z
     quotaLeasePercentWeekly: z.number().optional().describe("Weekly quota lease percent."),
     quotaLeasePercentMonthly: z.number().optional().describe("Monthly quota lease percent."),
     quotaLeaseCapUsd: z.number().nullable().optional().describe("Optional quota lease cap in USD."),
+    quotaModelLeasePercent5h: z
+      .number()
+      .min(0)
+      .max(1)
+      .nullable()
+      .optional()
+      .describe(
+        "Five-hour model-bucket lease percent (OPT-B). null falls back to the global percent."
+      ),
+    quotaModelLeasePercentDaily: z
+      .number()
+      .min(0)
+      .max(1)
+      .nullable()
+      .optional()
+      .describe("Daily model-bucket lease percent (OPT-B). null falls back to the global percent."),
+    quotaModelLeasePercentWeekly: z
+      .number()
+      .min(0)
+      .max(1)
+      .nullable()
+      .optional()
+      .describe(
+        "Weekly model-bucket lease percent (OPT-B). null falls back to the global percent."
+      ),
+    quotaModelLeasePercentMonthly: z
+      .number()
+      .min(0)
+      .max(1)
+      .nullable()
+      .optional()
+      .describe(
+        "Monthly model-bucket lease percent (OPT-B). null falls back to the global percent."
+      ),
+    quotaModelLeaseMinSliceUsd: z
+      .number()
+      .min(0)
+      .nullable()
+      .optional()
+      .describe("Minimum model-bucket lease slice in USD (OPT-B). null means no floor."),
     ipExtractionConfig: IpExtractionConfigSchema.nullable().describe(
       "Client IP extraction config."
     ),

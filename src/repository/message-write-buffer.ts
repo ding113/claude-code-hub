@@ -36,6 +36,9 @@ export type MessageRequestUpdatePatch = {
    * null = clear the column explicitly.
    */
   costBreakdown?: StoredCostBreakdown | null;
+  // group-rate-limit (§3.6/§5.3): per-axis complete-split flags written at billing.
+  countedInUserGlobal?: boolean;
+  countedInKeyGlobal?: boolean;
 };
 
 export type MessageRequestUpdateRecord = {
@@ -72,6 +75,8 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   swapCacheTtlApplied: "swap_cache_ttl_applied",
   specialSettings: "special_settings",
   costBreakdown: "cost_breakdown",
+  countedInUserGlobal: "counted_in_user_global",
+  countedInKeyGlobal: "counted_in_key_global",
 };
 
 function loadWriterConfig(): WriterConfig {

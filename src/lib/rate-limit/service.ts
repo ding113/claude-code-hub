@@ -72,14 +72,18 @@ import {
   getKeyActiveSessionsKey,
   getUserActiveSessionsKey,
 } from "@/lib/redis/active-session-keys";
+import type { CostCacheRollingPeriod } from "@/lib/redis/cost-display-cache";
+import {
+  buildCostDisplayCacheKey,
+  getCachedRollingCost,
+  mgetCachedRollingCost,
+  setCachedRollingCost,
+} from "@/lib/redis/cost-display-cache";
+import { withRollingCostSingleflight } from "@/lib/redis/cost-display-cache-singleflight";
 import {
   CHECK_AND_TRACK_KEY_USER_SESSION,
   CHECK_AND_TRACK_SESSION,
-  GET_COST_5H_ROLLING_WINDOW,
-  GET_COST_DAILY_ROLLING_WINDOW,
   RELEASE_PROVIDER_SESSION,
-  TRACK_COST_5H_ROLLING_WINDOW,
-  TRACK_COST_DAILY_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
@@ -113,6 +117,15 @@ interface CostLimit {
   name: string;
   resetTime?: string; // 自定义重置时间（仅 daily + fixed 模式使用，格式 "HH:mm"）
   resetMode?: DailyResetMode; // 5h/daily 限额重置模式
+}
+
+// bugfix #08: surfaced when the batch pipeline returns null so callers can
+// distinguish "Redis hiccup" from "no recorded spend". Used by getCurrentCostBatch.
+export class BatchCostPipelineNullError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BatchCostPipelineNullError";
+  }
 }
 
 /**
@@ -204,28 +217,6 @@ export class RateLimitService {
     );
   }
 
-  private static async warmRollingCostZset(
-    key: string,
-    entries: Array<{ id: number; createdAt: Date; costUsd: number }>,
-    ttlSeconds: number
-  ): Promise<void> {
-    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") return;
-    if (entries.length === 0) return;
-
-    const pipeline = RateLimitService.redis.pipeline();
-
-    for (const entry of entries) {
-      const createdAtMs = entry.createdAt.getTime();
-      if (!Number.isFinite(createdAtMs)) continue;
-      if (!Number.isFinite(entry.costUsd) || entry.costUsd <= 0) continue;
-
-      pipeline.zadd(key, createdAtMs, `${createdAtMs}:${entry.id}:${entry.costUsd}`);
-    }
-
-    pipeline.expire(key, ttlSeconds);
-    await pipeline.exec();
-  }
-
   /**
    * 检查金额限制（Key、Provider 或 User）
    * 优先使用 Redis，失败时降级到数据库查询（防止 Redis 清空后超支）
@@ -283,36 +274,24 @@ export class RateLimitService {
             current = fixedWindowState.current;
           } else if (limit.period === "5h") {
             try {
-              const key = RateLimitService.get5hCostKey(type, id, "rolling");
-              const result = (await RateLimitService.redis.eval(
-                GET_COST_5H_ROLLING_WINDOW,
-                1, // KEYS count
-                key, // KEYS[1]
-                now.toString(), // ARGV[1]: now
-                window5h.toString() // ARGV[2]: window
-              )) as string;
-
-              current = parseFloat(result || "0");
-
-              // Cache Miss 检测：如果返回 0 但 Redis 中没有 key，从数据库恢复
-              if (current === 0) {
-                const exists = await RateLimitService.redis.exists(key);
-                if (!exists) {
-                  logger.info(
-                    `[RateLimit] Cache miss for ${type}:${id}:cost_5h, querying database`
-                  );
-                  return await RateLimitService.checkCostLimitsFromDatabase(
-                    id,
-                    type,
-                    costLimits,
-                    limits.cost_reset_at,
-                    limits.limit_5h_cost_reset_at
-                  );
-                }
+              const cached = await getCachedRollingCost(RateLimitService.redis, type, id, "5h");
+              if (cached !== null) {
+                current = cached;
+              } else {
+                logger.debug(
+                  `[RateLimit] Display cache miss for cost_cache:${type}:${id}:5h_rolling, querying database`
+                );
+                return await RateLimitService.checkCostLimitsFromDatabase(
+                  id,
+                  type,
+                  costLimits,
+                  limits.cost_reset_at,
+                  limits.limit_5h_cost_reset_at
+                );
               }
             } catch (error) {
               logger.error(
-                "[RateLimit] 5h rolling window query failed, fallback to database:",
+                "[RateLimit] 5h rolling display cache lookup failed, fallback to database:",
                 error
               );
               return await RateLimitService.checkCostLimitsFromDatabase(
@@ -324,39 +303,25 @@ export class RateLimitService {
               );
             }
           } else if (limit.period === "daily" && limit.resetMode === "rolling") {
-            // daily 滚动窗口：使用 ZSET + Lua 脚本
             try {
-              const key = `${type}:${id}:cost_daily_rolling`;
-              const window24h = 24 * 60 * 60 * 1000;
-              const result = (await RateLimitService.redis.eval(
-                GET_COST_DAILY_ROLLING_WINDOW,
-                1,
-                key,
-                now.toString(),
-                window24h.toString()
-              )) as string;
-
-              current = parseFloat(result || "0");
-
-              // Cache Miss 检测
-              if (current === 0) {
-                const exists = await RateLimitService.redis.exists(key);
-                if (!exists) {
-                  logger.info(
-                    `[RateLimit] Cache miss for ${type}:${id}:cost_daily_rolling, querying database`
-                  );
-                  return await RateLimitService.checkCostLimitsFromDatabase(
-                    id,
-                    type,
-                    costLimits,
-                    limits.cost_reset_at,
-                    limits.limit_5h_cost_reset_at
-                  );
-                }
+              const cached = await getCachedRollingCost(RateLimitService.redis, type, id, "daily");
+              if (cached !== null) {
+                current = cached;
+              } else {
+                logger.debug(
+                  `[RateLimit] Display cache miss for cost_cache:${type}:${id}:daily_rolling, querying database`
+                );
+                return await RateLimitService.checkCostLimitsFromDatabase(
+                  id,
+                  type,
+                  costLimits,
+                  limits.cost_reset_at,
+                  limits.limit_5h_cost_reset_at
+                );
               }
             } catch (error) {
               logger.error(
-                "[RateLimit] Daily rolling window query failed, fallback to database:",
+                "[RateLimit] Daily rolling display cache lookup failed, fallback to database:",
                 error
               );
               return await RateLimitService.checkCostLimitsFromDatabase(
@@ -375,7 +340,7 @@ export class RateLimitService {
 
             // Cache Miss 检测
             if (value === null && limit.amount > 0) {
-              logger.info(
+              logger.debug(
                 `[RateLimit] Cache miss for ${type}:${id}:cost_${periodKey}, querying database`
               );
               return await RateLimitService.checkCostLimitsFromDatabase(
@@ -469,9 +434,9 @@ export class RateLimitService {
                 logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
                 return { allowed: true };
               }
-              current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
+              current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt, true);
             } else if (entityType === "user") {
-              current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
+              current = await sumUserTotalCost(entityId, Infinity, options?.resetAt, true);
             } else {
               current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
             }
@@ -487,9 +452,9 @@ export class RateLimitService {
             if (!options?.keyHash) {
               return { allowed: true };
             }
-            current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
+            current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt, true);
           } else if (entityType === "user") {
-            current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
+            current = await sumUserTotalCost(entityId, Infinity, options?.resetAt, true);
           } else {
             current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
           }
@@ -501,9 +466,9 @@ export class RateLimitService {
             logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
             return { allowed: true };
           }
-          current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
+          current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt, true);
         } else if (entityType === "user") {
-          current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
+          current = await sumUserTotalCost(entityId, Infinity, options?.resetAt, true);
         } else {
           current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
         }
@@ -536,6 +501,7 @@ export class RateLimitService {
     limit5hCostResetAt?: Date | null
   ): Promise<{ allowed: boolean; reason?: string }> {
     const {
+      findEarliestLedgerCreatedAtInWindow,
       findKeyCostEntriesInTimeRange,
       findProviderCostEntriesInTimeRange,
       findUserCostEntriesInTimeRange,
@@ -575,72 +541,63 @@ export class RateLimitService {
           : costResetAt;
       const effectiveStartTime = clipStartByResetAt(startTime, effectiveResetAt);
 
-      // 查询数据库
+      // 查询数据库：统一走 SUM（rolling 与 fixed 均使用 index-only scan 的覆盖索引）
       let current = 0;
-      let costEntries: Array<{
-        id: number;
-        createdAt: Date;
-        costUsd: number;
-      }> | null = null;
+      switch (type) {
+        case "key":
+          // group-rate-limit (§6.1): degraded periodic gate counts global-counted spend only.
+          current = await sumKeyCostInTimeRange(id, effectiveStartTime, endTime, true);
+          break;
+        case "provider":
+          current = await sumProviderCostInTimeRange(id, effectiveStartTime, endTime);
+          break;
+        case "user":
+          current = await sumUserCostInTimeRange(id, effectiveStartTime, endTime, true);
+          break;
+      }
 
       const isRollingWindow =
         limit.period === "5h" || (limit.period === "daily" && limit.resetMode === "rolling");
 
-      if (isRollingWindow) {
-        switch (type) {
-          case "key":
-            costEntries = await findKeyCostEntriesInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          case "provider":
-            costEntries = await findProviderCostEntriesInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          case "user":
-            costEntries = await findUserCostEntriesInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          default:
-            costEntries = [];
-        }
-
-        current = costEntries.reduce((sum, row) => sum + row.costUsd, 0);
-      } else {
-        switch (type) {
-          case "key":
-            current = await sumKeyCostInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          case "provider":
-            current = await sumProviderCostInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          case "user":
-            current = await sumUserCostInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          default:
-            current = 0;
-        }
-      }
-
       // Cache Warming: 写回 Redis
       if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
         try {
-          if (limit.period === "5h") {
-            // 5h 滚动窗口：Redis 恢复时必须按原始时间戳重建 ZSET，避免窗口边界偏差/重复累计
-            if (costEntries && costEntries.length > 0) {
-              const key = RateLimitService.get5hCostKey(type, id, "rolling");
-              await RateLimitService.warmRollingCostZset(key, costEntries, 21600);
-              logger.info(
-                `[RateLimit] Cache warmed for ${key}, value=${current} (rolling window, rebuilt)`
+          if (isRollingWindow) {
+            const rollingPeriod: CostCacheRollingPeriod = limit.period === "5h" ? "5h" : "daily";
+            // bugfix #09: clamp TTL so the cache cannot serve "limit reached"
+            // past the moment the oldest in-window row falls out of the rolling
+            // window. Without this, after a row crosses the window boundary the
+            // cache could keep blocking traffic for up to FALLBACK_TTL seconds.
+            let boundaryAtMs: number | undefined;
+            try {
+              const earliest = await findEarliestLedgerCreatedAtInWindow(
+                type,
+                id,
+                effectiveStartTime,
+                endTime,
+                type !== "provider"
               );
+              if (earliest !== null) {
+                const windowMs = limit.period === "5h" ? 5 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+                boundaryAtMs = earliest + windowMs;
+              }
+            } catch (err) {
+              logger.warn("[RateLimit] earliest-ledger lookup failed; using configured TTL", {
+                error: err instanceof Error ? err.message : String(err),
+              });
             }
-          } else if (limit.period === "daily" && limit.resetMode === "rolling") {
-            // daily 滚动窗口：使用 ZSET + Lua 脚本
-            if (costEntries && costEntries.length > 0) {
-              const key = `${type}:${id}:cost_daily_rolling`;
-              await RateLimitService.warmRollingCostZset(key, costEntries, 90000);
-              logger.info(
-                `[RateLimit] Cache warmed for ${key}, value=${current} (daily rolling window, rebuilt)`
-              );
-            }
+            await setCachedRollingCost(
+              RateLimitService.redis,
+              type,
+              id,
+              rollingPeriod,
+              current,
+              boundaryAtMs ? { boundaryAtMs } : undefined
+            );
+            logger.debug(
+              `[RateLimit] Display cache warmed for cost_cache:${type}:${id}:${rollingPeriod}_rolling, value=${current}, boundaryAtMs=${boundaryAtMs ?? "unset"}`
+            );
           } else {
-            // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
             const { normalized, suffix } = RateLimitService.resolveDailyReset(limit.resetTime);
             const ttl = await getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
             const periodKey = limit.period === "daily" ? `${limit.period}_${suffix}` : limit.period;
@@ -650,7 +607,7 @@ export class RateLimitService {
               "EX",
               ttl
             );
-            logger.info(
+            logger.debug(
               `[RateLimit] Cache warmed for ${type}:${id}:cost_${periodKey}, value=${current}, ttl=${ttl}s`
             );
           }
@@ -929,6 +886,13 @@ export class RateLimitService {
       user5hResetMode?: DailyResetMode;
       requestId?: number;
       createdAtMs?: number;
+      // group-rate-limit (§5.2.4): when a key/user axis is model-split (bypassed),
+      // its 5h-fixed counter must not be written, because that counter is the only
+      // mainline global window seeded from Redis (lease-service readFixed5hWindowState)
+      // instead of the counted_in-filtered DB query. Other windows seed from DB and are
+      // already excluded via the decrement skip + DB filter, so they need no gating here.
+      bypassKeyGlobalCost?: boolean;
+      bypassUserGlobalCost?: boolean;
     }
   ): Promise<void> {
     if (!RateLimitService.redis || cost <= 0) return;
@@ -964,18 +928,9 @@ export class RateLimitService {
       const ttlWeekly = await getTTLForPeriod("weekly");
       const ttlMonthly = await getTTLForPeriod("monthly");
 
-      // 1. 5h 窗口：rolling 使用 ZSET，fixed 仅在首个成功记账时创建 TTL 窗口
-      if (key5hMode === "rolling") {
-        await RateLimitService.redis.eval(
-          TRACK_COST_5H_ROLLING_WINDOW,
-          1, // KEYS count
-          RateLimitService.get5hCostKey("key", keyId, "rolling"), // KEYS[1]
-          cost.toString(), // ARGV[1]: cost
-          now.toString(), // ARGV[2]: now
-          window5h.toString(), // ARGV[3]: window
-          requestId // ARGV[4]: request_id (optional)
-        );
-      } else {
+      // 1. 5h 窗口：rolling 模式下不写 Redis（DB authoritative，lease 从 DB seed，
+      //    展示从 cost_cache:* 短 TTL 缓存恢复）。fixed 模式仍写 Redis 固定窗口。
+      if (key5hMode === "fixed" && !options?.bypassKeyGlobalCost) {
         await RateLimitService.trackFixedCostWindow(
           RateLimitService.get5hCostKey("key", keyId, "fixed"),
           cost,
@@ -983,17 +938,7 @@ export class RateLimitService {
         );
       }
 
-      if (provider5hMode === "rolling") {
-        await RateLimitService.redis.eval(
-          TRACK_COST_5H_ROLLING_WINDOW,
-          1,
-          RateLimitService.get5hCostKey("provider", providerId, "rolling"),
-          cost.toString(),
-          now.toString(),
-          window5h.toString(),
-          requestId
-        );
-      } else {
+      if (provider5hMode === "fixed") {
         await RateLimitService.trackFixedCostWindow(
           RateLimitService.get5hCostKey("provider", providerId, "fixed"),
           cost,
@@ -1001,50 +946,15 @@ export class RateLimitService {
         );
       }
 
-      if (options?.userId != null) {
-        if (user5hMode === "rolling") {
-          await RateLimitService.redis.eval(
-            TRACK_COST_5H_ROLLING_WINDOW,
-            1,
-            RateLimitService.get5hCostKey("user", options.userId, "rolling"),
-            cost.toString(),
-            now.toString(),
-            window5h.toString(),
-            requestId
-          );
-        } else {
-          await RateLimitService.trackFixedCostWindow(
-            RateLimitService.get5hCostKey("user", options.userId, "fixed"),
-            cost,
-            5 * 3600
-          );
-        }
-      }
-
-      // 2. daily 滚动窗口：使用 Lua 脚本（ZSET）
-      if (keyDailyMode === "rolling") {
-        await RateLimitService.redis.eval(
-          TRACK_COST_DAILY_ROLLING_WINDOW,
-          1,
-          `key:${keyId}:cost_daily_rolling`,
-          cost.toString(),
-          now.toString(),
-          window24h.toString(),
-          requestId
+      if (options?.userId != null && user5hMode === "fixed" && !options?.bypassUserGlobalCost) {
+        await RateLimitService.trackFixedCostWindow(
+          RateLimitService.get5hCostKey("user", options.userId, "fixed"),
+          cost,
+          5 * 3600
         );
       }
 
-      if (providerDailyMode === "rolling") {
-        await RateLimitService.redis.eval(
-          TRACK_COST_DAILY_ROLLING_WINDOW,
-          1,
-          `provider:${providerId}:cost_daily_rolling`,
-          cost.toString(),
-          now.toString(),
-          window24h.toString(),
-          requestId
-        );
-      }
+      // 2. daily rolling 模式下不写 Redis（同样 DB authoritative）
 
       // 3. daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
       const pipeline = RateLimitService.redis.pipeline();
@@ -1102,84 +1012,44 @@ export class RateLimitService {
     try {
       const effectiveResetMode = resetMode ?? (period === "5h" ? "rolling" : "fixed");
       const dailyResetInfo = RateLimitService.resolveDailyReset(resetTime);
+      const isRollingDisplay =
+        (period === "5h" && effectiveResetMode === "rolling") ||
+        (period === "daily" && effectiveResetMode === "rolling");
+      const rollingDisplayPeriod: CostCacheRollingPeriod | null = isRollingDisplay
+        ? period === "5h"
+          ? "5h"
+          : "daily"
+        : null;
+
       // Fast Path: Redis 查询
       if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
-        let current = 0;
-
-        // 5h 根据模式选择 fixed/rolling
+        // 5h fixed: 走 fixed window state（保持原语义）
         if (period === "5h" && effectiveResetMode === "fixed") {
           const fixedWindowState = await RateLimitService.getFixed5hWindowState(type, id);
           return fixedWindowState.current;
-        } else if (period === "5h") {
-          const now = Date.now();
-          const window5h = 5 * 60 * 60 * 1000;
-          const key = RateLimitService.get5hCostKey(type, id, "rolling");
+        }
 
-          const result = (await RateLimitService.redis.eval(
-            GET_COST_5H_ROLLING_WINDOW,
-            1,
-            key,
-            now.toString(),
-            window5h.toString()
-          )) as string;
-
-          current = parseFloat(result || "0");
-
-          // Cache Hit
-          if (current > 0) {
-            return current;
+        if (rollingDisplayPeriod) {
+          const cached = await getCachedRollingCost(
+            RateLimitService.redis,
+            type,
+            id,
+            rollingDisplayPeriod
+          );
+          if (cached !== null) {
+            return cached;
           }
-
-          // Cache Miss 检测：如果返回 0 但 Redis 中没有 key，从数据库恢复
-          const exists = await RateLimitService.redis.exists(key);
-          if (!exists) {
-            logger.info(`[RateLimit] Cache miss for ${type}:${id}:cost_5h, querying database`);
-          } else {
-            // Key 存在但值为 0，说明真的是 0
-            return 0;
-          }
-        } else if (period === "daily" && effectiveResetMode === "rolling") {
-          // daily 滚动窗口：使用 ZSET + Lua 脚本
-          const now = Date.now();
-          const window24h = 24 * 60 * 60 * 1000;
-          const key = `${type}:${id}:cost_daily_rolling`;
-
-          const result = (await RateLimitService.redis.eval(
-            GET_COST_DAILY_ROLLING_WINDOW,
-            1,
-            key,
-            now.toString(),
-            window24h.toString()
-          )) as string;
-
-          current = parseFloat(result || "0");
-
-          // Cache Hit
-          if (current > 0) {
-            return current;
-          }
-
-          // Cache Miss 检测
-          const exists = await RateLimitService.redis.exists(key);
-          if (!exists) {
-            logger.info(
-              `[RateLimit] Cache miss for ${type}:${id}:cost_daily_rolling, querying database`
-            );
-          } else {
-            return 0;
-          }
+          logger.debug(
+            `[RateLimit] Display cache miss for cost_cache:${type}:${id}:${rollingDisplayPeriod}_rolling, querying database`
+          );
         } else {
-          // daily fixed/周/月使用普通 GET
+          // daily fixed / weekly / monthly 仍走普通 string GET
           const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
           const value = await RateLimitService.redis.get(`${type}:${id}:cost_${redisKey}`);
-
-          // Cache Hit
           if (value !== null) {
             return parseFloat(value || "0");
           }
-
-          // Cache Miss: 从数据库恢复
-          logger.info(
+          logger.debug(
             `[RateLimit] Cache miss for ${type}:${id}:cost_${redisKey}, querying database`
           );
         }
@@ -1192,112 +1062,98 @@ export class RateLimitService {
         return 0;
       }
 
-      const {
-        findKeyCostEntriesInTimeRange,
-        findProviderCostEntriesInTimeRange,
-        findUserCostEntriesInTimeRange,
-        sumKeyCostInTimeRange,
-        sumProviderCostInTimeRange,
-        sumUserCostInTimeRange,
-      } = await import("@/repository/statistics");
+      // review M2: dedupe concurrent miss-storms within this process so the
+      // same (type,id,period) does not fan out into N parallel DB SUMs when
+      // the rolling cache cold-starts or TTL-expires under heavy polling.
+      const loadFromDb = async (): Promise<number> => {
+        const { sumKeyCostInTimeRange, sumProviderCostInTimeRange, sumUserCostInTimeRange } =
+          await import("@/repository/statistics");
 
-      const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
-        period,
-        dailyResetInfo.normalized,
-        effectiveResetMode
-      );
-      const effectiveResetAt =
-        type === "user" && period === "5h" && effectiveResetMode === "rolling"
-          ? resolveUser5hCostResetAt(options?.costResetAt, options?.limit5hCostResetAt)
-          : options?.costResetAt;
-      const effectiveStartTime = clipStartByResetAt(startTime, effectiveResetAt);
+        const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
+          period,
+          dailyResetInfo.normalized,
+          effectiveResetMode
+        );
+        const effectiveResetAt =
+          type === "user" && period === "5h" && effectiveResetMode === "rolling"
+            ? resolveUser5hCostResetAt(options?.costResetAt, options?.limit5hCostResetAt)
+            : options?.costResetAt;
+        const effectiveStartTime = clipStartByResetAt(startTime, effectiveResetAt);
 
-      let current = 0;
-      let costEntries: Array<{
-        id: number;
-        createdAt: Date;
-        costUsd: number;
-      }> | null = null;
-
-      const isRollingWindow =
-        period === "5h" || (period === "daily" && effectiveResetMode === "rolling");
-
-      if (isRollingWindow) {
+        let current = 0;
         switch (type) {
           case "key":
-            costEntries = await findKeyCostEntriesInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          case "provider":
-            costEntries = await findProviderCostEntriesInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          case "user":
-            costEntries = await findUserCostEntriesInTimeRange(id, effectiveStartTime, endTime);
-            break;
-          default:
-            costEntries = [];
-        }
-
-        current = costEntries.reduce((sum, row) => sum + row.costUsd, 0);
-      } else {
-        switch (type) {
-          case "key":
-            current = await sumKeyCostInTimeRange(id, effectiveStartTime, endTime);
+            // bugfix #01: align cache warming with the gate path (counted_in_key_global=true)
+            // so the shared cost_cache key carries the gate's semantics, not the unfiltered
+            // ledger sum. Display surfaces that need the split-off spend use a separate API.
+            current = await sumKeyCostInTimeRange(id, effectiveStartTime, endTime, true);
             break;
           case "provider":
             current = await sumProviderCostInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "user":
-            current = await sumUserCostInTimeRange(id, effectiveStartTime, endTime);
+            // bugfix #01: same as key — keep cache writes in the gate's countedInGlobalOnly
+            // semantics so a dashboard poll cannot poison the gate read.
+            current = await sumUserCostInTimeRange(id, effectiveStartTime, endTime, true);
             break;
-          default:
-            current = 0;
         }
-      }
 
-      // Cache Warming: 写回 Redis
-      if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
-        try {
-          if (period === "5h") {
-            if (costEntries && costEntries.length > 0) {
-              const key = RateLimitService.get5hCostKey(type, id, "rolling");
-              await RateLimitService.warmRollingCostZset(key, costEntries, 21600);
-              logger.info(
-                `[RateLimit] Cache warmed for ${key}, value=${current} (rolling window, rebuilt)`
+        // Cache Warming: 写回 Redis
+        if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
+          try {
+            if (rollingDisplayPeriod) {
+              await setCachedRollingCost(
+                RateLimitService.redis,
+                type,
+                id,
+                rollingDisplayPeriod,
+                current
+              );
+              logger.debug(
+                `[RateLimit] Display cache warmed for cost_cache:${type}:${id}:${rollingDisplayPeriod}_rolling, value=${current}`
+              );
+            } else {
+              const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
+              const ttl = await getTTLForPeriodWithMode(
+                period,
+                dailyResetInfo.normalized,
+                effectiveResetMode
+              );
+              await RateLimitService.redis.set(
+                `${type}:${id}:cost_${redisKey}`,
+                current.toString(),
+                "EX",
+                ttl
+              );
+              logger.debug(
+                `[RateLimit] Cache warmed for ${type}:${id}:cost_${redisKey}, value=${current}, ttl=${ttl}s`
               );
             }
-          } else if (period === "daily" && effectiveResetMode === "rolling") {
-            // daily 滚动窗口：使用 ZSET + Lua 脚本
-            if (costEntries && costEntries.length > 0) {
-              const key = `${type}:${id}:cost_daily_rolling`;
-              await RateLimitService.warmRollingCostZset(key, costEntries, 90000);
-              logger.info(
-                `[RateLimit] Cache warmed for ${key}, value=${current} (daily rolling window, rebuilt)`
-              );
-            }
-          } else {
-            // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
-            const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
-            const ttl = await getTTLForPeriodWithMode(
-              period,
-              dailyResetInfo.normalized,
-              effectiveResetMode
-            );
-            await RateLimitService.redis.set(
-              `${type}:${id}:cost_${redisKey}`,
-              current.toString(),
-              "EX",
-              ttl
-            );
-            logger.info(
-              `[RateLimit] Cache warmed for ${type}:${id}:cost_${redisKey}, value=${current}, ttl=${ttl}s`
-            );
+          } catch (error) {
+            logger.error("[RateLimit] Failed to warm cache:", error);
           }
-        } catch (error) {
-          logger.error("[RateLimit] Failed to warm cache:", error);
         }
+
+        return current;
+      };
+
+      if (
+        rollingDisplayPeriod &&
+        RateLimitService.redis &&
+        RateLimitService.redis.status === "ready"
+      ) {
+        const redis = RateLimitService.redis;
+        const sfKey = buildCostDisplayCacheKey(type, id, rollingDisplayPeriod);
+        return await withRollingCostSingleflight(sfKey, async () => {
+          // Absorb peer warm: a sibling caller may have populated the cache
+          // while we were queued behind the inflight promise.
+          const cached = await getCachedRollingCost(redis, type, id, rollingDisplayPeriod);
+          if (cached !== null) return cached;
+          return loadFromDb();
+        });
       }
 
-      return current;
+      return await loadFromDb();
     } catch (error) {
       logger.error("[RateLimit] Get cost failed:", error);
       return 0;
@@ -1402,44 +1258,43 @@ export class RateLimitService {
         const now = Date.now();
 
         if (mode === "rolling") {
-          // Rolling 模式：使用 ZSET + Lua 脚本
-          const key = `user:${userId}:cost_daily_rolling`;
-          const window24h = 24 * 60 * 60 * 1000;
+          // Rolling 模式：display cache + DB authoritative
+          const cached = await getCachedRollingCost(
+            RateLimitService.redis,
+            "user",
+            userId,
+            "daily"
+          );
+          if (cached !== null) {
+            currentCost = cached;
+          } else {
+            logger.debug(
+              `[RateLimit] Display cache miss for cost_cache:user:${userId}:daily_rolling, querying database`
+            );
+            // review M2: coalesce concurrent miss-storms on the same user.daily
+            // entry so cold-start / TTL-expiry does not multiply DB SUMs.
+            const redis = RateLimitService.redis;
+            const sfKey = buildCostDisplayCacheKey("user", userId, "daily");
+            currentCost = await withRollingCostSingleflight(sfKey, async () => {
+              const peerCached = await getCachedRollingCost(redis, "user", userId, "daily");
+              if (peerCached !== null) return peerCached;
 
-          const result = (await RateLimitService.redis.eval(
-            GET_COST_DAILY_ROLLING_WINDOW,
-            1,
-            key,
-            now.toString(),
-            window24h.toString()
-          )) as string;
-
-          currentCost = parseFloat(result || "0");
-
-          // Cache Miss 检测
-          if (currentCost === 0) {
-            const exists = await RateLimitService.redis.exists(key);
-            if (!exists) {
-              logger.info(
-                `[RateLimit] Cache miss for user:${userId}:cost_daily_rolling, querying database`
-              );
-
-              // 导入明细查询函数
-              const { findUserCostEntriesInTimeRange } = await import("@/repository/statistics");
-
-              // 计算滚动窗口的时间范围
+              const window24h = 24 * 60 * 60 * 1000;
               const startTime = new Date(now - window24h);
               const endTime = new Date(now);
+              // group-rate-limit (§6.1): user daily gate counts global-counted spend only.
+              const value = await sumUserCostInTimeRange(userId, startTime, endTime, true);
 
-              // 查询明细并计算总和
-              const costEntries = await findUserCostEntriesInTimeRange(userId, startTime, endTime);
-              currentCost = costEntries.reduce((sum, row) => sum + row.costUsd, 0);
-
-              // Cache Warming: 重建 ZSET
-              if (costEntries.length > 0) {
-                await RateLimitService.warmRollingCostZset(key, costEntries, 90000); // 25 hours TTL
+              try {
+                await setCachedRollingCost(redis, "user", userId, "daily", value);
+              } catch (warmError) {
+                logger.warn("[RateLimit] Failed to warm user daily rolling display cache", {
+                  userId,
+                  error: warmError,
+                });
               }
-            }
+              return value;
+            });
           }
         } else {
           // Fixed 模式：使用 STRING 类型
@@ -1451,13 +1306,14 @@ export class RateLimitService {
             currentCost = parseFloat(cached);
           } else {
             // Cache Miss: 从数据库恢复
-            logger.info(`[RateLimit] Cache miss for ${key}, querying database`);
+            logger.debug(`[RateLimit] Cache miss for ${key}, querying database`);
             const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
               "daily",
               normalizedResetTime,
               mode
             );
-            currentCost = await sumUserCostInTimeRange(userId, startTime, endTime);
+            // group-rate-limit (§6.1): user daily gate counts global-counted spend only.
+            currentCost = await sumUserCostInTimeRange(userId, startTime, endTime, true);
 
             // Cache Warming: 写回 Redis
             const ttl = await getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
@@ -1472,7 +1328,8 @@ export class RateLimitService {
           normalizedResetTime,
           mode
         );
-        currentCost = await sumUserCostInTimeRange(userId, startTime, endTime);
+        // group-rate-limit (§6.1): user daily gate counts global-counted spend only.
+        currentCost = await sumUserCostInTimeRange(userId, startTime, endTime, true);
       }
 
       if (currentCost >= dailyLimitUsd) {
@@ -1510,23 +1367,11 @@ export class RateLimitService {
 
     try {
       if (mode === "rolling") {
-        // Rolling 模式：使用 ZSET + Lua 脚本
-        const key = `user:${userId}:cost_daily_rolling`;
-        const now = options?.createdAtMs ?? Date.now();
-        const window24h = 24 * 60 * 60 * 1000;
-        const requestId = options?.requestId != null ? String(options.requestId) : "";
-
-        await RateLimitService.redis.eval(
-          TRACK_COST_DAILY_ROLLING_WINDOW,
-          1,
-          key,
-          cost.toString(),
-          now.toString(),
-          window24h.toString(),
-          requestId
+        // Rolling 模式：DB authoritative，不写 Redis。
+        // usage_ledger 已由 response-handler.ts 落库，展示由 cost_cache:* 短 TTL 缓存承载。
+        logger.debug(
+          `[RateLimit] Skipped user daily rolling Redis write (DB authoritative): user=${userId}, cost=${cost}`
         );
-
-        logger.debug(`[RateLimit] Tracked user daily cost (rolling): user=${userId}, cost=${cost}`);
       } else {
         // Fixed 模式：使用 STRING 类型
         const suffix = normalizedResetTime.replace(":", "");
@@ -1577,102 +1422,225 @@ export class RateLimitService {
     }
 
     try {
+      const redis = RateLimitService.redis;
       const now = Date.now();
       const window5h = 5 * 60 * 60 * 1000;
       const window24h = 24 * 60 * 60 * 1000;
-      const pipeline = RateLimitService.redis.pipeline();
 
-      // 构建批量查询命令
-      // 记录每个供应商的查询顺序和类型
-      const queryMeta: Array<{
-        providerId: number;
-        period: "5h" | "daily" | "weekly" | "monthly";
-        isRolling: boolean;
-      }> = [];
+      // 1. Display cache lookup: 5h rolling (所有 provider)
+      const cached5h = await mgetCachedRollingCost(
+        redis,
+        providerIds.map((id) => ({ type: "provider" as const, id, period: "5h" as const }))
+      );
+      const miss5hIds: number[] = [];
+      for (let i = 0; i < providerIds.length; i++) {
+        const cost = cached5h[i];
+        if (cost !== null) {
+          result.get(providerIds[i])!.cost5h = cost;
+        } else {
+          miss5hIds.push(providerIds[i]);
+        }
+      }
 
+      // 2. 按 daily 模式分桶
+      const dailyRollingIds: number[] = [];
+      const dailyFixedIds: number[] = [];
       for (const providerId of providerIds) {
         const config = dailyResetConfigs.get(providerId);
         const dailyResetMode = (config?.resetMode ?? "fixed") as DailyResetMode;
-        const { suffix } = RateLimitService.resolveDailyReset(config?.resetTime ?? undefined);
-
-        // 5h 滚动窗口
-        pipeline.eval(
-          GET_COST_5H_ROLLING_WINDOW,
-          1,
-          `provider:${providerId}:cost_5h_rolling`,
-          now.toString(),
-          window5h.toString()
-        );
-        queryMeta.push({ providerId, period: "5h", isRolling: true });
-
-        // Daily: 根据模式选择查询方式
         if (dailyResetMode === "rolling") {
-          pipeline.eval(
-            GET_COST_DAILY_ROLLING_WINDOW,
-            1,
-            `provider:${providerId}:cost_daily_rolling`,
-            now.toString(),
-            window24h.toString()
-          );
-          queryMeta.push({ providerId, period: "daily", isRolling: true });
+          dailyRollingIds.push(providerId);
         } else {
-          pipeline.get(`provider:${providerId}:cost_daily_${suffix}`);
-          queryMeta.push({ providerId, period: "daily", isRolling: false });
+          dailyFixedIds.push(providerId);
         }
+      }
 
-        // Weekly
+      // 3. Display cache lookup: daily rolling
+      const missDailyIds: number[] = [];
+      if (dailyRollingIds.length > 0) {
+        const cachedDaily = await mgetCachedRollingCost(
+          redis,
+          dailyRollingIds.map((id) => ({ type: "provider" as const, id, period: "daily" as const }))
+        );
+        for (let i = 0; i < dailyRollingIds.length; i++) {
+          const cost = cachedDaily[i];
+          if (cost !== null) {
+            result.get(dailyRollingIds[i])!.costDaily = cost;
+          } else {
+            missDailyIds.push(dailyRollingIds[i]);
+          }
+        }
+      }
+
+      // 4. Pipeline GET: daily fixed / weekly / monthly
+      type StringMeta = { providerId: number; period: "daily" | "weekly" | "monthly" };
+      const stringMeta: StringMeta[] = [];
+      const pipeline = redis.pipeline();
+      for (const providerId of dailyFixedIds) {
+        const config = dailyResetConfigs.get(providerId);
+        const { suffix } = RateLimitService.resolveDailyReset(config?.resetTime ?? undefined);
+        pipeline.get(`provider:${providerId}:cost_daily_${suffix}`);
+        stringMeta.push({ providerId, period: "daily" });
+      }
+      for (const providerId of providerIds) {
         pipeline.get(`provider:${providerId}:cost_weekly`);
-        queryMeta.push({ providerId, period: "weekly", isRolling: false });
-
-        // Monthly
+        stringMeta.push({ providerId, period: "weekly" });
         pipeline.get(`provider:${providerId}:cost_monthly`);
-        queryMeta.push({ providerId, period: "monthly", isRolling: false });
+        stringMeta.push({ providerId, period: "monthly" });
       }
 
-      // 执行批量查询
-      const pipelineResults = await pipeline.exec();
-
-      if (!pipelineResults) {
-        logger.error("[RateLimit] Batch cost query returned null");
-        return result;
+      if (stringMeta.length > 0) {
+        const pipelineResults = await pipeline.exec();
+        // bugfix #08: previously a null pipeline result was silently logged and
+        // the function returned a partially-populated map (cost5h from cache,
+        // daily/weekly/monthly all zero). That misled callers into believing
+        // "no recent spend" when Redis had simply hiccuped. Surface as a
+        // recognizable error so callers can choose to fail closed or fall back
+        // to the DB explicitly.
+        if (!pipelineResults) {
+          throw new BatchCostPipelineNullError(
+            "[RateLimit] Batch cost query pipeline returned null"
+          );
+        }
+        for (let i = 0; i < stringMeta.length; i++) {
+          const meta = stringMeta[i];
+          const [err, value] = pipelineResults[i];
+          if (err) {
+            logger.error("[RateLimit] Batch query error for provider", {
+              providerId: meta.providerId,
+              period: meta.period,
+              error: err.message,
+            });
+            continue;
+          }
+          const cost = parseFloat((value as string) || "0");
+          const providerData = result.get(meta.providerId)!;
+          switch (meta.period) {
+            case "daily":
+              providerData.costDaily = cost;
+              break;
+            case "weekly":
+              providerData.costWeekly = cost;
+              break;
+            case "monthly":
+              providerData.costMonthly = cost;
+              break;
+          }
+        }
       }
 
-      // 解析结果
-      for (let i = 0; i < queryMeta.length; i++) {
-        const meta = queryMeta[i];
-        const [err, value] = pipelineResults[i];
+      // 5. DB batch SUM for rolling misses + 回写 cache
+      if (miss5hIds.length > 0 || missDailyIds.length > 0) {
+        const {
+          findEarliestLedgerCreatedAtInWindow,
+          getProviderCostResetAtMap,
+          sumProviderCostBatchInTimeRange,
+        } = await import("@/repository/statistics");
 
-        if (err) {
-          logger.error("[RateLimit] Batch query error for provider", {
-            providerId: meta.providerId,
-            period: meta.period,
-            error: err.message,
-          });
-          continue;
+        // bugfix #07: previously every provider shared a single startTime, so a
+        // provider whose costResetAt was pushed forward (admin reset) would still
+        // see pre-reset spend in the batch path while single-provider checks
+        // already honored the cut. Resolve per-provider reset timestamps so each
+        // bucket's start can be clipped independently.
+        const resetAtIds = Array.from(new Set([...miss5hIds, ...missDailyIds]));
+        const resetMap = await getProviderCostResetAtMap(resetAtIds);
+
+        // bugfix #09: per-provider earliest-ledger lookup so TTL can be clamped
+        // to the next window boundary. Cache-miss path only — N small queries
+        // are acceptable here.
+        const resolveBoundary = async (
+          providerId: number,
+          startTime: Date,
+          windowMs: number
+        ): Promise<number | undefined> => {
+          try {
+            const earliest = await findEarliestLedgerCreatedAtInWindow(
+              "provider",
+              providerId,
+              startTime,
+              new Date(now)
+            );
+            return earliest !== null ? earliest + windowMs : undefined;
+          } catch (err) {
+            logger.warn("[RateLimit] earliest-ledger lookup failed (batch warm)", {
+              providerId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return undefined;
+          }
+        };
+
+        // review M1: warm each miss provider in parallel. The previous loop
+        // awaited resolveBoundary + setCachedRollingCost serially, which on a
+        // dashboard polling N providers turned a single batch SUM into
+        // N sequential DB+Redis round-trips. Promise.all keeps the batch SUM
+        // as the only join point; one provider's boundary-lookup error
+        // (caught locally) cannot block its peers.
+        const warmProvider = async (
+          providerId: number,
+          startTime: Date,
+          windowMs: number,
+          period: "5h" | "daily",
+          cost: number
+        ): Promise<void> => {
+          try {
+            const boundaryAtMs = await resolveBoundary(providerId, startTime, windowMs);
+            await setCachedRollingCost(
+              redis,
+              "provider",
+              providerId,
+              period,
+              cost,
+              boundaryAtMs ? { boundaryAtMs } : undefined
+            );
+          } catch (err) {
+            logger.warn(`[RateLimit] Failed to warm ${period} display cache`, {
+              providerId,
+              error: err,
+            });
+          }
+        };
+
+        if (miss5hIds.length > 0) {
+          const params = miss5hIds.map((providerId) => ({
+            providerId,
+            startTime: clipStartByResetAt(new Date(now - window5h), resetMap.get(providerId)),
+          }));
+          const dbResult = await sumProviderCostBatchInTimeRange(params, new Date(now));
+          for (const { providerId } of params) {
+            result.get(providerId)!.cost5h = dbResult.get(providerId) ?? 0;
+          }
+          await Promise.all(
+            params.map(({ providerId, startTime }) =>
+              warmProvider(providerId, startTime, window5h, "5h", dbResult.get(providerId) ?? 0)
+            )
+          );
         }
 
-        const cost = parseFloat((value as string) || "0");
-        const providerData = result.get(meta.providerId)!;
-
-        switch (meta.period) {
-          case "5h":
-            providerData.cost5h = cost;
-            break;
-          case "daily":
-            providerData.costDaily = cost;
-            break;
-          case "weekly":
-            providerData.costWeekly = cost;
-            break;
-          case "monthly":
-            providerData.costMonthly = cost;
-            break;
+        if (missDailyIds.length > 0) {
+          const params = missDailyIds.map((providerId) => ({
+            providerId,
+            startTime: clipStartByResetAt(new Date(now - window24h), resetMap.get(providerId)),
+          }));
+          const dbResult = await sumProviderCostBatchInTimeRange(params, new Date(now));
+          for (const { providerId } of params) {
+            result.get(providerId)!.costDaily = dbResult.get(providerId) ?? 0;
+          }
+          await Promise.all(
+            params.map(({ providerId, startTime }) =>
+              warmProvider(providerId, startTime, window24h, "daily", dbResult.get(providerId) ?? 0)
+            )
+          );
         }
       }
 
       logger.debug(`[RateLimit] Batch cost query completed for ${providerIds.length} providers`);
       return result;
     } catch (error) {
+      // bugfix #08: keep BatchCostPipelineNullError visible to callers so the
+      // pipeline-null condition cannot be downgraded to "all zeros". Other
+      // failures continue to fail open to preserve display-path resilience.
+      if (error instanceof BatchCostPipelineNullError) throw error;
       logger.error("[RateLimit] Batch cost query failed:", error);
       return result;
     }
@@ -1703,7 +1671,13 @@ export class RateLimitService {
       limit_monthly_usd: number | null;
       cost_reset_at?: Date | null;
       limit_5h_cost_reset_at?: Date | null;
-    }
+    },
+    // bugfix #04: pessimistic gate against lease overspend under concurrent
+    // bursts. Callers that can pre-estimate a request's cost (e.g. P95 of
+    // recent ledger entries for the same model) pass it here so the gate
+    // denies BEFORE the in-flight request consumes more than the lease slice.
+    // Default 0 = byte-identical to the previous `remainingBudget <= 0` check.
+    options?: { estimatedCost?: number }
   ): Promise<{ allowed: boolean; reason?: string; failOpen?: boolean }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
     const limit5hResetMode = limits.limit_5h_reset_mode ?? "rolling";
@@ -1779,8 +1753,14 @@ export class RateLimitService {
           continue; // Fail-open: allow this window check
         }
 
-        // Check if remaining budget is sufficient (> 0)
-        if (lease.remainingBudget <= 0) {
+        // bugfix #04: when callers pass `estimatedCost`, reject as soon as the
+        // lease slice cannot cover one more request — preventing concurrent
+        // bursts from overshooting `limit` by `in_flight × per_request_cost`.
+        // The lease-only contract is preserved when estimatedCost is 0/absent.
+        const requiredBudget = Math.max(0, options?.estimatedCost ?? 0);
+        const insufficient =
+          requiredBudget > 0 ? lease.remainingBudget < requiredBudget : lease.remainingBudget <= 0;
+        if (insufficient) {
           const typeName =
             entityType === "key" ? "Key" : entityType === "provider" ? "Provider" : "User";
           return {

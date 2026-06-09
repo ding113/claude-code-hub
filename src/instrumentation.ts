@@ -23,7 +23,44 @@ const instrumentationState = globalThis as unknown as {
   __CCH_LIFECYCLE_MARKERS_LOGGED__?: boolean;
   __CCH_CRASH_HANDLERS_REGISTERED__?: boolean;
   __CCH_PROCESS_STARTED_AT__?: number;
+  __CCH_LEGACY_ROLLING_ZSET_CLEANUP_STARTED__?: boolean;
 };
+
+/**
+ * 一次性清理 rolling cost ZSET（5h / daily）历史遗留 key。
+ * 见 docs/limit/redis-cost-rolling-slowlog-fix.md。
+ * fire-and-forget：不阻塞启动；幂等可重复运行。
+ */
+function startLegacyRollingZsetCleanup(): void {
+  if (instrumentationState.__CCH_LEGACY_ROLLING_ZSET_CLEANUP_STARTED__) return;
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0" || !process.env.REDIS_URL) return;
+  instrumentationState.__CCH_LEGACY_ROLLING_ZSET_CLEANUP_STARTED__ = true;
+
+  void (async () => {
+    try {
+      const { getRedisClient } = await import("@/lib/redis");
+      const redis = getRedisClient();
+      if (!redis || redis.status !== "ready") {
+        // Redis 还在连接：等一个心跳再触发。
+        setTimeout(() => {
+          instrumentationState.__CCH_LEGACY_ROLLING_ZSET_CLEANUP_STARTED__ = false;
+          startLegacyRollingZsetCleanup();
+        }, 5_000);
+        return;
+      }
+      // bugfix #06: the fleet-wide Once wrapper consults a Redis sentinel and
+      // SETNX lock so a multi-replica rollout walks the keyspace at most once.
+      const { cleanupLegacyRollingZsetsOnce } = await import("@/lib/redis/cost-cache-cleanup");
+      const result = await cleanupLegacyRollingZsetsOnce(redis);
+      logger.info("[Instrumentation] Legacy rolling-cost ZSET cleanup completed", result);
+    } catch (error) {
+      logger.warn("[Instrumentation] Legacy rolling-cost ZSET cleanup failed (non-fatal)", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  })();
+}
 
 /**
  * 进程级崩溃诊断
@@ -278,6 +315,11 @@ export async function register() {
     logStartupMarker();
     registerCrashDiagnostics();
 
+    // Wire optional guard-pipeline extensions (in-memory, no DB). Must run on
+    // every runtime — including CI — since the pipeline is built per request.
+    const { registerModelRateLimitExtension } = await import("@/lib/model-rate-limit/register");
+    registerModelRateLimitExtension();
+
     // Initialize Langfuse observability (no-op if env vars not set)
     try {
       const { initLangfuse } = await import("@/lib/langfuse");
@@ -301,6 +343,14 @@ export async function register() {
       logger.info("[Instrumentation] Session cache cleanup started", {
         intervalSeconds: 60,
       });
+    }
+
+    // group-rate-limit: hard-delete expired quota_boost_grants every 60s (D12).
+    // Only when the feature is enabled; the function is self-idempotent.
+    const { isModelRateLimitEnabled } = await import("@/lib/model-rate-limit/types");
+    if (isModelRateLimitEnabled()) {
+      const { startBoostExpiryCleanup } = await import("@/lib/model-rate-limit/boost-cleanup");
+      startBoostExpiryCleanup();
     }
 
     if (!instrumentationState.__CCH_SHUTDOWN_HOOKS_REGISTERED__) {
@@ -357,6 +407,9 @@ export async function register() {
         });
 
       warmupApiKeyVacuumFilter();
+
+      // 一次性清理 rolling cost ZSET 历史遗留 key（fire-and-forget）
+      startLegacyRollingZsetCleanup();
 
       // 回填 provider_vendors/provider_endpoints（幂等）
       // 多实例启动时仅允许一个实例执行，避免重复扫描/写入导致的启动抖动（#779/#781）。
@@ -506,6 +559,9 @@ export async function register() {
           });
 
         warmupApiKeyVacuumFilter();
+
+        // 一次性清理 rolling cost ZSET 历史遗留 key（fire-and-forget）
+        startLegacyRollingZsetCleanup();
 
         // 回填 provider_vendors（按域名自动聚合旧 providers）
         try {

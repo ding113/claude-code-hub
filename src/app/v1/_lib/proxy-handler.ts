@@ -136,6 +136,12 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
   } catch (error) {
     logger.error("Proxy handler error:", error);
     if (session) {
+      // bugfix #03 (#B 兜底): also drain provider session refs here in case
+      // the failure originated outside the guard pipeline (forwarder hedge
+      // setup, fake streaming path, etc.). drainProviderSessionRefs is
+      // idempotent — if pipeline already cleaned up this is a no-op.
+      const { releaseAllProviderSessionRefs } = await import("./proxy/provider-session-cleanup");
+      await releaseAllProviderSessionRefs(session);
       return await ProxyErrorHandler.handle(session, error);
     }
 

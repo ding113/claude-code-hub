@@ -19,10 +19,10 @@ const ALL_TIME_MAX_AGE_DAYS = Infinity;
 
 // Mock functions
 const getSessionMock = vi.fn();
-const sumUserTotalCostMock = vi.fn();
+const sumUserTotalCostSplitMock = vi.fn();
 const sumKeyQuotaCostsByIdMock = vi.fn();
 const sumUserQuotaCostsMock = vi.fn();
-const sumUserCostInTimeRangeMock = vi.fn();
+const sumUserCostSplitInTimeRangeMock = vi.fn();
 const getTimeRangeForPeriodMock = vi.fn();
 const getTimeRangeForPeriodWithModeMock = vi.fn();
 const getKeySessionCountMock = vi.fn();
@@ -35,8 +35,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/repository/statistics", () => ({
-  sumUserCostInTimeRange: (...args: unknown[]) => sumUserCostInTimeRangeMock(...args),
-  sumUserTotalCost: (...args: unknown[]) => sumUserTotalCostMock(...args),
+  sumUserCostSplitInTimeRange: (...args: unknown[]) => sumUserCostSplitInTimeRangeMock(...args),
+  sumUserTotalCostSplit: (...args: unknown[]) => sumUserTotalCostSplitMock(...args),
   sumKeyQuotaCostsById: (...args: unknown[]) => sumKeyQuotaCostsByIdMock(...args),
   sumUserQuotaCosts: (...args: unknown[]) => sumUserQuotaCostsMock(...args),
 }));
@@ -82,8 +82,8 @@ describe("total-usage-semantics", () => {
     getTimeRangeForPeriodWithModeMock.mockResolvedValue(defaultRange);
 
     // Default cost mocks
-    sumUserTotalCostMock.mockResolvedValue(0);
-    sumUserCostInTimeRangeMock.mockResolvedValue(0);
+    sumUserTotalCostSplitMock.mockResolvedValue({ total: 0, countedInGlobal: 0 });
+    sumUserCostSplitInTimeRangeMock.mockResolvedValue({ total: 0, countedInGlobal: 0 });
     getKeySessionCountMock.mockResolvedValue(0);
     getUserSessionCountMock.mockResolvedValue(0);
 
@@ -93,6 +93,11 @@ describe("total-usage-semantics", () => {
       costWeekly: 0,
       costMonthly: 0,
       costTotal: 0,
+      cost5hCounted: 0,
+      costDailyCounted: 0,
+      costWeeklyCounted: 0,
+      costMonthlyCounted: 0,
+      costTotalCounted: 0,
     };
     sumKeyQuotaCostsByIdMock.mockResolvedValue(emptyCosts);
     sumUserQuotaCostsMock.mockResolvedValue(emptyCosts);
@@ -203,7 +208,7 @@ describe("total-usage-semantics", () => {
   });
 
   describe("getUserAllLimitUsage in users.ts", () => {
-    it("should call sumUserTotalCost with ALL_TIME_MAX_AGE_DAYS", async () => {
+    it("should call sumUserTotalCostSplit with ALL_TIME_MAX_AGE_DAYS", async () => {
       // Setup session mock
       getSessionMock.mockResolvedValue({
         user: {
@@ -229,9 +234,9 @@ describe("total-usage-semantics", () => {
       const { getUserAllLimitUsage } = await import("@/actions/users");
       await getUserAllLimitUsage(1);
 
-      // Verify sumUserTotalCost was called with Infinity (all-time)
+      // Verify sumUserTotalCostSplit was called with Infinity (all-time)
       // 3rd arg is user.costResetAt (undefined when not set on mock user)
-      const calls = sumUserTotalCostMock.mock.calls;
+      const calls = sumUserTotalCostSplitMock.mock.calls;
       expect(calls.length).toBe(1);
       expect(calls[0][0]).toBe(1);
       expect(calls[0][1]).toBe(Infinity);

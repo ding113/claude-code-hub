@@ -57,8 +57,86 @@
     "description": "查看和管理所有層級的限額使用情況",
     "tabs": {
       "users": "用戶限額",
+      "modelLimits": "按模型限額",
+      "modelGroups": "模型組",
+      "userGroups": "用戶組",
       "keys": "密鑰限額",
       "providers": "供應商限額"
+    },
+    "subTabs": {
+      "config": "限額設定",
+      "modelGroups": "模型組",
+      "userGroups": "用戶組"
+    }
+  },
+  "modelLimits": {
+    "title": "按模型組限額",
+    "description": "為指定主體（使用者、使用者組）和模型組設定成本上限。命中模型組限額時，該請求完全脫離全域使用者限額計算。",
+    "disabledNotice": "按模型限額目前未啟用，需設定環境變數 ENABLE_MODEL_RATE_LIMIT=true（依賴 ENABLE_RATE_LIMIT=true）後生效，組態可提前完成。",
+    "loadError": "載入模型組限額失敗",
+    "deleteSuccess": "已刪除限額",
+    "deleteError": "刪除限額失敗",
+    "noData": "尚無限額組態",
+    "allSubjects": "所有主體",
+    "allModelGroups": "所有模型組",
+    "searchSubject": "搜尋...",
+    "searchModelGroup": "搜尋模型組...",
+    "noResults": "無符合結果",
+    "addLimit": "新增限額",
+    "searchLimits": "搜尋主體 / 模型組",
+    "expandMembers": "展開 / 收合成員",
+    "subjectType": "主體類型",
+    "subjectTypeUser": "使用者",
+    "subjectTypeUserGroup": "使用者組",
+    "subjectTypeKey": "密鑰",
+    "modelGroup": "模型組",
+    "semanticsNote": "命中模型組限額時，該請求完全脫離全域使用者/密鑰配額（完全分區），RPM 和並行連線限制仍然有效。使用者組限額對每個成員單獨生效。同一視窗有多個來源時取最寬鬆（最大值）。",
+    "resetMode": {
+      "fixed": "固定視窗",
+      "rolling": "滾動視窗"
+    },
+    "table": {
+      "subjectType": "主體類型",
+      "subject": "主體",
+      "modelGroup": "模型組",
+      "fiveHour": "5 小時",
+      "daily": "每日",
+      "weekly": "每週",
+      "monthly": "每月",
+      "total": "總計",
+      "resetMode": "重置模式",
+      "actions": "操作"
+    },
+    "deleteConfirm": {
+      "title": "刪除限額",
+      "description": "確定要刪除模型組 \"{group}\" 的限額組態嗎？此操作無法復原。",
+      "cancel": "取消",
+      "confirm": "刪除"
+    },
+    "dialog": {
+      "addTitle": "新增模型組限額",
+      "editTitle": "編輯模型組限額",
+      "description": "模型組 \"{group}\" 的成本上限，留空表示該週期不限制。",
+      "fiveHour": "5 小時限額",
+      "daily": "每日限額",
+      "weekly": "每週限額",
+      "monthly": "每月限額",
+      "total": "總限額",
+      "unlimited": "不限制",
+      "resetMode": "5 小時重置模式",
+      "resetModeFixed": "固定視窗",
+      "resetModeRolling": "滾動視窗",
+      "save": "儲存",
+      "saveSuccess": "限額已儲存",
+      "saveError": "儲存限額失敗",
+      "selectDescription": "為所選主體與模型組設定成本上限，留空表示該週期不限制。",
+      "subjectRequired": "請選擇主體",
+      "modelGroupRequired": "請選擇模型組"
+    },
+    "boosts": {
+      "panelTitle": "臨時提額",
+      "dialogDescription": "為使用者「{user}」在模型組「{group}」上發放臨時額度提升。",
+      "configuredCount": "已設定 {count} 項臨時提額"
     }
   },
   "users": {
@@ -387,5 +465,147 @@
     "saveFailed": "更新失敗",
     "invalidNumber": "請輸入有效數字",
     "negativeNotAllowed": "不能為負數"
-  }
+  },
+  "modelGroups": {
+    "title": "模型組管理",
+    "description": "建立模型組，用於細緻的限額控制。每個模型只能屬於一個組（全域互斥）。",
+    "semanticsNote": "請求命中模型組限額後，該軸（使用者或 Key）的全域成本限額對該請求不再生效（完全切分）。RPM 與並發限制仍然生效。",
+    "totalCount": "{count} 個組",
+    "addGroup": "新建組",
+    "addSingleton": "單模型快捷組",
+    "singleton": "單模型",
+    "group": "多模型",
+    "noData": "暫無模型組，點擊「新建組」建立。",
+    "noMembers": "無成員",
+    "nameRequired": "組名不能為空。",
+    "modelRequired": "模型名不能為空。",
+    "duplicateName": "同名組已存在。",
+    "memberConflict": "模型「{model}」已屬於組「{groupName}」（id={groupId}），每個模型只能屬於一個組。",
+    "loadError": "載入模型組失敗。",
+    "createSuccess": "模型組建立成功。",
+    "createError": "建立模型組失敗。",
+    "updateSuccess": "模型組更新成功。",
+    "updateError": "更新模型組失敗。",
+    "deleteSuccess": "已刪除模型組「{name}」。",
+    "deleteError": "刪除模型組失敗。",
+    "memberUpdatePartialError": "部分成員變更失敗：{errors}",
+    "deleteConfirm": {
+      "title": "確認刪除模型組？",
+      "description": "將永久刪除組「{name}」及其所有模型映射，此操作無法復原。",
+      "cancel": "取消",
+      "confirm": "刪除"
+    },
+    "table": {
+      "name": "組名",
+      "description": "描述",
+      "members": "模型成員",
+      "type": "類型",
+      "actions": "操作"
+    },
+    "dialog": {
+      "addTitle": "新建模型組",
+      "addDescription": "將多個模型歸入一個組，統一配置限額策略。",
+      "addSingletonTitle": "新建單模型快捷組",
+      "addSingletonDescription": "為單個模型快速建立一個單元素組，實現按模型限額。",
+      "manageTitle": "編輯組：{name}",
+      "manageDescription": "重新命名或調整成員模型。模型在全系統只能屬於一個組。",
+      "name": "組名",
+      "nameOptional": "可選",
+      "namePlaceholder": "如 gpt-4-family",
+      "namePlaceholderSingleton": "預設使用模型名",
+      "description": "描述",
+      "descriptionPlaceholder": "可選描述",
+      "model": "模型",
+      "modelPlaceholder": "選擇或輸入模型名",
+      "searchModel": "搜尋模型...",
+      "noModels": "未找到模型",
+      "members": "成員模型",
+      "addMember": "新增",
+      "selectedCount": "已選 {count} 個模型",
+      "memberConflictNote": "若模型已屬於其他組，新增將失敗（全域互斥）。",
+      "cancel": "取消",
+      "save": "儲存"
+    }
+  },
+  "userGroups": {
+    "title": "用戶群組管理",
+    "description": "將標籤注冊為用戶群組，成員資格由用戶標籤派生。",
+    "loading": "載入中...",
+    "totalCount": "已注冊 {count} 個用戶群組",
+    "createGroup": "建立用戶群組",
+    "noGroups": "尚無用戶群組",
+    "members": "位成員",
+    "tagRequired": "請選擇標籤",
+    "duplicateTag": "該標籤已注冊為用戶群組",
+    "form": {
+      "tag": "標籤",
+      "tagPlaceholder": "選擇標籤",
+      "noAvailableTags": "所有標籤已注冊",
+      "name": "顯示名稱",
+      "namePlaceholder": "可選顯示名稱",
+      "description": "描述",
+      "descriptionPlaceholder": "可選描述",
+      "cancel": "取消",
+      "create": "建立",
+      "save": "儲存",
+      "saving": "儲存中..."
+    },
+    "createDialog": {
+      "title": "建立用戶群組",
+      "description": "選擇一個已有用戶標籤注冊為用戶群組。"
+    },
+    "editDialog": {
+      "title": "編輯用戶群組",
+      "description": "正在編輯用戶群組：{tag}"
+    },
+    "deleteDialog": {
+      "title": "刪除用戶群組",
+      "description": "確定刪除用戶群組「{tag}」嗎？此操作不會修改任何用戶的標籤。",
+      "confirm": "刪除"
+    }
+  },
+  "quotaBoosts": {
+    "errors": {
+      "list_failed": "取得臨時提額授予清單失敗。",
+      "create_failed": "建立臨時提額授予失敗。",
+      "delete_failed": "撤銷臨時提額授予失敗。",
+      "invalid_validity_range": "到期時間必須晚於開始時間。",
+      "action_failed": "臨時提額操作失敗。"
+    },
+    "note": "提額在 validFrom 時刻啟動，在該使用者和模型組的基礎限額上累加疊加。變更在快取 TTL 內生效。",
+    "window": "時間視窗",
+    "window_5h": "5 小時",
+    "window_daily": "每日",
+    "window_weekly": "每週",
+    "window_monthly": "每月",
+    "window_total": "總計",
+    "amount": "提額金額",
+    "validFrom": "生效時間",
+    "validTo": "到期時間",
+    "note_label": "備註",
+    "notePlaceholder": "管理員備註（選填）",
+    "addBoost": "新增提額",
+    "noBoosts": "該使用者與模型組尚無提額組態",
+    "createSuccess": "提額已新增",
+    "deleteSuccess": "提額已撤銷",
+    "invalidAmount": "請輸入有效的正數金額",
+    "validityRequired": "請填寫生效時間和到期時間",
+    "revokeConfirm": {
+      "title": "撤銷臨時提額",
+      "description": "將永久撤銷該提額授予，效果在快取 TTL 內傳播。",
+      "cancel": "取消",
+      "confirm": "撤銷"
+    },
+    "table": {
+      "window": "時間視窗",
+      "amount": "金額",
+      "validFrom": "生效時間",
+      "validTo": "到期時間",
+      "note": "備註",
+      "actions": "操作"
+    }
+  },
+  "countedInGlobalLabel": "計入全局額",
+  "modelGroupOnlyLabel": "模型組單算",
+  "splitNote": "命中模型組限額的消費按軸完全切分：不計入該軸全局額度，僅在模型組預算內單獨計量。"
 }

@@ -88,6 +88,11 @@ export async function saveSystemSettings(formData: {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+  quotaModelLeasePercent5h?: number | null;
+  quotaModelLeasePercentDaily?: number | null;
+  quotaModelLeasePercentWeekly?: number | null;
+  quotaModelLeasePercentMonthly?: number | null;
+  quotaModelLeaseMinSliceUsd?: number | null;
   publicStatusWindowHours?: number;
   publicStatusAggregationIntervalMinutes?: number;
   // IP 提取 / 归属地查询
@@ -140,6 +145,11 @@ export async function saveSystemSettings(formData: {
       quotaLeasePercentWeekly: validated.quotaLeasePercentWeekly,
       quotaLeasePercentMonthly: validated.quotaLeasePercentMonthly,
       quotaLeaseCapUsd: validated.quotaLeaseCapUsd,
+      quotaModelLeasePercent5h: validated.quotaModelLeasePercent5h,
+      quotaModelLeasePercentDaily: validated.quotaModelLeasePercentDaily,
+      quotaModelLeasePercentWeekly: validated.quotaModelLeasePercentWeekly,
+      quotaModelLeasePercentMonthly: validated.quotaModelLeasePercentMonthly,
+      quotaModelLeaseMinSliceUsd: validated.quotaModelLeaseMinSliceUsd,
       publicStatusWindowHours: validated.publicStatusWindowHours,
       publicStatusAggregationIntervalMinutes: validated.publicStatusAggregationIntervalMinutes,
       ipExtractionConfig: validated.ipExtractionConfig,

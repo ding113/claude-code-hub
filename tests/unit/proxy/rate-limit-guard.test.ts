@@ -78,6 +78,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       limitTotalUsd: number | null;
       limitConcurrentSessions: number;
     }>;
+    bypass?: { user?: boolean; key?: boolean };
   }) => {
     const session = {
       sessionId: "sess_test",
@@ -116,6 +117,10 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     session.setSessionId = (id: string) => {
       session.sessionId = id;
     };
+
+    // group-rate-limit: cost gates read these per-axis bypass flags (default false).
+    session.getBypassUserGlobalCost = () => overrides?.bypass?.user ?? false;
+    session.getBypassKeyGlobalCost = () => overrides?.bypass?.key ?? false;
 
     return session;
   };
@@ -638,5 +643,104 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     const keyDailyIdx = callOrder.indexOf("key_daily");
     const userDailyIdx = callOrder.indexOf("user_daily");
     expect(keyDailyIdx).toBeLessThan(userDailyIdx);
+  });
+
+  // group-rate-limit (§5.2.3): complete-split per-axis bypass. When a model-group
+  // limit splits an axis out of the mainline global gate, ALL of that axis's cost
+  // windows (total/5h/daily/weekly/monthly) are skipped; concurrent/RPM are not.
+  describe("complete-split per-axis bypass (T-GD-3/4/5)", () => {
+    const denyAxis = (axis: "user" | "key") => {
+      const denied = { allowed: false, reason: "limit reached (usage: 99.0000/1.0000)" };
+      const allowed = { allowed: true };
+      rateLimitServiceMock.checkCostLimitsWithLease.mockImplementation(async (_id, type) =>
+        type === axis ? denied : allowed
+      );
+      rateLimitServiceMock.checkTotalCostLimit.mockImplementation(async (_id, type) =>
+        type === axis ? { ...denied, current: 99 } : allowed
+      );
+    };
+
+    it("T-GD-3: key axis bypassed -> every key cost gate is skipped, request passes", async () => {
+      const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+      denyAxis("key");
+      const session = createSession({
+        key: { limitTotalUsd: 1, limit5hUsd: 1, limitDailyUsd: 1, limitWeeklyUsd: 1 },
+        bypass: { key: true },
+      });
+
+      await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
+
+      const totalAxes = rateLimitServiceMock.checkTotalCostLimit.mock.calls.map(([, type]) => type);
+      const leaseAxes = rateLimitServiceMock.checkCostLimitsWithLease.mock.calls.map(
+        ([, type]) => type
+      );
+      expect(totalAxes).not.toContain("key");
+      expect(leaseAxes).not.toContain("key");
+    });
+
+    it("T-GD-4: user axis bypassed -> every user cost gate is skipped, request passes", async () => {
+      const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+      denyAxis("user");
+      const session = createSession({
+        user: { limitTotalUsd: 1, limit5hUsd: 1, dailyQuota: 1, limitWeeklyUsd: 1 },
+        bypass: { user: true },
+      });
+
+      await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
+
+      const totalAxes = rateLimitServiceMock.checkTotalCostLimit.mock.calls.map(([, type]) => type);
+      const leaseAxes = rateLimitServiceMock.checkCostLimitsWithLease.mock.calls.map(
+        ([, type]) => type
+      );
+      expect(totalAxes).not.toContain("user");
+      expect(leaseAxes).not.toContain("user");
+    });
+
+    it("T-GD-5: both axes bypassed -> no cost gate runs at all", async () => {
+      const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+      rateLimitServiceMock.checkCostLimitsWithLease.mockResolvedValue({
+        allowed: false,
+        reason: "limit reached (usage: 99.0000/1.0000)",
+      });
+      rateLimitServiceMock.checkTotalCostLimit.mockResolvedValue({
+        allowed: false,
+        current: 99,
+        reason: "limit reached",
+      });
+
+      const session = createSession({
+        user: { limitTotalUsd: 1, limit5hUsd: 1 },
+        key: { limitTotalUsd: 1, limit5hUsd: 1 },
+        bypass: { user: true, key: true },
+      });
+
+      await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
+      expect(rateLimitServiceMock.checkTotalCostLimit).not.toHaveBeenCalled();
+      expect(rateLimitServiceMock.checkCostLimitsWithLease).not.toHaveBeenCalled();
+    });
+
+    it("bypass does not relax concurrent-session enforcement", async () => {
+      const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+      rateLimitServiceMock.checkAndTrackKeyUserSession.mockResolvedValueOnce({
+        allowed: false,
+        rejectedBy: "key",
+        reasonCode: "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED",
+        reasonParams: { current: 2, limit: 1, target: "key" },
+        keyCount: 2,
+        userCount: 0,
+        trackedKey: false,
+        trackedUser: false,
+      });
+
+      const session = createSession({
+        key: { limitConcurrentSessions: 1 },
+        bypass: { user: true, key: true },
+      });
+
+      await expect(ProxyRateLimitGuard.ensure(session)).rejects.toMatchObject({
+        name: "RateLimitError",
+        limitType: "concurrent_sessions",
+      });
+    });
   });
 });

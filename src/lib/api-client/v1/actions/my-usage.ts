@@ -1,4 +1,5 @@
 import type {
+  MyModelGroupQuota,
   MyStatsSummary,
   MyTodayStats,
   MyUsageLogsBatchResult,
@@ -16,6 +17,9 @@ import {
 } from "./_compat";
 
 export type {
+  MyModelGroupQuota,
+  MyModelGroupQuotaAxis,
+  MyModelGroupQuotaWindow,
   MyStatsSummary,
   MyTodayStats,
   MyUsageLogEntry,
@@ -30,6 +34,12 @@ export function getMyUsageMetadata() {
 
 export function getMyQuota() {
   return toActionResult(apiGet<MyUsageQuota>("/api/v1/me/quota"));
+}
+
+export function getMyModelGroupQuotas() {
+  return toActionResult(
+    apiGet<{ items?: MyModelGroupQuota[] }>("/api/v1/me/model-group-quotas").then(unwrapItems)
+  );
 }
 
 export function getMyTodayStats() {

@@ -1,6 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link } from "@/i18n/routing";
+import { QuotaTabsNav } from "./_components/quota-tabs-nav";
 
 export default async function QuotasLayout({
   children,
@@ -19,18 +18,9 @@ export default async function QuotasLayout({
         <p className="text-muted-foreground">{t("description")}</p>
       </div>
 
-      <Tabs defaultValue="users" className="space-y-4">
-        <TabsList>
-          <Link href="/dashboard/quotas/users">
-            <TabsTrigger value="users">{t("tabs.users")}</TabsTrigger>
-          </Link>
-          <Link href="/dashboard/quotas/providers">
-            <TabsTrigger value="providers">{t("tabs.providers")}</TabsTrigger>
-          </Link>
-        </TabsList>
+      <QuotaTabsNav />
 
-        {children}
-      </Tabs>
+      <div className="space-y-4">{children}</div>
     </div>
   );
 }

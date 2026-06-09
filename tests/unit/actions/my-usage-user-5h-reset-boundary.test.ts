@@ -32,6 +32,11 @@ const sumUserQuotaCostsMock = vi.fn(async () => ({
   costWeekly: 9,
   costMonthly: 9,
   costTotal: 9,
+  cost5hCounted: 2,
+  costDailyCounted: 9,
+  costWeeklyCounted: 9,
+  costMonthlyCounted: 9,
+  costTotalCounted: 9,
 }));
 const sumKeyQuotaCostsByIdMock = vi.fn(async () => ({
   cost5h: 0,
@@ -39,12 +44,17 @@ const sumKeyQuotaCostsByIdMock = vi.fn(async () => ({
   costWeekly: 0,
   costMonthly: 0,
   costTotal: 0,
+  cost5hCounted: 0,
+  costDailyCounted: 0,
+  costWeeklyCounted: 0,
+  costMonthlyCounted: 0,
+  costTotalCounted: 0,
 }));
 vi.mock("@/repository/statistics", () => ({
   sumUserQuotaCosts: (...args: unknown[]) => sumUserQuotaCostsMock(...args),
   sumKeyQuotaCostsById: (...args: unknown[]) => sumKeyQuotaCostsByIdMock(...args),
-  sumUserCostInTimeRange: vi.fn(async () => 0),
-  sumUserTotalCost: vi.fn(async () => 0),
+  sumUserCostSplitInTimeRange: vi.fn(async () => ({ total: 0, countedInGlobal: 0 })),
+  sumUserTotalCostSplit: vi.fn(async () => ({ total: 0, countedInGlobal: 0 })),
 }));
 
 const getCurrentCostMock = vi.fn(async () => 0);

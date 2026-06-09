@@ -30,6 +30,12 @@ export async function getMeToday(c: Context): Promise<Response> {
   return actionJson(c, await callAction(c, actions.getMyTodayStats, [], c.get("auth")));
 }
 
+export async function getMeModelGroupQuotas(c: Context): Promise<Response> {
+  const actions = await import("@/actions/my-usage");
+  const result = await callAction(c, actions.getMyModelGroupQuotas, [], c.get("auth"));
+  return result.ok ? jsonResponse({ items: result.data }) : actionError(c, result);
+}
+
 export async function listMeUsageLogs(c: Context): Promise<Response> {
   const query = parseMeUsageLogsQuery(c);
   if (query instanceof Response) return query;

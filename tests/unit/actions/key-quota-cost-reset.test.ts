@@ -20,11 +20,11 @@ vi.mock("@/repository/system-config", () => ({
 }));
 
 // Mock statistics
-const sumKeyCostInTimeRangeMock = vi.fn();
-const sumKeyTotalCostMock = vi.fn();
+const sumKeyCostSplitInTimeRangeMock = vi.fn();
+const sumKeyTotalCostSplitMock = vi.fn();
 vi.mock("@/repository/statistics", () => ({
-  sumKeyCostInTimeRange: sumKeyCostInTimeRangeMock,
-  sumKeyTotalCost: sumKeyTotalCostMock,
+  sumKeyCostSplitInTimeRange: sumKeyCostSplitInTimeRangeMock,
+  sumKeyTotalCostSplit: sumKeyTotalCostSplitMock,
 }));
 
 // Mock time-utils
@@ -125,8 +125,8 @@ function setupDefaultMocks(costResetAt: Date | null = null) {
   ]);
   setupTimeRangeMocks();
   getCurrentCostMock.mockResolvedValue(1.5);
-  sumKeyCostInTimeRangeMock.mockResolvedValue(1.5);
-  sumKeyTotalCostMock.mockResolvedValue(10.0);
+  sumKeyCostSplitInTimeRangeMock.mockResolvedValue({ total: 1.5, countedInGlobal: 1.5 });
+  sumKeyTotalCostSplitMock.mockResolvedValue({ total: 10.0, countedInGlobal: 10.0 });
   getKeySessionCountMock.mockResolvedValue(2);
 }
 
@@ -145,18 +145,22 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
 
     expect(result.ok).toBe(true);
 
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledTimes(4);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledTimes(4);
     // 1st call = 5h: clipped (07:00 < 10:00)
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(1, 42, costResetAt, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenNthCalledWith(1, 42, costResetAt, NOW);
     // 2nd call = daily: clipped (00:00 < 10:00)
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(2, 42, costResetAt, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenNthCalledWith(2, 42, costResetAt, NOW);
     // 3rd call = weekly: clipped (Feb 23 < Mar 1 10:00)
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(3, 42, costResetAt, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenNthCalledWith(3, 42, costResetAt, NOW);
     // 4th call = monthly: clipped (Feb 1 < Mar 1 10:00)
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(4, 42, costResetAt, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenNthCalledWith(4, 42, costResetAt, NOW);
 
     // sumKeyTotalCost receives costResetAt as 3rd argument
-    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", Infinity, costResetAt);
+    expect(sumKeyTotalCostSplitMock).toHaveBeenCalledWith(
+      "sk-test-key-hash",
+      Infinity,
+      costResetAt
+    );
   });
 
   test("user without costResetAt (null) -- original time ranges unchanged", async () => {
@@ -168,15 +172,15 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
     expect(result.ok).toBe(true);
 
     // 5h: original start used (no clipping)
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, FIVE_HOURS_AGO, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledWith(42, FIVE_HOURS_AGO, NOW);
     // daily: original start
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, DAILY_START, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledWith(42, DAILY_START, NOW);
     // weekly
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, WEEKLY_START, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledWith(42, WEEKLY_START, NOW);
     // monthly
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, MONTHLY_START, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledWith(42, MONTHLY_START, NOW);
     // total cost: null costResetAt
-    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", Infinity, null);
+    expect(sumKeyTotalCostSplitMock).toHaveBeenCalledWith("sk-test-key-hash", Infinity, null);
   });
 
   test("costResetAt older than all period starts -- no clipping effect", async () => {
@@ -190,12 +194,16 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
     expect(result.ok).toBe(true);
 
     // clipStart returns original start because costResetAt < start
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, FIVE_HOURS_AGO, NOW);
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, DAILY_START, NOW);
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, WEEKLY_START, NOW);
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, MONTHLY_START, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledWith(42, FIVE_HOURS_AGO, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledWith(42, DAILY_START, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledWith(42, WEEKLY_START, NOW);
+    expect(sumKeyCostSplitInTimeRangeMock).toHaveBeenCalledWith(42, MONTHLY_START, NOW);
     // total still receives costResetAt (sumKeyTotalCost handles it internally)
-    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", Infinity, costResetAt);
+    expect(sumKeyTotalCostSplitMock).toHaveBeenCalledWith(
+      "sk-test-key-hash",
+      Infinity,
+      costResetAt
+    );
   });
 
   test("costResetAt in the middle of daily range -- clips daily correctly", async () => {
@@ -210,7 +218,7 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
 
     // Daily start (midnight) < costResetAt (6AM) => clipped
     // Check the second call (daily) uses costResetAt
-    const calls = sumKeyCostInTimeRangeMock.mock.calls;
+    const calls = sumKeyCostSplitInTimeRangeMock.mock.calls;
     // 5h call: 7AM > 6AM => 5h start is AFTER costResetAt, so original 5h start used
     expect(calls[0]).toEqual([42, FIVE_HOURS_AGO, NOW]);
     // daily call: midnight < 6AM => clipped to costResetAt
@@ -237,7 +245,7 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errorCode).toBe(ERROR_CODES.PERMISSION_DENIED);
-    expect(sumKeyCostInTimeRangeMock).not.toHaveBeenCalled();
+    expect(sumKeyCostSplitInTimeRangeMock).not.toHaveBeenCalled();
   });
 
   test("key not found", async () => {

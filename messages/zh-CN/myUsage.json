@@ -27,7 +27,10 @@
     "keyLevel": "密钥",
     "userLevel": "用户",
     "unlimited": "不限",
-    "empty": "暂无额度数据"
+    "empty": "暂无额度数据",
+    "countedInGlobalLabel": "计入全局额",
+    "modelGroupOnlyLabel": "模型组单算",
+    "splitNote": "命中模型组限额的消费按轴完全切分：不计入该轴全局额度，仅在模型组预算内单独计量。"
   },
   "logs": {
     "title": "使用日志",
@@ -124,6 +127,11 @@
     "daily": "日",
     "monthly": "月",
     "total": "总计"
+  },
+  "modelGroupQuota": {
+    "sectionTitle": "模型组配额",
+    "modelsLabel": "模型",
+    "note": "以下模型组已单独限额；命中后该轴消费按模型组预算单独计量，不计入上方全局额度。"
   },
   "logsCollapsible": {
     "title": "使用日志",

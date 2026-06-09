@@ -57,6 +57,7 @@ export function KeyQuotaUsageDialog({
 }: KeyQuotaUsageDialogProps) {
   const t = useTranslations("dashboard.userManagement.keyQuotaUsageDialog");
   const tEdit = useTranslations("quota.quickEdit");
+  const tQuota = useTranslations("quota");
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<KeyQuotaUsageResult | null>(null);
   const [error, setError] = useState(false);
@@ -183,41 +184,65 @@ export function KeyQuotaUsageDialog({
           <div className="py-8 text-center text-sm text-muted-foreground">{t("fetchFailed")}</div>
         ) : (
           <div className="space-y-4 py-2">
-            {sortedItems?.map((item) => (
-              <div key={item.type} className="space-y-1.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">{t(getLabelKey(item.type))}</span>
-                  <span className="font-medium tabular-nums">
-                    {formatValue(item.type, item.current)} /{" "}
-                    <QuotaQuickEditPopover
-                      currentLimit={item.limit}
-                      label={t(getLabelKey(item.type))}
-                      unit={item.type === "limitSessions" ? "integer" : "currency"}
-                      currencyCode={currencyCode}
-                      onSave={(newLimit) => handleSaveLimit(item.type, newLimit)}
-                      allowClear={item.type !== "limitSessions"}
-                    >
-                      <button
-                        type="button"
-                        className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 rounded-sm cursor-pointer"
-                        aria-label={t(getLabelKey(item.type))}
+            {sortedItems?.map((item) => {
+              // group-rate-limit (§5.3/§10): for cost windows, gauge uses countedInGlobal.
+              // limitSessions has no split fields.
+              const isCostWindow = item.type !== "limitSessions";
+              const gaugeUsed = isCostWindow
+                ? (item.countedInGlobalCurrent ?? item.current)
+                : item.current;
+              const modelGroupOnlyAmt =
+                isCostWindow && (item.modelGroupOnlyCurrent ?? 0) > 0
+                  ? item.modelGroupOnlyCurrent!
+                  : 0;
+
+              return (
+                <div key={item.type} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{t(getLabelKey(item.type))}</span>
+                    <span className="font-medium tabular-nums">
+                      {formatValue(item.type, gaugeUsed)} /{" "}
+                      <QuotaQuickEditPopover
+                        currentLimit={item.limit}
+                        label={t(getLabelKey(item.type))}
+                        unit={item.type === "limitSessions" ? "integer" : "currency"}
+                        currencyCode={currencyCode}
+                        onSave={(newLimit) => handleSaveLimit(item.type, newLimit)}
+                        allowClear={item.type !== "limitSessions"}
                       >
-                        {formatLimit(item.type, item.limit)}
-                      </button>
-                    </QuotaQuickEditPopover>
-                  </span>
-                </div>
-                {item.limit !== null && item.limit > 0 && (
-                  <QuotaProgress current={item.current} limit={item.limit} />
-                )}
-                {item.type === "limitDaily" && item.mode && (
-                  <div className="text-xs text-muted-foreground">
-                    {item.mode === "fixed" ? t("modeFixed") : t("modeRolling")}
-                    {item.mode === "fixed" && item.time && ` (${item.time})`}
+                        <button
+                          type="button"
+                          className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 rounded-sm cursor-pointer"
+                          aria-label={t(getLabelKey(item.type))}
+                        >
+                          {formatLimit(item.type, item.limit)}
+                        </button>
+                      </QuotaQuickEditPopover>
+                    </span>
                   </div>
-                )}
-              </div>
-            ))}
+                  {item.limit !== null && item.limit > 0 && (
+                    <QuotaProgress current={gaugeUsed} limit={item.limit} />
+                  )}
+                  {modelGroupOnlyAmt > 0 && (
+                    <div
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground"
+                      title={tQuota("splitNote")}
+                    >
+                      <span>{tQuota("modelGroupOnlyLabel")}:</span>
+                      <span className="font-mono tabular-nums">
+                        {formatCurrency(modelGroupOnlyAmt, currencyCode)}
+                      </span>
+                    </div>
+                  )}
+                  {item.type === "limitDaily" && item.mode && (
+                    <div className="text-xs text-muted-foreground">
+                      {item.mode === "fixed" ? t("modeFixed") : t("modeRolling")}
+                      {item.mode === "fixed" && item.time && ` (${item.time})`}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </DialogContent>

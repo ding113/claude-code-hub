@@ -147,6 +147,8 @@ async function cleanupRedisKeys(userIds: number[]) {
   const keys = userIds.flatMap((userId) => [
     `user:${userId}:cost_5h_rolling`,
     `user:${userId}:cost_5h_fixed`,
+    `cost_cache:user:${userId}:5h_rolling`,
+    `cost_cache:user:${userId}:daily_rolling`,
     buildLeaseKey("user", userId, "5h", "rolling"),
     buildLeaseKey("user", userId, "5h", "fixed"),
   ]);

@@ -47,6 +47,7 @@ vi.mock("@/drizzle/schema", () => ({
     rpmLimit: "users.rpmLimit",
     dailyLimitUsd: "users.dailyLimitUsd",
     providerGroup: "users.providerGroup",
+    tags: "users.tags",
     limit5hUsd: "users.limit5hUsd",
     limit5hResetMode: "users.limit5hResetMode",
     limitWeeklyUsd: "users.limitWeeklyUsd",
@@ -148,6 +149,7 @@ function activeRow(overrides: Partial<Record<string, unknown>> = {}) {
     userRpm: null,
     userDailyQuota: null,
     userProviderGroup: null,
+    userTags: [],
     userLimit5hUsd: null,
     userLimit5hResetMode: "rolling",
     userLimitWeeklyUsd: null,
@@ -200,6 +202,51 @@ describe("repository/key resolveApiKeyAuthOutcome", () => {
       expect(outcome.user.id).toBe(2);
       expect(outcome.key.id).toBe(1);
     }
+  });
+
+  // Regression (group-rate-limit): the cold-path key+user JOIN must select and
+  // hydrate `users.tags`. When tags are dropped, the cached/authenticated user
+  // carries `[]`, and tag-derived user_group model limits never resolve, so the
+  // model-rate-limit guard silently skips enforcement.
+  it("cold path (JOIN) hydrates user.tags from the row", async () => {
+    whereMock.mockResolvedValueOnce([activeRow({ userTags: ["team-a", "vip"] })]);
+
+    const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+    const outcome = await resolveApiKeyAuthOutcome("sk-tagged");
+
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.user.tags).toEqual(["team-a", "vip"]);
+    }
+  });
+
+  it("cold path defaults user.tags to [] when the row has no tags", async () => {
+    whereMock.mockResolvedValueOnce([activeRow({ userTags: null })]);
+
+    const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+    const outcome = await resolveApiKeyAuthOutcome("sk-untagged");
+
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.user.tags).toEqual([]);
+    }
+  });
+
+  it("cached path returns the cached user with its tags intact", async () => {
+    const cache = await import("@/lib/security/api-key-auth-cache");
+    vi.mocked(cache.getCachedActiveKey).mockResolvedValue({ id: 7, userId: 9 } as never);
+    vi.mocked(cache.getCachedUser).mockResolvedValue({ id: 9, tags: ["team-b"] } as never);
+
+    const { resolveApiKeyAuthOutcome } = await import("@/repository/key");
+    const outcome = await resolveApiKeyAuthOutcome("sk-cached");
+
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.user.tags).toEqual(["team-b"]);
+      expect(outcome.key.id).toBe(7);
+    }
+    // Cached hit must short-circuit before the DB JOIN.
+    expect(whereMock).not.toHaveBeenCalled();
   });
 
   it("returns not_found when the row does not exist", async () => {

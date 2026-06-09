@@ -58,6 +58,8 @@ type InsertRequestInput = {
   inputTokens?: number | null;
   outputTokens?: number | null;
   providerChain?: Array<{ id: number; name: string }> | null;
+  countedInUserGlobal?: boolean;
+  countedInKeyGlobal?: boolean;
   createdAt?: Date;
 };
 
@@ -80,6 +82,8 @@ async function insertMessageRequestRow(input: InsertRequestInput) {
       inputTokens: input.inputTokens,
       outputTokens: input.outputTokens,
       providerChain: input.providerChain,
+      countedInUserGlobal: input.countedInUserGlobal,
+      countedInKeyGlobal: input.countedInKeyGlobal,
       createdAt: input.createdAt,
     })
     .returning({ id: messageRequest.id });
@@ -112,6 +116,8 @@ async function selectLedgerRowByRequestId(requestId: number) {
       costMultiplier: usageLedger.costMultiplier,
       inputTokens: usageLedger.inputTokens,
       outputTokens: usageLedger.outputTokens,
+      countedInUserGlobal: usageLedger.countedInUserGlobal,
+      countedInKeyGlobal: usageLedger.countedInKeyGlobal,
       createdAt: usageLedger.createdAt,
     })
     .from(usageLedger)
@@ -291,6 +297,66 @@ run("usage ledger integration", () => {
 
       const ledgerRow = await selectLedgerRowByRequestId(requestId);
       expect(ledgerRow?.successRateOutcome).toBe("excluded");
+    });
+
+    test("propagates default counted_in_*_global flags as true (group-rate-limit complete-split)", async () => {
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("trigger-split-default"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        statusCode: 200,
+      });
+
+      const ledgerRow = await selectLedgerRowByRequestId(requestId);
+      expect(ledgerRow?.countedInUserGlobal).toBe(true);
+      expect(ledgerRow?.countedInKeyGlobal).toBe(true);
+    });
+
+    test("propagates explicit counted_in_*_global flags to usage_ledger", async () => {
+      const userExcludedId = await insertMessageRequestRow({
+        key: nextKey("trigger-split-user-excluded"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        statusCode: 200,
+        countedInUserGlobal: false,
+        countedInKeyGlobal: true,
+      });
+      const keyExcludedId = await insertMessageRequestRow({
+        key: nextKey("trigger-split-key-excluded"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        statusCode: 200,
+        countedInUserGlobal: true,
+        countedInKeyGlobal: false,
+      });
+
+      const userExcludedRow = await selectLedgerRowByRequestId(userExcludedId);
+      expect(userExcludedRow?.countedInUserGlobal).toBe(false);
+      expect(userExcludedRow?.countedInKeyGlobal).toBe(true);
+
+      const keyExcludedRow = await selectLedgerRowByRequestId(keyExcludedId);
+      expect(keyExcludedRow?.countedInUserGlobal).toBe(true);
+      expect(keyExcludedRow?.countedInKeyGlobal).toBe(false);
+    });
+
+    test("propagates counted_in_*_global flag changes on UPSERT", async () => {
+      const requestId = await insertMessageRequestRow({
+        key: nextKey("trigger-split-upsert"),
+        userId: nextUserId(),
+        providerId: nextProviderId(),
+        statusCode: 200,
+        countedInUserGlobal: true,
+        countedInKeyGlobal: true,
+      });
+
+      await db
+        .update(messageRequest)
+        .set({ countedInUserGlobal: false, countedInKeyGlobal: false })
+        .where(eq(messageRequest.id, requestId));
+
+      const ledgerRow = await selectLedgerRowByRequestId(requestId);
+      expect(ledgerRow?.countedInUserGlobal).toBe(false);
+      expect(ledgerRow?.countedInKeyGlobal).toBe(false);
     });
   });
 

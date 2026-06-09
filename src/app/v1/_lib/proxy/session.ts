@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
+import type { ModelLimitBucket } from "@/lib/model-rate-limit/types";
 import { writeLiveChain } from "@/lib/redis/live-chain-store";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import {
@@ -20,6 +21,7 @@ import { isCountTokensEndpointPath } from "./endpoint-paths";
 import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
+import { ModelRedirector } from "./model-redirector";
 import {
   buildOpenAIImageLogicalBody,
   getOpenAIImageEndpoint,
@@ -206,6 +208,23 @@ export class ProxySession {
   // 失败切换 provider 时只能释放这里记录过的引用，避免 hedge/fallback 释放未 acquire 的 Redis 计数。
   private providerSessionRefs = new Set<number>();
 
+  // group-rate-limit (§5.2): buckets resolved by the model guard, reused by the
+  // settle path to decrement the exact same lease set that was checked.
+  private resolvedModelLimits: ModelLimitBucket[] = [];
+
+  // group-rate-limit (§5.1/§5.3): per-axis complete-split flags. Set by the model
+  // guard ONLY when that axis's bucket was checked (not fail-open) and passed.
+  // When true: the mainline global cost gate for that axis is skipped AND the
+  // request's consumption is excluded from that axis's global aggregation
+  // (counted_in_*_global = false). Default false → byte-identical to mainline.
+  private bypassUserGlobalCost = false;
+  private bypassKeyGlobalCost = false;
+
+  // bugfix #02: external listener notified whenever the bound provider changes.
+  // The model rate-limit guard registers a re-resolution callback here so failover
+  // / hedge winner swaps recompute buckets and per-axis bypass flags before settle.
+  private providerChangeListener: ((session: ProxySession) => Promise<void> | void) | null = null;
+
   private constructor(init: {
     startTime: number;
     method: string;
@@ -342,11 +361,76 @@ export class ProxySession {
     }
   }
 
+  setResolvedModelLimits(buckets: ModelLimitBucket[]): void {
+    this.resolvedModelLimits = buckets;
+  }
+
+  getResolvedModelLimits(): ModelLimitBucket[] {
+    return this.resolvedModelLimits;
+  }
+
+  setBypassUserGlobalCost(bypass: boolean): void {
+    this.bypassUserGlobalCost = bypass;
+  }
+
+  getBypassUserGlobalCost(): boolean {
+    return this.bypassUserGlobalCost;
+  }
+
+  setBypassKeyGlobalCost(bypass: boolean): void {
+    this.bypassKeyGlobalCost = bypass;
+  }
+
+  getBypassKeyGlobalCost(): boolean {
+    return this.bypassKeyGlobalCost;
+  }
+
   setProvider(provider: Provider | null): void {
     this.provider = provider;
     if (provider) {
       this.providerType = provider.providerType as ProviderType;
     }
+  }
+
+  /**
+   * bugfix #02: register a one-shot callback that recomputes model-rate-limit
+   * state whenever the bound provider changes. Listener replacements are
+   * idempotent; the latest registration wins so dev hot reload cannot stack
+   * stale handlers.
+   */
+  setProviderChangeListener(
+    listener: ((session: ProxySession) => Promise<void> | void) | null
+  ): void {
+    this.providerChangeListener = listener;
+  }
+
+  /**
+   * bugfix #02: async sibling of `setProvider` that fires the registered
+   * listener after the swap. Forwarder failover / hedge paths must call this
+   * instead of `setProvider` so that buckets and bypass flags reflect the
+   * final provider's redirect namespace.
+   */
+  async changeProvider(provider: Provider | null): Promise<void> {
+    this.setProvider(provider);
+    if (this.providerChangeListener) {
+      try {
+        await this.providerChangeListener(this);
+      } catch (error) {
+        logger.warn("[Session] provider-change listener failed", { error });
+      }
+    }
+  }
+
+  /**
+   * bugfix #02: derived getter — the upstream model name a request would
+   * send through the currently-bound provider. Used by the model rate-limit
+   * group resolver so the lookup namespace matches `usage_ledger.model`.
+   */
+  getEffectiveUpstreamModel(): string | null {
+    const client = this.originalModelName ?? this.request.model;
+    if (!client) return null;
+    if (!this.provider) return client;
+    return ModelRedirector.getRedirectedModel(client, this.provider);
   }
 
   recordProviderSessionRef(providerId: number): void {
@@ -366,6 +450,21 @@ export class ProxySession {
 
     this.providerSessionRefs.delete(providerId);
     return true;
+  }
+
+  /**
+   * bugfix #03: return every recorded provider session ref and clear the set so
+   * a subsequent drain (or forwarder-level `consumeProviderSessionRef`) is a
+   * no-op. Used by the guard-pipeline error path to release ZSET entries that
+   * the `provider` step ZADD'd before a later guard threw.
+   */
+  drainProviderSessionRefs(): number[] {
+    if (!this.providerSessionRefs || this.providerSessionRefs.size === 0) {
+      return [];
+    }
+    const refs = [...this.providerSessionRefs];
+    this.providerSessionRefs.clear();
+    return refs;
   }
 
   setCacheTtlResolved(ttl: CacheTtlResolved | null): void {

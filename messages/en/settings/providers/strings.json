@@ -48,6 +48,16 @@
   "viewModeList": "List",
   "viewModeVendor": "Vendor",
   "viewModeGroups": "Groups",
+  "viewModeModels": "Models",
+  "modelView": {
+    "search": "Search models...",
+    "modelCount": "{count} models",
+    "providerCount": "{count} providers",
+    "unrestricted": "Unrestricted",
+    "unrestrictedDesc": "These providers have no explicit model restrictions and will accept any model.",
+    "noModels": "No providers with specific model configurations found.",
+    "noResults": "No matching models found."
+  },
   "endpoints": "Endpoints",
   "manualProbe": "Probe",
   "addEndpoint": "Add Endpoint",

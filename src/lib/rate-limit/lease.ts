@@ -98,15 +98,21 @@ export interface CalculateLeaseSliceParams {
   currentUsage: number;
   percent: number;
   capUsd?: number;
+  /**
+   * OPT-B (group-rate-limit): minimum slice floor for small model-group buckets.
+   * Always closed out by `remaining`, so it can never over-grant. Default
+   * undefined keeps mainline behavior byte-identical.
+   */
+  minSliceUsd?: number;
 }
 
 /**
  * Calculate lease slice as percentage of limit
- * Returns min(limit * percent, remaining budget, capUsd)
+ * Returns min(max(limit * percent, minSliceUsd), capUsd, remaining budget)
  * Rounded to 4 decimal places
  */
 export function calculateLeaseSlice(params: CalculateLeaseSliceParams): number {
-  const { limitAmount, currentUsage, percent, capUsd } = params;
+  const { limitAmount, currentUsage, percent, capUsd, minSliceUsd } = params;
 
   const remaining = Math.max(0, limitAmount - currentUsage);
   if (remaining === 0) {
@@ -117,13 +123,18 @@ export function calculateLeaseSlice(params: CalculateLeaseSliceParams): number {
   const safePercent = Math.min(1, Math.max(0, percent));
   let slice = limitAmount * safePercent;
 
-  // Cap by remaining budget
-  slice = Math.min(slice, remaining);
+  // OPT-B: raise to the floor (before cap/remaining clamps)
+  if (minSliceUsd !== undefined && minSliceUsd > 0) {
+    slice = Math.max(slice, minSliceUsd);
+  }
 
   // Cap by USD limit if provided (ensure non-negative)
   if (capUsd !== undefined) {
     slice = Math.min(slice, Math.max(0, capUsd));
   }
+
+  // Cap by remaining budget last so the floor never over-grants
+  slice = Math.min(slice, remaining);
 
   // Round to 4 decimal places, ensure non-negative
   return Math.max(0, Math.round(slice * 10000) / 10000);

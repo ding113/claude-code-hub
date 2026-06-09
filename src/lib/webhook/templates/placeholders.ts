@@ -57,7 +57,12 @@ export const TEMPLATE_PLACEHOLDERS = {
   cost_alert: [
     { key: "{{target_type}}", label: "目标类型", description: "user 或 provider" },
     { key: "{{target_name}}", label: "目标名称", description: "用户名或供应商名" },
-    { key: "{{current_cost}}", label: "当前消费", description: "当前已消费金额" },
+    { key: "{{current_cost}}", label: "当前消费", description: "当前已消费金额（计入全局额部分）" },
+    {
+      key: "{{model_group_only_cost}}",
+      label: "模型组单算",
+      description: "被模型组限额切分、不计入全局额的消费",
+    },
     { key: "{{quota_limit}}", label: "配额上限", description: "配额限制金额" },
     { key: "{{usage_percent}}", label: "使用比例", description: "百分比(0-100)" },
   ],
@@ -132,6 +137,8 @@ export function buildTemplateVariables(params: {
     values["{{target_type}}"] = ca?.targetType ?? "";
     values["{{target_name}}"] = ca?.targetName ?? "";
     values["{{current_cost}}"] = ca?.currentCost !== undefined ? String(ca.currentCost) : "";
+    values["{{model_group_only_cost}}"] =
+      ca?.modelGroupOnlyCost !== undefined ? String(ca.modelGroupOnlyCost) : "";
     values["{{quota_limit}}"] = ca?.quotaLimit !== undefined ? String(ca.quotaLimit) : "";
     values["{{usage_percent}}"] = buildUsagePercent(ca);
   }

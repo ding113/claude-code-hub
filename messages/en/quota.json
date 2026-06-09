@@ -57,8 +57,86 @@
     "description": "View and manage quota usage across all levels",
     "tabs": {
       "users": "User Quotas",
+      "modelLimits": "Per-Model Limits",
+      "modelGroups": "Model Groups",
+      "userGroups": "User Groups",
       "keys": "Key Quotas",
       "providers": "Provider Quotas"
+    },
+    "subTabs": {
+      "config": "Limit Config",
+      "modelGroups": "Model Groups",
+      "userGroups": "User Groups"
+    }
+  },
+  "modelLimits": {
+    "title": "Per-Model-Group Limits",
+    "description": "Set cost caps per subject (user, user group) for a specific model group. Hitting a model-group limit fully replaces the global per-user cap for that request.",
+    "disabledNotice": "Per-model limits are not active yet. Set ENABLE_MODEL_RATE_LIMIT=true (requires ENABLE_RATE_LIMIT=true) to enable them. You can configure them ahead of time.",
+    "loadError": "Failed to load model-group limits",
+    "deleteSuccess": "Limit deleted",
+    "deleteError": "Failed to delete limit",
+    "noData": "No limits configured",
+    "allSubjects": "All subjects",
+    "allModelGroups": "All model groups",
+    "searchSubject": "Search...",
+    "searchModelGroup": "Search model group...",
+    "noResults": "No results found",
+    "addLimit": "Add limit",
+    "searchLimits": "Search subject or model group",
+    "expandMembers": "Expand / collapse members",
+    "subjectType": "Subject type",
+    "subjectTypeUser": "User",
+    "subjectTypeUserGroup": "User group",
+    "subjectTypeKey": "Key",
+    "modelGroup": "Model group",
+    "semanticsNote": "When a request hits a model-group limit, the global per-user or per-key quota is bypassed entirely for that model group (complete cost partition). RPM and concurrent-session limits continue to apply. User-group limits act as per-member ceilings. When multiple sources define a limit for the same window, the most permissive (highest) value is used.",
+    "resetMode": {
+      "fixed": "Fixed window",
+      "rolling": "Rolling window"
+    },
+    "table": {
+      "subjectType": "Subject type",
+      "subject": "Subject",
+      "modelGroup": "Model group",
+      "fiveHour": "5h",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "total": "Total",
+      "resetMode": "Reset mode",
+      "actions": "Actions"
+    },
+    "deleteConfirm": {
+      "title": "Delete limit",
+      "description": "Delete the limit for model group \"{group}\"? This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "dialog": {
+      "addTitle": "Add model-group limit",
+      "editTitle": "Edit model-group limit",
+      "description": "Caps for model group \"{group}\". Leave a field empty to keep that window unlimited.",
+      "fiveHour": "5-hour limit",
+      "daily": "Daily limit",
+      "weekly": "Weekly limit",
+      "monthly": "Monthly limit",
+      "total": "Total limit",
+      "unlimited": "Unlimited",
+      "resetMode": "5-hour reset mode",
+      "resetModeFixed": "Fixed window",
+      "resetModeRolling": "Rolling window",
+      "save": "Save",
+      "saveSuccess": "Limit saved",
+      "saveError": "Failed to save limit",
+      "selectDescription": "Set cost caps for the selected subject and model group. Leave a field empty to keep that window unlimited.",
+      "subjectRequired": "Please select a subject",
+      "modelGroupRequired": "Please select a model group"
+    },
+    "boosts": {
+      "panelTitle": "Quota Boosts",
+      "dialogDescription": "Grant temporary quota boosts for user \"{user}\" on model group \"{group}\".",
+      "configuredCount": "{count} quota boost(s) configured"
     }
   },
   "users": {
@@ -412,5 +490,147 @@
     "saveFailed": "Update failed",
     "invalidNumber": "Please enter a valid number",
     "negativeNotAllowed": "Cannot be negative"
-  }
+  },
+  "modelGroups": {
+    "title": "Model Group Management",
+    "description": "Create model groups for fine-grained rate limiting. Each model can belong to at most one group (global exclusivity).",
+    "semanticsNote": "When a request matches a model group limit, the global per-user or per-key quota does not apply to that request (full partition). RPM and concurrent session limits always remain active.",
+    "totalCount": "{count} groups",
+    "addGroup": "New Group",
+    "addSingleton": "Single Model Group",
+    "singleton": "Singleton",
+    "group": "Group",
+    "noData": "No model groups. Click \"New Group\" to create one.",
+    "noMembers": "No members",
+    "nameRequired": "Group name is required.",
+    "modelRequired": "Model name is required.",
+    "duplicateName": "A group with that name already exists.",
+    "memberConflict": "Model \"{model}\" already belongs to group \"{groupName}\" (id={groupId}).",
+    "loadError": "Failed to load model groups.",
+    "createSuccess": "Model group created.",
+    "createError": "Failed to create model group.",
+    "updateSuccess": "Model group updated.",
+    "updateError": "Failed to update model group.",
+    "deleteSuccess": "Model group \"{name}\" deleted.",
+    "deleteError": "Failed to delete model group.",
+    "memberUpdatePartialError": "Some member changes failed: {errors}",
+    "deleteConfirm": {
+      "title": "Delete model group?",
+      "description": "This will permanently delete group \"{name}\" and remove all its model mappings. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "table": {
+      "name": "Group Name",
+      "description": "Description",
+      "members": "Models",
+      "type": "Type",
+      "actions": "Actions"
+    },
+    "dialog": {
+      "addTitle": "Create Model Group",
+      "addDescription": "Create a group to collect multiple models under one rate-limit policy.",
+      "addSingletonTitle": "Create Single-Model Group",
+      "addSingletonDescription": "Quickly wrap one model in a singleton group for per-model rate limiting.",
+      "manageTitle": "Edit Group: {name}",
+      "manageDescription": "Rename the group or adjust its member models. Members must be globally unique across all groups.",
+      "name": "Group Name",
+      "nameOptional": "optional",
+      "namePlaceholder": "e.g. gpt-4-family",
+      "namePlaceholderSingleton": "Defaults to model name",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "model": "Model",
+      "modelPlaceholder": "Select or type model name",
+      "searchModel": "Search models...",
+      "noModels": "No models found",
+      "members": "Members",
+      "addMember": "Add",
+      "selectedCount": "{count} selected",
+      "memberConflictNote": "If a model already belongs to another group, adding it here will fail (global exclusivity).",
+      "cancel": "Cancel",
+      "save": "Save"
+    }
+  },
+  "userGroups": {
+    "title": "User Group Management",
+    "description": "Register tags as user groups. Membership is derived from users whose tags contain the group tag.",
+    "loading": "Loading...",
+    "totalCount": "{count} groups registered",
+    "createGroup": "Create Group",
+    "noGroups": "No user groups registered yet",
+    "members": "members",
+    "tagRequired": "Please select a tag",
+    "duplicateTag": "This tag is already registered as a group",
+    "form": {
+      "tag": "Tag",
+      "tagPlaceholder": "Select a tag",
+      "noAvailableTags": "All tags are already registered",
+      "name": "Display Name",
+      "namePlaceholder": "Optional display name",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "cancel": "Cancel",
+      "create": "Create",
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "createDialog": {
+      "title": "Create User Group",
+      "description": "Select an existing user tag to register as a user group."
+    },
+    "editDialog": {
+      "title": "Edit User Group",
+      "description": "Editing group: {tag}"
+    },
+    "deleteDialog": {
+      "title": "Delete User Group",
+      "description": "Are you sure you want to delete the group \"{tag}\"? This will not modify any user tags.",
+      "confirm": "Delete"
+    }
+  },
+  "quotaBoosts": {
+    "errors": {
+      "list_failed": "Failed to retrieve quota boost grants.",
+      "create_failed": "Failed to create quota boost grant.",
+      "delete_failed": "Failed to revoke quota boost grant.",
+      "invalid_validity_range": "The expiry time must be after the start time.",
+      "action_failed": "Quota boost operation failed."
+    },
+    "note": "Boosts grant temporary extra capacity on top of the base limit for this user and model group. They activate exactly at validFrom and stack additively. Changes propagate within the cache TTL.",
+    "window": "Window",
+    "window_5h": "5-hour",
+    "window_daily": "Daily",
+    "window_weekly": "Weekly",
+    "window_monthly": "Monthly",
+    "window_total": "Total",
+    "amount": "Boost amount",
+    "validFrom": "Valid from",
+    "validTo": "Valid until",
+    "note_label": "Note",
+    "notePlaceholder": "Optional admin note",
+    "addBoost": "Add boost",
+    "noBoosts": "No boosts configured for this user and model group",
+    "createSuccess": "Quota boost added",
+    "deleteSuccess": "Quota boost revoked",
+    "invalidAmount": "Please enter a valid positive amount",
+    "validityRequired": "Please fill in both valid-from and valid-until",
+    "revokeConfirm": {
+      "title": "Revoke quota boost",
+      "description": "This will permanently revoke the quota boost. The effect propagates within the cache TTL.",
+      "cancel": "Cancel",
+      "confirm": "Revoke"
+    },
+    "table": {
+      "window": "Window",
+      "amount": "Amount",
+      "validFrom": "Valid from",
+      "validTo": "Valid until",
+      "note": "Note",
+      "actions": "Actions"
+    }
+  },
+  "countedInGlobalLabel": "Global",
+  "modelGroupOnlyLabel": "Model group",
+  "splitNote": "Cost split: this amount hits a model-group limit and is counted separately from the global quota."
 }

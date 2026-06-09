@@ -8,6 +8,8 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
 import { logger } from "@/lib/logger";
+import { modelBucketDecrements, resolveCountedFlags } from "@/lib/model-rate-limit/backfill";
+import { isModelRateLimitEnabled } from "@/lib/model-rate-limit/types";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
@@ -3690,10 +3692,13 @@ async function updateRequestCostFromUsage(
     });
 
     if (cost.gt(0)) {
+      // group-rate-limit (§5.3): freeze per-axis counted_in flags at billing. Only
+      // when the feature is on; otherwise omit so columns keep their default (true).
+      const countedFlags = isModelRateLimitEnabled() ? resolveCountedFlags(session) : undefined;
       if (winnerLoserAware) {
-        await updateMessageRequestWinnerCost(messageId, cost, storedBreakdown);
+        await updateMessageRequestWinnerCost(messageId, cost, storedBreakdown, countedFlags);
       } else {
-        await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown);
+        await updateMessageRequestCostWithBreakdown(messageId, cost, storedBreakdown, countedFlags);
       }
       return {
         costUsd: cost.toString(),
@@ -4205,6 +4210,13 @@ async function trackCostToRedis(
 
     const costFloat = parseFloat(cost.toString());
 
+    // group-rate-limit (§5.2.4 / §5.3): a split axis (bypass=true) is excluded from
+    // its mainline global lease decrement and from its 5h-fixed counter write, so that
+    // model-group spend never seeds/consumes the mainline global gate. Default false ->
+    // full mainline parity. The model buckets are decremented unconditionally below.
+    const bypassKeyGlobal = session.getBypassKeyGlobalCost();
+    const bypassUserGlobal = session.getBypassUserGlobalCost();
+
     // 追踪到 Redis（使用 session.sessionId）
     await RateLimitService.trackCost(
       key.id,
@@ -4222,6 +4234,8 @@ async function trackCostToRedis(
         user5hResetMode: user.limit5hResetMode,
         requestId: messageContext.id,
         createdAtMs: messageContext.createdAt.getTime(),
+        bypassKeyGlobalCost: bypassKeyGlobal,
+        bypassUserGlobalCost: bypassUserGlobal,
       }
     );
 
@@ -4237,24 +4251,34 @@ async function trackCostToRedis(
       }
     );
 
-    // Decrement lease budgets for all windows (fire-and-forget)
+    // Decrement lease budgets for all windows (fire-and-forget). A split axis skips its
+    // own global lease decrement (bypass*GlobalCost computed above), matching the
+    // counted_in DB filter; model buckets are decremented unconditionally below.
     void Promise.all([
-      RateLimitService.decrementLeaseBudget(key.id, "key", "5h", costFloat, {
-        resetMode: key.limit5hResetMode,
-      }),
-      RateLimitService.decrementLeaseBudget(key.id, "key", "daily", costFloat, {
-        resetMode: key.dailyResetMode,
-      }),
-      RateLimitService.decrementLeaseBudget(key.id, "key", "weekly", costFloat),
-      RateLimitService.decrementLeaseBudget(key.id, "key", "monthly", costFloat),
-      RateLimitService.decrementLeaseBudget(user.id, "user", "5h", costFloat, {
-        resetMode: user.limit5hResetMode,
-      }),
-      RateLimitService.decrementLeaseBudget(user.id, "user", "daily", costFloat, {
-        resetMode: user.dailyResetMode,
-      }),
-      RateLimitService.decrementLeaseBudget(user.id, "user", "weekly", costFloat),
-      RateLimitService.decrementLeaseBudget(user.id, "user", "monthly", costFloat),
+      ...(bypassKeyGlobal
+        ? []
+        : [
+            RateLimitService.decrementLeaseBudget(key.id, "key", "5h", costFloat, {
+              resetMode: key.limit5hResetMode,
+            }),
+            RateLimitService.decrementLeaseBudget(key.id, "key", "daily", costFloat, {
+              resetMode: key.dailyResetMode,
+            }),
+            RateLimitService.decrementLeaseBudget(key.id, "key", "weekly", costFloat),
+            RateLimitService.decrementLeaseBudget(key.id, "key", "monthly", costFloat),
+          ]),
+      ...(bypassUserGlobal
+        ? []
+        : [
+            RateLimitService.decrementLeaseBudget(user.id, "user", "5h", costFloat, {
+              resetMode: user.limit5hResetMode,
+            }),
+            RateLimitService.decrementLeaseBudget(user.id, "user", "daily", costFloat, {
+              resetMode: user.dailyResetMode,
+            }),
+            RateLimitService.decrementLeaseBudget(user.id, "user", "weekly", costFloat),
+            RateLimitService.decrementLeaseBudget(user.id, "user", "monthly", costFloat),
+          ]),
       RateLimitService.decrementLeaseBudget(provider.id, "provider", "5h", costFloat, {
         resetMode: provider.limit5hResetMode,
       }),
@@ -4263,6 +4287,7 @@ async function trackCostToRedis(
       }),
       RateLimitService.decrementLeaseBudget(provider.id, "provider", "weekly", costFloat),
       RateLimitService.decrementLeaseBudget(provider.id, "provider", "monthly", costFloat),
+      ...modelBucketDecrements(session, costFloat),
     ]).catch((error) => {
       logger.warn("[ResponseHandler] Failed to decrement lease budgets:", {
         error: error instanceof Error ? error.message : String(error),

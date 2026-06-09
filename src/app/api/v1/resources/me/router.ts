@@ -13,6 +13,7 @@ import {
 import {
   getMeIpGeo,
   getMeMetadata,
+  getMeModelGroupQuotas,
   getMeQuota,
   getMeStatsSummary,
   getMeToday,
@@ -93,6 +94,28 @@ meRouter.openapi(
     },
   }),
   getMeQuota as never
+);
+
+meRouter.openapi(
+  createRoute({
+    method: "get",
+    path: "/me/model-group-quotas",
+    middleware: requireAuth("read"),
+    tags: ["Me"],
+    summary: "Get current caller model-group quotas",
+    description:
+      "Returns per-model-group quota views (current usage vs configured caps) for the caller when per-model rate limiting applies. Empty when the feature is off or no model-group limits apply.",
+    "x-required-access": "read",
+    security,
+    responses: {
+      200: {
+        description: "Model-group quotas.",
+        content: { "application/json": { schema: GenericMeResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  getMeModelGroupQuotas as never
 );
 
 meRouter.openapi(
