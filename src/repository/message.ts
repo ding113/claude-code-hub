@@ -320,7 +320,10 @@ export async function updateMessageRequestCost(
 export async function updateMessageRequestCostWithBreakdown(
   id: number,
   costUsd: CreateMessageRequestData["cost_usd"],
-  costBreakdown?: StoredCostBreakdown
+  costBreakdown?: StoredCostBreakdown,
+  // group-rate-limit (§3.6/§5.3): per-axis complete-split flags. Omitted -> columns
+  // keep their default (true), so flag-off behavior is byte-identical to mainline.
+  countedFlags?: { countedInUserGlobal: boolean; countedInKeyGlobal: boolean }
 ): Promise<void> {
   const formattedCost = formatCostForStorage(costUsd);
   if (!formattedCost) {
@@ -331,6 +334,7 @@ export async function updateMessageRequestCostWithBreakdown(
     enqueueMessageRequestUpdate(id, {
       costUsd: formattedCost,
       ...(costBreakdown ? { costBreakdown } : {}),
+      ...(countedFlags ?? {}),
     });
     return;
   }
@@ -340,6 +344,7 @@ export async function updateMessageRequestCostWithBreakdown(
     .set({
       costUsd: formattedCost,
       ...(costBreakdown ? { costBreakdown } : {}),
+      ...(countedFlags ?? {}),
       updatedAt: new Date(),
     })
     .where(eq(messageRequest.id, id));
@@ -363,7 +368,10 @@ export async function updateMessageRequestCostWithBreakdown(
 export async function updateMessageRequestWinnerCost(
   id: number,
   winnerCost: CreateMessageRequestData["cost_usd"],
-  costBreakdown?: StoredCostBreakdown
+  costBreakdown?: StoredCostBreakdown,
+  // group-rate-limit (§5.3): per-axis complete-split flags, frozen at billing.
+  // Omitted -> columns keep their default (true), so flag-off behavior is unchanged.
+  countedFlags?: { countedInUserGlobal: boolean; countedInKeyGlobal: boolean }
 ): Promise<void> {
   const formattedCost = formatCostForStorage(winnerCost);
   if (!formattedCost) {
@@ -379,6 +387,7 @@ export async function updateMessageRequestWinnerCost(
         .set({
           costUsd: sql`${formattedCost}::numeric + COALESCE((SELECT SUM((entry->>'costUsd')::numeric) FROM jsonb_array_elements(COALESCE(${messageRequest.hedgeLosers}, '[]'::jsonb)) AS entry), 0)`,
           ...(costBreakdown ? { costBreakdown } : {}),
+          ...(countedFlags ?? {}),
           updatedAt: new Date(),
         })
         .where(eq(messageRequest.id, id));

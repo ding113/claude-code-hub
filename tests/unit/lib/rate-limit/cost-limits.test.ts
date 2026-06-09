@@ -34,6 +34,10 @@ vi.mock("@/lib/redis", () => ({
   getRedisClient: () => redisClient,
 }));
 
+vi.mock("@/lib/config/system-settings-cache", () => ({
+  getCachedSystemSettings: vi.fn(async () => ({ quotaDbRefreshIntervalSeconds: 10 })),
+}));
+
 const resolveSystemTimezoneMock = vi.hoisted(() => vi.fn(async () => "Asia/Shanghai"));
 
 vi.mock("@/lib/utils/timezone", () => ({
@@ -55,6 +59,9 @@ const statisticsMock = {
   findKeyCostEntriesInTimeRange: vi.fn(async () => []),
   findProviderCostEntriesInTimeRange: vi.fn(async () => []),
   findUserCostEntriesInTimeRange: vi.fn(async () => []),
+
+  // bugfix #09: earliest-ledger lookup for boundary-aware TTL
+  findEarliestLedgerCreatedAtInWindow: vi.fn(async () => null as number | null),
 };
 
 vi.mock("@/repository/statistics", () => statisticsMock);
@@ -110,10 +117,13 @@ describe("RateLimitService - cost limits and quota checks", () => {
     expect(result.reason).toContain("Key 每日消费上限已达到（12.0000/10）");
   });
 
-  it("checkCostLimits：Provider 每日 rolling 超限时应返回 not allowed", async () => {
+  it("checkCostLimits：Provider 每日 rolling display cache hit 超限时应拦截", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
-    redisClient.eval.mockResolvedValueOnce("11");
+    redisClient.get.mockImplementation(async (key: string) => {
+      if (key === "cost_cache:provider:9:daily_rolling") return "11";
+      return null;
+    });
 
     const result = await RateLimitService.checkCostLimits(9, "provider", {
       limit_5h_usd: null,
@@ -126,6 +136,28 @@ describe("RateLimitService - cost limits and quota checks", () => {
 
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("供应商 每日消费上限已达到（11.0000/10）");
+    expect(redisClient.eval).not.toHaveBeenCalled();
+  });
+
+  it("checkCostLimits：5h rolling display cache hit 超限时应拦截", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClient.get.mockImplementation(async (key: string) => {
+      if (key === "cost_cache:provider:9:5h_rolling") return "11";
+      return null;
+    });
+
+    const result = await RateLimitService.checkCostLimits(9, "provider", {
+      limit_5h_usd: 10,
+      limit_5h_reset_mode: "rolling",
+      limit_daily_usd: null,
+      limit_weekly_usd: null,
+      limit_monthly_usd: null,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("供应商 5小时消费上限已达到（11.0000/10）");
+    expect(redisClient.eval).not.toHaveBeenCalled();
   });
 
   it("checkCostLimits：User fast-path 的类型标识应为 User（避免错误标为“供应商”）", async () => {
@@ -290,22 +322,36 @@ describe("RateLimitService - cost limits and quota checks", () => {
     expect(redisClient.set).toHaveBeenCalled();
   });
 
-  it("checkUserDailyCost：rolling 模式 cache miss 时应走明细查询并 warm ZSET", async () => {
+  it("checkUserDailyCost：rolling 模式 display cache hit 时直接返回，不查 DB、不写 ZSET", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
-    redisClient.eval.mockResolvedValueOnce("0");
-    redisClient.exists.mockResolvedValueOnce(0);
-    statisticsMock.findUserCostEntriesInTimeRange.mockResolvedValueOnce([
-      { id: 101, createdAt: new Date(nowMs - 60_000), costUsd: 3 },
-      { id: 102, createdAt: new Date(nowMs - 30_000), costUsd: 8 },
-    ]);
+    redisClient.get.mockImplementation(async (key: string) => {
+      if (key === "cost_cache:user:1:daily_rolling") return "11";
+      return null;
+    });
 
     const result = await RateLimitService.checkUserDailyCost(1, 10, "00:00", "rolling");
     expect(result.allowed).toBe(false);
     expect(result.current).toBe(11);
+    expect(statisticsMock.sumUserCostInTimeRange).not.toHaveBeenCalled();
+    expect(statisticsMock.findUserCostEntriesInTimeRange).not.toHaveBeenCalled();
+    expect(pipelineCommands.some((c) => c[0] === "zadd")).toBe(false);
+  });
 
-    const zaddCalls = pipelineCommands.filter((c) => c[0] === "zadd");
-    expect(zaddCalls).toHaveLength(2);
-    expect(pipelineCommands.some((c) => c[0] === "expire")).toBe(true);
+  it("checkUserDailyCost：rolling 模式 display cache miss 时应走 DB SUM 并回写 cache", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClient.get.mockResolvedValue(null); // cache miss
+    statisticsMock.sumUserCostInTimeRange.mockResolvedValueOnce(11);
+
+    const result = await RateLimitService.checkUserDailyCost(1, 10, "00:00", "rolling");
+    expect(result.allowed).toBe(false);
+    expect(result.current).toBe(11);
+    expect(statisticsMock.sumUserCostInTimeRange).toHaveBeenCalledTimes(1);
+    expect(pipelineCommands.some((c) => c[0] === "zadd")).toBe(false);
+    const setCalls = redisClient.set.mock.calls as unknown[][];
+    expect(setCalls.some((call) => String(call[0]) === "cost_cache:user:1:daily_rolling")).toBe(
+      true
+    );
   });
 });

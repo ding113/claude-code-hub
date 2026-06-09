@@ -1,11 +1,20 @@
 import { getUserAllLimitUsage } from "@/lib/api-client/v1/actions/users";
 
+export interface LimitUsageWindow {
+  usage: number;
+  limit: number | null;
+  /** group-rate-limit (§5.3/§10): portion counted toward the mainline global gate */
+  countedInGlobalUsage?: number;
+  /** group-rate-limit (§5.3/§10): portion split off to model-group buckets only */
+  modelGroupOnlyUsage?: number;
+}
+
 export interface LimitUsageData {
-  limit5h: { usage: number; limit: number | null };
-  limitDaily: { usage: number; limit: number | null };
-  limitWeekly: { usage: number; limit: number | null };
-  limitMonthly: { usage: number; limit: number | null };
-  limitTotal: { usage: number; limit: number | null };
+  limit5h: LimitUsageWindow;
+  limitDaily: LimitUsageWindow;
+  limitWeekly: LimitUsageWindow;
+  limitMonthly: LimitUsageWindow;
+  limitTotal: LimitUsageWindow;
 }
 
 export const LIMIT_USAGE_CACHE_TTL = 60 * 1000;

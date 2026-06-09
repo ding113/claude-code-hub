@@ -48,6 +48,16 @@
   "viewModeList": "リスト",
   "viewModeVendor": "ベンダー",
   "viewModeGroups": "グループ",
+  "viewModeModels": "モデル",
+  "modelView": {
+    "search": "モデルを検索...",
+    "modelCount": "{count} 件のモデル",
+    "providerCount": "{count} 件のプロバイダー",
+    "unrestricted": "無制限",
+    "unrestrictedDesc": "これらのプロバイダーはモデルの制限がなく、任意のモデルリクエストを受け付けます。",
+    "noModels": "特定のモデルが設定されたプロバイダーが見つかりません。",
+    "noResults": "一致するモデルが見つかりません。"
+  },
   "endpoints": "エンドポイント",
   "manualProbe": "テスト",
   "addEndpoint": "エンドポイントを追加",

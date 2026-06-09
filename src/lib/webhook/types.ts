@@ -76,6 +76,10 @@ export interface CostAlertData {
   quotaLimit: number;
   threshold: number;
   period: string;
+  // group-rate-limit (§5.3/§10): spend split off by a model-group limit that is excluded
+  // from the global gate. currentCost is the global-counted portion; this is the rest.
+  // Only set for user/key targets (providers are never split, R4); undefined => 0/hidden.
+  modelGroupOnlyCost?: number;
 }
 
 export interface CacheHitRateAlertSample {

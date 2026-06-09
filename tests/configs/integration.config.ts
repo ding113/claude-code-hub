@@ -8,6 +8,8 @@ export default createTestRunnerConfig({
   testFiles: [
     "tests/integration/usage-ledger.test.ts",
     "tests/integration/my-usage-imported-ledger.test.ts",
+    "tests/integration/model-group-complete-split.test.ts",
+    "tests/integration/cost-cache-rolling-flow.test.ts",
   ],
   api: {
     host: process.env.VITEST_API_HOST || "127.0.0.1",

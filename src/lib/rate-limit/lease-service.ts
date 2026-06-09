@@ -334,9 +334,11 @@ export class LeaseService {
   ): Promise<number> {
     switch (entityType) {
       case "key":
-        return await sumKeyCostInTimeRange(entityId, startTime, endTime);
+        // group-rate-limit (§6.1): the global key lease seeds from global-counted spend
+        // only, so a model-split axis's consumption never inflates the mainline gate.
+        return await sumKeyCostInTimeRange(entityId, startTime, endTime, true);
       case "user":
-        return await sumUserCostInTimeRange(entityId, startTime, endTime);
+        return await sumUserCostInTimeRange(entityId, startTime, endTime, true);
       case "provider":
         return await sumProviderCostInTimeRange(entityId, startTime, endTime);
       default:

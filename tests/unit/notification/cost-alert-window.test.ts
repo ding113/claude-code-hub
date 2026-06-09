@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Track mock calls
 const mockGetTimeRangeForPeriod = vi.fn();
-const mockSumKeyCostInTimeRange = vi.fn();
+const mockSumKeyCostSplitInTimeRange = vi.fn();
 const mockSumProviderCostInTimeRange = vi.fn();
 const mockDbSelect = vi.fn();
 const mockDbFrom = vi.fn();
@@ -63,7 +63,7 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
 
 // Mock the statistics repository
 vi.mock("@/repository/statistics", () => ({
-  sumKeyCostInTimeRange: (...args: unknown[]) => mockSumKeyCostInTimeRange(...args),
+  sumKeyCostSplitInTimeRange: (...args: unknown[]) => mockSumKeyCostSplitInTimeRange(...args),
   sumProviderCostInTimeRange: (...args: unknown[]) => mockSumProviderCostInTimeRange(...args),
 }));
 
@@ -105,7 +105,7 @@ describe("Cost Alert Time Windows", () => {
     });
 
     // Default mock for cost queries
-    mockSumKeyCostInTimeRange.mockResolvedValue(0);
+    mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 0, countedInGlobal: 0 });
     mockSumProviderCostInTimeRange.mockResolvedValue(0);
 
     // Default: return empty arrays for DB queries
@@ -129,7 +129,7 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: null,
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(5);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 5, countedInGlobal: 5 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
@@ -149,7 +149,7 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: null,
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(50);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 50, countedInGlobal: 50 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
@@ -169,7 +169,7 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: "1000.00",
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(500);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 500, countedInGlobal: 500 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
@@ -177,7 +177,7 @@ describe("Cost Alert Time Windows", () => {
       expect(mockGetTimeRangeForPeriod).toHaveBeenCalledWith("monthly");
     });
 
-    it("should use sumKeyCostInTimeRange with keyId and correct time range", async () => {
+    it("should use sumKeyCostSplitInTimeRange with keyId and correct time range", async () => {
       const expectedStart = new Date(nowMs - 5 * 60 * 60 * 1000);
       const expectedEnd = new Date(nowMs);
 
@@ -191,17 +191,14 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: null,
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(5);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 5, countedInGlobal: 5 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
 
-      // Should call sumKeyCostInTimeRange with keyId (not key string) and time range
-      expect(mockSumKeyCostInTimeRange).toHaveBeenCalledWith(
-        1, // keyId
-        expectedStart,
-        expectedEnd
-      );
+      // group-rate-limit (§5.3/§10): the split query returns total + global-counted spend in
+      // one round-trip; the gate compares the global-counted portion. keyId (not key string).
+      expect(mockSumKeyCostSplitInTimeRange).toHaveBeenCalledWith(1, expectedStart, expectedEnd);
     });
 
     it("should generate alert when cost exceeds threshold", async () => {
@@ -215,7 +212,7 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: null,
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(9); // 90% of limit
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 9, countedInGlobal: 9 }); // 90% of limit
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       const alerts = await generateCostAlerts(0.8); // 80% threshold
@@ -243,10 +240,58 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: null,
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(7); // 70% of limit
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 7, countedInGlobal: 7 }); // 70% of limit
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       const alerts = await generateCostAlerts(0.8); // 80% threshold
+
+      expect(alerts).toHaveLength(0);
+    });
+
+    it("carries the model-group-only split into the alert (group-rate-limit §5.3/§10)", async () => {
+      mockDbWhere.mockResolvedValue([
+        {
+          id: 1,
+          key: "test-key",
+          userName: "Test User",
+          limit5h: "10.00",
+          limitWeek: null,
+          limitMonth: null,
+        },
+      ]);
+      // total $24 spend, of which $9 counts toward the global gate and $15 was split off
+      // by a model-group limit (counted_in_*_global=false).
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 24, countedInGlobal: 9 });
+
+      const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
+      const alerts = await generateCostAlerts(0.8); // 80% threshold
+
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]).toMatchObject({
+        targetId: 1,
+        currentCost: 9, // gate value = global-counted portion
+        quotaLimit: 10,
+        modelGroupOnlyCost: 15, // total - countedInGlobal
+      });
+    });
+
+    it("gates on the global-counted portion, not total spend", async () => {
+      mockDbWhere.mockResolvedValue([
+        {
+          id: 1,
+          key: "test-key",
+          userName: "Test User",
+          limit5h: "10.00",
+          limitWeek: null,
+          limitMonth: null,
+        },
+      ]);
+      // total $50 exceeds the limit, but only $5 counts toward the global gate (50% < 80%)
+      // -> no false global-limit alert (the model-split spend must not trip the global gate).
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 50, countedInGlobal: 5 });
+
+      const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
+      const alerts = await generateCostAlerts(0.8);
 
       expect(alerts).toHaveLength(0);
     });
@@ -343,7 +388,7 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: null,
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(50);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 50, countedInGlobal: 50 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
@@ -352,10 +397,10 @@ describe("Cost Alert Time Windows", () => {
       expect(mockGetTimeRangeForPeriod).toHaveBeenCalledWith("weekly");
 
       // Verify sumKeyCostInTimeRange was called
-      expect(mockSumKeyCostInTimeRange).toHaveBeenCalled();
+      expect(mockSumKeyCostSplitInTimeRange).toHaveBeenCalled();
 
       // Extract the actual startTime passed
-      const callArgs = mockSumKeyCostInTimeRange.mock.calls[0];
+      const callArgs = mockSumKeyCostSplitInTimeRange.mock.calls[0];
       const startTime = callArgs[1] as Date;
 
       // Should be Monday 00:00 Shanghai = Sunday 16:00 UTC
@@ -373,14 +418,14 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: "1000.00",
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(500);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 500, countedInGlobal: 500 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
 
       expect(mockGetTimeRangeForPeriod).toHaveBeenCalledWith("monthly");
 
-      const callArgs = mockSumKeyCostInTimeRange.mock.calls[0];
+      const callArgs = mockSumKeyCostSplitInTimeRange.mock.calls[0];
       const startTime = callArgs[1] as Date;
 
       // Should be Jan 1st 00:00 Shanghai = Dec 31 16:00 UTC
@@ -389,9 +434,9 @@ describe("Cost Alert Time Windows", () => {
   });
 
   describe("Warmup and Deleted Record Exclusion", () => {
-    it("should use sumKeyCostInTimeRange which excludes warmup records", async () => {
-      // This is a verification test - sumKeyCostInTimeRange already includes EXCLUDE_WARMUP_CONDITION
-      // The old getKeyCostSince did NOT have this filter
+    it("should use sumKeyCostSplitInTimeRange which excludes warmup records", async () => {
+      // This is a verification test - sumKeyCostSplitInTimeRange shares LEDGER_BILLING_CONDITION
+      // (EXCLUDE_WARMUP_CONDITION + deletedAt). The old getKeyCostSince did NOT have this filter
 
       mockDbWhere.mockResolvedValue([
         {
@@ -403,13 +448,13 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: null,
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(5);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 5, countedInGlobal: 5 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
 
-      // Verify sumKeyCostInTimeRange is called (which has EXCLUDE_WARMUP_CONDITION built-in)
-      expect(mockSumKeyCostInTimeRange).toHaveBeenCalled();
+      // Verify sumKeyCostSplitInTimeRange is called (which has EXCLUDE_WARMUP_CONDITION built-in)
+      expect(mockSumKeyCostSplitInTimeRange).toHaveBeenCalled();
     });
 
     it("should use sumProviderCostInTimeRange which excludes deleted records", async () => {
@@ -446,7 +491,7 @@ describe("Cost Alert Time Windows", () => {
           limitMonth: null,
         },
       ]);
-      mockSumKeyCostInTimeRange.mockResolvedValue(50);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 50, countedInGlobal: 50 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
@@ -488,7 +533,7 @@ describe("Cost Alert Time Windows", () => {
           },
         ])
         .mockResolvedValueOnce([]); // providers query returns empty
-      mockSumKeyCostInTimeRange.mockResolvedValue(5);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 5, countedInGlobal: 5 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);
@@ -518,7 +563,7 @@ describe("Cost Alert Time Windows", () => {
       }));
 
       mockDbWhere.mockResolvedValueOnce(manyKeys).mockResolvedValueOnce([]); // empty providers
-      mockSumKeyCostInTimeRange.mockResolvedValue(5);
+      mockSumKeyCostSplitInTimeRange.mockResolvedValue({ total: 5, countedInGlobal: 5 });
 
       const { generateCostAlerts } = await import("@/lib/notification/tasks/cost-alert");
       await generateCostAlerts(0.5);

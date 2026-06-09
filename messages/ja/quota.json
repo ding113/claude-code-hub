@@ -57,8 +57,86 @@
     "description": "すべてのレベルでクォータ使用状況を表示および管理",
     "tabs": {
       "users": "ユーザークォータ",
+      "modelLimits": "モデル別上限",
+      "modelGroups": "モデルグループ",
+      "userGroups": "ユーザーグループ",
       "keys": "キークォータ",
       "providers": "プロバイダークォータ"
+    },
+    "subTabs": {
+      "config": "上限設定",
+      "modelGroups": "モデルグループ",
+      "userGroups": "ユーザーグループ"
+    }
+  },
+  "modelLimits": {
+    "title": "モデルグループ別上限",
+    "description": "対象（ユーザー、ユーザーグループ）とモデルグループごとにコスト上限を設定します。モデルグループ上限に達した場合、そのリクエストはグローバルユーザー上限から完全に切り離されます。",
+    "disabledNotice": "モデル別上限は現在有効ではありません。環境変数 ENABLE_MODEL_RATE_LIMIT=true（ENABLE_RATE_LIMIT=true が前提）を設定すると有効になります。設定は事前に行えます。",
+    "loadError": "モデルグループ上限の読み込みに失敗しました",
+    "deleteSuccess": "上限を削除しました",
+    "deleteError": "上限の削除に失敗しました",
+    "noData": "上限設定はありません",
+    "allSubjects": "すべての対象",
+    "allModelGroups": "すべてのモデルグループ",
+    "searchSubject": "検索...",
+    "searchModelGroup": "モデルグループを検索...",
+    "noResults": "一致なし",
+    "addLimit": "上限を追加",
+    "searchLimits": "対象 / モデルグループを検索",
+    "expandMembers": "メンバーの展開 / 折りたたみ",
+    "subjectType": "対象種別",
+    "subjectTypeUser": "ユーザー",
+    "subjectTypeUserGroup": "ユーザーグループ",
+    "subjectTypeKey": "キー",
+    "modelGroup": "モデルグループ",
+    "semanticsNote": "モデルグループ上限に達した場合、そのリクエストはグローバルユーザー/キー配額から完全に切り離されます（完全分離）。RPM と同時セッション制限は引き続き有効です。ユーザーグループ上限はメンバーごとに独立して適用されます。同一ウィンドウに複数のソースがある場合は最も緩い値（最大値）が使用されます。",
+    "resetMode": {
+      "fixed": "固定ウィンドウ",
+      "rolling": "ローリングウィンドウ"
+    },
+    "table": {
+      "subjectType": "対象種別",
+      "subject": "対象",
+      "modelGroup": "モデルグループ",
+      "fiveHour": "5時間",
+      "daily": "日次",
+      "weekly": "週次",
+      "monthly": "月次",
+      "total": "合計",
+      "resetMode": "リセットモード",
+      "actions": "操作"
+    },
+    "deleteConfirm": {
+      "title": "上限を削除",
+      "description": "モデルグループ \"{group}\" の上限設定を削除しますか？この操作は取り消せません。",
+      "cancel": "キャンセル",
+      "confirm": "削除"
+    },
+    "dialog": {
+      "addTitle": "モデルグループ上限を追加",
+      "editTitle": "モデルグループ上限を編集",
+      "description": "モデルグループ \"{group}\" のコスト上限。空欄にするとその期間は無制限になります。",
+      "fiveHour": "5時間上限",
+      "daily": "日次上限",
+      "weekly": "週次上限",
+      "monthly": "月次上限",
+      "total": "合計上限",
+      "unlimited": "無制限",
+      "resetMode": "5時間リセットモード",
+      "resetModeFixed": "固定ウィンドウ",
+      "resetModeRolling": "ローリングウィンドウ",
+      "save": "保存",
+      "saveSuccess": "上限を保存しました",
+      "saveError": "上限の保存に失敗しました",
+      "selectDescription": "選択した対象とモデルグループにコスト上限を設定します。空欄にするとその期間は無制限になります。",
+      "subjectRequired": "対象を選択してください",
+      "modelGroupRequired": "モデルグループを選択してください"
+    },
+    "boosts": {
+      "panelTitle": "一時クォータブースト",
+      "dialogDescription": "ユーザー「{user}」のモデルグループ「{group}」に一時的な上限引き上げを付与します。",
+      "configuredCount": "一時提額を {count} 件設定済み"
     }
   },
   "users": {
@@ -389,5 +467,147 @@
     "saveFailed": "更新に失敗しました",
     "invalidNumber": "有効な数値を入力してください",
     "negativeNotAllowed": "負の値は入力できません"
-  }
+  },
+  "modelGroups": {
+    "title": "モデルグループ管理",
+    "description": "モデルグループを作成して、きめ細かいレート制限を設定します。各モデルは1つのグループにのみ所属できます（グローバル排他）。",
+    "semanticsNote": "リクエストがモデルグループの制限に一致すると、そのリクエストに対してユーザーまたはKeyのグローバルコスト制限は適用されません（完全分離）。RPMと同時接続制限は常に有効です。",
+    "totalCount": "{count} グループ",
+    "addGroup": "グループを作成",
+    "addSingleton": "単一モデルグループ",
+    "singleton": "シングルトン",
+    "group": "グループ",
+    "noData": "モデルグループがありません。「グループを作成」をクリックしてください。",
+    "noMembers": "メンバーなし",
+    "nameRequired": "グループ名は必須です。",
+    "modelRequired": "モデル名は必須です。",
+    "duplicateName": "同名のグループが既に存在します。",
+    "memberConflict": "モデル「{model}」は既にグループ「{groupName}」（id={groupId}）に所属しています。",
+    "loadError": "モデルグループの読み込みに失敗しました。",
+    "createSuccess": "モデルグループを作成しました。",
+    "createError": "モデルグループの作成に失敗しました。",
+    "updateSuccess": "モデルグループを更新しました。",
+    "updateError": "モデルグループの更新に失敗しました。",
+    "deleteSuccess": "モデルグループ「{name}」を削除しました。",
+    "deleteError": "モデルグループの削除に失敗しました。",
+    "memberUpdatePartialError": "一部のメンバー変更が失敗しました：{errors}",
+    "deleteConfirm": {
+      "title": "モデルグループを削除しますか？",
+      "description": "グループ「{name}」とすべてのモデルマッピングが完全に削除されます。この操作は元に戻せません。",
+      "cancel": "キャンセル",
+      "confirm": "削除"
+    },
+    "table": {
+      "name": "グループ名",
+      "description": "説明",
+      "members": "モデル",
+      "type": "種類",
+      "actions": "操作"
+    },
+    "dialog": {
+      "addTitle": "モデルグループを作成",
+      "addDescription": "複数のモデルをグループにまとめ、統一的なレート制限ポリシーを設定します。",
+      "addSingletonTitle": "単一モデルグループを作成",
+      "addSingletonDescription": "1つのモデルを素早くシングルトングループにラップして、モデル別レート制限を実現します。",
+      "manageTitle": "グループを編集：{name}",
+      "manageDescription": "グループ名の変更またはメンバーモデルの調整。モデルはシステム全体で1つのグループにのみ所属できます。",
+      "name": "グループ名",
+      "nameOptional": "任意",
+      "namePlaceholder": "例：gpt-4-family",
+      "namePlaceholderSingleton": "デフォルトはモデル名",
+      "description": "説明",
+      "descriptionPlaceholder": "任意の説明",
+      "model": "モデル",
+      "modelPlaceholder": "モデル名を選択または入力",
+      "searchModel": "モデルを検索...",
+      "noModels": "モデルが見つかりません",
+      "members": "メンバーモデル",
+      "addMember": "追加",
+      "selectedCount": "{count} 件選択中",
+      "memberConflictNote": "モデルが既に別のグループに所属している場合、追加は失敗します（グローバル排他）。",
+      "cancel": "キャンセル",
+      "save": "保存"
+    }
+  },
+  "userGroups": {
+    "title": "ユーザーグループ管理",
+    "description": "タグをユーザーグループとして登録します。メンバーシップはユーザーのタグから派生します。",
+    "loading": "読み込み中...",
+    "totalCount": "{count} 個のグループを登録済み",
+    "createGroup": "グループを作成",
+    "noGroups": "ユーザーグループが未登録です",
+    "members": "人のメンバー",
+    "tagRequired": "タグを選択してください",
+    "duplicateTag": "このタグはすでにグループとして登録されています",
+    "form": {
+      "tag": "タグ",
+      "tagPlaceholder": "タグを選択",
+      "noAvailableTags": "すべてのタグが登録済みです",
+      "name": "表示名",
+      "namePlaceholder": "任意の表示名",
+      "description": "説明",
+      "descriptionPlaceholder": "任意の説明",
+      "cancel": "キャンセル",
+      "create": "作成",
+      "save": "保存",
+      "saving": "保存中..."
+    },
+    "createDialog": {
+      "title": "ユーザーグループを作成",
+      "description": "既存のユーザータグを選択してグループとして登録します。"
+    },
+    "editDialog": {
+      "title": "ユーザーグループを編集",
+      "description": "グループを編集中：{tag}"
+    },
+    "deleteDialog": {
+      "title": "ユーザーグループを削除",
+      "description": "グループ「{tag}」を削除しますか？ユーザーのタグは変更されません。",
+      "confirm": "削除"
+    }
+  },
+  "quotaBoosts": {
+    "errors": {
+      "list_failed": "一時クォータ付与の一覧取得に失敗しました。",
+      "create_failed": "一時クォータ付与の作成に失敗しました。",
+      "delete_failed": "一時クォータ付与の取り消しに失敗しました。",
+      "invalid_validity_range": "終了日時は開始日時より後でなければなりません。",
+      "action_failed": "一時クォータ操作に失敗しました。"
+    },
+    "note": "ブーストは validFrom の時刻に有効化され、このユーザーとモデルグループの基本上限に加算されます。変更はキャッシュ TTL 以内に反映されます。",
+    "window": "ウィンドウ",
+    "window_5h": "5時間",
+    "window_daily": "日次",
+    "window_weekly": "週次",
+    "window_monthly": "月次",
+    "window_total": "合計",
+    "amount": "ブースト金額",
+    "validFrom": "有効開始日時",
+    "validTo": "有効終了日時",
+    "note_label": "メモ",
+    "notePlaceholder": "管理者メモ（任意）",
+    "addBoost": "ブーストを追加",
+    "noBoosts": "このユーザーとモデルグループのブーストはありません",
+    "createSuccess": "クォータブーストを追加しました",
+    "deleteSuccess": "クォータブーストを取り消しました",
+    "invalidAmount": "有効な正の金額を入力してください",
+    "validityRequired": "有効開始日時と終了日時を入力してください",
+    "revokeConfirm": {
+      "title": "クォータブーストを取り消す",
+      "description": "このクォータブーストを永久に取り消します。効果はキャッシュ TTL 以内に伝播します。",
+      "cancel": "キャンセル",
+      "confirm": "取り消す"
+    },
+    "table": {
+      "window": "ウィンドウ",
+      "amount": "金額",
+      "validFrom": "有効開始",
+      "validTo": "有効終了",
+      "note": "メモ",
+      "actions": "操作"
+    }
+  },
+  "countedInGlobalLabel": "グローバル枠計上",
+  "modelGroupOnlyLabel": "モデルグループ分算",
+  "splitNote": "モデルグループ制限に命中したコストは軸ごとに完全分割されます。グローバル枠には計上されず、モデルグループ予算内のみで計量されます。"
 }

@@ -1,6 +1,10 @@
 {
   "entries": [
     {
+      "key": "myUsage.modelGroupQuota.modelsLabel",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
       "key": "providers.form.codexInstructions",
       "reason": "zh-cn==zh-tw title term"
     },

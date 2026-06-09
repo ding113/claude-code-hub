@@ -1071,10 +1071,13 @@ export const UpdateSystemSettingsSchema = z.object({
     .optional(),
 
   // Quota lease settings
+  // bugfix #05: minimum raised from 1s to 5s. The display cache TTL is derived
+  // from this value with a ±1s jitter; values below 5s let half the writes
+  // collapse to a 1s TTL and stampede the DB on every dashboard poll.
   quotaDbRefreshIntervalSeconds: z.coerce
     .number()
     .int("DB refresh interval must be an integer")
-    .min(1, "DB refresh interval cannot be less than 1 second")
+    .min(5, "DB refresh interval cannot be less than 5 seconds")
     .max(300, "DB refresh interval cannot exceed 300 seconds")
     .optional(),
   quotaLeasePercent5h: z.coerce
@@ -1098,6 +1101,35 @@ export const UpdateSystemSettingsSchema = z.object({
     .max(1, "Lease percent cannot exceed 1")
     .optional(),
   quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
+  quotaModelLeasePercent5h: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .nullable()
+    .optional(),
+  quotaModelLeasePercentDaily: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .nullable()
+    .optional(),
+  quotaModelLeasePercentWeekly: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .nullable()
+    .optional(),
+  quotaModelLeasePercentMonthly: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .nullable()
+    .optional(),
+  quotaModelLeaseMinSliceUsd: z.coerce
+    .number()
+    .min(0, "Lease min slice cannot be negative")
+    .nullable()
+    .optional(),
   publicStatusWindowHours: z.coerce
     .number()
     .int("PUBLIC_STATUS_WINDOW_INVALID_INT")

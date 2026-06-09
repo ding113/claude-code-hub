@@ -6,12 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Source**: https://github.com/ding113/claude-code-hub
 - **PR Target Branch**: `dev` (all pull requests must target the dev branch)
+- **Branching & commit conventions**: see @CONTRIBUTING.md (Conventional Commits, `feature/*` / `fix/*` branches, squash-merge to `dev`)
 
 ## Critical Rules
 
-1. **No Emoji in Code** - Never use emoji characters in any code, comments, or string literals
+1. **No Emoji in Code** - Never use emoji characters in any code, comments, or string literals (verify: `bun run i18n:audit-messages-no-emoji`)
 2. **Test Coverage** - All new features must have unit test coverage of at least 80%
-3. **i18n Required** - All user-facing strings must use i18n (5 languages supported). Never hardcode display text
+3. **i18n Required** - All user-facing strings must use i18n (5 languages supported). Message files live at `messages/<locale>/<section>.json`. Verify placeholders: `bun run i18n:audit-placeholders`
 4. **Pre-commit Checklist** - Before committing, always run:
    ```bash
    bun run build      # Production build
@@ -44,6 +45,9 @@ bun run test:ui           # Interactive test UI
 bun run test:coverage     # Coverage report
 bunx vitest run <file>    # Run single test file
 bunx vitest run -t "test name"  # Run specific test
+bun run test:integration  # Run integration tests (separate config)
+bun run test:e2e          # Run e2e tests (separate config)
+bun run test:v1           # API v1 critical-path coverage check
 
 # Dev environment (via dev/Makefile)
 cd dev && make dev        # Start all services (PG + Redis + app)
@@ -65,6 +69,7 @@ bun run db:generate       # Generate Drizzle migrations from schema changes
 bun run db:migrate        # Apply migrations
 bun run db:push           # Push schema changes (dev only)
 bun run db:studio         # Open Drizzle Studio
+bun run validate:migrations  # Verify generated migration files are consistent
 ```
 
 ## Architecture Overview
@@ -123,6 +128,13 @@ Key components:
 - **Legacy Management API**: `/api/actions/{module}/{action}` - Deprecated Server Action adapter, retained behind `ENABLE_LEGACY_ACTIONS_API`
 - **Docs**: `/api/v1/scalar` (Scalar UI), `/api/v1/docs` (Swagger), `/api/v1/openapi.json`
 - **OpenAPI checks**: `bun run test:v1`, `bun run openapi:check`, `bun run openapi:lint`
+- **OpenAPI codegen**: `bun run openapi:generate` regenerates TypeScript types from the OpenAPI schema
+
+### MCP Servers
+Configured in `.mcp.json` — prefer these over reinventing:
+- `db` (Bytebase DBHub): introspect Postgres schema/data directly
+- `shadcn`: search/install shadcn/ui components into the project
+- `chrome-devtools`: browser automation for E2E debugging
 
 ## Code Conventions
 

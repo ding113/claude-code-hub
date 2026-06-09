@@ -27,7 +27,10 @@
     "keyLevel": "キー",
     "userLevel": "ユーザー",
     "unlimited": "無制限",
-    "empty": "クォータ情報がありません"
+    "empty": "クォータ情報がありません",
+    "countedInGlobalLabel": "グローバル枠計上",
+    "modelGroupOnlyLabel": "モデルグループ分算",
+    "splitNote": "モデルグループ制限に命中したコストは軸ごとに完全分割されます。グローバル枠には計上されず、モデルグループ予算内のみで計量されます。"
   },
   "logs": {
     "title": "利用ログ",
@@ -124,6 +127,11 @@
     "daily": "日次",
     "monthly": "月次",
     "total": "合計"
+  },
+  "modelGroupQuota": {
+    "sectionTitle": "モデルグループのクォータ",
+    "modelsLabel": "モデル",
+    "note": "以下のモデルグループは個別に制限されています。該当する使用量はモデルグループの予算で計測され、上記のグローバルクォータには計上されません。"
   },
   "logsCollapsible": {
     "title": "使用ログ",

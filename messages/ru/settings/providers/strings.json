@@ -48,6 +48,16 @@
   "viewModeList": "Список",
   "viewModeVendor": "Вендор",
   "viewModeGroups": "Группы",
+  "viewModeModels": "Модели",
+  "modelView": {
+    "search": "Поиск моделей...",
+    "modelCount": "{count} моделей",
+    "providerCount": "{count} провайдеров",
+    "unrestricted": "Без ограничений",
+    "unrestrictedDesc": "У этих провайдеров нет ограничений по моделям — они принимают любые запросы.",
+    "noModels": "Провайдеры с конкретными моделями не найдены.",
+    "noResults": "Совпадающих моделей не найдено."
+  },
   "endpoints": "Эндпоинты",
   "manualProbe": "Проверка",
   "addEndpoint": "Добавить эндпоинт",

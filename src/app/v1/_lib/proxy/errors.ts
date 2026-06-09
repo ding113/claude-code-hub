@@ -834,9 +834,22 @@ export class RateLimitError extends Error {
 
 /**
  * 类型守卫：检查是否为 RateLimitError
+ *
+ * 注意（跨模块实例）：模型组限额 guard 经 `globalThis` 扩展注册表 splice 进 guard
+ * pipeline，可能在与本模块不同的模块实例中被求值——此时它抛出的 RateLimitError 用
+ * 本模块的类做 `instanceof` 会判为 false，导致限额拒绝被误分类为通用 500（而非 402）。
+ * 因此在 `instanceof` 快路径之外，按稳定判别字段（`type === "rate_limit_error"` +
+ * 错误处理实际依赖的 `limitType` / `toJSON`）做结构化兜底识别。
  */
 export function isRateLimitError(error: unknown): error is RateLimitError {
-  return error instanceof RateLimitError;
+  if (error instanceof RateLimitError) return true;
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { type?: unknown; limitType?: unknown; toJSON?: unknown };
+  return (
+    candidate.type === "rate_limit_error" &&
+    typeof candidate.limitType === "string" &&
+    typeof candidate.toJSON === "function"
+  );
 }
 
 /**

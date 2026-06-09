@@ -48,6 +48,16 @@
   "viewModeList": "清單",
   "viewModeVendor": "供應商",
   "viewModeGroups": "分組",
+  "viewModeModels": "模型",
+  "modelView": {
+    "search": "搜尋模型...",
+    "modelCount": "{count} 個模型",
+    "providerCount": "{count} 個供應商",
+    "unrestricted": "無限制",
+    "unrestrictedDesc": "這些供應商未設定具體模型限制，接受任意模型請求。",
+    "noModels": "未找到已配置具體模型的供應商。",
+    "noResults": "未找到符合的模型。"
+  },
   "endpoints": "服務端點",
   "manualProbe": "測速",
   "addEndpoint": "新增端點",

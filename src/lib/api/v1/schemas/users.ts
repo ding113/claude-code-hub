@@ -201,8 +201,16 @@ export const UserLimitUsageResponseSchema = z
   .describe("Current user limit usage.");
 
 const LimitBucketSchema = z.object({
-  usage: z.number().describe("Current usage in USD."),
+  usage: z.number().describe("Total usage in USD (counted-in-global + model-group-only)."),
   limit: z.number().nullable().describe("Configured USD quota, or null."),
+  countedInGlobalUsage: z
+    .number()
+    .optional()
+    .describe("Portion of usage counted toward the mainline global limit (group-rate-limit)."),
+  modelGroupOnlyUsage: z
+    .number()
+    .optional()
+    .describe("Portion of usage split off to model-group buckets only (group-rate-limit)."),
 });
 
 export const UserAllLimitUsageResponseSchema = z

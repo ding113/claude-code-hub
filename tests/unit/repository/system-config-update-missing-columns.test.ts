@@ -364,6 +364,70 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.useRealTimers();
   });
 
+  test("updateSystemSettings 应将模型维度 lease 配置以字符串写入 set（null 清空覆盖）", async () => {
+    vi.resetModules();
+
+    const now = new Date("2026-05-25T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const selectMock = vi.fn().mockReturnValue(
+      createThenableQuery([
+        {
+          id: 1,
+          siteTitle: "Claude Code Hub",
+          allowGlobalUsageView: false,
+          currencyDisplay: "USD",
+          billingModelSource: "original",
+          createdAt: now,
+          updatedAt: now,
+        },
+      ])
+    );
+
+    const updateQuery = createThenableQuery([
+      {
+        id: 1,
+        siteTitle: "Claude Code Hub",
+        allowGlobalUsageView: false,
+        currencyDisplay: "USD",
+        billingModelSource: "original",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    const updateMock = vi.fn(() => updateQuery);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        update: updateMock,
+        insert: vi.fn(() => createThenableQuery([])),
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { updateSystemSettings } = await import("@/repository/system-config");
+
+    await updateSystemSettings({
+      quotaModelLeasePercent5h: 0.1,
+      quotaModelLeasePercentDaily: 0.08,
+      quotaModelLeaseMinSliceUsd: 0.5,
+      quotaModelLeasePercentWeekly: null,
+    });
+
+    expect(updateQuery.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quotaModelLeasePercent5h: "0.1",
+        quotaModelLeasePercentDaily: "0.08",
+        quotaModelLeaseMinSliceUsd: "0.5",
+        quotaModelLeasePercentWeekly: null,
+      })
+    );
+
+    vi.useRealTimers();
+  });
+
   test("updateSystemSettings 在仅缺新列时应降级保存其他字段", async () => {
     vi.resetModules();
 

@@ -22,6 +22,10 @@ export interface KeyQuotaItem {
   mode?: "fixed" | "rolling";
   time?: string;
   resetAt?: Date;
+  // group-rate-limit (§5.3 / §10): for cost windows, the portion counted toward the
+  // mainline global gate vs the model-group-only split-off. Absent for limitSessions.
+  countedInGlobalCurrent?: number;
+  modelGroupOnlyCurrent?: number;
 }
 
 export interface KeyQuotaUsageResult {
@@ -100,7 +104,9 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       "@/lib/rate-limit/time-utils"
     );
     const { RateLimitService } = await import("@/lib/rate-limit");
-    const { sumKeyCostInTimeRange, sumKeyTotalCost } = await import("@/repository/statistics");
+    const { sumKeyCostSplitInTimeRange, sumKeyTotalCostSplit } = await import(
+      "@/repository/statistics"
+    );
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
@@ -121,49 +127,63 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
     const limit5hResetMode = (keyRow.limit5hResetMode as DailyResetMode | undefined) ?? "rolling";
 
     // rolling 5h 继续沿用 DB 统计；fixed 5h 只能读取运行时窗口状态
+    // group-rate-limit (§5.3/§10): each cost window is split into counted-in-global vs
+    // model-group-only. 5h-fixed reads the runtime counter (already global-counted post
+    // P0-1), so it carries no model-group-only breakdown.
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
         limit5hResetMode === "fixed"
-          ? RateLimitService.getCurrentCost(keyId, "key", "5h", "00:00", limit5hResetMode)
-          : sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
-        sumKeyCostInTimeRange(
+          ? RateLimitService.getCurrentCost(keyId, "key", "5h", "00:00", limit5hResetMode).then(
+              (value) => ({ total: value, countedInGlobal: value })
+            )
+          : sumKeyCostSplitInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
+        sumKeyCostSplitInTimeRange(
           keyId,
           clipStart(keyDailyTimeRange.startTime),
           keyDailyTimeRange.endTime
         ),
-        sumKeyCostInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
-        sumKeyCostInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
-        sumKeyTotalCost(keyRow.key, Infinity, costResetAt),
+        sumKeyCostSplitInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
+        sumKeyCostSplitInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
+        sumKeyTotalCostSplit(keyRow.key, Infinity, costResetAt),
         SessionTracker.getKeySessionCount(keyId),
       ]);
+
+    const splitFields = (split: { total: number; countedInGlobal: number }) => {
+      const counted = Math.min(split.countedInGlobal, split.total);
+      return {
+        current: split.total,
+        countedInGlobalCurrent: counted,
+        modelGroupOnlyCurrent: Math.max(0, split.total - counted),
+      };
+    };
 
     const items: KeyQuotaItem[] = [
       {
         type: "limit5h",
-        current: cost5h,
+        ...splitFields(cost5h),
         limit: parseNumericLimit(keyRow.limit5hUsd),
         mode: limit5hResetMode,
       },
       {
         type: "limitDaily",
-        current: costDaily,
+        ...splitFields(costDaily),
         limit: parseNumericLimit(keyRow.limitDailyUsd),
         mode: keyRow.dailyResetMode ?? "fixed",
         time: keyRow.dailyResetTime ?? "00:00",
       },
       {
         type: "limitWeekly",
-        current: costWeekly,
+        ...splitFields(costWeekly),
         limit: parseNumericLimit(keyRow.limitWeeklyUsd),
       },
       {
         type: "limitMonthly",
-        current: costMonthly,
+        ...splitFields(costMonthly),
         limit: parseNumericLimit(keyRow.limitMonthlyUsd),
       },
       {
         type: "limitTotal",
-        current: totalCost,
+        ...splitFields(totalCost),
         limit: parseNumericLimit(keyRow.limitTotalUsd),
         resetAt: costResetAt ?? undefined,
       },

@@ -2178,7 +2178,13 @@ export class ProxyForwarder {
 
       // 切换到新供应商
       currentProvider = alternativeProvider;
-      session.setProvider(currentProvider);
+      // bugfix #02: changeProvider triggers the model-rate-limit guard's
+      // re-resolve listener so buckets + bypass flags reflect the new
+      // provider's redirect namespace before any ledger write.
+      // enforce: true — this is the non-hedge failover path and the next upstream
+      // attempt has not been sent yet, so a fallback-provider group-quota breach
+      // must abort the request rather than slip through unenforced.
+      await session.changeProvider(currentProvider, { enforce: true });
 
       logger.info("ProxyForwarder: Switched to alternative provider", {
         totalProvidersAttempted,
@@ -4301,7 +4307,9 @@ export class ProxyForwarder {
         session,
         detailSnapshotSession.detailSnapshotResponseBefore
       );
-      session.setProvider(attempt.provider);
+      // bugfix #02: hedge winner commit must re-resolve so settle-time ledger
+      // writes (counted_in_*_global, bucket decrements) match the actual upstream.
+      await session.changeProvider(attempt.provider);
 
       // Determine if this is truly a hedge winner or just a regular success
       // Only mark as hedge_winner when an actual hedge race occurred

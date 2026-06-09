@@ -941,7 +941,9 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
     const { RateLimitService } = await import("@/lib/rate-limit/service");
-    const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import("@/repository/statistics");
+    const { sumKeyTotalCostSplit, sumKeyCostSplitInTimeRange } = await import(
+      "@/repository/statistics"
+    );
     const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
       key.limitConcurrentSessions,
       result.userLimitConcurrentSessions ?? null
@@ -966,21 +968,34 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     // 获取金额消费（使用 DB direct，与 my-usage.ts 保持一致）
+    // group-rate-limit (§5.3/§10): split each cost window into counted-in-global vs
+    // model-group-only. 5h-fixed reads the runtime counter (global-counted post P0-1).
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
         limit5hResetMode === "fixed"
-          ? RateLimitService.getCurrentCost(keyId, "key", "5h", "00:00", limit5hResetMode)
-          : sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
-        sumKeyCostInTimeRange(
+          ? RateLimitService.getCurrentCost(keyId, "key", "5h", "00:00", limit5hResetMode).then(
+              (value) => ({ total: value, countedInGlobal: value })
+            )
+          : sumKeyCostSplitInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
+        sumKeyCostSplitInTimeRange(
           keyId,
           clipStart(keyDailyTimeRange.startTime),
           keyDailyTimeRange.endTime
         ),
-        sumKeyCostInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
-        sumKeyCostInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
-        sumKeyTotalCost(key.key, Infinity, costResetAt),
+        sumKeyCostSplitInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
+        sumKeyCostSplitInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
+        sumKeyTotalCostSplit(key.key, Infinity, costResetAt),
         SessionTracker.getKeySessionCount(keyId),
       ]);
+
+    const splitFields = (split: { total: number; countedInGlobal: number }) => {
+      const counted = Math.min(split.countedInGlobal, split.total);
+      return {
+        current: split.total,
+        countedInGlobalCurrent: counted,
+        modelGroupOnlyCurrent: Math.max(0, split.total - counted),
+      };
+    };
 
     // 获取重置时间
     const resetAt5h =
@@ -999,27 +1014,27 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       ok: true,
       data: {
         cost5h: {
-          current: cost5h,
+          ...splitFields(cost5h),
           limit: key.limit5hUsd,
           resetAt: resetAt5h ?? undefined,
         },
         costDaily: {
-          current: costDaily,
+          ...splitFields(costDaily),
           limit: key.limitDailyUsd,
           resetAt: resetInfoDaily.resetAt,
         },
         costWeekly: {
-          current: costWeekly,
+          ...splitFields(costWeekly),
           limit: key.limitWeeklyUsd,
           resetAt: resetInfoWeekly.resetAt,
         },
         costMonthly: {
-          current: costMonthly,
+          ...splitFields(costMonthly),
           limit: key.limitMonthlyUsd,
           resetAt: resetInfoMonthly.resetAt,
         },
         costTotal: {
-          current: totalCost,
+          ...splitFields(totalCost),
           limit: key.limitTotalUsd ?? null,
           resetAt: costResetAt ?? undefined,
         },

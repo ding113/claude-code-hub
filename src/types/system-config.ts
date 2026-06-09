@@ -128,6 +128,14 @@ export interface SystemSettings {
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
 
+  // OPT-B (group-rate-limit): model-bucket lease tuning. null -> fall back to the
+  // global quotaLeasePercent* / no floor, so behavior is identical to today.
+  quotaModelLeasePercent5h?: number | null;
+  quotaModelLeasePercentDaily?: number | null;
+  quotaModelLeasePercentWeekly?: number | null;
+  quotaModelLeasePercentMonthly?: number | null;
+  quotaModelLeaseMinSliceUsd?: number | null;
+
   // 客户端 IP 提取链（null 走内置默认）
   ipExtractionConfig: IpExtractionConfig | null;
   // 是否启用 IP 归属地查询
@@ -225,6 +233,13 @@ export interface UpdateSystemSettingsInput {
   quotaLeasePercentWeekly?: number;
   quotaLeasePercentMonthly?: number;
   quotaLeaseCapUsd?: number | null;
+
+  // OPT-B (group-rate-limit): model-bucket lease tuning. null 显式清空覆盖，回退主线百分比/无下限。
+  quotaModelLeasePercent5h?: number | null;
+  quotaModelLeasePercentDaily?: number | null;
+  quotaModelLeasePercentWeekly?: number | null;
+  quotaModelLeasePercentMonthly?: number | null;
+  quotaModelLeaseMinSliceUsd?: number | null;
 
   // 客户端 IP 提取链（可选，null = 使用默认）
   ipExtractionConfig?: IpExtractionConfig | null;

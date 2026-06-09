@@ -18,6 +18,10 @@ traffic can converge without reimplementing business rules.
 
 Every response includes `X-API-Version: 1.0.0`.
 
+### Resource guides
+
+- [Per-Model Limits](./model-limits.md): admin endpoints for per-model cost limits.
+
 ## Authentication
 
 The API accepts three credential transports:

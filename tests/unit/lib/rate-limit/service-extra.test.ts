@@ -54,6 +54,10 @@ vi.mock("@/lib/redis", () => ({
   getRedisClient: () => redisClientRef,
 }));
 
+vi.mock("@/lib/config/system-settings-cache", () => ({
+  getCachedSystemSettings: vi.fn(async () => ({ quotaDbRefreshIntervalSeconds: 10 })),
+}));
+
 const resolveSystemTimezoneMock = vi.hoisted(() => vi.fn(async () => "Asia/Shanghai"));
 
 vi.mock("@/lib/utils/timezone", () => ({
@@ -72,6 +76,11 @@ const statisticsMock = {
   findUserCostEntriesInTimeRange: vi.fn(async () => []),
   sumKeyCostInTimeRange: vi.fn(async () => 0),
   sumProviderCostInTimeRange: vi.fn(async () => 0),
+  // bugfix #09: boundary lookup
+  findEarliestLedgerCreatedAtInWindow: vi.fn(async () => null as number | null),
+  // bugfix #07: batch path
+  sumProviderCostBatchInTimeRange: vi.fn(async () => new Map<number, number>()),
+  getProviderCostResetAtMap: vi.fn(async () => new Map<number, Date | null>()),
 };
 
 vi.mock("@/repository/statistics", () => statisticsMock);
@@ -292,12 +301,77 @@ describe("RateLimitService - other quota paths", () => {
     expect(pipelineCalls.some((c) => c[0] === "expire")).toBe(true);
   });
 
-  it("trackUserDailyCost：rolling 模式应使用 ZSET Lua 脚本", async () => {
+  it("trackUserDailyCost：rolling 模式不再调用 ZSET Lua（DB authoritative）", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     await RateLimitService.trackUserDailyCost(1, 1.25, "00:00", "rolling", { requestId: 123 });
 
-    expect(redisClientRef.eval).toHaveBeenCalled();
+    const evalArgs = (redisClientRef.eval as ReturnType<typeof vi.fn>).mock.calls.map(
+      (c: unknown[]) => String(c[2])
+    );
+    expect(evalArgs.some((k) => k === "user:1:cost_daily_rolling")).toBe(false);
+    expect(pipelineCalls.some((c) => c[0] === "zadd")).toBe(false);
+  });
+
+  // group-rate-limit (§5.2.4 / P0-1): the 5h-fixed counter is the only mainline global
+  // window seeded from Redis (lease-service readFixed5hWindowState) rather than the
+  // counted_in-filtered DB query. A model-split axis must therefore skip its 5h-fixed
+  // write, or its spend would re-seed and consume the mainline global 5h-fixed gate.
+  const fixed5hKeys = () =>
+    redisClientRef.eval.mock.calls
+      .map((call: unknown[]) => call[2])
+      .filter(
+        (key: unknown): key is string => typeof key === "string" && key.endsWith(":cost_5h_fixed")
+      );
+
+  it("trackCost：未旁路时 key/user/provider 的 5h-fixed 计数器都写入（主线一致）", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    await RateLimitService.trackCost(456, 99, "sess", 3, {
+      userId: 123,
+      key5hResetMode: "fixed",
+      provider5hResetMode: "fixed",
+      user5hResetMode: "fixed",
+    });
+
+    const keys = fixed5hKeys();
+    expect(keys).toContain("key:456:cost_5h_fixed");
+    expect(keys).toContain("user:123:cost_5h_fixed");
+    expect(keys).toContain("provider:99:cost_5h_fixed");
+  });
+
+  it("trackCost：key 轴被旁路时跳过 key 5h-fixed 写入，但 provider 仍写入", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    await RateLimitService.trackCost(456, 99, "sess", 3, {
+      userId: 123,
+      key5hResetMode: "fixed",
+      provider5hResetMode: "fixed",
+      user5hResetMode: "fixed",
+      bypassKeyGlobalCost: true,
+    });
+
+    const keys = fixed5hKeys();
+    expect(keys).not.toContain("key:456:cost_5h_fixed");
+    expect(keys).toContain("provider:99:cost_5h_fixed");
+    expect(keys).toContain("user:123:cost_5h_fixed");
+  });
+
+  it("trackCost：user 轴被旁路时跳过 user 5h-fixed 写入，但 key 仍写入", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    await RateLimitService.trackCost(456, 99, "sess", 3, {
+      userId: 123,
+      key5hResetMode: "fixed",
+      provider5hResetMode: "fixed",
+      user5hResetMode: "fixed",
+      bypassUserGlobalCost: true,
+    });
+
+    const keys = fixed5hKeys();
+    expect(keys).not.toContain("user:123:cost_5h_fixed");
+    expect(keys).toContain("key:456:cost_5h_fixed");
+    expect(keys).toContain("provider:99:cost_5h_fixed");
   });
 
   it("checkUserRPM：达到上限时应拦截", async () => {
@@ -372,13 +446,14 @@ describe("RateLimitService - other quota paths", () => {
     expect(result.get(1)).toEqual({ cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0 });
   });
 
-  it("getCurrentCostBatch：应按 pipeline 返回解析 5h/daily/weekly/monthly", async () => {
+  it("getCurrentCostBatch：5h 走 display cache，daily/weekly/monthly 走 pipeline GET", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
+    redisClientRef.mget = vi.fn(async () => ["1.5"]); // 5h cache hit
+
     const pipeline = makePipeline();
-    // queryMeta: 5h(eval), daily(get fixed), weekly(get), monthly(get)
+    // 新 pipeline 顺序：daily(fixed) + weekly + monthly
     pipeline.exec.mockResolvedValueOnce([
-      [null, "1.5"],
       [null, "2.5"],
       [null, "3.5"],
       [null, "4.5"],
@@ -398,12 +473,18 @@ describe("RateLimitService - other quota paths", () => {
       costWeekly: 3.5,
       costMonthly: 4.5,
     });
+    // 不再使用 Lua eval
+    expect(pipelineCalls.some((c) => c[0] === "eval")).toBe(false);
   });
 
-  it("checkCostLimits：5h 滚动窗口超限时应返回 not allowed", async () => {
+  it("checkCostLimits：5h rolling display cache hit 超限时应拦截", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
-    redisClientRef.eval.mockResolvedValueOnce("11");
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === "cost_cache:provider:1:5h_rolling") return "11";
+      return null;
+    });
+
     const result = await RateLimitService.checkCostLimits(1, "provider", {
       limit_5h_usd: 10,
       limit_daily_usd: null,
@@ -413,17 +494,14 @@ describe("RateLimitService - other quota paths", () => {
 
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("供应商 5小时消费上限已达到（11.0000/10）");
+    expect(redisClientRef.eval).not.toHaveBeenCalled();
   });
 
-  it("checkCostLimits：daily rolling cache miss 时应回退 DB 并 warm ZSET", async () => {
+  it("checkCostLimits：daily rolling cache miss 时应走 DB SUM 并回写 display cache", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
-    redisClientRef.eval.mockResolvedValueOnce("0");
-    redisClientRef.exists.mockResolvedValueOnce(0);
-    statisticsMock.findProviderCostEntriesInTimeRange.mockResolvedValueOnce([
-      { id: 101, createdAt: new Date(nowMs - 60_000), costUsd: 3 },
-      { id: 102, createdAt: new Date(nowMs - 30_000), costUsd: 9 },
-    ]);
+    redisClientRef.get.mockResolvedValue(null); // display cache miss
+    statisticsMock.sumProviderCostInTimeRange.mockResolvedValueOnce(12);
 
     const result = await RateLimitService.checkCostLimits(9, "provider", {
       limit_5h_usd: null,
@@ -436,7 +514,12 @@ describe("RateLimitService - other quota paths", () => {
 
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("供应商 每日消费上限已达到（12.0000/10）");
-    expect(pipelineCalls.some((c) => c[0] === "zadd")).toBe(true);
+    expect(statisticsMock.sumProviderCostInTimeRange).toHaveBeenCalledTimes(1);
+    expect(pipelineCalls.some((c) => c[0] === "zadd")).toBe(false);
+    const setCalls = (redisClientRef.set as ReturnType<typeof vi.fn>).mock.calls as unknown[][];
+    expect(setCalls.some((call) => String(call[0]) === "cost_cache:provider:9:daily_rolling")).toBe(
+      true
+    );
   });
 
   it("getCurrentCost：daily fixed cache hit 时应直接返回当前值", async () => {
@@ -451,15 +534,11 @@ describe("RateLimitService - other quota paths", () => {
     expect(current).toBeCloseTo(7.5, 10);
   });
 
-  it("getCurrentCost：daily rolling cache miss 时应从 DB 重建并返回", async () => {
+  it("getCurrentCost：daily rolling cache miss 时应从 DB SUM 取数并回写 display cache", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
-    redisClientRef.eval.mockResolvedValueOnce("0");
-    redisClientRef.exists.mockResolvedValueOnce(0);
-    statisticsMock.findProviderCostEntriesInTimeRange.mockResolvedValueOnce([
-      { id: 101, createdAt: new Date(nowMs - 60_000), costUsd: 2 },
-      { id: 102, createdAt: new Date(nowMs - 30_000), costUsd: 3 },
-    ]);
+    redisClientRef.get.mockResolvedValueOnce(null); // display cache miss
+    statisticsMock.sumProviderCostInTimeRange.mockResolvedValueOnce(5);
 
     const current = await RateLimitService.getCurrentCost(
       9,
@@ -469,7 +548,12 @@ describe("RateLimitService - other quota paths", () => {
       "rolling"
     );
     expect(current).toBeCloseTo(5, 10);
-    expect(pipelineCalls.some((c) => c[0] === "zadd")).toBe(true);
+    expect(statisticsMock.sumProviderCostInTimeRange).toHaveBeenCalledTimes(1);
+    const setCalls = (redisClientRef.set as ReturnType<typeof vi.fn>).mock.calls as unknown[][];
+    expect(setCalls.some((call) => String(call[0]) === "cost_cache:provider:9:daily_rolling")).toBe(
+      true
+    );
+    expect(pipelineCalls.some((c) => c[0] === "zadd")).toBe(false);
   });
 
   it("checkCostLimits：5h fixed 在没有活动窗口时应视为 0 且不回退 DB", async () => {
@@ -553,13 +637,29 @@ describe("RateLimitService - other quota paths", () => {
       createdAtMs: nowMs,
     });
 
-    // 5h 的 Lua 脚本至少会执行两次（key/provider）
-    expect(redisClientRef.eval).toHaveBeenCalled();
     expect(pipelineCalls.filter((c) => c[0] === "incrbyfloat").length).toBeGreaterThanOrEqual(4);
     expect(pipelineCalls.filter((c) => c[0] === "expire").length).toBeGreaterThanOrEqual(4);
   });
 
-  it("trackCost：rolling 模式应写入 key/provider 的 daily_rolling（ZSET）", async () => {
+  it("trackCost：rolling 5h 模式不再调用 ZSET Lua（DB authoritative）", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    await RateLimitService.trackCost(1, 9, "sess", 1.25, {
+      userId: 7,
+      key5hResetMode: "rolling",
+      provider5hResetMode: "rolling",
+      user5hResetMode: "rolling",
+      keyResetMode: "fixed",
+      providerResetMode: "fixed",
+      requestId: 123,
+      createdAtMs: nowMs,
+    });
+
+    const evalArgs = redisClientRef.eval.mock.calls.map((c: unknown[]) => String(c[2]));
+    expect(evalArgs.some((k) => k.endsWith(":cost_5h_rolling"))).toBe(false);
+  });
+
+  it("trackCost：rolling daily 模式不再调用 ZSET Lua（DB authoritative）", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     await RateLimitService.trackCost(1, 9, "sess", 1.25, {
@@ -570,35 +670,45 @@ describe("RateLimitService - other quota paths", () => {
     });
 
     const evalArgs = redisClientRef.eval.mock.calls.map((c: unknown[]) => String(c[2]));
-    expect(evalArgs.some((k) => k === "key:1:cost_daily_rolling")).toBe(true);
-    expect(evalArgs.some((k) => k === "provider:9:cost_daily_rolling")).toBe(true);
+    expect(evalArgs.some((k) => k === "key:1:cost_daily_rolling")).toBe(false);
+    expect(evalArgs.some((k) => k === "provider:9:cost_daily_rolling")).toBe(false);
   });
 
-  it("getCurrentCostBatch：pipeline.exec 返回 null 时应返回默认值", async () => {
-    const { RateLimitService } = await import("@/lib/rate-limit");
+  it("getCurrentCostBatch：pipeline.exec 返回 null 时抛出可识别错误 (bug08)", async () => {
+    const { RateLimitService, BatchCostPipelineNullError } = await import("@/lib/rate-limit");
+
+    // mget must succeed so we reach the pipeline path; cache hit avoids DB fallback.
+    redisClientRef.mget = vi.fn(async () => ["1.5"]);
 
     const pipeline = makePipeline();
     pipeline.exec.mockResolvedValueOnce(null);
     redisClientRef.pipeline.mockReturnValueOnce(pipeline);
 
-    const result = await RateLimitService.getCurrentCostBatch([1], new Map());
-    expect(result.get(1)).toEqual({ cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0 });
+    await expect(RateLimitService.getCurrentCostBatch([1], new Map())).rejects.toThrow(
+      BatchCostPipelineNullError
+    );
   });
 
-  it("getCurrentCostBatch：单个 query 出错时应跳过该项", async () => {
+  it("getCurrentCostBatch：daily pipeline 项出错时该项保持默认 0", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
+    redisClientRef.mget = vi.fn(async () => ["1.5"]); // 5h cache hit
+
     const pipeline = makePipeline();
+    // pipeline 顺序：daily(fixed) + weekly + monthly；daily 出错
     pipeline.exec.mockResolvedValueOnce([
       [new Error("boom"), null],
-      [null, "2.5"],
       [null, "3.5"],
       [null, "4.5"],
     ]);
     redisClientRef.pipeline.mockReturnValueOnce(pipeline);
 
     const result = await RateLimitService.getCurrentCostBatch([1], new Map());
-    // 5h 出错，保持默认 0，其余正常
-    expect(result.get(1)).toEqual({ cost5h: 0, costDaily: 2.5, costWeekly: 3.5, costMonthly: 4.5 });
+    expect(result.get(1)).toEqual({
+      cost5h: 1.5,
+      costDaily: 0,
+      costWeekly: 3.5,
+      costMonthly: 4.5,
+    });
   });
 });

@@ -1,3 +1,3 @@
 import "server-only";
 
-export { RateLimitService } from "./service";
+export { BatchCostPipelineNullError, RateLimitService } from "./service";

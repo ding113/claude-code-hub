@@ -27,7 +27,10 @@
     "keyLevel": "Key",
     "userLevel": "User",
     "unlimited": "Unlimited",
-    "empty": "No quota data"
+    "empty": "No quota data",
+    "countedInGlobalLabel": "Global",
+    "modelGroupOnlyLabel": "Model group",
+    "splitNote": "Cost split: this amount hits a model-group limit and is counted separately from the global quota."
   },
   "logs": {
     "title": "Usage Logs",
@@ -124,6 +127,11 @@
     "daily": "Daily",
     "monthly": "Monthly",
     "total": "Total"
+  },
+  "modelGroupQuota": {
+    "sectionTitle": "Model Group Quotas",
+    "modelsLabel": "Models",
+    "note": "These model groups are limited separately; matching usage is metered against the model-group budget and is not counted toward the global quota above."
   },
   "logsCollapsible": {
     "title": "Usage Logs",

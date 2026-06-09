@@ -304,5 +304,32 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.codexPriorityBillingSource).toBe("actual");
       expect(result.interceptAnthropicWarmupRequests).toBe(true);
     });
+
+    it("缺失模型维度 lease 列时回退为 null（保留主线百分比回退语义）", () => {
+      const result = toSystemSettings({ id: 1 });
+
+      expect(result.quotaModelLeasePercent5h).toBeNull();
+      expect(result.quotaModelLeasePercentDaily).toBeNull();
+      expect(result.quotaModelLeasePercentWeekly).toBeNull();
+      expect(result.quotaModelLeasePercentMonthly).toBeNull();
+      expect(result.quotaModelLeaseMinSliceUsd).toBeNull();
+    });
+
+    it("应将模型维度 lease 列的字符串数值解析为 number", () => {
+      const result = toSystemSettings({
+        id: 1,
+        quotaModelLeasePercent5h: "0.10",
+        quotaModelLeasePercentDaily: "0.08",
+        quotaModelLeasePercentWeekly: "0.06",
+        quotaModelLeasePercentMonthly: "0.04",
+        quotaModelLeaseMinSliceUsd: "0.50",
+      });
+
+      expect(result.quotaModelLeasePercent5h).toBe(0.1);
+      expect(result.quotaModelLeasePercentDaily).toBe(0.08);
+      expect(result.quotaModelLeasePercentWeekly).toBe(0.06);
+      expect(result.quotaModelLeasePercentMonthly).toBe(0.04);
+      expect(result.quotaModelLeaseMinSliceUsd).toBe(0.5);
+    });
   });
 });

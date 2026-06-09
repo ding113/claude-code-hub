@@ -152,6 +152,13 @@ export const keys = pgTable('keys', {
   keysDeletedAtIdx: index('idx_keys_deleted_at').on(table.deletedAt),
 }));
 
+// Per-model rate limit tables (additive; existing users/keys quota columns untouched)
+// model = "*" acts as the wildcard fallback for a scope.
+// NOTE: Legacy per-model limit tables (user_model_limits / key_model_limits) were
+// removed in favor of the group-based model. See the "group-rate-limit" region at
+// the end of this file (modelGroups / modelGroupMembers / userGroups /
+// modelGroupLimits / quotaBoostGrants).
+
 // Provider Vendors table - 以官网域名聚合的供应商实体（与 key/providerGroup 字段无关）
 export const providerVendors = pgTable('provider_vendors', {
   id: serial('id').primaryKey(),
@@ -539,6 +546,13 @@ export const messageRequest = pgTable('message_request', {
   // Messages 数量（用于短请求检测和分析）
   messagesCount: integer('messages_count'),
 
+  // group-rate-limit (§3.6/§5.3): per-axis complete-split flags. Frozen at billing
+  // time from the guard's bypass flags and propagated to usage_ledger by the
+  // fn_upsert_usage_ledger trigger. Default true -> historical rows, flag-off,
+  // ungrouped models and fail-open all count toward the global axis (main parity).
+  countedInUserGlobal: boolean('counted_in_user_global').notNull().default(true),
+  countedInKeyGlobal: boolean('counted_in_key_global').notNull().default(true),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -862,6 +876,14 @@ export const systemSettings = pgTable('system_settings', {
   quotaLeasePercentMonthly: numeric('quota_lease_percent_monthly', { precision: 5, scale: 4 }).default('0.05'),
   quotaLeaseCapUsd: numeric('quota_lease_cap_usd', { precision: 10, scale: 2 }),
 
+  // group-rate-limit (OPT-B, §17.2): model-bucket lease tuning. All nullable; null
+  // falls back to the global quotaLeasePercent* / no floor → behavior identical to today.
+  quotaModelLeasePercent5h: numeric('quota_model_lease_percent_5h', { precision: 5, scale: 4 }),
+  quotaModelLeasePercentDaily: numeric('quota_model_lease_percent_daily', { precision: 5, scale: 4 }),
+  quotaModelLeasePercentWeekly: numeric('quota_model_lease_percent_weekly', { precision: 5, scale: 4 }),
+  quotaModelLeasePercentMonthly: numeric('quota_model_lease_percent_monthly', { precision: 5, scale: 4 }),
+  quotaModelLeaseMinSliceUsd: numeric('quota_model_lease_min_slice_usd', { precision: 10, scale: 2 }),
+
   // 客户端 IP 提取配置（null 表示使用内置默认链：x-real-ip → x-forwarded-for rightmost）
   ipExtractionConfig: jsonb('ip_extraction_config').$type<IpExtractionConfig>(),
   // 是否启用 IP 归属地查询（默认开启）
@@ -1021,6 +1043,10 @@ export const usageLedger = pgTable('usage_ledger', {
   ttfbMs: integer('ttfb_ms'),
   // 客户端 IP（从 message_request 拷贝；永久保留，避免被清理任务删除）
   clientIp: varchar('client_ip', { length: 45 }),
+  // group-rate-limit (完全切分, D13/§3.6): 写入期冻结该笔成本是否计入对应轴主线全局额。
+  // 默认 true → 历史行/flag off/模型无组/fail-open 全部计入全局，保证与 main 逐字节一致。
+  countedInUserGlobal: boolean('counted_in_user_global').notNull().default(true),
+  countedInKeyGlobal: boolean('counted_in_key_global').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 }, (table) => ({
   // UNIQUE on requestId (survives message_request log deletion)
@@ -1162,3 +1188,109 @@ export const messageRequestRelations = relations(messageRequest, ({ one }) => ({
     references: [providers.id],
   }),
 }));
+
+// ============================================================================
+// #region group-rate-limit (用户组 × 模型组限额) — see docs/limit/group-rate-limit.md
+// Additive trailing block (5 tables + 2 enums). All lazy when ENABLE_MODEL_RATE_LIMIT
+// is off. Kept contiguous at file end to minimize merge conflicts with upstream.
+// ============================================================================
+
+export const limitSubjectEnum = pgEnum('limit_subject', ['user', 'key', 'user_group']);
+export const boostWindowEnum = pgEnum('boost_window', ['5h', 'daily', 'weekly', 'monthly', 'total']);
+
+// model_groups — 模型组 (D6: 一个模型在全系统只属一个组)
+export const modelGroups = pgTable('model_groups', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 128 }).notNull(),
+  description: text('description'),
+  isSingleton: boolean('is_singleton').notNull().default(false), // 单模型快捷组标记
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  modelGroupsNameUnique: uniqueIndex('model_groups_name_idx').on(t.name),
+}));
+
+// model_group_members — model→组 全局互斥映射 (D6: model 唯一约束)
+export const modelGroupMembers = pgTable('model_group_members', {
+  id: serial('id').primaryKey(),
+  modelGroupId: integer('model_group_id')
+    .notNull()
+    .references(() => modelGroups.id, { onDelete: 'cascade' }),
+  model: varchar('model', { length: 128 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  modelGroupMembersModelUnique: uniqueIndex('model_group_members_model_idx').on(t.model),
+  modelGroupMembersGroupIdx: index('model_group_members_group_idx').on(t.modelGroupId),
+}));
+
+// user_groups — 用户组 (tag 登记; 成员由 users.tags @> [tag] 派生, 无独立成员表)
+export const userGroups = pgTable('user_groups', {
+  id: serial('id').primaryKey(),
+  tag: varchar('tag', { length: 255 }).notNull(),
+  name: varchar('name', { length: 128 }),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  userGroupsTagUnique: uniqueIndex('user_groups_tag_idx').on(t.tag),
+}));
+
+// model_group_limits — 统一限额表 (仅基准五档; 提额拆到 quota_boost_grants)
+export const modelGroupLimits = pgTable('model_group_limits', {
+  id: serial('id').primaryKey(),
+  subjectType: limitSubjectEnum('subject_type').notNull(),
+  subjectId: integer('subject_id').notNull(), // userId | keyId | userGroupId
+  modelGroupId: integer('model_group_id')
+    .notNull()
+    .references(() => modelGroups.id, { onDelete: 'cascade' }),
+  rpmLimit: integer('rpm_limit'), // 预留, v1 不强制
+  limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limit5hResetMode: dailyResetModeEnum('limit_5h_reset_mode').default('fixed').notNull(),
+  dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }),
+  limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
+  limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
+  limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
+  limit5hCostResetAt: timestamp('limit_5h_cost_reset_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  modelGroupLimitsUniq: uniqueIndex('model_group_limits_uniq_idx').on(
+    t.subjectType,
+    t.subjectId,
+    t.modelGroupId
+  ),
+  modelGroupLimitsSubjectIdx: index('model_group_limits_subject_idx').on(
+    t.subjectType,
+    t.subjectId
+  ),
+  modelGroupLimitsGroupIdx: index('model_group_limits_group_idx').on(t.modelGroupId),
+}));
+
+// quota_boost_grants — 临时提额授予账本 (D10/D11/D12/D14; 仅个人用户)
+// tstzrange 退化为 validFrom/validTo 两列 (drizzle pg-core 无内置 range 类型)。
+export const quotaBoostGrants = pgTable('quota_boost_grants', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  modelGroupId: integer('model_group_id')
+    .notNull()
+    .references(() => modelGroups.id, { onDelete: 'cascade' }),
+  window: boostWindowEnum('window').notNull(),
+  amountUsd: numeric('amount_usd', { precision: 10, scale: 2 }).notNull(),
+  validFrom: timestamp('valid_from', { withTimezone: true }).notNull(),
+  validTo: timestamp('valid_to', { withTimezone: true }).notNull(),
+  note: text('note'),
+  createdBy: integer('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  quotaBoostGrantsTargetIdx: index('quota_boost_grants_target_idx').on(
+    t.userId,
+    t.modelGroupId,
+    t.window
+  ),
+  quotaBoostGrantsValidToIdx: index('quota_boost_grants_valid_to_idx').on(t.validTo),
+}));
+
+// #endregion group-rate-limit

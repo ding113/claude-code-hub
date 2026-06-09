@@ -48,6 +48,16 @@
   "viewModeList": "列表",
   "viewModeVendor": "服务商",
   "viewModeGroups": "分组",
+  "viewModeModels": "模型",
+  "modelView": {
+    "search": "搜索模型...",
+    "modelCount": "{count} 个模型",
+    "providerCount": "{count} 个供应商",
+    "unrestricted": "无限制",
+    "unrestrictedDesc": "这些供应商未配置具体的模型限制，接受任意模型请求。",
+    "noModels": "未找到配置了具体模型的供应商。",
+    "noResults": "未找到匹配的模型。"
+  },
   "endpoints": "服务端点",
   "manualProbe": "测速",
   "addEndpoint": "添加端点",

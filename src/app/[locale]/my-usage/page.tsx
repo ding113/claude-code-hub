@@ -2,10 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "@/i18n/routing";
-import { getMyQuota, type MyUsageQuota } from "@/lib/api-client/v1/actions/my-usage";
+import {
+  getMyModelGroupQuotas,
+  getMyQuota,
+  type MyModelGroupQuota,
+  type MyUsageQuota,
+} from "@/lib/api-client/v1/actions/my-usage";
 import { getServerTimeZone } from "@/lib/api-client/v1/actions/system-config";
 import { CollapsibleQuotaCard } from "./_components/collapsible-quota-card";
 import { ExpirationInfo } from "./_components/expiration-info";
+import { ModelGroupQuotaCards } from "./_components/model-group-quota-cards";
 import { MyUsageHeader } from "./_components/my-usage-header";
 import { ProviderGroupInfo } from "./_components/provider-group-info";
 import { StatisticsSummaryCard } from "./_components/statistics-summary-card";
@@ -16,16 +22,25 @@ export default function MyUsagePage() {
 
   const [quota, setQuota] = useState<MyUsageQuota | null>(null);
   const [isQuotaLoading, setIsQuotaLoading] = useState(true);
+  const [modelGroupQuotas, setModelGroupQuotas] = useState<MyModelGroupQuota[]>([]);
+  const [isModelGroupQuotasLoading, setIsModelGroupQuotasLoading] = useState(true);
   const [serverTimeZone, setServerTimeZone] = useState<string | undefined>(undefined);
 
   const loadInitial = useCallback(() => {
     setIsQuotaLoading(true);
+    setIsModelGroupQuotasLoading(true);
 
     void getMyQuota()
       .then((quotaResult) => {
         if (quotaResult.ok) setQuota(quotaResult.data);
       })
       .finally(() => setIsQuotaLoading(false));
+
+    void getMyModelGroupQuotas()
+      .then((result) => {
+        if (result.ok) setModelGroupQuotas(result.data);
+      })
+      .finally(() => setIsModelGroupQuotasLoading(false));
 
     void getServerTimeZone().then((tzResult) => {
       if (tzResult.ok) setServerTimeZone(tzResult.data.timeZone);
@@ -68,6 +83,8 @@ export default function MyUsagePage() {
       ) : null}
 
       <CollapsibleQuotaCard quota={quota} loading={isQuotaLoading} />
+
+      <ModelGroupQuotaCards quotas={modelGroupQuotas} loading={isModelGroupQuotasLoading} />
 
       <StatisticsSummaryCard serverTimeZone={serverTimeZone} />
 

@@ -158,6 +158,46 @@ describe("Message Templates", () => {
       const sectionsStr = JSON.stringify(message.sections);
       expect(sectionsStr).toContain("供应商");
     });
+
+    it("renders the model-group-only split when present (group-rate-limit §5.3/§10)", () => {
+      const data: CostAlertData = {
+        targetType: "user",
+        targetName: "李四",
+        targetId: 101,
+        currentCost: 9,
+        quotaLimit: 10,
+        threshold: 0.8,
+        period: "5小时",
+        modelGroupOnlyCost: 15,
+      };
+
+      const message = buildCostAlertMessage(data);
+      const sectionsStr = JSON.stringify(message.sections);
+
+      expect(sectionsStr).toContain("模型组单算");
+      expect(sectionsStr).toContain("计入全局额");
+      expect(sectionsStr).toContain("15.0000"); // model-group-only portion
+      expect(sectionsStr).toContain("24.0000"); // total = currentCost + modelGroupOnly
+    });
+
+    it("hides the split rows when there is no model-group-only spend", () => {
+      const data: CostAlertData = {
+        targetType: "user",
+        targetName: "王五",
+        targetId: 102,
+        currentCost: 8,
+        quotaLimit: 10,
+        threshold: 0.8,
+        period: "本月",
+        modelGroupOnlyCost: 0,
+      };
+
+      const message = buildCostAlertMessage(data);
+      const sectionsStr = JSON.stringify(message.sections);
+
+      expect(sectionsStr).not.toContain("模型组单算");
+      expect(sectionsStr).not.toContain("计入全局额");
+    });
   });
 
   describe("buildDailyLeaderboardMessage", () => {

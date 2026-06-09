@@ -15,8 +15,8 @@ const getSessionMock = vi.fn();
 const findUserByIdMock = vi.fn();
 const getTimeRangeForPeriodMock = vi.fn();
 const getTimeRangeForPeriodWithModeMock = vi.fn();
-const sumUserCostInTimeRangeMock = vi.fn();
-const sumUserTotalCostMock = vi.fn();
+const sumUserCostSplitInTimeRangeMock = vi.fn();
+const sumUserTotalCostSplitMock = vi.fn();
 
 // Mock modules
 vi.mock("@/lib/auth", () => ({
@@ -33,8 +33,8 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
 }));
 
 vi.mock("@/repository/statistics", () => ({
-  sumUserCostInTimeRange: (...args: unknown[]) => sumUserCostInTimeRangeMock(...args),
-  sumUserTotalCost: (...args: unknown[]) => sumUserTotalCostMock(...args),
+  sumUserCostSplitInTimeRange: (...args: unknown[]) => sumUserCostSplitInTimeRangeMock(...args),
+  sumUserTotalCostSplit: (...args: unknown[]) => sumUserTotalCostSplitMock(...args),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -97,8 +97,8 @@ describe("getUserAllLimitUsage - daily window mode handling", () => {
     );
 
     // Default cost mocks
-    sumUserCostInTimeRangeMock.mockResolvedValue(1.0);
-    sumUserTotalCostMock.mockResolvedValue(10.0);
+    sumUserCostSplitInTimeRangeMock.mockResolvedValue({ total: 1.0, countedInGlobal: 1.0 });
+    sumUserTotalCostSplitMock.mockResolvedValue({ total: 10.0, countedInGlobal: 10.0 });
   });
 
   afterEach(() => {
@@ -289,8 +289,8 @@ describe("getUserAllLimitUsage - consistency with key-quota.ts", () => {
       endTime: now,
     });
 
-    sumUserCostInTimeRangeMock.mockResolvedValue(1.0);
-    sumUserTotalCostMock.mockResolvedValue(10.0);
+    sumUserCostSplitInTimeRangeMock.mockResolvedValue({ total: 1.0, countedInGlobal: 1.0 });
+    sumUserTotalCostSplitMock.mockResolvedValue({ total: 10.0, countedInGlobal: 10.0 });
   });
 
   afterEach(() => {

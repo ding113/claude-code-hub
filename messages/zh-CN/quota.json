@@ -57,8 +57,86 @@
     "description": "查看和管理所有层级的限额使用情况",
     "tabs": {
       "users": "用户限额",
+      "modelLimits": "按模型限额",
+      "modelGroups": "模型组",
+      "userGroups": "用户组",
       "keys": "密钥限额",
       "providers": "供应商限额"
+    },
+    "subTabs": {
+      "config": "限额配置",
+      "modelGroups": "模型组",
+      "userGroups": "用户组"
+    }
+  },
+  "modelLimits": {
+    "title": "按模型组限额",
+    "description": "为指定主体（用户、用户组）和模型组设置成本上限。命中模型组限额时，该请求完全脱离全局用户限额计算。",
+    "disabledNotice": "按模型限额当前未启用，需设置环境变量 ENABLE_MODEL_RATE_LIMIT=true（依赖 ENABLE_RATE_LIMIT=true）后生效，配置可提前完成。",
+    "loadError": "加载模型组限额失败",
+    "deleteSuccess": "已删除限额",
+    "deleteError": "删除限额失败",
+    "noData": "暂无限额配置",
+    "allSubjects": "所有主体",
+    "allModelGroups": "所有模型组",
+    "searchSubject": "搜索...",
+    "searchModelGroup": "搜索模型组...",
+    "noResults": "无匹配结果",
+    "addLimit": "添加限额",
+    "searchLimits": "搜索主体 / 模型组",
+    "expandMembers": "展开 / 收起成员",
+    "subjectType": "主体类型",
+    "subjectTypeUser": "用户",
+    "subjectTypeUserGroup": "用户组",
+    "subjectTypeKey": "密钥",
+    "modelGroup": "模型组",
+    "semanticsNote": "命中模型组限额时，该请求完全脱离全局用户/密钥配额（完全分区），RPM 和并发会话限制仍然有效。用户组限额对每个成员单独生效。同一窗口有多个来源时取最宽松（最大值）。",
+    "resetMode": {
+      "fixed": "固定窗口",
+      "rolling": "滚动窗口"
+    },
+    "table": {
+      "subjectType": "主体类型",
+      "subject": "主体",
+      "modelGroup": "模型组",
+      "fiveHour": "5 小时",
+      "daily": "每日",
+      "weekly": "每周",
+      "monthly": "每月",
+      "total": "总计",
+      "resetMode": "重置模式",
+      "actions": "操作"
+    },
+    "deleteConfirm": {
+      "title": "删除限额",
+      "description": "确定要删除模型组 \"{group}\" 的限额配置吗？此操作无法撤销。",
+      "cancel": "取消",
+      "confirm": "删除"
+    },
+    "dialog": {
+      "addTitle": "新增模型组限额",
+      "editTitle": "编辑模型组限额",
+      "description": "模型组 \"{group}\" 的成本上限，留空表示该周期不限制。",
+      "fiveHour": "5 小时限额",
+      "daily": "每日限额",
+      "weekly": "每周限额",
+      "monthly": "每月限额",
+      "total": "总限额",
+      "unlimited": "不限制",
+      "resetMode": "5 小时重置模式",
+      "resetModeFixed": "固定窗口",
+      "resetModeRolling": "滚动窗口",
+      "save": "保存",
+      "saveSuccess": "限额已保存",
+      "saveError": "保存限额失败",
+      "selectDescription": "为所选主体与模型组设置成本上限，留空表示该周期不限制。",
+      "subjectRequired": "请选择主体",
+      "modelGroupRequired": "请选择模型组"
+    },
+    "boosts": {
+      "panelTitle": "临时提额",
+      "dialogDescription": "为用户「{user}」在模型组「{group}」上发放临时额度提升。",
+      "configuredCount": "已配置 {count} 项临时提额"
     }
   },
   "users": {
@@ -412,5 +490,147 @@
     "saveFailed": "更新失败",
     "invalidNumber": "请输入有效数字",
     "negativeNotAllowed": "不能为负数"
-  }
+  },
+  "modelGroups": {
+    "title": "模型组管理",
+    "description": "创建模型组，用于精细化限额控制。每个模型只能属于一个组（全局互斥）。",
+    "semanticsNote": "请求命中模型组限额后，该轴（用户或 Key）的全局成本限额对该请求不再生效（完全切分）。RPM 与并发限制始终生效。",
+    "totalCount": "{count} 个组",
+    "addGroup": "新建组",
+    "addSingleton": "单模型快捷组",
+    "singleton": "单模型",
+    "group": "多模型",
+    "noData": "暂无模型组，点击「新建组」创建。",
+    "noMembers": "无成员",
+    "nameRequired": "组名不能为空。",
+    "modelRequired": "模型名不能为空。",
+    "duplicateName": "同名组已存在。",
+    "memberConflict": "模型「{model}」已属于组「{groupName}」（id={groupId}），每个模型只能属于一个组。",
+    "loadError": "加载模型组失败。",
+    "createSuccess": "模型组创建成功。",
+    "createError": "创建模型组失败。",
+    "updateSuccess": "模型组更新成功。",
+    "updateError": "更新模型组失败。",
+    "deleteSuccess": "已删除模型组「{name}」。",
+    "deleteError": "删除模型组失败。",
+    "memberUpdatePartialError": "部分成员变更失败：{errors}",
+    "deleteConfirm": {
+      "title": "确认删除模型组？",
+      "description": "将永久删除组「{name}」及其所有模型映射，此操作不可撤销。",
+      "cancel": "取消",
+      "confirm": "删除"
+    },
+    "table": {
+      "name": "组名",
+      "description": "描述",
+      "members": "模型成员",
+      "type": "类型",
+      "actions": "操作"
+    },
+    "dialog": {
+      "addTitle": "新建模型组",
+      "addDescription": "将多个模型归入一个组，统一配置限额策略。",
+      "addSingletonTitle": "新建单模型快捷组",
+      "addSingletonDescription": "为单个模型快速创建一个单元素组，实现按模型限额。",
+      "manageTitle": "编辑组：{name}",
+      "manageDescription": "重命名或调整成员模型。模型在全系统只能属于一个组。",
+      "name": "组名",
+      "nameOptional": "可选",
+      "namePlaceholder": "如 gpt-4-family",
+      "namePlaceholderSingleton": "默认使用模型名",
+      "description": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "model": "模型",
+      "modelPlaceholder": "选择或输入模型名",
+      "searchModel": "搜索模型...",
+      "noModels": "未找到模型",
+      "members": "成员模型",
+      "addMember": "添加",
+      "selectedCount": "已选 {count} 个模型",
+      "memberConflictNote": "若模型已属于其他组，添加将失败（全局互斥）。",
+      "cancel": "取消",
+      "save": "保存"
+    }
+  },
+  "userGroups": {
+    "title": "用户组管理",
+    "description": "将标签注册为用户组，成员资格由用户标签派生。",
+    "loading": "加载中...",
+    "totalCount": "已注册 {count} 个用户组",
+    "createGroup": "创建用户组",
+    "noGroups": "暂无用户组",
+    "members": "名成员",
+    "tagRequired": "请选择标签",
+    "duplicateTag": "该标签已注册为用户组",
+    "form": {
+      "tag": "标签",
+      "tagPlaceholder": "选择标签",
+      "noAvailableTags": "所有标签已注册",
+      "name": "显示名称",
+      "namePlaceholder": "可选显示名称",
+      "description": "描述",
+      "descriptionPlaceholder": "可选描述",
+      "cancel": "取消",
+      "create": "创建",
+      "save": "保存",
+      "saving": "保存中..."
+    },
+    "createDialog": {
+      "title": "创建用户组",
+      "description": "选择一个已有用户标签注册为用户组。"
+    },
+    "editDialog": {
+      "title": "编辑用户组",
+      "description": "正在编辑用户组：{tag}"
+    },
+    "deleteDialog": {
+      "title": "删除用户组",
+      "description": "确定删除用户组 '{tag}' 吗？此操作不会修改任何用户的标签。",
+      "confirm": "删除"
+    }
+  },
+  "quotaBoosts": {
+    "errors": {
+      "list_failed": "获取临时提额授予列表失败。",
+      "create_failed": "创建临时提额授予失败。",
+      "delete_failed": "撤销临时提额授予失败。",
+      "invalid_validity_range": "到期时间必须晚于开始时间。",
+      "action_failed": "临时提额操作失败。"
+    },
+    "note": "提额在 validFrom 时刻激活，在该用户和模型组的基础限额上累加叠加。变更在缓存 TTL 内生效。",
+    "window": "时间窗口",
+    "window_5h": "5 小时",
+    "window_daily": "每日",
+    "window_weekly": "每周",
+    "window_monthly": "每月",
+    "window_total": "总计",
+    "amount": "提额金额",
+    "validFrom": "生效时间",
+    "validTo": "到期时间",
+    "note_label": "备注",
+    "notePlaceholder": "管理员备注（可选）",
+    "addBoost": "添加提额",
+    "noBoosts": "该用户与模型组暂无提额配置",
+    "createSuccess": "提额已添加",
+    "deleteSuccess": "提额已撤销",
+    "invalidAmount": "请输入合法的正数金额",
+    "validityRequired": "请填写生效时间和到期时间",
+    "revokeConfirm": {
+      "title": "撤销临时提额",
+      "description": "将永久撤销该提额授予，效果在缓存 TTL 内传播。",
+      "cancel": "取消",
+      "confirm": "撤销"
+    },
+    "table": {
+      "window": "时间窗口",
+      "amount": "金额",
+      "validFrom": "生效时间",
+      "validTo": "到期时间",
+      "note": "备注",
+      "actions": "操作"
+    }
+  },
+  "countedInGlobalLabel": "计入全局额",
+  "modelGroupOnlyLabel": "模型组单算",
+  "splitNote": "命中模型组限额的消费按轴完全切分：不计入该轴全局额度，仅在模型组预算内单独计量。"
 }

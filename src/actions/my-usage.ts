@@ -8,6 +8,7 @@ import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { lookupIp } from "@/lib/ip-geo/client";
 import { logger } from "@/lib/logger";
+import type { LimitWindow, ModelLimitBucket } from "@/lib/model-rate-limit/types";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import {
   clipStartByResetAt,
@@ -178,11 +179,19 @@ export interface MyUsageQuota {
   keyLimitMonthlyUsd: number | null;
   keyLimitTotalUsd: number | null;
   keyLimitConcurrentSessions: number;
+  // group-rate-limit (§5.3 / §10): keyCurrent*Usd is the portion counted toward the
+  // mainline global gate (what the limit enforces); keyCurrent*ModelGroupOnlyUsd is the
+  // split-off model-group spend. Their sum is the total spend in that window.
   keyCurrent5hUsd: number;
   keyCurrentDailyUsd: number;
   keyCurrentWeeklyUsd: number;
   keyCurrentMonthlyUsd: number;
   keyCurrentTotalUsd: number;
+  keyCurrent5hModelGroupOnlyUsd: number;
+  keyCurrentDailyModelGroupOnlyUsd: number;
+  keyCurrentWeeklyModelGroupOnlyUsd: number;
+  keyCurrentMonthlyModelGroupOnlyUsd: number;
+  keyCurrentTotalModelGroupOnlyUsd: number;
   keyCurrentConcurrentSessions: number;
 
   userLimit5hUsd: number | null;
@@ -196,6 +205,11 @@ export interface MyUsageQuota {
   userCurrentWeeklyUsd: number;
   userCurrentMonthlyUsd: number;
   userCurrentTotalUsd: number;
+  userCurrent5hModelGroupOnlyUsd: number;
+  userCurrentDailyModelGroupOnlyUsd: number;
+  userCurrentWeeklyModelGroupOnlyUsd: number;
+  userCurrentMonthlyModelGroupOnlyUsd: number;
+  userCurrentTotalModelGroupOnlyUsd: number;
   userCurrentConcurrentSessions: number;
 
   userLimitDailyUsd: number | null;
@@ -214,6 +228,31 @@ export interface MyUsageQuota {
   expiresAt: Date | null;
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
+}
+
+/** One enforced cost window of a model-group quota view (only configured caps). */
+export interface MyModelGroupQuotaWindow {
+  window: LimitWindow;
+  current: number;
+  limit: number;
+}
+
+/** Per-axis (key / user) windows for one model group on the my-usage page. */
+export interface MyModelGroupQuotaAxis {
+  axis: "key" | "user";
+  windows: MyModelGroupQuotaWindow[];
+}
+
+/**
+ * A self-service model-group quota view. The page renders one card per entry
+ * when per-model rate limiting applies to the caller (see docs/limit §10).
+ */
+export interface MyModelGroupQuota {
+  modelGroupId: number;
+  modelGroupName: string;
+  models: string[];
+  axes: MyModelGroupQuotaAxis[];
+  currencyCode: CurrencyCode;
 }
 
 export interface MyTodayStats {
@@ -459,22 +498,30 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
         getUserConcurrentSessions(user.id),
       ]);
 
-    const {
-      cost5h: keyCurrent5hUsd,
-      costDaily: keyCostDaily,
-      costWeekly: keyCostWeekly,
-      costMonthly: keyCostMonthly,
-      costTotal: keyTotalCost,
-    } = keyCosts;
-    const {
-      cost5h: userCurrent5hUsd,
-      costDaily: userCostDaily,
-      costWeekly: userCostWeekly,
-      costMonthly: userCostMonthly,
-      costTotal: userTotalCost,
-    } = userCosts;
-    const resolvedKeyCurrent5hUsd = keyFixed5hUsd ?? keyCurrent5hUsd;
-    const resolvedUserCurrent5hUsd = userFixed5hUsd ?? userCurrent5hUsd;
+    // group-rate-limit (§5.3/§10): the gauge "used" shows the global-counted portion; the
+    // model-group-only split is `total - counted`. For 5h-fixed the runtime counter is
+    // already global-counted (post P0-1), so its model-group-only portion is 0.
+    const modelGroupOnly = (total: number, counted: number): number =>
+      Math.max(0, total - Math.min(counted, total));
+
+    const keyCurrent5hUsd = keyFixed5hUsd ?? keyCosts.cost5hCounted;
+    const keyCurrentDailyUsd = keyCosts.costDailyCounted;
+    const keyCurrentWeeklyUsd = keyCosts.costWeeklyCounted;
+    const keyCurrentMonthlyUsd = keyCosts.costMonthlyCounted;
+    const keyTotalCost = keyCosts.costTotalCounted;
+    const keyCurrent5hModelGroupOnlyUsd =
+      keyFixed5hUsd != null ? 0 : modelGroupOnly(keyCosts.cost5h, keyCosts.cost5hCounted);
+
+    const userCurrent5hUsd = userFixed5hUsd ?? userCosts.cost5hCounted;
+    const userCurrentDailyUsd = userCosts.costDailyCounted;
+    const userCurrentWeeklyUsd = userCosts.costWeeklyCounted;
+    const userCurrentMonthlyUsd = userCosts.costMonthlyCounted;
+    const userTotalCost = userCosts.costTotalCounted;
+    const userCurrent5hModelGroupOnlyUsd =
+      userFixed5hUsd != null ? 0 : modelGroupOnly(userCosts.cost5h, userCosts.cost5hCounted);
+
+    const resolvedKeyCurrent5hUsd = keyCurrent5hUsd;
+    const resolvedUserCurrent5hUsd = userCurrent5hUsd;
 
     const quota: MyUsageQuota = {
       keyLimit5hUsd: key.limit5hUsd ?? null,
@@ -484,10 +531,27 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyLimitTotalUsd: key.limitTotalUsd ?? null,
       keyLimitConcurrentSessions: effectiveKeyConcurrentLimit,
       keyCurrent5hUsd: resolvedKeyCurrent5hUsd,
-      keyCurrentDailyUsd: keyCostDaily,
-      keyCurrentWeeklyUsd: keyCostWeekly,
-      keyCurrentMonthlyUsd: keyCostMonthly,
+      keyCurrentDailyUsd: keyCurrentDailyUsd,
+      keyCurrentWeeklyUsd: keyCurrentWeeklyUsd,
+      keyCurrentMonthlyUsd: keyCurrentMonthlyUsd,
       keyCurrentTotalUsd: keyTotalCost,
+      keyCurrent5hModelGroupOnlyUsd: keyCurrent5hModelGroupOnlyUsd,
+      keyCurrentDailyModelGroupOnlyUsd: modelGroupOnly(
+        keyCosts.costDaily,
+        keyCosts.costDailyCounted
+      ),
+      keyCurrentWeeklyModelGroupOnlyUsd: modelGroupOnly(
+        keyCosts.costWeekly,
+        keyCosts.costWeeklyCounted
+      ),
+      keyCurrentMonthlyModelGroupOnlyUsd: modelGroupOnly(
+        keyCosts.costMonthly,
+        keyCosts.costMonthlyCounted
+      ),
+      keyCurrentTotalModelGroupOnlyUsd: modelGroupOnly(
+        keyCosts.costTotal,
+        keyCosts.costTotalCounted
+      ),
       keyCurrentConcurrentSessions: keyConcurrent,
 
       userLimit5hUsd: user.limit5hUsd ?? null,
@@ -497,10 +561,27 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userLimitConcurrentSessions: user.limitConcurrentSessions ?? null,
       userRpmLimit: user.rpm ?? null,
       userCurrent5hUsd: resolvedUserCurrent5hUsd,
-      userCurrentDailyUsd: userCostDaily,
-      userCurrentWeeklyUsd: userCostWeekly,
-      userCurrentMonthlyUsd: userCostMonthly,
+      userCurrentDailyUsd: userCurrentDailyUsd,
+      userCurrentWeeklyUsd: userCurrentWeeklyUsd,
+      userCurrentMonthlyUsd: userCurrentMonthlyUsd,
       userCurrentTotalUsd: userTotalCost,
+      userCurrent5hModelGroupOnlyUsd: userCurrent5hModelGroupOnlyUsd,
+      userCurrentDailyModelGroupOnlyUsd: modelGroupOnly(
+        userCosts.costDaily,
+        userCosts.costDailyCounted
+      ),
+      userCurrentWeeklyModelGroupOnlyUsd: modelGroupOnly(
+        userCosts.costWeekly,
+        userCosts.costWeeklyCounted
+      ),
+      userCurrentMonthlyModelGroupOnlyUsd: modelGroupOnly(
+        userCosts.costMonthly,
+        userCosts.costMonthlyCounted
+      ),
+      userCurrentTotalModelGroupOnlyUsd: modelGroupOnly(
+        userCosts.costTotal,
+        userCosts.costTotalCounted
+      ),
       userCurrentConcurrentSessions: userKeyConcurrent,
 
       userLimitDailyUsd: user.dailyQuota ?? null,
@@ -525,6 +606,117 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
   } catch (error) {
     logger.error("[my-usage] getMyQuota failed", error);
     return { ok: false, error: "Failed to get quota information" };
+  }
+}
+
+const MODEL_GROUP_QUOTA_WINDOWS: ReadonlyArray<{
+  window: LimitWindow;
+  limitField: keyof ModelLimitBucket["caps"];
+  costField: "cost5h" | "costDaily" | "costWeekly" | "costMonthly" | "costTotal";
+}> = [
+  { window: "5h", limitField: "limit5hUsd", costField: "cost5h" },
+  { window: "daily", limitField: "dailyLimitUsd", costField: "costDaily" },
+  { window: "weekly", limitField: "limitWeeklyUsd", costField: "costWeekly" },
+  { window: "monthly", limitField: "limitMonthlyUsd", costField: "costMonthly" },
+  { window: "total", limitField: "limitTotalUsd", costField: "costTotal" },
+];
+
+/**
+ * Per-model-group quota views for the self-service usage page. Returns one entry
+ * per model group the caller (user / key / its user groups) has a configured
+ * limit on, with current usage per enforced window. Empty when the per-model
+ * rate-limit feature is off or the caller has no model-group limits (the page
+ * then shows only the mainline quota card).
+ */
+export async function getMyModelGroupQuotas(): Promise<ActionResult<MyModelGroupQuota[]>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const { isModelRateLimitEnabled } = await import("@/lib/model-rate-limit/types");
+    if (!isModelRateLimitEnabled()) return { ok: true, data: [] };
+
+    const { getModelLimitSnapshot } = await import("@/lib/model-rate-limit/cache");
+    const { resolveAllSubjectModelLimits } = await import("@/lib/model-rate-limit/resolver");
+    const { listModelGroups } = await import("@/repository/model-group");
+    const { sumScopeQuotaCostsByModels } = await import("@/repository/statistics");
+    const { getLeaseTimeRange } = await import("@/lib/rate-limit/lease");
+
+    const user = session.user;
+    const key = session.key;
+    const now = new Date();
+
+    const snapshot = await getModelLimitSnapshot();
+    const buckets = resolveAllSubjectModelLimits(snapshot, {
+      userId: user.id,
+      keyId: key.id,
+      tags: user.tags ?? [],
+      now,
+    });
+    if (buckets.length === 0) return { ok: true, data: [] };
+
+    const settings = await getSystemSettings();
+    const currencyCode = settings.currencyDisplay;
+
+    const groups = await listModelGroups();
+    const groupNameById = new Map(groups.map((g) => [g.id, g.name]));
+
+    // daily/weekly/monthly windows are shared across buckets (fixed mode); 5h
+    // follows each bucket's reset mode/costResetAt, so it is computed per bucket.
+    const [rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
+      getLeaseTimeRange("daily", "00:00", "fixed"),
+      getLeaseTimeRange("weekly", "00:00", "fixed"),
+      getLeaseTimeRange("monthly", "00:00", "fixed"),
+    ]);
+
+    const axesByGroup = new Map<number, { models: string[]; axes: MyModelGroupQuotaAxis[] }>();
+
+    await Promise.all(
+      buckets.map(async (bucket) => {
+        const { caps } = bucket;
+        const range5h = await getLeaseTimeRange("5h", "00:00", caps.limit5hResetMode);
+        const startTime5h =
+          caps.limit5hCostResetAt instanceof Date && caps.limit5hCostResetAt > range5h.startTime
+            ? caps.limit5hCostResetAt
+            : range5h.startTime;
+
+        const costs = await sumScopeQuotaCostsByModels(bucket.axis, bucket.scopeId, bucket.models, {
+          range5h: { startTime: startTime5h, endTime: range5h.endTime },
+          rangeDaily,
+          rangeWeekly,
+          rangeMonthly,
+        });
+
+        const windows: MyModelGroupQuotaWindow[] = MODEL_GROUP_QUOTA_WINDOWS.flatMap((def) => {
+          const limit = caps[def.limitField];
+          if (typeof limit !== "number" || limit <= 0) return [];
+          return [{ window: def.window, current: costs[def.costField], limit }];
+        });
+        if (windows.length === 0) return;
+
+        const entry = axesByGroup.get(bucket.modelGroupId) ?? {
+          models: bucket.models,
+          axes: [],
+        };
+        entry.axes.push({ axis: bucket.axis, windows });
+        axesByGroup.set(bucket.modelGroupId, entry);
+      })
+    );
+
+    const data: MyModelGroupQuota[] = [...axesByGroup.entries()]
+      .map(([modelGroupId, { models, axes }]) => ({
+        modelGroupId,
+        modelGroupName: groupNameById.get(modelGroupId) ?? `#${modelGroupId}`,
+        models,
+        axes: axes.sort((a, b) => (a.axis === b.axis ? 0 : a.axis === "key" ? -1 : 1)),
+        currencyCode,
+      }))
+      .sort((a, b) => a.modelGroupName.localeCompare(b.modelGroupName));
+
+    return { ok: true, data };
+  } catch (error) {
+    logger.error("[my-usage] getMyModelGroupQuotas failed", error);
+    return { ok: false, error: "Failed to get model group quotas" };
   }
 }
 
