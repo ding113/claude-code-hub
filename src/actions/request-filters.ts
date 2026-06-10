@@ -364,6 +364,9 @@ export async function updateRequestFilterAction(
       updates.providerIds !== undefined ? updates.providerIds : existing!.providerIds;
     const effectiveGroupTags =
       updates.groupTags !== undefined ? updates.groupTags : existing!.groupTags;
+    const effectiveRuleMode = updates.ruleMode ?? existing!.ruleMode;
+    const effectiveOperations =
+      updates.operations !== undefined ? updates.operations : existing!.operations;
 
     const validationError = validatePayload({
       name: existing!.name,
@@ -373,6 +376,8 @@ export async function updateRequestFilterAction(
       bindingType: effectiveBindingType,
       providerIds: effectiveProviderIds,
       groupTags: effectiveGroupTags,
+      ruleMode: effectiveRuleMode,
+      operations: effectiveOperations,
     });
 
     if (validationError) {
