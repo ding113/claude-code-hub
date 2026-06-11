@@ -61,6 +61,7 @@ async function SettingsConfigContent({ locale }: { locale: string }) {
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
             enableThinkingSignatureRectifier: settings.enableThinkingSignatureRectifier,
             enableThinkingBudgetRectifier: settings.enableThinkingBudgetRectifier,
+            enableThinkingEffortConflictRectifier: settings.enableThinkingEffortConflictRectifier,
             enableBillingHeaderRectifier: settings.enableBillingHeaderRectifier,
             enableSystemMessageRectifier: settings.enableSystemMessageRectifier,
             enableResponseInputRectifier: settings.enableResponseInputRectifier,

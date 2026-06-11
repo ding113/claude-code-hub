@@ -73,6 +73,7 @@ export async function saveSystemSettings(formData: {
   interceptAnthropicWarmupRequests?: boolean;
   enableThinkingSignatureRectifier?: boolean;
   enableThinkingBudgetRectifier?: boolean;
+  enableThinkingEffortConflictRectifier?: boolean;
   enableBillingHeaderRectifier?: boolean;
   enableSystemMessageRectifier?: boolean;
   enableResponseInputRectifier?: boolean;
@@ -126,6 +127,7 @@ export async function saveSystemSettings(formData: {
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,
+      enableThinkingEffortConflictRectifier: validated.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
       enableSystemMessageRectifier: validated.enableSystemMessageRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,

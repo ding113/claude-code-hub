@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS: Pick<
   | "codexPriorityBillingSource"
   | "enableThinkingSignatureRectifier"
   | "enableThinkingBudgetRectifier"
+  | "enableThinkingEffortConflictRectifier"
   | "enableBillingHeaderRectifier"
   | "enableSystemMessageRectifier"
   | "enableResponseInputRectifier"
@@ -61,6 +62,7 @@ const DEFAULT_SETTINGS: Pick<
   codexPriorityBillingSource: "requested",
   enableThinkingSignatureRectifier: true,
   enableThinkingBudgetRectifier: true,
+  enableThinkingEffortConflictRectifier: true,
   enableBillingHeaderRectifier: true,
   enableSystemMessageRectifier: true,
   enableResponseInputRectifier: true,
@@ -150,6 +152,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,
+      enableThinkingEffortConflictRectifier: DEFAULT_SETTINGS.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: DEFAULT_SETTINGS.enableBillingHeaderRectifier,
       enableSystemMessageRectifier: DEFAULT_SETTINGS.enableSystemMessageRectifier,
       enableResponseInputRectifier: DEFAULT_SETTINGS.enableResponseInputRectifier,

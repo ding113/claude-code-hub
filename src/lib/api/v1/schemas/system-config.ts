@@ -126,6 +126,9 @@ export const SystemSettingsSchema = z
     enableThinkingBudgetRectifier: z
       .boolean()
       .describe("Whether thinking budget rectifier retries are enabled."),
+    enableThinkingEffortConflictRectifier: z
+      .boolean()
+      .describe("Whether thinking effort conflict rectifier retries are enabled."),
     enableBillingHeaderRectifier: z
       .boolean()
       .describe("Whether billing-header rectifier is enabled."),

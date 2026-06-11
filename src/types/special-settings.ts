@@ -11,6 +11,7 @@ export type SpecialSetting =
   | GuardInterceptSpecialSetting
   | ThinkingSignatureRectifierSpecialSetting
   | ThinkingBudgetRectifierSpecialSetting
+  | ThinkingEffortConflictRectifierSpecialSetting
   | BillingHeaderRectifierSpecialSetting
   | SystemMessageRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
@@ -147,6 +148,28 @@ export type ThinkingSignatureRectifierSpecialSetting = {
   removedThinkingBlocks: number;
   removedRedactedThinkingBlocks: number;
   removedSignatureFields: number;
+};
+
+/**
+ * Thinking effort 冲突整流器审计
+ *
+ * 用于记录：当 Anthropic 兼容供应商（如 DeepSeek、MiMo 等）因
+ * thinking 关闭 + reasoning_effort/output_config.effort 同时存在而返回 400 时，
+ * 代理剥离 effort 字段并对同供应商自动重试一次的行为。
+ */
+export type ThinkingEffortConflictRectifierSpecialSetting = {
+  type: "thinking_effort_conflict_rectifier";
+  scope: "request";
+  hit: boolean;
+  providerId: number | null;
+  providerName: string | null;
+  trigger: "thinking_disabled_with_reasoning_effort";
+  attemptNumber: number;
+  retryAttemptNumber: number;
+  removedOutputConfig: boolean;
+  removedReasoningEffort: boolean;
+  thinkingType: string | null;
+  effort: string | null;
 };
 
 /**

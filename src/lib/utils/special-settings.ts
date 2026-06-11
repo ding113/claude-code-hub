@@ -75,6 +75,19 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.removedRedactedThinkingBlocks,
         setting.removedSignatureFields,
       ]);
+    case "thinking_effort_conflict_rectifier":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.providerId ?? null,
+        setting.trigger,
+        setting.attemptNumber,
+        setting.retryAttemptNumber,
+        setting.removedOutputConfig,
+        setting.removedReasoningEffort,
+        setting.thinkingType,
+        setting.effort,
+      ]);
     case "codex_session_id_completion":
       return JSON.stringify([
         setting.type,

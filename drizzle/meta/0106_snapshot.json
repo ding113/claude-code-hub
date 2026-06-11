@@ -1,6 +1,6 @@
 {
-  "id": "e61c4e85-4edf-4d73-b2e3-5326af94eba0",
-  "prevId": "e287317d-0fc7-4491-960d-b22636dc9471",
+  "id": "5c1a5a04-8a25-4735-8ead-9e5d2fe897d7",
+  "prevId": "e61c4e85-4edf-4d73-b2e3-5326af94eba0",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3463,6 +3463,13 @@
         },
         "enable_billing_header_rectifier": {
           "name": "enable_billing_header_rectifier",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "enable_system_message_rectifier": {
+          "name": "enable_system_message_rectifier",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

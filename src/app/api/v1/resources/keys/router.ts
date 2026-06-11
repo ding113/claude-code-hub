@@ -19,6 +19,7 @@ import {
 } from "@/lib/api/v1/schemas/keys";
 import {
   batchUpdateKeys,
+  createSelfKey,
   createUserKey,
   deleteKey,
   enableKey,
@@ -109,6 +110,31 @@ keysRouter.openapi(
     },
   }),
   createUserKey as never
+);
+
+keysRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/users:self/keys",
+    middleware: requireAuth("read"),
+    tags: ["Keys"],
+    summary: "Create own key",
+    description:
+      "Creates a key for the current session user. The target user id always comes from the authenticated session; read-only sessions (keys without Web UI access) are rejected.",
+    "x-required-access": "read",
+    security,
+    request: {
+      body: { required: true, content: { "application/json": { schema: KeyCreateSchema } } },
+    },
+    responses: {
+      201: {
+        description: "Created key.",
+        content: { "application/json": { schema: GenericKeyResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  createSelfKey as never
 );
 
 // Custom-method routes (`/keys/{id}:reveal` etc.) must register before the

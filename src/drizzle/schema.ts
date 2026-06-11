@@ -804,6 +804,13 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // thinking effort 冲突整流器（默认开启）
+  // 开启后：当 Anthropic 兼容供应商（DeepSeek/MiMo 等）因 thinking 关闭 + reasoning_effort 同时存在
+  // 返回 400 错误时，自动剥离 effort 字段并对同供应商重试一次
+  enableThinkingEffortConflictRectifier: boolean('enable_thinking_effort_conflict_rectifier')
+    .notNull()
+    .default(true),
+
   // billing header 整流器（默认开启）
   // 开启后：主动移除 Claude Code 客户端注入到 system 提示中的 x-anthropic-billing-header 文本块
   enableBillingHeaderRectifier: boolean('enable_billing_header_rectifier')

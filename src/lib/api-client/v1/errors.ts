@@ -23,6 +23,12 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
+// Admin-only routes reject non-admin sessions with this exact pair; clients
+// use it to decide whether to retry through a read-tier self endpoint.
+export function isAdminForbidden(error: unknown): boolean {
+  return isApiError(error) && error.status === 403 && error.errorCode === "auth.forbidden";
+}
+
 const API_ERROR_MESSAGE_KEYS: Record<string, string> = {
   "api.error": "INTERNAL_ERROR",
   "api.malformed_error_body": "INTERNAL_ERROR",
@@ -39,6 +45,10 @@ const API_ERROR_MESSAGE_KEYS: Record<string, string> = {
   "provider_endpoint.action_failed": "OPERATION_FAILED",
   "provider_vendor.not_found": "NOT_FOUND",
   "provider_vendor.action_failed": "OPERATION_FAILED",
+  "key.not_found": "KEY_NOT_FOUND",
+  "key.action_failed": "OPERATION_FAILED",
+  "user.not_found": "USER_NOT_FOUND",
+  "user.action_failed": "OPERATION_FAILED",
 };
 
 export function getApiErrorMessageKey(error: ApiError): string {

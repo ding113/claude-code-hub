@@ -1005,6 +1005,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableThinkingSignatureRectifier: z.boolean().optional(),
   // thinking budget 整流器（可选）
   enableThinkingBudgetRectifier: z.boolean().optional(),
+  // thinking effort 冲突整流器（可选）
+  enableThinkingEffortConflictRectifier: z.boolean().optional(),
   // billing header 整流器（可选）
   enableBillingHeaderRectifier: z.boolean().optional(),
   // system message 整流器（可选）

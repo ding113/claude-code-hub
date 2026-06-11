@@ -98,6 +98,10 @@ import {
   rectifyThinkingBudget,
 } from "./thinking-budget-rectifier";
 import {
+  detectThinkingEffortConflictRectifierTrigger,
+  rectifyThinkingEffortConflict,
+} from "./thinking-effort-conflict-rectifier";
+import {
   detectThinkingSignatureRectifierTrigger,
   rectifyAnthropicRequestMessage,
 } from "./thinking-signature-rectifier";
@@ -226,7 +230,13 @@ type StreamingHedgeAttempt = {
 type ReactiveRectifierRetryState = {
   thinkingSignatureRetried: boolean;
   thinkingBudgetRetried: boolean;
+  thinkingEffortConflictRetried: boolean;
 };
+
+type ReactiveRectifierType =
+  | "thinking_signature_rectifier"
+  | "thinking_budget_rectifier"
+  | "thinking_effort_conflict_rectifier";
 
 type ReactiveRectifierResult =
   | { matched: false }
@@ -234,13 +244,13 @@ type ReactiveRectifierResult =
       matched: true;
       applied: false;
       reason: "already_retried" | "not_applicable";
-      rectifierType: "thinking_signature_rectifier" | "thinking_budget_rectifier";
+      rectifierType: ReactiveRectifierType;
       trigger: string;
     }
   | {
       matched: true;
       applied: true;
-      rectifierType: "thinking_signature_rectifier" | "thinking_budget_rectifier";
+      rectifierType: ReactiveRectifierType;
       trigger: string;
       requestDetailsBeforeRectify: ReturnType<typeof buildRequestDetails>;
     };
@@ -763,12 +773,15 @@ function buildRetryFailedChainEntry(
   };
 }
 
-function getReactiveRectifierDisplayName(
-  rectifierType: "thinking_signature_rectifier" | "thinking_budget_rectifier"
-): string {
-  return rectifierType === "thinking_signature_rectifier"
-    ? "Thinking signature rectifier"
-    : "Thinking budget rectifier";
+function getReactiveRectifierDisplayName(rectifierType: ReactiveRectifierType): string {
+  switch (rectifierType) {
+    case "thinking_signature_rectifier":
+      return "Thinking signature rectifier";
+    case "thinking_budget_rectifier":
+      return "Thinking budget rectifier";
+    case "thinking_effort_conflict_rectifier":
+      return "Thinking effort conflict rectifier";
+  }
 }
 
 async function tryApplyReactiveAnthropicRectifier(params: {
@@ -793,6 +806,68 @@ async function tryApplyReactiveAnthropicRectifier(params: {
 
   if (!isAnthropicProvider) {
     return { matched: false };
+  }
+
+  // 先于签名整流器检测：effort 冲突的错误文案更具体（reasoning_effort/output_config），
+  // 避免被签名整流器的通用 invalid request 兜底吞掉。
+  const effortConflictTrigger = detectThinkingEffortConflictRectifierTrigger(errorMessage);
+  if (effortConflictTrigger) {
+    const settings = await getCachedSystemSettings();
+    const enabled = settings.enableThinkingEffortConflictRectifier ?? true;
+
+    if (!enabled) {
+      return { matched: false };
+    }
+
+    if (params.retryState.thinkingEffortConflictRetried) {
+      return {
+        matched: true,
+        applied: false,
+        reason: "already_retried",
+        rectifierType: "thinking_effort_conflict_rectifier",
+        trigger: effortConflictTrigger,
+      };
+    }
+
+    const requestDetailsBeforeRectify = buildRequestDetails(requestSession);
+    const rectified = rectifyThinkingEffortConflict(
+      requestSession.request.message as Record<string, unknown>
+    );
+
+    addSpecialSettingForPersistence(requestSession, persistSession, {
+      type: "thinking_effort_conflict_rectifier",
+      scope: "request",
+      hit: rectified.applied,
+      providerId: provider.id,
+      providerName: provider.name,
+      trigger: effortConflictTrigger,
+      attemptNumber,
+      retryAttemptNumber,
+      removedOutputConfig: rectified.removedOutputConfig,
+      removedReasoningEffort: rectified.removedReasoningEffort,
+      thinkingType: rectified.thinkingType,
+      effort: rectified.effort,
+    });
+    await persistSpecialSettings(persistSession);
+
+    if (!rectified.applied) {
+      return {
+        matched: true,
+        applied: false,
+        reason: "not_applicable",
+        rectifierType: "thinking_effort_conflict_rectifier",
+        trigger: effortConflictTrigger,
+      };
+    }
+
+    params.retryState.thinkingEffortConflictRetried = true;
+    return {
+      matched: true,
+      applied: true,
+      rectifierType: "thinking_effort_conflict_rectifier",
+      trigger: effortConflictTrigger,
+      requestDetailsBeforeRectify,
+    };
   }
 
   const signatureTrigger = detectThinkingSignatureRectifierTrigger(errorMessage);
@@ -1095,6 +1170,7 @@ export class ProxyForwarder {
       const reactiveRectifierRetryState: ReactiveRectifierRetryState = {
         thinkingSignatureRetried: false,
         thinkingBudgetRetried: false,
+        thinkingEffortConflictRetried: false,
       };
 
       const requestPath = session.requestUrl.pathname;
@@ -4483,6 +4559,7 @@ export class ProxyForwarder {
         reactiveRectifierRetryState: {
           thinkingSignatureRetried: false,
           thinkingBudgetRetried: false,
+          thinkingEffortConflictRetried: false,
         },
         settled: false,
         thresholdTriggered: false,

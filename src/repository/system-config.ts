@@ -163,6 +163,7 @@ function createFallbackSettings(): SystemSettings {
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
+    enableThinkingEffortConflictRectifier: true,
     enableBillingHeaderRectifier: true,
     enableSystemMessageRectifier: true,
     enableResponseInputRectifier: true,
@@ -219,6 +220,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
@@ -261,6 +263,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
@@ -328,9 +331,33 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           );
         }
 
-        // 次新降级：移除 billHedgeLosers 列。
+        // 次新降级：再移除 enableThinkingEffortConflictRectifier 列。
+        const {
+          enableThinkingEffortConflictRectifier: _omitEffortConflict,
+          ...selectionWithoutEffortConflict
+        } = selectionWithoutSystemMessageRectifier;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutEffortConflict)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (effortConflictFallbackError) {
+          if (!isUndefinedColumnError(effortConflictFallbackError)) {
+            throw effortConflictFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 enableThinkingEffortConflictRectifier 外仍有列缺失，继续回退到上一代字段集。",
+            { error: effortConflictFallbackError }
+          );
+        }
+
+        // 再次降级：移除 billHedgeLosers 列。
         const { billHedgeLosers: _omitBillHedgeLosers, ...selectionWithoutBillHedgeLosers } =
-          selectionWithoutSystemMessageRectifier;
+          selectionWithoutEffortConflict;
 
         try {
           const [row] = await db
@@ -606,6 +633,7 @@ export async function updateSystemSettings(
     interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
     enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
     enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+    enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
     enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
     enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
     allowNonConversationEndpointProviderFallback:
@@ -648,6 +676,7 @@ export async function updateSystemSettings(
     interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
     enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
     enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+    enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
     enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
     enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
     enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
@@ -778,6 +807,11 @@ export async function updateSystemSettings(
       updates.enableThinkingBudgetRectifier = payload.enableThinkingBudgetRectifier;
     }
 
+    // thinking effort 冲突整流器开关（如果提供）
+    if (payload.enableThinkingEffortConflictRectifier !== undefined) {
+      updates.enableThinkingEffortConflictRectifier = payload.enableThinkingEffortConflictRectifier;
+    }
+
     // billing header 整流器开关（如果提供）
     if (payload.enableBillingHeaderRectifier !== undefined) {
       updates.enableBillingHeaderRectifier = payload.enableBillingHeaderRectifier;
@@ -905,11 +939,40 @@ export async function updateSystemSettings(
         );
       }
 
-      // 次新降级：移除 billHedgeLosers 列。
+      // 次新降级：再移除 enableThinkingEffortConflictRectifier 列。
+      const {
+        enableThinkingEffortConflictRectifier: _omitUpdateEffortConflict,
+        ...updatesWithoutEffortConflict
+      } = updatesWithoutSystemMessageRectifier;
+      const {
+        enableThinkingEffortConflictRectifier: _omitReturningEffortConflict,
+        ...returningWithoutEffortConflict
+      } = returningWithoutSystemMessageRectifier;
+
+      if (!updated) {
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(updatesWithoutEffortConflict)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutEffortConflict);
+        } catch (effortConflictFallbackError) {
+          if (!isUndefinedColumnError(effortConflictFallbackError)) {
+            throw effortConflictFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 enableThinkingEffortConflictRectifier 外仍有列缺失，继续降级更新。",
+            { error: effortConflictFallbackError }
+          );
+        }
+      }
+
+      // 再次降级：移除 billHedgeLosers 列。
       const { billHedgeLosers: _omitUpdateBillHedgeLosers, ...updatesWithoutBillHedgeLosers } =
-        updatesWithoutSystemMessageRectifier;
+        updatesWithoutEffortConflict;
       const { billHedgeLosers: _omitReturningBillHedgeLosers, ...returningWithoutBillHedgeLosers } =
-        returningWithoutSystemMessageRectifier;
+        returningWithoutEffortConflict;
 
       if (!updated) {
         try {
