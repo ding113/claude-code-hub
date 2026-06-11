@@ -163,6 +163,7 @@ function createFallbackSettings(): SystemSettings {
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
+    enableThinkingEffortConflictRectifier: true,
     enableBillingHeaderRectifier: true,
     enableResponseInputRectifier: true,
     allowNonConversationEndpointProviderFallback: true,
@@ -218,6 +219,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
@@ -260,6 +262,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
@@ -580,6 +583,7 @@ export async function updateSystemSettings(
     interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
     enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
     enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+    enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
     enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
     enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
     allowNonConversationEndpointProviderFallback:
@@ -622,6 +626,7 @@ export async function updateSystemSettings(
     interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
     enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
     enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+    enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
     enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
     enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
     enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
@@ -749,6 +754,11 @@ export async function updateSystemSettings(
     // thinking budget 整流器开关（如果提供）
     if (payload.enableThinkingBudgetRectifier !== undefined) {
       updates.enableThinkingBudgetRectifier = payload.enableThinkingBudgetRectifier;
+    }
+
+    // thinking effort 冲突整流器开关（如果提供）
+    if (payload.enableThinkingEffortConflictRectifier !== undefined) {
+      updates.enableThinkingEffortConflictRectifier = payload.enableThinkingEffortConflictRectifier;
     }
 
     // billing header 整流器开关（如果提供）

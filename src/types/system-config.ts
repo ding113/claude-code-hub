@@ -91,6 +91,11 @@ export interface SystemSettings {
   // 目标：当 Anthropic 类型供应商出现 budget_tokens < 1024 错误时，自动整流并重试一次
   enableThinkingBudgetRectifier: boolean;
 
+  // thinking effort 冲突整流器（默认开启）
+  // 目标：当 Anthropic 兼容供应商（DeepSeek/MiMo 等）因 thinking 关闭 + reasoning_effort
+  // 同时存在返回 400 错误时，自动剥离 effort 字段并对同供应商重试一次
+  enableThinkingEffortConflictRectifier: boolean;
+
   // billing header 整流器（默认开启）
   // 目标：主动移除 Claude Code 客户端注入到 system 提示中的 x-anthropic-billing-header 文本块，
   // 防止 Amazon Bedrock 等非原生 Anthropic 上游返回 400 错误

@@ -76,6 +76,7 @@ interface SystemSettingsFormProps {
     | "enableBillingHeaderRectifier"
     | "enableResponseInputRectifier"
     | "enableThinkingBudgetRectifier"
+    | "enableThinkingEffortConflictRectifier"
     | "allowNonConversationEndpointProviderFallback"
     | "fakeStreamingWhitelist"
     | "enableCodexSessionIdCompletion"
@@ -169,6 +170,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
   );
+  const [enableThinkingEffortConflictRectifier, setEnableThinkingEffortConflictRectifier] =
+    useState(initialSettings.enableThinkingEffortConflictRectifier);
   const [enableCodexSessionIdCompletion, setEnableCodexSessionIdCompletion] = useState(
     initialSettings.enableCodexSessionIdCompletion
   );
@@ -317,6 +320,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         allowNonConversationEndpointProviderFallback,
         fakeStreamingWhitelist: sanitizedFakeStreamingWhitelist,
         enableThinkingBudgetRectifier,
+        enableThinkingEffortConflictRectifier,
         enableCodexSessionIdCompletion,
         enableClaudeMetadataUserIdInjection,
         enableResponseFixer,
@@ -364,6 +368,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           }))
         );
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
+        setEnableThinkingEffortConflictRectifier(result.data.enableThinkingEffortConflictRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
         setEnableClaudeMetadataUserIdInjection(result.data.enableClaudeMetadataUserIdInjection);
         setEnableResponseFixer(result.data.enableResponseFixer);
@@ -792,6 +797,29 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-thinking-budget-rectifier"
             checked={enableThinkingBudgetRectifier}
             onCheckedChange={(checked) => setEnableThinkingBudgetRectifier(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Enable Thinking Effort Conflict Rectifier */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-fuchsia-500/10 text-fuchsia-400 shrink-0">
+              <Pencil className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("enableThinkingEffortConflictRectifier")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableThinkingEffortConflictRectifierDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-thinking-effort-conflict-rectifier"
+            checked={enableThinkingEffortConflictRectifier}
+            onCheckedChange={(checked) => setEnableThinkingEffortConflictRectifier(checked)}
             disabled={isPending}
           />
         </div>
