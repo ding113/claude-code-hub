@@ -2,6 +2,7 @@
   "header": {
     "title": "Мои расходы",
     "welcome": "Добро пожаловать, {name}",
+    "documentation": "Документация",
     "logout": "Выйти",
     "keyLabel": "Ключ",
     "userLabel": "Пользователь",
