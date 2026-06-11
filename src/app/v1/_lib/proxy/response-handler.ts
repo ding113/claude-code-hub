@@ -515,6 +515,196 @@ type FinalizeDeferredStreamingResult = {
   billHedgeLosers: boolean;
 };
 
+type CodexResponsesTerminalState = "completed" | "failed" | "incomplete" | "error" | "none";
+
+function applyCodexResponsesTerminalEvent(
+  terminalState: CodexResponsesTerminalState,
+  eventType: string
+): CodexResponsesTerminalState {
+  switch (eventType) {
+    case "response.completed":
+      return "completed";
+    case "response.failed":
+      return "failed";
+    case "response.incomplete":
+      return "incomplete";
+    case "error":
+    case "response.error":
+      return "error";
+    default:
+      return terminalState;
+  }
+}
+
+function getCodexResponsesTerminalState(allContent: string): CodexResponsesTerminalState {
+  let terminalState: CodexResponsesTerminalState = "none";
+  for (const event of parseSSEData(allContent)) {
+    const data =
+      event.data && typeof event.data === "object" && !Array.isArray(event.data)
+        ? (event.data as { type?: unknown })
+        : null;
+    // Intentional: fall back to event.event for events with non-JSON body (e.g. "error" events
+    // with plain-text data). This path processes complete events from allContent (post-tee),
+    // where the forwarded tracker already holds the terminal verdict — so truncation risk is nil.
+    const eventType = typeof data?.type === "string" ? data.type : event.event;
+    terminalState = applyCodexResponsesTerminalEvent(terminalState, eventType);
+  }
+
+  return terminalState;
+}
+
+function getCodexPromptCacheKeyFromSSEText(text: string): string | null {
+  let lastKey: string | null = null;
+  for (const event of parseSSEData(text)) {
+    if (!event.data || typeof event.data !== "object" || Array.isArray(event.data)) continue;
+    const promptCacheKey = SessionManager.extractCodexPromptCacheKey(
+      event.data as Record<string, unknown>
+    );
+    if (promptCacheKey) {
+      lastKey = promptCacheKey;
+    }
+  }
+  return lastKey;
+}
+
+function getCompleteSSEEventTexts(text: string): string[] {
+  const events: string[] = [];
+  const boundaryPattern = /\r?\n\r?\n/g;
+  let start = 0;
+
+  for (const match of text.matchAll(boundaryPattern)) {
+    const end = (match.index ?? 0) + match[0].length;
+    const eventText = text.slice(start, end);
+    start = end;
+    if (eventText.trim()) {
+      events.push(eventText);
+    }
+  }
+
+  return events;
+}
+
+function findLastCompleteSSEEventBoundary(text: string): number {
+  let lastBoundary = -1;
+  const boundaryPattern = /\r?\n\r?\n/g;
+  for (const match of text.matchAll(boundaryPattern)) {
+    lastBoundary = (match.index ?? 0) + match[0].length;
+  }
+  return lastBoundary;
+}
+
+function createCodexResponsesTerminalStateTracker(): {
+  push: (text: string) => void;
+  finalize: () => void;
+  getTerminalState: () => CodexResponsesTerminalState;
+  getUsageMetrics: () => UsageMetrics | null;
+  getServiceTier: () => string | null;
+  getPromptCacheKey: () => string | null;
+} {
+  let bufferedText = "";
+  let terminalState: CodexResponsesTerminalState = "none";
+  let terminalUsageMetrics: UsageMetrics | null = null;
+  let terminalServiceTier: string | null = null;
+  let terminalPromptCacheKey: string | null = null;
+
+  return {
+    push(text: string) {
+      bufferedText += text;
+      const boundary = findLastCompleteSSEEventBoundary(bufferedText);
+      if (boundary < 0) return;
+
+      const completeText = bufferedText.slice(0, boundary);
+      bufferedText = bufferedText.slice(boundary);
+      for (const eventText of getCompleteSSEEventTexts(completeText)) {
+        const keyFromEvent = getCodexPromptCacheKeyFromSSEText(eventText);
+        if (keyFromEvent) terminalPromptCacheKey = keyFromEvent;
+        const parsedTerminalState = getCodexResponsesTerminalState(eventText);
+        if (parsedTerminalState !== "none") {
+          terminalState = parsedTerminalState;
+          terminalUsageMetrics = parseUsageFromResponseText(eventText, "codex").usageMetrics;
+          terminalServiceTier = parseServiceTierFromResponseText(eventText);
+        }
+      }
+    },
+    finalize() {
+      if (!bufferedText) return;
+
+      const remainder = bufferedText.trim();
+      if (!remainder) return;
+
+      bufferedText = "";
+      const dataLines: string[] = [];
+      for (const line of remainder.split(/\r?\n/)) {
+        if (line.startsWith("data:")) {
+          let value = line.slice(5);
+          if (value.startsWith(" ")) {
+            value = value.slice(1);
+          }
+          dataLines.push(value);
+        }
+      }
+
+      const dataStr = dataLines.join("\n");
+      let parsedData: unknown;
+      try {
+        parsedData = JSON.parse(dataStr);
+      } catch {
+        parsedData = dataStr;
+      }
+
+      const parsedObject =
+        parsedData && typeof parsedData === "object" && !Array.isArray(parsedData)
+          ? (parsedData as Record<string, unknown>)
+          : null;
+      // Only classify terminal state when we have a valid JSON object with a string type field.
+      // If JSON parse failed (truncated mid-event), parsedObject is null and we skip classification
+      // to avoid misidentifying a partially-received event as a terminal state.
+      // Intentional contrast with push() which can rely on event.event for complete events.
+      const resolvedType = typeof parsedObject?.type === "string" ? parsedObject.type : null;
+      const newState = resolvedType
+        ? applyCodexResponsesTerminalEvent(terminalState, resolvedType)
+        : "none";
+      if (newState !== "none" && newState !== terminalState) {
+        terminalState = newState;
+        // parsedObject is guaranteed non-null here (resolvedType is derived from it), guard is redundant.
+        terminalUsageMetrics = parseUsageFromResponseText(remainder, "codex").usageMetrics;
+        terminalServiceTier = parseServiceTierFromResponseText(remainder);
+      }
+
+      if (!terminalPromptCacheKey && parsedObject) {
+        terminalPromptCacheKey = getCodexPromptCacheKeyFromSSEText(remainder);
+      }
+    },
+    getTerminalState() {
+      return terminalState;
+    },
+    getUsageMetrics() {
+      return terminalUsageMetrics;
+    },
+    getServiceTier() {
+      return terminalServiceTier;
+    },
+    getPromptCacheKey() {
+      return terminalPromptCacheKey;
+    },
+  };
+}
+
+export const __codexResponsesTerminalStateTrackerForTests = {
+  create: createCodexResponsesTerminalStateTracker,
+};
+
+function getCodexTerminalErrorMessage(state: CodexResponsesTerminalState): string | null {
+  switch (state) {
+    case "failed":
+      return "CODEX_RESPONSE_FAILED";
+    case "error":
+      return "CODEX_RESPONSE_ERROR";
+    default:
+      return null;
+  }
+}
+
 /**
  * 若本次 SSE 被标记为“延迟结算”，则在流结束后补齐成功/失败的最终判定。
  *
@@ -538,7 +728,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   upstreamStatusCode: number,
   streamEndedNormally: boolean,
   clientAborted: boolean,
-  abortReason?: string
+  abortReason?: string,
+  forwardedCodexTerminalState: CodexResponsesTerminalState = "none"
 ): Promise<FinalizeDeferredStreamingResult> {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
@@ -550,16 +741,32 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
   const isHedgeWinner = meta?.isHedgeWinner === true;
   const billHedgeLosers = meta?.billHedgeLosers === true;
+  const shouldInspectCodexTerminalState =
+    upstreamStatusCode >= 200 && upstreamStatusCode < 300 && meta?.providerType === "codex";
+  const codexTerminalState = shouldInspectCodexTerminalState
+    ? forwardedCodexTerminalState !== "none"
+      ? forwardedCodexTerminalState
+      : getCodexResponsesTerminalState(allContent)
+    : "none";
+  const codexTerminalErrorMessage = getCodexTerminalErrorMessage(codexTerminalState);
+  const codexTerminalNonSuccess = codexTerminalErrorMessage !== null;
+  const codexTerminalFinished =
+    codexTerminalState === "completed" || codexTerminalState === "incomplete";
+  const streamCompletedForFinalization =
+    !codexTerminalNonSuccess && (streamEndedNormally || codexTerminalFinished);
 
-  // 仅在“上游 HTTP=200 且流自然结束”时做“假 200”检测：
+  // 仅在"上游 HTTP=200 且流正常结束"时做"假 200"检测：
   // - 非 200：HTTP 已经表明失败（无需额外启发式）
-  // - 非自然结束：内容可能是部分流/截断，启发式会显著提高误判风险
+  // - 未完成/客户端中断：allContent 可能被截断，空内容会被误判为 EMPTY_BODY→502；
+  //   此时已有 terminal-tracker 给出权威结果（completed→200，failed/error→502），
+  //   不需要也不能依赖对不完整 body 的启发式。
   //
-  // 此处返回 `{isError:false}` 仅表示“跳过检测”，最终仍会在下面按中断/超时视为失败结算。
+  // 此处返回 `{isError:false}` 仅表示"跳过检测"，最终仍会在下面按中断/超时视为失败结算。
   const shouldDetectFake200 = streamEndedNormally && upstreamStatusCode === 200;
-  const detected = shouldDetectFake200
-    ? detectUpstreamErrorFromSseOrJsonText(allContent)
-    : ({ isError: false } as const);
+  const detected =
+    shouldDetectFake200 && !codexTerminalNonSuccess
+      ? detectUpstreamErrorFromSseOrJsonText(allContent)
+      : ({ isError: false } as const);
 
   // “内部结算用”的状态码（不会改变客户端实际 HTTP 状态码）。
   // - 假 200：优先映射为“推断得到的 4xx/5xx”（未命中则回退 502），确保内部统计/熔断/会话绑定把它当作失败。
@@ -578,11 +785,14 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       effectiveStatusCode = 502;
     }
     errorMessage = detected.detail ? `${detected.code}: ${detected.detail}` : detected.code;
-  } else if (!streamEndedNormally) {
+  } else if (codexTerminalNonSuccess) {
+    effectiveStatusCode = 502;
+    errorMessage = codexTerminalErrorMessage;
+  } else if (!streamCompletedForFinalization) {
     effectiveStatusCode = clientAborted ? 499 : 502;
     errorMessage = clientAborted ? "CLIENT_ABORTED" : (abortReason ?? "STREAM_ABORTED");
   } else {
-    // streamEndedNormally=true
+    // streamEndedNormally=true, or Codex Responses emitted response.completed before a non-normal end.
     effectiveStatusCode = upstreamStatusCode;
 
     if (upstreamStatusCode >= 400) {
@@ -596,7 +806,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   }
 
   const shouldClearSessionBindingOnFailure =
-    !streamEndedNormally ||
+    codexTerminalNonSuccess ||
+    !streamCompletedForFinalization ||
     detected.isError ||
     (upstreamStatusCode >= 400 && errorMessage !== null);
 
@@ -654,12 +865,57 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     }
   }
 
+  if (codexTerminalNonSuccess) {
+    await clearSessionBinding();
+
+    logger.warn("[ResponseHandler] Codex Responses stream ended with terminal non-success", {
+      providerId: meta.providerId,
+      providerName: meta.providerName,
+      upstreamStatusCode: meta.upstreamStatusCode,
+      effectiveStatusCode,
+      terminalState: codexTerminalState,
+      errorMessage,
+    });
+
+    if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+      try {
+        const { recordFailure } = await import("@/lib/circuit-breaker");
+        await recordFailure(meta.providerId, new Error(errorMessage ?? "CODEX_RESPONSE_FAILED"));
+      } catch (cbError) {
+        logger.warn("[ResponseHandler] Failed to record Codex terminal failure", {
+          providerId: meta.providerId,
+          sessionId: session.sessionId ?? null,
+          error: cbError,
+        });
+      }
+    }
+
+    // NOTE: Do NOT call recordEndpointFailure here. A Codex terminal body-level
+    // failure means the endpoint returned an HTTP 2xx stream successfully.
+    session.addProviderToChain(providerForChain, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: "retry_failed",
+      attemptNumber: meta.attemptNumber,
+      statusCode: effectiveStatusCode,
+      errorMessage: errorMessage ?? undefined,
+    });
+
+    return {
+      effectiveStatusCode,
+      errorMessage,
+      providerIdForPersistence,
+      isHedgeWinner,
+      billHedgeLosers,
+    };
+  }
+
   // 未自然结束：不更新 session 绑定（避免把会话粘到不稳定 provider），但要避免把它误记为 200 completed。
   //
   // 同时，为了让故障转移/熔断能正确工作：
   // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
-  if (!streamEndedNormally) {
+  if (!streamCompletedForFinalization) {
     await clearSessionBinding();
 
     if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
@@ -2229,13 +2485,31 @@ export class ProxyResponseHandler {
     // ⭐ 使用 TransformStream 包装流，以便在 idle timeout 时能关闭客户端流
     // 这解决了 tee() 后 internalStream abort 不影响 clientStream 的问题
     let streamController: TransformStreamDefaultController<Uint8Array> | null = null;
+    const deferredFinalizationMeta = peekDeferredStreamingFinalization(session);
+    const forwardedCodexTerminalTracker = createCodexResponsesTerminalStateTracker();
+    const forwardedCodexTerminalDecoder = new TextDecoder();
+    const shouldTrackForwardedCodexTerminalState =
+      (deferredFinalizationMeta?.providerType ?? provider.providerType) === "codex";
     const controllableStream = processedStream.pipeThrough(
       new TransformStream<Uint8Array, Uint8Array>({
         start(controller) {
           streamController = controller; // 保存 controller 引用
         },
         transform(chunk, controller) {
+          if (shouldTrackForwardedCodexTerminalState) {
+            forwardedCodexTerminalTracker.push(
+              forwardedCodexTerminalDecoder.decode(chunk, { stream: true })
+            );
+          }
           controller.enqueue(chunk); // 透传数据
+        },
+        flush() {
+          if (shouldTrackForwardedCodexTerminalState) {
+            const flushed = forwardedCodexTerminalDecoder.decode();
+            if (flushed) {
+              forwardedCodexTerminalTracker.push(flushed);
+            }
+          }
         },
       })
     );
@@ -2359,13 +2633,23 @@ export class ProxyResponseHandler {
         clientAborted: boolean,
         abortReason?: string
       ): Promise<void> => {
+        if (shouldTrackForwardedCodexTerminalState) {
+          // Flush any pending multi-byte UTF-8 sequence from the decoder. On normal close,
+          // TransformStream flush() already drains it; on abort, flush() is never called.
+          // TextDecoder.decode() without {stream:true} flushes the internal state — idempotent.
+          const decoderTail = forwardedCodexTerminalDecoder.decode();
+          if (decoderTail) forwardedCodexTerminalTracker.push(decoderTail);
+          forwardedCodexTerminalTracker.finalize();
+        }
+
         const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
           session,
           allContent,
           statusCode,
           streamEndedNormally,
           clientAborted,
-          abortReason
+          abortReason,
+          forwardedCodexTerminalTracker.getTerminalState()
         );
         const effectiveStatusCode = finalized.effectiveStatusCode;
         const streamErrorMessage = finalized.errorMessage;
@@ -2410,9 +2694,15 @@ export class ProxyResponseHandler {
         tracker.endRequest(messageContext.user.id, messageContext.id);
 
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
-        usageForCost = usageResult.usageMetrics;
+        usageForCost =
+          (shouldTrackForwardedCodexTerminalState
+            ? forwardedCodexTerminalTracker.getUsageMetrics()
+            : null) ?? usageResult.usageMetrics;
 
-        const actualServiceTier = parseServiceTierFromResponseText(allContent);
+        const actualServiceTier =
+          (shouldTrackForwardedCodexTerminalState
+            ? forwardedCodexTerminalTracker.getServiceTier()
+            : null) ?? parseServiceTierFromResponseText(allContent);
         const codexPriorityBillingDecision = await resolveCodexPriorityBillingDecision(
           session,
           actualServiceTier
@@ -2433,26 +2723,36 @@ export class ProxyResponseHandler {
         maybeSetCodexContext1m(session, provider, usageForCost?.input_tokens);
 
         // Codex: Extract prompt_cache_key from SSE events and update session binding
-        if (provider.providerType === "codex" && session.sessionId && provider.id) {
+        const codexSessionProviderId = providerIdForPersistence ?? provider.id;
+        if (
+          shouldTrackForwardedCodexTerminalState &&
+          effectiveStatusCode >= 200 &&
+          effectiveStatusCode < 300 &&
+          session.sessionId &&
+          codexSessionProviderId != null
+        ) {
           try {
-            const sseEvents = parseSSEData(allContent);
-            for (const event of sseEvents) {
-              if (typeof event.data === "object" && event.data) {
-                const promptCacheKey = SessionManager.extractCodexPromptCacheKey(
-                  event.data as Record<string, unknown>
-                );
-                if (promptCacheKey) {
-                  void SessionManager.updateSessionWithCodexCacheKey(
-                    session.sessionId,
-                    promptCacheKey,
-                    provider.id,
-                    session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
-                  ).catch((err) => {
-                    logger.error("[ResponseHandler] Failed to update Codex session (stream):", err);
-                  });
-                  break; // Only need first prompt_cache_key
+            let promptCacheKey: string | null = forwardedCodexTerminalTracker.getPromptCacheKey();
+            if (!promptCacheKey) {
+              const sseEvents = parseSSEData(allContent);
+              for (const event of sseEvents) {
+                if (typeof event.data === "object" && event.data) {
+                  const key = SessionManager.extractCodexPromptCacheKey(
+                    event.data as Record<string, unknown>
+                  );
+                  if (key) promptCacheKey = key; // last-event-wins, no break
                 }
               }
+            }
+            if (promptCacheKey) {
+              void SessionManager.updateSessionWithCodexCacheKey(
+                session.sessionId,
+                promptCacheKey,
+                codexSessionProviderId,
+                session.authState?.key?.id ?? session.messageContext?.key?.id ?? null
+              ).catch((err) => {
+                logger.error("[ResponseHandler] Failed to update Codex session (stream):", err);
+              });
             }
           } catch (parseError) {
             logger.trace("[ResponseHandler] Failed to parse SSE for Codex session:", parseError);
