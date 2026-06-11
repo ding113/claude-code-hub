@@ -508,6 +508,9 @@ describe("v1 action compatibility client", () => {
   });
 
   test("surfaces PERMISSION_DENIED when both admin and self key creation are forbidden", async () => {
+    // Drop any persistent implementation a prior test left on postMock so the
+    // two Once-rejections below are the only behaviors in play.
+    postMock.mockReset();
     // Readonly self-service user: admin route 403s, fallback self route also 403s.
     postMock
       .mockRejectedValueOnce(
