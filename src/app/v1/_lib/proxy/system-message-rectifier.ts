@@ -22,11 +22,13 @@ export type SystemMessageRectifierResult = {
   extractedValues: string[];
 };
 
-const NOOP_RESULT: SystemMessageRectifierResult = {
-  applied: false,
-  movedCount: 0,
-  extractedValues: [],
-};
+function createNoopResult(): SystemMessageRectifierResult {
+  return {
+    applied: false,
+    movedCount: 0,
+    extractedValues: [],
+  };
+}
 
 type TextBlock = { type: "text"; text: string; [key: string]: unknown };
 
@@ -65,7 +67,7 @@ export function rectifySystemMessages(
 ): SystemMessageRectifierResult {
   const messages = message.messages;
   if (!Array.isArray(messages)) {
-    return { ...NOOP_RESULT };
+    return createNoopResult();
   }
 
   const extractedBlocks: TextBlock[] = [];
@@ -89,7 +91,7 @@ export function rectifySystemMessages(
   }
 
   if (movedCount === 0) {
-    return { ...NOOP_RESULT };
+    return createNoopResult();
   }
 
   // Mutate in place: replace messages array contents

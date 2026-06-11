@@ -2448,13 +2448,15 @@ export class ProxyForwarder {
         // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
         // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
         if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+          const rectifierSettings = await getCachedSystemSettings();
+
           // System message rectifier: move role:"system" entries from messages array
           // into the top-level system field (Claude Code 2.1.172+ with custom model names).
           // Must run before the billing header rectifier so any billing-header text block
           // carried inside a role:"system" message lands in `system` before stripping.
           {
-            const settings = await getCachedSystemSettings();
-            const systemMessageRectifierEnabled = settings.enableSystemMessageRectifier ?? true;
+            const systemMessageRectifierEnabled =
+              rectifierSettings.enableSystemMessageRectifier ?? true;
             if (systemMessageRectifierEnabled) {
               const systemMessageResult = rectifySystemMessages(
                 session.request.message as Record<string, unknown>
@@ -2479,8 +2481,7 @@ export class ProxyForwarder {
 
           // Billing header rectifier: proactively strip x-anthropic-billing-header from system prompt
           {
-            const settings = await getCachedSystemSettings();
-            const billingRectifierEnabled = settings.enableBillingHeaderRectifier ?? true;
+            const billingRectifierEnabled = rectifierSettings.enableBillingHeaderRectifier ?? true;
             if (billingRectifierEnabled) {
               const billingResult = rectifyBillingHeader(
                 session.request.message as Record<string, unknown>
