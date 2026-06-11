@@ -221,6 +221,7 @@ type StreamingHedgeAttempt = {
   billingSnapshot: {
     originalModel: string | null;
     redirectedModel: string | null;
+    requestedServiceTier: string | null;
     context1mApplied: boolean;
     groupCostMultiplier: number;
   } | null;
@@ -4361,9 +4362,12 @@ export class ProxyForwarder {
         // loser's own billing context FIRST so it is priced against its own model, not the winner's.
         for (const other of attempts) {
           if (other !== attempt && other.session === session && other.billAsLoser) {
+            const loserRequest = session.request.message as Record<string, unknown>;
             other.billingSnapshot = {
               originalModel: session.getOriginalModel(),
               redirectedModel: session.getCurrentModel(),
+              requestedServiceTier:
+                typeof loserRequest.service_tier === "string" ? loserRequest.service_tier : null,
               context1mApplied: session.getContext1mApplied(),
               groupCostMultiplier: session.getGroupCostMultiplier(),
             };

@@ -188,8 +188,11 @@ function ensurePricingResolutionSpecialSetting(
   });
 }
 
-function getRequestedCodexServiceTier(session: ProxySession): string | null {
-  if (session.provider?.providerType !== "codex") {
+function getRequestedCodexServiceTier(
+  session: ProxySession,
+  provider?: Provider | null
+): string | null {
+  if ((provider ?? session.provider)?.providerType !== "codex") {
     return null;
   }
 
@@ -248,13 +251,21 @@ type CodexPriorityBillingDecision = {
 
 async function resolveCodexPriorityBillingDecision(
   session: ProxySession,
-  actualServiceTier: string | null
+  actualServiceTier: string | null,
+  options?: {
+    provider?: Provider | null;
+    requestedServiceTier?: string | null;
+  }
 ): Promise<CodexPriorityBillingDecision | null> {
-  if (session.provider?.providerType !== "codex") {
+  const provider = options?.provider ?? session.provider;
+  if (provider?.providerType !== "codex") {
     return null;
   }
 
-  const requestedServiceTier = getRequestedCodexServiceTier(session);
+  const requestedServiceTier =
+    options?.requestedServiceTier !== undefined
+      ? options.requestedServiceTier
+      : getRequestedCodexServiceTier(session, provider);
   let billingSourcePreference: Awaited<ReturnType<ProxySession["getCodexPriorityBillingSource"]>> =
     "requested";
 
@@ -3817,6 +3828,7 @@ export async function finalizeHedgeLoserBilling(params: {
   billingContext?: {
     originalModel: string | null;
     redirectedModel: string | null;
+    requestedServiceTier: string | null;
     context1mApplied: boolean;
     groupCostMultiplier: number;
   };
@@ -3880,8 +3892,12 @@ export async function finalizeHedgeLoserBilling(params: {
 
     const actualServiceTier = parseServiceTierFromResponseText(allContent);
     const priorityServiceTierApplied =
-      (await resolveCodexPriorityBillingDecision(loserSession, actualServiceTier))
-        ?.effectivePriority ?? false;
+      (
+        await resolveCodexPriorityBillingDecision(loserSession, actualServiceTier, {
+          provider,
+          ...(billingContext ? { requestedServiceTier: billingContext.requestedServiceTier } : {}),
+        })
+      )?.effectivePriority ?? false;
     // Mirror the winner: a Codex loser with a large prompt must trigger the 1M context tier,
     // else it under-bills. Only mutate for shadow-session losers (no snapshot) — the initial
     // loser uses its pre-pollution snapshot and must not mutate the shared/original session.
@@ -3931,7 +3947,12 @@ export async function finalizeHedgeLoserBilling(params: {
       billableUsage,
       priorityServiceTierApplied,
       resolvedPricing,
-      longContextPricing
+      longContextPricing,
+      {
+        provider,
+        context1mApplied,
+        groupCostMultiplier,
+      }
     );
 
     logger.info("[HedgeLoserBilling] Billed hedge loser", {
@@ -4199,6 +4220,12 @@ export async function finalizeRequestStats(
 /**
  * 追踪消费到 Redis（用于限流）
  */
+type TrackCostBillingOverrides = {
+  provider?: Provider | null;
+  context1mApplied?: boolean;
+  groupCostMultiplier?: number;
+};
+
 async function trackCostToRedis(
   session: ProxySession,
   usage: UsageMetrics | null,
@@ -4206,14 +4233,15 @@ async function trackCostToRedis(
   resolvedPricingOverride?: Awaited<
     ReturnType<ProxySession["getResolvedPricingByBillingSource"]>
   > | null,
-  longContextPricingOverride?: ResolvedLongContextPricing | null
+  longContextPricingOverride?: ResolvedLongContextPricing | null,
+  billingOverrides?: TrackCostBillingOverrides
 ): Promise<void> {
   if (!usage || !session.sessionId) return;
   if (isNonBillingUsageEndpoint(session)) return;
 
   try {
     const messageContext = session.messageContext;
-    const provider = session.provider;
+    const provider = billingOverrides?.provider ?? session.provider;
     const key = session.authState?.key;
     const user = session.authState?.user;
 
@@ -4239,10 +4267,10 @@ async function trackCostToRedis(
       resolvedPricing.priceData,
       buildCostCalculationOptions(
         provider.costMultiplier,
-        session.getContext1mApplied(),
+        billingOverrides?.context1mApplied ?? session.getContext1mApplied(),
         priorityServiceTierApplied,
         longContextPricing,
-        session.getGroupCostMultiplier()
+        billingOverrides?.groupCostMultiplier ?? session.getGroupCostMultiplier()
       )
     );
     if (cost.lte(0)) return;
