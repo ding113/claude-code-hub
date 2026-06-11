@@ -27,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { explicitCloseOnlyDialogProps } from "@/lib/utils/dialog";
+import { preventCloseOnOutsideInteraction } from "@/lib/utils/dialog";
 import { parseProviderGroups, resolveProviderGroupsWithDefault } from "@/lib/utils/provider-group";
 import type {
   ProviderDisplay,
@@ -714,7 +714,7 @@ export function ProviderManager({
         onOpenChange={(open) => !open && setEditingProviderId(null)}
       >
         <DialogContent
-          {...explicitCloseOnlyDialogProps}
+          {...preventCloseOnOutsideInteraction}
           className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
         >
           <VisuallyHidden>

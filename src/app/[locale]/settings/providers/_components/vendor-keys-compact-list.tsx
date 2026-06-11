@@ -48,7 +48,7 @@ import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-err
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
-import { explicitCloseOnlyDialogProps } from "@/lib/utils/dialog";
+import { preventCloseOnOutsideInteraction } from "@/lib/utils/dialog";
 import type {
   ProviderDisplay,
   ProviderEndpoint,
@@ -107,7 +107,7 @@ export function VendorKeysCompactList(props: {
               </Button>
             </DialogTrigger>
             <DialogContent
-              {...explicitCloseOnlyDialogProps}
+              {...preventCloseOnOutsideInteraction}
               className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
             >
               <VisuallyHidden>
@@ -508,7 +508,7 @@ function VendorKeyRow(props: {
                   </Button>
                 </DialogTrigger>
                 <DialogContent
-                  {...explicitCloseOnlyDialogProps}
+                  {...preventCloseOnOutsideInteraction}
                   className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
                 >
                   <VisuallyHidden>

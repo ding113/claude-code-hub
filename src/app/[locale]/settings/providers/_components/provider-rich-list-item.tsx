@@ -69,7 +69,7 @@ import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import { explicitCloseOnlyDialogProps } from "@/lib/utils/dialog";
+import { preventCloseOnOutsideInteraction } from "@/lib/utils/dialog";
 import { normalizeProviderGroupTag, parseProviderGroups } from "@/lib/utils/provider-group";
 import type {
   ProviderCircuitHealth,
@@ -1067,7 +1067,7 @@ function ProviderRichListItemInner({
       {/* Edit Dialog */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
         <DialogContent
-          {...explicitCloseOnlyDialogProps}
+          {...preventCloseOnOutsideInteraction}
           className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
         >
           <VisuallyHidden>
@@ -1093,7 +1093,7 @@ function ProviderRichListItemInner({
       {/* Clone Dialog */}
       <Dialog open={openClone} onOpenChange={setOpenClone}>
         <DialogContent
-          {...explicitCloseOnlyDialogProps}
+          {...preventCloseOnOutsideInteraction}
           className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
         >
           <VisuallyHidden>

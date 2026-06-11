@@ -1,25 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import { explicitCloseOnlyDialogProps } from "@/lib/utils/dialog";
+import { preventCloseOnOutsideInteraction } from "@/lib/utils/dialog";
 
-describe("explicitCloseOnlyDialogProps", () => {
+describe("preventCloseOnOutsideInteraction", () => {
   it("prevents the dialog from closing on outside interaction (click-away / window focus loss)", () => {
     const event = { preventDefault: vi.fn() };
-    explicitCloseOnlyDialogProps.onInteractOutside(event as unknown as Event);
+    preventCloseOnOutsideInteraction.onInteractOutside(event as unknown as Event);
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
   });
 
-  it("prevents the dialog from closing on the Escape key", () => {
-    const event = { preventDefault: vi.fn() };
-    explicitCloseOnlyDialogProps.onEscapeKeyDown(event as unknown as KeyboardEvent);
-    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+  it("does NOT intercept the Escape key, so Escape still dismisses the dialog", () => {
+    // Escape closing is intentionally preserved; the helper must not register an
+    // onEscapeKeyDown handler (which would otherwise need preventDefault to block it).
+    expect(preventCloseOnOutsideInteraction).not.toHaveProperty("onEscapeKeyDown");
   });
 
-  it("exposes exactly the two implicit-close handlers and nothing that itself closes the dialog", () => {
-    // The close button / cancel / successful submit still close the dialog via
-    // its own onOpenChange; these props only neutralize the implicit paths.
-    expect(Object.keys(explicitCloseOnlyDialogProps).sort()).toEqual([
-      "onEscapeKeyDown",
-      "onInteractOutside",
-    ]);
+  it("exposes only the outside-interaction guard and nothing that itself closes the dialog", () => {
+    expect(Object.keys(preventCloseOnOutsideInteraction)).toEqual(["onInteractOutside"]);
   });
 });

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { explicitCloseOnlyDialogProps } from "@/lib/utils/dialog";
+import { preventCloseOnOutsideInteraction } from "@/lib/utils/dialog";
 import { ProviderForm } from "./forms/provider-form";
 
 interface AddProviderDialogProps {
@@ -24,7 +24,7 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
         </Button>
       </DialogTrigger>
       <DialogContent
-        {...explicitCloseOnlyDialogProps}
+        {...preventCloseOnOutsideInteraction}
         className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
       >
         <VisuallyHidden>
