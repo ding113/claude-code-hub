@@ -69,7 +69,6 @@ import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import { preventCloseOnOutsideInteraction } from "@/lib/utils/dialog";
 import { normalizeProviderGroupTag, parseProviderGroups } from "@/lib/utils/provider-group";
 import type {
   ProviderCircuitHealth,
@@ -84,6 +83,7 @@ import { InlineEditPopover } from "./inline-edit-popover";
 import { invalidateProviderQueries } from "./invalidate-provider-queries";
 import { PriorityEditPopover } from "./priority-edit-popover";
 import { ProviderEndpointHover } from "./provider-endpoint-hover";
+import { ProviderFormDialogContent } from "./provider-form-dialog-content";
 
 interface ProviderRichListItemProps {
   provider: ProviderDisplay;
@@ -1066,10 +1066,7 @@ function ProviderRichListItemInner({
 
       {/* Edit Dialog */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent
-          {...preventCloseOnOutsideInteraction}
-          className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
-        >
+        <ProviderFormDialogContent className="max-w-6xl">
           <VisuallyHidden>
             <DialogTitle>{t("editProvider")}</DialogTitle>
           </VisuallyHidden>
@@ -1087,15 +1084,12 @@ function ProviderRichListItemInner({
           ) : (
             <DialogFormSkeleton />
           )}
-        </DialogContent>
+        </ProviderFormDialogContent>
       </Dialog>
 
       {/* Clone Dialog */}
       <Dialog open={openClone} onOpenChange={setOpenClone}>
-        <DialogContent
-          {...preventCloseOnOutsideInteraction}
-          className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
-        >
+        <ProviderFormDialogContent className="max-w-6xl">
           <VisuallyHidden>
             <DialogTitle>{t("clone")}</DialogTitle>
           </VisuallyHidden>
@@ -1113,7 +1107,7 @@ function ProviderRichListItemInner({
           ) : (
             <DialogFormSkeleton />
           )}
-        </DialogContent>
+        </ProviderFormDialogContent>
       </Dialog>
 
       {/* API Key 展示 Dialog */}

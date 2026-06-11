@@ -48,7 +48,6 @@ import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-err
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
-import { preventCloseOnOutsideInteraction } from "@/lib/utils/dialog";
 import type {
   ProviderDisplay,
   ProviderEndpoint,
@@ -58,6 +57,7 @@ import type {
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
 import { InlineEditPopover } from "./inline-edit-popover";
+import { ProviderFormDialogContent } from "./provider-form-dialog-content";
 
 function buildDefaultProviderName(input: {
   vendorWebsiteDomain: string;
@@ -106,10 +106,7 @@ export function VendorKeysCompactList(props: {
                 {t("addVendorKey")}
               </Button>
             </DialogTrigger>
-            <DialogContent
-              {...preventCloseOnOutsideInteraction}
-              className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
-            >
+            <ProviderFormDialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl">
               <VisuallyHidden>
                 <DialogTitle>{t("addVendorKey")}</DialogTitle>
               </VisuallyHidden>
@@ -153,7 +150,7 @@ export function VendorKeysCompactList(props: {
                   }}
                 />
               </FormErrorBoundary>
-            </DialogContent>
+            </ProviderFormDialogContent>
           </Dialog>
         ) : null}
       </div>
@@ -507,10 +504,7 @@ function VendorKeyRow(props: {
                     <Edit2 className="h-4 w-4" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent
-                  {...preventCloseOnOutsideInteraction}
-                  className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
-                >
+                <ProviderFormDialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl">
                   <VisuallyHidden>
                     <DialogTitle>{t("editProvider")}</DialogTitle>
                   </VisuallyHidden>
@@ -531,7 +525,7 @@ function VendorKeyRow(props: {
                       }}
                     />
                   </FormErrorBoundary>
-                </DialogContent>
+                </ProviderFormDialogContent>
               </Dialog>
             ) : null}
             {props.canEdit && (

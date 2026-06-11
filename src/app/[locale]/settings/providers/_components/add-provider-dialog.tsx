@@ -5,9 +5,9 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { preventCloseOnOutsideInteraction } from "@/lib/utils/dialog";
+import { Dialog, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProviderForm } from "./forms/provider-form";
+import { ProviderFormDialogContent } from "./provider-form-dialog-content";
 
 interface AddProviderDialogProps {
   enableMultiProviderTypes: boolean;
@@ -23,10 +23,7 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
           <ServerCog className="h-4 w-4" /> {t("addProvider")}
         </Button>
       </DialogTrigger>
-      <DialogContent
-        {...preventCloseOnOutsideInteraction}
-        className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0"
-      >
+      <ProviderFormDialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl">
         <VisuallyHidden>
           <DialogTitle>{t("addProvider")}</DialogTitle>
         </VisuallyHidden>
@@ -39,7 +36,7 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
             }}
           />
         </FormErrorBoundary>
-      </DialogContent>
+      </ProviderFormDialogContent>
     </Dialog>
   );
 }
