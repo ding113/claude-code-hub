@@ -88,6 +88,8 @@
   "UPDATE_KEY_FAILED": "Failed to update key, please try again later",
   "DELETE_KEY_FAILED": "Failed to delete key, please try again later",
   "CANNOT_DISABLE_LAST_KEY": "Cannot disable the last active key. Users must have at least one enabled key",
+  "CANNOT_DELETE_LAST_KEY": "Cannot delete the last enabled key. Users must keep at least one enabled key",
+  "CANNOT_DELETE_LAST_GROUP_KEY": "Cannot delete this key: no provider group would remain. Create another key with a group first or contact an administrator",
   "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT": "Key 5-hour limit ({keyLimit}) cannot exceed user limit ({userLimit})",
   "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT": "Key daily limit ({keyLimit}) cannot exceed user limit ({userLimit})",
   "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT": "Key weekly limit ({keyLimit}) cannot exceed user limit ({userLimit})",

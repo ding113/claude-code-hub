@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { removeKey } from "@/lib/api-client/v1/actions/keys";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 
 interface DeleteKeyConfirmProps {
   keyData?: {
@@ -28,6 +29,7 @@ export function DeleteKeyConfirm({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const t = useTranslations("dashboard.deleteKeyConfirm");
+  const tErrors = useTranslations("errors");
 
   const handleConfirm = () => {
     if (!keyData) return;
@@ -35,7 +37,11 @@ export function DeleteKeyConfirm({
       try {
         const res = await removeKey(keyData.id);
         if (!res.ok) {
-          toast.error(res.error || t("errors.deleteFailed"));
+          // REST 桥接返回的 error 是通用 detail，真实原因在 errorCode 中
+          const message = res.errorCode
+            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+            : res.error || t("errors.deleteFailed");
+          toast.error(message);
           return;
         }
         onSuccess?.();

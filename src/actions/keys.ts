@@ -686,19 +686,33 @@ export async function editKey(
 // 删除密钥
 export async function removeKey(keyId: number): Promise<ActionResult> {
   try {
+    const tError = await getTranslations("errors");
+
     // 权限检查：用户只能删除自己的Key，管理员可以删除所有Key
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: "未登录" };
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
     }
 
     const key = await findKeyById(keyId);
     if (!key) {
-      return { ok: false, error: "密钥不存在" };
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
     }
 
     if (session.user.role !== "admin" && session.user.id !== key.userId) {
-      return { ok: false, error: "无权限执行此操作" };
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     // 只有删除启用的密钥时，才需要检查是否是最后一个启用的密钥
@@ -708,7 +722,8 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       if (activeKeyCount <= 1) {
         return {
           ok: false,
-          error: "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥",
+          error: tError("CANNOT_DELETE_LAST_KEY"),
+          errorCode: ERROR_CODES.CANNOT_DELETE_LAST_KEY,
         };
       }
     }
@@ -731,8 +746,8 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       if (currentGroups.length > 0 && remainingGroups.size === 0) {
         return {
           ok: false,
-          error:
-            "无法删除此密钥：删除后您将没有任何可用的供应商分组。请先创建其他包含分组的密钥，或联系管理员。",
+          error: tError("CANNOT_DELETE_LAST_GROUP_KEY"),
+          errorCode: ERROR_CODES.CANNOT_DELETE_LAST_GROUP_KEY,
         };
       }
     }
@@ -770,7 +785,8 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
     return { ok: true };
   } catch (error) {
     logger.error("删除密钥失败:", error);
-    const message = error instanceof Error ? error.message : "删除密钥失败，请稍后重试";
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("DELETE_KEY_FAILED");
     emitActionAudit({
       category: "key",
       action: "key.delete",
@@ -780,7 +796,7 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       errorMessage: "DELETE_FAILED",
       redactExtraKeys: ["key"],
     });
-    return { ok: false, error: message };
+    return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }
 
