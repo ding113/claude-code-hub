@@ -33,6 +33,9 @@ const providerEndpoints = await vi.importActual<
 const usageLogs = await vi.importActual<typeof import("@/lib/api-client/v1/actions/usage-logs")>(
   "@/lib/api-client/v1/actions/usage-logs"
 );
+const keys = await vi.importActual<typeof import("@/lib/api-client/v1/actions/keys")>(
+  "@/lib/api-client/v1/actions/keys"
+);
 
 describe("v1 action compatibility client", () => {
   beforeEach(() => {
@@ -408,10 +411,83 @@ describe("v1 action compatibility client", () => {
 
     const result = await providers.getProviderGroupsWithCount();
 
+    // errorCode must arrive pre-mapped to an errors-namespace key so forms can
+    // translate it directly (issue #1259: raw "auth.forbidden" rendered as the
+    // literal fallback string "errors.auth.forbidden").
     expect(result).toEqual({
       ok: false,
       error: "Admin access is required.",
-      errorCode: "auth.forbidden",
+      errorCode: "PERMISSION_DENIED",
+      errorParams: undefined,
+    });
+  });
+
+  test("falls back to the self key-creation endpoint for non-admin key creation", async () => {
+    postMock
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 403,
+          errorCode: "auth.forbidden",
+          detail: "Admin access is required.",
+        })
+      )
+      .mockResolvedValueOnce({ id: 77, generatedKey: "sk-new", name: "self-key" });
+
+    const result = await keys.addKey({ userId: 2, name: "self-key", providerGroup: "default" });
+
+    expect(postMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/users/2/keys",
+      { name: "self-key", providerGroup: "default" },
+      undefined
+    );
+    expect(postMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/users:self/keys",
+      { name: "self-key", providerGroup: "default" },
+      undefined
+    );
+    expect(result).toEqual({
+      ok: true,
+      data: { id: 77, generatedKey: "sk-new", name: "self-key" },
+    });
+  });
+
+  test("does not retry key creation for non-authorization failures", async () => {
+    postMock.mockRejectedValue(
+      new ApiError({
+        status: 400,
+        errorCode: "DUPLICATE_NAME",
+        detail: "Key name already exists.",
+      })
+    );
+
+    const result = await keys.addKey({ userId: 2, name: "self-key" });
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: false,
+      error: "Key name already exists.",
+      errorCode: "DUPLICATE_NAME",
+      errorParams: undefined,
+    });
+  });
+
+  test("maps resource action_failed codes to translatable error codes", async () => {
+    getMock.mockRejectedValue(
+      new ApiError({
+        status: 400,
+        errorCode: "key.action_failed",
+        detail: "Bad request",
+      })
+    );
+
+    const result = await keys.getKeys(2);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Bad request",
+      errorCode: "OPERATION_FAILED",
       errorParams: undefined,
     });
   });

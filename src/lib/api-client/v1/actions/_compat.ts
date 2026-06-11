@@ -1,9 +1,12 @@
 "use client";
 
 import { apiClient } from "@/lib/api-client/v1/client";
-import { ApiError } from "@/lib/api-client/v1/errors";
+import { ApiError, getApiErrorMessageKey } from "@/lib/api-client/v1/errors";
 import type { ActionResult } from "./types";
 
+// NOTE(#1259): errorCode is pre-mapped to an errors-namespace key so forms can
+// pass it straight to getErrorMessage(); raw REST codes like "auth.forbidden"
+// have no translation and would render as the literal key path.
 export function toActionResult<T = any>(promise: Promise<T>): Promise<ActionResult<T>> {
   return promise
     .then((data) => ({ ok: true as const, data }) as ActionResult<T>)
@@ -11,7 +14,7 @@ export function toActionResult<T = any>(promise: Promise<T>): Promise<ActionResu
       (error): ActionResult<T> => ({
         ok: false as const,
         error: error instanceof Error ? error.message : "Request failed",
-        errorCode: error instanceof ApiError ? error.errorCode : undefined,
+        errorCode: error instanceof ApiError ? getApiErrorMessageKey(error) : undefined,
         errorParams: error instanceof ApiError ? toActionErrorParams(error.errorParams) : undefined,
       })
     );
@@ -24,7 +27,7 @@ export function toVoidActionResult(promise: Promise<unknown>): Promise<ActionRes
       (error): ActionResult => ({
         ok: false as const,
         error: error instanceof Error ? error.message : "Request failed",
-        errorCode: error instanceof ApiError ? error.errorCode : undefined,
+        errorCode: error instanceof ApiError ? getApiErrorMessageKey(error) : undefined,
         errorParams: error instanceof ApiError ? toActionErrorParams(error.errorParams) : undefined,
       })
     );

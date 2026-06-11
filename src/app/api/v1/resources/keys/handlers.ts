@@ -66,6 +66,45 @@ export async function createUserKey(c: Context): Promise<Response> {
   return createdResponse(result.data, location, { headers: withNoStoreHeaders() });
 }
 
+// NOTE(#1259): self-service write endpoint — the per-user route above is
+// admin-only, so non-admin dashboard users create keys through this route.
+// The target user id always comes from the authenticated session.
+export async function createSelfKey(c: Context): Promise<Response> {
+  const auth = c.get("auth");
+  const sessionUserId = auth?.session?.user?.id;
+  if (!sessionUserId) {
+    return createProblemResponse({
+      status: 401,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "auth.missing",
+      detail: "Authentication is required.",
+    });
+  }
+  // Read-tier auth admits canLoginWebUi=false keys as read-only sessions; a
+  // key write here would let them mint a Web-UI-capable key, so reject them.
+  if (auth?.session?.key?.canLoginWebUi === false) {
+    return createProblemResponse({
+      status: 403,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "auth.forbidden",
+      detail: "Read-only sessions cannot create keys.",
+    });
+  }
+  const body = await parseHonoJsonBody(c, KeyCreateSchema);
+  if (!body.ok) return body.response;
+  const actions = await import("@/actions/keys");
+  const result = await callAction(
+    c,
+    actions.addKey,
+    [{ userId: sessionUserId, ...body.data }] as never[],
+    c.get("auth")
+  );
+  if (!result.ok) return actionError(c, result);
+  const createdKeyId = (result.data as { id?: number }).id;
+  const location = createdKeyId ? `/api/v1/keys/${createdKeyId}` : "/api/v1/users:self/keys";
+  return createdResponse(result.data, location, { headers: withNoStoreHeaders() });
+}
+
 export async function getKey(c: Context): Promise<Response> {
   const params = parseKeyParams(c);
   if (params instanceof Response) return params;
