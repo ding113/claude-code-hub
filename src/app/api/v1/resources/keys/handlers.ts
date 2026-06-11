@@ -81,8 +81,9 @@ export async function createSelfKey(c: Context): Promise<Response> {
     });
   }
   // Read-tier auth admits canLoginWebUi=false keys as read-only sessions; a
-  // key write here would let them mint a Web-UI-capable key, so reject them.
-  if (auth?.session?.key?.canLoginWebUi === false) {
+  // key write here would let them mint a Web-UI-capable key. Deny-by-default
+  // (only an explicit canLoginWebUi=true session may proceed).
+  if (auth?.session?.key?.canLoginWebUi !== true) {
     return createProblemResponse({
       status: 403,
       instance: new URL(c.req.url).pathname,
@@ -93,10 +94,12 @@ export async function createSelfKey(c: Context): Promise<Response> {
   const body = await parseHonoJsonBody(c, KeyCreateSchema);
   if (!body.ok) return body.response;
   const actions = await import("@/actions/keys");
+  // Session user id is spread last so a future schema change can never let the
+  // request body steer the target user.
   const result = await callAction(
     c,
     actions.addKey,
-    [{ userId: sessionUserId, ...body.data }] as never[],
+    [{ ...body.data, userId: sessionUserId }] as never[],
     c.get("auth")
   );
   if (!result.ok) return actionError(c, result);
