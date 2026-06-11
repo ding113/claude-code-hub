@@ -267,6 +267,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
     enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
     enableBillingHeaderRectifier: dbSettings?.enableBillingHeaderRectifier ?? true,
+    enableSystemMessageRectifier: dbSettings?.enableSystemMessageRectifier ?? true,
     enableResponseInputRectifier: dbSettings?.enableResponseInputRectifier ?? true,
     allowNonConversationEndpointProviderFallback:
       dbSettings?.allowNonConversationEndpointProviderFallback ?? true,

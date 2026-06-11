@@ -810,6 +810,13 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // system message 整流器（默认开启）
+  // 开启后：将 messages 数组中的 role:"system" 消息合并到顶层 system 字段，
+  // 避免严格校验的 Anthropic 兼容上游（Vertex/Bedrock 类）返回 400
+  enableSystemMessageRectifier: boolean('enable_system_message_rectifier')
+    .notNull()
+    .default(true),
+
   // Response API input 整流器（默认开启）
   // 开启后：当 /v1/responses 端点收到非数组 input 时，自动规范化为数组格式
   enableResponseInputRectifier: boolean('enable_response_input_rectifier')

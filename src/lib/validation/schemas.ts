@@ -1007,6 +1007,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableThinkingBudgetRectifier: z.boolean().optional(),
   // billing header 整流器（可选）
   enableBillingHeaderRectifier: z.boolean().optional(),
+  // system message 整流器（可选）
+  enableSystemMessageRectifier: z.boolean().optional(),
   // Response API input 整流器（可选）
   enableResponseInputRectifier: z.boolean().optional(),
   // 非对话端点跨供应商 fallback（可选）

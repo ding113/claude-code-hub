@@ -92,6 +92,7 @@ import { ProxyProviderResolver } from "./provider-selector";
 import { finalizeHedgeLoserBilling } from "./response-handler";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
+import { rectifySystemMessages } from "./system-message-rectifier";
 import {
   detectThinkingBudgetRectifierTrigger,
   rectifyThinkingBudget,
@@ -2447,6 +2448,35 @@ export class ProxyForwarder {
         // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
         // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
         if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+          // System message rectifier: move role:"system" entries from messages array
+          // into the top-level system field (Claude Code 2.1.172+ with custom model names).
+          // Must run before the billing header rectifier so any billing-header text block
+          // carried inside a role:"system" message lands in `system` before stripping.
+          {
+            const settings = await getCachedSystemSettings();
+            const systemMessageRectifierEnabled = settings.enableSystemMessageRectifier ?? true;
+            if (systemMessageRectifierEnabled) {
+              const systemMessageResult = rectifySystemMessages(
+                session.request.message as Record<string, unknown>
+              );
+              if (systemMessageResult.applied) {
+                session.addSpecialSetting({
+                  type: "system_message_rectifier",
+                  scope: "request",
+                  hit: true,
+                  movedCount: systemMessageResult.movedCount,
+                  extractedValues: systemMessageResult.extractedValues,
+                });
+                logger.info("ProxyForwarder: System message rectifier applied", {
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  movedCount: systemMessageResult.movedCount,
+                });
+                await persistSpecialSettings(session);
+              }
+            }
+          }
+
           // Billing header rectifier: proactively strip x-anthropic-billing-header from system prompt
           {
             const settings = await getCachedSystemSettings();

@@ -96,6 +96,11 @@ export interface SystemSettings {
   // 防止 Amazon Bedrock 等非原生 Anthropic 上游返回 400 错误
   enableBillingHeaderRectifier: boolean;
 
+  // system message 整流器（默认开启）
+  // 目标：将 messages 数组中的 role:"system" 消息（Claude Code 2.1.172+ 配合自定义模型名注入）
+  // 合并到顶层 system 字段，避免严格校验的 Anthropic 兼容上游（Vertex/Bedrock 类）返回 400 错误
+  enableSystemMessageRectifier: boolean;
+
   // Response API input 整流器（默认开启）
   // 目标：当 /v1/responses 端点收到非数组 input（字符串或单对象）时，
   // 自动规范化为数组格式，确保下游处理兼容 OpenAI 完整规范
@@ -198,6 +203,9 @@ export interface UpdateSystemSettingsInput {
 
   // billing header 整流器（可选）
   enableBillingHeaderRectifier?: boolean;
+
+  // system message 整流器（可选）
+  enableSystemMessageRectifier?: boolean;
 
   // Response API input 整流器（可选）
   enableResponseInputRectifier?: boolean;
