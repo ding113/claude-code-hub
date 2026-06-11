@@ -163,6 +163,7 @@ function createFallbackSettings(): SystemSettings {
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
+    enableThinkingEffortConflictRectifier: true,
     enableBillingHeaderRectifier: true,
     enableResponseInputRectifier: true,
     allowNonConversationEndpointProviderFallback: true,
@@ -218,6 +219,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
@@ -260,6 +262,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
@@ -302,9 +305,33 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
-        // 最新降级：移除最近新增的 billHedgeLosers 列。
+        // 最新降级：移除最近新增的 enableThinkingEffortConflictRectifier 列。
+        const {
+          enableThinkingEffortConflictRectifier: _omitEffortConflict,
+          ...selectionWithoutEffortConflict
+        } = fullSelection;
+
+        try {
+          const [row] = await db
+            .select(selectionWithoutEffortConflict)
+            .from(systemSettings)
+            .orderBy(asc(systemSettings.id))
+            .limit(1);
+          return row ?? null;
+        } catch (effortConflictFallbackError) {
+          if (!isUndefinedColumnError(effortConflictFallbackError)) {
+            throw effortConflictFallbackError;
+          }
+
+          logger.warn(
+            "system_settings 表除 enableThinkingEffortConflictRectifier 外仍有列缺失，继续回退到上一代字段集。",
+            { error: effortConflictFallbackError }
+          );
+        }
+
+        // 次新降级：移除 billHedgeLosers 列。
         const { billHedgeLosers: _omitBillHedgeLosers, ...selectionWithoutBillHedgeLosers } =
-          fullSelection;
+          selectionWithoutEffortConflict;
 
         try {
           const [row] = await db
@@ -580,6 +607,7 @@ export async function updateSystemSettings(
     interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
     enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
     enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+    enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
     enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
     enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
     allowNonConversationEndpointProviderFallback:
@@ -622,6 +650,7 @@ export async function updateSystemSettings(
     interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
     enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
     enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+    enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
     enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
     enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
     enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
@@ -751,6 +780,11 @@ export async function updateSystemSettings(
       updates.enableThinkingBudgetRectifier = payload.enableThinkingBudgetRectifier;
     }
 
+    // thinking effort 冲突整流器开关（如果提供）
+    if (payload.enableThinkingEffortConflictRectifier !== undefined) {
+      updates.enableThinkingEffortConflictRectifier = payload.enableThinkingEffortConflictRectifier;
+    }
+
     // billing header 整流器开关（如果提供）
     if (payload.enableBillingHeaderRectifier !== undefined) {
       updates.enableBillingHeaderRectifier = payload.enableBillingHeaderRectifier;
@@ -846,26 +880,57 @@ export async function updateSystemSettings(
         error,
       });
 
-      // 最新降级：移除最近新增的 billHedgeLosers 列。
-      const { billHedgeLosers: _omitUpdateBillHedgeLosers, ...updatesWithoutBillHedgeLosers } =
-        updates;
-      const { billHedgeLosers: _omitReturningBillHedgeLosers, ...returningWithoutBillHedgeLosers } =
-        fullReturning;
+      // 最新降级：移除最近新增的 enableThinkingEffortConflictRectifier 列。
+      const {
+        enableThinkingEffortConflictRectifier: _omitUpdateEffortConflict,
+        ...updatesWithoutEffortConflict
+      } = updates;
+      const {
+        enableThinkingEffortConflictRectifier: _omitReturningEffortConflict,
+        ...returningWithoutEffortConflict
+      } = fullReturning;
 
       try {
         [updated] = await executor
           .update(systemSettings)
-          .set(updatesWithoutBillHedgeLosers)
+          .set(updatesWithoutEffortConflict)
           .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutBillHedgeLosers);
-      } catch (billHedgeLosersFallbackError) {
-        if (!isUndefinedColumnError(billHedgeLosersFallbackError)) {
-          throw billHedgeLosersFallbackError;
+          .returning(returningWithoutEffortConflict);
+      } catch (effortConflictFallbackError) {
+        if (!isUndefinedColumnError(effortConflictFallbackError)) {
+          throw effortConflictFallbackError;
         }
 
-        logger.warn("system_settings 表除 billHedgeLosers 外仍有列缺失，继续降级更新。", {
-          error: billHedgeLosersFallbackError,
-        });
+        logger.warn(
+          "system_settings 表除 enableThinkingEffortConflictRectifier 外仍有列缺失，继续降级更新。",
+          {
+            error: effortConflictFallbackError,
+          }
+        );
+      }
+
+      // 次新降级：移除 billHedgeLosers 列。
+      const { billHedgeLosers: _omitUpdateBillHedgeLosers, ...updatesWithoutBillHedgeLosers } =
+        updatesWithoutEffortConflict;
+      const { billHedgeLosers: _omitReturningBillHedgeLosers, ...returningWithoutBillHedgeLosers } =
+        returningWithoutEffortConflict;
+
+      if (!updated) {
+        try {
+          [updated] = await executor
+            .update(systemSettings)
+            .set(updatesWithoutBillHedgeLosers)
+            .where(eq(systemSettings.id, current.id))
+            .returning(returningWithoutBillHedgeLosers);
+        } catch (billHedgeLosersFallbackError) {
+          if (!isUndefinedColumnError(billHedgeLosersFallbackError)) {
+            throw billHedgeLosersFallbackError;
+          }
+
+          logger.warn("system_settings 表除 billHedgeLosers 外仍有列缺失，继续降级更新。", {
+            error: billHedgeLosersFallbackError,
+          });
+        }
       }
 
       // 次新降级：移除 billNonSuccessfulRequests 列。
