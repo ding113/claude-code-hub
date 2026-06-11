@@ -167,8 +167,22 @@ function createProvider(): Provider {
   } as Provider;
 }
 
-function createSession(signal: AbortSignal): ProxySession {
+function createSession(
+  signal: AbortSignal,
+  overrides: {
+    providerType?: string;
+    originalFormat?: string;
+    endpoint?: string;
+    model?: string;
+  } = {}
+): ProxySession {
   const provider = createProvider();
+  if (overrides.providerType) {
+    (provider as { providerType: string }).providerType = overrides.providerType;
+  }
+  const originalFormat = overrides.originalFormat ?? "response";
+  const endpoint = overrides.endpoint ?? "/v1/responses";
+  const model = overrides.model ?? "gpt-5.4-mini";
   const user = { id: 1, name: "admin" };
   const key = { id: 2, name: "Omni" };
   const session = Object.create(ProxySession.prototype) as ProxySession;
@@ -190,19 +204,19 @@ function createSession(signal: AbortSignal): ProxySession {
       key,
       apiKey: "sk-test",
     },
-    originalFormat: "response",
-    originalModelName: "gpt-5.4-mini",
-    originalUrlPathname: "/v1/responses",
+    originalFormat,
+    originalModelName: model,
+    originalUrlPathname: endpoint,
     provider,
     providerChain: [],
-    providerType: "codex",
+    providerType: overrides.providerType ?? "codex",
     request: {
       log: "",
-      message: { model: "gpt-5.4-mini", stream: true },
-      model: "gpt-5.4-mini",
+      message: { model, stream: true },
+      model,
     },
     requestSequence: 1,
-    requestUrl: new URL("http://localhost/v1/responses"),
+    requestUrl: new URL(`http://localhost${endpoint}`),
     sessionId: null,
     specialSettings: [],
     startTime: Date.now(),
@@ -214,11 +228,11 @@ function createSession(signal: AbortSignal): ProxySession {
     },
     clearResponseTimeout: vi.fn(),
     getContext1mApplied: () => false,
-    getCurrentModel: () => "gpt-5.4-mini",
-    getEndpoint: () => "/v1/responses",
-    getEndpointPolicy: () => resolveEndpointPolicy("/v1/responses"),
+    getCurrentModel: () => model,
+    getEndpoint: () => endpoint,
+    getEndpointPolicy: () => resolveEndpointPolicy(endpoint),
     getGroupCostMultiplier: () => 1,
-    getOriginalModel: () => "gpt-5.4-mini",
+    getOriginalModel: () => model,
     getProviderChain: () => session.providerChain,
     getResolvedPricingByBillingSource: async () => null,
     getSpecialSettings: () => [],
@@ -353,6 +367,93 @@ function createCompletedThenErroredResponsesSse(): Response {
   });
 }
 
+// U01: Anthropic streams carry usage in the FIRST `message_start` event, so a
+// truncated mid-stream abort already has positive billable tokens. Without a
+// completion marker it must NOT be reclassified as a 200 success.
+function createTruncatedClaudeSse(): Response {
+  const encoder = new TextEncoder();
+  // pull-based so the enqueued chunks are actually delivered to the internal
+  // (tee'd) branch before the error surfaces — a synchronous enqueue+error in
+  // start() would drop them and the body would read as empty.
+  const chunks = [
+    `event: message_start\ndata: ${JSON.stringify({
+      type: "message_start",
+      message: {
+        id: "msg_test",
+        model: "claude-x",
+        usage: { input_tokens: 463, output_tokens: 1 },
+      },
+    })}\n\n`,
+    `event: content_block_delta\ndata: ${JSON.stringify({
+      type: "content_block_delta",
+      delta: { type: "text_delta", text: "部分" },
+    })}\n\n`,
+  ];
+  let index = 0;
+
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(encoder.encode(chunks[index++]));
+        return;
+      }
+      // Truncated mid-stream: no message_delta, no terminal message_stop.
+      const error = new Error("Response transmission interrupted");
+      error.name = "ResponseAborted";
+      controller.error(error);
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+// A genuinely complete Claude stream (terminal `message_stop`) whose socket is
+// then dropped by the already-departed client must still bill as success.
+function createCompletedThenAbortedClaudeSse(): Response {
+  const encoder = new TextEncoder();
+  const chunks = [
+    `event: message_start\ndata: ${JSON.stringify({
+      type: "message_start",
+      message: {
+        id: "msg_test",
+        model: "claude-x",
+        usage: { input_tokens: 463, output_tokens: 1 },
+      },
+    })}\n\n`,
+    `event: content_block_delta\ndata: ${JSON.stringify({
+      type: "content_block_delta",
+      delta: { type: "text_delta", text: "完整" },
+    })}\n\n`,
+    `event: message_delta\ndata: ${JSON.stringify({
+      type: "message_delta",
+      delta: { stop_reason: "end_turn" },
+      usage: { output_tokens: 11 },
+    })}\n\n`,
+    `event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`,
+  ];
+  let index = 0;
+
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(encoder.encode(chunks[index++]));
+        return;
+      }
+      const error = new Error("Response transmission interrupted after message_stop");
+      error.name = "ResponseAborted";
+      controller.error(error);
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 async function drainAsyncTasks(): Promise<void> {
   while (asyncTasks.length > 0) {
     const tasks = asyncTasks.splice(0, asyncTasks.length);
@@ -462,6 +563,81 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect.objectContaining({
         statusCode: 499,
         errorMessage: "CLIENT_ABORTED",
+      })
+    );
+  });
+
+  it("keeps a truncated client-aborted Claude stream as 499 despite message_start usage (U01)", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const session = createSession(controller.signal, {
+      providerType: "anthropic",
+      originalFormat: "claude",
+      endpoint: "/v1/messages",
+      model: "claude-x",
+    });
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createTruncatedClaudeSse());
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 499,
+        errorMessage: "CLIENT_ABORTED",
+      })
+    );
+    // Must NOT have been recorded as a billed 200 success.
+    const calls = (updateMessageRequestDetails as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls;
+    const recorded = calls.find((c) => (c[0] as number) === 123)?.[1] as
+      | { statusCode?: number }
+      | undefined;
+    expect(recorded?.statusCode).not.toBe(200);
+  });
+
+  it("bills a complete-then-aborted Claude stream as success on the message_stop marker (U01)", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const session = createSession(controller.signal, {
+      providerType: "anthropic",
+      originalFormat: "claude",
+      endpoint: "/v1/messages",
+      model: "claude-x",
+    });
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createCompletedThenAbortedClaudeSse());
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 463,
       })
     );
   });

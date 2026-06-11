@@ -413,6 +413,28 @@ function hasPositiveBillableTokens(usage: UsageMetrics | null): boolean {
   return tokens > 0;
 }
 
+const FINISH_REASON_MARKER = /"finish_reason"\s*:\s*"[a-z_]+"/;
+const GEMINI_FINISH_REASON_MARKER = /"finishReason"\s*:\s*"[A-Z_]+"/;
+
+/**
+ * 判断流式响应文本中是否存在“与格式匹配的终止完成标记”，用以区分
+ * “上游已完整结束（仅客户端先断开）”与“流被客户端中断而截断”。
+ *
+ * 仅 usage>0 不足以证明完成：Anthropic 在首个 `message_start` 即带 usage、
+ * Gemini 在中间事件即带 usageMetadata，截断流同样会出现正向 token。
+ */
+function hasStreamCompletionMarker(text: string): boolean {
+  if (
+    text.includes("response.completed") || // OpenAI Responses / Codex
+    text.includes("message_stop") || // Anthropic Messages
+    text.includes("[DONE]") // OpenAI Chat Completions
+  ) {
+    return true;
+  }
+  // OpenAI chat / Gemini：非空 finish reason 标记最终块。
+  return FINISH_REASON_MARKER.test(text) || GEMINI_FINISH_REASON_MARKER.test(text);
+}
+
 export async function resolveBillableUsageMetricsForCost(
   session: ProxySession,
   provider: Provider | null,
@@ -583,6 +605,17 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
     const abortDetected = detectUpstreamErrorFromSseOrJsonText(allContent);
     if (abortDetected.isError) {
+      return false;
+    }
+
+    // U01: positive usage alone is NOT proof the stream completed — Anthropic
+    // emits usage in the FIRST `message_start` event and Gemini in intermediate
+    // `usageMetadata`, so a stream truncated by the client abort still shows
+    // tokens. Only reclassify as a success when a format-appropriate terminal
+    // completion marker is present, proving the upstream finished before the
+    // client stopped reading. Otherwise keep the pre-PR safe default (499,
+    // unbilled).
+    if (!hasStreamCompletionMarker(allContent)) {
       return false;
     }
 
