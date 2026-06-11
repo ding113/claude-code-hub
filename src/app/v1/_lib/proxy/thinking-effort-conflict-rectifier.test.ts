@@ -76,6 +76,34 @@ describe("rectifyThinkingEffortConflict", () => {
     expect(message.thinking).toEqual({ type: "disabled" });
   });
 
+  test("strips only effort and preserves sibling keys in output_config", () => {
+    const message: Record<string, unknown> = {
+      thinking: { type: "disabled" },
+      output_config: { effort: "max", verbosity: "high", future_flag: true },
+      messages: [],
+    };
+
+    const result = rectifyThinkingEffortConflict(message);
+
+    expect(result.applied).toBe(true);
+    expect(result.removedOutputConfig).toBe(true);
+    expect(result.effort).toBe("max");
+    // Sibling fields must survive; only the conflicting effort carrier is removed.
+    expect(message.output_config).toEqual({ verbosity: "high", future_flag: true });
+  });
+
+  test("drops output_config entirely when effort was its only key", () => {
+    const message: Record<string, unknown> = {
+      thinking: { type: "disabled" },
+      output_config: { effort: "max" },
+      messages: [],
+    };
+
+    rectifyThinkingEffortConflict(message);
+
+    expect("output_config" in message).toBe(false);
+  });
+
   test("removes a top-level reasoning_effort passthrough as well", () => {
     const message: Record<string, unknown> = {
       thinking: { type: "disabled" },

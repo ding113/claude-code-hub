@@ -94,7 +94,13 @@ export function rectifyThinkingEffortConflict(
 
   if (outputConfigEffort !== undefined) {
     result.effort = typeof outputConfigEffort === "string" ? outputConfigEffort : null;
-    delete message.output_config;
+    // 仅剥离冲突的 effort 字段，保留 output_config 中的其他配置；若剥离后为空对象则整体移除。
+    const { effort: _removedEffort, ...restOutputConfig } = outputConfig as Record<string, unknown>;
+    if (Object.keys(restOutputConfig).length > 0) {
+      message.output_config = restOutputConfig;
+    } else {
+      delete message.output_config;
+    }
     result.removedOutputConfig = true;
     result.applied = true;
   }

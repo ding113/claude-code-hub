@@ -201,6 +201,9 @@ export interface UpdateSystemSettingsInput {
   // thinking budget 整流器（可选）
   enableThinkingBudgetRectifier?: boolean;
 
+  // thinking effort 冲突整流器（可选）
+  enableThinkingEffortConflictRectifier?: boolean;
+
   // billing header 整流器（可选）
   enableBillingHeaderRectifier?: boolean;
 
