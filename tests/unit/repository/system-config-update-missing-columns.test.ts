@@ -334,11 +334,16 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
 
     const result = await getSystemSettings();
 
-    // 降级读取成功（未抛错），且缺失的新列经 transformer 默认开启。
+    // 降级读取成功（未抛错）。
     expect(selectMock).toHaveBeenCalledTimes(2);
     expect(result.siteTitle).toBe("Claude Code Hub");
     expect(result.enableHttp2).toBe(true);
-    expect(result.enableThinkingEffortConflictRectifier).toBe(true);
+
+    // 关键回归保护：第二次 select 必须恰好剥离了新列（最外层降级），
+    // 而非旧行为先剥离 billHedgeLosers。若新列未加入降级链最外层，下面两条断言会失败。
+    const secondSelection = selectMock.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect(secondSelection).not.toHaveProperty("enableThinkingEffortConflictRectifier");
+    expect(secondSelection).toHaveProperty("billHedgeLosers");
 
     vi.useRealTimers();
   });
