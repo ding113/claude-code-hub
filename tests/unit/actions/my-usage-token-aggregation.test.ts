@@ -193,9 +193,8 @@ describe("my-usage token aggregation", () => {
     const res = await getMyStatsSummary({ startDate: "2024-01-01", endDate: "2024-01-01" });
     expect(res.ok).toBe(true);
 
-    expect(capturedSelections).toHaveLength(1);
+    expect(capturedSelections).toHaveLength(2);
 
-    const selection = capturedSelections[0];
     const tokenFields = [
       "userInputTokens",
       "userOutputTokens",
@@ -211,8 +210,10 @@ describe("my-usage token aggregation", () => {
       "keyCacheCreation1hTokens",
     ];
 
-    for (const field of tokenFields) {
-      expectNoIntTokenSum(selection, field);
+    for (const selection of capturedSelections) {
+      for (const field of tokenFields) {
+        expectNoIntTokenSum(selection, field);
+      }
     }
   });
 });
