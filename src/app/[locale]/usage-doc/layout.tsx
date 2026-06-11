@@ -44,6 +44,12 @@ export default async function UsageDocLayout({
     getUsageTranslations(locale),
   ]);
 
+  // U06: read-only sessions (canLoginWebUi=false) can open the docs but cannot
+  // use the dashboard, so the "Back to Dashboard" quick link would dead-end at
+  // the login form. Gate it on the same predicate as DashboardHeader.
+  const canUseDashboard =
+    !!session && (session.user?.role === "admin" || session.key?.canLoginWebUi);
+
   return (
     <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">
       {/* 条件渲染头部：已登录显示 DashboardHeader，未登录显示简化版头部 */}
@@ -68,7 +74,7 @@ export default async function UsageDocLayout({
       )}
 
       <main className="mx-auto w-full max-w-7xl px-6 py-8">
-        <UsageDocAuthProvider isLoggedIn={!!session}>{children}</UsageDocAuthProvider>
+        <UsageDocAuthProvider isLoggedIn={canUseDashboard}>{children}</UsageDocAuthProvider>
       </main>
     </div>
   );

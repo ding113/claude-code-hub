@@ -121,7 +121,19 @@ describe("usage-doc auth state - HttpOnly cookie alignment", () => {
       "utf8"
     );
     expect(srcContent).toContain("UsageDocAuthProvider");
-    expect(srcContent).toContain("isLoggedIn={!!session}");
+    expect(srcContent).toContain("isLoggedIn={canUseDashboard}");
     expect(srcContent).toContain("getSession({ allowReadOnlyAccess: true })");
+  });
+
+  test("layout gates dashboard access on canLoginWebUi for read-only sessions (U06)", async () => {
+    const srcContent = fs.readFileSync(
+      path.join(process.cwd(), "src", "app", "[locale]", "usage-doc", "layout.tsx"),
+      "utf8"
+    );
+    // The provider's isLoggedIn must be derived from a dashboard-access predicate
+    // (admin OR canLoginWebUi), not from mere session presence, otherwise a
+    // read-only session gets a "Back to Dashboard" link that dead-ends at /login.
+    expect(srcContent).toContain("canUseDashboard");
+    expect(srcContent).toContain("canLoginWebUi");
   });
 });
