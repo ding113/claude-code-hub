@@ -368,11 +368,17 @@ export async function updateRequestFilterAction(
     const effectiveOperations =
       updates.operations !== undefined ? updates.operations : existing!.operations;
 
+    // U05: validate against the EFFECTIVE post-update name/target so an
+    // advanced->simple conversion that supplies a fresh target is not rejected
+    // by the stale empty target stored on the advanced filter.
+    const effectiveName = updates.name ?? existing!.name;
+    const effectiveTarget = updates.target !== undefined ? updates.target : existing!.target;
+
     const validationError = validatePayload({
-      name: existing!.name,
+      name: effectiveName,
       scope: existing!.scope,
       action: existing!.action,
-      target: existing!.target,
+      target: effectiveTarget,
       bindingType: effectiveBindingType,
       providerIds: effectiveProviderIds,
       groupTags: effectiveGroupTags,
