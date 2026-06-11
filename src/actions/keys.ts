@@ -189,6 +189,10 @@ export async function addKey(data: {
       return {
         ok: false,
         error: `名为"${validatedData.name}"的密钥已存在且正在生效中，请使用不同的名称`,
+        // U04: carry a machine-readable code so the self-service REST route can
+        // surface the specific reason instead of a generic OPERATION_FAILED.
+        errorCode: ERROR_CODES.DUPLICATE_NAME,
+        errorParams: { name: validatedData.name },
       };
     }
 
@@ -206,6 +210,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limit5hUsd),
           userLimit: String(user.limit5hUsd),
         }),
+        errorCode: "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limit5hUsd),
+          userLimit: String(user.limit5hUsd),
+        },
       };
     }
 
@@ -222,6 +231,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitDailyUsd),
           userLimit: String(user.dailyQuota),
         }),
+        errorCode: "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitDailyUsd),
+          userLimit: String(user.dailyQuota),
+        },
       };
     }
 
@@ -238,6 +252,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitWeeklyUsd),
           userLimit: String(user.limitWeeklyUsd),
         }),
+        errorCode: "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitWeeklyUsd),
+          userLimit: String(user.limitWeeklyUsd),
+        },
       };
     }
 
@@ -254,6 +273,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitMonthlyUsd),
           userLimit: String(user.limitMonthlyUsd),
         }),
+        errorCode: "KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitMonthlyUsd),
+          userLimit: String(user.limitMonthlyUsd),
+        },
       };
     }
 
@@ -270,6 +294,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitTotalUsd),
           userLimit: String(user.limitTotalUsd),
         }),
+        errorCode: "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitTotalUsd),
+          userLimit: String(user.limitTotalUsd),
+        },
       };
     }
 
@@ -286,6 +315,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitConcurrentSessions),
           userLimit: String(user.limitConcurrentSessions),
         }),
+        errorCode: "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitConcurrentSessions),
+          userLimit: String(user.limitConcurrentSessions),
+        },
       };
     }
 
