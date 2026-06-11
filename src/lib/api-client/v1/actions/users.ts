@@ -1,6 +1,6 @@
 import type { BatchUpdateUsersParams, GetUsersBatchParams } from "@/actions/users";
 import { DASHBOARD_COMPAT_HEADER } from "@/lib/api/v1/_shared/constants";
-import { ApiError } from "@/lib/api-client/v1/errors";
+import { isAdminForbidden } from "@/lib/api-client/v1/errors";
 import type { UserDisplay } from "@/types/user";
 import {
   apiDelete,
@@ -182,8 +182,4 @@ function toUserListQuery(params?: GetUsersBatchParams): string {
     sortBy: params?.sortBy,
     sortOrder: params?.sortOrder,
   });
-}
-
-function isAdminForbidden(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 403 && error.errorCode === "auth.forbidden";
 }
