@@ -13,7 +13,7 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -42,6 +42,7 @@ import {
   ProviderBatchToolbar,
 } from "./batch-edit";
 import { ProviderForm } from "./forms/provider-form";
+import { ProviderFormDialogContent } from "./provider-form-dialog-content";
 import { ProviderGroupTab } from "./provider-group-tab";
 import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
@@ -712,7 +713,7 @@ export function ProviderManager({
         open={editingProvider != null}
         onOpenChange={(open) => !open && setEditingProviderId(null)}
       >
-        <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
+        <ProviderFormDialogContent className="max-w-6xl">
           <VisuallyHidden>
             <DialogTitle>{tStrings("editProvider")}</DialogTitle>
           </VisuallyHidden>
@@ -726,7 +727,7 @@ export function ProviderManager({
               }}
             />
           ) : null}
-        </DialogContent>
+        </ProviderFormDialogContent>
       </Dialog>
     </div>
   );
