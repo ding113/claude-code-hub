@@ -560,6 +560,24 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   const detected = shouldDetectFake200
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
+  const clientAbortCompleteSuccess = (() => {
+    if (
+      streamEndedNormally ||
+      !clientAborted ||
+      upstreamStatusCode < 200 ||
+      upstreamStatusCode >= 300
+    ) {
+      return false;
+    }
+
+    const abortDetected = detectUpstreamErrorFromSseOrJsonText(allContent);
+    if (abortDetected.isError) {
+      return false;
+    }
+
+    const { usageMetrics } = parseUsageFromResponseText(allContent, provider?.providerType);
+    return hasPositiveBillableTokens(usageMetrics);
+  })();
 
   // “内部结算用”的状态码（不会改变客户端实际 HTTP 状态码）。
   // - 假 200：优先映射为“推断得到的 4xx/5xx”（未命中则回退 502），确保内部统计/熔断/会话绑定把它当作失败。
@@ -578,6 +596,9 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       effectiveStatusCode = 502;
     }
     errorMessage = detected.detail ? `${detected.code}: ${detected.detail}` : detected.code;
+  } else if (clientAbortCompleteSuccess) {
+    effectiveStatusCode = upstreamStatusCode;
+    errorMessage = null;
   } else if (!streamEndedNormally) {
     effectiveStatusCode = clientAborted ? 499 : 502;
     errorMessage = clientAborted ? "CLIENT_ABORTED" : (abortReason ?? "STREAM_ABORTED");
@@ -596,7 +617,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   }
 
   const shouldClearSessionBindingOnFailure =
-    !streamEndedNormally ||
+    (!streamEndedNormally && !clientAbortCompleteSuccess) ||
     detected.isError ||
     (upstreamStatusCode >= 400 && errorMessage !== null);
 
@@ -659,7 +680,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   // 同时，为了让故障转移/熔断能正确工作：
   // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
-  if (!streamEndedNormally) {
+  if (!streamEndedNormally && !clientAbortCompleteSuccess) {
     await clearSessionBinding();
 
     if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
@@ -2246,28 +2267,53 @@ export class ProxyResponseHandler {
     // 使用 AsyncTaskManager 管理后台处理任务
     const taskId = `stream-${messageContext?.id || `unknown-${Date.now()}`}`;
     const abortController = new AbortController();
+    const idleTimeoutMs =
+      provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
+    const clientAbortDrainTimeoutMs = idleTimeoutMs === Infinity ? 60_000 : idleTimeoutMs;
 
     // ⭐ 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;
+    let clientAbortDrainTimeoutId: NodeJS.Timeout | null = null;
+    const clearClientAbortDrainTimer = () => {
+      if (clientAbortDrainTimeoutId) {
+        clearTimeout(clientAbortDrainTimeoutId);
+        clientAbortDrainTimeoutId = null;
+      }
+    };
     const cleanupClientAbortListener = bindClientAbortListener(session.clientAbortSignal, () => {
       logger.debug("ResponseHandler: Client disconnected, cleaning up", {
         taskId,
         providerId: provider.id,
         messageId: messageContext.id,
       });
-
-      // 客户端断开时清除 idle timeout，避免任务已取消后仍误触发。
-      if (idleTimeoutId) {
-        clearTimeout(idleTimeoutId);
-        idleTimeoutId = null;
-        logger.debug("ResponseHandler: Idle timeout cleared due to client disconnect", {
+      // Do not cancel internal accounting on pure client disconnect. If the
+      // upstream stream has already completed, the tee'd internal branch can
+      // still drain buffered final usage and record the request as successful.
+      // Idle/response timeout paths still abort via abortController.
+      clearClientAbortDrainTimer();
+      clientAbortDrainTimeoutId = setTimeout(() => {
+        logger.info("ResponseHandler: Client abort drain window exceeded", {
           taskId,
           providerId: provider.id,
+          messageId: messageContext.id,
+          clientAbortDrainTimeoutMs,
         });
-      }
 
-      AsyncTaskManager.cancel(taskId);
-      abortController.abort();
+        try {
+          const sessionWithController = session as typeof session & {
+            responseController?: AbortController;
+          };
+          sessionWithController.responseController?.abort(new Error("client_abort_drain_timeout"));
+        } catch (e) {
+          logger.warn("ResponseHandler: Failed to abort upstream after client drain timeout", {
+            taskId,
+            providerId: provider.id,
+            error: e,
+          });
+        }
+
+        abortController.abort(new Error("client_abort_drain_timeout"));
+      }, clientAbortDrainTimeoutMs);
     });
 
     const processingPromise = (async () => {
@@ -2280,9 +2326,6 @@ export class ProxyResponseHandler {
       let usageForCost: UsageMetrics | null = null;
       let isFirstChunk = true; // ⭐ 标记是否为第一块数据
 
-      // ⭐ 静默期 Watchdog：监控流式请求中途卡住（无新数据推送）
-      const idleTimeoutMs =
-        provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
       const startIdleTimer = () => {
         if (idleTimeoutMs === Infinity) return; // 禁用时跳过
         clearIdleTimer(); // 清除旧的
@@ -2655,7 +2698,7 @@ export class ProxyResponseHandler {
         let streamEndedNormally = false;
         while (true) {
           // 检查取消信号
-          if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
+          if (abortController.signal.aborted) {
             logger.info("ResponseHandler: Stream processing cancelled", {
               taskId,
               providerId: provider.id,
@@ -2933,6 +2976,7 @@ export class ProxyResponseHandler {
       } finally {
         // 确保资源释放
         cleanupClientAbortListener();
+        clearClientAbortDrainTimer();
         clearIdleTimer(); // ⭐ 清除静默期计时器（防止泄漏）
         try {
           reader.releaseLock();
