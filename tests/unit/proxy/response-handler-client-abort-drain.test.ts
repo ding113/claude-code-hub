@@ -776,7 +776,58 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       );
       clientController.abort();
 
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(upstreamController.signal.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      const tasks = asyncTasks.splice(0, asyncTasks.length);
+      await Promise.allSettled(tasks);
+
+      expect(upstreamController.signal.aborted).toBe(true);
+      expect(AsyncTaskManager.cancel).not.toHaveBeenCalled();
+      expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+        123,
+        expect.objectContaining({
+          statusCode: 499,
+          errorMessage: "CLIENT_ABORTED",
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves an existing idle deadline when the client aborts after a chunk", async () => {
+    vi.useFakeTimers();
+    try {
+      const clientController = new AbortController();
+      const upstreamController = new AbortController();
+      const session = createSession(clientController.signal);
+      session.provider.streamingIdleTimeoutMs = 5_000;
+      Object.assign(session, { responseController: upstreamController });
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "avemujica-responses",
+        providerPriority: 1,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.invalid/v1",
+        upstreamStatusCode: 200,
+      });
+
+      await ProxyResponseHandler.dispatch(
+        session,
+        createHangingResponsesSse(upstreamController.signal)
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(upstreamController.signal.aborted).toBe(false);
+
+      clientController.abort();
+      await vi.advanceTimersByTimeAsync(1);
       const tasks = asyncTasks.splice(0, asyncTasks.length);
       await Promise.allSettled(tasks);
 

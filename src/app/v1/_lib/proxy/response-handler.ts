@@ -2302,7 +2302,7 @@ export class ProxyResponseHandler {
       }
     }
 
-    // ⭐ 使用 TransformStream 包装流，以便在 idle timeout 时能关闭客户端流
+    // 使用 TransformStream 包装流，以便在 idle timeout 时能关闭客户端流
     // 这解决了 tee() 后 internalStream abort 不影响 clientStream 的问题
     let streamController: TransformStreamDefaultController<Uint8Array> | null = null;
     const controllableStream = processedStream.pipeThrough(
@@ -2326,7 +2326,7 @@ export class ProxyResponseHandler {
       provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
     const clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
 
-    // ⭐ 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
+    // 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;
     let clientAbortDrainTimeoutId: NodeJS.Timeout | null = null;
     const chunks: string[] = [];
@@ -2353,7 +2353,7 @@ export class ProxyResponseHandler {
           chunksCollected: chunks.length,
         });
 
-        // ⭐ 1. 关闭客户端流（让客户端收到连接关闭通知，避免悬挂）
+        // 1. 关闭客户端流（让客户端收到连接关闭通知，避免悬挂）
         try {
           if (streamController) {
             streamController.error(new Error("Streaming idle timeout"));
@@ -2370,7 +2370,7 @@ export class ProxyResponseHandler {
           });
         }
 
-        // ⭐ 2. 终止上游连接（避免资源泄漏）
+        // 2. 终止上游连接（避免资源泄漏）
         try {
           const sessionWithController = session as typeof session & {
             responseController?: AbortController;
@@ -2390,7 +2390,7 @@ export class ProxyResponseHandler {
           });
         }
 
-        // ⭐ 3. 终止后台读取任务
+        // 3. 终止后台读取任务
         abortController.abort(new Error("streaming_idle"));
       }, idleTimeoutMs);
     };
@@ -2405,7 +2405,9 @@ export class ProxyResponseHandler {
       // still drain buffered final usage and record the request as successful.
       // Idle/response timeout paths still abort via abortController.
       clearClientAbortDrainTimer();
-      startIdleTimer();
+      if (!idleTimeoutId) {
+        startIdleTimer();
+      }
       clientAbortDrainTimeoutId = setTimeout(() => {
         logger.info("ResponseHandler: Client abort drain window exceeded", {
           taskId,
@@ -2438,9 +2440,9 @@ export class ProxyResponseHandler {
       // - 用于解析 usage/cost 与内部结算（例如“假 200”检测）
       // 因此该开关仅影响“是否持久化”，不用于控制流式内存占用。
       let usageForCost: UsageMetrics | null = null;
-      let isFirstChunk = true; // ⭐ 标记是否为第一块数据
+      let isFirstChunk = true; // 标记是否为第一块数据
 
-      // ⭐ 不在首次读取前启动 idle timer（避免与首字节超时职责重叠）
+      // 不在首次读取前启动 idle timer（避免与首字节超时职责重叠）
       // idle timer 仅在首块数据到达后启动，用于检测流中途静默。
       // 客户端断开后例外：后台 drain 也会启动 idle timer，避免 pre-body
       // 静默一直等到 60s drain 总上限。
@@ -2772,7 +2774,7 @@ export class ProxyResponseHandler {
             const chunkSize = value.length;
             chunks.push(decoder.decode(value, { stream: true }));
 
-            // ⭐ 每次收到数据后重置静默期计时器（首次收到数据时启动）
+            // 每次收到数据后重置静默期计时器（首次收到数据时启动）
             startIdleTimer();
             logger.trace("ResponseHandler: Idle timer reset (data received)", {
               taskId,
@@ -2782,7 +2784,7 @@ export class ProxyResponseHandler {
               idleTimeoutMs: idleTimeoutMs === Infinity ? "disabled" : idleTimeoutMs,
             });
 
-            // ⭐ 流式：读到第一块数据后立即清除响应超时定时器
+            // 流式：读到第一块数据后立即清除响应超时定时器
             if (isFirstChunk) {
               session.recordTtfb();
               isFirstChunk = false;
@@ -2801,7 +2803,7 @@ export class ProxyResponseHandler {
           }
         }
 
-        // ⭐ 流式读取完成：清除静默期计时器
+        // 流式读取完成：清除静默期计时器
         clearIdleTimer();
         const allContent = flushAndJoin();
         const clientAborted = session.clientAbortSignal?.aborted ?? false;
@@ -3032,7 +3034,7 @@ export class ProxyResponseHandler {
         // 确保资源释放
         cleanupClientAbortListener();
         clearClientAbortDrainTimer();
-        clearIdleTimer(); // ⭐ 清除静默期计时器（防止泄漏）
+        clearIdleTimer(); // 清除静默期计时器（防止泄漏）
         try {
           reader.releaseLock();
         } catch (releaseError) {
