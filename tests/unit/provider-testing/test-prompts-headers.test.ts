@@ -40,3 +40,19 @@ describe("provider-testing getTestHeaders — Anthropic auth header selection", 
     expect(headers.Authorization).toBeUndefined();
   });
 });
+
+describe("provider-testing getTestHeaders — Gemini auth header selection", () => {
+  it("sends x-goog-api-key by default for gemini", () => {
+    const headers = getTestHeaders("gemini", "AIza-test", "https://gemini.example.com");
+    expect(headers["x-goog-api-key"]).toBe("AIza-test");
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it("sends Bearer-only when geminiBearerAuth is set (JSON credentials)", () => {
+    const headers = getTestHeaders("gemini-cli", "ya29.token", "https://gemini.example.com", {
+      geminiBearerAuth: true,
+    });
+    expect(headers.Authorization).toBe("Bearer ya29.token");
+    expect(headers["x-goog-api-key"]).toBeUndefined();
+  });
+});

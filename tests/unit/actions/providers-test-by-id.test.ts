@@ -80,10 +80,13 @@ vi.mock("@/lib/proxy-agent", () => ({
   isValidProxyUrl: vi.fn(() => true),
 }));
 
+const geminiGetAccessTokenMock = vi.fn(async (apiKey: string) => apiKey);
+const geminiIsJsonMock = vi.fn(() => false);
+
 vi.mock("@/app/v1/_lib/gemini/auth", () => ({
   GeminiAuth: {
-    getAccessToken: vi.fn(async (apiKey: string) => apiKey),
-    isJson: vi.fn(() => false),
+    getAccessToken: geminiGetAccessTokenMock,
+    isJson: geminiIsJsonMock,
   },
 }));
 
@@ -136,6 +139,8 @@ describe("testProviderById", () => {
     getPresetsForProviderMock.mockReturnValue([]);
     findProviderByIdMock.mockResolvedValue(buildProvider());
     executeProviderTestMock.mockResolvedValue(GREEN_RESULT);
+    geminiGetAccessTokenMock.mockImplementation(async (apiKey: string) => apiKey);
+    geminiIsJsonMock.mockReturnValue(false);
   });
 
   test("非 admin 会话应返回未授权且不执行测试", async () => {
@@ -227,6 +232,34 @@ describe("testProviderById", () => {
 
     const config = executeProviderTestMock.mock.calls[0]?.[0];
     expect(config?.timeoutMs).toBe(60000);
+  });
+
+  test("gemini JSON 凭证转换为 access token 并使用 Bearer 认证", async () => {
+    const jsonKey = JSON.stringify({ type: "authorized_user", access_token: "ya29.token" });
+    findProviderByIdMock.mockResolvedValue(
+      buildProvider({ providerType: "gemini-cli", key: jsonKey })
+    );
+    geminiGetAccessTokenMock.mockResolvedValue("ya29.token");
+    geminiIsJsonMock.mockReturnValue(true);
+
+    const { testProviderById } = await import("@/actions/providers");
+    const result = await testProviderById(7);
+
+    expect(result.ok).toBe(true);
+    expect(geminiGetAccessTokenMock).toHaveBeenCalledWith(jsonKey);
+    const config = executeProviderTestMock.mock.calls[0]?.[0];
+    expect(config?.apiKey).toBe("ya29.token");
+    expect(config?.geminiBearerAuth).toBe(true);
+  });
+
+  test("非 gemini 类型不做凭证预处理", async () => {
+    const { testProviderById } = await import("@/actions/providers");
+    await testProviderById(7);
+
+    expect(geminiGetAccessTokenMock).not.toHaveBeenCalled();
+    const config = executeProviderTestMock.mock.calls[0]?.[0];
+    expect(config?.apiKey).toBe("sk-stored-secret");
+    expect(config?.geminiBearerAuth).toBeUndefined();
   });
 
   test("executeProviderTest 抛错时返回失败结果", async () => {

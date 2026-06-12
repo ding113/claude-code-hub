@@ -4815,17 +4815,31 @@ export async function testProviderById(
 
   const isGeminiType = provider.providerType === "gemini" || provider.providerType === "gemini-cli";
 
+  // JSON credentials must be exchanged for an access token and sent as a
+  // Bearer header, mirroring the dedicated Gemini test/model-fetch flows
+  let apiKey = provider.key;
+  let geminiBearerAuth = false;
+  if (isGeminiType) {
+    try {
+      apiKey = await GeminiAuth.getAccessToken(provider.key);
+      geminiBearerAuth = GeminiAuth.isJson(provider.key);
+    } catch (error) {
+      logger.warn("testProviderById: gemini auth preprocess failed", { error, providerId });
+    }
+  }
+
   try {
     const config: ProviderTestConfig = {
       providerId: String(provider.id),
       providerUrl: provider.url,
-      apiKey: provider.key,
+      apiKey,
       providerType: provider.providerType,
       model: args?.model?.trim() || undefined,
       proxyUrl: provider.proxyUrl ?? undefined,
       proxyFallbackToDirect: provider.proxyFallbackToDirect,
       customHeaders: provider.customHeaders ?? undefined,
       timeoutMs: isGeminiType ? BY_ID_TEST_GEMINI_TIMEOUT_MS : BY_ID_TEST_TIMEOUT_MS,
+      geminiBearerAuth: geminiBearerAuth || undefined,
     };
 
     const result = await executeProviderTest(config);

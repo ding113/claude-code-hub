@@ -77,15 +77,18 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
   const targets = useMemo(() => providers.slice(0, BATCH_TEST_MAX_PROVIDERS), [providers]);
   const overLimit = providers.length > BATCH_TEST_MAX_PROVIDERS;
 
-  // Reset transient state whenever the dialog is reopened
+  // Reset transient state whenever the dialog is reopened; stop launching
+  // new tests once it is closed so quota is not consumed in the background
   useEffect(() => {
     if (open) {
       reset();
       setResultFilter("all");
       setTogglingIds(new Set());
       setEnabledOverrides(new Map());
+    } else {
+      cancel();
     }
-  }, [open, reset]);
+  }, [open, reset, cancel]);
 
   const suggestionsQuery = useQuery({
     queryKey: ["provider-model-suggestions", "batch-test"],
@@ -139,6 +142,8 @@ export function BatchTestDialog({ open, onOpenChange, providers }: BatchTestDial
   );
 
   const handleStart = useCallback(() => {
+    // Back to "all" so the fresh pending rows stay visible under an old filter
+    setResultFilter("all");
     void run(
       targets.map((provider) => provider.id),
       model
