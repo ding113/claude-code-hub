@@ -37,6 +37,7 @@ import {
   ProviderModelSuggestionsQuerySchema,
   ProviderProxyTestSchema,
   type ProviderSummaryResponse,
+  ProviderTestByIdSchema,
   ProviderTypeQuerySchema,
   ProviderUndoBodySchema,
   ProviderUnifiedTestSchema,
@@ -425,6 +426,28 @@ export async function testProviderUnified(c: Context): Promise<Response> {
     c,
     isDashboardCompatRequest(c) ? InternalProviderUnifiedTestSchema : ProviderUnifiedTestSchema,
     "testProviderUnified"
+  );
+}
+
+export async function testProviderById(c: Context): Promise<Response> {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) {
+    return createProblemResponse({
+      status: 400,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "request.validation_failed",
+      detail: "Provider id is invalid.",
+    });
+  }
+  const body = await parseJson(c, ProviderTestByIdSchema);
+  if (body instanceof Response) return body;
+  const existing = await findVisibleProvider(c, id);
+  if (existing instanceof Response) return existing;
+  if (!existing) return providerNotFound(c);
+  const providerActions = await import("@/actions/providers");
+  return actionJson(
+    c,
+    await callAction(c, providerActions.testProviderById, [id, body] as never[], c.get("auth"))
   );
 }
 

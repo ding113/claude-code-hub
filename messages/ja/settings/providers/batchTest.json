@@ -1,0 +1,57 @@
+{
+  "title": "プロバイダーの一括テスト",
+  "description": "{count} 件のプロバイダーをテストします。",
+  "overLimit": "上限を超えています。今回は先頭の {max} 件のみテストします。",
+  "model": {
+    "label": "テストモデル",
+    "placeholder": "空欄の場合はタイプ別のデフォルトを使用",
+    "hint": "指定したモデルは選択中のすべてのプロバイダーに適用されます。空欄の場合はプロバイダータイプごとのデフォルトテストモデルを使用します。"
+  },
+  "start": "テスト開始",
+  "retest": "再テスト",
+  "cancelRemaining": "残りをキャンセル",
+  "close": "閉じる",
+  "summary": {
+    "progress": "{done}/{total}",
+    "green": "利用可能 {count}",
+    "yellow": "不安定 {count}",
+    "failed": "失敗 {count}"
+  },
+  "filter": {
+    "all": "すべて",
+    "green": "利用可能",
+    "yellow": "不安定",
+    "failed": "失敗"
+  },
+  "table": {
+    "provider": "プロバイダー",
+    "group": "グループ",
+    "status": "ステータス",
+    "latency": "レイテンシ",
+    "message": "メッセージ",
+    "enabled": "有効",
+    "empty": "該当する結果がありません"
+  },
+  "status": {
+    "pending": "待機中",
+    "testing": "テスト中",
+    "green": "利用可能",
+    "yellow": "不安定",
+    "red": "利用不可",
+    "error": "リクエスト失敗",
+    "canceled": "キャンセル済み"
+  },
+  "bulk": {
+    "disableFailed": "失敗をすべて無効化 ({count})",
+    "enableGreen": "利用可能をすべて有効化 ({count})"
+  },
+  "toast": {
+    "toggleFailed": "ステータスの切り替えに失敗しました: {error}",
+    "bulkFailed": "一括操作に失敗しました: {error}",
+    "bulkApplied": "{count} 件のプロバイダーを更新しました",
+    "undo": "元に戻す",
+    "undoSuccess": "{count} 件のプロバイダーを復元しました",
+    "undoFailed": "元に戻せませんでした: {error}",
+    "unknownError": "不明なエラー"
+  }
+}

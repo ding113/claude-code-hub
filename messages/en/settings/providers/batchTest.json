@@ -1,0 +1,57 @@
+{
+  "title": "Batch test providers",
+  "description": "{count} providers will be tested.",
+  "overLimit": "Selection exceeds the limit; only the first {max} will be tested.",
+  "model": {
+    "label": "Test model",
+    "placeholder": "Leave empty to use type defaults",
+    "hint": "The model is applied to every selected provider. Leave empty to use the default test model for each provider type."
+  },
+  "start": "Start test",
+  "retest": "Test again",
+  "cancelRemaining": "Cancel remaining",
+  "close": "Close",
+  "summary": {
+    "progress": "{done}/{total}",
+    "green": "Available {count}",
+    "yellow": "Degraded {count}",
+    "failed": "Failed {count}"
+  },
+  "filter": {
+    "all": "All",
+    "green": "Available",
+    "yellow": "Degraded",
+    "failed": "Failed"
+  },
+  "table": {
+    "provider": "Provider",
+    "group": "Group",
+    "status": "Status",
+    "latency": "Latency",
+    "message": "Message",
+    "enabled": "Enabled",
+    "empty": "No matching results"
+  },
+  "status": {
+    "pending": "Pending",
+    "testing": "Testing",
+    "green": "Available",
+    "yellow": "Degraded",
+    "red": "Unavailable",
+    "error": "Request failed",
+    "canceled": "Canceled"
+  },
+  "bulk": {
+    "disableFailed": "Disable all failed ({count})",
+    "enableGreen": "Enable all available ({count})"
+  },
+  "toast": {
+    "toggleFailed": "Failed to toggle status: {error}",
+    "bulkFailed": "Bulk operation failed: {error}",
+    "bulkApplied": "Updated {count} providers",
+    "undo": "Undo",
+    "undoSuccess": "Restored {count} providers",
+    "undoFailed": "Undo failed: {error}",
+    "unknownError": "Unknown error"
+  }
+}

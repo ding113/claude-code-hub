@@ -41,6 +41,7 @@ import {
   ProviderBatchDialog,
   ProviderBatchToolbar,
 } from "./batch-edit";
+import { BatchTestDialog } from "./batch-test";
 import { ProviderForm } from "./forms/provider-form";
 import { ProviderFormDialogContent } from "./provider-form-dialog-content";
 import { ProviderGroupTab } from "./provider-group-tab";
@@ -109,6 +110,7 @@ export function ProviderManager({
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<number>>(new Set());
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [batchActionMode, setBatchActionMode] = useState<BatchActionMode>(null);
+  const [batchTestOpen, setBatchTestOpen] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
 
   // Helper: check if a provider has any circuit open (key-level or endpoint-level)
@@ -310,9 +312,19 @@ export function ProviderManager({
   }, []);
 
   const handleBatchAction = useCallback((mode: BatchActionMode) => {
+    if (mode === "test") {
+      setBatchTestOpen(true);
+      return;
+    }
     setBatchActionMode(mode);
     setBatchDialogOpen(true);
   }, []);
+
+  // 批量测试基于全量列表取已选项：筛选条件变化不会丢失已勾选的供应商
+  const selectedProviders = useMemo(
+    () => providers.filter((p) => selectedProviderIds.has(p.id)),
+    [providers, selectedProviderIds]
+  );
 
   const handleSelectByType = useCallback(
     (type: ProviderType) => {
@@ -707,6 +719,12 @@ export function ProviderManager({
         selectedProviderIds={selectedProviderIds}
         providers={filteredProviders}
         onSuccess={handleBatchSuccess}
+      />
+
+      <BatchTestDialog
+        open={batchTestOpen}
+        onOpenChange={setBatchTestOpen}
+        providers={selectedProviders}
       />
 
       <Dialog

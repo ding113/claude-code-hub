@@ -15,6 +15,7 @@ import strings from "./strings.json";
 
 import providersAutoSort from "./providers/autoSort.json";
 import providersBatchEdit from "./providers/batchEdit.json";
+import providersBatchTest from "./providers/batchTest.json";
 import providersDispatchSimulator from "./providers/dispatchSimulator.json";
 import providersFilter from "./providers/filter.json";
 import providersGuide from "./providers/guide.json";
@@ -84,6 +85,7 @@ const providers = {
   ...providersStrings,
   autoSort: providersAutoSort,
   batchEdit: providersBatchEdit,
+  batchTest: providersBatchTest,
   dispatchSimulator: providersDispatchSimulator,
   filter: providersFilter,
   form: providersForm,

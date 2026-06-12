@@ -2,6 +2,7 @@
   "selectedCount": "已選擇 {count} 個",
   "actions": {
     "edit": "編輯",
+    "test": "測試",
     "resetCircuit": "重設熔斷器",
     "delete": "刪除"
   },

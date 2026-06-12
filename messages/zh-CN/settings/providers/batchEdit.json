@@ -2,6 +2,7 @@
   "selectedCount": "已选择 {count} 个",
   "actions": {
     "edit": "编辑",
+    "test": "测试",
     "resetCircuit": "重置熔断器",
     "delete": "删除"
   },

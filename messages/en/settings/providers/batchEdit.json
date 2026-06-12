@@ -2,6 +2,7 @@
   "selectedCount": "{count} selected",
   "actions": {
     "edit": "Edit",
+    "test": "Test",
     "resetCircuit": "Reset Circuit",
     "delete": "Delete"
   },

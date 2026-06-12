@@ -1,12 +1,12 @@
 "use client";
 
-import { Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { FlaskConical, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-export type BatchActionMode = "edit" | "delete" | "resetCircuit" | null;
+export type BatchActionMode = "edit" | "delete" | "resetCircuit" | "test" | null;
 
 export interface ProviderBatchActionsProps {
   selectedCount: number;
@@ -45,6 +45,11 @@ export function ProviderBatchActions({
         <Button size="sm" onClick={() => onAction("edit")}>
           <Pencil className="mr-2 h-4 w-4" />
           {t("actions.edit")}
+        </Button>
+
+        <Button size="sm" variant="outline" onClick={() => onAction("test")}>
+          <FlaskConical className="mr-2 h-4 w-4" />
+          {t("actions.test")}
         </Button>
 
         <Button size="sm" variant="outline" onClick={() => onAction("resetCircuit")}>

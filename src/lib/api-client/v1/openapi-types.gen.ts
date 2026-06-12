@@ -504,6 +504,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/providers/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run provider test by id
+         * @description Runs the unified relay-style provider API test against a stored provider using its saved credentials and proxy configuration.
+         */
+        post: operations["postProvidersByIdTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/providers/test:anthropic-messages": {
         parameters: {
             query?: never;
@@ -2418,6 +2438,26 @@ export interface paths {
          * @description Resets user limit counters without deleting logs.
          */
         post: operations["postUsersByIdLimitsReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/limits:reset-weekly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset user weekly cost limit
+         * @description Resets the user weekly limit counter without deleting logs or total usage.
+         */
+        post: operations["postUsersByIdLimitsResetWeekly"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4398,6 +4438,8 @@ export interface operations {
                             cacheTtlPreference: string | null;
                             /** @description Whether cache TTL billing swap is enabled. */
                             swapCacheTtlBilling: boolean;
+                            /** @description For openai-compatible providers: convert inbound Anthropic /v1/messages to OpenAI chat/completions. */
+                            convertAnthropicToOpenai: boolean;
                             /** @description 1M context preference. */
                             context1mPreference: string | null;
                             /** @description Codex reasoning effort. */
@@ -4641,6 +4683,8 @@ export interface operations {
                     preserve_client_ip?: boolean;
                     /** @description Whether sticky session reuse is disabled. */
                     disable_session_reuse?: boolean;
+                    /** @description Whether sensitive-word protection is enabled for this provider. */
+                    sensitive_words_enabled?: boolean;
                     /** @description Model redirect rules. */
                     model_redirects?: unknown[] | null;
                     /** @description Scheduled active start time. */
@@ -4720,6 +4764,8 @@ export interface operations {
                     cache_ttl_preference?: string;
                     /** @description Whether cache TTL billing swap is enabled. */
                     swap_cache_ttl_billing?: boolean;
+                    /** @description For openai-compatible providers: convert inbound Anthropic /v1/messages to OpenAI chat/completions. */
+                    convert_anthropic_to_openai?: boolean;
                     /** @description 1M context preference. */
                     context_1m_preference?: string | null;
                     /** @description Codex reasoning effort. */
@@ -4732,6 +4778,8 @@ export interface operations {
                     codex_parallel_tool_calls_preference?: string;
                     /** @description Codex service tier preference. */
                     codex_service_tier_preference?: string;
+                    /** @description Whether Codex Responses WebSocket transport is enabled. */
+                    codex_websocket_enabled?: boolean;
                     /** @description Anthropic max tokens preference. */
                     anthropic_max_tokens_preference?: string;
                     /** @description Anthropic thinking budget preference. */
@@ -4853,6 +4901,8 @@ export interface operations {
                         cacheTtlPreference: string | null;
                         /** @description Whether cache TTL billing swap is enabled. */
                         swapCacheTtlBilling: boolean;
+                        /** @description For openai-compatible providers: convert inbound Anthropic /v1/messages to OpenAI chat/completions. */
+                        convertAnthropicToOpenai: boolean;
                         /** @description 1M context preference. */
                         context1mPreference: string | null;
                         /** @description Codex reasoning effort. */
@@ -5170,6 +5220,8 @@ export interface operations {
                         cacheTtlPreference: string | null;
                         /** @description Whether cache TTL billing swap is enabled. */
                         swapCacheTtlBilling: boolean;
+                        /** @description For openai-compatible providers: convert inbound Anthropic /v1/messages to OpenAI chat/completions. */
+                        convertAnthropicToOpenai: boolean;
                         /** @description 1M context preference. */
                         context1mPreference: string | null;
                         /** @description Codex reasoning effort. */
@@ -5588,6 +5640,8 @@ export interface operations {
                     preserve_client_ip?: boolean;
                     /** @description Whether sticky session reuse is disabled. */
                     disable_session_reuse?: boolean;
+                    /** @description Whether sensitive-word protection is enabled for this provider. */
+                    sensitive_words_enabled?: boolean;
                     /** @description Model redirect rules. */
                     model_redirects?: unknown[] | null;
                     /** @description Scheduled active start time. */
@@ -5667,6 +5721,8 @@ export interface operations {
                     cache_ttl_preference?: string;
                     /** @description Whether cache TTL billing swap is enabled. */
                     swap_cache_ttl_billing?: boolean;
+                    /** @description For openai-compatible providers: convert inbound Anthropic /v1/messages to OpenAI chat/completions. */
+                    convert_anthropic_to_openai?: boolean;
                     /** @description 1M context preference. */
                     context_1m_preference?: string | null;
                     /** @description Codex reasoning effort. */
@@ -5679,6 +5735,8 @@ export interface operations {
                     codex_parallel_tool_calls_preference?: string;
                     /** @description Codex service tier preference. */
                     codex_service_tier_preference?: string;
+                    /** @description Whether Codex Responses WebSocket transport is enabled. */
+                    codex_websocket_enabled?: boolean;
                     /** @description Anthropic max tokens preference. */
                     anthropic_max_tokens_preference?: string;
                     /** @description Anthropic thinking budget preference. */
@@ -5806,6 +5864,8 @@ export interface operations {
                         cacheTtlPreference: string | null;
                         /** @description Whether cache TTL billing swap is enabled. */
                         swapCacheTtlBilling: boolean;
+                        /** @description For openai-compatible providers: convert inbound Anthropic /v1/messages to OpenAI chat/completions. */
+                        convertAnthropicToOpenai: boolean;
                         /** @description 1M context preference. */
                         context1mPreference: string | null;
                         /** @description Codex reasoning effort. */
@@ -8971,6 +9031,189 @@ export interface operations {
                     customHeaders?: {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+        responses: {
+            /** @description Unified test result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Provider not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postProvidersByIdTest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description Provider id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Optional model override. */
+                    model?: string;
                 };
             };
         };
@@ -18134,7 +18377,7 @@ export interface operations {
                             /** @description API call count. */
                             api_calls: number;
                             /** @description Total cost. */
-                            total_cost: string | number | unknown;
+                            total_cost: string | number | unknown | unknown;
                         }[];
                     };
                 };
@@ -27985,6 +28228,11 @@ export interface operations {
                     dailyResetMode?: "fixed" | "rolling";
                     /** @description Daily reset time in HH:mm. */
                     dailyResetTime?: string;
+                    /**
+                     * @description Weekly reset mode.
+                     * @enum {string}
+                     */
+                    weeklyResetMode?: "fixed" | "anchored";
                     /** @description Whether the user is enabled. */
                     isEnabled?: boolean;
                     /**
@@ -30094,6 +30342,11 @@ export interface operations {
                         dailyResetMode: "fixed" | "rolling";
                         /** @description Daily reset time in HH:mm. */
                         dailyResetTime: string;
+                        /**
+                         * @description Weekly reset mode.
+                         * @enum {string}
+                         */
+                        weeklyResetMode?: "fixed" | "anchored";
                         /** @description Whether the user can authenticate. */
                         isEnabled: boolean;
                         /**
@@ -30632,6 +30885,11 @@ export interface operations {
                     dailyResetMode?: "fixed" | "rolling";
                     /** @description Daily reset time in HH:mm. */
                     dailyResetTime?: string;
+                    /**
+                     * @description Weekly reset mode.
+                     * @enum {string}
+                     */
+                    weeklyResetMode?: "fixed" | "anchored";
                     /** @description Whether the user is enabled. */
                     isEnabled?: boolean;
                     /**
@@ -31967,6 +32225,252 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description User limits reset. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Admin access required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description User not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Internal server error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /** @description Stable problem type URI or URN. */
+                        type: string;
+                        /** @description Short problem title. */
+                        title: string;
+                        /** @description HTTP status code. */
+                        status: number;
+                        /** @description Human-readable error detail. */
+                        detail: string;
+                        /** @description Request path that produced the problem. */
+                        instance: string;
+                        /** @description Application error code for frontend i18n. */
+                        errorCode: string;
+                        /** @description Optional i18n parameters. */
+                        errorParams?: {
+                            [key: string]: unknown;
+                        };
+                        /** @description Optional request trace identifier. */
+                        traceId?: string;
+                        /** @description Validation failure details. */
+                        invalidParams?: {
+                            /** @description Path to the invalid input field. */
+                            path: (string | number)[];
+                            /** @description Machine-readable validation error code. */
+                            code: string;
+                            /** @description Validation error message. */
+                            message: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    postUsersByIdLimitsResetWeekly: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required only when authenticating with the auth-token cookie on mutation requests. */
+                "X-CCH-CSRF"?: string;
+            };
+            path: {
+                /** @description User id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User weekly limit reset. */
             204: {
                 headers: {
                     [name: string]: unknown;
