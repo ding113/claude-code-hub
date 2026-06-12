@@ -132,6 +132,9 @@ export const SystemSettingsSchema = z
     enableBillingHeaderRectifier: z
       .boolean()
       .describe("Whether billing-header rectifier is enabled."),
+    enableSystemMessageRectifier: z
+      .boolean()
+      .describe("Whether system message rectifier is enabled."),
     enableResponseInputRectifier: z
       .boolean()
       .describe("Whether Responses API input rectifier is enabled."),

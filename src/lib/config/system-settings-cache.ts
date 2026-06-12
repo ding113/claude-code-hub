@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS: Pick<
   | "enableThinkingBudgetRectifier"
   | "enableThinkingEffortConflictRectifier"
   | "enableBillingHeaderRectifier"
+  | "enableSystemMessageRectifier"
   | "enableResponseInputRectifier"
   | "allowNonConversationEndpointProviderFallback"
   | "fakeStreamingWhitelist"
@@ -63,6 +64,7 @@ const DEFAULT_SETTINGS: Pick<
   enableThinkingBudgetRectifier: true,
   enableThinkingEffortConflictRectifier: true,
   enableBillingHeaderRectifier: true,
+  enableSystemMessageRectifier: true,
   enableResponseInputRectifier: true,
   // 安全敏感开关：冷缓存 / DB 读取失败时 fail-closed，避免意外重新开启跨供应商 raw fallback。
   allowNonConversationEndpointProviderFallback: false,
@@ -152,6 +154,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,
       enableThinkingEffortConflictRectifier: DEFAULT_SETTINGS.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: DEFAULT_SETTINGS.enableBillingHeaderRectifier,
+      enableSystemMessageRectifier: DEFAULT_SETTINGS.enableSystemMessageRectifier,
       enableResponseInputRectifier: DEFAULT_SETTINGS.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
         DEFAULT_SETTINGS.allowNonConversationEndpointProviderFallback,

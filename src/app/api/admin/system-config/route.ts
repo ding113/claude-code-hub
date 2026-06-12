@@ -77,6 +77,7 @@ export async function POST(req: Request) {
       enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
+      enableSystemMessageRectifier: validated.enableSystemMessageRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,

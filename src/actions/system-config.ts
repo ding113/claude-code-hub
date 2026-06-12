@@ -75,6 +75,7 @@ export async function saveSystemSettings(formData: {
   enableThinkingBudgetRectifier?: boolean;
   enableThinkingEffortConflictRectifier?: boolean;
   enableBillingHeaderRectifier?: boolean;
+  enableSystemMessageRectifier?: boolean;
   enableResponseInputRectifier?: boolean;
   allowNonConversationEndpointProviderFallback?: boolean;
   fakeStreamingWhitelist?: FakeStreamingWhitelistEntry[];
@@ -128,6 +129,7 @@ export async function saveSystemSettings(formData: {
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,
       enableThinkingEffortConflictRectifier: validated.enableThinkingEffortConflictRectifier,
       enableBillingHeaderRectifier: validated.enableBillingHeaderRectifier,
+      enableSystemMessageRectifier: validated.enableSystemMessageRectifier,
       enableResponseInputRectifier: validated.enableResponseInputRectifier,
       allowNonConversationEndpointProviderFallback:
         validated.allowNonConversationEndpointProviderFallback,

@@ -13,6 +13,7 @@ export type SpecialSetting =
   | ThinkingBudgetRectifierSpecialSetting
   | ThinkingEffortConflictRectifierSpecialSetting
   | BillingHeaderRectifierSpecialSetting
+  | SystemMessageRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
   | ClaudeMetadataUserIdInjectionSpecialSetting
   | AnthropicEffortSpecialSetting
@@ -213,6 +214,22 @@ export type BillingHeaderRectifierSpecialSetting = {
   scope: "request";
   hit: boolean;
   removedCount: number;
+  extractedValues: string[];
+};
+
+/**
+ * System message 整流器审计
+ *
+ * 用于记录：当请求 messages 数组中包含 role:"system" 消息时
+ * （Claude Code 2.1.172+ 配合自定义模型名会注入），
+ * 系统将其内容合并到顶层 system 字段的行为，
+ * 避免严格校验的 Anthropic 兼容上游（Vertex/Bedrock 类）返回 400。
+ */
+export type SystemMessageRectifierSpecialSetting = {
+  type: "system_message_rectifier";
+  scope: "request";
+  hit: boolean;
+  movedCount: number;
   extractedValues: string[];
 };
 

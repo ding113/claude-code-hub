@@ -70,6 +70,8 @@
     "enableThinkingEffortConflictRectifierDesc": "Если Anthropic-совместимый провайдер (например, DeepSeek или MiMo) возвращает ошибку 400 из-за сочетания отключённого thinking и reasoning_effort, автоматически удаляет поля effort (output_config/reasoning_effort) и повторяет запрос к тому же провайдеру один раз (включено по умолчанию).",
     "enableBillingHeaderRectifier": "Включить исправление billing-заголовка",
     "enableBillingHeaderRectifierDesc": "Проактивно удаляет текстовые блоки x-anthropic-billing-header, добавленные клиентом Claude Code в системный промпт, предотвращая ошибки 400 от Amazon Bedrock и других не-Anthropic провайдеров (включено по умолчанию).",
+    "enableSystemMessageRectifier": "Включить исправление system-сообщений",
+    "enableSystemMessageRectifierDesc": "Переносит сообщения role:\"system\" из массива messages (добавляются Claude Code 2.1.172+ при использовании пользовательских имён моделей) в поле system верхнего уровня, предотвращая ошибки 400 от строгих Anthropic-совместимых провайдеров, таких как Vertex/Bedrock (включено по умолчанию).",
     "enableResponseInputRectifier": "Включить исправление Response Input",
     "enableResponseInputRectifierDesc": "Автоматически нормализует не-массивные input (строковые сокращения или одиночные объекты сообщений с role/type) в запросах /v1/responses в стандартный формат массива перед обработкой (включено по умолчанию).",
     "allowNonConversationEndpointProviderFallback": "Разрешить cross-provider fallback для не-диалоговых endpoint",

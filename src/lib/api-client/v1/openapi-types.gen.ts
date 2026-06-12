@@ -11679,6 +11679,8 @@ export interface operations {
                         enableThinkingEffortConflictRectifier: boolean;
                         /** @description Whether billing-header rectifier is enabled. */
                         enableBillingHeaderRectifier: boolean;
+                        /** @description Whether system message rectifier is enabled. */
+                        enableSystemMessageRectifier: boolean;
                         /** @description Whether Responses API input rectifier is enabled. */
                         enableResponseInputRectifier: boolean;
                         /** @description Whether non-conversation endpoints may fall back across providers. */
@@ -11939,6 +11941,8 @@ export interface operations {
                     enableThinkingEffortConflictRectifier?: boolean;
                     /** @description Whether billing-header rectifier is enabled. */
                     enableBillingHeaderRectifier?: boolean;
+                    /** @description Whether system message rectifier is enabled. */
+                    enableSystemMessageRectifier?: boolean;
                     /** @description Whether Responses API input rectifier is enabled. */
                     enableResponseInputRectifier?: boolean;
                     /** @description Whether non-conversation endpoints may fall back across providers. */
@@ -12072,6 +12076,8 @@ export interface operations {
                         enableThinkingEffortConflictRectifier: boolean;
                         /** @description Whether billing-header rectifier is enabled. */
                         enableBillingHeaderRectifier: boolean;
+                        /** @description Whether system message rectifier is enabled. */
+                        enableSystemMessageRectifier: boolean;
                         /** @description Whether Responses API input rectifier is enabled. */
                         enableResponseInputRectifier: boolean;
                         /** @description Whether non-conversation endpoints may fall back across providers. */

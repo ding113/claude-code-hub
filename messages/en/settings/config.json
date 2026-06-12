@@ -70,6 +70,8 @@
     "enableThinkingEffortConflictRectifierDesc": "When Anthropic-compatible providers (such as DeepSeek or MiMo) return 400 errors because disabled thinking conflicts with reasoning_effort, automatically strips the effort fields (output_config/reasoning_effort) and retries once against the same provider (enabled by default).",
     "enableBillingHeaderRectifier": "Enable Billing Header Rectifier",
     "enableBillingHeaderRectifierDesc": "Proactively removes x-anthropic-billing-header text blocks injected by Claude Code client into the system prompt, preventing Amazon Bedrock and other non-native Anthropic upstreams from returning 400 errors (enabled by default).",
+    "enableSystemMessageRectifier": "Enable System Message Rectifier",
+    "enableSystemMessageRectifierDesc": "Merges role:\"system\" entries in the messages array (injected by Claude Code 2.1.172+ when using custom model names) into the top-level system field, preventing strict Anthropic-compatible upstreams such as Vertex/Bedrock from returning 400 errors (enabled by default).",
     "enableResponseInputRectifier": "Enable Response Input Rectifier",
     "enableResponseInputRectifierDesc": "Automatically normalizes non-array input (string shortcut or single message object) in /v1/responses requests to standard array format before processing (enabled by default).",
     "allowNonConversationEndpointProviderFallback": "Allow cross-provider fallback for non-conversation endpoints",
