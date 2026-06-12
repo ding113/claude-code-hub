@@ -25,6 +25,8 @@ class KeywordRoutingRuleCache {
   private rules: KeywordRoutingRule[] = [];
   private lastReloadTime = 0;
   private isLoading = false;
+  private activeReloadPromise: Promise<void> | null = null; // 合并并发 reload
+  private reloadRequestedWhileLoading = false; // reload 期间收到的补跑请求
 
   private eventEmitterCleanup: (() => void) | null = null;
   private redisPubSubCleanup: (() => void) | null = null;
@@ -78,30 +80,58 @@ class KeywordRoutingRuleCache {
 
   /**
    * 从数据库重新加载关键词路由规则
+   *
+   * 并发语义（与 RequestFilterEngine 保持一致）：
+   * - 已有 reload 在途时不丢弃本次请求，而是排队补跑一轮，
+   *   避免“管理端已保存规则但缓存永远没刷新”的丢更新窗口
+   *   （缓存无 TTL，失效完全依赖事件，丢一次就丢到下次重启）。
+   * - queue=false 时直接复用在途 reload，供“事件已触发 reload 后再显式调用”的
+   *   场景避免对同一次写入做两次冗余 DB 读。
    */
-  async reload(): Promise<void> {
-    if (this.isLoading) {
-      logger.warn("[KeywordRoutingRuleCache] Reload already in progress, skipping");
-      return;
+  async reload(queue = true): Promise<void> {
+    if (this.activeReloadPromise) {
+      if (queue) {
+        this.reloadRequestedWhileLoading = true;
+        logger.info("[KeywordRoutingRuleCache] Reload already in progress, queueing another pass");
+      }
+      return this.activeReloadPromise;
     }
 
-    this.isLoading = true;
+    const reloadLoop = (async () => {
+      do {
+        // reload 期间若又收到补跑请求，本轮结束后立刻再跑一轮，避免新规则落库却没进缓存。
+        this.reloadRequestedWhileLoading = false;
+        this.isLoading = true;
 
-    try {
-      logger.info("[KeywordRoutingRuleCache] Reloading keyword routing rules from database...");
+        try {
+          logger.info("[KeywordRoutingRuleCache] Reloading keyword routing rules from database...");
 
-      const rules = await getActiveKeywordRoutingRules();
+          const rules = await getActiveKeywordRoutingRules();
 
-      this.rules = rules;
-      this.lastReloadTime = Date.now();
+          this.rules = rules;
+          this.lastReloadTime = Date.now();
 
-      logger.info(`[KeywordRoutingRuleCache] Loaded ${rules.length} keyword routing rules`);
-    } catch (error) {
-      logger.error("[KeywordRoutingRuleCache] Failed to reload keyword routing rules:", error);
-      // 失败时不清空现有缓存，保持降级可用
-    } finally {
-      this.isLoading = false;
-    }
+          logger.info(`[KeywordRoutingRuleCache] Loaded ${rules.length} keyword routing rules`);
+        } catch (error) {
+          logger.error("[KeywordRoutingRuleCache] Failed to reload keyword routing rules:", error);
+          // 失败时不清空现有缓存，保持降级可用
+        } finally {
+          this.isLoading = false;
+        }
+      } while (this.reloadRequestedWhileLoading);
+    })();
+
+    this.activeReloadPromise = reloadLoop.finally(() => {
+      // 极窄窗口：do/while 已判定无需继续，但 finally 微任务执行前又来了新请求，
+      // 此处再检查一次，避免晚到的补跑被静默吞掉。
+      const shouldRestart = this.reloadRequestedWhileLoading;
+      this.activeReloadPromise = null;
+      if (shouldRestart) {
+        return this.reload();
+      }
+    });
+
+    return this.activeReloadPromise;
   }
 
   /**

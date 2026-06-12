@@ -5,9 +5,25 @@ import type { KeywordRoutingRule } from "@/repository/keyword-routing-rules";
 const mocks = vi.hoisted(() => {
   const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
+  // 捕获 Redis pub/sub 订阅参数，供失效通道与 destroy 清理路径的测试断言
+  const redisSubscription: {
+    channel: string | null;
+    handler: (() => void) | null;
+    cleanup: ReturnType<typeof vi.fn>;
+  } = {
+    channel: null,
+    handler: null,
+    cleanup: vi.fn(),
+  };
+
   return {
     getActiveKeywordRoutingRules: vi.fn(),
-    subscribeCacheInvalidation: vi.fn(async () => undefined),
+    redisSubscription,
+    subscribeCacheInvalidation: vi.fn(async (channel: string, handler: () => void) => {
+      redisSubscription.channel = channel;
+      redisSubscription.handler = handler;
+      return redisSubscription.cleanup;
+    }),
     eventEmitter: {
       on(event: string, handler: (...args: unknown[]) => void) {
         const current = listeners.get(event) ?? new Set<(...args: unknown[]) => void>();
@@ -46,7 +62,7 @@ vi.mock("@/lib/event-emitter", () => ({
 }));
 
 vi.mock("@/lib/redis/pubsub", () => ({
-  CHANNEL_KEYWORD_ROUTING_RULES_UPDATED: "keywordRoutingRulesUpdated",
+  CHANNEL_KEYWORD_ROUTING_RULES_UPDATED: "cch:cache:keyword_routing_rules:updated",
   subscribeCacheInvalidation: mocks.subscribeCacheInvalidation,
 }));
 
@@ -96,6 +112,9 @@ describe("KeywordRoutingRuleCache (engine)", () => {
     vi.resetModules();
     vi.clearAllMocks();
     mocks.eventEmitter.removeAllListeners();
+    // 重置上一个测试捕获的 Redis 订阅参数（cleanup 的调用记录由 clearAllMocks 清除）
+    mocks.redisSubscription.channel = null;
+    mocks.redisSubscription.handler = null;
     // 引擎是 globalThis 单例，可跨 resetModules 存活；删除后下个测试
     // 重新导入会构造新实例并重新订阅 mocks.eventEmitter
     delete (globalThis as Record<string, unknown>).__CCH_KEYWORD_ROUTING_ENGINE__;
@@ -149,32 +168,32 @@ describe("KeywordRoutingRuleCache (engine)", () => {
     expect(statsAfterFailure.isLoading).toBe(false);
   });
 
-  test("concurrent reload while loading is skipped (detector semantics)", async () => {
+  test("a reload requested while another is in-flight is queued, not dropped", async () => {
     let resolveFirstLoad: ((value: KeywordRoutingRule[]) => void) | undefined;
-    mocks.getActiveKeywordRoutingRules.mockImplementationOnce(
-      () =>
-        new Promise<KeywordRoutingRule[]>((resolve) => {
-          resolveFirstLoad = resolve;
-        })
-    );
+
+    // 第一次加载挂起并返回旧快照（1 条规则），第二次加载返回用户刚保存的新快照（2 条规则）
+    mocks.getActiveKeywordRoutingRules
+      .mockImplementationOnce(
+        () =>
+          new Promise<KeywordRoutingRule[]>((resolve) => {
+            resolveFirstLoad = resolve;
+          })
+      )
+      .mockResolvedValueOnce([makeRule(), makeRule()]);
 
     const engine = await importFreshEngine();
 
     const firstReload = engine.reload(); // 启动加载（挂起中）
+    const secondReload = engine.reload(); // 在途中再次请求 -> 排队补跑
+
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const secondReload = engine.reload(); // isLoading 守卫直接跳过
-
-    await secondReload;
-    expect(mocks.logger.warn).toHaveBeenCalledWith(
-      "[KeywordRoutingRuleCache] Reload already in progress, skipping"
-    );
-
     resolveFirstLoad?.([makeRule()]);
-    await firstReload;
+    await Promise.all([firstReload, secondReload]);
 
-    // 第二次 reload 被跳过，仓库只读了一次
-    expect(mocks.getActiveKeywordRoutingRules).toHaveBeenCalledTimes(1);
-    expect(engine.getStats().ruleCount).toBe(1);
+    // 在途中的 reload 请求不能被静默丢弃：仓库总共读取两次，
+    // 最终缓存反映最新快照（2 条规则）而非旧快照（1 条）
+    expect(mocks.getActiveKeywordRoutingRules).toHaveBeenCalledTimes(2);
+    expect(engine.getStats().ruleCount).toBe(2);
   });
 
   test("isEmpty() is true before load, false after; getStats() shape", async () => {
@@ -214,12 +233,42 @@ describe("KeywordRoutingRuleCache (engine)", () => {
     expect(engine.isEmpty()).toBe(false);
   });
 
-  test("destroy() unsubscribes the local event handler", async () => {
+  test("engine subscribes to the keyword routing Redis invalidation channel", async () => {
+    mocks.getActiveKeywordRoutingRules.mockResolvedValue([makeRule()]);
+
+    await importFreshEngine();
+
+    expect(mocks.subscribeCacheInvalidation).toHaveBeenCalledTimes(1);
+    expect(mocks.redisSubscription.channel).toBe("cch:cache:keyword_routing_rules:updated");
+    expect(mocks.redisSubscription.handler).toBeTypeOf("function");
+  });
+
+  test("Redis invalidation message triggers reload via the subscribed handler", async () => {
+    mocks.getActiveKeywordRoutingRules.mockResolvedValueOnce([makeRule()]);
+
+    const engine = await importFreshEngine();
+    expect(engine.isEmpty()).toBe(true);
+
+    // 模拟收到 Redis 失效通知（跨进程路径，绕过本地 eventEmitter）
+    mocks.redisSubscription.handler?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.getActiveKeywordRoutingRules).toHaveBeenCalledTimes(1);
+    expect(engine.isEmpty()).toBe(false);
+  });
+
+  test("destroy() removes the local event listener and invokes the Redis cleanup", async () => {
     mocks.getActiveKeywordRoutingRules.mockResolvedValue([makeRule()]);
 
     const engine = await importFreshEngine();
+    expect(mocks.redisSubscription.cleanup).not.toHaveBeenCalled();
+
     engine.destroy();
 
+    // Redis 订阅清理函数被调用
+    expect(mocks.redisSubscription.cleanup).toHaveBeenCalledTimes(1);
+
+    // 本地事件监听已移除：再发事件不会触发 reload
     mocks.eventEmitter.emit("keywordRoutingRulesUpdated");
     await new Promise((resolve) => setTimeout(resolve, 0));
 

@@ -34,7 +34,9 @@ if (hasDsn) {
     logger.error("[App] KeywordRoutingEngine initialization failed:", err);
   });
 } else if (canSkipDsnWarmup) {
-  logger.info("[App] SensitiveWordDetector warmup skipped: DSN not configured");
+  logger.info(
+    "[App] SensitiveWordDetector and KeywordRoutingEngine warmup skipped: DSN not configured"
+  );
 } else {
   throw new Error("[App] DSN is required for SensitiveWordDetector warmup");
 }
