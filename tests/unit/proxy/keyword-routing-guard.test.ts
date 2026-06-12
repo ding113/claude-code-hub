@@ -44,6 +44,7 @@ import { isKeywordModelRoutingEnabled } from "@/lib/config/system-settings-cache
 import { keywordRoutingEngine } from "@/lib/keyword-routing/engine";
 import { logger } from "@/lib/logger";
 import type { KeywordRoutingRule } from "@/repository/keyword-routing-rules";
+import type { Provider } from "@/types/provider";
 
 function createContext(request: Request) {
   return {
@@ -110,7 +111,7 @@ describe("ProxyKeywordRoutingGuard", () => {
     expect(keywordRoutingEngine.match).not.toHaveBeenCalled();
   });
 
-  it("skips when the rule cache is empty (toggle on)", async () => {
+  it("skips when the rule cache is empty without consulting the master toggle", async () => {
     vi.mocked(keywordRoutingEngine.isEmpty).mockReturnValue(true);
     const session = await createJsonSession(DEFAULT_BODY);
 
@@ -119,6 +120,8 @@ describe("ProxyKeywordRoutingGuard", () => {
     expect(response).toBeNull();
     expect(session.request.model).toBe("claude-sonnet-4-5");
     expect(session.request.message.model).toBe("claude-sonnet-4-5");
+    // 空规则快速路径在总开关检查之前，settings 查询被完全跳过
+    expect(isKeywordModelRoutingEnabled).not.toHaveBeenCalled();
     expect(keywordRoutingEngine.match).not.toHaveBeenCalled();
   });
 
@@ -126,6 +129,7 @@ describe("ProxyKeywordRoutingGuard", () => {
     const rule = createRule();
     vi.mocked(keywordRoutingEngine.match).mockReturnValue({ rule, matchedIn: "user" });
     const session = await createJsonSession(DEFAULT_BODY);
+    session.request.note = "existing note";
 
     const response = await ProxyKeywordRoutingGuard.ensure(session);
 
@@ -162,10 +166,46 @@ describe("ProxyKeywordRoutingGuard", () => {
     // 否则供应商选择会使用改写前模型，且 ModelRedirector 会静默回退本次改写
     expect(session.getOriginalModel()).toBe("claude-opus-4-6");
 
-    // note 记录改写
-    expect(session.request.note).toContain(
-      "[Keyword Routed: claude-sonnet-4-5 -> claude-opus-4-6, rule#7]"
+    // note 记录改写：前缀为路由标记，且保留原有 note 内容
+    expect(session.request.note).toMatch(
+      /^\[Keyword Routed: claude-sonnet-4-5 -> claude-opus-4-6, rule#7\] /
     );
+    expect(session.request.note).toContain("existing note");
+  });
+
+  it("rewrites the model when the keyword matches in system texts and audits matchedIn=system", async () => {
+    const rule = createRule({ keyword: "deepdive" });
+    vi.mocked(keywordRoutingEngine.match).mockReturnValue({ rule, matchedIn: "system" });
+    const session = await createJsonSession({
+      model: "claude-sonnet-4-5",
+      system: "always deepdive into the problem",
+      messages: [{ role: "user", content: "hello" }],
+    });
+
+    const response = await ProxyKeywordRoutingGuard.ensure(session);
+
+    expect(response).toBeNull();
+
+    // 引擎收到的扫描文本中包含 system 来源
+    expect(keywordRoutingEngine.match).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemTexts: ["always deepdive into the problem"],
+        lastUserTexts: ["hello"],
+      }),
+      "claude-sonnet-4-5"
+    );
+
+    expect(session.request.model).toBe("claude-opus-4-6");
+    expect(session.request.message.model).toBe("claude-opus-4-6");
+
+    // 审计信息反映 system 命中
+    expect(session.getKeywordRoutingAudit()).toEqual({
+      userRequestedModel: "claude-sonnet-4-5",
+      routedModel: "claude-opus-4-6",
+      ruleId: 7,
+      keyword: "deepdive",
+      matchedIn: "system",
+    });
   });
 
   it("does not mutate anything when the matched target equals the requested model", async () => {
@@ -261,5 +301,67 @@ describe("ProxyKeywordRoutingGuard", () => {
     expect(response).toBeNull();
     expect(session.request.model).toBeNull();
     expect(keywordRoutingEngine.match).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProxySession keyword routing audit on the provider chain", () => {
+  const makeProvider = (id: number, name: string): Provider =>
+    ({
+      id,
+      name,
+      providerVendorId: 100,
+      providerType: "claude",
+      priority: 10,
+      weight: 1,
+      costMultiplier: 1,
+      groupTag: null,
+      isEnabled: true,
+    }) as unknown as Provider;
+
+  const AUDIT = {
+    userRequestedModel: "claude-sonnet-4-5",
+    routedModel: "claude-opus-4-6",
+    ruleId: 7,
+    keyword: "ultrathink",
+    matchedIn: "user",
+  } as const;
+
+  it("attaches the audit to chain items added after setKeywordRoutingAudit", async () => {
+    const session = await createJsonSession(DEFAULT_BODY);
+    session.setKeywordRoutingAudit({ ...AUDIT });
+
+    session.addProviderToChain(makeProvider(1, "Provider A"), { reason: "initial_selection" });
+
+    const chain = session.getProviderChain();
+    expect(chain).toHaveLength(1);
+    expect(chain[0].keywordRouting).toEqual(AUDIT);
+  });
+
+  it("leaves keywordRouting undefined on chain items when no audit was set", async () => {
+    const session = await createJsonSession(DEFAULT_BODY);
+
+    session.addProviderToChain(makeProvider(1, "Provider A"), { reason: "initial_selection" });
+
+    const chain = session.getProviderChain();
+    expect(chain).toHaveLength(1);
+    expect(chain[0].keywordRouting).toBeUndefined();
+  });
+
+  it("retains the first audit when setKeywordRoutingAudit is called twice", async () => {
+    const session = await createJsonSession(DEFAULT_BODY);
+    session.setKeywordRoutingAudit({ ...AUDIT });
+    session.setKeywordRoutingAudit({
+      userRequestedModel: "claude-haiku-4-5",
+      routedModel: "claude-sonnet-4-5",
+      ruleId: 99,
+      keyword: "other",
+      matchedIn: "system",
+    });
+
+    expect(session.getKeywordRoutingAudit()).toEqual(AUDIT);
+
+    // 链路项同样携带首次写入的审计信息
+    session.addProviderToChain(makeProvider(2, "Provider B"), { reason: "initial_selection" });
+    expect(session.getProviderChain()[0].keywordRouting).toEqual(AUDIT);
   });
 });

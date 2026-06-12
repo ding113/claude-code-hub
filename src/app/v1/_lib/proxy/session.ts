@@ -136,13 +136,7 @@ export class ProxySession {
   private originalModelName: string | null = null;
 
   // 关键词路由审计信息：保存用户原始请求模型与改写结果（用于决策链展示，不参与计费）
-  private keywordRoutingAudit: {
-    userRequestedModel: string;
-    routedModel: string;
-    ruleId: number;
-    keyword: string;
-    matchedIn: "system" | "user";
-  } | null = null;
+  private keywordRoutingAudit: NonNullable<ProviderChainItem["keywordRouting"]> | null = null;
 
   // 原始 URL 路径（用于 Gemini 模型重定向重置）
   private originalUrlPathname: string | null = null;

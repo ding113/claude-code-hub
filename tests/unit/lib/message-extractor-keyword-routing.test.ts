@@ -115,6 +115,16 @@ describe("extractKeywordRoutingTexts", () => {
       expect(result.lastUserTexts).toEqual(["last input"]);
       expect(result.lastUserTexts).not.toContain("first input");
     });
+
+    it("字符串形式的 input 进入 lastUserTexts", () => {
+      const result = extractKeywordRoutingTexts({
+        model: "gpt-5.2",
+        input: "please ultrathink about this",
+      });
+
+      expect(result.systemTexts).toEqual([]);
+      expect(result.lastUserTexts).toEqual(["please ultrathink about this"]);
+    });
   });
 
   describe("顶层 prompt 字段", () => {

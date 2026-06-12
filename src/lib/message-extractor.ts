@@ -238,9 +238,12 @@ export function extractKeywordRoutingTexts(
     collectRoleScanTexts(message.messages, systemTexts, lastUserTexts);
   }
 
-  // 4. 提取 input 数组（Codex / Response API 格式）
+  // 4. 提取 input 字段（Codex / Response API 格式，数组或纯字符串）
   if (Array.isArray(message.input)) {
     collectRoleScanTexts(message.input, systemTexts, lastUserTexts);
+  } else if (typeof message.input === "string") {
+    // input 为纯字符串时属于用户输入，进入 lastUserTexts
+    lastUserTexts.push(message.input);
   }
 
   // 5. 提取图片接口等顶层 prompt 字段（string 或 string 数组）

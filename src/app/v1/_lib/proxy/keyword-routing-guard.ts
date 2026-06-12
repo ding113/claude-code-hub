@@ -9,6 +9,8 @@
  * 调用时机：
  * - requestFilter 之后、rateLimit / provider 选择之前
  * - 必须早于供应商选择，否则改写无法影响供应商路由
+ * - 每个请求最多执行一次（GuardPipeline 对每个步骤只执行一次）；若被重复执行，
+ *   同规则命中为无副作用空操作，但 sourceModel 限定规则可能基于改写结果链式二次改写
  *
  * 重要约束：
  * - 不调用 setOriginalModel：改写后 getOriginalModel() 返回目标模型，
@@ -41,13 +43,13 @@ export class ProxyKeywordRoutingGuard {
         return null;
       }
 
-      // 总开关关闭时直接放行（fail-closed）
-      if (!(await isKeywordModelRoutingEnabled())) {
+      // 快速路径：规则缓存为空时直接放行，连总开关查询都跳过（零规则部署零额外开销）
+      if (keywordRoutingEngine.isEmpty()) {
         return null;
       }
 
-      // 快速路径：规则缓存为空时跳过文本提取（提取是昂贵步骤）
-      if (keywordRoutingEngine.isEmpty()) {
+      // 总开关关闭时直接放行（功能未启用）
+      if (!(await isKeywordModelRoutingEnabled())) {
         return null;
       }
 
