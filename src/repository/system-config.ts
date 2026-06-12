@@ -1,6 +1,7 @@
 "use server";
 
 import { asc, eq } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/drizzle/db";
 import { systemSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
@@ -196,334 +197,248 @@ function createFallbackSettings(): SystemSettings {
   };
 }
 
-/**
- * 获取系统设置，如果不存在则创建默认记录
- */
-export async function getSystemSettings(): Promise<SystemSettings> {
-  async function selectSettingsRow() {
-    const selectionWithoutHighConcurrencyMode = {
-      id: systemSettings.id,
-      siteTitle: systemSettings.siteTitle,
-      allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-      currencyDisplay: systemSettings.currencyDisplay,
-      billingModelSource: systemSettings.billingModelSource,
-      timezone: systemSettings.timezone,
-      enableAutoCleanup: systemSettings.enableAutoCleanup,
-      cleanupRetentionDays: systemSettings.cleanupRetentionDays,
-      cleanupSchedule: systemSettings.cleanupSchedule,
-      cleanupBatchSize: systemSettings.cleanupBatchSize,
-      enableClientVersionCheck: systemSettings.enableClientVersionCheck,
-      verboseProviderError: systemSettings.verboseProviderError,
-      enableHttp2: systemSettings.enableHttp2,
-      codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
-      interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
-      enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
-      enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
-      enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
-      enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
-      enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
-      allowNonConversationEndpointProviderFallback:
-        systemSettings.allowNonConversationEndpointProviderFallback,
-      enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
-      enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
-      enableResponseFixer: systemSettings.enableResponseFixer,
-      responseFixerConfig: systemSettings.responseFixerConfig,
-      quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
-      quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
-      quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
-      quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
-      quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
-      quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
-      publicStatusWindowHours: systemSettings.publicStatusWindowHours,
-      publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
-      createdAt: systemSettings.createdAt,
-      updatedAt: systemSettings.updatedAt,
-    };
-    const selectionWithoutPassThrough = {
-      ...selectionWithoutHighConcurrencyMode,
-      enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
-      ipExtractionConfig: systemSettings.ipExtractionConfig,
-      ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
-    };
-    const selectionWithoutCodexAndHighConcurrency = {
-      id: systemSettings.id,
-      siteTitle: systemSettings.siteTitle,
-      allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-      currencyDisplay: systemSettings.currencyDisplay,
-      billingModelSource: systemSettings.billingModelSource,
-      timezone: systemSettings.timezone,
-      enableAutoCleanup: systemSettings.enableAutoCleanup,
-      cleanupRetentionDays: systemSettings.cleanupRetentionDays,
-      cleanupSchedule: systemSettings.cleanupSchedule,
-      cleanupBatchSize: systemSettings.cleanupBatchSize,
-      enableClientVersionCheck: systemSettings.enableClientVersionCheck,
-      verboseProviderError: systemSettings.verboseProviderError,
-      enableHttp2: systemSettings.enableHttp2,
-      interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
-      enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
-      enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
-      enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
-      enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
-      enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
-      allowNonConversationEndpointProviderFallback:
-        systemSettings.allowNonConversationEndpointProviderFallback,
-      enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
-      enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
-      enableResponseFixer: systemSettings.enableResponseFixer,
-      responseFixerConfig: systemSettings.responseFixerConfig,
-      quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
-      quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
-      quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
-      quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
-      quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
-      quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
-      publicStatusWindowHours: systemSettings.publicStatusWindowHours,
-      publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
-      createdAt: systemSettings.createdAt,
-      updatedAt: systemSettings.updatedAt,
-    };
-    const fullSelection = {
-      billHedgeLosers: systemSettings.billHedgeLosers,
-      billNonSuccessfulRequests: systemSettings.billNonSuccessfulRequests,
-      passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
-      fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
-      enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
-      ...selectionWithoutPassThrough,
-    };
+// ---------------------------------------------------------------------------
+// system_settings 列降级阶梯（数据驱动）
+//
+// 滚动部署期间线上 schema 可能落后于代码（新列尚未迁移）。读取 / 更新遇到
+// 42703（列缺失）时按以下顺序逐层缩小字段集重试：
+//   1. 全量字段集；
+//   2. 近代新增列按引入顺序逐列累计剥离（RECENT_COLUMN_LADDER，最新列在最前）；
+//   3. 历史世代字段集（passThrough -> highConcurrency -> codex 世代，已冻结）；
+//   4. 仅读取链：最小核心字段集，缺失字段交给 toSystemSettings 补默认值。
+//
+// 新增 system_settings 列时，在 RECENT_COLUMN_LADDER 头部插入一项即可同时
+// 接入读取与更新的降级链（全量字段集由 BASE + 阶梯自动合成）。
+// ---------------------------------------------------------------------------
 
+type SettingsSelection = Record<string, AnyPgColumn>;
+
+// 引入逐列降级阶梯之前已存在的列（含历史世代字段集仍会选取的列）。
+const BASE_SETTINGS_COLUMNS: SettingsSelection = {
+  id: systemSettings.id,
+  siteTitle: systemSettings.siteTitle,
+  allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+  currencyDisplay: systemSettings.currencyDisplay,
+  billingModelSource: systemSettings.billingModelSource,
+  timezone: systemSettings.timezone,
+  enableAutoCleanup: systemSettings.enableAutoCleanup,
+  cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+  cleanupSchedule: systemSettings.cleanupSchedule,
+  cleanupBatchSize: systemSettings.cleanupBatchSize,
+  enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+  verboseProviderError: systemSettings.verboseProviderError,
+  enableHttp2: systemSettings.enableHttp2,
+  codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
+  interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+  enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+  enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+  enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
+  enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+  enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
+  enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
+  enableResponseFixer: systemSettings.enableResponseFixer,
+  responseFixerConfig: systemSettings.responseFixerConfig,
+  quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
+  quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
+  quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
+  quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
+  quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
+  quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+  publicStatusWindowHours: systemSettings.publicStatusWindowHours,
+  publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
+  createdAt: systemSettings.createdAt,
+  updatedAt: systemSettings.updatedAt,
+  passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
+  enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
+  ipExtractionConfig: systemSettings.ipExtractionConfig,
+  ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
+};
+
+// 近代新增列的降级阶梯：最新列在最前，第 N 层降级累计剥离前 N 项。
+const RECENT_COLUMN_LADDER: ReadonlyArray<{
+  key: string;
+  column: AnyPgColumn;
+  // 本层读取失败（仍有列缺失）时记录的告警
+  selectWarn: string;
+  // 本层更新失败（仍有列缺失）时记录的告警
+  updateWarn: string;
+}> = [
+  {
+    key: "enableThinkingEffortConflictRectifier",
+    column: systemSettings.enableThinkingEffortConflictRectifier,
+    selectWarn:
+      "system_settings 表除 enableThinkingEffortConflictRectifier 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn:
+      "system_settings 表除 enableThinkingEffortConflictRectifier 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "billHedgeLosers",
+    column: systemSettings.billHedgeLosers,
+    selectWarn: "system_settings 表除 billHedgeLosers 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 billHedgeLosers 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "billNonSuccessfulRequests",
+    column: systemSettings.billNonSuccessfulRequests,
+    selectWarn:
+      "system_settings 表除 billNonSuccessfulRequests 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 billNonSuccessfulRequests 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "enableOpenaiResponsesWebsocket",
+    column: systemSettings.enableOpenaiResponsesWebsocket,
+    selectWarn:
+      "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续降级更新。",
+  },
+  {
+    key: "fakeStreamingWhitelist",
+    column: systemSettings.fakeStreamingWhitelist,
+    selectWarn:
+      "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn:
+      "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到 allowNonConversationEndpointProviderFallback 之外的字段集。",
+  },
+  {
+    key: "allowNonConversationEndpointProviderFallback",
+    column: systemSettings.allowNonConversationEndpointProviderFallback,
+    selectWarn:
+      "system_settings 表除新增列外仍有列缺失，继续回退到 withoutHighConcurrencyMode 字段集。",
+    updateWarn:
+      "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
+  },
+];
+
+// 历史世代字段集（冻结）：passThrough 世代之前的 schema 没有以下五列。
+// 注意：世代字段集相对近代阶梯末层会重新选取更晚引入的列（与历史实现一致）。
+const PASS_THROUGH_ERA_OMIT: readonly string[] = [
+  "billHedgeLosers",
+  "billNonSuccessfulRequests",
+  "passThroughUpstreamErrorMessage",
+  "fakeStreamingWhitelist",
+  "enableOpenaiResponsesWebsocket",
+];
+const HIGH_CONCURRENCY_ERA_OMIT: readonly string[] = [
+  ...PASS_THROUGH_ERA_OMIT,
+  "enableHighConcurrencyMode",
+  "ipExtractionConfig",
+  "ipGeoLookupEnabled",
+];
+// 历史实现的不对称：读取链的 codex 世代保留 allowNonConversationEndpointProviderFallback，
+// 更新链的 codex 世代连同剥离。
+const CODEX_ERA_SELECT_OMIT: readonly string[] = [
+  ...HIGH_CONCURRENCY_ERA_OMIT,
+  "codexPriorityBillingSource",
+];
+const CODEX_ERA_RETURNING_OMIT: readonly string[] = [
+  ...CODEX_ERA_SELECT_OMIT,
+  "allowNonConversationEndpointProviderFallback",
+];
+// 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
+const MINIMAL_SELECTION_KEYS: readonly string[] = [
+  "id",
+  "siteTitle",
+  "allowGlobalUsageView",
+  "currencyDisplay",
+  "billingModelSource",
+  "createdAt",
+  "updatedAt",
+];
+
+function omitKeys<T extends Record<string, unknown>>(source: T, keys: readonly string[]): T {
+  const result: Record<string, unknown> = { ...source };
+  for (const key of keys) {
+    delete result[key];
+  }
+  return result as T;
+}
+
+function pickKeys(source: SettingsSelection, keys: readonly string[]): SettingsSelection {
+  const result: SettingsSelection = {};
+  for (const key of keys) {
+    result[key] = source[key];
+  }
+  return result;
+}
+
+function buildFullSettingsSelection(): SettingsSelection {
+  const selection: SettingsSelection = { ...BASE_SETTINGS_COLUMNS };
+  for (const rung of RECENT_COLUMN_LADDER) {
+    selection[rung.key] = rung.column;
+  }
+  return selection;
+}
+
+type SelectAttempt = {
+  selection: SettingsSelection;
+  // 本层读取失败时记录的告警；最后一层不设告警，错误直接向上抛出。
+  warnOnMissingColumn?: string;
+};
+
+function buildSelectAttempts(): SelectAttempt[] {
+  const fullSelection = buildFullSettingsSelection();
+  const attempts: SelectAttempt[] = [
+    {
+      selection: fullSelection,
+      warnOnMissingColumn: "system_settings 表列缺失，使用降级字段集读取（建议运行数据库迁移）。",
+    },
+  ];
+
+  const strippedKeys: string[] = [];
+  for (const rung of RECENT_COLUMN_LADDER) {
+    strippedKeys.push(rung.key);
+    attempts.push({
+      selection: omitKeys(fullSelection, strippedKeys),
+      warnOnMissingColumn: rung.selectWarn,
+    });
+  }
+
+  attempts.push(
+    {
+      selection: omitKeys(fullSelection, PASS_THROUGH_ERA_OMIT),
+      warnOnMissingColumn:
+        "system_settings 表缺少 passThroughUpstreamErrorMessage 之外的新列，继续降级读取。",
+    },
+    {
+      selection: omitKeys(fullSelection, HIGH_CONCURRENCY_ERA_OMIT),
+      warnOnMissingColumn: "system_settings 表存在多个缺失列，继续使用 legacy 字段集读取。",
+    },
+    {
+      selection: omitKeys(fullSelection, CODEX_ERA_SELECT_OMIT),
+      warnOnMissingColumn: "system_settings 表存在更多缺失列，继续使用最小字段集读取。",
+    },
+    { selection: pickKeys(fullSelection, MINIMAL_SELECTION_KEYS) }
+  );
+
+  return attempts;
+}
+
+async function selectSettingsRow() {
+  for (const attempt of buildSelectAttempts()) {
     try {
       const [row] = await db
-        .select(fullSelection)
+        .select(attempt.selection)
         .from(systemSettings)
         .orderBy(asc(systemSettings.id))
         .limit(1);
       return row ?? null;
     } catch (error) {
-      // 兼容旧版本数据库：system_settings 表存在但列未迁移齐全
-      if (isUndefinedColumnError(error)) {
-        logger.warn("system_settings 表列缺失，使用降级字段集读取（建议运行数据库迁移）。", {
-          error,
-        });
-
-        // 最新降级：移除最近新增的 enableThinkingEffortConflictRectifier 列。
-        const {
-          enableThinkingEffortConflictRectifier: _omitEffortConflict,
-          ...selectionWithoutEffortConflict
-        } = fullSelection;
-
-        try {
-          const [row] = await db
-            .select(selectionWithoutEffortConflict)
-            .from(systemSettings)
-            .orderBy(asc(systemSettings.id))
-            .limit(1);
-          return row ?? null;
-        } catch (effortConflictFallbackError) {
-          if (!isUndefinedColumnError(effortConflictFallbackError)) {
-            throw effortConflictFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除 enableThinkingEffortConflictRectifier 外仍有列缺失，继续回退到上一代字段集。",
-            { error: effortConflictFallbackError }
-          );
-        }
-
-        // 次新降级：移除 billHedgeLosers 列。
-        const { billHedgeLosers: _omitBillHedgeLosers, ...selectionWithoutBillHedgeLosers } =
-          selectionWithoutEffortConflict;
-
-        try {
-          const [row] = await db
-            .select(selectionWithoutBillHedgeLosers)
-            .from(systemSettings)
-            .orderBy(asc(systemSettings.id))
-            .limit(1);
-          return row ?? null;
-        } catch (billHedgeLosersFallbackError) {
-          if (!isUndefinedColumnError(billHedgeLosersFallbackError)) {
-            throw billHedgeLosersFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除 billHedgeLosers 外仍有列缺失，继续回退到上一代字段集。",
-            { error: billHedgeLosersFallbackError }
-          );
-        }
-
-        // 次新降级：移除 billNonSuccessfulRequests 列。
-        const {
-          billNonSuccessfulRequests: _omitBillNonSuccessful,
-          ...selectionWithoutBillNonSuccessful
-        } = selectionWithoutBillHedgeLosers;
-
-        try {
-          const [row] = await db
-            .select(selectionWithoutBillNonSuccessful)
-            .from(systemSettings)
-            .orderBy(asc(systemSettings.id))
-            .limit(1);
-          return row ?? null;
-        } catch (billNonSuccessfulFallbackError) {
-          if (!isUndefinedColumnError(billNonSuccessfulFallbackError)) {
-            throw billNonSuccessfulFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除 billNonSuccessfulRequests 外仍有列缺失，继续回退到上一代字段集。",
-            { error: billNonSuccessfulFallbackError }
-          );
-        }
-
-        // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列。
-        const {
-          enableOpenaiResponsesWebsocket: _omitOpenaiResponsesWebsocket,
-          ...selectionWithoutOpenaiResponsesWebsocket
-        } = selectionWithoutBillNonSuccessful;
-
-        try {
-          const [row] = await db
-            .select(selectionWithoutOpenaiResponsesWebsocket)
-            .from(systemSettings)
-            .orderBy(asc(systemSettings.id))
-            .limit(1);
-          return row ?? null;
-        } catch (openaiResponsesWebsocketFallbackError) {
-          if (!isUndefinedColumnError(openaiResponsesWebsocketFallbackError)) {
-            throw openaiResponsesWebsocketFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续回退到上一代字段集。",
-            { error: openaiResponsesWebsocketFallbackError }
-          );
-        }
-
-        // 第一层降级：再移除 fakeStreamingWhitelist 列。
-        const {
-          fakeStreamingWhitelist: _omitFakeStreamingWhitelist,
-          ...selectionWithoutFakeStreamingWhitelist
-        } = selectionWithoutOpenaiResponsesWebsocket;
-
-        try {
-          const [row] = await db
-            .select(selectionWithoutFakeStreamingWhitelist)
-            .from(systemSettings)
-            .orderBy(asc(systemSettings.id))
-            .limit(1);
-          return row ?? null;
-        } catch (fakeStreamingFallbackError) {
-          if (!isUndefinedColumnError(fakeStreamingFallbackError)) {
-            throw fakeStreamingFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到上一代字段集。",
-            { error: fakeStreamingFallbackError }
-          );
-        }
-
-        // 第二层降级：再移除 allowNonConversationEndpointProviderFallback 列。
-        const {
-          allowNonConversationEndpointProviderFallback: _omitNonConversationFallback,
-          ...selectionWithoutNonConversationFallback
-        } = selectionWithoutFakeStreamingWhitelist;
-
-        try {
-          const [row] = await db
-            .select(selectionWithoutNonConversationFallback)
-            .from(systemSettings)
-            .orderBy(asc(systemSettings.id))
-            .limit(1);
-          return row ?? null;
-        } catch (nonConversationFallbackError) {
-          if (!isUndefinedColumnError(nonConversationFallbackError)) {
-            throw nonConversationFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除新增列外仍有列缺失，继续回退到 withoutHighConcurrencyMode 字段集。",
-            { error: nonConversationFallbackError }
-          );
-        }
-
-        try {
-          const [row] = await db
-            .select(selectionWithoutPassThrough)
-            .from(systemSettings)
-            .orderBy(asc(systemSettings.id))
-            .limit(1);
-          return row ?? null;
-        } catch (passThroughFallbackError) {
-          if (!isUndefinedColumnError(passThroughFallbackError)) {
-            throw passThroughFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表缺少 passThroughUpstreamErrorMessage 之外的新列，继续降级读取。",
-            {
-              error: passThroughFallbackError,
-            }
-          );
-
-          try {
-            const [row] = await db
-              .select(selectionWithoutHighConcurrencyMode)
-              .from(systemSettings)
-              .orderBy(asc(systemSettings.id))
-              .limit(1);
-            return row ?? null;
-          } catch (fallbackError) {
-            if (!isUndefinedColumnError(fallbackError)) {
-              throw fallbackError;
-            }
-
-            logger.warn("system_settings 表存在多个缺失列，继续使用 legacy 字段集读取。", {
-              error: fallbackError,
-            });
-
-            try {
-              const [row] = await db
-                .select(selectionWithoutCodexAndHighConcurrency)
-                .from(systemSettings)
-                .orderBy(asc(systemSettings.id))
-                .limit(1);
-              return row ?? null;
-            } catch (legacyFallbackError) {
-              if (!isUndefinedColumnError(legacyFallbackError)) {
-                throw legacyFallbackError;
-              }
-
-              logger.warn("system_settings 表存在更多缺失列，继续使用最小字段集读取。", {
-                error: legacyFallbackError,
-              });
-
-              // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
-              const minimalSelection = {
-                id: systemSettings.id,
-                siteTitle: systemSettings.siteTitle,
-                allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-                currencyDisplay: systemSettings.currencyDisplay,
-                billingModelSource: systemSettings.billingModelSource,
-                createdAt: systemSettings.createdAt,
-                updatedAt: systemSettings.updatedAt,
-              };
-
-              const [row] = await db
-                .select(minimalSelection)
-                .from(systemSettings)
-                .orderBy(asc(systemSettings.id))
-                .limit(1);
-              return row ?? null;
-            }
-          }
-        }
+      // 兼容旧版本数据库：system_settings 表存在但列未迁移齐全。
+      // 没有告警文案说明已是最低字段集，错误向上抛出。
+      if (attempt.warnOnMissingColumn === undefined || !isUndefinedColumnError(error)) {
+        throw error;
       }
-
-      throw error;
+      logger.warn(attempt.warnOnMissingColumn, { error });
     }
   }
 
+  throw new Error("system_settings 降级读取链意外耗尽");
+}
+
+/**
+ * 获取系统设置，如果不存在则创建默认记录
+ */
+export async function getSystemSettings(): Promise<SystemSettings> {
   try {
     const settings = await selectSettingsRow();
 
@@ -582,6 +497,75 @@ export async function getSystemSettings(): Promise<SystemSettings> {
   }
 }
 
+// 近代阶梯全部失败后的历史世代降级更新（passThrough -> highConcurrency -> codex）。
+async function runLegacyUpdateFallbacks(
+  executor: SystemSettingsMutationExecutor,
+  settingsId: number,
+  prunedUpdates: Partial<typeof systemSettings.$inferInsert>
+) {
+  const fullSelection = buildFullSettingsSelection();
+  const returningWithoutPassThrough = omitKeys(fullSelection, PASS_THROUGH_ERA_OMIT);
+  const returningWithoutHighConcurrencyMode = omitKeys(fullSelection, HIGH_CONCURRENCY_ERA_OMIT);
+  const returningWithoutCodexAndHighConcurrency = omitKeys(fullSelection, CODEX_ERA_RETURNING_OMIT);
+
+  let updated;
+  try {
+    // 从已剥离近代列的对象继续裁剪，避免把新列重新带回旧 schema 再次失败。
+    const withoutPassThroughUpdates = omitKeys(prunedUpdates, ["passThroughUpstreamErrorMessage"]);
+    [updated] = await executor
+      .update(systemSettings)
+      .set(withoutPassThroughUpdates)
+      .where(eq(systemSettings.id, settingsId))
+      .returning(returningWithoutPassThrough);
+  } catch (passThroughFallbackError) {
+    if (!isUndefinedColumnError(passThroughFallbackError)) {
+      throw passThroughFallbackError;
+    }
+
+    const downgradedUpdates = omitKeys(prunedUpdates, [
+      "passThroughUpstreamErrorMessage",
+      "enableHighConcurrencyMode",
+      "publicStatusWindowHours",
+      "publicStatusAggregationIntervalMinutes",
+      "ipExtractionConfig",
+      "ipGeoLookupEnabled",
+    ]);
+    const legacyUpdates = omitKeys(downgradedUpdates, ["codexPriorityBillingSource"]);
+
+    try {
+      [updated] = await executor
+        .update(systemSettings)
+        .set(downgradedUpdates)
+        .where(eq(systemSettings.id, settingsId))
+        .returning(returningWithoutHighConcurrencyMode);
+    } catch (downgradedFallbackError) {
+      if (!isUndefinedColumnError(downgradedFallbackError)) {
+        throw downgradedFallbackError;
+      }
+
+      logger.warn("system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。", {
+        error: downgradedFallbackError,
+      });
+
+      [updated] = await executor
+        .update(systemSettings)
+        .set(legacyUpdates)
+        .where(eq(systemSettings.id, settingsId))
+        .returning(returningWithoutCodexAndHighConcurrency);
+    }
+
+    if (!updated) {
+      [updated] = await executor
+        .update(systemSettings)
+        .set(legacyUpdates)
+        .where(eq(systemSettings.id, settingsId))
+        .returning(returningWithoutCodexAndHighConcurrency);
+    }
+  }
+
+  return updated;
+}
+
 /**
  * 更新系统设置
  */
@@ -589,94 +573,6 @@ export async function updateSystemSettings(
   payload: UpdateSystemSettingsInput,
   executor: SystemSettingsMutationExecutor = db
 ): Promise<SystemSettings> {
-  const returningWithoutHighConcurrencyMode = {
-    id: systemSettings.id,
-    siteTitle: systemSettings.siteTitle,
-    allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-    currencyDisplay: systemSettings.currencyDisplay,
-    billingModelSource: systemSettings.billingModelSource,
-    timezone: systemSettings.timezone,
-    enableAutoCleanup: systemSettings.enableAutoCleanup,
-    cleanupRetentionDays: systemSettings.cleanupRetentionDays,
-    cleanupSchedule: systemSettings.cleanupSchedule,
-    cleanupBatchSize: systemSettings.cleanupBatchSize,
-    enableClientVersionCheck: systemSettings.enableClientVersionCheck,
-    verboseProviderError: systemSettings.verboseProviderError,
-    enableHttp2: systemSettings.enableHttp2,
-    codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
-    interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
-    enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
-    enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
-    enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
-    enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
-    enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
-    allowNonConversationEndpointProviderFallback:
-      systemSettings.allowNonConversationEndpointProviderFallback,
-    enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
-    enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
-    enableResponseFixer: systemSettings.enableResponseFixer,
-    responseFixerConfig: systemSettings.responseFixerConfig,
-    quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
-    quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
-    quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
-    quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
-    quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
-    quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
-    publicStatusWindowHours: systemSettings.publicStatusWindowHours,
-    publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
-    createdAt: systemSettings.createdAt,
-    updatedAt: systemSettings.updatedAt,
-  };
-  const returningWithoutPassThrough = {
-    ...returningWithoutHighConcurrencyMode,
-    enableHighConcurrencyMode: systemSettings.enableHighConcurrencyMode,
-    ipExtractionConfig: systemSettings.ipExtractionConfig,
-    ipGeoLookupEnabled: systemSettings.ipGeoLookupEnabled,
-  };
-  const returningWithoutCodexAndHighConcurrency = {
-    id: systemSettings.id,
-    siteTitle: systemSettings.siteTitle,
-    allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-    currencyDisplay: systemSettings.currencyDisplay,
-    billingModelSource: systemSettings.billingModelSource,
-    timezone: systemSettings.timezone,
-    enableAutoCleanup: systemSettings.enableAutoCleanup,
-    cleanupRetentionDays: systemSettings.cleanupRetentionDays,
-    cleanupSchedule: systemSettings.cleanupSchedule,
-    cleanupBatchSize: systemSettings.cleanupBatchSize,
-    enableClientVersionCheck: systemSettings.enableClientVersionCheck,
-    verboseProviderError: systemSettings.verboseProviderError,
-    enableHttp2: systemSettings.enableHttp2,
-    interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
-    enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
-    enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
-    enableThinkingEffortConflictRectifier: systemSettings.enableThinkingEffortConflictRectifier,
-    enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
-    enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
-    enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
-    enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
-    enableResponseFixer: systemSettings.enableResponseFixer,
-    responseFixerConfig: systemSettings.responseFixerConfig,
-    quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
-    quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
-    quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
-    quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
-    quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
-    quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
-    publicStatusWindowHours: systemSettings.publicStatusWindowHours,
-    publicStatusAggregationIntervalMinutes: systemSettings.publicStatusAggregationIntervalMinutes,
-    createdAt: systemSettings.createdAt,
-    updatedAt: systemSettings.updatedAt,
-  };
-  const fullReturning = {
-    billHedgeLosers: systemSettings.billHedgeLosers,
-    billNonSuccessfulRequests: systemSettings.billNonSuccessfulRequests,
-    passThroughUpstreamErrorMessage: systemSettings.passThroughUpstreamErrorMessage,
-    fakeStreamingWhitelist: systemSettings.fakeStreamingWhitelist,
-    enableOpenaiResponsesWebsocket: systemSettings.enableOpenaiResponsesWebsocket,
-    ...returningWithoutPassThrough,
-  };
-
   try {
     const current = await getSystemSettings();
 
@@ -870,7 +766,7 @@ export async function updateSystemSettings(
         .update(systemSettings)
         .set(updates)
         .where(eq(systemSettings.id, current.id))
-        .returning(fullReturning);
+        .returning(buildFullSettingsSelection());
     } catch (error) {
       if (!isUndefinedColumnError(error)) {
         throw error;
@@ -880,236 +776,34 @@ export async function updateSystemSettings(
         error,
       });
 
-      // 最新降级：移除最近新增的 enableThinkingEffortConflictRectifier 列。
-      const {
-        enableThinkingEffortConflictRectifier: _omitUpdateEffortConflict,
-        ...updatesWithoutEffortConflict
-      } = updates;
-      const {
-        enableThinkingEffortConflictRectifier: _omitReturningEffortConflict,
-        ...returningWithoutEffortConflict
-      } = fullReturning;
+      // 按阶梯逐层剥离近代新增列重试；某层命中行则停止，
+      // 命中空结果（列齐全但行不匹配）则静默继续向下尝试。
+      let prunedUpdates = updates;
+      let prunedReturning = buildFullSettingsSelection();
+      for (let index = 0; index < RECENT_COLUMN_LADDER.length; index++) {
+        const rung = RECENT_COLUMN_LADDER[index];
+        prunedUpdates = omitKeys(prunedUpdates, [rung.key]);
+        prunedReturning = omitKeys(prunedReturning, [rung.key]);
 
-      try {
-        [updated] = await executor
-          .update(systemSettings)
-          .set(updatesWithoutEffortConflict)
-          .where(eq(systemSettings.id, current.id))
-          .returning(returningWithoutEffortConflict);
-      } catch (effortConflictFallbackError) {
-        if (!isUndefinedColumnError(effortConflictFallbackError)) {
-          throw effortConflictFallbackError;
+        if (updated) {
+          continue;
         }
 
-        logger.warn(
-          "system_settings 表除 enableThinkingEffortConflictRectifier 外仍有列缺失，继续降级更新。",
-          {
-            error: effortConflictFallbackError,
-          }
-        );
-      }
-
-      // 次新降级：移除 billHedgeLosers 列。
-      const { billHedgeLosers: _omitUpdateBillHedgeLosers, ...updatesWithoutBillHedgeLosers } =
-        updatesWithoutEffortConflict;
-      const { billHedgeLosers: _omitReturningBillHedgeLosers, ...returningWithoutBillHedgeLosers } =
-        returningWithoutEffortConflict;
-
-      if (!updated) {
         try {
           [updated] = await executor
             .update(systemSettings)
-            .set(updatesWithoutBillHedgeLosers)
+            .set(prunedUpdates)
             .where(eq(systemSettings.id, current.id))
-            .returning(returningWithoutBillHedgeLosers);
-        } catch (billHedgeLosersFallbackError) {
-          if (!isUndefinedColumnError(billHedgeLosersFallbackError)) {
-            throw billHedgeLosersFallbackError;
+            .returning(prunedReturning);
+        } catch (rungError) {
+          if (!isUndefinedColumnError(rungError)) {
+            throw rungError;
           }
 
-          logger.warn("system_settings 表除 billHedgeLosers 外仍有列缺失，继续降级更新。", {
-            error: billHedgeLosersFallbackError,
-          });
-        }
-      }
+          logger.warn(rung.updateWarn, { error: rungError });
 
-      // 次新降级：移除 billNonSuccessfulRequests 列。
-      const {
-        billNonSuccessfulRequests: _omitUpdateBillNonSuccessful,
-        ...updatesWithoutBillNonSuccessful
-      } = updatesWithoutBillHedgeLosers;
-      const {
-        billNonSuccessfulRequests: _omitReturningBillNonSuccessful,
-        ...returningWithoutBillNonSuccessful
-      } = returningWithoutBillHedgeLosers;
-
-      if (!updated) {
-        try {
-          [updated] = await executor
-            .update(systemSettings)
-            .set(updatesWithoutBillNonSuccessful)
-            .where(eq(systemSettings.id, current.id))
-            .returning(returningWithoutBillNonSuccessful);
-        } catch (billNonSuccessfulFallbackError) {
-          if (!isUndefinedColumnError(billNonSuccessfulFallbackError)) {
-            throw billNonSuccessfulFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除 billNonSuccessfulRequests 外仍有列缺失，继续降级更新。",
-            { error: billNonSuccessfulFallbackError }
-          );
-        }
-      }
-
-      // 第零层降级：仅移除最新增加的 enableOpenaiResponsesWebsocket 列。
-      const {
-        enableOpenaiResponsesWebsocket: _omitUpdateOpenaiResponsesWebsocket,
-        ...updatesWithoutOpenaiResponsesWebsocket
-      } = updatesWithoutBillNonSuccessful;
-      const {
-        enableOpenaiResponsesWebsocket: _omitReturningOpenaiResponsesWebsocket,
-        ...returningWithoutOpenaiResponsesWebsocket
-      } = returningWithoutBillNonSuccessful;
-
-      if (!updated) {
-        try {
-          [updated] = await executor
-            .update(systemSettings)
-            .set(updatesWithoutOpenaiResponsesWebsocket)
-            .where(eq(systemSettings.id, current.id))
-            .returning(returningWithoutOpenaiResponsesWebsocket);
-        } catch (openaiResponsesWebsocketFallbackError) {
-          if (!isUndefinedColumnError(openaiResponsesWebsocketFallbackError)) {
-            throw openaiResponsesWebsocketFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除 enableOpenaiResponsesWebsocket 外仍有列缺失，继续降级更新。",
-            { error: openaiResponsesWebsocketFallbackError }
-          );
-        }
-      }
-
-      // 第一层降级：再移除 fakeStreamingWhitelist 列。
-      const {
-        fakeStreamingWhitelist: _omitUpdateFakeStreaming,
-        ...updatesWithoutFakeStreamingWhitelist
-      } = updatesWithoutOpenaiResponsesWebsocket;
-      const {
-        fakeStreamingWhitelist: _omitReturningFakeStreaming,
-        ...returningWithoutFakeStreamingWhitelist
-      } = returningWithoutOpenaiResponsesWebsocket;
-
-      if (!updated) {
-        try {
-          [updated] = await executor
-            .update(systemSettings)
-            .set(updatesWithoutFakeStreamingWhitelist)
-            .where(eq(systemSettings.id, current.id))
-            .returning(returningWithoutFakeStreamingWhitelist);
-        } catch (fakeStreamingFallbackError) {
-          if (!isUndefinedColumnError(fakeStreamingFallbackError)) {
-            throw fakeStreamingFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除 fakeStreamingWhitelist 外仍有列缺失，继续回退到 allowNonConversationEndpointProviderFallback 之外的字段集。",
-            { error: fakeStreamingFallbackError }
-          );
-        }
-      }
-
-      // 第二层降级：再移除 allowNonConversationEndpointProviderFallback 列。
-      const {
-        allowNonConversationEndpointProviderFallback: _omitUpdate,
-        ...updatesWithoutNonConversationFallback
-      } = updatesWithoutFakeStreamingWhitelist;
-      const {
-        allowNonConversationEndpointProviderFallback: _omitReturning,
-        ...returningWithoutNonConversationFallback
-      } = returningWithoutFakeStreamingWhitelist;
-
-      if (!updated) {
-        try {
-          [updated] = await executor
-            .update(systemSettings)
-            .set(updatesWithoutNonConversationFallback)
-            .where(eq(systemSettings.id, current.id))
-            .returning(returningWithoutNonConversationFallback);
-        } catch (nonConversationFallbackError) {
-          if (!isUndefinedColumnError(nonConversationFallbackError)) {
-            throw nonConversationFallbackError;
-          }
-
-          logger.warn(
-            "system_settings 表除新增列外仍有列缺失，继续回退到 passThrough / highConcurrency 字段集更新。",
-            { error: nonConversationFallbackError }
-          );
-
-          try {
-            // Continue pruning from the already-reduced object, otherwise the
-            // freshly removed `fakeStreamingWhitelist` (and any other newer
-            // columns) would be reintroduced and fail again on legacy schemas.
-            const withoutPassThroughUpdates = { ...updatesWithoutNonConversationFallback };
-            delete withoutPassThroughUpdates.passThroughUpstreamErrorMessage;
-            [updated] = await executor
-              .update(systemSettings)
-              .set(withoutPassThroughUpdates)
-              .where(eq(systemSettings.id, current.id))
-              .returning(returningWithoutPassThrough);
-          } catch (passThroughFallbackError) {
-            if (!isUndefinedColumnError(passThroughFallbackError)) {
-              throw passThroughFallbackError;
-            }
-
-            // Same rationale: clone from the already-pruned object to avoid
-            // re-introducing newer columns the legacy schema can't handle.
-            const downgradedUpdates = { ...updatesWithoutNonConversationFallback };
-            delete downgradedUpdates.passThroughUpstreamErrorMessage;
-            delete downgradedUpdates.enableHighConcurrencyMode;
-            delete downgradedUpdates.publicStatusWindowHours;
-            delete downgradedUpdates.publicStatusAggregationIntervalMinutes;
-            delete downgradedUpdates.ipExtractionConfig;
-            delete downgradedUpdates.ipGeoLookupEnabled;
-
-            // legacyUpdates already inherits the pruning from
-            // updatesWithoutNonConversationFallback (which dropped
-            // allowNonConversationEndpointProviderFallback), so we only need
-            // to additionally remove codexPriorityBillingSource here.
-            const legacyUpdates = { ...downgradedUpdates };
-            delete legacyUpdates.codexPriorityBillingSource;
-
-            try {
-              [updated] = await executor
-                .update(systemSettings)
-                .set(downgradedUpdates)
-                .where(eq(systemSettings.id, current.id))
-                .returning(returningWithoutHighConcurrencyMode);
-            } catch (downgradedFallbackError) {
-              if (!isUndefinedColumnError(downgradedFallbackError)) {
-                throw downgradedFallbackError;
-              }
-
-              logger.warn(
-                "system_settings 表缺少 codexPriorityBillingSource 之外的新列，继续降级重试。",
-                { error: downgradedFallbackError }
-              );
-
-              [updated] = await executor
-                .update(systemSettings)
-                .set(legacyUpdates)
-                .where(eq(systemSettings.id, current.id))
-                .returning(returningWithoutCodexAndHighConcurrency);
-            }
-
-            if (!updated) {
-              [updated] = await executor
-                .update(systemSettings)
-                .set(legacyUpdates)
-                .where(eq(systemSettings.id, current.id))
-                .returning(returningWithoutCodexAndHighConcurrency);
-            }
+          if (index === RECENT_COLUMN_LADDER.length - 1) {
+            updated = await runLegacyUpdateFallbacks(executor, current.id, prunedUpdates);
           }
         }
       }
