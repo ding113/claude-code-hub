@@ -722,6 +722,27 @@ export const sensitiveWords = pgTable('sensitive_words', {
   sensitiveWordsCreatedAtIdx: index('idx_sensitive_words_created_at').on(table.createdAt),
 }));
 
+// Keyword Routing Rules table - 关键词模型路由规则
+export const keywordRoutingRules = pgTable('keyword_routing_rules', {
+  id: serial('id').primaryKey(),
+  keyword: varchar('keyword', { length: 500 }).notNull(),
+  // 匹配的请求模型，null 表示匹配任意请求模型
+  sourceModel: varchar('source_model', { length: 128 }),
+  targetModel: varchar('target_model', { length: 128 }).notNull(),
+  caseSensitive: boolean('case_sensitive').notNull().default(true),
+  // 优先级，数值越小越先匹配
+  priority: integer('priority').notNull().default(0),
+  description: text('description'),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  // 优化启用状态和优先级的查询
+  keywordRoutingRulesEnabledIdx: index('idx_keyword_routing_rules_enabled').on(table.isEnabled, table.priority),
+  // 基础索引
+  keywordRoutingRulesCreatedAtIdx: index('idx_keyword_routing_rules_created_at').on(table.createdAt),
+}));
+
 // System Settings table
 export const systemSettings = pgTable('system_settings', {
   id: serial('id').primaryKey(),
@@ -763,6 +784,10 @@ export const systemSettings = pgTable('system_settings', {
 
   // 客户端版本检查配置
   enableClientVersionCheck: boolean('enable_client_version_check').notNull().default(false),
+
+  // 关键词模型路由（默认关闭）
+  // 开启后：当请求的 system 提示或最后一条用户消息命中配置的关键词时，在供应商选择前将请求模型重写为目标模型
+  enableKeywordModelRouting: boolean('enable_keyword_model_routing').notNull().default(false),
 
   // 供应商不可用时是否返回详细错误信息
   verboseProviderError: boolean('verbose_provider_error').notNull().default(false),
