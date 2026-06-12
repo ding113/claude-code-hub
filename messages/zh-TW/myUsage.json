@@ -2,7 +2,7 @@
   "header": {
     "title": "我的使用量",
     "welcome": "歡迎，{name}",
-    "documentation": "使用文件",
+    "documentation": "使用說明",
     "logout": "登出",
     "keyLabel": "金鑰",
     "userLabel": "使用者",
