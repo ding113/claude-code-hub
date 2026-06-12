@@ -19,6 +19,7 @@ interface EventMap {
   errorRulesUpdated: [];
   sensitiveWordsUpdated: [];
   requestFiltersUpdated: [];
+  keywordRoutingRulesUpdated: [];
 }
 
 /**
@@ -44,6 +45,13 @@ class GlobalEventEmitter extends NodeEventEmitter {
    */
   emitRequestFiltersUpdated(): void {
     this.emit("requestFiltersUpdated");
+  }
+
+  /**
+   * 发送 keywordRoutingRulesUpdated 事件
+   */
+  emitKeywordRoutingRulesUpdated(): void {
+    this.emit("keywordRoutingRulesUpdated");
   }
 }
 

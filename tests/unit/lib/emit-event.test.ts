@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
     emitErrorRulesUpdated: vi.fn(),
     emitSensitiveWordsUpdated: vi.fn(),
     emitRequestFiltersUpdated: vi.fn(),
+    emitKeywordRoutingRulesUpdated: vi.fn(),
     publishCacheInvalidation: vi.fn(async () => {}),
   };
 });
@@ -14,6 +15,7 @@ vi.mock("@/lib/event-emitter", () => ({
     emitErrorRulesUpdated: mocks.emitErrorRulesUpdated,
     emitSensitiveWordsUpdated: mocks.emitSensitiveWordsUpdated,
     emitRequestFiltersUpdated: mocks.emitRequestFiltersUpdated,
+    emitKeywordRoutingRulesUpdated: mocks.emitKeywordRoutingRulesUpdated,
   },
 }));
 
@@ -21,6 +23,7 @@ vi.mock("@/lib/redis/pubsub", () => ({
   CHANNEL_ERROR_RULES_UPDATED: "cch:cache:error_rules:updated",
   CHANNEL_REQUEST_FILTERS_UPDATED: "cch:cache:request_filters:updated",
   CHANNEL_SENSITIVE_WORDS_UPDATED: "cch:cache:sensitive_words:updated",
+  CHANNEL_KEYWORD_ROUTING_RULES_UPDATED: "cch:cache:keyword_routing_rules:updated",
   publishCacheInvalidation: mocks.publishCacheInvalidation,
 }));
 
@@ -67,19 +70,36 @@ describe.sequential("emit-event", () => {
     );
   });
 
+  test("emitKeywordRoutingRulesUpdated：Node.js runtime 下应触发本地事件并广播缓存失效", async () => {
+    const { emitKeywordRoutingRulesUpdated } = await import("@/lib/emit-event");
+    await emitKeywordRoutingRulesUpdated();
+
+    expect(mocks.emitKeywordRoutingRulesUpdated).toHaveBeenCalledTimes(1);
+    expect(mocks.publishCacheInvalidation).toHaveBeenCalledTimes(1);
+    expect(mocks.publishCacheInvalidation).toHaveBeenCalledWith(
+      "cch:cache:keyword_routing_rules:updated"
+    );
+  });
+
   test("Edge runtime 下应静默跳过（不触发任何事件/广播）", async () => {
     process.env.NEXT_RUNTIME = "edge";
 
-    const { emitErrorRulesUpdated, emitSensitiveWordsUpdated, emitRequestFiltersUpdated } =
-      await import("@/lib/emit-event");
+    const {
+      emitErrorRulesUpdated,
+      emitSensitiveWordsUpdated,
+      emitRequestFiltersUpdated,
+      emitKeywordRoutingRulesUpdated,
+    } = await import("@/lib/emit-event");
 
     await emitErrorRulesUpdated();
     await emitSensitiveWordsUpdated();
     await emitRequestFiltersUpdated();
+    await emitKeywordRoutingRulesUpdated();
 
     expect(mocks.emitErrorRulesUpdated).not.toHaveBeenCalled();
     expect(mocks.emitSensitiveWordsUpdated).not.toHaveBeenCalled();
     expect(mocks.emitRequestFiltersUpdated).not.toHaveBeenCalled();
+    expect(mocks.emitKeywordRoutingRulesUpdated).not.toHaveBeenCalled();
     expect(mocks.publishCacheInvalidation).not.toHaveBeenCalled();
   });
 });

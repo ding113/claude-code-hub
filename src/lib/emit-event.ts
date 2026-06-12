@@ -52,6 +52,29 @@ export async function emitSensitiveWordsUpdated(): Promise<void> {
 }
 
 /**
+ * 触发 keywordRoutingRulesUpdated 事件
+ */
+export async function emitKeywordRoutingRulesUpdated(): Promise<void> {
+  if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
+    try {
+      const { eventEmitter } = await import("@/lib/event-emitter");
+      eventEmitter.emitKeywordRoutingRulesUpdated();
+    } catch {
+      // 忽略导入错误
+    }
+
+    try {
+      const { CHANNEL_KEYWORD_ROUTING_RULES_UPDATED, publishCacheInvalidation } = await import(
+        "@/lib/redis/pubsub"
+      );
+      await publishCacheInvalidation(CHANNEL_KEYWORD_ROUTING_RULES_UPDATED);
+    } catch {
+      // 忽略导入错误
+    }
+  }
+}
+
+/**
  * 触发 requestFiltersUpdated 事件
  */
 export async function emitRequestFiltersUpdated(): Promise<void> {
