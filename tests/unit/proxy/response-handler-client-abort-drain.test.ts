@@ -327,6 +327,44 @@ function createHangingResponsesSse(upstreamSignal: AbortSignal): Response {
   });
 }
 
+function createActiveHangingResponsesSse(upstreamSignal: AbortSignal): Response {
+  const encoder = new TextEncoder();
+  let index = 0;
+  let intervalId: ReturnType<typeof setInterval> | null = null;
+
+  const encodeChunk = (delta: string) =>
+    encoder.encode(
+      `event: response.output_text.delta\ndata: ${JSON.stringify({
+        type: "response.output_text.delta",
+        delta,
+      })}\n\n`
+    );
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encodeChunk("短"));
+      intervalId = setInterval(() => {
+        controller.enqueue(encodeChunk(`持续-${++index}`));
+      }, 4_000);
+      upstreamSignal.addEventListener(
+        "abort",
+        () => {
+          if (intervalId) clearInterval(intervalId);
+          const error = new Error("client_abort_drain_timeout");
+          error.name = "AbortError";
+          controller.error(error);
+        },
+        { once: true }
+      );
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 function createCompletedThenErroredResponsesSse(): Response {
   const encoder = new TextEncoder();
   const chunks = [
@@ -640,6 +678,54 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         inputTokens: 463,
       })
     );
+  });
+
+  it("keeps client-abort drain independent from a small idle timeout while chunks are active", async () => {
+    vi.useFakeTimers();
+    try {
+      const clientController = new AbortController();
+      const upstreamController = new AbortController();
+      const session = createSession(clientController.signal);
+      session.provider.streamingIdleTimeoutMs = 5_000;
+      Object.assign(session, { responseController: upstreamController });
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "avemujica-responses",
+        providerPriority: 1,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.invalid/v1",
+        upstreamStatusCode: 200,
+      });
+
+      await ProxyResponseHandler.dispatch(
+        session,
+        createActiveHangingResponsesSse(upstreamController.signal)
+      );
+      clientController.abort();
+
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(upstreamController.signal.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      const tasks = asyncTasks.splice(0, asyncTasks.length);
+      await Promise.allSettled(tasks);
+
+      expect(upstreamController.signal.aborted).toBe(true);
+      expect(AsyncTaskManager.cancel).not.toHaveBeenCalled();
+      expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+        123,
+        expect.objectContaining({
+          statusCode: 499,
+          errorMessage: "CLIENT_ABORTED",
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("caps client-abort drain at 60s when the upstream stream hangs", async () => {
