@@ -48,6 +48,7 @@ const DEFAULT_SETTINGS: Pick<
   | "fakeStreamingWhitelist"
   | "enableCodexSessionIdCompletion"
   | "enableClaudeMetadataUserIdInjection"
+  | "enableKeywordModelRouting"
   | "enableResponseFixer"
   | "responseFixerConfig"
   | "passThroughUpstreamErrorMessage"
@@ -71,6 +72,8 @@ const DEFAULT_SETTINGS: Pick<
   fakeStreamingWhitelist: [],
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
+  // 关键词模型路由在冷缓存 / DB 读取失败时 fail-closed，避免在不确定状态下重写请求模型。
+  enableKeywordModelRouting: false,
   enableResponseFixer: true,
   passThroughUpstreamErrorMessage: true,
   responseFixerConfig: {
@@ -144,6 +147,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       cleanupSchedule: "0 2 * * *",
       cleanupBatchSize: 10000,
       enableClientVersionCheck: false,
+      enableKeywordModelRouting: DEFAULT_SETTINGS.enableKeywordModelRouting,
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
       enableOpenaiResponsesWebsocket: DEFAULT_SETTINGS.enableOpenaiResponsesWebsocket,
       enableHighConcurrencyMode: DEFAULT_SETTINGS.enableHighConcurrencyMode,
@@ -196,6 +200,16 @@ export async function isHttp2Enabled(): Promise<boolean> {
 export async function isOpenaiResponsesWebsocketEnabled(): Promise<boolean> {
   const settings = await getCachedSystemSettings();
   return settings.enableOpenaiResponsesWebsocket;
+}
+
+/**
+ * Get only the keyword model routing enabled setting (optimized for proxy path)
+ *
+ * @returns Whether keyword-based model routing is enabled
+ */
+export async function isKeywordModelRoutingEnabled(): Promise<boolean> {
+  const settings = await getCachedSystemSettings();
+  return settings.enableKeywordModelRouting;
 }
 
 /**

@@ -284,6 +284,7 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.cleanupSchedule).toBe("0 2 * * *");
       expect(result.cleanupBatchSize).toBe(10000);
       expect(result.enableClientVersionCheck).toBe(false);
+      expect(result.enableKeywordModelRouting).toBe(false);
       expect(result.verboseProviderError).toBe(false);
       expect(result.passThroughUpstreamErrorMessage).toBe(true);
       expect(result.enableHttp2).toBe(false);

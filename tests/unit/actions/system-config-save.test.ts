@@ -364,4 +364,17 @@ describe("saveSystemSettings", () => {
       })
     );
   });
+
+  it("should pass enableKeywordModelRouting through validation and save", async () => {
+    const result = await saveSystemSettings({
+      enableKeywordModelRouting: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enableKeywordModelRouting: true,
+      })
+    );
+  });
 });

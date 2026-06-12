@@ -291,7 +291,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.useRealTimers();
   });
 
-  test("getSystemSettings 在仅缺 enable_thinking_effort_conflict_rectifier 新列时应降级读取并默认开启", async () => {
+  test("getSystemSettings 在仅缺 enable_keyword_model_routing 新列时应降级读取并默认关闭", async () => {
     vi.resetModules();
 
     const now = new Date("2026-01-04T00:00:00.000Z");
@@ -299,9 +299,67 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.setSystemTime(now);
 
     // 第一次 select(fullSelection) 因新列缺失而抛 42703；
-    // 第二次 select(selectionWithoutEffortConflict) 命中——验证新列已加入降级链最外层。
+    // 第二次 select(selectionWithoutKeywordModelRouting) 命中——验证新列已加入降级链最外层。
     const selectMock = vi
       .fn()
+      .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
+      .mockReturnValueOnce(
+        createThenableQuery([
+          {
+            id: 1,
+            siteTitle: "Claude Code Hub",
+            allowGlobalUsageView: false,
+            currencyDisplay: "USD",
+            billingModelSource: "original",
+            codexPriorityBillingSource: "requested",
+            enableHttp2: true,
+            enableThinkingEffortConflictRectifier: true,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ])
+      );
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        update: vi.fn(() => createThenableQuery([])),
+        insert: vi.fn(() => createThenableQuery([])),
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { getSystemSettings } = await import("@/repository/system-config");
+
+    const result = await getSystemSettings();
+
+    // 降级读取成功（未抛错），且缺失的新列经 transformer 默认关闭。
+    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(result.siteTitle).toBe("Claude Code Hub");
+    expect(result.enableHttp2).toBe(true);
+    expect(result.enableKeywordModelRouting).toBe(false);
+
+    // 关键回归保护：第二次 select 必须恰好剥离了新列（最外层降级），
+    // 而非旧行为先剥离 enableThinkingEffortConflictRectifier。若新列未加入降级链最外层，下面两条断言会失败。
+    const secondSelection = selectMock.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect(secondSelection).not.toHaveProperty("enableKeywordModelRouting");
+    expect(secondSelection).toHaveProperty("enableThinkingEffortConflictRectifier");
+
+    vi.useRealTimers();
+  });
+
+  test("getSystemSettings 在仅缺 enable_thinking_effort_conflict_rectifier 新列时应降级读取并默认开启", async () => {
+    vi.resetModules();
+
+    const now = new Date("2026-01-04T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    // 第一次 select(fullSelection) 与第二次（仅剥离 enableKeywordModelRouting）均因列缺失而抛 42703；
+    // 第三次（继续剥离 enableThinkingEffortConflictRectifier）命中——验证该列位于降级链第二层。
+    const selectMock = vi
+      .fn()
+      .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
       .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
       .mockReturnValueOnce(
         createThenableQuery([
@@ -335,15 +393,16 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     const result = await getSystemSettings();
 
     // 降级读取成功（未抛错）。
-    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(selectMock).toHaveBeenCalledTimes(3);
     expect(result.siteTitle).toBe("Claude Code Hub");
     expect(result.enableHttp2).toBe(true);
 
-    // 关键回归保护：第二次 select 必须恰好剥离了新列（最外层降级），
-    // 而非旧行为先剥离 billHedgeLosers。若新列未加入降级链最外层，下面两条断言会失败。
-    const secondSelection = selectMock.mock.calls[1]?.[0] as Record<string, unknown>;
-    expect(secondSelection).not.toHaveProperty("enableThinkingEffortConflictRectifier");
-    expect(secondSelection).toHaveProperty("billHedgeLosers");
+    // 关键回归保护：第三次 select 必须恰好累计剥离了最外两层新列，
+    // 而非提前剥离 billHedgeLosers。若降级顺序被改变，下面的断言会失败。
+    const thirdSelection = selectMock.mock.calls[2]?.[0] as Record<string, unknown>;
+    expect(thirdSelection).not.toHaveProperty("enableKeywordModelRouting");
+    expect(thirdSelection).not.toHaveProperty("enableThinkingEffortConflictRectifier");
+    expect(thirdSelection).toHaveProperty("billHedgeLosers");
 
     vi.useRealTimers();
   });

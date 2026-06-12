@@ -258,6 +258,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     cleanupSchedule: dbSettings?.cleanupSchedule ?? "0 2 * * *",
     cleanupBatchSize: dbSettings?.cleanupBatchSize ?? 10000,
     enableClientVersionCheck: dbSettings?.enableClientVersionCheck ?? false,
+    enableKeywordModelRouting: dbSettings?.enableKeywordModelRouting ?? false,
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
     passThroughUpstreamErrorMessage: dbSettings?.passThroughUpstreamErrorMessage ?? true,
     enableHttp2: dbSettings?.enableHttp2 ?? false,

@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       cleanupSchedule: validated.cleanupSchedule,
       cleanupBatchSize: validated.cleanupBatchSize,
       enableClientVersionCheck: validated.enableClientVersionCheck,
+      enableKeywordModelRouting: validated.enableKeywordModelRouting,
       verboseProviderError: validated.verboseProviderError,
       passThroughUpstreamErrorMessage: validated.passThroughUpstreamErrorMessage,
       enableHttp2: validated.enableHttp2,

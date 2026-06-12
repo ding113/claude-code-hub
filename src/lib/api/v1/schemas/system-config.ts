@@ -106,6 +106,9 @@ export const SystemSettingsSchema = z
     cleanupSchedule: z.string().optional().describe("Cleanup cron schedule."),
     cleanupBatchSize: z.number().int().optional().describe("Cleanup batch size."),
     enableClientVersionCheck: z.boolean().describe("Whether client version checks are enabled."),
+    enableKeywordModelRouting: z
+      .boolean()
+      .describe("Whether keyword-based model routing is enabled."),
     verboseProviderError: z
       .boolean()
       .describe("Whether provider errors include extra diagnostics."),

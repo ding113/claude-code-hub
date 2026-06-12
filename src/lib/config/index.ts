@@ -9,4 +9,5 @@ export {
   getCachedSystemSettingsOnlyCache,
   invalidateSystemSettingsCache,
   isHttp2Enabled,
+  isKeywordModelRoutingEnabled,
 } from "./system-settings-cache";

@@ -11659,6 +11659,8 @@ export interface operations {
                         cleanupBatchSize?: number;
                         /** @description Whether client version checks are enabled. */
                         enableClientVersionCheck: boolean;
+                        /** @description Whether keyword-based model routing is enabled. */
+                        enableKeywordModelRouting: boolean;
                         /** @description Whether provider errors include extra diagnostics. */
                         verboseProviderError: boolean;
                         /** @description Whether sanitized upstream error messages are passed through. */
@@ -11919,6 +11921,8 @@ export interface operations {
                     cleanupBatchSize?: number;
                     /** @description Whether client version checks are enabled. */
                     enableClientVersionCheck?: boolean;
+                    /** @description Whether keyword-based model routing is enabled. */
+                    enableKeywordModelRouting?: boolean;
                     /** @description Whether provider errors include extra diagnostics. */
                     verboseProviderError?: boolean;
                     /** @description Whether sanitized upstream error messages are passed through. */
@@ -12052,6 +12056,8 @@ export interface operations {
                         cleanupBatchSize?: number;
                         /** @description Whether client version checks are enabled. */
                         enableClientVersionCheck: boolean;
+                        /** @description Whether keyword-based model routing is enabled. */
+                        enableKeywordModelRouting: boolean;
                         /** @description Whether provider errors include extra diagnostics. */
                         verboseProviderError: boolean;
                         /** @description Whether sanitized upstream error messages are passed through. */

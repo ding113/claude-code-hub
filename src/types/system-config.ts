@@ -62,6 +62,10 @@ export interface SystemSettings {
   // 客户端版本检查配置
   enableClientVersionCheck: boolean;
 
+  // 关键词模型路由（默认关闭）
+  // 开启后：当请求的 system 提示或最后一条用户消息命中配置的关键词时，在供应商选择前将请求模型重写为目标模型
+  enableKeywordModelRouting: boolean;
+
   // 供应商不可用时是否返回详细错误信息
   verboseProviderError: boolean;
 
@@ -176,6 +180,9 @@ export interface UpdateSystemSettingsInput {
 
   // 客户端版本检查配置（可选）
   enableClientVersionCheck?: boolean;
+
+  // 关键词模型路由（可选）
+  enableKeywordModelRouting?: boolean;
 
   // 供应商不可用时是否返回详细错误信息（可选）
   verboseProviderError?: boolean;

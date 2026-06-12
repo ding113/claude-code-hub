@@ -37,6 +37,7 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     cleanupSchedule: "0 2 * * *",
     cleanupBatchSize: 10000,
     enableClientVersionCheck: false,
+    enableKeywordModelRouting: false,
     verboseProviderError: false,
     passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
@@ -73,6 +74,7 @@ async function loadCache() {
   return {
     getCachedSystemSettings: mod.getCachedSystemSettings,
     isHttp2Enabled: mod.isHttp2Enabled,
+    isKeywordModelRoutingEnabled: mod.isKeywordModelRoutingEnabled,
     invalidateSystemSettingsCache: mod.invalidateSystemSettingsCache,
   };
 }
@@ -149,6 +151,7 @@ describe("SystemSettingsCache", () => {
         enableHttp2: false,
         enableHighConcurrencyMode: false,
         interceptAnthropicWarmupRequests: false,
+        enableKeywordModelRouting: false,
         codexPriorityBillingSource: "requested",
         passThroughUpstreamErrorMessage: true,
       })
@@ -177,5 +180,14 @@ describe("SystemSettingsCache", () => {
     const { isHttp2Enabled } = await loadCache();
 
     expect(await isHttp2Enabled()).toBe(true);
+  });
+
+  test("isKeywordModelRoutingEnabled 应读取缓存并返回 enableKeywordModelRouting", async () => {
+    getSystemSettingsMock.mockResolvedValueOnce(
+      createSettings({ id: 601, enableKeywordModelRouting: true })
+    );
+    const { isKeywordModelRoutingEnabled } = await loadCache();
+
+    expect(await isKeywordModelRoutingEnabled()).toBe(true);
   });
 });

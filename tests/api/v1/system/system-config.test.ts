@@ -48,6 +48,7 @@ const settings: SystemSettings = {
   cleanupSchedule: "0 2 * * *",
   cleanupBatchSize: 10000,
   enableClientVersionCheck: true,
+  enableKeywordModelRouting: false,
   verboseProviderError: false,
   passThroughUpstreamErrorMessage: true,
   enableHttp2: false,

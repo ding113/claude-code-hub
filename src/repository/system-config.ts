@@ -156,6 +156,7 @@ function createFallbackSettings(): SystemSettings {
     cleanupSchedule: "0 2 * * *",
     cleanupBatchSize: 10000,
     enableClientVersionCheck: false,
+    enableKeywordModelRouting: false,
     verboseProviderError: false,
     passThroughUpstreamErrorMessage: true,
     enableHttp2: false,
@@ -263,6 +264,13 @@ const RECENT_COLUMN_LADDER: ReadonlyArray<{
   // 本层更新失败（仍有列缺失）时记录的告警
   updateWarn: string;
 }> = [
+  {
+    key: "enableKeywordModelRouting",
+    column: systemSettings.enableKeywordModelRouting,
+    selectWarn:
+      "system_settings 表除 enableKeywordModelRouting 外仍有列缺失，继续回退到上一代字段集。",
+    updateWarn: "system_settings 表除 enableKeywordModelRouting 外仍有列缺失，继续降级更新。",
+  },
   {
     key: "enableThinkingEffortConflictRectifier",
     column: systemSettings.enableThinkingEffortConflictRectifier,
@@ -634,6 +642,11 @@ export async function updateSystemSettings(
     // 客户端版本检查配置字段（如果提供）
     if (payload.enableClientVersionCheck !== undefined) {
       updates.enableClientVersionCheck = payload.enableClientVersionCheck;
+    }
+
+    // 关键词模型路由开关（如果提供）
+    if (payload.enableKeywordModelRouting !== undefined) {
+      updates.enableKeywordModelRouting = payload.enableKeywordModelRouting;
     }
 
     // 供应商错误详情配置字段（如果提供）
