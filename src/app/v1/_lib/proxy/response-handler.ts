@@ -56,6 +56,8 @@ import {
   peekDeferredStreamingFinalization,
 } from "./stream-finalization";
 
+const CLIENT_ABORT_DRAIN_MAX_MS = 60_000;
+
 /**
  * Idempotent helper to release the agent pool reference count attached to a session.
  * Prevents double-release by clearing the callback after first invocation.
@@ -2322,7 +2324,7 @@ export class ProxyResponseHandler {
     const abortController = new AbortController();
     const idleTimeoutMs =
       provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
-    const clientAbortDrainTimeoutMs = idleTimeoutMs === Infinity ? 60_000 : idleTimeoutMs;
+    const clientAbortDrainTimeoutMs = Math.min(idleTimeoutMs, CLIENT_ABORT_DRAIN_MAX_MS);
 
     // ⭐ 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;

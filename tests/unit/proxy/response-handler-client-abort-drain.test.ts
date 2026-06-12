@@ -642,12 +642,13 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     );
   });
 
-  it("bounds client-abort drain when the upstream stream hangs", async () => {
+  it("caps client-abort drain at 60s when the upstream stream hangs", async () => {
     vi.useFakeTimers();
     try {
       const clientController = new AbortController();
       const upstreamController = new AbortController();
       const session = createSession(clientController.signal);
+      session.provider.streamingIdleTimeoutMs = 120_000;
       Object.assign(session, { responseController: upstreamController });
       setDeferredStreamingFinalization(session, {
         providerId: 1,
