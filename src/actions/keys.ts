@@ -7,7 +7,7 @@ import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
 import { emitActionAudit } from "@/lib/audit/emit";
-import { getSession } from "@/lib/auth";
+import { type AuthSession, getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
@@ -34,6 +34,23 @@ import {
 import type { Key } from "@/types/key";
 import type { ActionResult } from "./types";
 import { type BatchUpdateResult, syncUserProviderGroupFromKeys } from "./users";
+
+// U02: key 写操作的会话级守卫。REST read 层与 legacy adapter 的 scoped 上下文
+// 会放行 canLoginWebUi=false 的只读会话；写操作必须是管理员或完整 Web 会话，
+// 否则只读 key 可改写自身 canLoginWebUi 自提权。
+function denyKeyWriteForReadOnlySession(
+  session: AuthSession,
+  tError: (key: string) => string
+): { ok: false; error: string; errorCode: string } | null {
+  if (session.user.role === "admin" || session.key?.canLoginWebUi === true) {
+    return null;
+  }
+  return {
+    ok: false,
+    error: tError("PERMISSION_DENIED"),
+    errorCode: ERROR_CODES.PERMISSION_DENIED,
+  };
+}
 
 type TranslationFunction = (key: string, values?: Record<string, string>) => string;
 
@@ -447,6 +464,11 @@ export async function editKey(
       };
     }
 
+    const readOnlyDenied = denyKeyWriteForReadOnlySession(session, tError);
+    if (readOnlyDenied) {
+      return readOnlyDenied;
+    }
+
     const key = await findKeyById(keyId);
     if (!key) {
       return { ok: false, error: "密钥不存在" };
@@ -471,6 +493,19 @@ export async function editKey(
           ok: false,
           error: tError("PERMISSION_DENIED"),
           errorCode: ERROR_CODES.PERMISSION_DENIED,
+        };
+      }
+    }
+
+    // 非管理员经 PATCH isEnabled=false 关停 key 时，沿用 toggleKeyEnabled 的
+    // 最后一个启用 key 保护（U02 路由放开后该路径对自助用户可达）
+    if (session.user.role !== "admin" && data.isEnabled === false && key.isEnabled) {
+      const activeKeyCount = await countActiveKeysByUser(key.userId);
+      if (activeKeyCount <= 1) {
+        return {
+          ok: false,
+          error: tError("CANNOT_DISABLE_LAST_KEY"),
+          errorCode: ERROR_CODES.OPERATION_FAILED,
         };
       }
     }
@@ -732,12 +767,17 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       };
     }
 
+    const readOnlyDenied = denyKeyWriteForReadOnlySession(session, tError);
+    if (readOnlyDenied) {
+      return readOnlyDenied;
+    }
+
     const key = await findKeyById(keyId);
     if (!key) {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1103,7 +1143,7 @@ export async function resetKeyLimitsOnly(keyId: number): Promise<ActionResult> {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1112,7 +1152,7 @@ export async function resetKeyLimitsOnly(keyId: number): Promise<ActionResult> {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1172,12 +1212,17 @@ export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise
       };
     }
 
+    const readOnlyDenied = denyKeyWriteForReadOnlySession(session, tError);
+    if (readOnlyDenied) {
+      return readOnlyDenied;
+    }
+
     const key = await findKeyById(keyId);
     if (!key) {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1479,12 +1524,17 @@ export async function renewKeyExpiresAt(
       };
     }
 
+    const readOnlyDenied = denyKeyWriteForReadOnlySession(session, tError);
+    if (readOnlyDenied) {
+      return readOnlyDenied;
+    }
+
     const key = await findKeyById(keyId);
     if (!key) {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1550,7 +1600,7 @@ export async function patchKeyLimit(
 
     const key = await findKeyById(keyId);
     if (!key) {
-      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.KEY_NOT_FOUND };
     }
 
     if (session.user.role !== "admin" && session.user.id !== key.userId) {

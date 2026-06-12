@@ -424,27 +424,35 @@ describe("v1 action compatibility client", () => {
     });
   });
 
-  test("falls back to the self key-creation endpoint for non-admin key creation", async () => {
-    postMock
-      .mockRejectedValueOnce(
-        new ApiError({
-          status: 403,
-          errorCode: "auth.forbidden",
-          detail: "Admin access is required.",
-        })
-      )
-      .mockResolvedValueOnce({ id: 77, generatedKey: "sk-new", name: "self-key" });
+  test("addKey hard-fails on 403 instead of silently retargeting to the self endpoint", async () => {
+    // U03: the old 403 fallback could turn "create a key for user X" into
+    // "create a key for myself" when the session lost admin rights mid-flight.
+    postMock.mockRejectedValueOnce(
+      new ApiError({
+        status: 403,
+        errorCode: "auth.forbidden",
+        detail: "Admin access is required.",
+      })
+    );
 
     const result = await keys.addKey({ userId: 2, name: "self-key", providerGroup: "default" });
 
-    expect(postMock).toHaveBeenNthCalledWith(
-      1,
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(postMock).toHaveBeenCalledWith(
       "/api/v1/users/2/keys",
       { name: "self-key", providerGroup: "default" },
       undefined
     );
-    expect(postMock).toHaveBeenNthCalledWith(
-      2,
+    expect(result).toMatchObject({ ok: false, errorCode: "PERMISSION_DENIED" });
+  });
+
+  test("addOwnKey posts directly to the self key-creation endpoint", async () => {
+    postMock.mockResolvedValueOnce({ id: 77, generatedKey: "sk-new", name: "self-key" });
+
+    const result = await keys.addOwnKey({ name: "self-key", providerGroup: "default" });
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(postMock).toHaveBeenCalledWith(
       "/api/v1/users:self/keys",
       { name: "self-key", providerGroup: "default" },
       undefined
@@ -507,34 +515,22 @@ describe("v1 action compatibility client", () => {
     expect(result).toMatchObject({ ok: false, errorCode: "OPERATION_FAILED" });
   });
 
-  test("surfaces PERMISSION_DENIED when both admin and self key creation are forbidden", async () => {
+  test("addOwnKey surfaces PERMISSION_DENIED for read-only sessions", async () => {
     // Drop any persistent implementation a prior test left on postMock so the
-    // two Once-rejections below are the only behaviors in play.
+    // Once-rejection below is the only behavior in play.
     postMock.mockReset();
-    // Readonly self-service user: admin route 403s, fallback self route also 403s.
-    postMock
-      .mockRejectedValueOnce(
-        new ApiError({ status: 403, errorCode: "auth.forbidden", detail: "Admin access required." })
-      )
-      .mockRejectedValueOnce(
-        new ApiError({
-          status: 403,
-          errorCode: "auth.forbidden",
-          detail: "Read-only sessions cannot create keys.",
-        })
-      );
-
-    const result = await keys.addKey({ userId: 2, name: "self-key" });
-
-    expect(postMock).toHaveBeenCalledTimes(2);
-    expect(postMock).toHaveBeenNthCalledWith(
-      1,
-      "/api/v1/users/2/keys",
-      { name: "self-key" },
-      undefined
+    postMock.mockRejectedValueOnce(
+      new ApiError({
+        status: 403,
+        errorCode: "auth.forbidden",
+        detail: "Read-only sessions cannot create keys.",
+      })
     );
-    expect(postMock).toHaveBeenNthCalledWith(
-      2,
+
+    const result = await keys.addOwnKey({ name: "self-key" });
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(postMock).toHaveBeenCalledWith(
       "/api/v1/users:self/keys",
       { name: "self-key" },
       undefined

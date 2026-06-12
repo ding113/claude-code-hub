@@ -62,7 +62,7 @@ describe("removeKey action error codes", () => {
     }
   });
 
-  it("returns NOT_FOUND when the key does not exist", async () => {
+  it("returns KEY_NOT_FOUND when the key does not exist", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findKeyByIdMock.mockResolvedValueOnce(null);
 
@@ -71,13 +71,16 @@ describe("removeKey action error codes", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errorCode).toBe("NOT_FOUND");
+      expect(result.errorCode).toBe("KEY_NOT_FOUND");
       expect(result.error).toBe("KEY_NOT_FOUND");
     }
   });
 
   it("returns PERMISSION_DENIED when a non-admin deletes someone else's key", async () => {
-    getSessionMock.mockResolvedValue({ user: { id: 7, role: "user" } });
+    getSessionMock.mockResolvedValue({
+      user: { id: 7, role: "user" },
+      key: { canLoginWebUi: true },
+    });
     findKeyByIdMock.mockResolvedValueOnce({
       id: 42,
       userId: 99,
@@ -119,7 +122,10 @@ describe("removeKey action error codes", () => {
   });
 
   it("returns CANNOT_DELETE_LAST_GROUP_KEY when deleting would leave no provider group", async () => {
-    getSessionMock.mockResolvedValue({ user: { id: 99, role: "user" } });
+    getSessionMock.mockResolvedValue({
+      user: { id: 99, role: "user" },
+      key: { canLoginWebUi: true },
+    });
     findKeyByIdMock.mockResolvedValueOnce({
       id: 42,
       userId: 99,

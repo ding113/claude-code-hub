@@ -2499,7 +2499,7 @@ export interface paths {
         put?: never;
         /**
          * Set key enabled state
-         * @description Enables or disables one key.
+         * @description Enables or disables one key. Admins may toggle any key; regular users with Web UI access may toggle only the keys they own. Read-only sessions are rejected.
          */
         post: operations["postKeysByKeyidEnable"];
         delete?: never;
@@ -2519,7 +2519,7 @@ export interface paths {
         put?: never;
         /**
          * Renew key expiration
-         * @description Updates one key expiration date.
+         * @description Updates one key expiration date. Admins may renew any key; regular users with Web UI access may renew only the keys they own. Read-only sessions are rejected.
          */
         post: operations["postKeysByKeyidRenew"];
         delete?: never;
@@ -2564,14 +2564,14 @@ export interface paths {
         post?: never;
         /**
          * Delete key
-         * @description Deletes one key.
+         * @description Deletes one key. Admins may delete any key; regular users with Web UI access may delete only the keys they own. Read-only sessions are rejected.
          */
         delete: operations["deleteKeysByKeyid"];
         options?: never;
         head?: never;
         /**
          * Update key
-         * @description Updates one key.
+         * @description Updates one key. Admins may update any key; regular users with Web UI access may update only the keys they own. Read-only sessions are rejected.
          */
         patch: operations["patchKeysByKeyid"];
         trace?: never;
@@ -2605,7 +2605,7 @@ export interface paths {
         };
         /**
          * Get key limit usage
-         * @description Returns all key cost buckets and concurrent session usage.
+         * @description Returns all key cost buckets and concurrent session usage. Admins may query any key; regular users may query only the keys they own (enforced by the action).
          */
         get: operations["getKeysByKeyidLimitUsage"];
         put?: never;

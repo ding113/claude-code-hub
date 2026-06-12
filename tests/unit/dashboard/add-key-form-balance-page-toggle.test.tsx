@@ -30,13 +30,14 @@ vi.mock("sonner", () => sonnerMocks);
 
 const keysActionMocks = vi.hoisted(() => ({
   addKey: vi.fn(async () => ({ ok: true, data: { generatedKey: "sk-test", name: "test" } })),
+  addOwnKey: vi.fn(async () => ({ ok: true, data: { generatedKey: "sk-test", name: "test" } })),
 }));
-vi.mock("@/actions/keys", () => keysActionMocks);
+vi.mock("@/lib/api-client/v1/actions/keys", () => keysActionMocks);
 
 const providersActionMocks = vi.hoisted(() => ({
   getAvailableProviderGroups: vi.fn(async () => []),
 }));
-vi.mock("@/actions/providers", () => providersActionMocks);
+vi.mock("@/lib/api-client/v1/actions/providers", () => providersActionMocks);
 
 function loadMessages() {
   const base = path.join(process.cwd(), "messages/en");

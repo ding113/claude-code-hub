@@ -186,6 +186,7 @@ function actionError(c: Context, result: Extract<ActionResult<unknown>, { ok: fa
     result.errorCode === "UNAUTHORIZED" || detail.toLowerCase().includes("unauthorized")
       ? 401
       : result.errorCode === "NOT_FOUND" ||
+          result.errorCode?.endsWith("_NOT_FOUND") === true ||
           detail.toLowerCase().includes("not found") ||
           detail.includes("不存在")
         ? 404

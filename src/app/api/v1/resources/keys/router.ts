@@ -146,8 +146,9 @@ const enableKeyRoute = createRoute({
   path: "/keys/{keyId}:enable",
   tags: ["Keys"],
   summary: "Set key enabled state",
-  description: "Enables or disables one key.",
-  "x-required-access": "admin",
+  description:
+    "Enables or disables one key. Admins may toggle any key; regular users with Web UI access may toggle only the keys they own. Read-only sessions are rejected.",
+  "x-required-access": "read",
   security,
   request: {
     params: KeyIdParamSchema,
@@ -163,15 +164,16 @@ const enableKeyRoute = createRoute({
 });
 
 keysRouter.openAPIRegistry.registerPath(enableKeyRoute);
-keysRouter.post("/keys/:keyId{[0-9]+:enable}", requireAuth("admin"), enableKey);
+keysRouter.post("/keys/:keyId{[0-9]+:enable}", requireAuth("read"), enableKey);
 
 const renewKeyRoute = createRoute({
   method: "post",
   path: "/keys/{keyId}:renew",
   tags: ["Keys"],
   summary: "Renew key expiration",
-  description: "Updates one key expiration date.",
-  "x-required-access": "admin",
+  description:
+    "Updates one key expiration date. Admins may renew any key; regular users with Web UI access may renew only the keys they own. Read-only sessions are rejected.",
+  "x-required-access": "read",
   security,
   request: {
     params: KeyIdParamSchema,
@@ -187,7 +189,7 @@ const renewKeyRoute = createRoute({
 });
 
 keysRouter.openAPIRegistry.registerPath(renewKeyRoute);
-keysRouter.post("/keys/:keyId{[0-9]+:renew}", requireAuth("admin"), renewKey);
+keysRouter.post("/keys/:keyId{[0-9]+:renew}", requireAuth("read"), renewKey);
 
 const revealKeyRoute = createRoute({
   method: "get",
@@ -239,11 +241,12 @@ keysRouter.openapi(
   createRoute({
     method: "patch",
     path: "/keys/{keyId}",
-    middleware: requireAuth("admin"),
+    middleware: requireAuth("read"),
     tags: ["Keys"],
     summary: "Update key",
-    description: "Updates one key.",
-    "x-required-access": "admin",
+    description:
+      "Updates one key. Admins may update any key; regular users with Web UI access may update only the keys they own. Read-only sessions are rejected.",
+    "x-required-access": "read",
     security,
     request: {
       params: KeyIdParamSchema,
@@ -264,11 +267,12 @@ keysRouter.openapi(
   createRoute({
     method: "delete",
     path: "/keys/{keyId}",
-    middleware: requireAuth("admin"),
+    middleware: requireAuth("read"),
     tags: ["Keys"],
     summary: "Delete key",
-    description: "Deletes one key.",
-    "x-required-access": "admin",
+    description:
+      "Deletes one key. Admins may delete any key; regular users with Web UI access may delete only the keys they own. Read-only sessions are rejected.",
+    "x-required-access": "read",
     security,
     request: { params: KeyIdParamSchema },
     responses: { 204: { description: "Key deleted." }, ...problemResponses },
@@ -296,11 +300,12 @@ keysRouter.openapi(
   createRoute({
     method: "get",
     path: "/keys/{keyId}/limit-usage",
-    middleware: requireAuth("admin"),
+    middleware: requireAuth("read"),
     tags: ["Keys"],
     summary: "Get key limit usage",
-    description: "Returns all key cost buckets and concurrent session usage.",
-    "x-required-access": "admin",
+    description:
+      "Returns all key cost buckets and concurrent session usage. Admins may query any key; regular users may query only the keys they own (enforced by the action).",
+    "x-required-access": "read",
     security,
     request: { params: KeyIdParamSchema },
     responses: {

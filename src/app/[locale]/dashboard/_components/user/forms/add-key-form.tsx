@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { addKey } from "@/lib/api-client/v1/actions/keys";
+import { addKey, addOwnKey } from "@/lib/api-client/v1/actions/keys";
 import { getAvailableProviderGroups } from "@/lib/api-client/v1/actions/providers";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
@@ -76,8 +76,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
       }
 
       try {
-        const result = await addKey({
-          userId: userId!,
+        const body = {
           name: data.name,
           // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
           expiresAt: data.expiresAt ?? "",
@@ -93,7 +92,10 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           limitConcurrentSessions: data.limitConcurrentSessions,
           cacheTtlPreference: data.cacheTtlPreference,
           providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
-        });
+        };
+        // 非管理员走会话定向的自助端点，目标用户由服务端会话决定（U03：
+        // 避免 admin 路由 403 后静默改为给会话用户建 key）
+        const result = isAdmin ? await addKey({ userId: userId!, ...body }) : await addOwnKey(body);
 
         if (!result.ok) {
           const msg = result.errorCode

@@ -1,5 +1,4 @@
 import type { BatchUpdateKeysParams, PatchKeyLimitField } from "@/actions/keys";
-import { isAdminForbidden } from "@/lib/api-client/v1/errors";
 import type { Key } from "@/types/key";
 import {
   apiDelete,
@@ -16,17 +15,15 @@ export type { Key } from "@/types/key";
 
 export function addKey(data: { userId: number } & Record<string, unknown>) {
   const { userId, ...body } = data;
-  // NOTE(#1259): the per-user route is admin-only. Non-admin self-service runs
-  // into auth.forbidden there, so retry via the read-tier self endpoint, which
-  // derives the target user from the session (mirrors getUsers()'s fallback).
-  return toActionResult(
-    apiPost(`/api/v1/users/${userId}/keys`, body).catch((error: unknown) => {
-      if (isAdminForbidden(error)) {
-        return apiPost("/api/v1/users:self/keys", body);
-      }
-      throw error;
-    })
-  );
+  // Admin-only route; a 403 must surface instead of silently retargeting the
+  // key to the session user (U03). Self-service callers use addOwnKey().
+  return toActionResult(apiPost(`/api/v1/users/${userId}/keys`, body));
+}
+
+export function addOwnKey(body: Record<string, unknown>) {
+  // Session-scoped endpoint (#1259): the server derives the target user from
+  // the authenticated session and rejects read-only sessions.
+  return toActionResult(apiPost("/api/v1/users:self/keys", body));
 }
 
 export function editKey(keyId: number, data: unknown) {

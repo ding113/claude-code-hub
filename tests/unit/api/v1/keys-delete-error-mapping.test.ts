@@ -18,7 +18,10 @@ function makeContext(keyId = "12"): Context {
       param: (name: string) => (name === "keyId" ? keyId : undefined),
       url: `http://localhost/api/v1/keys/${keyId}`,
     },
-    get: () => undefined,
+    get: (name: string) =>
+      name === "auth"
+        ? { session: { user: { id: 1, role: "admin" }, key: { canLoginWebUi: true } } }
+        : undefined,
   } as unknown as Context;
 }
 
@@ -46,6 +49,16 @@ describe("DELETE /api/v1/keys/{keyId} error mapping", () => {
     });
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ errorCode: "NOT_FOUND" });
+  });
+
+  it("maps KEY_NOT_FOUND to 404 and keeps the action error code", async () => {
+    const response = await runDelete({
+      ok: false,
+      error: "key missing",
+      errorCode: "KEY_NOT_FOUND",
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ errorCode: "KEY_NOT_FOUND" });
   });
 
   it("maps PERMISSION_DENIED to 403 and keeps the action error code", async () => {

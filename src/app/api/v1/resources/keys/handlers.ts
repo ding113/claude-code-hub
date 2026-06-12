@@ -122,9 +122,36 @@ export async function getKey(c: Context): Promise<Response> {
   return jsonResponse({ id: params.keyId, limitUsage: result.data });
 }
 
+// U02: write routes relaxed from admin to read tier must re-enforce a full
+// Web-UI session here — read-tier auth admits canLoginWebUi=false keys, and a
+// key write would let a read-only key escalate itself (e.g. PATCH
+// canLoginWebUi). Ownership (self-or-admin) is enforced by the actions.
+function requireKeyWriteSession(c: Context): Response | null {
+  const session = c.get("auth")?.session;
+  if (!session?.user?.id) {
+    return createProblemResponse({
+      status: 401,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "auth.missing",
+      detail: "Authentication is required.",
+    });
+  }
+  if (session.user.role !== "admin" && session.key?.canLoginWebUi !== true) {
+    return createProblemResponse({
+      status: 403,
+      instance: new URL(c.req.url).pathname,
+      errorCode: "auth.forbidden",
+      detail: "Read-only sessions cannot manage keys.",
+    });
+  }
+  return null;
+}
+
 export async function updateKey(c: Context): Promise<Response> {
   const params = parseKeyParams(c);
   if (params instanceof Response) return params;
+  const denied = requireKeyWriteSession(c);
+  if (denied) return denied;
   const body = await parseHonoJsonBody(c, KeyUpdateSchema);
   if (!body.ok) return body.response;
   const actions = await import("@/actions/keys");
@@ -137,6 +164,8 @@ export async function updateKey(c: Context): Promise<Response> {
 export async function deleteKey(c: Context): Promise<Response> {
   const params = parseKeyParams(c);
   if (params instanceof Response) return params;
+  const denied = requireKeyWriteSession(c);
+  if (denied) return denied;
   const actions = await import("@/actions/keys");
   const result = await callAction(c, actions.removeKey, [params.keyId] as never[], c.get("auth"));
   if (!result.ok) return actionError(c, result);
@@ -146,6 +175,8 @@ export async function deleteKey(c: Context): Promise<Response> {
 export async function enableKey(c: Context): Promise<Response> {
   const params = parseKeyParams(c);
   if (params instanceof Response) return params;
+  const denied = requireKeyWriteSession(c);
+  if (denied) return denied;
   const body = await parseHonoJsonBody(c, KeyEnableSchema);
   if (!body.ok) return body.response;
   const actions = await import("@/actions/keys");
@@ -163,6 +194,8 @@ export async function enableKey(c: Context): Promise<Response> {
 export async function renewKey(c: Context): Promise<Response> {
   const params = parseKeyParams(c);
   if (params instanceof Response) return params;
+  const denied = requireKeyWriteSession(c);
+  if (denied) return denied;
   const body = await parseHonoJsonBody(c, KeyRenewSchema);
   if (!body.ok) return body.response;
   const actions = await import("@/actions/keys");
