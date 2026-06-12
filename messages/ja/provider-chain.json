@@ -119,7 +119,10 @@
     "afterHealthCheck": "ヘルスチェック後",
     "filteredProviders": "フィルタされたプロバイダー",
     "priorityLevels": "優先度レベル",
-    "candidates": "候補プロバイダー"
+    "candidates": "候補プロバイダー",
+    "keywordRouting": "キーワードルーティング",
+    "keywordRoutingMatchedInSystem": "システムプロンプトで一致",
+    "keywordRoutingMatchedInUser": "ユーザーメッセージで一致"
   },
   "technicalTimeline": "技術タイムライン",
   "timeline": {
@@ -243,7 +246,13 @@
     "hedgeLoserBilled": "競争の敗者（応答を回収し課金）",
     "clientAbort": "クライアント切断（リクエスト中断）",
     "hedgeRace": "Hedge 競争",
-    "hedgeThresholdExceeded": "ファーストバイトタイムアウト超過、代替プロバイダーを起動"
+    "hedgeThresholdExceeded": "ファーストバイトタイムアウト超過、代替プロバイダーを起動",
+    "keywordRouting": "キーワードルーティング",
+    "keywordRoutingFrom": "  リクエストモデル: {model}",
+    "keywordRoutingTo": "  ルーティング先: {model}",
+    "keywordRoutingKeyword": "  一致キーワード: {keyword}",
+    "keywordRoutingMatchedInSystem": "  一致箇所: システムプロンプト",
+    "keywordRoutingMatchedInUser": "  一致箇所: 最後のユーザーメッセージ"
   },
   "selectionMethods": {
     "session_reuse": "セッション再利用",

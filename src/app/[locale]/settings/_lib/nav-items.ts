@@ -53,6 +53,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     iconName: "shield-alert",
   },
   {
+    href: "/settings/keyword-routing",
+    labelKey: "nav.keywordRouting",
+    label: "Keyword Routing",
+    iconName: "filter",
+  },
+  {
     href: "/settings/error-rules",
     labelKey: "nav.errorRules",
     label: "Error Rules",

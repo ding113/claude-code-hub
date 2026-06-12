@@ -119,7 +119,10 @@
     "afterHealthCheck": "健康检查后",
     "filteredProviders": "被过滤供应商",
     "priorityLevels": "优先级层级",
-    "candidates": "候选供应商"
+    "candidates": "候选供应商",
+    "keywordRouting": "关键词路由",
+    "keywordRoutingMatchedInSystem": "命中系统提示词",
+    "keywordRoutingMatchedInUser": "命中用户消息"
   },
   "technicalTimeline": "技术时间线",
   "timeline": {
@@ -243,7 +246,13 @@
     "hedgeLoserBilled": "竞速落败（已拿回响应并计费）",
     "clientAbort": "客户端已断开连接（请求中断）",
     "hedgeRace": "Hedge 竞速",
-    "hedgeThresholdExceeded": "首字节超时，已启动备选供应商"
+    "hedgeThresholdExceeded": "首字节超时，已启动备选供应商",
+    "keywordRouting": "关键词路由",
+    "keywordRoutingFrom": "  请求模型: {model}",
+    "keywordRoutingTo": "  路由至: {model}",
+    "keywordRoutingKeyword": "  命中关键词: {keyword}",
+    "keywordRoutingMatchedInSystem": "  命中位置: 系统提示词",
+    "keywordRoutingMatchedInUser": "  命中位置: 最后一条用户消息"
   },
   "selectionMethods": {
     "session_reuse": "会话复用",

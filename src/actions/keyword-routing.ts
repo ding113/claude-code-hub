@@ -70,7 +70,7 @@ function validateRuleFields(fields: {
 export async function listKeywordRoutingRules(): Promise<repo.KeywordRoutingRule[]> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       logger.warn("[KeywordRoutingAction] Unauthorized access attempt");
       return [];
     }
@@ -95,7 +95,7 @@ export async function createKeywordRoutingRuleAction(data: {
 }): Promise<ActionResult<repo.KeywordRoutingRule>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -184,7 +184,7 @@ export async function updateKeywordRoutingRuleAction(
 ): Promise<ActionResult<repo.KeywordRoutingRule>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -263,7 +263,7 @@ export async function updateKeywordRoutingRuleAction(
 export async function deleteKeywordRoutingRuleAction(id: number): Promise<ActionResult> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -322,7 +322,7 @@ export async function refreshKeywordRoutingCacheAction(): Promise<
 > {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return {
         ok: false,
         error: "权限不足",
@@ -357,7 +357,7 @@ export async function refreshKeywordRoutingCacheAction(): Promise<
 export async function getKeywordRoutingCacheStats() {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return null;
     }
 

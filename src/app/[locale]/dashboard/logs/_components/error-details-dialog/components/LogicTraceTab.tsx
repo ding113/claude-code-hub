@@ -983,6 +983,33 @@ export function LogicTraceTab({
                       </div>
                     )}
 
+                    {/* Keyword Routing */}
+                    {item.keywordRouting && (
+                      <div className="pt-2 border-t border-muted/50">
+                        <div className="flex items-center gap-1 text-muted-foreground mb-1">
+                          <ArrowRight className="h-3 w-3" />
+                          <span>{tChain("details.keywordRouting")}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <code className="text-[10px] px-1 py-0.5 bg-muted rounded">
+                            {item.keywordRouting.userRequestedModel}
+                          </code>
+                          <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                          <code className="text-[10px] px-1 py-0.5 bg-muted rounded">
+                            {item.keywordRouting.routedModel}
+                          </code>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {item.keywordRouting.keyword}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground">
+                            {item.keywordRouting.matchedIn === "system"
+                              ? tChain("details.keywordRoutingMatchedInSystem")
+                              : tChain("details.keywordRoutingMatchedInUser")}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Model Redirect */}
                     {item.modelRedirect && (
                       <div className="pt-2 border-t border-muted/50">

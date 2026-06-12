@@ -13,5 +13,6 @@
   "prices": "價格表",
   "providers": "供應商",
   "requestFilters": "請求過濾",
-  "sensitiveWords": "敏感詞"
+  "sensitiveWords": "敏感詞",
+  "keywordRouting": "關鍵詞路由"
 }

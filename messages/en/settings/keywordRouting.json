@@ -1,0 +1,71 @@
+{
+  "add": "Add Rule",
+  "addFailed": "Failed to create routing rule",
+  "addSuccess": "Routing rule created successfully",
+  "cacheStats": "Cache stats: {count} rules loaded",
+  "confirmDelete": "Are you sure you want to delete the rule \"{keyword}\"?",
+  "delete": "Delete Rule",
+  "deleteFailed": "Delete failed",
+  "deleteSuccess": "Routing rule deleted successfully",
+  "description": "Route requests to a different model when prompts contain specific keywords.",
+  "dialog": {
+    "addDescription": "Configure a keyword routing rule. Requests that hit the keyword will be forwarded to the target model.",
+    "addTitle": "Add Routing Rule",
+    "caseSensitiveLabel": "Case Sensitive",
+    "creating": "Creating...",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Optional: Add description...",
+    "editDescription": "Modify the routing rule configuration. Changes will automatically refresh the cache.",
+    "editTitle": "Edit Routing Rule",
+    "keywordLabel": "Keyword *",
+    "keywordPlaceholder": "Enter keyword...",
+    "keywordRequired": "Please enter a keyword",
+    "priorityHint": "Lower values are evaluated first. Default is 0.",
+    "priorityLabel": "Priority",
+    "priorityPlaceholder": "0",
+    "saving": "Saving...",
+    "sourceModelLabel": "Source Model",
+    "sourceModelPlaceholder": "Any model",
+    "targetModelLabel": "Target Model *",
+    "targetModelPlaceholder": "e.g. claude-opus-4-1",
+    "targetModelRequired": "Please enter a target model"
+  },
+  "disable": "Routing rule disabled",
+  "edit": "Edit Rule",
+  "editFailed": "Failed to update routing rule",
+  "editSuccess": "Routing rule updated successfully",
+  "emptyState": "No routing rules yet. Click 'Add Rule' in the top right to start configuration.",
+  "enable": "Routing rule enabled",
+  "masterToggle": {
+    "description": "When enabled, requests that hit a keyword are routed to the configured target model",
+    "disabled": "Keyword routing disabled",
+    "enabled": "Keyword routing enabled",
+    "label": "Enable Keyword Routing",
+    "saveFailed": "Failed to save setting",
+    "section": {
+      "description": "Master switch for keyword-based model routing. The rules below only take effect while this switch is on.",
+      "title": "Keyword Routing Switch"
+    }
+  },
+  "refreshCache": "Refresh Cache",
+  "refreshCacheFailed": "Failed to refresh cache",
+  "refreshCacheSuccess": "Cache refreshed successfully, loaded {count} rules",
+  "section": {
+    "description": "Rules are evaluated in priority order (lower first). The first matched rule rewrites the requested model before provider selection.",
+    "title": "Routing Rules"
+  },
+  "table": {
+    "actions": "Actions",
+    "anyModel": "Any",
+    "caseSensitive": "Case Sensitive",
+    "caseSensitiveNo": "Insensitive",
+    "caseSensitiveYes": "Sensitive",
+    "createdAt": "Created At",
+    "keyword": "Keyword",
+    "priority": "Priority",
+    "sourceModel": "Source Model",
+    "status": "Status",
+    "targetModel": "Target Model"
+  },
+  "title": "Keyword Routing"
+}

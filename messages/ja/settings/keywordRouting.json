@@ -1,0 +1,71 @@
+{
+  "add": "ルールを追加",
+  "addFailed": "ルーティングルールの作成に失敗しました",
+  "addSuccess": "ルーティングルールが正常に作成されました",
+  "cacheStats": "キャッシュ統計：{count}件のルールを読み込み済み",
+  "confirmDelete": "ルール「{keyword}」を削除してもよろしいですか？",
+  "delete": "ルールを削除",
+  "deleteFailed": "削除に失敗しました",
+  "deleteSuccess": "ルーティングルールが正常に削除されました",
+  "description": "リクエスト内容に特定のキーワードが含まれている場合、リクエストを別のモデルにルーティングします。",
+  "dialog": {
+    "addDescription": "キーワードルーティングルールを設定します。キーワードにマッチしたリクエストは転送先モデルに転送されます。",
+    "addTitle": "ルーティングルールを追加",
+    "caseSensitiveLabel": "大文字と小文字を区別",
+    "creating": "作成中...",
+    "descriptionLabel": "説明",
+    "descriptionPlaceholder": "オプション：説明を追加...",
+    "editDescription": "ルーティングルールの設定を変更します。変更後、自動的にキャッシュがリフレッシュされます。",
+    "editTitle": "ルーティングルールを編集",
+    "keywordLabel": "キーワード *",
+    "keywordPlaceholder": "キーワードを入力...",
+    "keywordRequired": "キーワードを入力してください",
+    "priorityHint": "値が小さいほど先に評価されます。デフォルトは0です。",
+    "priorityLabel": "優先度",
+    "priorityPlaceholder": "0",
+    "saving": "保存しています...",
+    "sourceModelLabel": "ソースモデル",
+    "sourceModelPlaceholder": "任意のモデル",
+    "targetModelLabel": "転送先モデル *",
+    "targetModelPlaceholder": "例：claude-opus-4-1",
+    "targetModelRequired": "転送先モデルを入力してください"
+  },
+  "disable": "ルーティングルールが無効になりました",
+  "edit": "ルールを編集",
+  "editFailed": "ルーティングルールの更新に失敗しました",
+  "editSuccess": "ルーティングルールが正常に更新されました",
+  "emptyState": "ルーティングルールがありません。右上の「ルールを追加」をクリックして設定を開始してください。",
+  "enable": "ルーティングルールが有効になりました",
+  "masterToggle": {
+    "description": "有効にすると、キーワードにマッチしたリクエストは設定された転送先モデルにルーティングされます",
+    "disabled": "キーワードルーティングが無効になりました",
+    "enabled": "キーワードルーティングが有効になりました",
+    "label": "キーワードルーティングを有効にする",
+    "saveFailed": "設定の保存に失敗しました",
+    "section": {
+      "description": "キーワードベースのモデルルーティングのマスタースイッチです。オフの場合、以下のルールは適用されません。",
+      "title": "キーワードルーティングスイッチ"
+    }
+  },
+  "refreshCache": "キャッシュを更新",
+  "refreshCacheFailed": "キャッシュのリフレッシュに失敗しました",
+  "refreshCacheSuccess": "キャッシュのリフレッシュに成功しました。{count}件のルールを読み込みました",
+  "section": {
+    "description": "ルールは優先度の小さい順に評価されます。最初にマッチしたルールが、供給元の選択前にリクエストモデルを書き換えます。",
+    "title": "ルーティングルール一覧"
+  },
+  "table": {
+    "actions": "アクション",
+    "anyModel": "任意",
+    "caseSensitive": "大文字小文字",
+    "caseSensitiveNo": "区別しない",
+    "caseSensitiveYes": "区別する",
+    "createdAt": "作成日時",
+    "keyword": "キーワード",
+    "priority": "優先度",
+    "sourceModel": "ソースモデル",
+    "status": "ステータス",
+    "targetModel": "転送先モデル"
+  },
+  "title": "キーワードルーティング"
+}

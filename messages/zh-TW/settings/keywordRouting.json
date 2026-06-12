@@ -1,0 +1,71 @@
+{
+  "add": "新增規則",
+  "addFailed": "建立路由規則失敗",
+  "addSuccess": "路由規則建立成功",
+  "cacheStats": "快取統計：已載入 {count} 條規則",
+  "confirmDelete": "確定要刪除規則「{keyword}」嗎？",
+  "delete": "刪除規則",
+  "deleteFailed": "刪除失敗",
+  "deleteSuccess": "路由規則刪除成功",
+  "description": "當請求內容包含指定關鍵詞時，將請求路由到其他模型。",
+  "dialog": {
+    "addDescription": "配置關鍵詞路由規則，命中關鍵詞的請求將被轉發到目標模型。",
+    "addTitle": "新增路由規則",
+    "caseSensitiveLabel": "區分大小寫",
+    "creating": "建立中...",
+    "descriptionLabel": "說明",
+    "descriptionPlaceholder": "選填：新增說明...",
+    "editDescription": "修改路由規則配置，更改後將自動刷新快取。",
+    "editTitle": "編輯路由規則",
+    "keywordLabel": "關鍵詞 *",
+    "keywordPlaceholder": "輸入關鍵詞...",
+    "keywordRequired": "請輸入關鍵詞",
+    "priorityHint": "數值越小越先比對，預設為 0。",
+    "priorityLabel": "優先級",
+    "priorityPlaceholder": "0",
+    "saving": "儲存中...",
+    "sourceModelLabel": "來源模型",
+    "sourceModelPlaceholder": "任意模型",
+    "targetModelLabel": "目標模型 *",
+    "targetModelPlaceholder": "例如 claude-opus-4-1",
+    "targetModelRequired": "請輸入目標模型"
+  },
+  "disable": "路由規則已停用",
+  "edit": "編輯規則",
+  "editFailed": "更新路由規則失敗",
+  "editSuccess": "路由規則更新成功",
+  "emptyState": "暫無路由規則，點選右上角「新增規則」開始配置。",
+  "enable": "路由規則已啟用",
+  "masterToggle": {
+    "description": "啟用後，命中關鍵詞的請求將被路由到配置的目標模型",
+    "disabled": "關鍵詞路由已停用",
+    "enabled": "關鍵詞路由已啟用",
+    "label": "啟用關鍵詞路由",
+    "saveFailed": "儲存設定失敗",
+    "section": {
+      "description": "關鍵詞模型路由的總開關，關閉後下方規則不會生效。",
+      "title": "關鍵詞路由開關"
+    }
+  },
+  "refreshCache": "重新整理快取",
+  "refreshCacheFailed": "刷新快取失敗",
+  "refreshCacheSuccess": "快取刷新成功，已載入 {count} 條規則",
+  "section": {
+    "description": "規則按優先級由小到大依次比對，命中的第一條規則會在供應商選擇前改寫請求模型。",
+    "title": "路由規則列表"
+  },
+  "table": {
+    "actions": "動作",
+    "anyModel": "任意",
+    "caseSensitive": "大小寫",
+    "caseSensitiveNo": "不區分",
+    "caseSensitiveYes": "區分",
+    "createdAt": "建立時間",
+    "keyword": "關鍵詞",
+    "priority": "優先級",
+    "sourceModel": "來源模型",
+    "status": "狀態",
+    "targetModel": "目標模型"
+  },
+  "title": "關鍵詞路由"
+}

@@ -13,5 +13,6 @@
   "prices": "Цены",
   "providers": "Поставщики",
   "requestFilters": "Запросы",
-  "sensitiveWords": "Фильтры"
+  "sensitiveWords": "Фильтры",
+  "keywordRouting": "Маршрутизация"
 }

@@ -119,7 +119,10 @@
     "afterHealthCheck": "After Health Check",
     "filteredProviders": "Filtered Providers",
     "priorityLevels": "Priority Levels",
-    "candidates": "Candidates"
+    "candidates": "Candidates",
+    "keywordRouting": "Keyword Routing",
+    "keywordRoutingMatchedInSystem": "Matched in system prompt",
+    "keywordRoutingMatchedInUser": "Matched in user message"
   },
   "technicalTimeline": "Technical Timeline",
   "timeline": {
@@ -243,7 +246,13 @@
     "hedgeLoserBilled": "Hedge Race Loser (response reclaimed & billed)",
     "clientAbort": "Client Disconnected (request aborted)",
     "hedgeRace": "Hedge Race",
-    "hedgeThresholdExceeded": "First-byte timeout exceeded, alternative provider launched"
+    "hedgeThresholdExceeded": "First-byte timeout exceeded, alternative provider launched",
+    "keywordRouting": "Keyword Routing",
+    "keywordRoutingFrom": "  Requested Model: {model}",
+    "keywordRoutingTo": "  Routed To: {model}",
+    "keywordRoutingKeyword": "  Matched Keyword: {keyword}",
+    "keywordRoutingMatchedInSystem": "  Matched In: system prompt",
+    "keywordRoutingMatchedInUser": "  Matched In: last user message"
   },
   "selectionMethods": {
     "session_reuse": "Session Reuse",

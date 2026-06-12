@@ -13,5 +13,6 @@
   "prices": "Pricing",
   "providers": "Providers",
   "requestFilters": "Requests",
-  "sensitiveWords": "Filters"
+  "sensitiveWords": "Filters",
+  "keywordRouting": "Keyword Routing"
 }

@@ -119,7 +119,10 @@
     "afterHealthCheck": "健康檢查後",
     "filteredProviders": "被過濾供應商",
     "priorityLevels": "優先級層級",
-    "candidates": "候選供應商"
+    "candidates": "候選供應商",
+    "keywordRouting": "關鍵詞路由",
+    "keywordRoutingMatchedInSystem": "命中系統提示詞",
+    "keywordRoutingMatchedInUser": "命中用戶訊息"
   },
   "technicalTimeline": "技術時間線",
   "timeline": {
@@ -243,7 +246,13 @@
     "hedgeLoserBilled": "競速落敗（已取回回應並計費）",
     "clientAbort": "客戶端已斷開連接（請求中斷）",
     "hedgeRace": "Hedge 競速",
-    "hedgeThresholdExceeded": "首位元組逾時，已啟動備選供應商"
+    "hedgeThresholdExceeded": "首位元組逾時，已啟動備選供應商",
+    "keywordRouting": "關鍵詞路由",
+    "keywordRoutingFrom": "  請求模型: {model}",
+    "keywordRoutingTo": "  路由至: {model}",
+    "keywordRoutingKeyword": "  命中關鍵詞: {keyword}",
+    "keywordRoutingMatchedInSystem": "  命中位置: 系統提示詞",
+    "keywordRoutingMatchedInUser": "  命中位置: 最後一條用戶訊息"
   },
   "selectionMethods": {
     "session_reuse": "會話複用",

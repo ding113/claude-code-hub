@@ -4,6 +4,7 @@ import config from "./config.json";
 import data from "./data.json";
 import errorRules from "./errorRules.json";
 import errors from "./errors.json";
+import keywordRouting from "./keywordRouting.json";
 import logs from "./logs.json";
 import nav from "./nav.json";
 import notifications from "./notifications.json";
@@ -107,6 +108,7 @@ export default {
   providerTypes: providersFormProviderTypes,
   prices,
   sensitiveWords,
+  keywordRouting,
   requestFilters,
   logs,
   data,

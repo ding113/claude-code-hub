@@ -917,6 +917,25 @@ export function formatProviderTimeline(
       timeline += `${t("timeline.provider", { provider: item.name })}\n`;
       timeline += `${t("timeline.successStatus", { code: item.statusCode || 200 })}\n`;
 
+      // 关键词路由信息
+      if (item.keywordRouting) {
+        timeline += `\n${t("timeline.keywordRouting")}:\n`;
+        timeline += `${t("timeline.keywordRoutingFrom", {
+          model: item.keywordRouting.userRequestedModel,
+        })}\n`;
+        timeline += `${t("timeline.keywordRoutingTo", {
+          model: item.keywordRouting.routedModel,
+        })}\n`;
+        timeline += `${t("timeline.keywordRoutingKeyword", {
+          keyword: item.keywordRouting.keyword,
+        })}\n`;
+        timeline += `${
+          item.keywordRouting.matchedIn === "system"
+            ? t("timeline.keywordRoutingMatchedInSystem")
+            : t("timeline.keywordRoutingMatchedInUser")
+        }\n`;
+      }
+
       // 模型重定向信息
       if (item.modelRedirect) {
         timeline += `\n${t("timeline.modelRedirect")}:\n`;

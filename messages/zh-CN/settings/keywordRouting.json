@@ -1,0 +1,71 @@
+{
+  "add": "添加规则",
+  "addFailed": "创建路由规则失败",
+  "addSuccess": "路由规则创建成功",
+  "cacheStats": "缓存统计: 已加载 {count} 条规则",
+  "confirmDelete": "确定要删除规则\"{keyword}\"吗？",
+  "delete": "删除规则",
+  "deleteFailed": "删除失败",
+  "deleteSuccess": "路由规则删除成功",
+  "description": "当请求内容包含指定关键词时，将请求路由到其他模型。",
+  "dialog": {
+    "addDescription": "配置关键词路由规则，命中关键词的请求将被转发到目标模型。",
+    "addTitle": "添加路由规则",
+    "caseSensitiveLabel": "区分大小写",
+    "creating": "创建中...",
+    "descriptionLabel": "说明",
+    "descriptionPlaceholder": "可选：添加说明...",
+    "editDescription": "修改路由规则配置，更改后将自动刷新缓存。",
+    "editTitle": "编辑路由规则",
+    "keywordLabel": "关键词 *",
+    "keywordPlaceholder": "输入关键词...",
+    "keywordRequired": "请输入关键词",
+    "priorityHint": "数值越小越先匹配，默认为 0。",
+    "priorityLabel": "优先级",
+    "priorityPlaceholder": "0",
+    "saving": "保存中...",
+    "sourceModelLabel": "来源模型",
+    "sourceModelPlaceholder": "任意模型",
+    "targetModelLabel": "目标模型 *",
+    "targetModelPlaceholder": "例如 claude-opus-4-1",
+    "targetModelRequired": "请输入目标模型"
+  },
+  "disable": "路由规则已禁用",
+  "edit": "编辑规则",
+  "editFailed": "更新路由规则失败",
+  "editSuccess": "路由规则更新成功",
+  "emptyState": "暂无路由规则，点击右上角\"添加规则\"开始配置。",
+  "enable": "路由规则已启用",
+  "masterToggle": {
+    "description": "启用后，命中关键词的请求将被路由到配置的目标模型",
+    "disabled": "关键词路由已禁用",
+    "enabled": "关键词路由已启用",
+    "label": "启用关键词路由",
+    "saveFailed": "保存设置失败",
+    "section": {
+      "description": "关键词模型路由的总开关，关闭后下方规则不会生效。",
+      "title": "关键词路由开关"
+    }
+  },
+  "refreshCache": "刷新缓存",
+  "refreshCacheFailed": "刷新缓存失败",
+  "refreshCacheSuccess": "缓存刷新成功，已加载 {count} 条规则",
+  "section": {
+    "description": "规则按优先级从小到大依次匹配，命中的第一条规则会在供应商选择前改写请求模型。",
+    "title": "路由规则列表"
+  },
+  "table": {
+    "actions": "操作",
+    "anyModel": "任意",
+    "caseSensitive": "大小写",
+    "caseSensitiveNo": "不区分",
+    "caseSensitiveYes": "区分",
+    "createdAt": "创建时间",
+    "keyword": "关键词",
+    "priority": "优先级",
+    "sourceModel": "来源模型",
+    "status": "状态",
+    "targetModel": "目标模型"
+  },
+  "title": "关键词路由"
+}
