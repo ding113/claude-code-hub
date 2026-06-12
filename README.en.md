@@ -22,6 +22,11 @@ Claude Code Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Cl
 
 ---
 
+> [!IMPORTANT]
+> **This project is currently under active refactoring**
+>
+> Claude Code Hub Plus, the refactored version of Claude Code Hub, is expected to be open-sourced under the AGPL license in Q3. Claude Code Hub Plus is dedicated to building a high-performance, stable, commercial-grade LLM gateway, offering comprehensive commercial features such as format conversion, privacy filtering, a model marketplace, and top-up billing, while significantly improving the theoretical performance of the forwarding core. During development of the refactored version, progress and community support for the Node.js version may be delayed — thank you for your understanding.
+
 <table>
 <tr>
 <td width="200">
@@ -74,21 +79,6 @@ Register via this link to get started → <a href="https://co.yes.vg/register?re
 <td>
 <b>💎 Special Offer</b>: <a href="https://aigocode.com/invite/QDNEJJAH">AIGoCode</a> is an all-in-one platform integrating the latest models from Claude Code, Codex, and Gemini, delivering stable, efficient, and cost-effective AI coding services. Flexible subscription plans (monthly or bundled), zero ban risk, direct access from China, massive credit pools, and lightning-fast responses.<br/>
 AIGoCode offers a special bonus for CCH users — register via this link and receive an extra <b>10% bonus credit</b> on your first top-up → <a href="https://aigocode.com/invite/QDNEJJAH">Visit Now</a>
-</td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="200">
-<a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">
-<img src="public/readme/aicodemirror.jpg" alt="AICodeMirror Logo" width="180"/>
-</a>
-</td>
-<td>
-<b>💎 Special Offer</b>: Thanks to <a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">AICodeMirror</a> for sponsoring this project! AICodeMirror provides official high-stability relay services for Claude Code / Codex / Gemini CLI, with enterprise-grade concurrency, fast invoicing, and 24/7 dedicated technical support.<br/>
-Claude Code / Codex / Gemini official channels at 38% / 6% / 9% of original price, with extra discounts on top-ups!<br/>
-For claude-code-hub users, AICodeMirror offers special benefits: register via this link to enjoy 20% off your first top-up, and enterprise customers can get up to 25% off! → <a href="https://www.aicodemirror.com/register?invitecode=ZRQVL9">Visit Now</a>
 </td>
 </tr>
 </table>
