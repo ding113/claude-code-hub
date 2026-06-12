@@ -327,6 +327,27 @@ function createHangingResponsesSse(upstreamSignal: AbortSignal): Response {
   });
 }
 
+function createPreBodyHangingResponsesSse(upstreamSignal: AbortSignal): Response {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      upstreamSignal.addEventListener(
+        "abort",
+        () => {
+          const error = new Error("streaming_idle");
+          error.name = "AbortError";
+          controller.error(error);
+        },
+        { once: true }
+      );
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 function createActiveHangingResponsesSse(upstreamSignal: AbortSignal): Response {
   const encoder = new TextEncoder();
   let index = 0;
@@ -711,6 +732,51 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
       expect(upstreamController.signal.aborted).toBe(false);
 
       await vi.advanceTimersByTimeAsync(1_000);
+      const tasks = asyncTasks.splice(0, asyncTasks.length);
+      await Promise.allSettled(tasks);
+
+      expect(upstreamController.signal.aborted).toBe(true);
+      expect(AsyncTaskManager.cancel).not.toHaveBeenCalled();
+      expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+        123,
+        expect.objectContaining({
+          statusCode: 499,
+          errorMessage: "CLIENT_ABORTED",
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses idle timeout for client-aborted streams that hang before the first chunk", async () => {
+    vi.useFakeTimers();
+    try {
+      const clientController = new AbortController();
+      const upstreamController = new AbortController();
+      const session = createSession(clientController.signal);
+      session.provider.streamingIdleTimeoutMs = 5_000;
+      Object.assign(session, { responseController: upstreamController });
+      setDeferredStreamingFinalization(session, {
+        providerId: 1,
+        providerName: "avemujica-responses",
+        providerPriority: 1,
+        attemptNumber: 1,
+        totalProvidersAttempted: 1,
+        isFirstAttempt: true,
+        isFailoverSuccess: false,
+        endpointId: 42,
+        endpointUrl: "https://api.test.invalid/v1",
+        upstreamStatusCode: 200,
+      });
+
+      await ProxyResponseHandler.dispatch(
+        session,
+        createPreBodyHangingResponsesSse(upstreamController.signal)
+      );
+      clientController.abort();
+
+      await vi.advanceTimersByTimeAsync(5_000);
       const tasks = asyncTasks.splice(0, asyncTasks.length);
       await Promise.allSettled(tasks);
 

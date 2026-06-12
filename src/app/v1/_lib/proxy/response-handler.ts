@@ -2329,11 +2329,70 @@ export class ProxyResponseHandler {
     // ⭐ 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
     let idleTimeoutId: NodeJS.Timeout | null = null;
     let clientAbortDrainTimeoutId: NodeJS.Timeout | null = null;
+    const chunks: string[] = [];
     const clearClientAbortDrainTimer = () => {
       if (clientAbortDrainTimeoutId) {
         clearTimeout(clientAbortDrainTimeoutId);
         clientAbortDrainTimeoutId = null;
       }
+    };
+    const clearIdleTimer = () => {
+      if (idleTimeoutId) {
+        clearTimeout(idleTimeoutId);
+        idleTimeoutId = null;
+      }
+    };
+    const startIdleTimer = () => {
+      if (idleTimeoutMs === Infinity) return; // 禁用时跳过
+      clearIdleTimer(); // 清除旧的
+      idleTimeoutId = setTimeout(() => {
+        logger.warn("ResponseHandler: Streaming idle timeout triggered", {
+          taskId,
+          providerId: provider.id,
+          idleTimeoutMs,
+          chunksCollected: chunks.length,
+        });
+
+        // ⭐ 1. 关闭客户端流（让客户端收到连接关闭通知，避免悬挂）
+        try {
+          if (streamController) {
+            streamController.error(new Error("Streaming idle timeout"));
+            logger.debug("ResponseHandler: Client stream closed due to idle timeout", {
+              taskId,
+              providerId: provider.id,
+            });
+          }
+        } catch (e) {
+          logger.warn("ResponseHandler: Failed to close client stream", {
+            taskId,
+            providerId: provider.id,
+            error: e,
+          });
+        }
+
+        // ⭐ 2. 终止上游连接（避免资源泄漏）
+        try {
+          const sessionWithController = session as typeof session & {
+            responseController?: AbortController;
+          };
+          if (sessionWithController.responseController) {
+            sessionWithController.responseController.abort(new Error("streaming_idle"));
+            logger.debug("ResponseHandler: Upstream connection aborted due to idle timeout", {
+              taskId,
+              providerId: provider.id,
+            });
+          }
+        } catch (e) {
+          logger.warn("ResponseHandler: Failed to abort upstream connection", {
+            taskId,
+            providerId: provider.id,
+            error: e,
+          });
+        }
+
+        // ⭐ 3. 终止后台读取任务
+        abortController.abort(new Error("streaming_idle"));
+      }, idleTimeoutMs);
     };
     const cleanupClientAbortListener = bindClientAbortListener(session.clientAbortSignal, () => {
       logger.debug("ResponseHandler: Client disconnected, cleaning up", {
@@ -2346,6 +2405,7 @@ export class ProxyResponseHandler {
       // still drain buffered final usage and record the request as successful.
       // Idle/response timeout paths still abort via abortController.
       clearClientAbortDrainTimer();
+      startIdleTimer();
       clientAbortDrainTimeoutId = setTimeout(() => {
         logger.info("ResponseHandler: Client abort drain window exceeded", {
           taskId,
@@ -2377,71 +2437,13 @@ export class ProxyResponseHandler {
       // 注意：即使 STORE_SESSION_RESPONSE_BODY=false（不写入 Redis），这里也会在内存中累积完整流内容：
       // - 用于解析 usage/cost 与内部结算（例如“假 200”检测）
       // 因此该开关仅影响“是否持久化”，不用于控制流式内存占用。
-      const chunks: string[] = [];
       let usageForCost: UsageMetrics | null = null;
       let isFirstChunk = true; // ⭐ 标记是否为第一块数据
 
-      const startIdleTimer = () => {
-        if (idleTimeoutMs === Infinity) return; // 禁用时跳过
-        clearIdleTimer(); // 清除旧的
-        idleTimeoutId = setTimeout(() => {
-          logger.warn("ResponseHandler: Streaming idle timeout triggered", {
-            taskId,
-            providerId: provider.id,
-            idleTimeoutMs,
-            chunksCollected: chunks.length,
-          });
-
-          // ⭐ 1. 关闭客户端流（让客户端收到连接关闭通知，避免悬挂）
-          try {
-            if (streamController) {
-              streamController.error(new Error("Streaming idle timeout"));
-              logger.debug("ResponseHandler: Client stream closed due to idle timeout", {
-                taskId,
-                providerId: provider.id,
-              });
-            }
-          } catch (e) {
-            logger.warn("ResponseHandler: Failed to close client stream", {
-              taskId,
-              providerId: provider.id,
-              error: e,
-            });
-          }
-
-          // ⭐ 2. 终止上游连接（避免资源泄漏）
-          try {
-            const sessionWithController = session as typeof session & {
-              responseController?: AbortController;
-            };
-            if (sessionWithController.responseController) {
-              sessionWithController.responseController.abort(new Error("streaming_idle"));
-              logger.debug("ResponseHandler: Upstream connection aborted due to idle timeout", {
-                taskId,
-                providerId: provider.id,
-              });
-            }
-          } catch (e) {
-            logger.warn("ResponseHandler: Failed to abort upstream connection", {
-              taskId,
-              providerId: provider.id,
-              error: e,
-            });
-          }
-
-          // ⭐ 3. 终止后台读取任务
-          abortController.abort(new Error("streaming_idle"));
-        }, idleTimeoutMs);
-      };
-      const clearIdleTimer = () => {
-        if (idleTimeoutId) {
-          clearTimeout(idleTimeoutId);
-          idleTimeoutId = null;
-        }
-      };
-
       // ⭐ 不在首次读取前启动 idle timer（避免与首字节超时职责重叠）
-      // idle timer 仅在首块数据到达后启动，用于检测流中途静默
+      // idle timer 仅在首块数据到达后启动，用于检测流中途静默。
+      // 客户端断开后例外：后台 drain 也会启动 idle timer，避免 pre-body
+      // 静默一直等到 60s drain 总上限。
 
       const flushAndJoin = (): string => {
         const flushed = decoder.decode();
