@@ -11,6 +11,8 @@ import type { ActionResult } from "./types";
 const KEYWORD_MAX_LENGTH = 500;
 const MODEL_MAX_LENGTH = 128;
 const DESCRIPTION_MAX_LENGTH = 500;
+// 与 KeywordRoutingRuleCreateSchema 中 priority 的 min/max 边界保持一致
+const PRIORITY_ABS_LIMIT = 1000000;
 
 /**
  * 校验创建/更新规则的字段，返回错误信息（合法时返回 null）
@@ -50,8 +52,13 @@ function validateRuleFields(fields: {
     return `描述长度不能超过 ${DESCRIPTION_MAX_LENGTH} 个字符`;
   }
 
-  if (fields.priority !== undefined && !Number.isInteger(fields.priority)) {
-    return "优先级必须为整数";
+  if (fields.priority !== undefined) {
+    if (!Number.isInteger(fields.priority)) {
+      return "优先级必须为整数";
+    }
+    if (fields.priority < -PRIORITY_ABS_LIMIT || fields.priority > PRIORITY_ABS_LIMIT) {
+      return `优先级必须在 -${PRIORITY_ABS_LIMIT} 到 ${PRIORITY_ABS_LIMIT} 之间`;
+    }
   }
 
   return null;

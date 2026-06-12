@@ -66,6 +66,37 @@ describe("keyword-routing actions", () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
   });
 
+  describe("listKeywordRoutingRules", () => {
+    it("returns rules from the repository for admins", async () => {
+      getAllKeywordRoutingRulesMock.mockResolvedValue([baseRule]);
+
+      const { listKeywordRoutingRules } = await import("@/actions/keyword-routing");
+      const rules = await listKeywordRoutingRules();
+
+      expect(rules).toEqual([baseRule]);
+      expect(getAllKeywordRoutingRulesMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns an empty list for non-admin sessions without touching the repository", async () => {
+      getSessionMock.mockResolvedValue({ user: { id: 2, role: "user" } });
+
+      const { listKeywordRoutingRules } = await import("@/actions/keyword-routing");
+      const rules = await listKeywordRoutingRules();
+
+      expect(rules).toEqual([]);
+      expect(getAllKeywordRoutingRulesMock).not.toHaveBeenCalled();
+    });
+
+    it("returns an empty list when the repository throws", async () => {
+      getAllKeywordRoutingRulesMock.mockRejectedValue(new Error("db down"));
+
+      const { listKeywordRoutingRules } = await import("@/actions/keyword-routing");
+      const rules = await listKeywordRoutingRules();
+
+      expect(rules).toEqual([]);
+    });
+  });
+
   describe("createKeywordRoutingRuleAction", () => {
     it("rejects an empty keyword without touching the repository", async () => {
       const { createKeywordRoutingRuleAction } = await import("@/actions/keyword-routing");
@@ -120,6 +151,79 @@ describe("keyword-routing actions", () => {
 
       expect(res.ok).toBe(false);
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects a source model longer than 128 characters", async () => {
+      const { createKeywordRoutingRuleAction } = await import("@/actions/keyword-routing");
+      const res = await createKeywordRoutingRuleAction({
+        keyword: "ultrathink",
+        sourceModel: "s".repeat(129),
+        targetModel: "model-b",
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toBe("来源模型长度不能超过 128 个字符");
+      expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects a description longer than 500 characters", async () => {
+      const { createKeywordRoutingRuleAction } = await import("@/actions/keyword-routing");
+      const res = await createKeywordRoutingRuleAction({
+        keyword: "ultrathink",
+        targetModel: "model-b",
+        description: "d".repeat(501),
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toBe("描述长度不能超过 500 个字符");
+      expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects a non-integer priority", async () => {
+      const { createKeywordRoutingRuleAction } = await import("@/actions/keyword-routing");
+      const res = await createKeywordRoutingRuleAction({
+        keyword: "ultrathink",
+        targetModel: "model-b",
+        priority: 1.5,
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toBe("优先级必须为整数");
+      expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects a priority outside the +/-1000000 bounds", async () => {
+      const { createKeywordRoutingRuleAction } = await import("@/actions/keyword-routing");
+      const res = await createKeywordRoutingRuleAction({
+        keyword: "ultrathink",
+        targetModel: "model-b",
+        priority: 2000000,
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toBe("优先级必须在 -1000000 到 1000000 之间");
+      expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
+    });
+
+    it("returns an error result and emits a failure audit when the repository throws", async () => {
+      createKeywordRoutingRuleMock.mockRejectedValue(new Error("db down"));
+
+      const { createKeywordRoutingRuleAction } = await import("@/actions/keyword-routing");
+      const res = await createKeywordRoutingRuleAction({
+        keyword: "ultrathink",
+        targetModel: "model-b",
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toBe("创建关键词路由规则失败");
+      expect(emitActionAuditMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: "keyword_routing_rule",
+          action: "keyword_routing_rule.create",
+          success: false,
+          errorMessage: "CREATE_FAILED",
+        })
+      );
     });
 
     it("passes a valid create through to the repository and emits an audit event", async () => {
