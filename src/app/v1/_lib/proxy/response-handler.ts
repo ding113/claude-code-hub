@@ -546,6 +546,14 @@ type FinalizeDeferredStreamingResult = {
    * 以便与异步累加的输家费用共存而互不覆盖。
    */
   billHedgeLosers: boolean;
+  /**
+   * clientAbortCompleteSuccess 门控解析出的 usage（U11：drain 路径避免对同一份
+   * allContent 二次解析）。providerType 与调用方不一致时调用方需自行重新解析。
+   */
+  clientAbortGateUsage?: {
+    usageMetrics: UsageMetrics | null;
+    providerType: Provider["providerType"] | undefined;
+  };
 };
 
 /**
@@ -593,6 +601,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   const detected = shouldDetectFake200
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
+  let clientAbortGateUsage: FinalizeDeferredStreamingResult["clientAbortGateUsage"];
   const clientAbortCompleteSuccess = (() => {
     if (
       streamEndedNormally ||
@@ -620,6 +629,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     }
 
     const { usageMetrics } = parseUsageFromResponseText(allContent, provider?.providerType);
+    clientAbortGateUsage = { usageMetrics, providerType: provider?.providerType };
     return hasPositiveBillableTokens(usageMetrics);
   })();
 
@@ -679,6 +689,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       providerIdForPersistence,
       isHedgeWinner,
       billHedgeLosers,
+      clientAbortGateUsage,
     };
   }
 
@@ -761,6 +772,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       providerIdForPersistence,
       isHedgeWinner,
       billHedgeLosers,
+      clientAbortGateUsage,
     };
   }
 
@@ -821,6 +833,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       providerIdForPersistence,
       isHedgeWinner,
       billHedgeLosers,
+      clientAbortGateUsage,
     };
   }
 
@@ -873,6 +886,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       providerIdForPersistence,
       isHedgeWinner,
       billHedgeLosers,
+      clientAbortGateUsage,
     };
   }
 
@@ -975,6 +989,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     providerIdForPersistence,
     isHedgeWinner,
     billHedgeLosers,
+    clientAbortGateUsage,
   };
 }
 
@@ -1406,28 +1421,22 @@ export class ProxyResponseHandler {
         }
 
         if (billableUsageMetrics && messageContext) {
+          const billing = sessionBillingInputs(session, provider, priorityServiceTierApplied);
           const costUpdateResult = await updateRequestCostFromUsage(
             messageContext.id,
             session,
             billableUsageMetrics,
-            provider,
-            provider.costMultiplier,
-            session.getContext1mApplied(),
-            priorityServiceTierApplied,
-            session.getGroupCostMultiplier()
+            billing
           );
           if (costUpdateResult.longContextPricingApplied) {
             ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
           }
 
           // 追踪消费到 Redis（用于限流）
-          await trackCostToRedis(
-            session,
-            billableUsageMetrics,
-            priorityServiceTierApplied,
-            costUpdateResult.resolvedPricing,
-            costUpdateResult.longContextPricing
-          );
+          await trackCostToRedis(session, billableUsageMetrics, billing, {
+            resolvedPricing: costUpdateResult.resolvedPricing,
+            longContextPricing: costUpdateResult.longContextPricing,
+          });
         }
 
         // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
@@ -2496,7 +2505,11 @@ export class ProxyResponseHandler {
         const tracker = ProxyStatusTracker.getInstance();
         tracker.endRequest(messageContext.user.id, messageContext.id);
 
-        const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
+        // U11：门控已在 finalize 内解析过同一份 allContent，类型一致时直接复用
+        const usageResult =
+          finalized.clientAbortGateUsage?.providerType === provider.providerType
+            ? { usageMetrics: finalized.clientAbortGateUsage.usageMetrics }
+            : parseUsageFromResponseText(allContent, provider.providerType);
         usageForCost = usageResult.usageMetrics;
 
         const actualServiceTier = parseServiceTierFromResponseText(allContent);
@@ -2554,15 +2567,12 @@ export class ProxyResponseHandler {
           allContent
         );
 
+        const billing = sessionBillingInputs(session, provider, priorityServiceTierApplied);
         const costUpdateResult = await updateRequestCostFromUsage(
           messageContext.id,
           session,
           billableUsageForCost,
-          provider,
-          provider.costMultiplier,
-          session.getContext1mApplied(),
-          priorityServiceTierApplied,
-          session.getGroupCostMultiplier(),
+          billing,
           // Any hedge-path winner with loser billing on uses the loser-sum-aware write.
           // Gate on billHedgeLosers (not the racy isHedgeWinner/launchedProviderCount):
           // an alternative can still be mid-launch when the initial provider commits, so
@@ -2575,13 +2585,10 @@ export class ProxyResponseHandler {
         }
 
         // 追踪消费到 Redis（用于限流）
-        await trackCostToRedis(
-          session,
-          billableUsageForCost,
-          priorityServiceTierApplied,
-          costUpdateResult.resolvedPricing,
-          costUpdateResult.longContextPricing
-        );
+        await trackCostToRedis(session, billableUsageForCost, billing, {
+          resolvedPricing: costUpdateResult.resolvedPricing,
+          longContextPricing: costUpdateResult.longContextPricing,
+        });
 
         // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
         let costUsdStr: string | undefined;
@@ -3652,11 +3659,7 @@ async function updateRequestCostFromUsage(
   messageId: number,
   session: ProxySession,
   usage: UsageMetrics | null,
-  provider: Provider | null,
-  costMultiplier: number = 1.0,
-  context1mApplied: boolean = false,
-  priorityServiceTierApplied: boolean = false,
-  groupCostMultiplier: number = 1.0,
+  billing: BillingComputeInputs,
   // When true the winner cost is written via a direct, idempotent, loser-sum-aware
   // replacement (cost_usd = winnerCost + SUM(hedge_losers[].costUsd)) so it coexists
   // with losers' concurrent additive writes without clobbering or double-counting.
@@ -3668,6 +3671,13 @@ async function updateRequestCostFromUsage(
   longContextPricing: ResolvedLongContextPricing | null;
   longContextPricingApplied: boolean;
 }> {
+  const {
+    provider,
+    costMultiplier,
+    context1mApplied,
+    priorityServiceTierApplied,
+    groupCostMultiplier,
+  } = billing;
   if (!usage) {
     logger.warn("[CostCalculation] No usage data, skipping cost update", {
       messageId,
@@ -3978,14 +3988,14 @@ export async function finalizeHedgeLoserBilling(params: {
     await trackCostToRedis(
       loserSession,
       billableUsage,
-      priorityServiceTierApplied,
-      resolvedPricing,
-      longContextPricing,
       {
         provider,
+        costMultiplier,
         context1mApplied,
+        priorityServiceTierApplied,
         groupCostMultiplier,
-      }
+      },
+      { resolvedPricing, longContextPricing }
     );
 
     logger.info("[HedgeLoserBilling] Billed hedge loser", {
@@ -4065,15 +4075,12 @@ export async function finalizeRequestStats(
     let perRequestCostUsd: string | undefined;
 
     if (billablePerRequestUsage) {
+      const billing = sessionBillingInputs(session, provider, priorityServiceTierApplied);
       const costUpdateResult = await updateRequestCostFromUsage(
         messageContext.id,
         session,
         billablePerRequestUsage,
-        provider,
-        provider.costMultiplier,
-        session.getContext1mApplied(),
-        priorityServiceTierApplied,
-        session.getGroupCostMultiplier(),
+        billing,
         winnerLoserAware
       );
       if (costUpdateResult.resolvedPricing) {
@@ -4083,13 +4090,10 @@ export async function finalizeRequestStats(
         ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
       }
 
-      await trackCostToRedis(
-        session,
-        billablePerRequestUsage,
-        priorityServiceTierApplied,
-        costUpdateResult.resolvedPricing,
-        costUpdateResult.longContextPricing
-      );
+      await trackCostToRedis(session, billablePerRequestUsage, billing, {
+        resolvedPricing: costUpdateResult.resolvedPricing,
+        longContextPricing: costUpdateResult.longContextPricing,
+      });
       perRequestCostUsd = costUpdateResult.costUsd ?? undefined;
     }
 
@@ -4143,15 +4147,12 @@ export async function finalizeRequestStats(
     maybeSetCodexContext1m(session, provider, billableNormalizedUsage.input_tokens);
   }
 
+  const billing = sessionBillingInputs(session, provider, priorityServiceTierApplied);
   const costUpdateResult = await updateRequestCostFromUsage(
     messageContext.id,
     session,
     normalizedUsage,
-    provider,
-    provider.costMultiplier,
-    session.getContext1mApplied(),
-    priorityServiceTierApplied,
-    session.getGroupCostMultiplier(),
+    billing,
     winnerLoserAware
   );
   if (costUpdateResult.longContextPricingApplied) {
@@ -4159,13 +4160,10 @@ export async function finalizeRequestStats(
   }
 
   // 5. 追踪消费到 Redis（用于限流）
-  await trackCostToRedis(
-    session,
-    normalizedUsage,
-    priorityServiceTierApplied,
-    costUpdateResult.resolvedPricing,
-    costUpdateResult.longContextPricing
-  );
+  await trackCostToRedis(session, normalizedUsage, billing, {
+    resolvedPricing: costUpdateResult.resolvedPricing,
+    longContextPricing: costUpdateResult.longContextPricing,
+  });
 
   // 6. 更新 session usage
   if (session.sessionId) {
@@ -4253,28 +4251,48 @@ export async function finalizeRequestStats(
 /**
  * 追踪消费到 Redis（用于限流）
  */
-type TrackCostBillingOverrides = {
-  provider?: Provider | null;
-  context1mApplied?: boolean;
-  groupCostMultiplier?: number;
+/**
+ * 计费五元组（U19）：一次构造，贯穿 updateRequestCostFromUsage / trackCostToRedis /
+ * buildCostCalculationOptions。正常路径用 sessionBillingInputs 从会话即时取值；
+ * hedge loser 路径用 commitWinner 之前的快照构造，避免被赢家提交污染。
+ */
+type BillingComputeInputs = {
+  provider: Provider | null;
+  costMultiplier: number;
+  context1mApplied: boolean;
+  priorityServiceTierApplied: boolean;
+  groupCostMultiplier: number;
 };
+
+function sessionBillingInputs(
+  session: ProxySession,
+  provider: Provider,
+  priorityServiceTierApplied: boolean
+): BillingComputeInputs {
+  return {
+    provider,
+    costMultiplier: provider.costMultiplier,
+    context1mApplied: session.getContext1mApplied(),
+    priorityServiceTierApplied,
+    groupCostMultiplier: session.getGroupCostMultiplier(),
+  };
+}
 
 async function trackCostToRedis(
   session: ProxySession,
   usage: UsageMetrics | null,
-  priorityServiceTierApplied: boolean = false,
-  resolvedPricingOverride?: Awaited<
-    ReturnType<ProxySession["getResolvedPricingByBillingSource"]>
-  > | null,
-  longContextPricingOverride?: ResolvedLongContextPricing | null,
-  billingOverrides?: TrackCostBillingOverrides
+  billing: BillingComputeInputs,
+  pricingOverrides?: {
+    resolvedPricing?: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>> | null;
+    longContextPricing?: ResolvedLongContextPricing | null;
+  }
 ): Promise<void> {
   if (!usage || !session.sessionId) return;
   if (isNonBillingUsageEndpoint(session)) return;
 
   try {
     const messageContext = session.messageContext;
-    const provider = billingOverrides?.provider ?? session.provider;
+    const { provider, priorityServiceTierApplied } = billing;
     const key = session.authState?.key;
     const user = session.authState?.user;
 
@@ -4284,26 +4302,26 @@ async function trackCostToRedis(
     if (!modelName) return;
 
     const resolvedPricing =
-      resolvedPricingOverride === undefined
+      pricingOverrides?.resolvedPricing === undefined
         ? await session.getResolvedPricingByBillingSource(provider)
-        : resolvedPricingOverride;
+        : pricingOverrides.resolvedPricing;
     if (!resolvedPricing) return;
 
     ensurePricingResolutionSpecialSetting(session, resolvedPricing);
     const longContextPricing =
-      longContextPricingOverride === undefined
+      pricingOverrides?.longContextPricing === undefined
         ? (matchLongContextPricing(usage, resolvedPricing.priceData)?.pricing ?? null)
-        : longContextPricingOverride;
+        : pricingOverrides.longContextPricing;
 
     const cost = calculateRequestCost(
       usage,
       resolvedPricing.priceData,
       buildCostCalculationOptions(
-        provider.costMultiplier,
-        billingOverrides?.context1mApplied ?? session.getContext1mApplied(),
+        billing.costMultiplier,
+        billing.context1mApplied,
         priorityServiceTierApplied,
         longContextPricing,
-        billingOverrides?.groupCostMultiplier ?? session.getGroupCostMultiplier()
+        billing.groupCostMultiplier
       )
     );
     if (cost.lte(0)) return;

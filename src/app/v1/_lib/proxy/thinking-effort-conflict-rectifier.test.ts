@@ -68,7 +68,7 @@ describe("rectifyThinkingEffortConflict", () => {
     const result = rectifyThinkingEffortConflict(message);
 
     expect(result.applied).toBe(true);
-    expect(result.removedOutputConfig).toBe(true);
+    expect(result.removedOutputConfigEffort).toBe(true);
     expect(result.removedReasoningEffort).toBe(false);
     expect(result.thinkingType).toBe("disabled");
     expect(result.effort).toBe("max");
@@ -86,7 +86,7 @@ describe("rectifyThinkingEffortConflict", () => {
     const result = rectifyThinkingEffortConflict(message);
 
     expect(result.applied).toBe(true);
-    expect(result.removedOutputConfig).toBe(true);
+    expect(result.removedOutputConfigEffort).toBe(true);
     expect(result.effort).toBe("max");
     // Sibling fields must survive; only the conflicting effort carrier is removed.
     expect(message.output_config).toEqual({ verbosity: "high", future_flag: true });
@@ -114,7 +114,7 @@ describe("rectifyThinkingEffortConflict", () => {
     const result = rectifyThinkingEffortConflict(message);
 
     expect(result.applied).toBe(true);
-    expect(result.removedOutputConfig).toBe(false);
+    expect(result.removedOutputConfigEffort).toBe(false);
     expect(result.removedReasoningEffort).toBe(true);
     expect(result.effort).toBe("high");
     expect("reasoning_effort" in message).toBe(false);
@@ -129,7 +129,7 @@ describe("rectifyThinkingEffortConflict", () => {
     const result = rectifyThinkingEffortConflict(message);
 
     expect(result.applied).toBe(true);
-    expect(result.removedOutputConfig).toBe(true);
+    expect(result.removedOutputConfigEffort).toBe(true);
     expect(result.thinkingType).toBeNull();
   });
 
@@ -165,7 +165,7 @@ describe("rectifyThinkingEffortConflict", () => {
     const result = rectifyThinkingEffortConflict(message);
 
     expect(result.applied).toBe(false);
-    expect(result.removedOutputConfig).toBe(false);
+    expect(result.removedOutputConfigEffort).toBe(false);
     expect(result.removedReasoningEffort).toBe(false);
   });
 
@@ -179,7 +179,7 @@ describe("rectifyThinkingEffortConflict", () => {
     const result = rectifyThinkingEffortConflict(message);
 
     expect(result.applied).toBe(true);
-    expect(result.removedOutputConfig).toBe(false);
+    expect(result.removedOutputConfigEffort).toBe(false);
     expect(result.removedReasoningEffort).toBe(true);
     expect(message.output_config).toEqual({ something_else: true });
   });

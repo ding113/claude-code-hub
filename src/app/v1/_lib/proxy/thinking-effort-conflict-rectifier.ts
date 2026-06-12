@@ -17,7 +17,7 @@ export type ThinkingEffortConflictRectifierTrigger = "thinking_disabled_with_rea
 
 export type ThinkingEffortConflictRectifierResult = {
   applied: boolean;
-  removedOutputConfig: boolean;
+  removedOutputConfigEffort: boolean;
   removedReasoningEffort: boolean;
   thinkingType: string | null;
   effort: string | null;
@@ -74,7 +74,7 @@ export function rectifyThinkingEffortConflict(
 
   const result: ThinkingEffortConflictRectifierResult = {
     applied: false,
-    removedOutputConfig: false,
+    removedOutputConfigEffort: false,
     removedReasoningEffort: false,
     thinkingType,
     effort: null,
@@ -101,7 +101,7 @@ export function rectifyThinkingEffortConflict(
     } else {
       delete message.output_config;
     }
-    result.removedOutputConfig = true;
+    result.removedOutputConfigEffort = true;
     result.applied = true;
   }
 

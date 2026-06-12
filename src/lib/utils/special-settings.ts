@@ -83,7 +83,7 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.trigger,
         setting.attemptNumber,
         setting.retryAttemptNumber,
-        setting.removedOutputConfig,
+        setting.removedOutputConfigEffort,
         setting.removedReasoningEffort,
         setting.thinkingType,
         setting.effort,

@@ -46,6 +46,7 @@ import type {
   ClaudeMetadataUserIdInjectionSpecialSetting,
   SpecialSetting,
 } from "@/types/special-settings";
+import type { SystemSettings } from "@/types/system-config";
 
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
@@ -95,14 +96,20 @@ import { setDeferredStreamingFinalization } from "./stream-finalization";
 import {
   detectThinkingBudgetRectifierTrigger,
   rectifyThinkingBudget,
+  type ThinkingBudgetRectifierResult,
+  type ThinkingBudgetRectifierTrigger,
 } from "./thinking-budget-rectifier";
 import {
   detectThinkingEffortConflictRectifierTrigger,
   rectifyThinkingEffortConflict,
+  type ThinkingEffortConflictRectifierResult,
+  type ThinkingEffortConflictRectifierTrigger,
 } from "./thinking-effort-conflict-rectifier";
 import {
   detectThinkingSignatureRectifierTrigger,
   rectifyAnthropicRequestMessage,
+  type ThinkingSignatureRectifierResult,
+  type ThinkingSignatureRectifierTrigger,
 } from "./thinking-signature-rectifier";
 
 /** Default User-Agent for Codex CLI requests when none is provided */
@@ -773,15 +780,143 @@ function buildRetryFailedChainEntry(
   };
 }
 
+/** 整流器构造审计对象时可用的上下文（trigger 为该描述符 detect 的命中结果） */
+type ReactiveRectifierAuditContext<TTrigger extends string = string> = {
+  trigger: TTrigger;
+  provider: Provider;
+  attemptNumber: number;
+  retryAttemptNumber: number;
+};
+
+/**
+ * Reactive rectifier 描述符：上游 4xx 命中触发词后“整流请求体 + 同供应商重试一次”。
+ *
+ * 泛型让各描述符内部保持窄类型；成员声明为方法签名（参数双变检查），
+ * 注册表才能按基类型 ReactiveRectifierDescriptor 统一持有。
+ */
+type ReactiveRectifierDescriptor<
+  TTrigger extends string = string,
+  TRectified extends { applied: boolean } = { applied: boolean },
+> = {
+  /** special-setting type，同时作为返回给重试决策的 rectifierType */
+  type: ReactiveRectifierType;
+  /** 日志展示名 */
+  displayName: string;
+  /** 从上游错误文案检测触发词；未命中返回 null */
+  detect(errorMessage: string): TTrigger | null;
+  /** 系统设置开关（默认开启）。命中触发词但被禁用时整体按未命中处理，不回退到后续整流器 */
+  isEnabled(settings: SystemSettings): boolean;
+  /** “同供应商仅重试一次”状态读写 */
+  hasRetried(state: ReactiveRectifierRetryState): boolean;
+  markRetried(state: ReactiveRectifierRetryState): void;
+  /** 原地整流请求体 */
+  rectify(message: Record<string, unknown>): TRectified;
+  /** 构造 special-setting 审计对象（payload 形状必须与历史实现保持一致） */
+  buildAuditSetting(
+    rectified: TRectified,
+    context: ReactiveRectifierAuditContext<TTrigger>
+  ): SpecialSetting;
+};
+
+const thinkingEffortConflictRectifierDescriptor: ReactiveRectifierDescriptor<
+  ThinkingEffortConflictRectifierTrigger,
+  ThinkingEffortConflictRectifierResult
+> = {
+  type: "thinking_effort_conflict_rectifier",
+  displayName: "Thinking effort conflict rectifier",
+  detect: detectThinkingEffortConflictRectifierTrigger,
+  isEnabled: (settings) => settings.enableThinkingEffortConflictRectifier ?? true,
+  hasRetried: (state) => state.thinkingEffortConflictRetried,
+  markRetried: (state) => {
+    state.thinkingEffortConflictRetried = true;
+  },
+  rectify: rectifyThinkingEffortConflict,
+  buildAuditSetting: (rectified, context) => ({
+    type: "thinking_effort_conflict_rectifier",
+    scope: "request",
+    hit: rectified.applied,
+    providerId: context.provider.id,
+    providerName: context.provider.name,
+    trigger: context.trigger,
+    attemptNumber: context.attemptNumber,
+    retryAttemptNumber: context.retryAttemptNumber,
+    removedOutputConfigEffort: rectified.removedOutputConfigEffort,
+    removedReasoningEffort: rectified.removedReasoningEffort,
+    thinkingType: rectified.thinkingType,
+    effort: rectified.effort,
+  }),
+};
+
+const thinkingSignatureRectifierDescriptor: ReactiveRectifierDescriptor<
+  ThinkingSignatureRectifierTrigger,
+  ThinkingSignatureRectifierResult
+> = {
+  type: "thinking_signature_rectifier",
+  displayName: "Thinking signature rectifier",
+  detect: detectThinkingSignatureRectifierTrigger,
+  isEnabled: (settings) => settings.enableThinkingSignatureRectifier ?? true,
+  hasRetried: (state) => state.thinkingSignatureRetried,
+  markRetried: (state) => {
+    state.thinkingSignatureRetried = true;
+  },
+  rectify: rectifyAnthropicRequestMessage,
+  buildAuditSetting: (rectified, context) => ({
+    type: "thinking_signature_rectifier",
+    scope: "request",
+    hit: rectified.applied,
+    providerId: context.provider.id,
+    providerName: context.provider.name,
+    trigger: context.trigger,
+    attemptNumber: context.attemptNumber,
+    retryAttemptNumber: context.retryAttemptNumber,
+    removedThinkingBlocks: rectified.removedThinkingBlocks,
+    removedRedactedThinkingBlocks: rectified.removedRedactedThinkingBlocks,
+    removedSignatureFields: rectified.removedSignatureFields,
+  }),
+};
+
+const thinkingBudgetRectifierDescriptor: ReactiveRectifierDescriptor<
+  ThinkingBudgetRectifierTrigger,
+  ThinkingBudgetRectifierResult
+> = {
+  type: "thinking_budget_rectifier",
+  displayName: "Thinking budget rectifier",
+  detect: detectThinkingBudgetRectifierTrigger,
+  isEnabled: (settings) => settings.enableThinkingBudgetRectifier ?? true,
+  hasRetried: (state) => state.thinkingBudgetRetried,
+  markRetried: (state) => {
+    state.thinkingBudgetRetried = true;
+  },
+  rectify: rectifyThinkingBudget,
+  buildAuditSetting: (rectified, context) => ({
+    type: "thinking_budget_rectifier",
+    scope: "request",
+    hit: rectified.applied,
+    providerId: context.provider.id,
+    providerName: context.provider.name,
+    trigger: context.trigger,
+    attemptNumber: context.attemptNumber,
+    retryAttemptNumber: context.retryAttemptNumber,
+    before: rectified.before,
+    after: rectified.after,
+  }),
+};
+
+// 注册表顺序即检测优先级：effort 冲突的错误文案更具体（reasoning_effort/output_config），
+// 必须先于签名整流器检测，避免被签名整流器的通用 invalid request 兜底吞掉。
+const REACTIVE_ANTHROPIC_RECTIFIERS: readonly ReactiveRectifierDescriptor[] = [
+  thinkingEffortConflictRectifierDescriptor,
+  thinkingSignatureRectifierDescriptor,
+  thinkingBudgetRectifierDescriptor,
+];
+
 function getReactiveRectifierDisplayName(rectifierType: ReactiveRectifierType): string {
-  switch (rectifierType) {
-    case "thinking_signature_rectifier":
-      return "Thinking signature rectifier";
-    case "thinking_budget_rectifier":
-      return "Thinking budget rectifier";
-    case "thinking_effort_conflict_rectifier":
-      return "Thinking effort conflict rectifier";
+  for (const descriptor of REACTIVE_ANTHROPIC_RECTIFIERS) {
+    if (descriptor.type === rectifierType) {
+      return descriptor.displayName;
+    }
   }
+  return rectifierType;
 }
 
 async function tryApplyReactiveAnthropicRectifier(params: {
@@ -808,46 +943,41 @@ async function tryApplyReactiveAnthropicRectifier(params: {
     return { matched: false };
   }
 
-  // 先于签名整流器检测：effort 冲突的错误文案更具体（reasoning_effort/output_config），
-  // 避免被签名整流器的通用 invalid request 兜底吞掉。
-  const effortConflictTrigger = detectThinkingEffortConflictRectifierTrigger(errorMessage);
-  if (effortConflictTrigger) {
-    const settings = await getCachedSystemSettings();
-    const enabled = settings.enableThinkingEffortConflictRectifier ?? true;
+  for (const descriptor of REACTIVE_ANTHROPIC_RECTIFIERS) {
+    const trigger = descriptor.detect(errorMessage);
+    if (!trigger) {
+      continue;
+    }
 
-    if (!enabled) {
+    // 命中触发词后即终结（后续分支不再检测），与历史的 if/else 级联保持一致
+    const settings = await getCachedSystemSettings();
+    if (!descriptor.isEnabled(settings)) {
       return { matched: false };
     }
 
-    if (params.retryState.thinkingEffortConflictRetried) {
+    if (descriptor.hasRetried(params.retryState)) {
       return {
         matched: true,
         applied: false,
         reason: "already_retried",
-        rectifierType: "thinking_effort_conflict_rectifier",
-        trigger: effortConflictTrigger,
+        rectifierType: descriptor.type,
+        trigger,
       };
     }
 
     const requestDetailsBeforeRectify = buildRequestDetails(requestSession);
-    const rectified = rectifyThinkingEffortConflict(
-      requestSession.request.message as Record<string, unknown>
-    );
+    const rectified = descriptor.rectify(requestSession.request.message as Record<string, unknown>);
 
-    addSpecialSettingForPersistence(requestSession, persistSession, {
-      type: "thinking_effort_conflict_rectifier",
-      scope: "request",
-      hit: rectified.applied,
-      providerId: provider.id,
-      providerName: provider.name,
-      trigger: effortConflictTrigger,
-      attemptNumber,
-      retryAttemptNumber,
-      removedOutputConfig: rectified.removedOutputConfig,
-      removedReasoningEffort: rectified.removedReasoningEffort,
-      thinkingType: rectified.thinkingType,
-      effort: rectified.effort,
-    });
+    addSpecialSettingForPersistence(
+      requestSession,
+      persistSession,
+      descriptor.buildAuditSetting(rectified, {
+        trigger,
+        provider,
+        attemptNumber,
+        retryAttemptNumber,
+      })
+    );
     await persistSpecialSettings(persistSession);
 
     if (!rectified.applied) {
@@ -855,139 +985,22 @@ async function tryApplyReactiveAnthropicRectifier(params: {
         matched: true,
         applied: false,
         reason: "not_applicable",
-        rectifierType: "thinking_effort_conflict_rectifier",
-        trigger: effortConflictTrigger,
+        rectifierType: descriptor.type,
+        trigger,
       };
     }
 
-    params.retryState.thinkingEffortConflictRetried = true;
+    descriptor.markRetried(params.retryState);
     return {
       matched: true,
       applied: true,
-      rectifierType: "thinking_effort_conflict_rectifier",
-      trigger: effortConflictTrigger,
+      rectifierType: descriptor.type,
+      trigger,
       requestDetailsBeforeRectify,
     };
   }
 
-  const signatureTrigger = detectThinkingSignatureRectifierTrigger(errorMessage);
-  if (signatureTrigger) {
-    const settings = await getCachedSystemSettings();
-    const enabled = settings.enableThinkingSignatureRectifier ?? true;
-
-    if (!enabled) {
-      return { matched: false };
-    }
-
-    if (params.retryState.thinkingSignatureRetried) {
-      return {
-        matched: true,
-        applied: false,
-        reason: "already_retried",
-        rectifierType: "thinking_signature_rectifier",
-        trigger: signatureTrigger,
-      };
-    }
-
-    const requestDetailsBeforeRectify = buildRequestDetails(requestSession);
-    const rectified = rectifyAnthropicRequestMessage(
-      requestSession.request.message as Record<string, unknown>
-    );
-
-    addSpecialSettingForPersistence(requestSession, persistSession, {
-      type: "thinking_signature_rectifier",
-      scope: "request",
-      hit: rectified.applied,
-      providerId: provider.id,
-      providerName: provider.name,
-      trigger: signatureTrigger,
-      attemptNumber,
-      retryAttemptNumber,
-      removedThinkingBlocks: rectified.removedThinkingBlocks,
-      removedRedactedThinkingBlocks: rectified.removedRedactedThinkingBlocks,
-      removedSignatureFields: rectified.removedSignatureFields,
-    });
-    await persistSpecialSettings(persistSession);
-
-    if (!rectified.applied) {
-      return {
-        matched: true,
-        applied: false,
-        reason: "not_applicable",
-        rectifierType: "thinking_signature_rectifier",
-        trigger: signatureTrigger,
-      };
-    }
-
-    params.retryState.thinkingSignatureRetried = true;
-    return {
-      matched: true,
-      applied: true,
-      rectifierType: "thinking_signature_rectifier",
-      trigger: signatureTrigger,
-      requestDetailsBeforeRectify,
-    };
-  }
-
-  const budgetTrigger = detectThinkingBudgetRectifierTrigger(errorMessage);
-  if (!budgetTrigger) {
-    return { matched: false };
-  }
-
-  const settings = await getCachedSystemSettings();
-  const enabled = settings.enableThinkingBudgetRectifier ?? true;
-
-  if (!enabled) {
-    return { matched: false };
-  }
-
-  if (params.retryState.thinkingBudgetRetried) {
-    return {
-      matched: true,
-      applied: false,
-      reason: "already_retried",
-      rectifierType: "thinking_budget_rectifier",
-      trigger: budgetTrigger,
-    };
-  }
-
-  const requestDetailsBeforeRectify = buildRequestDetails(requestSession);
-  const rectified = rectifyThinkingBudget(
-    requestSession.request.message as Record<string, unknown>
-  );
-
-  addSpecialSettingForPersistence(requestSession, persistSession, {
-    type: "thinking_budget_rectifier",
-    scope: "request",
-    hit: rectified.applied,
-    providerId: provider.id,
-    providerName: provider.name,
-    trigger: budgetTrigger,
-    attemptNumber,
-    retryAttemptNumber,
-    before: rectified.before,
-    after: rectified.after,
-  });
-  await persistSpecialSettings(persistSession);
-
-  if (!rectified.applied) {
-    return {
-      matched: true,
-      applied: false,
-      reason: "not_applicable",
-      rectifierType: "thinking_budget_rectifier",
-      trigger: budgetTrigger,
-    };
-  }
-
-  params.retryState.thinkingBudgetRetried = true;
-  return {
-    matched: true,
-    applied: true,
-    rectifierType: "thinking_budget_rectifier",
-    trigger: budgetTrigger,
-    requestDetailsBeforeRectify,
-  };
+  return { matched: false };
 }
 
 /**

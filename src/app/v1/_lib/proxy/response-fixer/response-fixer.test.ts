@@ -376,6 +376,98 @@ describe("ResponseFixer", () => {
     expect(session.getSpecialSettings()).toBeNull();
   });
 
+  test("流式 Responses SSE：过滤 inert chunk 时相邻行的多字节 CJK 内容应按字节原样保留", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const encoder = new TextEncoder();
+    const emptyChatChunk = {
+      id: "chatcmpl-dummy",
+      object: "chat.completion.chunk",
+      created: 1780753978,
+      model: "gpt-5.5",
+      choices: [{ index: 0, delta: { role: "assistant", content: "" } }],
+    };
+    // 含 3 字节 CJK 与 4 字节扩展区 CJK（U+20000），覆盖多字节 UTF-8 往返
+    const cjkDeltaBefore = {
+      type: "response.output_text.delta",
+      delta: "你好，",
+    };
+    const cjkDeltaAfter = {
+      type: "response.output_text.delta",
+      delta: "世界𠀀",
+    };
+
+    const fixed = await ResponseFixer.process(
+      session,
+      createSseResponse([
+        `data: ${JSON.stringify(cjkDeltaBefore)}`,
+        "",
+        `data: ${JSON.stringify(emptyChatChunk)}`,
+        "",
+        "event: response.output_text.delta",
+        `data: ${JSON.stringify(cjkDeltaAfter)}`,
+        "",
+        "",
+      ])
+    );
+
+    const bytes = new Uint8Array(await fixed.arrayBuffer());
+    const expected = encoder.encode(
+      [
+        `data: ${JSON.stringify(cjkDeltaBefore)}`,
+        "",
+        "event: response.output_text.delta",
+        `data: ${JSON.stringify(cjkDeltaAfter)}`,
+        "",
+        "",
+      ].join("\n")
+    );
+
+    expect(Array.from(bytes)).toEqual(Array.from(expected));
+
+    // inert 过滤应计入 sse 修复的审计项
+    const settings = session.getSpecialSettings() as Array<{
+      fixersApplied: Array<{ fixer: string; applied: boolean }>;
+    }> | null;
+    expect(settings).not.toBeNull();
+    expect(settings?.[0]?.fixersApplied).toEqual(
+      expect.arrayContaining([expect.objectContaining({ fixer: "sse", applied: true })])
+    );
+  });
+
+  test("流式 Responses SSE：不含 chat.completion.chunk 标记的块应原引用返回（字节预扫描早退）", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const data = new TextEncoder().encode(
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"你好"}\n\n'
+    );
+
+    const result = (ResponseFixer as any).filterInertResponsesChatCompletionChunks(
+      session,
+      data
+    ) as { data: Uint8Array; applied: boolean };
+
+    expect(result.applied).toBe(false);
+    expect(result.data).toBe(data);
+  });
+
+  test("byteIndexOf：部分匹配回退与边界场景", async () => {
+    const { ResponseFixer } = await import("./index");
+    const encoder = new TextEncoder();
+    const indexOf = (haystack: string, needle: string) =>
+      (ResponseFixer as any).byteIndexOf(encoder.encode(haystack), encoder.encode(needle));
+
+    expect(indexOf("aaab", "aab")).toBe(1);
+    expect(indexOf('x"chat.completion.chunk"', '"chat.completion.chunk"')).toBe(1);
+    expect(indexOf("abc", "abc")).toBe(0);
+    expect(indexOf("ab", "abc")).toBe(-1);
+    expect(indexOf("abc", "xyz")).toBe(-1);
+  });
+
   test("流式 SSE：无换行且超过 maxFixSize 时应降级输出，避免无限缓冲", async () => {
     const { ResponseFixer } = await import("./index");
 

@@ -165,7 +165,7 @@ export type ThinkingEffortConflictRectifierSpecialSetting = {
   trigger: "thinking_disabled_with_reasoning_effort";
   attemptNumber: number;
   retryAttemptNumber: number;
-  removedOutputConfig: boolean;
+  removedOutputConfigEffort: boolean;
   removedReasoningEffort: boolean;
   thinkingType: string | null;
   effort: string | null;

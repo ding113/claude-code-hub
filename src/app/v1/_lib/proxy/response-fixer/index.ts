@@ -27,6 +27,9 @@ const DEFAULT_CONFIG: ResponseFixerConfig = {
 const UTF8_DECODER = new TextDecoder();
 const UTF8_ENCODER = new TextEncoder();
 
+// '"chat.completion.chunk"' 的 ASCII 字节序列：用于解码前的字节级预扫描
+const CHAT_COMPLETION_CHUNK_MARKER = UTF8_ENCODER.encode('"chat.completion.chunk"');
+
 function nowMs(): number {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
@@ -371,6 +374,48 @@ export class ResponseFixer {
 
     const headers = cleanResponseHeaders(response.headers);
 
+    // transform 与 flush 共用的修复序列：encoding -> sse -> data 行 JSON -> inert chunk 过滤
+    const applyStreamFixers = (input: Uint8Array): Uint8Array => {
+      let data: Uint8Array = input;
+
+      if (encodingFixer) {
+        const res = encodingFixer.fix(data);
+        if (res.applied) {
+          applied.encoding.applied = true;
+          applied.encoding.details ??= res.details;
+          data = res.data;
+        }
+      }
+
+      if (sseFixer) {
+        const res = sseFixer.fix(data);
+        if (res.applied) {
+          applied.sse.applied = true;
+          applied.sse.details ??= res.details;
+          data = res.data;
+        }
+      }
+
+      if (jsonFixer) {
+        const res = ResponseFixer.fixSseJsonLines(data, jsonFixer);
+        if (res.applied) {
+          applied.json.applied = true;
+          applied.json.details ??= res.details;
+          data = res.data;
+        }
+      }
+
+      // inert chunk 过滤是序列的固定末步，审计上计入 sse 修复
+      const filtered = ResponseFixer.filterInertResponsesChatCompletionChunks(session, data);
+      if (filtered.applied) {
+        applied.sse.applied = true;
+        applied.sse.details ??= filtered.details;
+        data = filtered.data;
+      }
+
+      return data;
+    };
+
     const transform = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         audit.totalBytesProcessed += chunk.length;
@@ -396,85 +441,11 @@ export class ResponseFixer {
           return;
         }
 
-        const toProcess = buffer.take(end);
-
-        let data: Uint8Array = toProcess;
-
-        if (encodingFixer) {
-          const res = encodingFixer.fix(data);
-          if (res.applied) {
-            applied.encoding.applied = true;
-            applied.encoding.details ??= res.details;
-            data = res.data;
-          }
-        }
-
-        if (sseFixer) {
-          const res = sseFixer.fix(data);
-          if (res.applied) {
-            applied.sse.applied = true;
-            applied.sse.details ??= res.details;
-            data = res.data;
-          }
-        }
-
-        if (jsonFixer) {
-          const res = ResponseFixer.fixSseJsonLines(data, jsonFixer);
-          if (res.applied) {
-            applied.json.applied = true;
-            applied.json.details ??= res.details;
-            data = res.data;
-          }
-        }
-
-        const filtered = ResponseFixer.filterInertResponsesChatCompletionChunks(session, data);
-        if (filtered.applied) {
-          applied.sse.applied = true;
-          applied.sse.details ??= filtered.details;
-          data = filtered.data;
-        }
-
-        controller.enqueue(data);
+        controller.enqueue(applyStreamFixers(buffer.take(end)));
       },
       flush(controller) {
         if (buffer.length > 0) {
-          let data: Uint8Array = buffer.drain();
-
-          if (encodingFixer) {
-            const res = encodingFixer.fix(data);
-            if (res.applied) {
-              applied.encoding.applied = true;
-              applied.encoding.details ??= res.details;
-              data = res.data;
-            }
-          }
-
-          if (sseFixer) {
-            const res = sseFixer.fix(data);
-            if (res.applied) {
-              applied.sse.applied = true;
-              applied.sse.details ??= res.details;
-              data = res.data;
-            }
-          }
-
-          if (jsonFixer) {
-            const res = ResponseFixer.fixSseJsonLines(data, jsonFixer);
-            if (res.applied) {
-              applied.json.applied = true;
-              applied.json.details ??= res.details;
-              data = res.data;
-            }
-          }
-
-          const filtered = ResponseFixer.filterInertResponsesChatCompletionChunks(session, data);
-          if (filtered.applied) {
-            applied.sse.applied = true;
-            applied.sse.details ??= filtered.details;
-            data = filtered.data;
-          }
-
-          controller.enqueue(data);
+          controller.enqueue(applyStreamFixers(buffer.drain()));
         }
 
         audit.hit = applied.encoding.applied || applied.sse.applied || applied.json.applied;
@@ -590,11 +561,13 @@ export class ResponseFixer {
       return { data, applied: false };
     }
 
-    const text = UTF8_DECODER.decode(data);
-    if (!text.includes('"chat.completion.chunk"')) {
+    // 解码前先做字节级预扫描：标记为纯 ASCII，字节比较与解码后的子串匹配完全等价
+    // （UTF-8 多字节序列不会解码出 ASCII 字符），绝大多数块可免去整块解码的开销
+    if (ResponseFixer.byteIndexOf(data, CHAT_COMPLETION_CHUNK_MARKER) < 0) {
       return { data, applied: false };
     }
 
+    const text = UTF8_DECODER.decode(data);
     const lines = text.split("\n");
     const out: string[] = [];
     let applied = false;
@@ -629,6 +602,19 @@ export class ResponseFixer {
       applied: true,
       details: "filtered_inert_chat_completion_chunk",
     };
+  }
+
+  private static byteIndexOf(haystack: Uint8Array, needle: Uint8Array): number {
+    if (needle.length === 0) return 0;
+    const limit = haystack.length - needle.length;
+    const first = needle[0];
+    for (let i = 0; i <= limit; i += 1) {
+      if (haystack[i] !== first) continue;
+      let j = 1;
+      while (j < needle.length && haystack[i + j] === needle[j]) j += 1;
+      if (j === needle.length) return i;
+    }
+    return -1;
   }
 
   private static isInertChatCompletionDataLine(line: string): boolean {
