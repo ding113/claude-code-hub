@@ -6,12 +6,14 @@ import { ApiError } from "@/lib/api-client/v1/errors";
 const getMock = vi.hoisted(() => vi.fn());
 const patchMock = vi.hoisted(() => vi.fn());
 const postMock = vi.hoisted(() => vi.fn());
+const deleteMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api-client/v1/client", () => ({
   apiClient: {
     get: getMock,
     patch: patchMock,
     post: postMock,
+    delete: deleteMock,
   },
 }));
 
@@ -32,6 +34,9 @@ const providerEndpoints = await vi.importActual<
 >("@/lib/api-client/v1/actions/provider-endpoints");
 const usageLogs = await vi.importActual<typeof import("@/lib/api-client/v1/actions/usage-logs")>(
   "@/lib/api-client/v1/actions/usage-logs"
+);
+const keys = await vi.importActual<typeof import("@/lib/api-client/v1/actions/keys")>(
+  "@/lib/api-client/v1/actions/keys"
 );
 
 describe("v1 action compatibility client", () => {
@@ -408,10 +413,146 @@ describe("v1 action compatibility client", () => {
 
     const result = await providers.getProviderGroupsWithCount();
 
+    // errorCode must arrive pre-mapped to an errors-namespace key so forms can
+    // translate it directly (issue #1259: raw "auth.forbidden" rendered as the
+    // literal fallback string "errors.auth.forbidden").
     expect(result).toEqual({
       ok: false,
       error: "Admin access is required.",
-      errorCode: "auth.forbidden",
+      errorCode: "PERMISSION_DENIED",
+      errorParams: undefined,
+    });
+  });
+
+  test("addKey hard-fails on 403 instead of silently retargeting to the self endpoint", async () => {
+    // U03: the old 403 fallback could turn "create a key for user X" into
+    // "create a key for myself" when the session lost admin rights mid-flight.
+    postMock.mockRejectedValueOnce(
+      new ApiError({
+        status: 403,
+        errorCode: "auth.forbidden",
+        detail: "Admin access is required.",
+      })
+    );
+
+    const result = await keys.addKey({ userId: 2, name: "self-key", providerGroup: "default" });
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/v1/users/2/keys",
+      { name: "self-key", providerGroup: "default" },
+      undefined
+    );
+    expect(result).toMatchObject({ ok: false, errorCode: "PERMISSION_DENIED" });
+  });
+
+  test("addOwnKey posts directly to the self key-creation endpoint", async () => {
+    postMock.mockResolvedValueOnce({ id: 77, generatedKey: "sk-new", name: "self-key" });
+
+    const result = await keys.addOwnKey({ name: "self-key", providerGroup: "default" });
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/v1/users:self/keys",
+      { name: "self-key", providerGroup: "default" },
+      undefined
+    );
+    expect(result).toEqual({
+      ok: true,
+      data: { id: 77, generatedKey: "sk-new", name: "self-key" },
+    });
+  });
+
+  test("does not retry key creation for non-authorization failures", async () => {
+    postMock.mockRejectedValue(
+      new ApiError({
+        status: 400,
+        errorCode: "DUPLICATE_NAME",
+        detail: "Key name already exists.",
+      })
+    );
+
+    const result = await keys.addKey({ userId: 2, name: "self-key" });
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: false,
+      error: "Key name already exists.",
+      errorCode: "DUPLICATE_NAME",
+      errorParams: undefined,
+    });
+  });
+
+  test("preserves business delete codes through toVoidActionResult (removeKey)", async () => {
+    // The #1266 contract: CANNOT_DELETE_LAST_KEY must survive the void wrapper
+    // unchanged (not collapsed to a generic code) so the toast shows the reason.
+    deleteMock.mockRejectedValueOnce(
+      new ApiError({
+        status: 400,
+        errorCode: "CANNOT_DELETE_LAST_KEY",
+        detail: "Bad request",
+      })
+    );
+
+    const result = await keys.removeKey(7);
+
+    expect(deleteMock).toHaveBeenCalledWith("/api/v1/keys/7");
+    expect(result).toEqual({
+      ok: false,
+      error: "Bad request",
+      errorCode: "CANNOT_DELETE_LAST_KEY",
+      errorParams: undefined,
+    });
+  });
+
+  test("maps key.action_failed through toVoidActionResult to OPERATION_FAILED", async () => {
+    deleteMock.mockRejectedValueOnce(
+      new ApiError({ status: 400, errorCode: "key.action_failed", detail: "Bad request" })
+    );
+
+    const result = await keys.removeKey(7);
+
+    expect(result).toMatchObject({ ok: false, errorCode: "OPERATION_FAILED" });
+  });
+
+  test("addOwnKey surfaces PERMISSION_DENIED for read-only sessions", async () => {
+    // Drop any persistent implementation a prior test left on postMock so the
+    // Once-rejection below is the only behavior in play.
+    postMock.mockReset();
+    postMock.mockRejectedValueOnce(
+      new ApiError({
+        status: 403,
+        errorCode: "auth.forbidden",
+        detail: "Read-only sessions cannot create keys.",
+      })
+    );
+
+    const result = await keys.addOwnKey({ name: "self-key" });
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/v1/users:self/keys",
+      { name: "self-key" },
+      undefined
+    );
+    expect(result).toMatchObject({ ok: false, errorCode: "PERMISSION_DENIED" });
+  });
+
+  test("maps resource action_failed codes to translatable error codes", async () => {
+    getMock.mockRejectedValue(
+      new ApiError({
+        status: 400,
+        errorCode: "key.action_failed",
+        detail: "Bad request",
+      })
+    );
+
+    const result = await keys.getKeys(2);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Bad request",
+      errorCode: "OPERATION_FAILED",
       errorParams: undefined,
     });
   });

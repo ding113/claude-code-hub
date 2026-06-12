@@ -964,9 +964,9 @@
     "addKey": "Add Key",
     "keyCreatedDialog": {
       "title": "Key Created Successfully",
-      "description": "Your API key has been created successfully. Please copy and save it securely, as it will only be displayed once.",
+      "description": "Your API key has been created successfully. Copy and store it securely, and keep it confidential. You can view the full key again in the key list at any time.",
       "apiKeyLabel": "API Key",
-      "warningText": "Please copy and save before closing. You will not be able to view this key again after closing.",
+      "warningText": "Keep this key secure and do not share it. You can view the full key again in the key list whenever needed.",
       "httpWarningText": "HTTP access detected. Browser restrictions prevent clipboard access. Click the eye icon to reveal the key and copy manually.",
       "copyTooltip": "Copy to clipboard",
       "showTooltip": "Show full key",
@@ -1079,7 +1079,7 @@
     "successDescription": "Your API key has been created successfully.",
     "generatedKey": {
       "label": "Generated Key",
-      "hint": "You can manage this key in the key list (enable/disable, quotas, etc.), but the full key is only shown once. Copy it now."
+      "hint": "You can manage this key in the key list (enable/disable, quotas, etc.) and view the full key again at any time. Keep it secure."
     },
     "errors": {
       "userIdMissing": "User ID does not exist",
@@ -1797,7 +1797,7 @@
       "successTitle": "Created Successfully",
       "successDescription": "User and key have been created",
       "generatedKey": "Generated Key",
-      "keyHint": "You can manage this key from the user management page (enable/disable, quotas, etc.), but the full key is only shown once. Copy it now.",
+      "keyHint": "You can manage this key from the user management page (enable/disable, quotas, etc.) and view the full key again at any time. Keep it secure.",
       "keysSection": "Keys",
       "addKey": "Add key",
       "removeKey": "Remove key",

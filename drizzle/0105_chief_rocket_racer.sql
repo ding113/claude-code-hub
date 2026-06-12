@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_thinking_effort_conflict_rectifier" boolean DEFAULT true NOT NULL;

@@ -82,6 +82,8 @@
   "UPDATE_KEY_FAILED": "キーの更新に失敗しました。後でもう一度お試しください",
   "DELETE_KEY_FAILED": "キーの削除に失敗しました。後でもう一度お試しください",
   "CANNOT_DISABLE_LAST_KEY": "最後のアクティブなキーを無効にすることはできません。ユーザーには少なくとも1つの有効なキーが必要です",
+  "CANNOT_DELETE_LAST_KEY": "最後の有効なキーは削除できません。ユーザーには少なくとも1つの有効なキーが必要です",
+  "CANNOT_DELETE_LAST_GROUP_KEY": "このキーは削除できません。削除すると利用可能なプロバイダーグループがなくなります。先にグループを含む別のキーを作成するか、管理者にお問い合わせください",
   "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT": "キーの5時間上限（{keyLimit}）はユーザー上限（{userLimit}）を超えられません",
   "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT": "キーの日次上限（{keyLimit}）はユーザー上限（{userLimit}）を超えられません",
   "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT": "キーの週次上限（{keyLimit}）はユーザー上限（{userLimit}）を超えられません",

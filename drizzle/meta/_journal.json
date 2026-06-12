@@ -736,6 +736,13 @@
       "when": 1780575810214,
       "tag": "0104_watery_thunderbird",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1781156586163,
+      "tag": "0105_chief_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

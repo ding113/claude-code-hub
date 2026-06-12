@@ -58,4 +58,30 @@ describe("v1 API error i18n mapping", () => {
       )
     ).toBe("OPERATION_FAILED");
   });
+
+  test("maps key and user REST codes to existing translation keys", () => {
+    expect(
+      getApiErrorMessageKey(
+        new ApiError({ status: 404, errorCode: "key.not_found", detail: "Not found" })
+      )
+    ).toBe("KEY_NOT_FOUND");
+
+    expect(
+      getApiErrorMessageKey(
+        new ApiError({ status: 400, errorCode: "key.action_failed", detail: "Bad request" })
+      )
+    ).toBe("OPERATION_FAILED");
+
+    expect(
+      getApiErrorMessageKey(
+        new ApiError({ status: 404, errorCode: "user.not_found", detail: "Not found" })
+      )
+    ).toBe("USER_NOT_FOUND");
+
+    expect(
+      getApiErrorMessageKey(
+        new ApiError({ status: 400, errorCode: "user.action_failed", detail: "Bad request" })
+      )
+    ).toBe("OPERATION_FAILED");
+  });
 });

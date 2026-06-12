@@ -24,11 +24,56 @@ const DEFAULT_CONFIG: ResponseFixerConfig = {
   maxFixSize: 1024 * 1024,
 };
 
+const UTF8_DECODER = new TextDecoder();
+const UTF8_ENCODER = new TextEncoder();
+
+// '"chat.completion.chunk"' 的 ASCII 字节序列：用于解码前的字节级预扫描
+const CHAT_COMPLETION_CHUNK_MARKER = UTF8_ENCODER.encode('"chat.completion.chunk"');
+
 function nowMs(): number {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
   }
   return Date.now();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasMeaningfulValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "string") return value.length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (isRecord(value)) return Object.keys(value).length > 0;
+  return true;
+}
+
+function isInertChatCompletionChoice(choice: unknown): boolean {
+  if (!isRecord(choice)) return false;
+  if (choice.finish_reason != null) return false;
+
+  const delta = choice.delta;
+  if (!isRecord(delta)) {
+    return true;
+  }
+
+  for (const [key, value] of Object.entries(delta)) {
+    if (key === "role") continue;
+    if (hasMeaningfulValue(value)) return false;
+  }
+
+  return true;
+}
+
+function isInertChatCompletionChunkPayload(payload: unknown): boolean {
+  if (!isRecord(payload)) return false;
+  if (payload.object !== "chat.completion.chunk") return false;
+  if (hasMeaningfulValue(payload.usage)) return false;
+
+  const choices = payload.choices;
+  if (!Array.isArray(choices) || choices.length === 0) return false;
+  return choices.every(isInertChatCompletionChoice);
 }
 
 function toArrayBufferUint8Array(input: Uint8Array): Uint8Array<ArrayBuffer> {
@@ -329,6 +374,48 @@ export class ResponseFixer {
 
     const headers = cleanResponseHeaders(response.headers);
 
+    // transform 与 flush 共用的修复序列：encoding -> sse -> data 行 JSON -> inert chunk 过滤
+    const applyStreamFixers = (input: Uint8Array): Uint8Array => {
+      let data: Uint8Array = input;
+
+      if (encodingFixer) {
+        const res = encodingFixer.fix(data);
+        if (res.applied) {
+          applied.encoding.applied = true;
+          applied.encoding.details ??= res.details;
+          data = res.data;
+        }
+      }
+
+      if (sseFixer) {
+        const res = sseFixer.fix(data);
+        if (res.applied) {
+          applied.sse.applied = true;
+          applied.sse.details ??= res.details;
+          data = res.data;
+        }
+      }
+
+      if (jsonFixer) {
+        const res = ResponseFixer.fixSseJsonLines(data, jsonFixer);
+        if (res.applied) {
+          applied.json.applied = true;
+          applied.json.details ??= res.details;
+          data = res.data;
+        }
+      }
+
+      // inert chunk 过滤是序列的固定末步，审计上计入 sse 修复
+      const filtered = ResponseFixer.filterInertResponsesChatCompletionChunks(session, data);
+      if (filtered.applied) {
+        applied.sse.applied = true;
+        applied.sse.details ??= filtered.details;
+        data = filtered.data;
+      }
+
+      return data;
+    };
+
     const transform = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         audit.totalBytesProcessed += chunk.length;
@@ -354,71 +441,11 @@ export class ResponseFixer {
           return;
         }
 
-        const toProcess = buffer.take(end);
-
-        let data: Uint8Array = toProcess;
-
-        if (encodingFixer) {
-          const res = encodingFixer.fix(data);
-          if (res.applied) {
-            applied.encoding.applied = true;
-            applied.encoding.details ??= res.details;
-            data = res.data;
-          }
-        }
-
-        if (sseFixer) {
-          const res = sseFixer.fix(data);
-          if (res.applied) {
-            applied.sse.applied = true;
-            applied.sse.details ??= res.details;
-            data = res.data;
-          }
-        }
-
-        if (jsonFixer) {
-          const res = ResponseFixer.fixSseJsonLines(data, jsonFixer);
-          if (res.applied) {
-            applied.json.applied = true;
-            applied.json.details ??= res.details;
-            data = res.data;
-          }
-        }
-
-        controller.enqueue(data);
+        controller.enqueue(applyStreamFixers(buffer.take(end)));
       },
       flush(controller) {
         if (buffer.length > 0) {
-          let data: Uint8Array = buffer.drain();
-
-          if (encodingFixer) {
-            const res = encodingFixer.fix(data);
-            if (res.applied) {
-              applied.encoding.applied = true;
-              applied.encoding.details ??= res.details;
-              data = res.data;
-            }
-          }
-
-          if (sseFixer) {
-            const res = sseFixer.fix(data);
-            if (res.applied) {
-              applied.sse.applied = true;
-              applied.sse.details ??= res.details;
-              data = res.data;
-            }
-          }
-
-          if (jsonFixer) {
-            const res = ResponseFixer.fixSseJsonLines(data, jsonFixer);
-            if (res.applied) {
-              applied.json.applied = true;
-              applied.json.details ??= res.details;
-              data = res.data;
-            }
-          }
-
-          controller.enqueue(data);
+          controller.enqueue(applyStreamFixers(buffer.drain()));
         }
 
         audit.hit = applied.encoding.applied || applied.sse.applied || applied.json.applied;
@@ -524,6 +551,90 @@ export class ResponseFixer {
     }
 
     return { data: concatUint8Chunks(chunks), applied };
+  }
+
+  private static filterInertResponsesChatCompletionChunks(
+    session: ProxySession,
+    data: Uint8Array
+  ): { data: Uint8Array; applied: boolean; details?: string } {
+    if (session.originalFormat !== "response") {
+      return { data, applied: false };
+    }
+
+    // 解码前先做字节级预扫描：标记为纯 ASCII，字节比较与解码后的子串匹配完全等价
+    // （UTF-8 多字节序列不会解码出 ASCII 字符），绝大多数块可免去整块解码的开销
+    if (ResponseFixer.byteIndexOf(data, CHAT_COMPLETION_CHUNK_MARKER) < 0) {
+      return { data, applied: false };
+    }
+
+    const text = UTF8_DECODER.decode(data);
+    const lines = text.split("\n");
+    const out: string[] = [];
+    let applied = false;
+    let skipNextBlankLine = false;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const hasLineBreak = i < lines.length - 1;
+
+      if (skipNextBlankLine && ResponseFixer.isBlankSseSeparatorLine(line)) {
+        skipNextBlankLine = false;
+        continue;
+      }
+      skipNextBlankLine = false;
+
+      if (ResponseFixer.isInertChatCompletionDataLine(line)) {
+        applied = true;
+        skipNextBlankLine = true;
+        continue;
+      }
+
+      out.push(line);
+      if (hasLineBreak) out.push("\n");
+    }
+
+    if (!applied) {
+      return { data, applied: false };
+    }
+
+    return {
+      data: UTF8_ENCODER.encode(out.join("")),
+      applied: true,
+      details: "filtered_inert_chat_completion_chunk",
+    };
+  }
+
+  private static byteIndexOf(haystack: Uint8Array, needle: Uint8Array): number {
+    if (needle.length === 0) return 0;
+    const limit = haystack.length - needle.length;
+    const first = needle[0];
+    for (let i = 0; i <= limit; i += 1) {
+      if (haystack[i] !== first) continue;
+      let j = 1;
+      while (j < needle.length && haystack[i + j] === needle[j]) j += 1;
+      if (j === needle.length) return i;
+    }
+    return -1;
+  }
+
+  private static isInertChatCompletionDataLine(line: string): boolean {
+    if (!line.startsWith("data:")) return false;
+
+    let payloadText = line.slice(5);
+    if (payloadText.startsWith(" ")) {
+      payloadText = payloadText.slice(1);
+    }
+    if (!payloadText.startsWith("{")) return false;
+
+    try {
+      return isInertChatCompletionChunkPayload(JSON.parse(payloadText));
+    } catch {
+      return false;
+    }
+  }
+
+  private static isBlankSseSeparatorLine(line: string): boolean {
+    return line === "" || line === "\r";
   }
 
   private static fixMaybeDataJsonLine(

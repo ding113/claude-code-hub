@@ -965,9 +965,9 @@
     "addKey": "新增 Key",
     "keyCreatedDialog": {
       "title": "Key 创建成功",
-      "description": "你的 API Key 已成功创建。请务必复制并妥善保存，此密钥仅显示一次。",
+      "description": "你的 API Key 已成功创建。请复制并妥善保存，避免泄露；后续可在密钥列表中重新查看完整密钥。",
       "apiKeyLabel": "API Key",
-      "warningText": "请在关闭前复制并保存，关闭后将无法再次查看此密钥",
+      "warningText": "请妥善保管此密钥，避免泄露。如有需要，可随时在密钥列表中重新查看完整密钥",
       "httpWarningText": "检测到 HTTP 访问，浏览器限制无法使用复制功能。请点击眼睛图标显示密钥后手动复制。",
       "copyTooltip": "复制到剪贴板",
       "showTooltip": "显示完整密钥",
@@ -1080,7 +1080,7 @@
     "successDescription": "您的 API 密钥已成功创建。",
     "generatedKey": {
       "label": "生成的密钥",
-      "hint": "您可以在密钥列表中管理此密钥（启用/禁用、设置限额等），但完整密钥仅显示一次，请立即复制并妥善保存"
+      "hint": "您可以在密钥列表中管理此密钥（启用/禁用、设置限额等），并可随时重新查看完整密钥。请妥善保管，避免泄露"
     },
     "errors": {
       "userIdMissing": "用户ID不存在",
@@ -1798,7 +1798,7 @@
       "successTitle": "创建成功",
       "successDescription": "用户和密钥已成功创建",
       "generatedKey": "生成的密钥",
-      "keyHint": "您可以在用户管理页面管理此密钥（启用/禁用、设置限额等），但完整密钥仅显示一次，请立即复制并妥善保存",
+      "keyHint": "您可以在用户管理页面管理此密钥（启用/禁用、设置限额等），并可随时重新查看完整密钥。请妥善保管，避免泄露",
       "keysSection": "密钥",
       "addKey": "添加密钥",
       "removeKey": "删除密钥",

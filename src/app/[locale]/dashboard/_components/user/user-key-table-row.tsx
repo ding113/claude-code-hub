@@ -29,6 +29,7 @@ import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { getCurrencySymbol } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { UserDisplay } from "@/types/user";
 import { EditKeyDialog } from "./edit-key-dialog";
@@ -153,6 +154,7 @@ export function UserKeyTableRow({
   const locale = useLocale();
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
   const tUserStatus = useTranslations("dashboard.userManagement.userStatus");
+  const tErrors = useTranslations("errors");
   const router = useRouter();
   const queryClient = useQueryClient();
   const [_isPending, startTransition] = useTransition();
@@ -250,7 +252,11 @@ export function UserKeyTableRow({
     startTransition(async () => {
       const res = await removeKey(keyId);
       if (!res.ok) {
-        toast.error(res.error || tUserStatus("deleteFailed"));
+        // REST 桥接返回的 error 是通用 detail，真实原因在 errorCode 中
+        const message = res.errorCode
+          ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+          : res.error || tUserStatus("deleteFailed");
+        toast.error(message);
         return;
       }
       toast.success(tUserStatus("deleteSuccess"));

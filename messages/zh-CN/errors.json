@@ -87,6 +87,8 @@
   "UPDATE_KEY_FAILED": "更新密钥失败，请稍后重试",
   "DELETE_KEY_FAILED": "删除密钥失败，请稍后重试",
   "CANNOT_DISABLE_LAST_KEY": "无法禁用最后一个可用密钥，用户至少需要保留一个启用的密钥",
+  "CANNOT_DELETE_LAST_KEY": "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥",
+  "CANNOT_DELETE_LAST_GROUP_KEY": "无法删除此密钥：删除后将没有任何可用的供应商分组，请先创建其他包含分组的密钥或联系管理员",
   "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT": "Key的5小时消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
   "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT": "Key的日消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
   "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT": "Key的周消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",

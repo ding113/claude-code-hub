@@ -291,6 +291,63 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
     vi.useRealTimers();
   });
 
+  test("getSystemSettings 在仅缺 enable_thinking_effort_conflict_rectifier 新列时应降级读取并默认开启", async () => {
+    vi.resetModules();
+
+    const now = new Date("2026-01-04T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    // 第一次 select(fullSelection) 因新列缺失而抛 42703；
+    // 第二次 select(selectionWithoutEffortConflict) 命中——验证新列已加入降级链最外层。
+    const selectMock = vi
+      .fn()
+      .mockReturnValueOnce(createRejectedThenableQuery({ code: "42703" }))
+      .mockReturnValueOnce(
+        createThenableQuery([
+          {
+            id: 1,
+            siteTitle: "Claude Code Hub",
+            allowGlobalUsageView: false,
+            currencyDisplay: "USD",
+            billingModelSource: "original",
+            codexPriorityBillingSource: "requested",
+            enableHttp2: true,
+            enableThinkingSignatureRectifier: true,
+            enableThinkingBudgetRectifier: true,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ])
+      );
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        update: vi.fn(() => createThenableQuery([])),
+        insert: vi.fn(() => createThenableQuery([])),
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { getSystemSettings } = await import("@/repository/system-config");
+
+    const result = await getSystemSettings();
+
+    // 降级读取成功（未抛错）。
+    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(result.siteTitle).toBe("Claude Code Hub");
+    expect(result.enableHttp2).toBe(true);
+
+    // 关键回归保护：第二次 select 必须恰好剥离了新列（最外层降级），
+    // 而非旧行为先剥离 billHedgeLosers。若新列未加入降级链最外层，下面两条断言会失败。
+    const secondSelection = selectMock.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect(secondSelection).not.toHaveProperty("enableThinkingEffortConflictRectifier");
+    expect(secondSelection).toHaveProperty("billHedgeLosers");
+
+    vi.useRealTimers();
+  });
+
   test("getSystemSettings 在缺少新列且无记录时应使用降级插入初始化", async () => {
     vi.resetModules();
 

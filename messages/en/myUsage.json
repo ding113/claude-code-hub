@@ -2,6 +2,7 @@
   "header": {
     "title": "My Usage",
     "welcome": "Welcome, {name}",
+    "documentation": "Usage Docs",
     "logout": "Logout",
     "keyLabel": "Key",
     "userLabel": "User",

@@ -5,6 +5,7 @@ const reloadMock = vi.fn(async () => {});
 const createRequestFilterMock = vi.fn();
 const updateRequestFilterMock = vi.fn();
 const deleteRequestFilterMock = vi.fn();
+const getRequestFilterByIdMock = vi.fn(async () => null);
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -29,7 +30,7 @@ vi.mock("@/repository/request-filters", () => ({
   createRequestFilter: createRequestFilterMock,
   deleteRequestFilter: deleteRequestFilterMock,
   getAllRequestFilters: vi.fn(async () => []),
-  getRequestFilterById: vi.fn(async () => null),
+  getRequestFilterById: getRequestFilterByIdMock,
   updateRequestFilter: updateRequestFilterMock,
 }));
 
@@ -109,6 +110,107 @@ describe("request-filters actions reload the engine on mutation", () => {
     const res = await updateRequestFilterAction(1, { isEnabled: false });
 
     expect(res.ok).toBe(true);
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows updating provider bindings on an advanced final filter with an empty target", async () => {
+    const advancedFilter = {
+      ...baseFilter,
+      target: "",
+      bindingType: "providers" as const,
+      providerIds: [5, 4, 6],
+      ruleMode: "advanced" as const,
+      executionPhase: "final" as const,
+      operations: [
+        {
+          op: "remove" as const,
+          scope: "body" as const,
+          path: "tools",
+          matcher: { field: "type", value: "image_generation", matchType: "exact" as const },
+        },
+      ],
+    };
+    getRequestFilterByIdMock.mockResolvedValue(advancedFilter);
+    updateRequestFilterMock.mockResolvedValue({ ...advancedFilter, providerIds: [5, 4, 6, 24] });
+
+    const { updateRequestFilterAction } = await import("@/actions/request-filters");
+    const res = await updateRequestFilterAction(1, { providerIds: [5, 4, 6, 24] });
+
+    expect(res.ok).toBe(true);
+    expect(updateRequestFilterMock).toHaveBeenCalledWith(1, { providerIds: [5, 4, 6, 24] });
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("validates binding updates against the effective updated rule mode", async () => {
+    const advancedFilter = {
+      ...baseFilter,
+      target: "",
+      bindingType: "providers" as const,
+      providerIds: [5, 4, 6],
+      ruleMode: "advanced" as const,
+      executionPhase: "final" as const,
+      operations: [
+        {
+          op: "remove" as const,
+          scope: "body" as const,
+          path: "tools",
+          matcher: { field: "type", value: "image_generation", matchType: "exact" as const },
+        },
+      ],
+    };
+    getRequestFilterByIdMock.mockResolvedValue(advancedFilter);
+
+    const { updateRequestFilterAction } = await import("@/actions/request-filters");
+    const res = await updateRequestFilterAction(1, {
+      providerIds: [5, 4, 6, 24],
+      ruleMode: "simple",
+      operations: null,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("目标字段不能为空");
+    expect(updateRequestFilterMock).not.toHaveBeenCalled();
+    expect(reloadMock).not.toHaveBeenCalled();
+  });
+
+  it("allows advanced->simple conversion when a non-empty target is supplied", async () => {
+    // Regression (U05): the binding-block revalidation must use the EFFECTIVE
+    // post-update target, not the stale empty target stored on the advanced
+    // filter. Switching to simple mode WITH a target must succeed.
+    const advancedFilter = {
+      ...baseFilter,
+      target: "",
+      bindingType: "providers" as const,
+      providerIds: [5, 4, 6],
+      ruleMode: "advanced" as const,
+      executionPhase: "final" as const,
+      operations: [
+        {
+          op: "remove" as const,
+          scope: "body" as const,
+          path: "tools",
+          matcher: { field: "type", value: "image_generation", matchType: "exact" as const },
+        },
+      ],
+    };
+    getRequestFilterByIdMock.mockResolvedValue(advancedFilter);
+    updateRequestFilterMock.mockResolvedValue({
+      ...advancedFilter,
+      target: "x-my-header",
+      ruleMode: "simple",
+      operations: null,
+    });
+
+    const { updateRequestFilterAction } = await import("@/actions/request-filters");
+    const res = await updateRequestFilterAction(1, {
+      providerIds: [5, 4, 6, 24],
+      ruleMode: "simple",
+      operations: null,
+      target: "x-my-header",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(updateRequestFilterMock).toHaveBeenCalledTimes(1);
     expect(reloadMock).toHaveBeenCalledTimes(1);
   });
 

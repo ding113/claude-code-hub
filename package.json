@@ -24,6 +24,7 @@
     "test:coverage:logs-sessionid-time-filter": "vitest run --config tests/configs/logs-sessionid-time-filter.config.ts --coverage",
     "test:coverage:codex-session-id-completer": "vitest run --config tests/configs/codex-session-id-completer.config.ts --coverage",
     "test:coverage:thinking-signature-rectifier": "vitest run --config tests/configs/thinking-signature-rectifier.config.ts --coverage",
+    "test:coverage:thinking-effort-conflict-rectifier": "vitest run --config tests/configs/thinking-effort-conflict-rectifier.config.ts --coverage",
     "test:coverage:quota": "vitest run --config tests/configs/quota.config.ts --coverage",
     "test:coverage:my-usage": "vitest run --config tests/configs/my-usage.config.ts --coverage",
     "test:coverage:proxy-guard-pipeline": "vitest run --config tests/configs/proxy-guard-pipeline.config.ts --coverage",

@@ -44,6 +44,20 @@ function createSession() {
   } as any;
 }
 
+function createSseResponse(payloadLines: string[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(payloadLines.join("\n")));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 describe("ResponseFixer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -203,6 +217,255 @@ describe("ResponseFixer", () => {
     const fixed = await ResponseFixer.process(session, response);
     expect(await fixed.text()).toBe('data: {"a":1}\n\n');
     expect(session.getSpecialSettings()).toBeNull();
+  });
+
+  test("流式 Responses SSE：应过滤上游混入的空 Chat Completions chunk", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const encoder = new TextEncoder();
+    const emptyChatChunk = {
+      id: "chatcmpl-dummy",
+      object: "chat.completion.chunk",
+      created: 1780753978,
+      model: "gpt-5.5",
+      choices: [{ index: 0, delta: { role: "assistant", content: "" } }],
+    };
+    const responseDelta = {
+      type: "response.output_text.delta",
+      delta: "Hi",
+    };
+    const responseCompleted = {
+      type: "response.completed",
+      response: { id: "resp_test", object: "response" },
+    };
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              `data: ${JSON.stringify(emptyChatChunk)}`,
+              "",
+              "event: response.output_text.delta",
+              `data: ${JSON.stringify(responseDelta)}`,
+              "",
+              "event: response.completed",
+              `data: ${JSON.stringify(responseCompleted)}`,
+              "",
+            ].join("\n")
+          )
+        );
+        controller.close();
+      },
+    });
+
+    const response = new Response(stream, {
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const fixed = await ResponseFixer.process(session, response);
+    const text = await fixed.text();
+
+    expect(text).not.toContain("chat.completion.chunk");
+    expect(text).not.toContain("chatcmpl-dummy");
+    expect(text.startsWith("event: response.output_text.delta")).toBe(true);
+    expect(text).toContain("response.output_text.delta");
+    expect(text).toContain("response.completed");
+    expect(session.getSpecialSettings()).not.toBeNull();
+  });
+
+  test("流式 Responses SSE：包含实际 content 的 Chat Completions chunk 应保留", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const chatChunk = {
+      id: "chatcmpl-content",
+      object: "chat.completion.chunk",
+      created: 1780753978,
+      model: "gpt-5.5",
+      choices: [{ index: 0, delta: { role: "assistant", content: "Hi" } }],
+    };
+
+    const fixed = await ResponseFixer.process(
+      session,
+      createSseResponse([`data: ${JSON.stringify(chatChunk)}`, ""])
+    );
+    const text = await fixed.text();
+
+    expect(text).toContain("chat.completion.chunk");
+    expect(text).toContain("chatcmpl-content");
+    expect(text).toContain('"content":"Hi"');
+    expect(session.getSpecialSettings()).toBeNull();
+  });
+
+  test("流式 Responses SSE：带 finish_reason 的 Chat Completions chunk 应保留", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const chatChunk = {
+      id: "chatcmpl-finish",
+      object: "chat.completion.chunk",
+      created: 1780753978,
+      model: "gpt-5.5",
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+    };
+
+    const fixed = await ResponseFixer.process(
+      session,
+      createSseResponse([`data: ${JSON.stringify(chatChunk)}`, ""])
+    );
+    const text = await fixed.text();
+
+    expect(text).toContain("chat.completion.chunk");
+    expect(text).toContain("chatcmpl-finish");
+    expect(text).toContain("finish_reason");
+    expect(session.getSpecialSettings()).toBeNull();
+  });
+
+  test("流式 Responses SSE：带 usage 的 Chat Completions chunk 应保留", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const chatChunk = {
+      id: "chatcmpl-usage",
+      object: "chat.completion.chunk",
+      created: 1780753978,
+      model: "gpt-5.5",
+      choices: [{ index: 0, delta: { role: "assistant", content: "" } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    };
+
+    const fixed = await ResponseFixer.process(
+      session,
+      createSseResponse([`data: ${JSON.stringify(chatChunk)}`, ""])
+    );
+    const text = await fixed.text();
+
+    expect(text).toContain("chat.completion.chunk");
+    expect(text).toContain("chatcmpl-usage");
+    expect(text).toContain("prompt_tokens");
+    expect(session.getSpecialSettings()).toBeNull();
+  });
+
+  test("流式非 Responses SSE：空 Chat Completions chunk 应保留", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "chat";
+    const emptyChatChunk = {
+      id: "chatcmpl-chat-format",
+      object: "chat.completion.chunk",
+      created: 1780753978,
+      model: "gpt-5.5",
+      choices: [{ index: 0, delta: { role: "assistant", content: "" } }],
+    };
+
+    const fixed = await ResponseFixer.process(
+      session,
+      createSseResponse([`data: ${JSON.stringify(emptyChatChunk)}`, ""])
+    );
+    const text = await fixed.text();
+
+    expect(text).toContain("chat.completion.chunk");
+    expect(text).toContain("chatcmpl-chat-format");
+    expect(session.getSpecialSettings()).toBeNull();
+  });
+
+  test("流式 Responses SSE：过滤 inert chunk 时相邻行的多字节 CJK 内容应按字节原样保留", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const encoder = new TextEncoder();
+    const emptyChatChunk = {
+      id: "chatcmpl-dummy",
+      object: "chat.completion.chunk",
+      created: 1780753978,
+      model: "gpt-5.5",
+      choices: [{ index: 0, delta: { role: "assistant", content: "" } }],
+    };
+    // 含 3 字节 CJK 与 4 字节扩展区 CJK（U+20000），覆盖多字节 UTF-8 往返
+    const cjkDeltaBefore = {
+      type: "response.output_text.delta",
+      delta: "你好，",
+    };
+    const cjkDeltaAfter = {
+      type: "response.output_text.delta",
+      delta: "世界𠀀",
+    };
+
+    const fixed = await ResponseFixer.process(
+      session,
+      createSseResponse([
+        `data: ${JSON.stringify(cjkDeltaBefore)}`,
+        "",
+        `data: ${JSON.stringify(emptyChatChunk)}`,
+        "",
+        "event: response.output_text.delta",
+        `data: ${JSON.stringify(cjkDeltaAfter)}`,
+        "",
+        "",
+      ])
+    );
+
+    const bytes = new Uint8Array(await fixed.arrayBuffer());
+    const expected = encoder.encode(
+      [
+        `data: ${JSON.stringify(cjkDeltaBefore)}`,
+        "",
+        "event: response.output_text.delta",
+        `data: ${JSON.stringify(cjkDeltaAfter)}`,
+        "",
+        "",
+      ].join("\n")
+    );
+
+    expect(Array.from(bytes)).toEqual(Array.from(expected));
+
+    // inert 过滤应计入 sse 修复的审计项
+    const settings = session.getSpecialSettings() as Array<{
+      fixersApplied: Array<{ fixer: string; applied: boolean }>;
+    }> | null;
+    expect(settings).not.toBeNull();
+    expect(settings?.[0]?.fixersApplied).toEqual(
+      expect.arrayContaining([expect.objectContaining({ fixer: "sse", applied: true })])
+    );
+  });
+
+  test("流式 Responses SSE：不含 chat.completion.chunk 标记的块应原引用返回（字节预扫描早退）", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    session.originalFormat = "response";
+    const data = new TextEncoder().encode(
+      'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"你好"}\n\n'
+    );
+
+    const result = (ResponseFixer as any).filterInertResponsesChatCompletionChunks(
+      session,
+      data
+    ) as { data: Uint8Array; applied: boolean };
+
+    expect(result.applied).toBe(false);
+    expect(result.data).toBe(data);
+  });
+
+  test("byteIndexOf：部分匹配回退与边界场景", async () => {
+    const { ResponseFixer } = await import("./index");
+    const encoder = new TextEncoder();
+    const indexOf = (haystack: string, needle: string) =>
+      (ResponseFixer as any).byteIndexOf(encoder.encode(haystack), encoder.encode(needle));
+
+    expect(indexOf("aaab", "aab")).toBe(1);
+    expect(indexOf('x"chat.completion.chunk"', '"chat.completion.chunk"')).toBe(1);
+    expect(indexOf("abc", "abc")).toBe(0);
+    expect(indexOf("ab", "abc")).toBe(-1);
+    expect(indexOf("abc", "xyz")).toBe(-1);
   });
 
   test("流式 SSE：无换行且超过 maxFixSize 时应降级输出，避免无限缓冲", async () => {

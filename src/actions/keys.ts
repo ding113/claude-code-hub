@@ -7,7 +7,7 @@ import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
 import { emitActionAudit } from "@/lib/audit/emit";
-import { getSession } from "@/lib/auth";
+import { type AuthSession, getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
@@ -34,6 +34,23 @@ import {
 import type { Key } from "@/types/key";
 import type { ActionResult } from "./types";
 import { type BatchUpdateResult, syncUserProviderGroupFromKeys } from "./users";
+
+// U02: key 写操作的会话级守卫。REST read 层与 legacy adapter 的 scoped 上下文
+// 会放行 canLoginWebUi=false 的只读会话；写操作必须是管理员或完整 Web 会话，
+// 否则只读 key 可改写自身 canLoginWebUi 自提权。
+function denyKeyWriteForReadOnlySession(
+  session: AuthSession,
+  tError: (key: string) => string
+): { ok: false; error: string; errorCode: string } | null {
+  if (session.user.role === "admin" || session.key?.canLoginWebUi === true) {
+    return null;
+  }
+  return {
+    ok: false,
+    error: tError("PERMISSION_DENIED"),
+    errorCode: ERROR_CODES.PERMISSION_DENIED,
+  };
+}
 
 type TranslationFunction = (key: string, values?: Record<string, string>) => string;
 
@@ -189,6 +206,10 @@ export async function addKey(data: {
       return {
         ok: false,
         error: `名为"${validatedData.name}"的密钥已存在且正在生效中，请使用不同的名称`,
+        // U04: carry a machine-readable code so the self-service REST route can
+        // surface the specific reason instead of a generic OPERATION_FAILED.
+        errorCode: ERROR_CODES.DUPLICATE_NAME,
+        errorParams: { name: validatedData.name },
       };
     }
 
@@ -206,6 +227,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limit5hUsd),
           userLimit: String(user.limit5hUsd),
         }),
+        errorCode: "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limit5hUsd),
+          userLimit: String(user.limit5hUsd),
+        },
       };
     }
 
@@ -222,6 +248,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitDailyUsd),
           userLimit: String(user.dailyQuota),
         }),
+        errorCode: "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitDailyUsd),
+          userLimit: String(user.dailyQuota),
+        },
       };
     }
 
@@ -238,6 +269,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitWeeklyUsd),
           userLimit: String(user.limitWeeklyUsd),
         }),
+        errorCode: "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitWeeklyUsd),
+          userLimit: String(user.limitWeeklyUsd),
+        },
       };
     }
 
@@ -254,6 +290,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitMonthlyUsd),
           userLimit: String(user.limitMonthlyUsd),
         }),
+        errorCode: "KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitMonthlyUsd),
+          userLimit: String(user.limitMonthlyUsd),
+        },
       };
     }
 
@@ -270,6 +311,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitTotalUsd),
           userLimit: String(user.limitTotalUsd),
         }),
+        errorCode: "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitTotalUsd),
+          userLimit: String(user.limitTotalUsd),
+        },
       };
     }
 
@@ -286,6 +332,11 @@ export async function addKey(data: {
           keyLimit: String(validatedData.limitConcurrentSessions),
           userLimit: String(user.limitConcurrentSessions),
         }),
+        errorCode: "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT",
+        errorParams: {
+          keyLimit: String(validatedData.limitConcurrentSessions),
+          userLimit: String(user.limitConcurrentSessions),
+        },
       };
     }
 
@@ -413,6 +464,11 @@ export async function editKey(
       };
     }
 
+    const readOnlyDenied = denyKeyWriteForReadOnlySession(session, tError);
+    if (readOnlyDenied) {
+      return readOnlyDenied;
+    }
+
     const key = await findKeyById(keyId);
     if (!key) {
       return { ok: false, error: "密钥不存在" };
@@ -437,6 +493,19 @@ export async function editKey(
           ok: false,
           error: tError("PERMISSION_DENIED"),
           errorCode: ERROR_CODES.PERMISSION_DENIED,
+        };
+      }
+    }
+
+    // 非管理员经 PATCH isEnabled=false 关停 key 时，沿用 toggleKeyEnabled 的
+    // 最后一个启用 key 保护（U02 路由放开后该路径对自助用户可达）
+    if (session.user.role !== "admin" && data.isEnabled === false && key.isEnabled) {
+      const activeKeyCount = await countActiveKeysByUser(key.userId);
+      if (activeKeyCount <= 1) {
+        return {
+          ok: false,
+          error: tError("CANNOT_DISABLE_LAST_KEY"),
+          errorCode: ERROR_CODES.OPERATION_FAILED,
         };
       }
     }
@@ -686,19 +755,38 @@ export async function editKey(
 // 删除密钥
 export async function removeKey(keyId: number): Promise<ActionResult> {
   try {
+    const tError = await getTranslations("errors");
+
     // 权限检查：用户只能删除自己的Key，管理员可以删除所有Key
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: "未登录" };
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    const readOnlyDenied = denyKeyWriteForReadOnlySession(session, tError);
+    if (readOnlyDenied) {
+      return readOnlyDenied;
     }
 
     const key = await findKeyById(keyId);
     if (!key) {
-      return { ok: false, error: "密钥不存在" };
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
+      };
     }
 
     if (session.user.role !== "admin" && session.user.id !== key.userId) {
-      return { ok: false, error: "无权限执行此操作" };
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     // 只有删除启用的密钥时，才需要检查是否是最后一个启用的密钥
@@ -708,7 +796,8 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       if (activeKeyCount <= 1) {
         return {
           ok: false,
-          error: "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥",
+          error: tError("CANNOT_DELETE_LAST_KEY"),
+          errorCode: ERROR_CODES.CANNOT_DELETE_LAST_KEY,
         };
       }
     }
@@ -731,8 +820,8 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       if (currentGroups.length > 0 && remainingGroups.size === 0) {
         return {
           ok: false,
-          error:
-            "无法删除此密钥：删除后您将没有任何可用的供应商分组。请先创建其他包含分组的密钥，或联系管理员。",
+          error: tError("CANNOT_DELETE_LAST_GROUP_KEY"),
+          errorCode: ERROR_CODES.CANNOT_DELETE_LAST_GROUP_KEY,
         };
       }
     }
@@ -770,7 +859,8 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
     return { ok: true };
   } catch (error) {
     logger.error("删除密钥失败:", error);
-    const message = error instanceof Error ? error.message : "删除密钥失败，请稍后重试";
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("DELETE_KEY_FAILED");
     emitActionAudit({
       category: "key",
       action: "key.delete",
@@ -780,7 +870,7 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       errorMessage: "DELETE_FAILED",
       redactExtraKeys: ["key"],
     });
-    return { ok: false, error: message };
+    return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }
 
@@ -1053,7 +1143,7 @@ export async function resetKeyLimitsOnly(keyId: number): Promise<ActionResult> {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1062,7 +1152,7 @@ export async function resetKeyLimitsOnly(keyId: number): Promise<ActionResult> {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1122,12 +1212,17 @@ export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise
       };
     }
 
+    const readOnlyDenied = denyKeyWriteForReadOnlySession(session, tError);
+    if (readOnlyDenied) {
+      return readOnlyDenied;
+    }
+
     const key = await findKeyById(keyId);
     if (!key) {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1429,12 +1524,17 @@ export async function renewKeyExpiresAt(
       };
     }
 
+    const readOnlyDenied = denyKeyWriteForReadOnlySession(session, tError);
+    if (readOnlyDenied) {
+      return readOnlyDenied;
+    }
+
     const key = await findKeyById(keyId);
     if (!key) {
       return {
         ok: false,
         error: tError("KEY_NOT_FOUND"),
-        errorCode: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.KEY_NOT_FOUND,
       };
     }
 
@@ -1500,7 +1600,7 @@ export async function patchKeyLimit(
 
     const key = await findKeyById(keyId);
     if (!key) {
-      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.KEY_NOT_FOUND };
     }
 
     if (session.user.role !== "admin" && session.user.id !== key.userId) {

@@ -15,7 +15,15 @@ export type { Key } from "@/types/key";
 
 export function addKey(data: { userId: number } & Record<string, unknown>) {
   const { userId, ...body } = data;
+  // Admin-only route; a 403 must surface instead of silently retargeting the
+  // key to the session user (U03). Self-service callers use addOwnKey().
   return toActionResult(apiPost(`/api/v1/users/${userId}/keys`, body));
+}
+
+export function addOwnKey(body: Record<string, unknown>) {
+  // Session-scoped endpoint (#1259): the server derives the target user from
+  // the authenticated session and rejects read-only sessions.
+  return toActionResult(apiPost("/api/v1/users:self/keys", body));
 }
 
 export function editKey(keyId: number, data: unknown) {
