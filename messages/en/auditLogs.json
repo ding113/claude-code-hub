@@ -18,6 +18,7 @@
     "key": "Keys",
     "notification": "Notifications",
     "sensitive_word": "Sensitive words",
+    "keyword_routing_rule": "Keyword routing",
     "model_price": "Model prices"
   },
   "columns": {
@@ -69,6 +70,11 @@
       "create": "Create sensitive word",
       "update": "Update sensitive word",
       "delete": "Delete sensitive word"
+    },
+    "keyword_routing_rule": {
+      "create": "Create keyword routing rule",
+      "update": "Update keyword routing rule",
+      "delete": "Delete keyword routing rule"
     },
     "model_price": {
       "bulk_upload": "Bulk upload model prices",

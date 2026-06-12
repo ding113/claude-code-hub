@@ -21,6 +21,7 @@ const AUDIT_CATEGORY_VALUES = [
   "key",
   "notification",
   "sensitive_word",
+  "keyword_routing_rule",
   "model_price",
 ] as const satisfies readonly AuditCategory[];
 

@@ -11,6 +11,7 @@ export const AuditCategorySchema = z
     "key",
     "notification",
     "sensitive_word",
+    "keyword_routing_rule",
     "model_price",
   ])
   .describe("Audit log action category.");

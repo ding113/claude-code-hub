@@ -18,6 +18,7 @@
     "key": "金鑰",
     "notification": "通知",
     "sensitive_word": "敏感詞",
+    "keyword_routing_rule": "關鍵詞路由",
     "model_price": "模型價格"
   },
   "columns": {
@@ -69,6 +70,11 @@
       "create": "建立敏感詞",
       "update": "更新敏感詞",
       "delete": "刪除敏感詞"
+    },
+    "keyword_routing_rule": {
+      "create": "建立關鍵詞路由規則",
+      "update": "更新關鍵詞路由規則",
+      "delete": "刪除關鍵詞路由規則"
     },
     "model_price": {
       "bulk_upload": "批次上傳模型價格",

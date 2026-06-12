@@ -175,6 +175,7 @@ const actionCompatMocks: Record<string, string> = {
   "error-rules": "@/actions/error-rules",
   "key-quota": "@/actions/key-quota",
   keys: "@/actions/keys",
+  "keyword-routing": "@/actions/keyword-routing",
   "model-prices": "@/actions/model-prices",
   "my-usage": "@/actions/my-usage",
   "notification-bindings": "@/actions/notification-bindings",

@@ -38,6 +38,7 @@ const CATEGORIES: AuditCategory[] = [
   "key",
   "notification",
   "sensitive_word",
+  "keyword_routing_rule",
   "model_price",
 ];
 
