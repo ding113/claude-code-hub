@@ -1,0 +1,228 @@
+import { afterEach, describe, expect, test, vi } from "vitest";
+import type { KeywordRoutingScanTexts } from "@/lib/message-extractor";
+import type { KeywordRoutingRule } from "@/repository/keyword-routing-rules";
+
+const mocks = vi.hoisted(() => {
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+
+  return {
+    getActiveKeywordRoutingRules: vi.fn(),
+    subscribeCacheInvalidation: vi.fn(async () => undefined),
+    eventEmitter: {
+      on(event: string, handler: (...args: unknown[]) => void) {
+        const current = listeners.get(event) ?? new Set<(...args: unknown[]) => void>();
+        current.add(handler);
+        listeners.set(event, current);
+      },
+      off(event: string, handler: (...args: unknown[]) => void) {
+        listeners.get(event)?.delete(handler);
+      },
+      emit(event: string, ...args: unknown[]) {
+        for (const handler of listeners.get(event) ?? []) {
+          handler(...args);
+        }
+      },
+      removeAllListeners() {
+        listeners.clear();
+      },
+    },
+    logger: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      trace: vi.fn(),
+      error: vi.fn(),
+      fatal: vi.fn(),
+    },
+  };
+});
+
+vi.mock("@/repository/keyword-routing-rules", () => ({
+  getActiveKeywordRoutingRules: mocks.getActiveKeywordRoutingRules,
+}));
+
+vi.mock("@/lib/event-emitter", () => ({
+  eventEmitter: mocks.eventEmitter,
+}));
+
+vi.mock("@/lib/redis/pubsub", () => ({
+  CHANNEL_KEYWORD_ROUTING_RULES_UPDATED: "keywordRoutingRulesUpdated",
+  subscribeCacheInvalidation: mocks.subscribeCacheInvalidation,
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: mocks.logger,
+}));
+
+let nextRuleId = 1;
+
+/** 构建测试规则的工厂函数（id 自增，提供合理默认值） */
+function makeRule(overrides: Partial<KeywordRoutingRule> = {}): KeywordRoutingRule {
+  const now = new Date("2026-06-01T00:00:00.000Z");
+  return {
+    id: nextRuleId++,
+    keyword: "EXAMPLE DIALOGE",
+    sourceModel: null,
+    targetModel: "claude-haiku-4-5",
+    caseSensitive: true,
+    priority: 0,
+    description: null,
+    isEnabled: true,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+/** 构建扫描文本的便捷函数 */
+function makeTexts(overrides: Partial<KeywordRoutingScanTexts> = {}): KeywordRoutingScanTexts {
+  return {
+    systemTexts: [],
+    lastUserTexts: [],
+    ...overrides,
+  };
+}
+
+/** 导入全新的引擎单例（先清理 globalThis 缓存） */
+async function importFreshEngine() {
+  const { keywordRoutingEngine } = await import("@/lib/keyword-routing/engine");
+  // 等待构造函数中异步的事件监听注册完成
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return keywordRoutingEngine;
+}
+
+describe("KeywordRoutingRuleCache (engine)", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    mocks.eventEmitter.removeAllListeners();
+    // 引擎是 globalThis 单例，可跨 resetModules 存活；删除后下个测试
+    // 重新导入会构造新实例并重新订阅 mocks.eventEmitter
+    delete (globalThis as Record<string, unknown>).__CCH_KEYWORD_ROUTING_ENGINE__;
+    nextRuleId = 1;
+  });
+
+  test("reload() populates rules from repository; match() delegates to matcher", async () => {
+    const rule = makeRule({ keyword: "magic-token" });
+    mocks.getActiveKeywordRoutingRules.mockResolvedValueOnce([rule]);
+
+    const engine = await importFreshEngine();
+    await engine.reload();
+
+    expect(mocks.getActiveKeywordRoutingRules).toHaveBeenCalledTimes(1);
+
+    // 正向：关键词命中 lastUserTexts
+    const hit = engine.match(makeTexts({ lastUserTexts: ["please use magic-token here"] }), null);
+    expect(hit?.rule).toBe(rule);
+    expect(hit?.matchedIn).toBe("user");
+
+    // 反向：无关键词命中
+    const miss = engine.match(makeTexts({ lastUserTexts: ["nothing relevant"] }), null);
+    expect(miss).toBeNull();
+  });
+
+  test("reload() failure keeps previous rules and lastReloadTime, logs error", async () => {
+    const rule = makeRule({ keyword: "magic-token" });
+    mocks.getActiveKeywordRoutingRules
+      .mockResolvedValueOnce([rule])
+      .mockRejectedValueOnce(new Error("db down"));
+
+    const engine = await importFreshEngine();
+    await engine.reload();
+    const statsAfterSuccess = engine.getStats();
+
+    await engine.reload(); // 第二次 reload 失败
+
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "[KeywordRoutingRuleCache] Failed to reload keyword routing rules:",
+      expect.any(Error)
+    );
+
+    // 旧缓存保留，匹配仍可用（降级可用语义）
+    const hit = engine.match(makeTexts({ lastUserTexts: ["with magic-token inside"] }), null);
+    expect(hit?.rule).toBe(rule);
+
+    // lastReloadTime 仅在成功时更新（与敏感词引擎语义一致）
+    const statsAfterFailure = engine.getStats();
+    expect(statsAfterFailure.ruleCount).toBe(1);
+    expect(statsAfterFailure.lastReloadTime).toBe(statsAfterSuccess.lastReloadTime);
+    expect(statsAfterFailure.isLoading).toBe(false);
+  });
+
+  test("concurrent reload while loading is skipped (detector semantics)", async () => {
+    let resolveFirstLoad: ((value: KeywordRoutingRule[]) => void) | undefined;
+    mocks.getActiveKeywordRoutingRules.mockImplementationOnce(
+      () =>
+        new Promise<KeywordRoutingRule[]>((resolve) => {
+          resolveFirstLoad = resolve;
+        })
+    );
+
+    const engine = await importFreshEngine();
+
+    const firstReload = engine.reload(); // 启动加载（挂起中）
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const secondReload = engine.reload(); // isLoading 守卫直接跳过
+
+    await secondReload;
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "[KeywordRoutingRuleCache] Reload already in progress, skipping"
+    );
+
+    resolveFirstLoad?.([makeRule()]);
+    await firstReload;
+
+    // 第二次 reload 被跳过，仓库只读了一次
+    expect(mocks.getActiveKeywordRoutingRules).toHaveBeenCalledTimes(1);
+    expect(engine.getStats().ruleCount).toBe(1);
+  });
+
+  test("isEmpty() is true before load, false after; getStats() shape", async () => {
+    mocks.getActiveKeywordRoutingRules.mockResolvedValueOnce([makeRule(), makeRule()]);
+
+    const engine = await importFreshEngine();
+
+    expect(engine.isEmpty()).toBe(true);
+    expect(engine.getStats()).toEqual({
+      ruleCount: 0,
+      lastReloadTime: 0,
+      isLoading: false,
+    });
+
+    await engine.reload();
+
+    expect(engine.isEmpty()).toBe(false);
+    expect(engine.getStats()).toEqual({
+      ruleCount: 2,
+      lastReloadTime: expect.any(Number),
+      isLoading: false,
+    });
+    expect(engine.getStats().lastReloadTime).toBeGreaterThan(0);
+  });
+
+  test("local keywordRoutingRulesUpdated event triggers reload", async () => {
+    mocks.getActiveKeywordRoutingRules.mockResolvedValueOnce([makeRule()]);
+
+    const engine = await importFreshEngine();
+    expect(engine.isEmpty()).toBe(true);
+
+    mocks.eventEmitter.emit("keywordRoutingRulesUpdated");
+    // 等待事件触发的异步 reload 完成
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.getActiveKeywordRoutingRules).toHaveBeenCalledTimes(1);
+    expect(engine.isEmpty()).toBe(false);
+  });
+
+  test("destroy() unsubscribes the local event handler", async () => {
+    mocks.getActiveKeywordRoutingRules.mockResolvedValue([makeRule()]);
+
+    const engine = await importFreshEngine();
+    engine.destroy();
+
+    mocks.eventEmitter.emit("keywordRoutingRulesUpdated");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.getActiveKeywordRoutingRules).not.toHaveBeenCalled();
+  });
+});

@@ -53,12 +53,16 @@ function createRow(overrides: Record<string, unknown> = {}) {
 }
 
 function mockModules(db: unknown, emitKeywordRoutingRulesUpdated: ReturnType<typeof vi.fn>) {
+  const columns = { id: {}, priority: {}, isEnabled: {} };
   vi.doMock("@/drizzle/db", () => ({ db }));
   vi.doMock("@/drizzle/schema", () => ({
-    keywordRoutingRules: { id: {}, priority: {}, isEnabled: {} },
+    keywordRoutingRules: columns,
   }));
-  vi.doMock("drizzle-orm", () => ({ eq: vi.fn(() => ({})) }));
+  vi.doMock("drizzle-orm", () => ({
+    eq: vi.fn((column: unknown, value: unknown) => ({ column, value })),
+  }));
   vi.doMock("@/lib/emit-event", () => ({ emitKeywordRoutingRulesUpdated }));
+  return columns;
 }
 
 describe("Keyword routing rules repository events", () => {
@@ -208,5 +212,68 @@ describe("Keyword routing rules repository events", () => {
 
     expect(deleted).toBe(false);
     expect(emitKeywordRoutingRulesUpdated).not.toHaveBeenCalled();
+  });
+
+  test("getActiveKeywordRoutingRules: should filter isEnabled=true, order by [priority, id] and map rows", async () => {
+    vi.resetModules();
+
+    const emitKeywordRoutingRulesUpdated = vi.fn(async () => undefined);
+    const { db } = createDbMock({
+      insertReturning: [],
+      updateReturning: [],
+      deleteReturning: [],
+    });
+    const row = createRow();
+    db.query.keywordRoutingRules.findMany.mockResolvedValue([row]);
+
+    const columns = mockModules(db, emitKeywordRoutingRulesUpdated);
+
+    const repo = await import("@/repository/keyword-routing-rules");
+    const rules = await repo.getActiveKeywordRoutingRules();
+
+    expect(db.query.keywordRoutingRules.findMany).toHaveBeenCalledWith({
+      where: { column: columns.isEnabled, value: true },
+      orderBy: [columns.priority, columns.id],
+    });
+    expect(rules).toEqual([
+      {
+        id: row.id,
+        keyword: row.keyword,
+        sourceModel: row.sourceModel,
+        targetModel: row.targetModel,
+        caseSensitive: row.caseSensitive,
+        priority: row.priority,
+        description: row.description,
+        isEnabled: row.isEnabled,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      },
+    ]);
+  });
+
+  test("getAllKeywordRoutingRules: should order by [priority, id] without isEnabled filter", async () => {
+    vi.resetModules();
+
+    const emitKeywordRoutingRulesUpdated = vi.fn(async () => undefined);
+    const { db } = createDbMock({
+      insertReturning: [],
+      updateReturning: [],
+      deleteReturning: [],
+    });
+    const enabledRow = createRow();
+    const disabledRow = createRow({ id: 2, isEnabled: false });
+    db.query.keywordRoutingRules.findMany.mockResolvedValue([enabledRow, disabledRow]);
+
+    const columns = mockModules(db, emitKeywordRoutingRulesUpdated);
+
+    const repo = await import("@/repository/keyword-routing-rules");
+    const rules = await repo.getAllKeywordRoutingRules();
+
+    expect(db.query.keywordRoutingRules.findMany).toHaveBeenCalledWith({
+      orderBy: [columns.priority, columns.id],
+    });
+    expect(rules).toHaveLength(2);
+    expect(rules.map((rule) => rule.id)).toEqual([1, 2]);
+    expect(rules.map((rule) => rule.isEnabled)).toEqual([true, false]);
   });
 });

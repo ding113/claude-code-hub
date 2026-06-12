@@ -8,6 +8,7 @@ import {
   handleOpenAICompatibleModels,
 } from "@/app/v1/_lib/models/available-models";
 import { handleProxyRequest } from "@/app/v1/_lib/proxy-handler";
+import { keywordRoutingEngine } from "@/lib/keyword-routing/engine";
 import { logger } from "@/lib/logger";
 import { sensitiveWordDetector } from "@/lib/sensitive-word-detector";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -27,6 +28,10 @@ const canSkipDsnWarmup =
 if (hasDsn) {
   sensitiveWordDetector.reload().catch((err) => {
     logger.error("[App] SensitiveWordDetector initialization failed:", err);
+  });
+  // 关键词路由为非关键能力：预热失败仅记录日志，绝不阻断启动
+  keywordRoutingEngine.reload().catch((err) => {
+    logger.error("[App] KeywordRoutingEngine initialization failed:", err);
   });
 } else if (canSkipDsnWarmup) {
   logger.info("[App] SensitiveWordDetector warmup skipped: DSN not configured");

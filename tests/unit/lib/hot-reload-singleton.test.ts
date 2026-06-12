@@ -17,6 +17,7 @@ describe("globalThis singleton pattern", () => {
     delete g.__CCH_EVENT_EMITTER__;
     delete g.__CCH_REQUEST_FILTER_ENGINE__;
     delete g.__CCH_SENSITIVE_WORD_DETECTOR__;
+    delete g.__CCH_KEYWORD_ROUTING_ENGINE__;
   });
 
   test("eventEmitter: multiple imports return same instance", async () => {
@@ -93,6 +94,31 @@ describe("globalThis singleton pattern", () => {
     const { sensitiveWordDetector } = await import("@/lib/sensitive-word-detector");
     expect(g.__CCH_SENSITIVE_WORD_DETECTOR__).toBe(sensitiveWordDetector);
   });
+
+  test("keywordRoutingEngine: multiple imports return same instance", async () => {
+    // First import
+    const { keywordRoutingEngine: engine1 } = await import("@/lib/keyword-routing/engine");
+
+    // Reset module cache
+    vi.resetModules();
+
+    // Second import
+    const { keywordRoutingEngine: engine2 } = await import("@/lib/keyword-routing/engine");
+
+    // Should be the exact same instance
+    expect(engine1).toBe(engine2);
+  });
+
+  test("keywordRoutingEngine: globalThis stores the singleton", async () => {
+    const g = globalThis as Record<string, unknown>;
+
+    // Before import, should not exist
+    expect(g.__CCH_KEYWORD_ROUTING_ENGINE__).toBeUndefined();
+
+    // After import, should exist
+    const { keywordRoutingEngine } = await import("@/lib/keyword-routing/engine");
+    expect(g.__CCH_KEYWORD_ROUTING_ENGINE__).toBe(keywordRoutingEngine);
+  });
 });
 
 describe("event propagation between singleton instances", () => {
@@ -106,6 +132,7 @@ describe("event propagation between singleton instances", () => {
     delete g.__CCH_EVENT_EMITTER__;
     delete g.__CCH_REQUEST_FILTER_ENGINE__;
     delete g.__CCH_SENSITIVE_WORD_DETECTOR__;
+    delete g.__CCH_KEYWORD_ROUTING_ENGINE__;
   });
 
   afterEach(() => {
@@ -114,6 +141,7 @@ describe("event propagation between singleton instances", () => {
     delete g.__CCH_EVENT_EMITTER__;
     delete g.__CCH_REQUEST_FILTER_ENGINE__;
     delete g.__CCH_SENSITIVE_WORD_DETECTOR__;
+    delete g.__CCH_KEYWORD_ROUTING_ENGINE__;
   });
 
   test("events emitted in one context should be received in another", async () => {
@@ -139,6 +167,7 @@ describe("event propagation between singleton instances", () => {
       errorRules: vi.fn(),
       sensitiveWords: vi.fn(),
       requestFilters: vi.fn(),
+      keywordRoutingRules: vi.fn(),
     };
 
     // Subscribe in context A
@@ -146,6 +175,7 @@ describe("event propagation between singleton instances", () => {
     emitterA.on("errorRulesUpdated", handlers.errorRules);
     emitterA.on("sensitiveWordsUpdated", handlers.sensitiveWords);
     emitterA.on("requestFiltersUpdated", handlers.requestFilters);
+    emitterA.on("keywordRoutingRulesUpdated", handlers.keywordRoutingRules);
 
     vi.resetModules();
 
@@ -154,9 +184,11 @@ describe("event propagation between singleton instances", () => {
     emitterB.emitErrorRulesUpdated();
     emitterB.emitSensitiveWordsUpdated();
     emitterB.emitRequestFiltersUpdated();
+    emitterB.emitKeywordRoutingRulesUpdated();
 
     expect(handlers.errorRules).toHaveBeenCalledTimes(1);
     expect(handlers.sensitiveWords).toHaveBeenCalledTimes(1);
     expect(handlers.requestFilters).toHaveBeenCalledTimes(1);
+    expect(handlers.keywordRoutingRules).toHaveBeenCalledTimes(1);
   });
 });
