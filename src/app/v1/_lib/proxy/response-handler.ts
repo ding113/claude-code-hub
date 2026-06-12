@@ -2896,7 +2896,12 @@ export class ProxyResponseHandler {
             // 结算并消费 deferred meta，确保 provider chain/熔断归因完整
             try {
               const allContent = flushAndJoin();
-              await finalizeStream(allContent, false, false, "STREAM_IDLE_TIMEOUT");
+              await finalizeStream(
+                allContent,
+                false,
+                clientAborted,
+                clientAborted ? "CLIENT_ABORTED" : "STREAM_IDLE_TIMEOUT"
+              );
             } catch (finalizeError) {
               logger.error("ResponseHandler: Failed to finalize idle-timeout stream", {
                 taskId,
