@@ -18337,7 +18337,7 @@ export interface operations {
                             /** @description API call count. */
                             api_calls: number;
                             /** @description Total cost. */
-                            total_cost: string | number | unknown | unknown;
+                            total_cost: string | number | unknown;
                         }[];
                     };
                 };
