@@ -15,6 +15,9 @@ export interface KeywordRoutingMatch {
  * 判断规则的关键词是否命中给定文本（子串匹配）
  *
  * caseSensitive=false 时双方统一转为小写后比较
+ *
+ * 注意：依据 String.includes 语义，空关键词会命中任意文本；
+ * 空关键词的防御性过滤由 findMatchingKeywordRoutingRule 负责
  */
 export function ruleMatchesText(
   rule: Pick<KeywordRoutingRule, "keyword" | "caseSensitive">,
@@ -24,6 +27,22 @@ export function ruleMatchesText(
     return text.includes(rule.keyword);
   }
   return text.toLowerCase().includes(rule.keyword.toLowerCase());
+}
+
+/**
+ * 创建小写文本数组的惰性缓存
+ *
+ * 仅在首次遇到大小写不敏感规则时才构建小写副本，且整个匹配调用内只构建一次，
+ * 避免对每个 (规则, 文本) 组合重复执行 toLowerCase（文本可能高达 100KB+）
+ */
+function createLoweredTextsCache(source: readonly string[]): () => readonly string[] {
+  let lowered: string[] | null = null;
+  return () => {
+    if (lowered === null) {
+      lowered = source.map((text) => text.toLowerCase());
+    }
+    return lowered;
+  };
 }
 
 /**
@@ -46,6 +65,9 @@ export function findMatchingKeywordRoutingRule(
   texts: KeywordRoutingScanTexts,
   requestedModel: string | null
 ): KeywordRoutingMatch | null {
+  const loweredSystemTexts = createLoweredTextsCache(texts.systemTexts);
+  const loweredLastUserTexts = createLoweredTextsCache(texts.lastUserTexts);
+
   for (const rule of rules) {
     if (!rule.isEnabled) {
       continue;
@@ -59,11 +81,16 @@ export function findMatchingKeywordRoutingRule(
       continue;
     }
 
-    if (texts.systemTexts.some((text) => ruleMatchesText(rule, text))) {
+    // 大小写不敏感时：关键词每条规则只转小写一次，扫描文本走惰性缓存
+    const keyword = rule.caseSensitive ? rule.keyword : rule.keyword.toLowerCase();
+    const systemTexts = rule.caseSensitive ? texts.systemTexts : loweredSystemTexts();
+    const lastUserTexts = rule.caseSensitive ? texts.lastUserTexts : loweredLastUserTexts();
+
+    if (systemTexts.some((text) => text.includes(keyword))) {
       return { rule, matchedIn: "system" };
     }
 
-    if (texts.lastUserTexts.some((text) => ruleMatchesText(rule, text))) {
+    if (lastUserTexts.some((text) => text.includes(keyword))) {
       return { rule, matchedIn: "user" };
     }
   }

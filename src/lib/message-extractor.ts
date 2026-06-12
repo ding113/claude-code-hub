@@ -184,9 +184,9 @@ function collectRoleScanTexts(
 ): void {
   let lastUserEntry: Record<string, unknown> | null = null;
 
-  entries.forEach((entry) => {
+  for (const entry of entries) {
     if (typeof entry !== "object" || entry === null) {
-      return;
+      continue;
     }
 
     const obj = entry as Record<string, unknown>;
@@ -196,7 +196,7 @@ function collectRoleScanTexts(
     } else if (obj.role === "user") {
       lastUserEntry = obj;
     }
-  });
+  }
 
   if (lastUserEntry) {
     lastUserTexts.push(...extractEntryContentTexts(lastUserEntry));

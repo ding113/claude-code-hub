@@ -130,6 +130,20 @@ describe("findMatchingKeywordRoutingRule", () => {
 
       expect(findMatchingKeywordRoutingRule([first, second], texts, null)?.rule).toBe(second);
     });
+
+    it("规则顺序优先于来源顺序：前序规则命中 user 时胜过后续规则命中 system", () => {
+      const first = makeRule({ keyword: "user-only" });
+      const second = makeRule({ keyword: "system-only" });
+      const texts = makeTexts({
+        systemTexts: ["contains system-only keyword"],
+        lastUserTexts: ["contains user-only keyword"],
+      });
+
+      const result = findMatchingKeywordRoutingRule([first, second], texts, null);
+
+      expect(result?.rule).toBe(first);
+      expect(result?.matchedIn).toBe("user");
+    });
   });
 
   describe("规则有效性防御", () => {
@@ -149,6 +163,20 @@ describe("findMatchingKeywordRoutingRule", () => {
 
       expect(findMatchingKeywordRoutingRule([empty, whitespace], texts, null)).toBeNull();
     });
+  });
+
+  it("中文关键词：大小写敏感与不敏感均能命中 CJK 文本", () => {
+    const texts = makeTexts({ lastUserTexts: ["以下是一段示例对话，请参考其中的格式"] });
+
+    const sensitiveRule = makeRule({ keyword: "示例对话", caseSensitive: true });
+    const sensitiveResult = findMatchingKeywordRoutingRule([sensitiveRule], texts, null);
+    expect(sensitiveResult?.rule).toBe(sensitiveRule);
+    expect(sensitiveResult?.matchedIn).toBe("user");
+
+    const insensitiveRule = makeRule({ keyword: "示例对话", caseSensitive: false });
+    const insensitiveResult = findMatchingKeywordRoutingRule([insensitiveRule], texts, null);
+    expect(insensitiveResult?.rule).toBe(insensitiveRule);
+    expect(insensitiveResult?.matchedIn).toBe("user");
   });
 
   describe("matchedIn 来源标记", () => {
