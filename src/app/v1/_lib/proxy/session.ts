@@ -135,6 +135,15 @@ export class ProxySession {
   // 模型重定向追踪：保存原始模型名（重定向前）
   private originalModelName: string | null = null;
 
+  // 关键词路由审计信息：保存用户原始请求模型与改写结果（用于决策链展示，不参与计费）
+  private keywordRoutingAudit: {
+    userRequestedModel: string;
+    routedModel: string;
+    ruleId: number;
+    keyword: string;
+    matchedIn: "system" | "user";
+  } | null = null;
+
   // 原始 URL 路径（用于 Gemini 模型重定向重置）
   private originalUrlPathname: string | null = null;
 
@@ -663,6 +672,8 @@ export class ProxySession {
       strictBlockCause: metadata?.strictBlockCause,
       endpointFilterStats: metadata?.endpointFilterStats,
       modelRedirect: metadata?.modelRedirect ?? this.getCurrentModelRedirect(provider.id),
+      // 关键词路由审计信息（请求级别，发生过改写时附加到每个链路项）
+      keywordRouting: this.keywordRoutingAudit ?? undefined,
       rawCrossProviderFallbackEnabled: metadata?.rawCrossProviderFallbackEnabled,
     };
 
@@ -797,6 +808,23 @@ export class ProxySession {
    */
   isModelRedirected(): boolean {
     return this.originalModelName !== null && this.originalModelName !== this.request.model;
+  }
+
+  /**
+   * 记录关键词路由审计信息（在关键词路由改写模型后调用）
+   * 只能设置一次，避免重试链路重复覆盖
+   */
+  setKeywordRoutingAudit(info: NonNullable<ProviderChainItem["keywordRouting"]>): void {
+    if (this.keywordRoutingAudit === null) {
+      this.keywordRoutingAudit = info;
+    }
+  }
+
+  /**
+   * 获取关键词路由审计信息（未发生关键词路由时返回 null）
+   */
+  getKeywordRoutingAudit(): NonNullable<ProviderChainItem["keywordRouting"]> | null {
+    return this.keywordRoutingAudit;
   }
 
   /**

@@ -106,6 +106,15 @@ export interface ProviderChainItem {
     };
   };
 
+  // 关键词路由信息（在请求级别记录，标记请求模型在供应商选择前被关键词规则改写）
+  keywordRouting?: {
+    userRequestedModel: string; // 用户原始请求的模型
+    routedModel: string; // 关键词路由改写后的模型
+    ruleId: number; // 命中的规则 ID
+    keyword: string; // 命中的关键词
+    matchedIn: "system" | "user"; // 命中位置（系统提示词 / 最后一条用户消息）
+  };
+
   // 错误信息（记录失败时的上游报错）
   errorMessage?: string;
 

@@ -1,6 +1,7 @@
 import { ProxyAuthenticator } from "./auth-guard";
 import { ProxyClientGuard } from "./client-guard";
 import type { EndpointPolicy } from "./endpoint-policy";
+import { ProxyKeywordRoutingGuard } from "./keyword-routing-guard";
 import { ProxyMessageService } from "./message-service";
 import { ProxyModelGuard } from "./model-guard";
 import { ProxyProviderRequestFilter } from "./provider-request-filter";
@@ -35,6 +36,7 @@ export type GuardStepKey =
   | "session"
   | "warmup"
   | "requestFilter"
+  | "keywordRouting"
   | "sensitive"
   | "rateLimit"
   | "provider"
@@ -105,6 +107,12 @@ const Steps: Record<GuardStepKey, GuardStep> = {
     async execute(session) {
       await ProxyRequestFilter.ensure(session);
       return null;
+    },
+  },
+  keywordRouting: {
+    name: "keywordRouting",
+    async execute(session) {
+      return ProxyKeywordRoutingGuard.ensure(session);
     },
   },
   sensitive: {
@@ -209,6 +217,7 @@ export const CHAT_PIPELINE: GuardConfig = {
     "session",
     "warmup",
     "requestFilter",
+    "keywordRouting",
     "rateLimit",
     "provider",
     "providerRequestFilter",
