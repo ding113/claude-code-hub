@@ -94,15 +94,36 @@ export async function getKeywordRoutingCacheStats(c: Context): Promise<Response>
 
 function actionError(c: Context, result: Extract<ActionResult<unknown>, { ok: false }>): Response {
   const detail = result.error || "Request failed.";
-  const status = detail.includes("不存在") ? 404 : detail.includes("权限") ? 403 : 400;
+  const code = result.errorCode;
+  const status = getActionErrorStatus(code, detail);
+
+  // Map errorCode to namespace-prefixed code
+  let errorCode: string;
+  if (code === "NOT_FOUND" || status === 404) {
+    errorCode = "keyword_routing_rule.not_found";
+  } else if (code) {
+    errorCode = code;
+  } else {
+    errorCode = "keyword_routing_rule.action_failed";
+  }
+
   return createProblemResponse({
     status,
     instance: new URL(c.req.url).pathname,
-    errorCode:
-      status === 404
-        ? "keyword_routing_rule.not_found"
-        : (result.errorCode ?? "keyword_routing_rule.action_failed"),
+    errorCode,
     errorParams: result.errorParams,
     detail: publicActionErrorDetail(status),
   });
+}
+
+function getActionErrorStatus(code: string | undefined, detail: string): 400 | 403 | 404 | 500 {
+  if (code === "PERMISSION_DENIED") return 403;
+  if (code === "NOT_FOUND") return 404;
+  if (code === "VALIDATION_ERROR") return 400;
+  if (code === "OPERATION_FAILED") return 500;
+
+  // Fallback to string matching for backward compatibility
+  if (detail.includes("不存在") || detail.includes("not found")) return 404;
+  if (detail.includes("权限")) return 403;
+  return 400;
 }

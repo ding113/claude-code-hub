@@ -1,4 +1,10 @@
 import { z } from "@hono/zod-openapi";
+import {
+  DESCRIPTION_MAX_LENGTH,
+  KEYWORD_MAX_LENGTH,
+  MODEL_MAX_LENGTH,
+  PRIORITY_ABS_LIMIT,
+} from "@/lib/validation/keyword-routing-constants";
 import { IsoDateTimeStringSchema } from "./_common";
 
 export const KeywordRoutingRuleSchema = z.object({
@@ -23,11 +29,16 @@ export const KeywordRoutingRuleListResponseSchema = z.object({
 
 export const KeywordRoutingRuleCreateSchema = z
   .object({
-    keyword: z.string().trim().min(1).max(500).describe("Keyword to match in request texts."),
+    keyword: z
+      .string()
+      .trim()
+      .min(1)
+      .max(KEYWORD_MAX_LENGTH)
+      .describe("Keyword to match in request texts."),
     sourceModel: z
       .string()
       .trim()
-      .max(128)
+      .max(MODEL_MAX_LENGTH)
       .nullable()
       .optional()
       .describe("Source model filter; null or empty matches any requested model."),
@@ -35,17 +46,23 @@ export const KeywordRoutingRuleCreateSchema = z
       .string()
       .trim()
       .min(1)
-      .max(128)
+      .max(MODEL_MAX_LENGTH)
       .describe("Target model to route matched requests to."),
     caseSensitive: z.boolean().optional().describe("Whether keyword matching is case sensitive."),
     priority: z
       .number()
       .int()
-      .min(-1000000)
-      .max(1000000)
+      .min(-PRIORITY_ABS_LIMIT)
+      .max(PRIORITY_ABS_LIMIT)
       .optional()
       .describe("Rule priority; lower values are evaluated first."),
-    description: z.string().trim().max(500).nullable().optional().describe("Optional description."),
+    description: z
+      .string()
+      .trim()
+      .max(DESCRIPTION_MAX_LENGTH)
+      .nullable()
+      .optional()
+      .describe("Optional description."),
   })
   .strict();
 

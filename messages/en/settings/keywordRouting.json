@@ -67,5 +67,21 @@
     "status": "Status",
     "targetModel": "Target Model"
   },
-  "title": "Keyword Routing"
+  "title": "Keyword Routing",
+  "validation": {
+    "keywordRequired": "Keyword cannot be empty",
+    "keywordMaxLength": "Keyword must not exceed {max} characters",
+    "targetModelRequired": "Target model cannot be empty",
+    "targetModelMaxLength": "Target model must not exceed {max} characters",
+    "sourceModelMaxLength": "Source model must not exceed {max} characters",
+    "descriptionMaxLength": "Description must not exceed {max} characters",
+    "priorityInteger": "Priority must be an integer",
+    "priorityRange": "Priority must be between -{limit} and {limit}",
+    "permissionDenied": "Permission denied",
+    "ruleNotFound": "Keyword routing rule not found",
+    "createFailed": "Failed to create keyword routing rule",
+    "updateFailed": "Failed to update keyword routing rule",
+    "deleteFailed": "Failed to delete keyword routing rule",
+    "refreshCacheFailed": "Failed to refresh cache"
+  }
 }

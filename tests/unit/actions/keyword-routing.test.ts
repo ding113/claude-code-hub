@@ -43,6 +43,16 @@ vi.mock("@/repository/keyword-routing-rules", () => ({
   getAllKeywordRoutingRules: getAllKeywordRoutingRulesMock,
 }));
 
+vi.mock("next-intl/server", () => ({
+  getTranslations: vi.fn(() => (key: string, params?: Record<string, unknown>) => {
+    // Mock translation function: return key with params for test assertions
+    if (params) {
+      return `${key}:${JSON.stringify(params)}`;
+    }
+    return key;
+  }),
+}));
+
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
@@ -103,7 +113,10 @@ describe("keyword-routing actions", () => {
       const res = await createKeywordRoutingRuleAction({ keyword: "", targetModel: "model-b" });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("关键词不能为空");
+      if (!res.ok) {
+        expect(res.error).toBe("keywordRequired");
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -115,7 +128,10 @@ describe("keyword-routing actions", () => {
       });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("关键词不能为空");
+      if (!res.ok) {
+        expect(res.error).toBe("keywordRequired");
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -127,7 +143,10 @@ describe("keyword-routing actions", () => {
       });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("目标模型不能为空");
+      if (!res.ok) {
+        expect(res.error).toBe("targetModelRequired");
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -162,7 +181,10 @@ describe("keyword-routing actions", () => {
       });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("来源模型长度不能超过 128 个字符");
+      if (!res.ok) {
+        expect(res.error).toMatch(/sourceModelMaxLength/);
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -175,7 +197,10 @@ describe("keyword-routing actions", () => {
       });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("描述长度不能超过 500 个字符");
+      if (!res.ok) {
+        expect(res.error).toMatch(/descriptionMaxLength/);
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -188,7 +213,10 @@ describe("keyword-routing actions", () => {
       });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("优先级必须为整数");
+      if (!res.ok) {
+        expect(res.error).toBe("priorityInteger");
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -201,7 +229,10 @@ describe("keyword-routing actions", () => {
       });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("优先级必须在 -1000000 到 1000000 之间");
+      if (!res.ok) {
+        expect(res.error).toMatch(/priorityRange/);
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -215,7 +246,10 @@ describe("keyword-routing actions", () => {
       });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("创建关键词路由规则失败");
+      if (!res.ok) {
+        expect(res.error).toBe("createFailed");
+        expect(res.errorCode).toBe("OPERATION_FAILED");
+      }
       expect(emitActionAuditMock).toHaveBeenCalledWith(
         expect.objectContaining({
           category: "keyword_routing_rule",
@@ -262,7 +296,10 @@ describe("keyword-routing actions", () => {
       });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("权限不足");
+      if (!res.ok) {
+        expect(res.error).toBe("permissionDenied");
+        expect(res.errorCode).toBe("PERMISSION_DENIED");
+      }
       expect(createKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
   });
@@ -275,7 +312,10 @@ describe("keyword-routing actions", () => {
       const res = await updateKeywordRoutingRuleAction(404, { isEnabled: false });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("关键词路由规则不存在");
+      if (!res.ok) {
+        expect(res.error).toBe("ruleNotFound");
+        expect(res.errorCode).toBe("NOT_FOUND");
+      }
       expect(emitActionAuditMock).not.toHaveBeenCalled();
     });
 
@@ -284,7 +324,10 @@ describe("keyword-routing actions", () => {
       const res = await updateKeywordRoutingRuleAction(1, { keyword: "   " });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("关键词不能为空");
+      if (!res.ok) {
+        expect(res.error).toBe("keywordRequired");
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(updateKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -293,7 +336,10 @@ describe("keyword-routing actions", () => {
       const res = await updateKeywordRoutingRuleAction(1, { targetModel: "" });
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("目标模型不能为空");
+      if (!res.ok) {
+        expect(res.error).toBe("targetModelRequired");
+        expect(res.errorCode).toBe("VALIDATION_ERROR");
+      }
       expect(updateKeywordRoutingRuleMock).not.toHaveBeenCalled();
     });
 
@@ -340,7 +386,10 @@ describe("keyword-routing actions", () => {
       const res = await deleteKeywordRoutingRuleAction(404);
 
       expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toBe("关键词路由规则不存在");
+      if (!res.ok) {
+        expect(res.error).toBe("ruleNotFound");
+        expect(res.errorCode).toBe("NOT_FOUND");
+      }
     });
   });
 

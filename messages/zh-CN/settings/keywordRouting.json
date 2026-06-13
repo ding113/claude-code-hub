@@ -67,5 +67,21 @@
     "status": "状态",
     "targetModel": "目标模型"
   },
-  "title": "关键词路由"
+  "title": "关键词路由",
+  "validation": {
+    "keywordRequired": "关键词不能为空",
+    "keywordMaxLength": "关键词长度不能超过 {max} 个字符",
+    "targetModelRequired": "目标模型不能为空",
+    "targetModelMaxLength": "目标模型长度不能超过 {max} 个字符",
+    "sourceModelMaxLength": "来源模型长度不能超过 {max} 个字符",
+    "descriptionMaxLength": "描述长度不能超过 {max} 个字符",
+    "priorityInteger": "优先级必须为整数",
+    "priorityRange": "优先级必须在 -{limit} 到 {limit} 之间",
+    "permissionDenied": "权限不足",
+    "ruleNotFound": "关键词路由规则不存在",
+    "createFailed": "创建关键词路由规则失败",
+    "updateFailed": "更新关键词路由规则失败",
+    "deleteFailed": "删除关键词路由规则失败",
+    "refreshCacheFailed": "刷新缓存失败"
+  }
 }

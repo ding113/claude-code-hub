@@ -66,7 +66,33 @@ export class ProxyKeywordRoutingGuard {
 
       // 匹配关键词路由规则（首个命中即返回）
       const match = keywordRoutingEngine.match(texts, requestedModel);
-      if (!match || match.rule.targetModel === requestedModel) {
+      if (!match) {
+        return null;
+      }
+
+      // 规则命中但目标模型与请求模型相同：记录审计但不改写
+      if (match.rule.targetModel === requestedModel) {
+        session.setKeywordRoutingAudit({
+          userRequestedModel: requestedModel,
+          routedModel: match.rule.targetModel,
+          ruleId: match.rule.id,
+          keyword: match.rule.keyword,
+          matchedIn: match.matchedIn,
+        });
+
+        session.request.note = `[Keyword Matched (no rewrite): rule#${match.rule.id}, target=${match.rule.targetModel}] ${session.request.note || ""}`;
+
+        logger.debug(
+          "[KeywordRoutingGuard] Rule matched but target equals source, skipped rewrite",
+          {
+            ruleId: match.rule.id,
+            keyword: match.rule.keyword,
+            matchedIn: match.matchedIn,
+            model: requestedModel,
+            sessionId: session.sessionId,
+          }
+        );
+
         return null;
       }
 

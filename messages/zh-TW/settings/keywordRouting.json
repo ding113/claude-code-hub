@@ -67,5 +67,21 @@
     "status": "狀態",
     "targetModel": "目標模型"
   },
-  "title": "關鍵詞路由"
+  "title": "關鍵詞路由",
+  "validation": {
+    "keywordRequired": "關鍵詞不能為空",
+    "keywordMaxLength": "關鍵詞長度不能超過 {max} 個字元",
+    "targetModelRequired": "目標模型不能為空",
+    "targetModelMaxLength": "目標模型長度不能超過 {max} 個字元",
+    "sourceModelMaxLength": "來源模型長度不能超過 {max} 個字元",
+    "descriptionMaxLength": "說明長度不能超過 {max} 個字元",
+    "priorityInteger": "優先級必須為整數",
+    "priorityRange": "優先級必須在 -{limit} 到 {limit} 之間",
+    "permissionDenied": "權限不足",
+    "ruleNotFound": "關鍵詞路由規則不存在",
+    "createFailed": "建立關鍵詞路由規則失敗",
+    "updateFailed": "更新關鍵詞路由規則失敗",
+    "deleteFailed": "刪除關鍵詞路由規則失敗",
+    "refreshCacheFailed": "刷新快取失敗"
+  }
 }

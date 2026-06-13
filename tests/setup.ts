@@ -7,6 +7,20 @@
 import { config } from "dotenv";
 import { afterAll, beforeAll, vi } from "vitest";
 
+// ==================== 全局 Mock ====================
+
+// Mock next-intl/server to prevent "server-only" errors in tests
+vi.mock("next-intl/server", () => ({
+  getTranslations: vi.fn(() => (key: string, params?: Record<string, unknown>) => {
+    if (params) {
+      return `${key}:${JSON.stringify(params)}`;
+    }
+    return key;
+  }),
+  getLocale: vi.fn(() => "en"),
+  getMessages: vi.fn(() => ({})),
+}));
+
 // ==================== 加载环境变量 ====================
 
 // 优先加载 .env.test（如果存在）

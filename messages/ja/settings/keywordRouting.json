@@ -67,5 +67,21 @@
     "status": "ステータス",
     "targetModel": "転送先モデル"
   },
-  "title": "キーワードルーティング"
+  "title": "キーワードルーティング",
+  "validation": {
+    "keywordRequired": "キーワードは空にできません",
+    "keywordMaxLength": "キーワードは{max}文字以内である必要があります",
+    "targetModelRequired": "転送先モデルは空にできません",
+    "targetModelMaxLength": "転送先モデルは{max}文字以内である必要があります",
+    "sourceModelMaxLength": "ソースモデルは{max}文字以内である必要があります",
+    "descriptionMaxLength": "説明は{max}文字以内である必要があります",
+    "priorityInteger": "優先度は整数である必要があります",
+    "priorityRange": "優先度は-{limit}から{limit}の間である必要があります",
+    "permissionDenied": "権限が不足しています",
+    "ruleNotFound": "キーワードルーティングルールが存在しません",
+    "createFailed": "キーワードルーティングルールの作成に失敗しました",
+    "updateFailed": "キーワードルーティングルールの更新に失敗しました",
+    "deleteFailed": "キーワードルーティングルールの削除に失敗しました",
+    "refreshCacheFailed": "キャッシュのリフレッシュに失敗しました"
+  }
 }

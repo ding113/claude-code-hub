@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Must be before any other imports to prevent server-only errors
+vi.mock("next-intl/server", () => ({
+  getTranslations: vi.fn(() => (key: string) => key),
+}));
+
+vi.mock("@/actions/keyword-routing", () => ({
+  listKeywordRoutingRules: vi.fn(),
+  createKeywordRoutingRuleAction: vi.fn(),
+}));
+
 vi.mock("@/drizzle/db", () => ({
   db: {
     insert: vi.fn(() => ({
@@ -208,7 +218,7 @@ describe("ProxyKeywordRoutingGuard", () => {
     });
   });
 
-  it("does not mutate anything when the matched target equals the requested model", async () => {
+  it("records audit but does not mutate the model when the matched target equals the requested model", async () => {
     const rule = createRule({ targetModel: "claude-sonnet-4-5" });
     vi.mocked(keywordRoutingEngine.match).mockReturnValue({ rule, matchedIn: "user" });
     const session = await createJsonSession(DEFAULT_BODY);
@@ -220,8 +230,31 @@ describe("ProxyKeywordRoutingGuard", () => {
     expect(session.request.model).toBe("claude-sonnet-4-5");
     expect(session.request.message.model).toBe("claude-sonnet-4-5");
     expect(session.request.buffer).toBe(bufferBefore);
-    expect(session.getKeywordRoutingAudit()).toBeNull();
-    expect(session.request.note ?? "").not.toContain("Keyword Routed");
+
+    // Audit is recorded even when no rewrite occurs
+    expect(session.getKeywordRoutingAudit()).toEqual({
+      userRequestedModel: "claude-sonnet-4-5",
+      routedModel: "claude-sonnet-4-5",
+      ruleId: 7,
+      keyword: "ultrathink",
+      matchedIn: "user",
+    });
+
+    // Note indicates rule matched but no rewrite needed
+    expect(session.request.note ?? "").toContain("Keyword Matched (no rewrite)");
+    expect(session.request.note ?? "").toContain("rule#7");
+    expect(session.request.note ?? "").not.toContain("Keyword Routed:");
+
+    // Debug log should be called
+    expect(logger.debug).toHaveBeenCalledWith(
+      "[KeywordRoutingGuard] Rule matched but target equals source, skipped rewrite",
+      expect.objectContaining({
+        ruleId: 7,
+        keyword: "ultrathink",
+        matchedIn: "user",
+        model: "claude-sonnet-4-5",
+      })
+    );
   });
 
   it("leaves the request untouched when no rule matches", async () => {

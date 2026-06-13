@@ -2,13 +2,13 @@ import type { AuthSession } from "@/lib/auth";
 import type { KeywordRoutingRule } from "@/repository/keyword-routing-rules";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const listKeywordRoutingRulesMock = vi.hoisted(() => vi.fn());
-const createKeywordRoutingRuleActionMock = vi.hoisted(() => vi.fn());
-const updateKeywordRoutingRuleActionMock = vi.hoisted(() => vi.fn());
-const deleteKeywordRoutingRuleActionMock = vi.hoisted(() => vi.fn());
-const refreshKeywordRoutingCacheActionMock = vi.hoisted(() => vi.fn());
-const getKeywordRoutingCacheStatsMock = vi.hoisted(() => vi.fn());
-const validateAuthTokenMock = vi.hoisted(() => vi.fn());
+const listKeywordRoutingRulesMock = vi.fn();
+const createKeywordRoutingRuleActionMock = vi.fn();
+const updateKeywordRoutingRuleActionMock = vi.fn();
+const deleteKeywordRoutingRuleActionMock = vi.fn();
+const refreshKeywordRoutingCacheActionMock = vi.fn();
+const getKeywordRoutingCacheStatsMock = vi.fn();
+const validateAuthTokenMock = vi.fn();
 
 vi.mock("@/actions/keyword-routing", () => ({
   listKeywordRoutingRules: listKeywordRoutingRulesMock,
@@ -19,10 +19,9 @@ vi.mock("@/actions/keyword-routing", () => ({
   getKeywordRoutingCacheStats: getKeywordRoutingCacheStatsMock,
 }));
 
-vi.mock("@/lib/auth", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/auth")>();
-  return { ...actual, validateAuthToken: validateAuthTokenMock };
-});
+vi.mock("@/lib/auth", () => ({
+  validateAuthToken: validateAuthTokenMock,
+}));
 
 const { callV1Route } = await import("../test-utils");
 
@@ -148,6 +147,7 @@ describe("v1 keyword routing endpoints", () => {
     updateKeywordRoutingRuleActionMock.mockResolvedValueOnce({
       ok: false,
       error: "关键词路由规则不存在",
+      errorCode: "NOT_FOUND",
     });
     const missing = await callV1Route({
       method: "PATCH",
@@ -157,6 +157,32 @@ describe("v1 keyword routing endpoints", () => {
     });
     expect(missing.response.status).toBe(404);
     expect(missing.json).toMatchObject({ errorCode: "keyword_routing_rule.not_found" });
+
+    createKeywordRoutingRuleActionMock.mockResolvedValueOnce({
+      ok: false,
+      error: "权限不足",
+      errorCode: "PERMISSION_DENIED",
+    });
+    const forbidden = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/keyword-routing-rules",
+      headers: { Authorization: "Bearer admin-token" },
+      body: { keyword: "test", targetModel: "model-c" },
+    });
+    expect(forbidden.response.status).toBe(403);
+
+    createKeywordRoutingRuleActionMock.mockResolvedValueOnce({
+      ok: false,
+      error: "创建失败",
+      errorCode: "OPERATION_FAILED",
+    });
+    const failed = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/keyword-routing-rules",
+      headers: { Authorization: "Bearer admin-token" },
+      body: { keyword: "test", targetModel: "model-c" },
+    });
+    expect(failed.response.status).toBe(500);
   });
 
   test("documents keyword routing REST paths", async () => {

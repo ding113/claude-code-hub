@@ -1,63 +1,74 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getTranslations } from "next-intl/server";
 import { emitActionAudit } from "@/lib/audit/emit";
 import { getSession } from "@/lib/auth";
 import { keywordRoutingEngine } from "@/lib/keyword-routing/engine";
 import { logger } from "@/lib/logger";
+import {
+  DESCRIPTION_MAX_LENGTH,
+  KEYWORD_MAX_LENGTH,
+  MODEL_MAX_LENGTH,
+  PRIORITY_ABS_LIMIT,
+} from "@/lib/validation/keyword-routing-constants";
 import * as repo from "@/repository/keyword-routing-rules";
 import type { ActionResult } from "./types";
 
-const KEYWORD_MAX_LENGTH = 500;
-const MODEL_MAX_LENGTH = 128;
-const DESCRIPTION_MAX_LENGTH = 500;
-// 与 KeywordRoutingRuleCreateSchema 中 priority 的 min/max 边界保持一致
-const PRIORITY_ABS_LIMIT = 1000000;
+type TranslationFunction = Awaited<
+  ReturnType<typeof getTranslations<"settings.keywordRouting.validation">>
+>;
 
 /**
  * 校验创建/更新规则的字段，返回错误信息（合法时返回 null）
+ *
+ * 使用从 @/lib/validation/keyword-routing-constants 导入的共享常量，
+ * 确保与 API 层 Zod schema 验证保持一致。
  */
-function validateRuleFields(fields: {
-  keyword?: string;
-  sourceModel?: string | null;
-  targetModel?: string;
-  description?: string | null;
-  priority?: number;
-}): string | null {
+async function validateRuleFields(
+  fields: {
+    keyword?: string;
+    sourceModel?: string | null;
+    targetModel?: string;
+    description?: string | null;
+    priority?: number;
+  },
+  t: TranslationFunction
+): Promise<string | null> {
   if (fields.keyword !== undefined) {
     const keyword = fields.keyword?.trim() ?? "";
     if (keyword.length === 0) {
-      return "关键词不能为空";
+      return t("keywordRequired");
     }
     if (keyword.length > KEYWORD_MAX_LENGTH) {
-      return `关键词长度不能超过 ${KEYWORD_MAX_LENGTH} 个字符`;
+      return t("keywordMaxLength", { max: KEYWORD_MAX_LENGTH });
     }
   }
 
   if (fields.targetModel !== undefined) {
     const targetModel = fields.targetModel?.trim() ?? "";
     if (targetModel.length === 0) {
-      return "目标模型不能为空";
+      return t("targetModelRequired");
     }
     if (targetModel.length > MODEL_MAX_LENGTH) {
-      return `目标模型长度不能超过 ${MODEL_MAX_LENGTH} 个字符`;
+      return t("targetModelMaxLength", { max: MODEL_MAX_LENGTH });
     }
   }
 
   if (fields.sourceModel != null && fields.sourceModel.trim().length > MODEL_MAX_LENGTH) {
-    return `来源模型长度不能超过 ${MODEL_MAX_LENGTH} 个字符`;
+    return t("sourceModelMaxLength", { max: MODEL_MAX_LENGTH });
   }
 
   if (fields.description != null && fields.description.length > DESCRIPTION_MAX_LENGTH) {
-    return `描述长度不能超过 ${DESCRIPTION_MAX_LENGTH} 个字符`;
+    return t("descriptionMaxLength", { max: DESCRIPTION_MAX_LENGTH });
   }
 
   if (fields.priority !== undefined) {
     if (!Number.isInteger(fields.priority)) {
-      return "优先级必须为整数";
+      return t("priorityInteger");
     }
     if (fields.priority < -PRIORITY_ABS_LIMIT || fields.priority > PRIORITY_ABS_LIMIT) {
-      return `优先级必须在 -${PRIORITY_ABS_LIMIT} 到 ${PRIORITY_ABS_LIMIT} 之间`;
+      return t("priorityRange", { limit: PRIORITY_ABS_LIMIT });
     }
   }
 
@@ -94,26 +105,32 @@ export async function createKeywordRoutingRuleAction(data: {
   description?: string | null;
 }): Promise<ActionResult<repo.KeywordRoutingRule>> {
   try {
+    const t = await getTranslations("settings.keywordRouting.validation");
     const session = await getSession();
     if (session?.user.role !== "admin") {
       return {
         ok: false,
-        error: "权限不足",
+        error: t("permissionDenied"),
+        errorCode: "PERMISSION_DENIED",
       };
     }
 
     // 验证必填字段与长度限制
-    const validationError = validateRuleFields({
-      keyword: data.keyword ?? "",
-      targetModel: data.targetModel ?? "",
-      sourceModel: data.sourceModel,
-      description: data.description,
-      priority: data.priority,
-    });
+    const validationError = await validateRuleFields(
+      {
+        keyword: data.keyword ?? "",
+        targetModel: data.targetModel ?? "",
+        sourceModel: data.sourceModel,
+        description: data.description,
+        priority: data.priority,
+      },
+      t
+    );
     if (validationError) {
       return {
         ok: false,
         error: validationError,
+        errorCode: "VALIDATION_ERROR",
       };
     }
 
@@ -152,6 +169,7 @@ export async function createKeywordRoutingRuleAction(data: {
     };
   } catch (error) {
     logger.error("[KeywordRoutingAction] Failed to create keyword routing rule:", error);
+    const t = await getTranslations("settings.keywordRouting.validation");
     emitActionAudit({
       category: "keyword_routing_rule",
       action: "keyword_routing_rule.create",
@@ -162,7 +180,8 @@ export async function createKeywordRoutingRuleAction(data: {
     });
     return {
       ok: false,
-      error: "创建关键词路由规则失败",
+      error: t("createFailed"),
+      errorCode: "OPERATION_FAILED",
     };
   }
 }
@@ -183,20 +202,23 @@ export async function updateKeywordRoutingRuleAction(
   }>
 ): Promise<ActionResult<repo.KeywordRoutingRule>> {
   try {
+    const t = await getTranslations("settings.keywordRouting.validation");
     const session = await getSession();
     if (session?.user.role !== "admin") {
       return {
         ok: false,
-        error: "权限不足",
+        error: t("permissionDenied"),
+        errorCode: "PERMISSION_DENIED",
       };
     }
 
     // 仅校验本次提供的字段
-    const validationError = validateRuleFields(updates);
+    const validationError = await validateRuleFields(updates, t);
     if (validationError) {
       return {
         ok: false,
         error: validationError,
+        errorCode: "VALIDATION_ERROR",
       };
     }
 
@@ -205,7 +227,8 @@ export async function updateKeywordRoutingRuleAction(
     if (!result) {
       return {
         ok: false,
-        error: "关键词路由规则不存在",
+        error: t("ruleNotFound"),
+        errorCode: "NOT_FOUND",
       };
     }
 
@@ -242,6 +265,7 @@ export async function updateKeywordRoutingRuleAction(
     };
   } catch (error) {
     logger.error("[KeywordRoutingAction] Failed to update keyword routing rule:", error);
+    const t = await getTranslations("settings.keywordRouting.validation");
     emitActionAudit({
       category: "keyword_routing_rule",
       action: "keyword_routing_rule.update",
@@ -252,7 +276,8 @@ export async function updateKeywordRoutingRuleAction(
     });
     return {
       ok: false,
-      error: "更新关键词路由规则失败",
+      error: t("updateFailed"),
+      errorCode: "OPERATION_FAILED",
     };
   }
 }
@@ -262,11 +287,13 @@ export async function updateKeywordRoutingRuleAction(
  */
 export async function deleteKeywordRoutingRuleAction(id: number): Promise<ActionResult> {
   try {
+    const t = await getTranslations("settings.keywordRouting.validation");
     const session = await getSession();
     if (session?.user.role !== "admin") {
       return {
         ok: false,
-        error: "权限不足",
+        error: t("permissionDenied"),
+        errorCode: "PERMISSION_DENIED",
       };
     }
 
@@ -275,7 +302,8 @@ export async function deleteKeywordRoutingRuleAction(id: number): Promise<Action
     if (!deleted) {
       return {
         ok: false,
-        error: "关键词路由规则不存在",
+        error: t("ruleNotFound"),
+        errorCode: "NOT_FOUND",
       };
     }
 
@@ -299,6 +327,7 @@ export async function deleteKeywordRoutingRuleAction(id: number): Promise<Action
     };
   } catch (error) {
     logger.error("[KeywordRoutingAction] Failed to delete keyword routing rule:", error);
+    const t = await getTranslations("settings.keywordRouting.validation");
     emitActionAudit({
       category: "keyword_routing_rule",
       action: "keyword_routing_rule.delete",
@@ -309,7 +338,8 @@ export async function deleteKeywordRoutingRuleAction(id: number): Promise<Action
     });
     return {
       ok: false,
-      error: "删除关键词路由规则失败",
+      error: t("deleteFailed"),
+      errorCode: "OPERATION_FAILED",
     };
   }
 }
@@ -321,11 +351,13 @@ export async function refreshKeywordRoutingCacheAction(): Promise<
   ActionResult<{ stats: ReturnType<typeof keywordRoutingEngine.getStats> }>
 > {
   try {
+    const t = await getTranslations("settings.keywordRouting.validation");
     const session = await getSession();
     if (session?.user.role !== "admin") {
       return {
         ok: false,
-        error: "权限不足",
+        error: t("permissionDenied"),
+        errorCode: "PERMISSION_DENIED",
       };
     }
 
@@ -344,9 +376,11 @@ export async function refreshKeywordRoutingCacheAction(): Promise<
     };
   } catch (error) {
     logger.error("[KeywordRoutingAction] Failed to refresh cache:", error);
+    const t = await getTranslations("settings.keywordRouting.validation");
     return {
       ok: false,
-      error: "刷新缓存失败",
+      error: t("refreshCacheFailed"),
+      errorCode: "OPERATION_FAILED",
     };
   }
 }
