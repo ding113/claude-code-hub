@@ -968,13 +968,16 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(2);
+      // Actual hedge win (launchedProviderCount > 1) forces the session-reuse
+      // binding to the winner (forceUpdate=true, the trailing arg).
       expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith(
         "sess-hedge",
         2,
         0,
         false,
         true,
-        null
+        null,
+        true
       );
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(1, "sess-hedge");
     } finally {
@@ -1267,6 +1270,18 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.recordSuccess).not.toHaveBeenCalled();
       expect(session.provider?.id).toBe(1);
+      // Initial provider won the race (launchedProviderCount > 1): the binding
+      // must still be force-updated to the winner (forceUpdate=true), closing
+      // the gap where the smart path could keep a stale/higher-priority binding.
+      expect(mocks.updateSessionBindingSmart).toHaveBeenCalledWith(
+        "sess-hedge",
+        1,
+        0,
+        false,
+        false,
+        null,
+        true
+      );
       expect(mocks.releaseProviderSession).toHaveBeenCalledWith(2, "sess-hedge");
     } finally {
       vi.useRealTimers();
