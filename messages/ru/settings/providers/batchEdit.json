@@ -2,6 +2,7 @@
   "selectedCount": "Выбрано: {count}",
   "actions": {
     "edit": "Редактировать",
+    "test": "Тест",
     "resetCircuit": "Сбросить предохранитель",
     "delete": "Удалить"
   },

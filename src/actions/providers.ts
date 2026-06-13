@@ -37,6 +37,7 @@ import {
 import {
   executeProviderTest,
   type ProviderTestConfig,
+  type ProviderTestResult,
   type TestStatus,
   type TestSubStatus,
 } from "@/lib/provider-testing";
@@ -4714,37 +4715,141 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
     // Execute test
     const result = await executeProviderTest(config);
 
-    // Build response message
-    const statusText =
-      result.status === "green" ? "可用" : result.status === "yellow" ? "波动" : "不可用";
-
-    const message = `供应商 ${statusText}: ${SUB_STATUS_MESSAGES[result.subStatus]}`;
-
     return {
       ok: true,
-      data: {
-        success: result.success,
-        status: result.status,
-        subStatus: result.subStatus,
-        message,
-        latencyMs: result.latencyMs,
-        firstByteMs: result.firstByteMs,
-        httpStatusCode: result.httpStatusCode,
-        httpStatusText: result.httpStatusText,
-        model: result.model,
-        content: result.content,
-        requestUrl: result.requestUrl,
-        rawResponse: result.rawResponse,
-        usage: result.usage,
-        streamInfo: result.streamInfo,
-        errorMessage: result.errorMessage,
-        errorType: result.errorType,
-        testedAt: result.testedAt.toISOString(),
-        validationDetails: result.validationDetails,
-      },
+      data: buildUnifiedTestSuccessData(result),
     };
   } catch (error) {
     logger.error("testProviderUnified error", { error });
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "测试执行失败",
+    };
+  }
+}
+
+type UnifiedTestSuccessData = Extract<UnifiedTestResult, { ok: true }>["data"];
+
+/**
+ * Map an internal ProviderTestResult to the unified test response payload
+ */
+function buildUnifiedTestSuccessData(result: ProviderTestResult): UnifiedTestSuccessData {
+  const statusText =
+    result.status === "green" ? "可用" : result.status === "yellow" ? "波动" : "不可用";
+  const message = `供应商 ${statusText}: ${SUB_STATUS_MESSAGES[result.subStatus]}`;
+
+  return {
+    success: result.success,
+    status: result.status,
+    subStatus: result.subStatus,
+    message,
+    latencyMs: result.latencyMs,
+    firstByteMs: result.firstByteMs,
+    httpStatusCode: result.httpStatusCode,
+    httpStatusText: result.httpStatusText,
+    model: result.model,
+    content: result.content,
+    requestUrl: result.requestUrl,
+    rawResponse: result.rawResponse,
+    usage: result.usage,
+    streamInfo: result.streamInfo,
+    errorMessage: result.errorMessage,
+    errorType: result.errorType,
+    testedAt: result.testedAt.toISOString(),
+    validationDetails: result.validationDetails,
+  };
+}
+
+// ============================================================================
+// Test Provider By Id
+// ============================================================================
+
+/**
+ * Arguments for testing an existing provider by id
+ */
+export type TestProviderByIdArgs = {
+  /** Optional model override; falls back to the provider type preset default */
+  model?: string;
+};
+
+/** Timeout for by-id tests; Gemini needs longer because of thinking output */
+const BY_ID_TEST_TIMEOUT_MS = 15000;
+const BY_ID_TEST_GEMINI_TIMEOUT_MS = 60000;
+
+/**
+ * Run the unified provider test against a stored provider.
+ *
+ * Server-side variant of testProviderUnified: loads URL, key, proxy and custom
+ * headers from the database so the plaintext key never reaches the client.
+ * Used by the batch provider testing UI. The test result does not touch the
+ * circuit breaker or usage statistics.
+ */
+export async function testProviderById(
+  providerId: number,
+  args?: TestProviderByIdArgs
+): Promise<UnifiedTestResult> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      ok: false,
+      error: "未授权",
+    };
+  }
+
+  const provider = await findProviderById(providerId);
+  if (!provider) {
+    return {
+      ok: false,
+      error: "供应商不存在",
+      errorCode: "provider.not_found",
+    };
+  }
+
+  const urlValidation = await isUrlSafeForApiTest(provider.url);
+  if (!urlValidation.safe) {
+    return {
+      ok: false,
+      error: urlValidation.reason ?? "无效的 URL",
+    };
+  }
+
+  const isGeminiType = provider.providerType === "gemini" || provider.providerType === "gemini-cli";
+
+  // JSON credentials must be exchanged for an access token and sent as a
+  // Bearer header, mirroring the dedicated Gemini test/model-fetch flows
+  let apiKey = provider.key;
+  let geminiBearerAuth = false;
+  if (isGeminiType) {
+    try {
+      apiKey = await GeminiAuth.getAccessToken(provider.key);
+      geminiBearerAuth = GeminiAuth.isJson(provider.key);
+    } catch (error) {
+      logger.warn("testProviderById: gemini auth preprocess failed", { error, providerId });
+    }
+  }
+
+  try {
+    const config: ProviderTestConfig = {
+      providerId: String(provider.id),
+      providerUrl: provider.url,
+      apiKey,
+      providerType: provider.providerType,
+      model: args?.model?.trim() || undefined,
+      proxyUrl: provider.proxyUrl ?? undefined,
+      proxyFallbackToDirect: provider.proxyFallbackToDirect,
+      customHeaders: provider.customHeaders ?? undefined,
+      timeoutMs: isGeminiType ? BY_ID_TEST_GEMINI_TIMEOUT_MS : BY_ID_TEST_TIMEOUT_MS,
+      geminiBearerAuth: geminiBearerAuth || undefined,
+    };
+
+    const result = await executeProviderTest(config);
+
+    return {
+      ok: true,
+      data: buildUnifiedTestSuccessData(result),
+    };
+  } catch (error) {
+    logger.error("testProviderById error", { error, providerId });
     return {
       ok: false,
       error: error instanceof Error ? error.message : "测试执行失败",

@@ -1,0 +1,57 @@
+{
+  "title": "批次測試供應商",
+  "description": "將測試 {count} 個供應商。",
+  "overLimit": "超過單次上限，本次僅測試前 {max} 個。",
+  "model": {
+    "label": "測試模型",
+    "placeholder": "留空使用各類型預設模型",
+    "hint": "指定的模型將套用於所有選中的供應商；留空則依供應商類型使用預設測試模型。"
+  },
+  "start": "開始測試",
+  "retest": "重新測試",
+  "cancelRemaining": "取消剩餘",
+  "close": "關閉",
+  "summary": {
+    "progress": "{done}/{total}",
+    "green": "可用 {count}",
+    "yellow": "波動 {count}",
+    "failed": "失敗 {count}"
+  },
+  "filter": {
+    "all": "全部",
+    "green": "可用",
+    "yellow": "波動",
+    "failed": "失敗"
+  },
+  "table": {
+    "provider": "供應商",
+    "group": "分組",
+    "status": "狀態",
+    "latency": "延遲",
+    "message": "訊息",
+    "enabled": "啟用",
+    "empty": "暫無符合的結果"
+  },
+  "status": {
+    "pending": "等待中",
+    "testing": "測試中",
+    "green": "可用",
+    "yellow": "波動",
+    "red": "不可用",
+    "error": "請求失敗",
+    "canceled": "已取消"
+  },
+  "bulk": {
+    "disableFailed": "停用所有失敗 ({count})",
+    "enableGreen": "啟用所有可用 ({count})"
+  },
+  "toast": {
+    "toggleFailed": "狀態切換失敗: {error}",
+    "bulkFailed": "批次操作失敗: {error}",
+    "bulkApplied": "已更新 {count} 個供應商",
+    "undo": "復原",
+    "undoSuccess": "已還原 {count} 個供應商",
+    "undoFailed": "復原失敗: {error}",
+    "unknownError": "未知錯誤"
+  }
+}

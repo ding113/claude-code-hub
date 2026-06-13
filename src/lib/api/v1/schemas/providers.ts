@@ -310,6 +310,12 @@ export const ProviderUnifiedTestSchema = ProviderApiTestSchema.extend({
   customHeaders: z.record(z.string(), z.string()).optional().describe("Optional custom headers."),
 }).strict();
 
+export const ProviderTestByIdSchema = z
+  .object({
+    model: z.string().trim().min(1).optional().describe("Optional model override."),
+  })
+  .strict();
+
 export const ProviderTypeQuerySchema = z.object({
   providerType: ProviderTypeSchema.describe("Provider type."),
 });

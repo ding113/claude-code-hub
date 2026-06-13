@@ -204,6 +204,12 @@ export function testProviderUnified(data: unknown) {
   return toActionResult(apiPost("/api/v1/providers/test:unified", data, dashboardCompatOptions));
 }
 
+export function testProviderById(providerId: number, data?: { model?: string }) {
+  return toActionResult(
+    apiPost(`/api/v1/providers/${providerId}/test`, data ?? {}, dashboardCompatOptions)
+  );
+}
+
 export function getProviderTestPresets(providerType: string) {
   return toActionResult(
     apiGet(

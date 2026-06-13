@@ -1,0 +1,57 @@
+{
+  "title": "批量测试供应商",
+  "description": "将测试 {count} 个供应商。",
+  "overLimit": "超过单次上限，本次仅测试前 {max} 个。",
+  "model": {
+    "label": "测试模型",
+    "placeholder": "留空使用各类型默认模型",
+    "hint": "指定的模型将应用于所有选中的供应商；留空则按供应商类型使用默认测试模型。"
+  },
+  "start": "开始测试",
+  "retest": "重新测试",
+  "cancelRemaining": "取消剩余",
+  "close": "关闭",
+  "summary": {
+    "progress": "{done}/{total}",
+    "green": "可用 {count}",
+    "yellow": "波动 {count}",
+    "failed": "失败 {count}"
+  },
+  "filter": {
+    "all": "全部",
+    "green": "可用",
+    "yellow": "波动",
+    "failed": "失败"
+  },
+  "table": {
+    "provider": "供应商",
+    "group": "分组",
+    "status": "状态",
+    "latency": "延迟",
+    "message": "信息",
+    "enabled": "启用",
+    "empty": "暂无匹配的结果"
+  },
+  "status": {
+    "pending": "等待中",
+    "testing": "测试中",
+    "green": "可用",
+    "yellow": "波动",
+    "red": "不可用",
+    "error": "请求失败",
+    "canceled": "已取消"
+  },
+  "bulk": {
+    "disableFailed": "禁用所有失败 ({count})",
+    "enableGreen": "启用所有可用 ({count})"
+  },
+  "toast": {
+    "toggleFailed": "状态切换失败: {error}",
+    "bulkFailed": "批量操作失败: {error}",
+    "bulkApplied": "已更新 {count} 个供应商",
+    "undo": "撤销",
+    "undoSuccess": "已恢复 {count} 个供应商",
+    "undoFailed": "撤销失败: {error}",
+    "unknownError": "未知错误"
+  }
+}
