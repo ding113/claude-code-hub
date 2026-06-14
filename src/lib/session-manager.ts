@@ -743,7 +743,7 @@ export class SessionManager {
   /**
    * 智能更新 Session 绑定
    *
-   * 策略：首次绑定用 SET NX；故障转移后无条件更新；其他情况按优先级和熔断状态决策
+   * 策略：首次绑定用 SET NX；故障转移成功或竞速赢家强制改绑时无条件更新；其他情况按优先级和熔断状态决策
    */
   static async updateSessionBindingSmart(
     sessionId: string,

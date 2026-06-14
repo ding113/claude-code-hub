@@ -91,6 +91,29 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
 
     expect(result).toMatchObject({ updated: true, reason: "race_winner_forced" });
     expect(lastPipeline.setex).toHaveBeenCalledWith(`session:${SID}:provider`, TTL, "2");
+    // Guard against a regression that queues setex but forgets to flush the pipeline.
+    expect(lastPipeline.exec).toHaveBeenCalledTimes(1);
+  });
+
+  it("forceUpdate=true rebinds even when the winner equals the current binding", async () => {
+    // Production winner==initialProvider race: the bound provider is already the winner,
+    // but the race result must still (re)write the binding and refresh its TTL.
+    redisClientRef!.get.mockResolvedValue("2");
+
+    const result = await SessionManager.updateSessionBindingSmart(
+      SID,
+      2, // winner id == currently bound id
+      10,
+      false,
+      false,
+      null,
+      true // forceUpdate
+    );
+
+    expect(result).toMatchObject({ updated: true, reason: "race_winner_forced" });
+    expect(redisClientRef!.get).not.toHaveBeenCalled();
+    expect(lastPipeline.setex).toHaveBeenCalledWith(`session:${SID}:provider`, TTL, "2");
+    expect(lastPipeline.exec).toHaveBeenCalledTimes(1);
   });
 
   it("forceUpdate=false keeps the healthy higher-priority binding (documents the gap)", async () => {
@@ -136,6 +159,7 @@ describe("SessionManager.updateSessionBindingSmart forceUpdate", () => {
     expect(result.updated).toBe(true);
     expect(lastPipeline.setex).toHaveBeenCalledWith(`session:${SID}:provider`, TTL, "2");
     expect(lastPipeline.setex).toHaveBeenCalledWith(`session:${SID}:key`, TTL, "42");
+    expect(lastPipeline.exec).toHaveBeenCalledTimes(1);
   });
 
   it("isFailoverSuccess=true keeps reason failover_success even when forceUpdate=true", async () => {
