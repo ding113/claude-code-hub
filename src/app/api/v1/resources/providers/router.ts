@@ -22,6 +22,7 @@ import {
   ProviderModelSuggestionsQuerySchema,
   ProviderProxyTestSchema,
   ProviderSummarySchema,
+  ProviderTestByIdSchema,
   ProviderTypeQuerySchema,
   ProviderUndoBodySchema,
   ProviderUnifiedTestSchema,
@@ -50,6 +51,7 @@ import {
   resetProviderUsage,
   revealProviderKey,
   testProviderAnthropic,
+  testProviderById,
   testProviderGemini,
   testProviderOpenAIChat,
   testProviderOpenAIResponses,
@@ -655,6 +657,35 @@ providersRouter.openapi(
     },
   }),
   testProviderUnified as never
+);
+
+providersRouter.openapi(
+  createRoute({
+    method: "post",
+    path: "/providers/{id}/test",
+    middleware: requireAuth("admin"),
+    tags: ["Providers"],
+    summary: "Run provider test by id",
+    description:
+      "Runs the unified relay-style provider API test against a stored provider using its saved credentials and proxy configuration.",
+    "x-required-access": "admin",
+    security,
+    request: {
+      params: ProviderIdParamSchema,
+      body: {
+        required: true,
+        content: { "application/json": { schema: ProviderTestByIdSchema } },
+      },
+    },
+    responses: {
+      200: {
+        description: "Unified test result.",
+        content: { "application/json": { schema: ProviderGenericResponseSchema } },
+      },
+      ...problemResponses,
+    },
+  }),
+  testProviderById as never
 );
 
 providersRouter.openapi(

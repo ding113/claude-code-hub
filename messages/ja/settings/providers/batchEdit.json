@@ -2,6 +2,7 @@
   "selectedCount": "{count} 件選択中",
   "actions": {
     "edit": "編集",
+    "test": "テスト",
     "resetCircuit": "サーキットブレーカーをリセット",
     "delete": "削除"
   },

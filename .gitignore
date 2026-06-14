@@ -84,6 +84,7 @@ docs-site/node_modules/
 
 # local scratch
 tmp/
+.playwright-mcp/
 .trae/
 .sisyphus
 .ace-tool/

@@ -4419,7 +4419,9 @@ export class ProxyForwarder {
             attempt.provider.priority || 0,
             launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
             attempt.provider.id !== initialProvider.id,
-            session.authState?.key?.id ?? null
+            session.authState?.key?.id ?? null,
+            // 产生了真实竞速赢家时，无条件把 Session 复用绑定改绑到赢家。
+            isActualHedgeWin
           );
 
           if (bindingResult.updated) {

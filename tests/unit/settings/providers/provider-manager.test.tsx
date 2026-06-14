@@ -24,6 +24,11 @@ vi.mock("@/app/[locale]/settings/providers/_components/batch-edit", () => ({
   ProviderBatchToolbar: () => null,
 }));
 
+// Batch-test dialog (requires QueryClientProvider, irrelevant to this test scope)
+vi.mock("@/app/[locale]/settings/providers/_components/batch-test", () => ({
+  BatchTestDialog: () => null,
+}));
+
 // ProviderList -- render a simple list so we can inspect filtered output
 vi.mock("@/app/[locale]/settings/providers/_components/provider-list", () => ({
   ProviderList: ({ providers }: { providers: ProviderDisplay[] }) => (

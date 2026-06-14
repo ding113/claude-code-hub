@@ -743,7 +743,7 @@ export class SessionManager {
   /**
    * 智能更新 Session 绑定
    *
-   * 策略：首次绑定用 SET NX；故障转移后无条件更新；其他情况按优先级和熔断状态决策
+   * 策略：首次绑定用 SET NX；故障转移成功或竞速赢家强制改绑时无条件更新；其他情况按优先级和熔断状态决策
    */
   static async updateSessionBindingSmart(
     sessionId: string,
@@ -751,7 +751,8 @@ export class SessionManager {
     newProviderPriority: number,
     isFirstAttempt: boolean = false,
     isFailoverSuccess: boolean = false,
-    keyId?: number | null
+    keyId?: number | null,
+    forceUpdate: boolean = false
   ): Promise<{ updated: boolean; reason: string; details?: string }> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
@@ -801,8 +802,9 @@ export class SessionManager {
 
       // ========== 情况 2：重试成功（需要智能决策）==========
 
-      // 2.0 故障转移成功：无条件更新绑定（减少缓存切换）
-      if (isFailoverSuccess) {
+      // 2.0 故障转移成功 或 竞速赢家强制改绑：无条件更新绑定
+      // forceUpdate 在读取当前绑定/优先级/熔断状态之前短路，确保竞速赢家一定成为复用绑定。
+      if (isFailoverSuccess || forceUpdate) {
         const pipeline = redis.pipeline();
         pipeline.setex(
           `session:${sessionId}:provider`,
@@ -814,16 +816,24 @@ export class SessionManager {
         }
         await pipeline.exec();
 
-        logger.info("SessionManager: Updated binding after failover", {
-          sessionId,
-          newProviderId,
-          newPriority: newProviderPriority,
-        });
+        const reason = isFailoverSuccess ? "failover_success" : "race_winner_forced";
+        logger.info(
+          isFailoverSuccess
+            ? "SessionManager: Updated binding after failover"
+            : "SessionManager: Forced binding to race winner",
+          {
+            sessionId,
+            newProviderId,
+            newPriority: newProviderPriority,
+          }
+        );
 
         return {
           updated: true,
-          reason: "failover_success",
-          details: `故障转移成功，绑定到供应商 ${newProviderId}`,
+          reason,
+          details: isFailoverSuccess
+            ? `故障转移成功，绑定到供应商 ${newProviderId}`
+            : `竞速赢家强制改绑到供应商 ${newProviderId}`,
         };
       }
 

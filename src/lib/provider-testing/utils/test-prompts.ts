@@ -167,6 +167,7 @@ export function getTestHeaders(
   overrides?: {
     userAgent?: string;
     extraHeaders?: Record<string, string>;
+    geminiBearerAuth?: boolean;
   }
 ): Record<string, string> {
   const headers: Record<string, string> = {
@@ -198,10 +199,15 @@ export function getTestHeaders(
       break;
     case "gemini":
     case "gemini-cli":
-      Object.assign(headers, {
-        ...GEMINI_TEST_HEADERS,
-        "x-goog-api-key": apiKey,
-      });
+      Object.assign(
+        headers,
+        GEMINI_TEST_HEADERS,
+        // JSON credentials are exchanged for an OAuth access token upstream,
+        // which Gemini only accepts as a Bearer token
+        overrides?.geminiBearerAuth
+          ? { Authorization: `Bearer ${apiKey}` }
+          : { "x-goog-api-key": apiKey }
+      );
       break;
     default:
       throw new Error(`Unsupported provider type: ${providerType}`);

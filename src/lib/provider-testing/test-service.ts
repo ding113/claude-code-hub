@@ -57,7 +57,9 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
         {
           body: parsed,
           headers: {
-            ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl),
+            ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
+              geminiBearerAuth: config.geminiBearerAuth,
+            }),
             ...(config.customHeaders || {}),
           },
           model: config.model,
@@ -90,7 +92,9 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
       {
         body: getTestBody(config.providerType, config.model),
         headers: {
-          ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl),
+          ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
+            geminiBearerAuth: config.geminiBearerAuth,
+          }),
           ...(config.customHeaders || {}),
         },
         model: config.model,
@@ -109,6 +113,7 @@ function buildAttemptPlans(config: ProviderTestConfig): AttemptPlan[] {
         ...getTestHeaders(config.providerType, config.apiKey, config.providerUrl, {
           userAgent: preset.userAgent,
           extraHeaders: preset.extraHeaders,
+          geminiBearerAuth: config.geminiBearerAuth,
         }),
         ...(config.customHeaders || {}),
       },
