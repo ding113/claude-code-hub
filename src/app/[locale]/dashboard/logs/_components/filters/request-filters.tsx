@@ -71,6 +71,7 @@ export function RequestFilters({
     () => new Map(providers.map((provider) => [provider.id, provider.name])),
     [providers]
   );
+  const modelOptions = useMemo(() => models.filter((model) => model.trim().length > 0), [models]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -256,7 +257,7 @@ export function RequestFilters({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("logs.filters.allModels")}</SelectItem>
-            {models.map((model) => (
+            {modelOptions.map((model) => (
               <SelectItem key={model} value={model}>
                 {model}
               </SelectItem>
