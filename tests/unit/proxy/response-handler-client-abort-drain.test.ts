@@ -281,6 +281,23 @@ function createResponsesSse(): Response {
   });
 }
 
+function createResponsesJson(): Response {
+  return new Response(
+    JSON.stringify({
+      id: "resp_non_stream",
+      model: "gpt-5.4-mini-2026-03-17",
+      usage: {
+        input_tokens: 463,
+        output_tokens: 11,
+      },
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }
+  );
+}
+
 function createOversizedResponsesSse(): Response {
   const oversizedDelta = "x".repeat(11 * 1024 * 1024);
   const body = [
@@ -661,6 +678,60 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     expect(snapshot.text).toContain(headMarker);
     expect(snapshot.text).toContain(tailMarker);
     expect(snapshot.text).not.toContain("zzzzzzzzzzzzzzzz");
+  });
+
+  it("does not apply the default stale cleanup when stream idle timeout is disabled", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.provider.streamingIdleTimeoutMs = 0;
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createResponsesSse());
+    await drainAsyncTasks();
+
+    const streamRegisterCall = vi.mocked(AsyncTaskManager.register).mock.calls.find((call) => {
+      const options = call[2] as { taskType?: string } | undefined;
+      return options?.taskType === "stream-processing";
+    });
+
+    expect(streamRegisterCall).toBeDefined();
+    expect(streamRegisterCall?.[2]).toEqual(
+      expect.objectContaining({
+        staleTimeoutMs: Number.POSITIVE_INFINITY,
+      })
+    );
+  });
+
+  it("does not apply the default stale cleanup when non-stream request timeout is disabled", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.provider.requestTimeoutNonStreamingMs = 0;
+
+    await ProxyResponseHandler.dispatch(session, createResponsesJson());
+    await drainAsyncTasks();
+
+    const nonStreamRegisterCall = vi.mocked(AsyncTaskManager.register).mock.calls.find((call) => {
+      const options = call[2] as { taskType?: string } | undefined;
+      return options?.taskType === "non-stream-processing";
+    });
+
+    expect(nonStreamRegisterCall).toBeDefined();
+    expect(nonStreamRegisterCall?.[2]).toEqual(
+      expect.objectContaining({
+        staleTimeoutMs: Number.POSITIVE_INFINITY,
+      })
+    );
   });
 
   it("finalizes a complete upstream responses stream as success when the downstream client already closed", async () => {

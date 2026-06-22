@@ -75,6 +75,24 @@ function copyUint8Range(value: Uint8Array, start = 0, end = value.byteLength): U
   return new Uint8Array(value.subarray(start, end));
 }
 
+function resolveNonStreamTaskStaleTimeoutMs(provider: Provider): number {
+  return provider.requestTimeoutNonStreamingMs > 0
+    ? provider.requestTimeoutNonStreamingMs
+    : Number.POSITIVE_INFINITY;
+}
+
+function resolveStreamTaskStaleTimeoutMs(provider: Provider): number {
+  if (provider.streamingIdleTimeoutMs <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (provider.firstByteTimeoutStreamingMs > 0) {
+    return Math.max(provider.firstByteTimeoutStreamingMs, provider.streamingIdleTimeoutMs);
+  }
+
+  return Number.POSITIVE_INFINITY;
+}
+
 // 流式统计只需要头部元信息和尾部 usage/final event。按字节保存窗口，避免
 // string[] 无界增长，也避免 subarray 持有超大原始 ArrayBuffer。
 export class BoundedStreamTextAccumulator {
@@ -1509,6 +1527,7 @@ export class ProxyResponseHandler {
         AsyncTaskManager.register(taskId, statsPromise, {
           taskType: "non-stream-passthrough-stats",
           abortController: statsAbortController,
+          staleTimeoutMs: resolveNonStreamTaskStaleTimeoutMs(provider),
         });
         statsPromise.catch((error) => {
           if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
@@ -2032,6 +2051,7 @@ export class ProxyResponseHandler {
     AsyncTaskManager.register(taskId, processingPromise, {
       taskType: "non-stream-processing",
       abortController,
+      staleTimeoutMs: resolveNonStreamTaskStaleTimeoutMs(provider),
     });
     processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in non-stream processing", {
@@ -2094,6 +2114,7 @@ export class ProxyResponseHandler {
         const statusCode = response.status;
 
         const taskId = `stream-passthrough-${messageContext.id}`;
+        const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(provider);
         const statsAbortController = new AbortController();
         const cleanupTaskAbortBinding = bindTaskAbortToUpstreamResponse(
           session,
@@ -2120,7 +2141,9 @@ export class ProxyResponseHandler {
 
           // 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
           const idleTimeoutMs =
-            provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
+            provider.streamingIdleTimeoutMs > 0
+              ? provider.streamingIdleTimeoutMs
+              : Number.POSITIVE_INFINITY;
           let idleTimeoutId: NodeJS.Timeout | null = null;
           const clearIdleTimer = () => {
             if (idleTimeoutId) {
@@ -2441,6 +2464,7 @@ export class ProxyResponseHandler {
         AsyncTaskManager.register(taskId, statsPromise, {
           taskType: "stream-passthrough-stats",
           abortController: statsAbortController,
+          staleTimeoutMs: streamTaskStaleTimeoutMs,
         });
         statsPromise.catch((error) => {
           if (session.sessionId && session.shouldPersistSessionDebugArtifacts()) {
@@ -2546,7 +2570,10 @@ export class ProxyResponseHandler {
       taskId
     );
     const idleTimeoutMs =
-      provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
+      provider.streamingIdleTimeoutMs > 0
+        ? provider.streamingIdleTimeoutMs
+        : Number.POSITIVE_INFINITY;
+    const streamTaskStaleTimeoutMs = resolveStreamTaskStaleTimeoutMs(provider);
     const clientAbortDrainTimeoutMs = CLIENT_ABORT_DRAIN_MAX_MS;
 
     // 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
@@ -3295,6 +3322,7 @@ export class ProxyResponseHandler {
     AsyncTaskManager.register(taskId, processingPromise, {
       taskType: "stream-processing",
       abortController,
+      staleTimeoutMs: streamTaskStaleTimeoutMs,
     });
     processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in stream processing", {
