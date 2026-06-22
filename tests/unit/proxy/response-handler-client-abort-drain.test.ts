@@ -4,6 +4,8 @@ import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
+import { emitProxyLangfuseTrace } from "@/lib/langfuse/emit-proxy-trace";
+import { SessionManager } from "@/lib/session-manager";
 import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
 import type { Provider } from "@/types/provider";
 
@@ -82,6 +84,7 @@ vi.mock("@/lib/session-manager", () => ({
     storeSessionUpstreamResponseMeta: vi.fn(),
     updateSessionProvider: vi.fn(),
     updateSessionUsage: vi.fn(),
+    updateSessionBindingSmart: vi.fn(async () => ({ updated: false, reason: "test" })),
     updateSessionWithCodexCacheKey: vi.fn(),
   },
 }));
@@ -257,6 +260,33 @@ function createResponsesSse(): Response {
       type: "response.completed",
       response: {
         id: "resp_test",
+        model: "gpt-5.4-mini-2026-03-17",
+        usage: {
+          input_tokens: 463,
+          output_tokens: 11,
+        },
+      },
+    })}`,
+    "",
+  ].join("\n\n");
+
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function createOversizedResponsesSse(): Response {
+  const oversizedDelta = "x".repeat(11 * 1024 * 1024);
+  const body = [
+    `event: response.output_text.delta\ndata: ${JSON.stringify({
+      type: "response.output_text.delta",
+      delta: oversizedDelta,
+    })}`,
+    `event: response.completed\ndata: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        id: "resp_large",
         model: "gpt-5.4-mini-2026-03-17",
         usage: {
           input_tokens: 463,
@@ -557,6 +587,47 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
         outputTokens: 11,
       })
     );
+  });
+
+  it("keeps stream accounting bounded for oversized successful streams", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.sessionId = "session_large";
+    Object.assign(session, {
+      shouldPersistSessionDebugArtifacts: () => true,
+    });
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createOversizedResponsesSse());
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 463,
+        outputTokens: 11,
+      })
+    );
+    expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
+
+    const traceCall = vi.mocked(emitProxyLangfuseTrace).mock.calls.at(-1);
+    expect(traceCall).toBeDefined();
+    const traceData = traceCall?.[1];
+    const responseText = traceData?.responseText ?? "";
+    expect(responseText).toContain("[cch_truncated]");
+    expect(responseText.length).toBeLessThan(10 * 1024 * 1024 + 1024);
   });
 
   it("reclassifies a client-aborted stream as success when final usage was already received", async () => {

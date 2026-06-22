@@ -4,6 +4,9 @@ import { isLangfuseEnabled } from "@/lib/langfuse/index";
 import { logger } from "@/lib/logger";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
 
+const LANGFUSE_JSON_PARSE_MAX_CHARS = 1024 * 1024;
+const LANGFUSE_TEXT_PREVIEW_EDGE_CHARS = 128 * 1024;
+
 function buildRequestBodySummary(session: ProxySession): Record<string, unknown> {
   const msg = session.request.message as Record<string, unknown>;
   return {
@@ -124,6 +127,15 @@ function buildResponseOutput(ctx: TraceContext): unknown {
   }
 
   return output;
+}
+
+function buildLargeTextPreview(text: string): Record<string, unknown> {
+  return {
+    truncated: true,
+    totalChars: text.length,
+    head: text.slice(0, LANGFUSE_TEXT_PREVIEW_EDGE_CHARS),
+    tail: text.slice(-LANGFUSE_TEXT_PREVIEW_EDGE_CHARS),
+  };
 }
 
 /**
@@ -422,6 +434,10 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
 }
 
 function tryParseJsonSafe(text: string): unknown {
+  if (text.length > LANGFUSE_JSON_PARSE_MAX_CHARS) {
+    return buildLargeTextPreview(text);
+  }
+
   try {
     return JSON.parse(text);
   } catch {

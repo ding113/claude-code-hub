@@ -21,7 +21,16 @@ interface TaskInfo {
   abortController: AbortController;
   createdAt: number;
   taskType: string;
+  staleTimeoutMs: number;
 }
+
+interface RegisterTaskOptions {
+  taskType?: string;
+  abortController?: AbortController;
+  staleTimeoutMs?: number;
+}
+
+const DEFAULT_STALE_TASK_TIMEOUT_MS = 10 * 60 * 1000;
 
 class AsyncTaskManagerClass {
   private tasks: Map<string, TaskInfo> = new Map();
@@ -74,25 +83,40 @@ class AsyncTaskManagerClass {
    * @param taskType 任务类型（用于日志）
    * @returns AbortController（可用于取消任务）
    */
-  register(taskId: string, promise: Promise<void>, taskType = "unknown"): AbortController {
+  register(
+    taskId: string,
+    promise: Promise<void>,
+    taskTypeOrOptions: string | RegisterTaskOptions = "unknown"
+  ): AbortController {
     this.initializeIfNeeded();
 
+    const options =
+      typeof taskTypeOrOptions === "string" ? { taskType: taskTypeOrOptions } : taskTypeOrOptions;
+    const taskType = options.taskType ?? "unknown";
+
     // 如果任务已存在，先取消旧任务
-    if (this.tasks.has(taskId)) {
+    const oldTaskInfo = this.tasks.get(taskId);
+    if (oldTaskInfo) {
       logger.warn("[AsyncTaskManager] Task already exists, cancelling old task", {
         taskId,
         taskType,
       });
       this.cancel(taskId);
+      this.cleanup(taskId, oldTaskInfo);
     }
 
-    const abortController = new AbortController();
+    const abortController = options.abortController ?? new AbortController();
+    const staleTimeoutMs =
+      options.staleTimeoutMs === undefined || options.staleTimeoutMs <= 0
+        ? DEFAULT_STALE_TASK_TIMEOUT_MS
+        : options.staleTimeoutMs;
 
     const taskInfo: TaskInfo = {
       promise,
       abortController,
       createdAt: Date.now(),
       taskType,
+      staleTimeoutMs,
     };
 
     this.tasks.set(taskId, taskInfo);
@@ -126,7 +150,7 @@ class AsyncTaskManagerClass {
         }
       })
       .finally(() => {
-        this.cleanup(taskId);
+        this.cleanup(taskId, taskInfo);
       });
 
     logger.debug("[AsyncTaskManager] Task registered", {
@@ -150,7 +174,9 @@ class AsyncTaskManagerClass {
       return;
     }
 
-    taskInfo.abortController.abort();
+    if (!taskInfo.abortController.signal.aborted) {
+      taskInfo.abortController.abort();
+    }
 
     logger.info("[AsyncTaskManager] Task cancelled", {
       taskId,
@@ -164,7 +190,11 @@ class AsyncTaskManagerClass {
    *
    * @param taskId 任务唯一标识
    */
-  cleanup(taskId: string): void {
+  cleanup(taskId: string, expectedTask?: TaskInfo): boolean {
+    if (expectedTask && this.tasks.get(taskId) !== expectedTask) {
+      return false;
+    }
+
     const deleted = this.tasks.delete(taskId);
     if (deleted) {
       logger.debug("[AsyncTaskManager] Task cleaned up", {
@@ -172,6 +202,7 @@ class AsyncTaskManagerClass {
         remainingTasks: this.tasks.size,
       });
     }
+    return deleted;
   }
 
   /**
@@ -191,14 +222,18 @@ class AsyncTaskManagerClass {
     for (const [taskId, taskInfo] of this.tasks.entries()) {
       const age = now - taskInfo.createdAt;
 
-      // 如果任务超过 10 分钟还没完成，记录警告并取消
-      if (age > staleThreshold) {
-        logger.warn("[AsyncTaskManager] Task timeout, cancelling", {
+      const staleTimeoutMs = taskInfo.staleTimeoutMs || staleThreshold;
+
+      // 如果任务超过阈值还没完成，记录警告、取消并从 Map 断开强引用。
+      if (age > staleTimeoutMs) {
+        logger.warn("[AsyncTaskManager] Task timeout, cancelling and detaching", {
           taskId,
           taskType: taskInfo.taskType,
           age,
+          staleTimeoutMs,
         });
         this.cancel(taskId);
+        this.cleanup(taskId, taskInfo);
       }
     }
   }
@@ -211,8 +246,9 @@ class AsyncTaskManagerClass {
       count: this.tasks.size,
     });
 
-    for (const taskId of this.tasks.keys()) {
+    for (const [taskId, taskInfo] of Array.from(this.tasks.entries())) {
       this.cancel(taskId);
+      this.cleanup(taskId, taskInfo);
     }
 
     if (this.cleanupInterval) {

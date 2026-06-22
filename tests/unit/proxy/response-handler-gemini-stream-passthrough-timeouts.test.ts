@@ -6,6 +6,7 @@ import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { SessionManager } from "@/lib/session-manager";
+import { updateMessageRequestDetails } from "@/repository/message";
 import type { Provider } from "@/types/provider";
 
 const asyncTasks: Promise<void>[] = [];
@@ -75,7 +76,7 @@ vi.mock("@/repository/model-price", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     storeSessionResponse: vi.fn(),
-    updateSessionUsage: vi.fn(),
+    updateSessionUsage: vi.fn(async () => undefined),
     clearSessionProvider: vi.fn(),
     storeSessionRequestPhaseSnapshot: vi.fn(async () => undefined),
     storeSessionResponsePhaseSnapshot: vi.fn(async () => undefined),
@@ -661,5 +662,65 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       await close();
       await Promise.allSettled(asyncTasks);
     }
+  });
+
+  test("Gemini 流式透传超大单 chunk 应保留尾部 usage 且不把截断快照作为完整正文存储", async () => {
+    asyncTasks.length = 0;
+    vi.mocked(SessionManager.storeSessionResponse).mockClear();
+    vi.mocked(updateMessageRequestDetails).mockClear();
+
+    const clientAbortController = new AbortController();
+    const provider = createProvider({
+      firstByteTimeoutStreamingMs: 1000,
+      streamingIdleTimeoutMs: 0,
+    });
+    const session = createSession({
+      clientAbortSignal: clientAbortController.signal,
+      messageId: 77,
+      userId: 1,
+    });
+    session.setProvider(provider);
+    session.setSessionId("gemini-large-single-chunk");
+    (
+      session as ProxySession & {
+        shouldPersistSessionDebugArtifacts?: () => boolean;
+      }
+    ).shouldPersistSessionDebugArtifacts = () => true;
+
+    const hugeText = "x".repeat(11 * 1024 * 1024);
+    const bodyText = `data: {"text":"${hugeText}"}\n\ndata: {"usageMetadata":{"promptTokenCount":463,"candidatesTokenCount":11}}\n\n`;
+    const bodyBytes = new TextEncoder().encode(bodyText);
+
+    const upstreamResponse = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bodyBytes);
+          controller.close();
+        },
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      }
+    );
+
+    const returned = await (
+      ProxyResponseHandler as unknown as {
+        handleStream: (session: ProxySession, response: Response) => Promise<Response>;
+      }
+    ).handleStream(session, upstreamResponse);
+
+    await returned.text();
+    await Promise.allSettled(asyncTasks);
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      77,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 463,
+        outputTokens: 11,
+      })
+    );
+    expect(SessionManager.storeSessionResponse).not.toHaveBeenCalled();
   });
 });
