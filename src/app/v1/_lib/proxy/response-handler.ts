@@ -119,15 +119,10 @@ class BoundedStreamTextAccumulator {
         return;
       }
 
-      if (remainingHeadBytes > 0) {
-        this.headChunks.push(value.slice(0, remainingHeadBytes));
-        this.headBufferedBytes += remainingHeadBytes;
-        this.tailMode = true;
-        this.pushTailBytes(value.subarray(remainingHeadBytes));
-      } else {
-        this.tailMode = true;
-        this.pushTailBytes(value);
-      }
+      this.headChunks.push(value.slice(0, remainingHeadBytes));
+      this.headBufferedBytes += remainingHeadBytes;
+      this.tailMode = true;
+      this.pushTailBytes(value.subarray(remainingHeadBytes));
       return;
     }
 
@@ -2138,6 +2133,7 @@ export class ProxyResponseHandler {
                 }
 
                 streamTextAccumulator.pushBytes(value);
+                AsyncTaskManager.touch(taskId);
               }
 
               // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
@@ -2929,6 +2925,7 @@ export class ProxyResponseHandler {
           if (value) {
             const chunkSize = value.length;
             streamTextAccumulator.pushBytes(value);
+            AsyncTaskManager.touch(taskId);
 
             // 每次收到数据后重置静默期计时器（首次收到数据时启动）
             startIdleTimer();

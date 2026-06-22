@@ -9,11 +9,22 @@ const LANGFUSE_TEXT_PREVIEW_EDGE_CHARS = 128 * 1024;
 
 function buildRequestBodySummary(session: ProxySession): Record<string, unknown> {
   const msg = session.request.message as Record<string, unknown>;
+  const hasSystemPrompt =
+    typeof msg.hasSystemPrompt === "boolean"
+      ? msg.hasSystemPrompt
+      : Array.isArray(msg.system) && msg.system.length > 0;
+  const toolsCount =
+    typeof msg.toolsCount === "number"
+      ? msg.toolsCount
+      : Array.isArray(msg.tools)
+        ? msg.tools.length
+        : 0;
+
   return {
     model: session.request.model,
     messageCount: session.getMessagesLength(),
-    hasSystemPrompt: Array.isArray(msg.system) && msg.system.length > 0,
-    toolsCount: Array.isArray(msg.tools) ? msg.tools.length : 0,
+    hasSystemPrompt,
+    toolsCount,
     stream: msg.stream === true,
     maxTokens: typeof msg.max_tokens === "number" ? msg.max_tokens : undefined,
     temperature: typeof msg.temperature === "number" ? msg.temperature : undefined,

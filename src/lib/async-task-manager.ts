@@ -20,6 +20,7 @@ interface TaskInfo {
   promise: Promise<void>;
   abortController: AbortController;
   createdAt: number;
+  lastActivityAt: number;
   taskType: string;
   staleTimeoutMs: number;
 }
@@ -110,11 +111,13 @@ class AsyncTaskManagerClass {
       options.staleTimeoutMs === undefined || options.staleTimeoutMs <= 0
         ? DEFAULT_STALE_TASK_TIMEOUT_MS
         : options.staleTimeoutMs;
+    const now = Date.now();
 
     const taskInfo: TaskInfo = {
       promise,
       abortController,
-      createdAt: Date.now(),
+      createdAt: now,
+      lastActivityAt: now,
       taskType,
       staleTimeoutMs,
     };
@@ -160,6 +163,20 @@ class AsyncTaskManagerClass {
     });
 
     return abortController;
+  }
+
+  /**
+   * 标记任务仍在推进。流式任务每次读到 chunk 都应 touch，避免长时间活跃流被
+   * wall-clock stale cleanup 误判为挂死任务。
+   */
+  touch(taskId: string): boolean {
+    const taskInfo = this.tasks.get(taskId);
+    if (!taskInfo) {
+      return false;
+    }
+
+    taskInfo.lastActivityAt = Date.now();
+    return true;
   }
 
   /**
@@ -217,19 +234,20 @@ class AsyncTaskManagerClass {
    */
   private cleanupCompletedTasks(): void {
     const now = Date.now();
-    const staleThreshold = 10 * 60 * 1000; // 10 分钟
 
     for (const [taskId, taskInfo] of this.tasks.entries()) {
       const age = now - taskInfo.createdAt;
+      const idleAge = now - taskInfo.lastActivityAt;
 
-      const staleTimeoutMs = taskInfo.staleTimeoutMs || staleThreshold;
+      const staleTimeoutMs = taskInfo.staleTimeoutMs || DEFAULT_STALE_TASK_TIMEOUT_MS;
 
-      // 如果任务超过阈值还没完成，记录警告、取消并从 Map 断开强引用。
-      if (age > staleTimeoutMs) {
+      // 如果任务超过阈值没有任何进展，记录警告、取消并从 Map 断开强引用。
+      if (idleAge > staleTimeoutMs) {
         logger.warn("[AsyncTaskManager] Task timeout, cancelling and detaching", {
           taskId,
           taskType: taskInfo.taskType,
           age,
+          idleAge,
           staleTimeoutMs,
         });
         this.cancel(taskId);

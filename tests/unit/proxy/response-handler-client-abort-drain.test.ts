@@ -23,6 +23,7 @@ vi.mock("@/lib/async-task-manager", () => ({
       asyncTasks.push(promise);
       return new AbortController();
     }),
+    touch: vi.fn(() => true),
     cleanup: vi.fn(),
     cancel: vi.fn(),
   },
