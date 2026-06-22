@@ -71,9 +71,13 @@ type BoundedStreamTextSnapshot = {
   chunkCount: number;
 };
 
+function copyUint8Range(value: Uint8Array, start = 0, end = value.byteLength): Uint8Array {
+  return new Uint8Array(value.subarray(start, end));
+}
+
 // 流式统计只需要头部元信息和尾部 usage/final event。按字节保存窗口，避免
 // string[] 无界增长，也避免 subarray 持有超大原始 ArrayBuffer。
-class BoundedStreamTextAccumulator {
+export class BoundedStreamTextAccumulator {
   private readonly headChunks: Uint8Array[] = [];
   private readonly tailChunks: Uint8Array[] = [];
   private readonly tailChunkBytes: number[] = [];
@@ -114,12 +118,12 @@ class BoundedStreamTextAccumulator {
     if (!this.tailMode && this.headBufferedBytes < STREAM_STATS_HEAD_BYTES) {
       const remainingHeadBytes = STREAM_STATS_HEAD_BYTES - this.headBufferedBytes;
       if (value.byteLength <= remainingHeadBytes) {
-        this.headChunks.push(value.slice());
+        this.headChunks.push(copyUint8Range(value));
         this.headBufferedBytes += value.byteLength;
         return;
       }
 
-      this.headChunks.push(value.slice(0, remainingHeadBytes));
+      this.headChunks.push(copyUint8Range(value, 0, remainingHeadBytes));
       this.headBufferedBytes += remainingHeadBytes;
       this.tailMode = true;
       this.pushTailBytes(value.subarray(remainingHeadBytes));
@@ -171,7 +175,7 @@ class BoundedStreamTextAccumulator {
       this.tailChunks.length = 0;
       this.tailChunkBytes.length = 0;
       this.tailHead = 0;
-      const tail = value.slice(value.byteLength - STREAM_STATS_TAIL_BYTES);
+      const tail = copyUint8Range(value, value.byteLength - STREAM_STATS_TAIL_BYTES);
       this.tailChunks.push(tail);
       this.tailChunkBytes.push(tail.byteLength);
       this.tailBufferedBytes = tail.byteLength;
@@ -179,7 +183,7 @@ class BoundedStreamTextAccumulator {
       return;
     }
 
-    const copy = value.slice();
+    const copy = copyUint8Range(value);
     this.tailChunks.push(copy);
     this.tailChunkBytes.push(copy.byteLength);
     this.tailBufferedBytes += copy.byteLength;
@@ -206,7 +210,7 @@ class BoundedStreamTextAccumulator {
       }
 
       const oldestChunk = this.tailChunks[this.tailHead]!;
-      this.tailChunks[this.tailHead] = oldestChunk.slice(overflowBytes);
+      this.tailChunks[this.tailHead] = copyUint8Range(oldestChunk, overflowBytes);
       this.tailChunkBytes[this.tailHead] = oldestChunkBytes - overflowBytes;
       this.tailBufferedBytes -= overflowBytes;
       this.truncated = true;

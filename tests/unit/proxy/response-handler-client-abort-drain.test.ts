@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
-import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import {
+  BoundedStreamTextAccumulator,
+  ProxyResponseHandler,
+} from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
@@ -638,6 +641,26 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
   beforeEach(() => {
     asyncTasks.splice(0, asyncTasks.length);
     vi.clearAllMocks();
+  });
+
+  it("copies Buffer-backed stream windows before retaining stats snapshots", () => {
+    const accumulator = new BoundedStreamTextAccumulator();
+    const headMarker = "head-copy-marker";
+    const tailMarker = "tail-copy-marker";
+    const originalChunk = Buffer.from(`${headMarker}${"x".repeat(11 * 1024 * 1024)}${tailMarker}`);
+    const originalLength = originalChunk.byteLength;
+
+    accumulator.pushBytes(originalChunk);
+    originalChunk.fill("z");
+
+    const snapshot = accumulator.finish();
+
+    expect(snapshot.truncated).toBe(true);
+    expect(snapshot.totalBytes).toBe(originalLength);
+    expect(snapshot.bufferedBytes).toBe(10 * 1024 * 1024);
+    expect(snapshot.text).toContain(headMarker);
+    expect(snapshot.text).toContain(tailMarker);
+    expect(snapshot.text).not.toContain("zzzzzzzzzzzzzzzz");
   });
 
   it("finalizes a complete upstream responses stream as success when the downstream client already closed", async () => {
