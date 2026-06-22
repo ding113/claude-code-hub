@@ -10,6 +10,7 @@ import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/rep
 import type { Provider } from "@/types/provider";
 
 const asyncTasks: Promise<void>[] = [];
+const STREAM_STATS_HEAD_BYTES_FOR_TEST = 1024 * 1024;
 
 vi.mock("@/app/v1/_lib/proxy/response-fixer", () => ({
   ResponseFixer: {
@@ -75,7 +76,7 @@ vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     clearSessionProvider: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
-    storeSessionResponse: vi.fn(),
+    storeSessionResponse: vi.fn(async () => undefined),
     storeSessionRequestPhaseSnapshot: vi.fn(),
     storeSessionResponsePhaseSnapshot: vi.fn(),
     storeSessionRequestHeaders: vi.fn(),
@@ -299,6 +300,42 @@ function createOversizedResponsesSse(): Response {
   ].join("\n\n");
 
   return new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function createUtf8SplitHeadTailResponsesSse(): Response {
+  const encoder = new TextEncoder();
+  const eventPrefix = `event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"`;
+  const splitChar = "界";
+  const prefixBytes = encoder.encode(eventPrefix).byteLength;
+  const fillBytes = STREAM_STATS_HEAD_BYTES_FOR_TEST - prefixBytes - 1;
+  if (fillBytes < 0) {
+    throw new Error("test event prefix is too large for the head window");
+  }
+
+  const completedEvent = `event: response.completed\ndata: ${JSON.stringify({
+    type: "response.completed",
+    response: {
+      id: "resp_utf8_boundary",
+      model: "gpt-5.4-mini-2026-03-17",
+      usage: {
+        input_tokens: 463,
+        output_tokens: 11,
+      },
+    },
+  })}\n\n`;
+  const body = `${eventPrefix}${"a".repeat(fillBytes)}${splitChar}"}\n\n${completedEvent}`;
+  const chunk = encoder.encode(body);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
     status: 200,
     headers: { "content-type": "text/event-stream" },
   });
@@ -674,6 +711,46 @@ describe("ProxyResponseHandler stream client abort finalization", () => {
     const responseText = traceData?.responseText ?? "";
     expect(responseText).toContain("[cch_truncated]");
     expect(responseText.length).toBeLessThan(10 * 1024 * 1024 + 1024);
+  });
+
+  it("decodes an untruncated stream as contiguous UTF-8 across the head/tail split", async () => {
+    const controller = new AbortController();
+    const session = createSession(controller.signal);
+    session.sessionId = "session_utf8_boundary";
+    Object.assign(session, {
+      shouldPersistSessionDebugArtifacts: () => true,
+    });
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "avemujica-responses",
+      providerPriority: 1,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.invalid/v1",
+      upstreamStatusCode: 200,
+    });
+
+    await ProxyResponseHandler.dispatch(session, createUtf8SplitHeadTailResponsesSse());
+    await drainAsyncTasks();
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      123,
+      expect.objectContaining({
+        statusCode: 200,
+        inputTokens: 463,
+        outputTokens: 11,
+      })
+    );
+
+    const traceCall = vi.mocked(emitProxyLangfuseTrace).mock.calls.at(-1);
+    expect(traceCall).toBeDefined();
+    const responseText = traceCall?.[1].responseText ?? "";
+    expect(responseText).toContain("界");
+    expect(responseText).not.toContain("\uFFFD");
+    expect(responseText).not.toContain("[cch_truncated]");
   });
 
   it("keeps usage when a terminal responses event is split across tail chunk eviction", async () => {

@@ -70,7 +70,7 @@ class AsyncTaskManagerClass {
       this.cleanupAll();
     });
 
-    // 每分钟检查并清理超时任务（>10 分钟未完成，防止内存泄漏）
+    // 每分钟检查并清理空闲超时任务，防止挂死后台任务长期强引用上下文。
     this.cleanupInterval = setInterval(() => {
       this.cleanupCompletedTasks();
     }, 60000);
@@ -225,12 +225,13 @@ class AsyncTaskManagerClass {
   /**
    * 检查并清理超时任务
    *
-   * 遍历所有活跃任务，对于超过 10 分钟还未完成的任务：
+   * 遍历所有活跃任务，对于空闲时间超过任务级 staleTimeoutMs 的任务：
    * 1. 记录警告日志
    * 2. 触发 AbortController 取消任务
    * 3. 从任务 Map 中移除
    *
-   * ⚠️ 注意：这不是清理"已完成"的任务，而是清理"超时未完成"的任务
+   * 注意：这是清理"空闲超时"的任务。活跃流应在收到上游 chunk 时
+   * 调用 touch() 更新 lastActivityAt，避免被误判为挂死任务。
    */
   private cleanupCompletedTasks(): void {
     const now = Date.now();

@@ -135,13 +135,7 @@ class BoundedStreamTextAccumulator {
       return this.finishedSnapshot;
     }
 
-    const headText = this.decodeChunks(this.headChunks, 0, this.headBufferedBytes);
-    const tailText = this.decodeChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
-    const text = this.tailMode
-      ? this.truncated
-        ? `${headText}${STREAM_STATS_TRUNCATED_MARKER}${tailText}`
-        : `${headText}${tailText}`
-      : headText;
+    const text = this.createSnapshotText();
 
     this.finishedSnapshot = {
       text,
@@ -152,6 +146,20 @@ class BoundedStreamTextAccumulator {
     };
 
     return this.finishedSnapshot;
+  }
+
+  private createSnapshotText(): string {
+    if (!this.tailMode) {
+      return this.decodeChunks(this.headChunks, 0, this.headBufferedBytes);
+    }
+
+    if (!this.truncated) {
+      return this.decodeContiguousBufferedBytes();
+    }
+
+    const headText = this.decodeChunks(this.headChunks, 0, this.headBufferedBytes);
+    const tailText = this.decodeChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
+    return `${headText}${STREAM_STATS_TRUNCATED_MARKER}${tailText}`;
   }
 
   private pushTailBytes(value: Uint8Array): void {
@@ -227,6 +235,20 @@ class BoundedStreamTextAccumulator {
       return "";
     }
     return new TextDecoder().decode(this.concatChunks(chunks, startIndex, totalBytes));
+  }
+
+  private decodeContiguousBufferedBytes(): string {
+    const totalBytes = this.headBufferedBytes + this.tailBufferedBytes;
+    if (totalBytes <= 0) {
+      return "";
+    }
+
+    const headBytes = this.concatChunks(this.headChunks, 0, this.headBufferedBytes);
+    const tailBytes = this.concatChunks(this.tailChunks, this.tailHead, this.tailBufferedBytes);
+    const out = new Uint8Array(headBytes.byteLength + tailBytes.byteLength);
+    out.set(headBytes, 0);
+    out.set(tailBytes, headBytes.byteLength);
+    return new TextDecoder().decode(out);
   }
 
   private concatChunks(chunks: Uint8Array[], startIndex: number, totalBytes: number): Uint8Array {
