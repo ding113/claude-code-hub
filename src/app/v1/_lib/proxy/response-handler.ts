@@ -324,6 +324,44 @@ function bindTaskAbortToUpstreamResponse(
   };
 }
 
+async function readResponseTextWithTaskActivity(
+  response: Response,
+  taskId: string
+): Promise<string> {
+  if (!response.body) {
+    AsyncTaskManager.touch(taskId);
+    return response.text();
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value || value.byteLength === 0) {
+        continue;
+      }
+
+      AsyncTaskManager.touch(taskId);
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+
+    const finalText = decoder.decode();
+    if (finalText) {
+      chunks.push(finalText);
+    }
+    AsyncTaskManager.touch(taskId);
+    return chunks.join("");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function takeBeforeResponseBodySnapshotSource(session: ProxySession): Response | null {
   const snapshotSession = session as ProxySession & {
     detailSnapshotResponseBeforeSource?: Response | null;
@@ -1299,17 +1337,17 @@ export class ProxyResponseHandler {
     const statusCode = response.status;
 
     let finalResponse = response;
-    const persistNonStreamAfterSnapshot = async (targetResponse: Response) => {
+    let finalResponseBodyForSnapshot: string | null = null;
+    const persistNonStreamAfterSnapshot = (targetResponse: Response, body: string) => {
       if (!session.sessionId || !session.shouldPersistSessionDebugArtifacts()) {
         return;
       }
 
-      const finalBody = await targetResponse.clone().text();
       const responseAfterSnapshotTask = SessionManager.storeSessionResponsePhaseSnapshot?.(
         session.sessionId,
         "after",
         {
-          body: finalBody,
+          body,
           headers: targetResponse.headers,
           meta: {
             upstreamUrl: null,
@@ -1354,7 +1392,7 @@ export class ProxyResponseHandler {
         );
         const statsPromise = (async () => {
           try {
-            const responseText = await responseForStats.text();
+            const responseText = await readResponseTextWithTaskActivity(responseForStats, taskId);
 
             const sessionWithCleanup = session as typeof session & {
               clearResponseTimeout?: () => void;
@@ -1505,6 +1543,7 @@ export class ProxyResponseHandler {
           const responseData = JSON.parse(responseText) as GeminiResponse;
 
           const transformed = GeminiAdapter.transformResponse(responseData, false);
+          const transformedBody = JSON.stringify(transformed);
 
           logger.debug(
             "[ResponseHandler] Transformed Gemini non-stream response to client format",
@@ -1516,7 +1555,8 @@ export class ProxyResponseHandler {
           );
 
           // ⭐ 清理传输 headers（body 已从流转为 JSON 字符串）
-          finalResponse = new Response(JSON.stringify(transformed), {
+          finalResponseBodyForSnapshot = transformedBody;
+          finalResponse = new Response(transformedBody, {
             status: response.status,
             statusText: response.statusText,
             headers: cleanResponseHeaders(response.headers),
@@ -1524,6 +1564,7 @@ export class ProxyResponseHandler {
         } catch (error) {
           logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
           finalResponse = response;
+          finalResponseBodyForSnapshot = null;
         }
       }
     }
@@ -1598,7 +1639,7 @@ export class ProxyResponseHandler {
         }
 
         // ⭐ 非流式：读取完整响应体（会等待所有数据下载完成）
-        const responseText = await responseForLog.text();
+        const responseText = await readResponseTextWithTaskActivity(responseForLog, taskId);
 
         // ⭐ 响应体读取完成：清除响应超时定时器
         const sessionWithCleanup = session as typeof session & {
@@ -1684,6 +1725,13 @@ export class ProxyResponseHandler {
           responseBeforeSnapshotTask?.catch((err) => {
             logger.error("[ResponseHandler] Failed to store response before snapshot:", err);
           });
+
+          // after 快照复用本任务已经读取到的响应文本，避免再启动一个未受
+          // AsyncTaskManager 管理的 clone().text() 读取分支。
+          persistNonStreamAfterSnapshot(
+            finalResponse,
+            finalResponseBodyForSnapshot ?? responseText
+          );
         }
 
         if (billableUsageMetrics && messageContext) {
@@ -1998,9 +2046,6 @@ export class ProxyResponseHandler {
       });
     });
 
-    void persistNonStreamAfterSnapshot(finalResponse).catch((error) => {
-      logger.error("[ResponseHandler] Failed to persist non-stream after snapshot", { error });
-    });
     return finalResponse;
   }
 
