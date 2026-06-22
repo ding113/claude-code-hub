@@ -120,6 +120,6 @@ export const useLazyStatusCodes: () => UseLazyFilterOptionsReturn<number> =
 export const useLazyEndpoints: () => UseLazyFilterOptionsReturn<string> =
   createLazyFilterHook<string>(getEndpointList);
 
-function isNonBlankString(value: string): boolean {
-  return value.trim().length > 0;
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
