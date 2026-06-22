@@ -109,21 +109,32 @@ export function emitProxyLangfuseTrace(
   // 必须在异步 import 之前截断，避免动态加载/SDK 发送期间闭包继续强引用完整大响应。
   const responseText = truncateResponseTextForLangfuse(data.responseText);
   const sessionSnapshot = buildLangfuseSessionSnapshot(session);
+  const {
+    responseHeaders,
+    durationMs,
+    statusCode,
+    isStreaming,
+    usageMetrics,
+    costUsd,
+    costBreakdown,
+    sseEventCount,
+    errorMessage,
+  } = data;
 
   void import("@/lib/langfuse/trace-proxy-request")
     .then(({ traceProxyRequest }) => {
       void traceProxyRequest({
         session: sessionSnapshot,
-        responseHeaders: data.responseHeaders,
-        durationMs: data.durationMs,
-        statusCode: data.statusCode,
-        isStreaming: data.isStreaming,
+        responseHeaders,
+        durationMs,
+        statusCode,
+        isStreaming,
         responseText,
-        usageMetrics: data.usageMetrics,
-        costUsd: data.costUsd,
-        costBreakdown: data.costBreakdown,
-        sseEventCount: data.sseEventCount,
-        errorMessage: data.errorMessage,
+        usageMetrics,
+        costUsd,
+        costBreakdown,
+        sseEventCount,
+        errorMessage,
       });
     })
     .catch((err) => {

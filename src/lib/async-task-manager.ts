@@ -203,12 +203,12 @@ class AsyncTaskManagerClass {
   }
 
   /**
-   * 清理单个任务
+   * 清理单个任务。必须带上注册时的任务实例，避免旧任务 finally 误删同 taskId 的新任务。
    *
    * @param taskId 任务唯一标识
    */
-  cleanup(taskId: string, expectedTask?: TaskInfo): boolean {
-    if (expectedTask && this.tasks.get(taskId) !== expectedTask) {
+  private cleanup(taskId: string, expectedTask: TaskInfo): boolean {
+    if (this.tasks.get(taskId) !== expectedTask) {
       return false;
     }
 

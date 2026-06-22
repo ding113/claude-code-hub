@@ -180,10 +180,27 @@ class BoundedStreamTextAccumulator {
       this.tailBufferedBytes > STREAM_STATS_TAIL_BYTES &&
       this.tailHead < this.tailChunkBytes.length
     ) {
-      this.tailBufferedBytes -= this.tailChunkBytes[this.tailHead] ?? 0;
-      this.tailChunks[this.tailHead] = new Uint8Array();
-      this.tailChunkBytes[this.tailHead] = 0;
-      this.tailHead += 1;
+      const overflowBytes = this.tailBufferedBytes - STREAM_STATS_TAIL_BYTES;
+      const oldestChunkBytes = this.tailChunkBytes[this.tailHead] ?? 0;
+
+      if (oldestChunkBytes <= 0) {
+        this.tailHead += 1;
+        continue;
+      }
+
+      if (overflowBytes >= oldestChunkBytes) {
+        this.tailBufferedBytes -= oldestChunkBytes;
+        this.tailChunks[this.tailHead] = new Uint8Array();
+        this.tailChunkBytes[this.tailHead] = 0;
+        this.tailHead += 1;
+        this.truncated = true;
+        continue;
+      }
+
+      const oldestChunk = this.tailChunks[this.tailHead]!;
+      this.tailChunks[this.tailHead] = oldestChunk.slice(overflowBytes);
+      this.tailChunkBytes[this.tailHead] = oldestChunkBytes - overflowBytes;
+      this.tailBufferedBytes -= overflowBytes;
       this.truncated = true;
     }
 
@@ -1422,7 +1439,6 @@ export class ProxyResponseHandler {
           } finally {
             cleanupTaskAbortBinding();
             releaseSessionAgent(session);
-            AsyncTaskManager.cleanup(taskId);
           }
         })();
 
@@ -1935,7 +1951,6 @@ export class ProxyResponseHandler {
         cleanupTaskAbortBinding();
         cleanupClientAbortListener();
         releaseSessionAgent(session);
-        AsyncTaskManager.cleanup(taskId);
       }
     })();
 
@@ -2349,7 +2364,6 @@ export class ProxyResponseHandler {
               });
             }
             releaseSessionAgent(session);
-            AsyncTaskManager.cleanup(taskId);
           }
         })();
 
@@ -3203,7 +3217,6 @@ export class ProxyResponseHandler {
           });
         }
         releaseSessionAgent(session);
-        AsyncTaskManager.cleanup(taskId);
       }
     })();
 
