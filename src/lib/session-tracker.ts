@@ -44,7 +44,7 @@ export class SessionTracker {
    */
   static async initialize(): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.warn("SessionTracker: Redis not ready, skipping initialization");
       return;
     }
@@ -82,7 +82,7 @@ export class SessionTracker {
    */
   static async trackSession(sessionId: string, keyId: number, userId?: number): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const now = Date.now();
@@ -137,7 +137,7 @@ export class SessionTracker {
    */
   static async updateProvider(sessionId: string, providerId: number): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const now = Date.now();
@@ -193,7 +193,7 @@ export class SessionTracker {
     userId?: number
   ): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const now = Date.now();
@@ -279,7 +279,7 @@ export class SessionTracker {
    */
   static async getGlobalSessionCount(): Promise<number> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return 0;
+    if (redis?.status !== "ready") return 0;
 
     try {
       const key = getGlobalActiveSessionsKey();
@@ -312,7 +312,7 @@ export class SessionTracker {
    */
   static async getKeySessionCount(keyId: number): Promise<number> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return 0;
+    if (redis?.status !== "ready") return 0;
 
     try {
       const key = getKeyActiveSessionsKey(keyId);
@@ -345,7 +345,7 @@ export class SessionTracker {
    */
   static async getProviderSessionCount(providerId: number): Promise<number> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return 0;
+    if (redis?.status !== "ready") return 0;
 
     try {
       const key = `provider:${providerId}:active_sessions`;
@@ -378,7 +378,7 @@ export class SessionTracker {
    */
   static async getUserSessionCount(userId: number): Promise<number> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return 0;
+    if (redis?.status !== "ready") return 0;
 
     try {
       const key = getUserActiveSessionsKey(userId);
@@ -423,7 +423,7 @@ export class SessionTracker {
     }
 
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       return result;
     }
 
@@ -546,7 +546,7 @@ export class SessionTracker {
    */
   static async getActiveSessions(): Promise<string[]> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return [];
+    if (redis?.status !== "ready") return [];
 
     try {
       const key = getGlobalActiveSessionsKey();
@@ -592,7 +592,7 @@ export class SessionTracker {
    */
   private static async countFromZSet(key: string): Promise<number> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return 0;
+    if (redis?.status !== "ready") return 0;
 
     try {
       const now = Date.now();
@@ -649,7 +649,7 @@ export class SessionTracker {
    */
   static async incrementConcurrentCount(sessionId: string): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const key = `session:${sessionId}:concurrent_count`;
@@ -671,7 +671,7 @@ export class SessionTracker {
    */
   static async decrementConcurrentCount(sessionId: string): Promise<void> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
+    if (redis?.status !== "ready") return;
 
     try {
       const key = `session:${sessionId}:concurrent_count`;
@@ -703,7 +703,7 @@ export class SessionTracker {
     }
 
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       for (const id of sessionIds) {
         result.set(id, 0);
       }
@@ -754,7 +754,7 @@ export class SessionTracker {
    */
   static async getConcurrentCount(sessionId: string): Promise<number> {
     const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.trace("SessionTracker: Redis not ready, returning 0 for concurrent count");
       return 0;
     }

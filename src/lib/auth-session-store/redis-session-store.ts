@@ -119,7 +119,7 @@ export class RedisSessionStore implements SessionStore {
 
   private getReadyRedis(): RedisSessionClient | null {
     const redis = this.resolveRedisClient();
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       return null;
     }
 

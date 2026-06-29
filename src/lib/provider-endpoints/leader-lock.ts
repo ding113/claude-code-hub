@@ -81,7 +81,7 @@ export async function renewLeaderLock(lock: LeaderLock, ttlMs: number): Promise<
     return true;
   }
 
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return false;
   }
 
@@ -118,7 +118,7 @@ export async function releaseLeaderLock(lock: LeaderLock): Promise<void> {
   }
 
   const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return;
   }
 

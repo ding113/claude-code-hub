@@ -444,7 +444,7 @@ export async function simulateDispatchAction(
   rawInput: DispatchSimulatorInput
 ): Promise<ActionResult<DispatchSimulatorResult>> {
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return {
       ok: false,
       error: DISPATCH_SIMULATOR_ERROR_CODES.PERMISSION_DENIED,

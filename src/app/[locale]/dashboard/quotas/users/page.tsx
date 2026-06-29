@@ -125,7 +125,7 @@ export default async function UsersQuotaPage({ params }: { params: Promise<{ loc
   const { locale } = await params;
   const session = await getSession();
 
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return redirect({ href: session ? "/dashboard/my-quota" : "/login", locale });
   }
 

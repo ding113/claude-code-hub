@@ -881,7 +881,7 @@ export class ProxySession {
     }
 
     const text = typeof blockObj.text === "string" ? blockObj.text.trim() : "";
-    if (!text || text.toLowerCase() !== "warmup") {
+    if (text?.toLowerCase() !== "warmup") {
       return false;
     }
 

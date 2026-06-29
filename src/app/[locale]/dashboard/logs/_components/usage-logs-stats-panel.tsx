@@ -187,11 +187,11 @@ function StatsContent({
           </div>
           <div className="flex justify-between">
             <span>{t("logs.stats.reasoning")}:</span>
-            <span className="font-mono">
-              {formatTokenAmount(stats.totalReasoningOutputTokens)}
-            </span>
+            <span className="font-mono">{formatTokenAmount(stats.totalReasoningOutputTokens)}</span>
           </div>
-          <div className="text-[11px] text-muted-foreground">{t("logs.stats.includedInOutput")}</div>
+          <div className="text-[11px] text-muted-foreground">
+            {t("logs.stats.includedInOutput")}
+          </div>
         </div>
       </div>
 

@@ -335,7 +335,7 @@ function buildTestData(type: NotificationType): unknown {
 export async function getWebhookTargetsAction(): Promise<ActionResult<WebhookTarget[]>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限访问推送目标" };
     }
 
@@ -352,7 +352,7 @@ export async function createWebhookTargetAction(
 ): Promise<ActionResult<WebhookTarget>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -381,7 +381,7 @@ export async function updateWebhookTargetAction(
 ): Promise<ActionResult<WebhookTarget>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -405,7 +405,7 @@ export async function updateWebhookTargetAction(
 export async function deleteWebhookTargetAction(id: number): Promise<ActionResult<void>> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
@@ -426,7 +426,7 @@ export async function testWebhookTargetAction(
 
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 

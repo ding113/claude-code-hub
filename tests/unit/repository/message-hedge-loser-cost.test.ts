@@ -7,7 +7,6 @@ function sqlToString(sqlObj: unknown): string {
     visited.add(node);
     if (typeof node === "string") return node;
     if (typeof node === "object") {
-      // biome-ignore lint/suspicious/noExplicitAny: test-only structural walk
       const anyNode = node as any;
       if (Array.isArray(anyNode)) return anyNode.map(walk).join("");
       if (anyNode.name && typeof anyNode.name === "string") return anyNode.name;

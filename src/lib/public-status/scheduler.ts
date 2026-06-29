@@ -65,7 +65,7 @@ async function collectTargets(): Promise<
   Array<{ intervalMinutes: number; rangeHours: number; hintKey?: string }>
 > {
   const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-  if (!redis || redis.status !== "ready") {
+  if (redis?.status !== "ready") {
     return [];
   }
 
@@ -143,7 +143,7 @@ async function runCycle(): Promise<void> {
 
   try {
     const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
-    if (!redis || redis.status !== "ready") {
+    if (redis?.status !== "ready") {
       logger.warn("[PublicStatusScheduler] Redis not ready, skipping cycle");
       return;
     }

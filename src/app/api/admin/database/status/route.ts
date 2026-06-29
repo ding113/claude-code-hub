@@ -18,7 +18,7 @@ export async function GET() {
   try {
     // 1. 验证管理员权限
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
+    if (session?.user.role !== "admin") {
       logger.warn({ action: "database_status_unauthorized" });
       return new Response("Unauthorized", { status: 401 });
     }

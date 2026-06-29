@@ -12,7 +12,8 @@ function safeLog(method: LoggerMethod, message: string, ...args: unknown[]) {
     return;
   }
 
-  const fallback = method === "error" ? console.error : method === "warn" ? console.warn : console.info;
+  const fallback =
+    method === "error" ? console.error : method === "warn" ? console.warn : console.info;
   fallback(message, ...args);
 }
 

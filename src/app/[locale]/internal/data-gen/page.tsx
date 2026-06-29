@@ -10,7 +10,7 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
 
   const session = await getSession();
 
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return redirect({ href: "/login", locale });
   }
 

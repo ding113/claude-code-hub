@@ -100,7 +100,7 @@ function parseProviderIdsQueryParam(value: string): number[] {
 export async function GET(request: NextRequest) {
   // Verify admin authentication using session cookies
   const session = await getSession();
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
