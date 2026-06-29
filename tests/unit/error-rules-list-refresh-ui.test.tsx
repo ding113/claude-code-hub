@@ -134,6 +134,7 @@ const rule: ErrorRule = {
   description: "test rule",
   overrideResponse: null,
   overrideStatusCode: null,
+  retryOnMatch: false,
   isEnabled: true,
   isDefault: false,
   priority: 0,

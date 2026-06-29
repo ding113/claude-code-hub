@@ -74,6 +74,7 @@ export async function createErrorRuleAction(data: {
   overrideResponse?: repo.ErrorOverrideResponse | null;
   /** 覆写状态码：null 表示透传上游状态码 */
   overrideStatusCode?: number | null;
+  retryOnMatch?: boolean;
 }): Promise<ActionResult<repo.ErrorRule>> {
   try {
     const session = await getSession();
@@ -174,6 +175,7 @@ export async function createErrorRuleAction(data: {
       description: data.description,
       overrideResponse: data.overrideResponse ?? null,
       overrideStatusCode: data.overrideStatusCode ?? null,
+      retryOnMatch: data.retryOnMatch ?? false,
     });
 
     // 刷新缓存（事件广播，支持多 worker 同步）
@@ -222,6 +224,7 @@ export async function updateErrorRuleAction(
     overrideResponse: repo.ErrorOverrideResponse | null;
     /** 覆写状态码：null 表示透传上游状态码 */
     overrideStatusCode: number | null;
+    retryOnMatch: boolean;
     isEnabled: boolean;
     priority: number;
   }>

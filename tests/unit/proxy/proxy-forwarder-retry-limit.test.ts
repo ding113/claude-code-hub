@@ -1343,6 +1343,7 @@ describe("NON_RETRYABLE_CLIENT_ERROR regression tests", () => {
         },
       },
       overrideStatusCode: 400,
+      retryOnMatch: false,
     });
 
     const session = createSession(new URL("https://example.com/v1/messages"));
@@ -1386,6 +1387,7 @@ describe("NON_RETRYABLE_CLIENT_ERROR regression tests", () => {
       matchType: "contains",
       description: "YesCode missing thinking fields",
       overrideStatusCode: 400,
+      retryOnMatch: false,
     });
 
     const session = createSession(new URL("https://example.com/v1/messages"));
@@ -1412,5 +1414,55 @@ describe("NON_RETRYABLE_CLIENT_ERROR regression tests", () => {
       })
     );
     expect(session.getProviderChain()[0].errorDetails?.matchedRule?.ruleId).toBe(42);
+  });
+
+  test("NON_RETRYABLE_CLIENT_ERROR with retryOnMatch should fall through to provider retry", async () => {
+    const proxyError = new ProxyError("missing thinking fields", 400);
+
+    const doForward = vi.spyOn(ProxyForwarder as unknown as { doForward: unknown }, "doForward");
+    doForward
+      .mockRejectedValueOnce(proxyError)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+    vi.mocked(getErrorDetectionResultAsync).mockResolvedValue({
+      matched: true,
+      ruleId: 42,
+      category: "thinking_error",
+      pattern: "missing thinking fields",
+      matchType: "contains",
+      description: "YesCode missing thinking fields",
+      overrideStatusCode: 400,
+      retryOnMatch: true,
+    });
+
+    const session = createSession(new URL("https://example.com/v1/messages"));
+    const provider = createProvider({
+      id: 1,
+      name: "YesCode Team Claude",
+      providerType: "claude",
+      providerVendorId: 1,
+      maxRetryAttempts: 2,
+    });
+    session.setProvider(provider);
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      "ProxyForwarder: Error rule matched with retry_on_match, retrying",
+      expect.objectContaining({
+        providerId: 1,
+        providerName: "YesCode Team Claude",
+        ruleId: 42,
+        pattern: "missing thinking fields",
+      })
+    );
+    expect(session.getProviderChain()[0].reason).toBe("client_error_non_retryable");
+    expect(session.getProviderChain()[0].errorDetails?.matchedRule?.ruleId).toBe(42);
+    expect(session.getProviderChain()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ reason: "retry_failed", statusCode: 400 })])
+    );
   });
 });

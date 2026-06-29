@@ -1,0 +1,1 @@
+ALTER TABLE "error_rules" ADD COLUMN "retry_on_match" boolean DEFAULT false NOT NULL;

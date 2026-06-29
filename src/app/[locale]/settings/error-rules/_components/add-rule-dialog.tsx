@@ -38,6 +38,7 @@ export function AddRuleDialog() {
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [enableOverride, setEnableOverride] = useState(false);
+  const [enableRetryOnMatch, setEnableRetryOnMatch] = useState(false);
   const [overrideResponse, setOverrideResponse] = useState("");
   const [overrideStatusCode, setOverrideStatusCode] = useState<string>("");
 
@@ -101,6 +102,7 @@ export function AddRuleDialog() {
           | "invalid_request"
           | "cache_limit",
         description: description.trim() || undefined,
+        retryOnMatch: enableRetryOnMatch,
         overrideResponse: parsedOverrideResponse ?? null,
         overrideStatusCode: parsedStatusCode ?? null,
       });
@@ -114,6 +116,7 @@ export function AddRuleDialog() {
         setCategory("");
         setDescription("");
         setEnableOverride(false);
+        setEnableRetryOnMatch(false);
         setOverrideResponse("");
         setOverrideStatusCode("");
       } else {
@@ -225,6 +228,8 @@ export function AddRuleDialog() {
               idPrefix="add"
               enableOverride={enableOverride}
               onEnableOverrideChange={setEnableOverride}
+              enableRetryOnMatch={enableRetryOnMatch}
+              onEnableRetryOnMatchChange={setEnableRetryOnMatch}
               overrideResponse={overrideResponse}
               onOverrideResponseChange={setOverrideResponse}
               overrideStatusCode={overrideStatusCode}

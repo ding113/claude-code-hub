@@ -13957,6 +13957,8 @@ export interface operations {
                             } | null;
                             /** @description Optional status override. */
                             overrideStatusCode: number | null;
+                            /** @description Whether a matched rule should be retried. */
+                            retryOnMatch: boolean;
                             /** @description Whether the rule is enabled. */
                             isEnabled: boolean;
                             /** @description Whether this is a built-in default rule. */
@@ -14160,6 +14162,8 @@ export interface operations {
                     } | null;
                     /** @description Optional status override. */
                     overrideStatusCode?: number | null;
+                    /** @description Whether a matched rule should be retried. */
+                    retryOnMatch?: boolean;
                 };
             };
         };
@@ -14190,6 +14194,8 @@ export interface operations {
                         } | null;
                         /** @description Optional status override. */
                         overrideStatusCode: number | null;
+                        /** @description Whether a matched rule should be retried. */
+                        retryOnMatch: boolean;
                         /** @description Whether the rule is enabled. */
                         isEnabled: boolean;
                         /** @description Whether this is a built-in default rule. */
@@ -15131,6 +15137,8 @@ export interface operations {
                     } | null;
                     /** @description Optional status override. */
                     overrideStatusCode?: number | null;
+                    /** @description Whether a matched rule should be retried. */
+                    retryOnMatch?: boolean;
                     /** @description Whether the rule is enabled. */
                     isEnabled?: boolean;
                     /** @description Rule priority. */
@@ -15165,6 +15173,8 @@ export interface operations {
                         } | null;
                         /** @description Optional status override. */
                         overrideStatusCode: number | null;
+                        /** @description Whether a matched rule should be retried. */
+                        retryOnMatch: boolean;
                         /** @description Whether the rule is enabled. */
                         isEnabled: boolean;
                         /** @description Whether this is a built-in default rule. */

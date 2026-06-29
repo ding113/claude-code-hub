@@ -58,6 +58,7 @@ function buildRule(overrides?: Partial<Record<string, unknown>>) {
     description: "YesCode missing thinking fields",
     overrideResponse: undefined,
     overrideStatusCode: 400,
+    retryOnMatch: false,
     isEnabled: true,
     isDefault: false,
     priority: 10,

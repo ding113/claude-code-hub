@@ -1,3 +1,4 @@
+import type { ErrorRuleCreateInput, ErrorRuleUpdateInput } from "@/lib/api/v1/schemas/error-rules";
 import {
   apiDelete,
   apiGet,
@@ -12,11 +13,11 @@ export function listErrorRules() {
   return toActionResult(apiGet<{ items?: unknown[] }>("/api/v1/error-rules").then(unwrapItems));
 }
 
-export function createErrorRuleAction(data: unknown) {
+export function createErrorRuleAction(data: ErrorRuleCreateInput) {
   return toActionResult(apiPost("/api/v1/error-rules", data));
 }
 
-export function updateErrorRuleAction(id: number, data: unknown) {
+export function updateErrorRuleAction(id: number, data: ErrorRuleUpdateInput) {
   return toActionResult(apiPatch(`/api/v1/error-rules/${id}`, data));
 }
 

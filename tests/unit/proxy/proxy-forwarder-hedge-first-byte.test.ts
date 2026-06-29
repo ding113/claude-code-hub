@@ -1674,6 +1674,7 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       matchType: "contains",
       description: "Prompt too long",
       overrideStatusCode: 400,
+      retryOnMatch: false,
     });
 
     const doForward = vi.spyOn(

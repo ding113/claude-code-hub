@@ -31,7 +31,7 @@
   "delete": "刪除錯誤規則",
   "deleteFailed": "刪除失敗",
   "deleteSuccess": "錯誤規則刪除成功",
-  "description": "管理不需要自動重試的客戶端錯誤規則。配置後，命中規則的報錯將直接返回給用戶，不會觸發重試，也不會計入供應商熔斷。",
+  "description": "管理按響應內容匹配的錯誤處理規則。啟用了「匹配後自動重試」的規則將觸發重試而非直接報錯。未啟用此選項的規則（預設）會直接將錯誤返回給使用者，不計入供應商熔斷器。",
   "dialog": {
     "addDescription": "設定錯誤訊息正則表達式模式，符合的錯誤將被識別為不可重試的客戶端錯誤。",
     "addTitle": "新增錯誤規則",
@@ -46,7 +46,9 @@
     "editDescription": "修改錯誤規則設定，更改後將自動重新整理快取。",
     "editTitle": "編輯錯誤規則",
     "enableOverride": "啟用錯誤覆寫",
+    "enableRetryOnMatch": "匹配後自動重試",
     "enableOverrideHint": "啟用後可自訂返回給客戶端的錯誤回應和狀態碼，原始錯誤仍會記錄到資料庫。當前僅支援 Claude API 錯誤格式。",
+    "enableRetryOnMatchHint": "啟用後，匹配此規則將觸發自動重試，而不是立即返回錯誤。僅用於臨時性錯誤（伺服器過載、暫時不可用、限流等）。",
     "invalidJson": "JSON 格式無效",
     "invalidPattern": "無效的正則表達式",
     "invalidRegex": "正則表達式語法錯誤",

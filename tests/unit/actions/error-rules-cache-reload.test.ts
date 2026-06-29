@@ -58,6 +58,7 @@ const baseRule = {
   description: null,
   overrideResponse: null,
   overrideStatusCode: null,
+  retryOnMatch: false,
   isEnabled: true,
   isDefault: false,
   priority: 0,

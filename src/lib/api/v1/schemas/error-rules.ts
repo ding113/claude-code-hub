@@ -35,6 +35,7 @@ export const ErrorRuleSchema = z.object({
     .max(599)
     .nullable()
     .describe("Optional status override."),
+  retryOnMatch: z.boolean().describe("Whether a matched rule should be retried."),
   isEnabled: z.boolean().describe("Whether the rule is enabled."),
   isDefault: z.boolean().describe("Whether this is a built-in default rule."),
   priority: z.number().int().describe("Rule priority."),
@@ -63,6 +64,7 @@ export const ErrorRuleCreateSchema = z
       .nullable()
       .optional()
       .describe("Optional status override."),
+    retryOnMatch: z.boolean().optional().describe("Whether a matched rule should be retried."),
   })
   .strict();
 

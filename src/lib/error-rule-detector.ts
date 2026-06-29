@@ -30,6 +30,7 @@ export interface ErrorDetectionResult {
   overrideResponse?: ErrorOverrideResponse;
   /** 覆写状态码：如果配置了则用此状态码替换原始状态码 */
   overrideStatusCode?: number;
+  retryOnMatch?: boolean;
 }
 
 /**
@@ -43,6 +44,7 @@ interface RegexPattern {
   description?: string;
   overrideResponse?: ErrorOverrideResponse;
   overrideStatusCode?: number;
+  retryOnMatch?: boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ interface ContainsPattern {
   description?: string;
   overrideResponse?: ErrorOverrideResponse;
   overrideStatusCode?: number;
+  retryOnMatch?: boolean;
 }
 
 /**
@@ -69,6 +72,7 @@ interface ExactPattern {
   description?: string;
   overrideResponse?: ErrorOverrideResponse;
   overrideStatusCode?: number;
+  retryOnMatch?: boolean;
 }
 
 /**
@@ -252,6 +256,7 @@ class ErrorRuleDetector {
                   description: rule.description ?? undefined,
                   overrideResponse: validatedOverrideResponse,
                   overrideStatusCode: rule.overrideStatusCode ?? undefined,
+                  retryOnMatch: rule.retryOnMatch ?? false,
                 });
                 break;
               }
@@ -266,6 +271,7 @@ class ErrorRuleDetector {
                   description: rule.description ?? undefined,
                   overrideResponse: validatedOverrideResponse,
                   overrideStatusCode: rule.overrideStatusCode ?? undefined,
+                  retryOnMatch: rule.retryOnMatch ?? false,
                 });
                 break;
               }
@@ -290,6 +296,7 @@ class ErrorRuleDetector {
                     description: rule.description ?? undefined,
                     overrideResponse: validatedOverrideResponse,
                     overrideStatusCode: rule.overrideStatusCode ?? undefined,
+                    retryOnMatch: rule.retryOnMatch ?? false,
                   });
                   validRegexCount++;
                 } catch (error) {
@@ -403,6 +410,7 @@ class ErrorRuleDetector {
           description: pattern.description,
           overrideResponse: pattern.overrideResponse,
           overrideStatusCode: pattern.overrideStatusCode,
+          retryOnMatch: pattern.retryOnMatch,
         };
       }
     }
@@ -419,6 +427,7 @@ class ErrorRuleDetector {
         description: exactMatch.description,
         overrideResponse: exactMatch.overrideResponse,
         overrideStatusCode: exactMatch.overrideStatusCode,
+        retryOnMatch: exactMatch.retryOnMatch,
       };
     }
 
@@ -431,6 +440,7 @@ class ErrorRuleDetector {
       description,
       overrideResponse,
       overrideStatusCode,
+      retryOnMatch,
     } of this.regexPatterns) {
       if (pattern.test(errorMessage)) {
         return {
@@ -442,6 +452,7 @@ class ErrorRuleDetector {
           description,
           overrideResponse,
           overrideStatusCode,
+          retryOnMatch,
         };
       }
     }

@@ -651,6 +651,7 @@ export const errorRules = pgTable('error_rules', {
     .notNull()
     .default('regex')
     .$type<'regex' | 'contains' | 'exact'>(),
+  retryOnMatch: boolean('retry_on_match').notNull().default(false),
   category: varchar('category', { length: 50 }).notNull(),
   description: text('description'),
   // 覆写响应体（JSONB）：匹配成功时用此响应替换原始错误响应

@@ -42,6 +42,7 @@ function rule(overrides: Partial<ErrorRule> = {}): ErrorRule {
     description: "Prompt limit",
     overrideResponse: null,
     overrideStatusCode: null,
+    retryOnMatch: false,
     isEnabled: true,
     isDefault: false,
     priority: 0,

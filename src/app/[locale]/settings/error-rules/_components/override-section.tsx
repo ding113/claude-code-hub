@@ -56,6 +56,8 @@ interface OverrideSectionProps {
   idPrefix: string;
   enableOverride: boolean;
   onEnableOverrideChange: (enabled: boolean) => void;
+  enableRetryOnMatch: boolean;
+  onEnableRetryOnMatchChange: (enabled: boolean) => void;
   overrideResponse: string;
   onOverrideResponseChange: (value: string) => void;
   overrideStatusCode: string;
@@ -66,6 +68,8 @@ export function OverrideSection({
   idPrefix,
   enableOverride,
   onEnableOverrideChange,
+  enableRetryOnMatch,
+  onEnableRetryOnMatchChange,
   overrideResponse,
   onOverrideResponseChange,
   overrideStatusCode,
@@ -100,120 +104,145 @@ export function OverrideSection({
   );
 
   return (
-    <div className="rounded-xl bg-card/80 border border-border/50 p-4 space-y-4">
-      <div className="flex items-center space-x-2">
-        <Checkbox
-          id={`${idPrefix}-enableOverride`}
-          checked={enableOverride}
-          onCheckedChange={(checked) => onEnableOverrideChange(checked === true)}
-        />
-        <Label
-          htmlFor={`${idPrefix}-enableOverride`}
-          className="font-medium cursor-pointer text-sm"
-        >
-          {t("errorRules.dialog.enableOverride")}
-        </Label>
-      </div>
-      <p className="text-xs text-muted-foreground">{t("errorRules.dialog.enableOverrideHint")}</p>
+    <>
+      <div className="rounded-xl bg-card/80 border border-border/50 p-4 space-y-4">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id={`${idPrefix}-enableOverride`}
+            checked={enableOverride}
+            onCheckedChange={(checked) => onEnableOverrideChange(checked === true)}
+          />
+          <Label
+            htmlFor={`${idPrefix}-enableOverride`}
+            className="font-medium cursor-pointer text-sm"
+          >
+            {t("errorRules.dialog.enableOverride")}
+          </Label>
+        </div>
+        <p className="text-xs text-muted-foreground">{t("errorRules.dialog.enableOverrideHint")}</p>
 
-      {enableOverride && (
-        <div className="space-y-4 pt-2">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+        {enableOverride && (
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label
+                  htmlFor={`${idPrefix}-overrideResponse`}
+                  className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                >
+                  {t("errorRules.dialog.overrideResponseLabel")}
+                </Label>
+                <div className="flex items-center gap-3">
+                  {jsonStatus.state === "valid" && (
+                    <span className="flex items-center gap-1 text-xs text-green-400">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {t("errorRules.dialog.validJson")}
+                    </span>
+                  )}
+                  {jsonStatus.state === "invalid" && (
+                    <span className="flex items-center gap-1 text-xs text-red-400">
+                      <XCircle className="h-3 w-3" />
+                      {t("errorRules.dialog.invalidJson")}
+                    </span>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs hover:bg-muted"
+                      >
+                        {t("errorRules.dialog.useTemplate")}
+                        <ChevronDown className="ml-1 h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onSelect={() => handleUseTemplate(CLAUDE_OVERRIDE_TEMPLATE)}
+                      >
+                        {t("errorRules.dialog.templateClaudeApi")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => handleUseTemplate(GEMINI_OVERRIDE_TEMPLATE)}
+                      >
+                        {t("errorRules.dialog.templateGeminiApi")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => handleUseTemplate(OPENAI_OVERRIDE_TEMPLATE)}
+                      >
+                        {t("errorRules.dialog.templateOpenaiApi")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+              <textarea
+                id={`${idPrefix}-overrideResponse`}
+                value={overrideResponse}
+                onChange={(e) => onOverrideResponseChange(e.target.value)}
+                placeholder={DEFAULT_OVERRIDE_RESPONSE}
+                rows={6}
+                className={cn(
+                  "w-full bg-muted/50 border rounded-lg py-2.5 px-3 text-sm text-foreground font-mono",
+                  "placeholder:text-muted-foreground/50 resize-none",
+                  "focus:ring-1 outline-none transition-all",
+                  jsonStatus.state === "invalid"
+                    ? "border-red-500/50 focus:border-red-500 focus:ring-red-500"
+                    : "border-border focus:border-primary focus:ring-primary"
+                )}
+              />
+              {jsonStatus.state === "invalid" && (
+                <p className="text-xs text-red-400">{jsonStatus.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label
-                htmlFor={`${idPrefix}-overrideResponse`}
+                htmlFor={`${idPrefix}-overrideStatusCode`}
                 className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
               >
-                {t("errorRules.dialog.overrideResponseLabel")}
+                {t("errorRules.dialog.overrideStatusCodeLabel")}
               </Label>
-              <div className="flex items-center gap-3">
-                {/* JSON validation status indicator */}
-                {jsonStatus.state === "valid" && (
-                  <span className="flex items-center gap-1 text-xs text-green-400">
-                    <CheckCircle2 className="h-3 w-3" />
-                    {t("errorRules.dialog.validJson")}
-                  </span>
+              <input
+                id={`${idPrefix}-overrideStatusCode`}
+                type="number"
+                min={400}
+                max={599}
+                value={overrideStatusCode}
+                onChange={(e) => onOverrideStatusCodeChange(e.target.value)}
+                placeholder={t("errorRules.dialog.overrideStatusCodePlaceholder")}
+                className={cn(
+                  "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                  "placeholder:text-muted-foreground/50",
+                  "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                 )}
-                {jsonStatus.state === "invalid" && (
-                  <span className="flex items-center gap-1 text-xs text-red-400">
-                    <XCircle className="h-3 w-3" />
-                    {t("errorRules.dialog.invalidJson")}
-                  </span>
-                )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs hover:bg-muted"
-                    >
-                      {t("errorRules.dialog.useTemplate")}
-                      <ChevronDown className="ml-1 h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => handleUseTemplate(CLAUDE_OVERRIDE_TEMPLATE)}>
-                      {t("errorRules.dialog.templateClaudeApi")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleUseTemplate(GEMINI_OVERRIDE_TEMPLATE)}>
-                      {t("errorRules.dialog.templateGeminiApi")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleUseTemplate(OPENAI_OVERRIDE_TEMPLATE)}>
-                      {t("errorRules.dialog.templateOpenaiApi")}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("errorRules.dialog.overrideStatusCodeHint")}
+              </p>
             </div>
-            <textarea
-              id={`${idPrefix}-overrideResponse`}
-              value={overrideResponse}
-              onChange={(e) => onOverrideResponseChange(e.target.value)}
-              placeholder={DEFAULT_OVERRIDE_RESPONSE}
-              rows={6}
-              className={cn(
-                "w-full bg-muted/50 border rounded-lg py-2.5 px-3 text-sm text-foreground font-mono",
-                "placeholder:text-muted-foreground/50 resize-none",
-                "focus:ring-1 outline-none transition-all",
-                jsonStatus.state === "invalid"
-                  ? "border-red-500/50 focus:border-red-500 focus:ring-red-500"
-                  : "border-border focus:border-primary focus:ring-primary"
-              )}
-            />
-            {/* JSON parse error details */}
-            {jsonStatus.state === "invalid" && (
-              <p className="text-xs text-red-400">{jsonStatus.message}</p>
-            )}
           </div>
+        )}
+      </div>
 
-          <div className="space-y-2">
-            <Label
-              htmlFor={`${idPrefix}-overrideStatusCode`}
-              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
-            >
-              {t("errorRules.dialog.overrideStatusCodeLabel")}
-            </Label>
-            <input
-              id={`${idPrefix}-overrideStatusCode`}
-              type="number"
-              min={400}
-              max={599}
-              value={overrideStatusCode}
-              onChange={(e) => onOverrideStatusCodeChange(e.target.value)}
-              placeholder={t("errorRules.dialog.overrideStatusCodePlaceholder")}
-              className={cn(
-                "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                "placeholder:text-muted-foreground/50",
-                "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
-              )}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("errorRules.dialog.overrideStatusCodeHint")}
-            </p>
-          </div>
+      <div className="rounded-xl bg-card/80 border border-border/50 p-4 space-y-4">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id={`${idPrefix}-enableRetryOnMatch`}
+            checked={enableRetryOnMatch}
+            onCheckedChange={(checked) => onEnableRetryOnMatchChange(checked === true)}
+          />
+          <Label
+            htmlFor={`${idPrefix}-enableRetryOnMatch`}
+            className="font-medium cursor-pointer text-sm"
+          >
+            {t("errorRules.dialog.enableRetryOnMatch")}
+          </Label>
         </div>
-      )}
-    </div>
+        <p className="text-xs text-muted-foreground">
+          {t("errorRules.dialog.enableRetryOnMatchHint")}
+        </p>
+      </div>
+    </>
   );
 }

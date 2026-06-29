@@ -41,6 +41,7 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [enableOverride, setEnableOverride] = useState(false);
+  const [enableRetryOnMatch, setEnableRetryOnMatch] = useState(false);
   const [overrideResponse, setOverrideResponse] = useState("");
   const [overrideStatusCode, setOverrideStatusCode] = useState<string>("");
 
@@ -53,6 +54,7 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
       // Enable override if rule has override response or status code
       const hasOverride = !!rule.overrideResponse || !!rule.overrideStatusCode;
       setEnableOverride(hasOverride);
+      setEnableRetryOnMatch(rule.retryOnMatch || false);
       setOverrideResponse(
         rule.overrideResponse ? JSON.stringify(rule.overrideResponse, null, 2) : ""
       );
@@ -122,6 +124,7 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
           | "invalid_request"
           | "cache_limit",
         description: description.trim() || undefined,
+        retryOnMatch: enableRetryOnMatch,
         overrideResponse: parsedOverrideResponse,
         overrideStatusCode: parsedStatusCode,
       });
@@ -244,6 +247,8 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
               idPrefix="edit"
               enableOverride={enableOverride}
               onEnableOverrideChange={setEnableOverride}
+              enableRetryOnMatch={enableRetryOnMatch}
+              onEnableRetryOnMatchChange={setEnableRetryOnMatch}
               overrideResponse={overrideResponse}
               onOverrideResponseChange={setOverrideResponse}
               overrideStatusCode={overrideStatusCode}

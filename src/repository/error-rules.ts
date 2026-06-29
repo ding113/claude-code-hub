@@ -67,6 +67,7 @@ export interface ErrorRule {
   overrideResponse: ErrorOverrideResponse | null;
   /** 覆写状态码：null 表示透传上游状态码 */
   overrideStatusCode: number | null;
+  retryOnMatch: boolean;
   isEnabled: boolean;
   isDefault: boolean;
   priority: number;
@@ -120,6 +121,7 @@ export async function getActiveErrorRules(): Promise<ErrorRule[]> {
       `getActiveErrorRules id=${r.id}`
     ),
     overrideStatusCode: r.overrideStatusCode,
+    retryOnMatch: r.retryOnMatch ?? false,
     isEnabled: r.isEnabled,
     isDefault: r.isDefault,
     priority: r.priority,
@@ -151,6 +153,7 @@ export async function getErrorRuleById(id: number): Promise<ErrorRule | null> {
       `getErrorRuleById id=${result.id}`
     ),
     overrideStatusCode: result.overrideStatusCode,
+    retryOnMatch: result.retryOnMatch ?? false,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,
     priority: result.priority,
@@ -175,6 +178,7 @@ export async function getAllErrorRules(): Promise<ErrorRule[]> {
     description: r.description,
     overrideResponse: sanitizeOverrideResponse(r.overrideResponse, `getAllErrorRules id=${r.id}`),
     overrideStatusCode: r.overrideStatusCode,
+    retryOnMatch: r.retryOnMatch ?? false,
     isEnabled: r.isEnabled,
     isDefault: r.isDefault,
     priority: r.priority,
@@ -193,6 +197,7 @@ export async function createErrorRule(data: {
   description?: string;
   overrideResponse?: ErrorOverrideResponse | null;
   overrideStatusCode?: number | null;
+  retryOnMatch?: boolean;
   priority?: number;
 }): Promise<ErrorRule> {
   const [result] = await db
@@ -204,6 +209,7 @@ export async function createErrorRule(data: {
       description: data.description,
       overrideResponse: data.overrideResponse,
       overrideStatusCode: data.overrideStatusCode ?? null,
+      retryOnMatch: data.retryOnMatch ?? false,
       priority: data.priority ?? 0,
     })
     .returning();
@@ -219,6 +225,7 @@ export async function createErrorRule(data: {
       `createErrorRule id=${result.id}`
     ),
     overrideStatusCode: result.overrideStatusCode,
+    retryOnMatch: result.retryOnMatch ?? false,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,
     priority: result.priority,
@@ -239,6 +246,7 @@ export async function updateErrorRule(
     description: string;
     overrideResponse: ErrorOverrideResponse | null;
     overrideStatusCode: number | null;
+    retryOnMatch: boolean;
     isEnabled: boolean;
     /** 是否为默认规则（编辑默认规则时会自动设为 false） */
     isDefault: boolean;
@@ -269,6 +277,7 @@ export async function updateErrorRule(
       `updateErrorRule id=${result.id}`
     ),
     overrideStatusCode: result.overrideStatusCode,
+    retryOnMatch: result.retryOnMatch ?? false,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,
     priority: result.priority,
@@ -959,6 +968,10 @@ export async function syncDefaultErrorRules(): Promise<{
               ("overrideStatusCode" in rule
                 ? (rule as { overrideStatusCode?: number | null }).overrideStatusCode
                 : null) ?? null,
+            retryOnMatch:
+              ("retryOnMatch" in rule
+                ? (rule as { retryOnMatch?: boolean }).retryOnMatch
+                : false) ?? false,
             isEnabled: rule.isEnabled,
             isDefault: true,
             priority: rule.priority,

@@ -1812,7 +1812,25 @@ export class ProxyForwarder {
               rawCrossProviderFallbackEnabled
             );
 
-            if (lastError instanceof ProxyError) {
+            // ⭐ 新增：用户配置了 retryOnMatch，视为可重试错误，走 PROVIDER_ERROR 路径
+            if (detectionResult.matched && detectionResult.retryOnMatch) {
+              logger.info("ProxyForwarder: Error rule matched with retry_on_match, retrying", {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                ruleId: detectionResult.ruleId,
+                pattern: detectionResult.pattern,
+                error: errorMessage,
+                attemptNumber: attemptCount,
+                totalProvidersAttempted,
+              });
+
+              // 确保即使 maxAttemptsPerProvider=1 也能完成一次额外重试
+              maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
+
+              // 改分类为 PROVIDER_ERROR 以触发同供应商重试
+              errorCategory = ErrorCategory.PROVIDER_ERROR;
+              // 继续到下方 PROVIDER_ERROR 分支，不执行 throw
+            } else if (lastError instanceof ProxyError) {
               // Original path: full ProxyError fields available
               logger.warn("ProxyForwarder: Non-retryable client error, stopping immediately", {
                 providerId: currentProvider.id,
@@ -1842,13 +1860,18 @@ export class ProxyForwarder {
               );
             }
 
-            // 记录到决策链（标记为不可重试的客户端错误）
+            // 记录到决策链（标记为不可重试的客户端错误，或 retry_on_match 的首次失败）
             // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
             session.addProviderToChain(currentProvider, clientErrorChainEntry);
 
-            // 立即抛出错误，不重试，不切换供应商
-            // 白名单错误不计入熔断器，因为是客户端输入问题，不是供应商故障
-            throw lastError;
+            // retry_on_match 时不抛出，由下方 PROVIDER_ERROR 分支处理重试
+            if (detectionResult.matched && detectionResult.retryOnMatch) {
+              // 不抛出，继续到 PROVIDER_ERROR 分支
+            } else {
+              // 立即抛出错误，不重试，不切换供应商
+              // 白名单错误不计入熔断器，因为是客户端输入问题，不是供应商故障
+              throw lastError;
+            }
           }
 
           // ⭐ 4. 系统错误处理（不计入熔断器，先重试1次当前供应商）

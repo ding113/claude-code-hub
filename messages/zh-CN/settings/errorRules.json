@@ -1,7 +1,7 @@
 {
   "nav": "错误规则",
   "title": "错误规则管理",
-  "description": "管理不需要自动重试的客户端错误规则。配置后，命中规则的报错将直接返回给用户，不会触发重试，也不会计入供应商熔断。",
+  "description": "管理按响应内容匹配的错误处理规则。启用了「匹配后自动重试」的规则将触发重试而非直接报错。未启用此选项的规则（默认）会直接将错误返回给用户，不计入供应商熔断器。",
   "section": {
     "title": "错误规则列表"
   },
@@ -70,7 +70,9 @@
     "matchedText": "匹配内容",
     "defaultRuleHint": "默认规则的模式不可修改",
     "enableOverride": "启用错误覆写",
+    "enableRetryOnMatch": "匹配后自动重试",
     "enableOverrideHint": "启用后可自定义返回给客户端的错误响应和状态码，原始错误仍会记录到数据库。当前仅支持 Claude API 错误格式。",
+    "enableRetryOnMatchHint": "启用后，匹配此规则将触发自动重试，而不是立即返回错误。仅用于临时性错误（服务器过载、暂时不可用、限流等）。",
     "overrideResponseLabel": "覆写响应（JSON 格式）",
     "overrideResponsePlaceholder": "{\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"invalid_request_error\",\n    \"message\": \"您的自定义消息\"\n  }\n}",
     "overrideResponseHint": "留空则仅覆写状态码。",
