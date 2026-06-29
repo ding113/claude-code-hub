@@ -405,3 +405,8 @@ cch doctor            # 诊断集群与部署状态
 ## 📜 许可证 License
 
 本项目采用 [MIT License](LICENSE)，可自由使用与二次开发，仍需遵守条款并保留致谢信息。
+
+
+## Environment Configuration
+
+See CONTRIBUTING.md for setup.
