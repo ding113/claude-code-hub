@@ -1,6 +1,6 @@
 {
   "name": "claude-code-hub",
-  "version": "0.8.7",
+  "version": "0.8.9",
   "private": true,
   "engines": {
     "node": ">=22.15.0"

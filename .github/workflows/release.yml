@@ -109,11 +109,14 @@ jobs:
           # 获取VERSION文件中的版本
           FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
           echo "VERSION file: $FILE_VERSION"
+          # 提取干净的 semver 核心（去除 +build 元数据，如 +cch.1）
+          FILE_VERSION_CLEAN=$(echo "$FILE_VERSION" | sed 's/[+].*$//')
+          echo "VERSION file (clean): $FILE_VERSION_CLEAN"
 
           # 比较tag版本和文件版本,取较大值
           function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 
-          if version_gt "$FILE_VERSION" "$TAG_VERSION"; then
+          if version_gt "$FILE_VERSION_CLEAN" "$TAG_VERSION"; then
             VERSION="$FILE_VERSION"
             echo "Using VERSION file: $VERSION (newer than tag)"
           else
@@ -124,6 +127,10 @@ jobs:
           echo "Current version: $VERSION"
           echo "current_version=$VERSION" >> $GITHUB_OUTPUT
 
+          # 提取 build metadata 后缀（如 +cch.1），供写回 VERSION 文件时使用
+          CUSTOM_SUFFIX=$(echo "$VERSION" | grep -o '[+].*$' || echo "")
+          echo "custom_suffix=${CUSTOM_SUFFIX}" >> $GITHUB_OUTPUT
+
       - name: Calculate next version
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         id: next_version
@@ -133,8 +140,12 @@ jobs:
         run: |
           VERSION="${{ steps.get_version.outputs.current_version }}"
 
-          # 移除可能存在的 prerelease 后缀以获取基础版本
-          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+          # 移除 prerelease 和 build metadata 后缀以获取基础版本（如 0.8.8+cch.1 → 0.8.8）
+          BASE_VERSION=$(echo "$VERSION" | sed 's/[-+].*$//')
+
+          # 记录原始 build metadata 后缀（如 +cch.1），写回时保留
+          CUSTOM_SUFFIX=$(echo "$VERSION" | grep -o '[+].*$' || echo "")
+          echo "Custom suffix: ${CUSTOM_SUFFIX:-(none)}"
 
           # 分割版本号
           IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
@@ -187,7 +198,11 @@ jobs:
       - name: Update VERSION file
         if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true'
         run: |
-          echo "${{ steps.next_version.outputs.new_version }}" > VERSION
+          # 保留自定义 build metadata 后缀（如 +cch.1）
+          NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
+          SUFFIX="${{ steps.get_version.outputs.custom_suffix }}"
+          echo "${NEW_VERSION}${SUFFIX}" > VERSION
+          echo "VERSION updated to: ${NEW_VERSION}${SUFFIX}"
 
       - name: Setup Node.js for formatting
         if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
