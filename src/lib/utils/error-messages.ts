@@ -153,6 +153,17 @@ export type ErrorParams = {
   [key: string]: Record<string, string | number> | undefined;
 };
 
+function logDevelopmentWarning(message: string, details: Record<string, unknown>): void {
+  if (process.env.NODE_ENV !== "development") return;
+  void import("@/lib/logger")
+    .then(({ logger }) => {
+      logger.warn(message, details);
+    })
+    .catch(() => {
+      // Ignore logging failures in fallback paths.
+    });
+}
+
 /**
  * Get translated error message (Client-side)
  *
@@ -174,9 +185,17 @@ export function getErrorMessage(
   try {
     return t(code, params);
   } catch (error) {
-    console.warn("Translation missing for error code", code, error);
+    logDevelopmentWarning("[ErrorMessages] Translation missing for error code", { code, error });
     // Fallback to generic error message if translation key not found
-    return t("INTERNAL_ERROR");
+    try {
+      return t("INTERNAL_ERROR");
+    } catch (fallbackError) {
+      logDevelopmentWarning("[ErrorMessages] INTERNAL_ERROR translation fallback failed", {
+        code,
+        error: fallbackError,
+      });
+      return "An error occurred";
+    }
   }
 }
 
@@ -204,7 +223,7 @@ export async function getErrorMessageServer(
     const t = await getTranslations({ locale, namespace: "errors" });
     return t(code, params);
   } catch (error) {
-    console.error("getErrorMessageServer failed", { locale, code, error });
+    logDevelopmentWarning("[ErrorMessages] getErrorMessageServer failed", { locale, code, error });
     // Fallback to generic error message
     return "An error occurred";
   }

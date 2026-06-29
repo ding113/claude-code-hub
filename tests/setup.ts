@@ -21,6 +21,81 @@ function isUnsetOrPlaceholder(value: string | undefined): boolean {
   return !value || /^change-me(?:$|[-_])/i.test(value);
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isExpectedSetupSkipError(error: unknown): boolean {
+  const message = getErrorMessage(error);
+  return (
+    message.includes('No "relations" export is defined on the "drizzle-orm" mock') ||
+    message.includes("db.transaction is not a function") ||
+    message.includes("DSN environment variable is not set") ||
+    message.includes("db.update is not a function") ||
+    message.includes("Cannot read properties of undefined (reading 'errorRules')")
+  );
+}
+
+type RedisReadyClient = {
+  status: string;
+  once?: (event: string, listener: () => void) => void;
+};
+
+type RedisCleanupCoordinator = RedisReadyClient & {
+  incr: (key: string) => Promise<number>;
+  expire: (key: string, seconds: number) => Promise<number>;
+  decr: (key: string) => Promise<number>;
+  del: (key: string) => Promise<number>;
+};
+
+type CleanupDbLike = {
+  update?: unknown;
+};
+
+function isRedisReadyClient(value: unknown): value is RedisReadyClient {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "status" in value &&
+    typeof (value as { status?: unknown }).status === "string"
+  );
+}
+
+function isRedisCleanupCoordinator(value: unknown): value is RedisCleanupCoordinator {
+  return (
+    isRedisReadyClient(value) &&
+    typeof (value as { incr?: unknown }).incr === "function" &&
+    typeof (value as { expire?: unknown }).expire === "function" &&
+    typeof (value as { decr?: unknown }).decr === "function" &&
+    typeof (value as { del?: unknown }).del === "function"
+  );
+}
+
+async function hasCleanupDbCapabilities(): Promise<boolean> {
+  const db = (globalThis as { __vitest_cleanup_db__?: CleanupDbLike }).__vitest_cleanup_db__;
+  if (db && typeof db.update !== "function") return false;
+
+  try {
+    const { db: importedDb } = await import("@/drizzle/db");
+    return typeof (importedDb as CleanupDbLike | undefined)?.update === "function";
+  } catch {
+    return false;
+  }
+}
+
+async function waitForRedisReady(redis: RedisReadyClient): Promise<void> {
+  if (redis.status === "ready") return;
+  if (typeof redis.once !== "function") return;
+
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, 2000);
+    redis.once?.("ready", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
+}
+
 // 设置测试环境默认值（如果未配置或仍是占位符）
 process.env.NODE_ENV = process.env.NODE_ENV || "test";
 process.env.API_BASE_URL = process.env.API_BASE_URL || "http://localhost:13500/api/actions";
@@ -77,7 +152,9 @@ beforeAll(async () => {
       await syncDefaultErrorRules();
       console.log("默认错误规则已同步\n");
     } catch (error) {
-      console.warn("无法同步默认错误规则:", error);
+      if (!isExpectedSetupSkipError(error)) {
+        console.warn("无法同步默认错误规则:", error);
+      }
     }
   }
 
@@ -87,26 +164,18 @@ beforeAll(async () => {
   try {
     const shouldCleanup = Boolean(dsn) && process.env.AUTO_CLEANUP_TEST_DATA !== "false";
     if (!shouldCleanup) return;
+    if (!(await hasCleanupDbCapabilities())) return;
 
     const dbNameForKey = dbName || "unknown";
     const counterKey = `cch:vitest:cleanup_workers:${dbNameForKey}`;
     const { getRedisClient } = await import("@/lib/redis");
     const redis = getRedisClient();
-    if (!redis) return;
+    if (!isRedisCleanupCoordinator(redis)) return;
 
     // 等待连接就绪（enableOfflineQueue=false，未 ready 时发命令会直接报错）
-    if (redis.status !== "ready") {
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, 2000);
-        redis.once("ready", () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-      });
-    }
+    await waitForRedisReady(redis);
 
     if (redis.status !== "ready") {
-      console.warn("Redis 未就绪，跳过并行清理协调（不影响测试结果）");
       return;
     }
 
@@ -117,7 +186,9 @@ beforeAll(async () => {
     }
     process.env.__VITEST_CLEANUP_COUNTER_KEY__ = counterKey;
   } catch (error) {
-    console.warn("并行清理协调初始化失败（不影响测试结果）:", error);
+    if (!isExpectedSetupSkipError(error)) {
+      console.warn("并行清理协调初始化失败（不影响测试结果）:", error);
+    }
   }
 });
 
@@ -130,21 +201,17 @@ afterAll(async () => {
   const dsn = process.env.DSN || "";
   if (dsn && process.env.AUTO_CLEANUP_TEST_DATA !== "false") {
     try {
+      if (!(await hasCleanupDbCapabilities())) {
+        return;
+      }
+
       // 仅最后一个 worker 执行清理，避免并发互相删除
       const counterKey = process.env.__VITEST_CLEANUP_COUNTER_KEY__;
       const { getRedisClient } = await import("@/lib/redis");
       const redis = counterKey ? getRedisClient() : null;
 
-      if (counterKey && redis) {
-        if (redis.status !== "ready") {
-          await new Promise<void>((resolve) => {
-            const timeout = setTimeout(resolve, 2000);
-            redis.once("ready", () => {
-              clearTimeout(timeout);
-              resolve();
-            });
-          });
-        }
+      if (counterKey && isRedisCleanupCoordinator(redis)) {
+        await waitForRedisReady(redis);
 
         if (redis.status === "ready") {
           const remaining = await redis.decr(counterKey);
@@ -158,18 +225,12 @@ afterAll(async () => {
           } else {
             // 非最后一个 worker：跳过清理
           }
-        } else {
-          console.warn("Redis 未就绪，跳过自动清理（不影响测试结果）");
         }
-      } else {
-        // 无 Redis 协调：为了避免竞态，默认跳过清理
-        console.warn("未启用清理协调，跳过自动清理（不影响测试结果）");
       }
     } catch (error) {
-      console.warn(
-        "自动清理失败（不影响测试结果）:",
-        error instanceof Error ? error.message : error
-      );
+      if (!isExpectedSetupSkipError(error)) {
+        console.warn("自动清理失败（不影响测试结果）:", getErrorMessage(error));
+      }
     }
   }
 
@@ -371,6 +432,11 @@ global.console.error = (...args: unknown[]) => {
 // ==================== React act 环境标记 ====================
 // React 18+ 在测试环境中会检查该标记，避免出现 “not configured to support act(...)” 的噪声警告。
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+if (typeof document !== "undefined" && !document.doctype) {
+  const doctype = document.implementation.createDocumentType("html", "", "");
+  document.insertBefore(doctype, document.documentElement);
+}
 
 // ==================== 全局超时配置 ====================
 

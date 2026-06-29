@@ -5,6 +5,7 @@ import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, usageLedger } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
+import { getTimeRangeForPeriodWithMode } from "@/lib/rate-limit/time-utils";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
   DatabaseKey,
@@ -18,6 +19,7 @@ import type {
 } from "@/types/statistics";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
+import { findUserById } from "./user";
 
 /**
  * Key ID -> key string cache
@@ -433,29 +435,16 @@ export async function getMixedStatisticsFromDB(
   };
 }
 
-/**
- * 查询用户今日总消费（所有 Key 的消费总和）
- * 用于用户层每日限额检查（Redis 降级）
- *
- * DEPRECATED: 该函数使用简单的日期比较，不考虑用户的 dailyResetTime 配置。
- * 请使用 sumUserCostInTimeRange() 配合 getTimeRangeForPeriodWithMode() 来获取正确的时间范围。
- *
- * @deprecated 使用 sumUserCostInTimeRange() 替代
- */
 export async function sumUserCostToday(userId: number): Promise<number> {
-  const timezone = await resolveSystemTimezone();
+  const user = await findUserById(userId);
+  if (!user) return 0;
 
-  const query = sql`
-    SELECT COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
-    FROM usage_ledger
-    WHERE usage_ledger.user_id = ${userId}
-      AND (usage_ledger.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-      AND ${LEDGER_BILLING_CONDITION}
-  `;
-
-  const result = await db.execute(query);
-  const row = Array.from(result)[0] as { total_cost?: string | number } | undefined;
-  return Number(row?.total_cost || 0);
+  const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
+    "daily",
+    user.dailyResetTime ?? "00:00",
+    user.dailyResetMode ?? "fixed"
+  );
+  return sumUserCostInTimeRange(userId, startTime, endTime);
 }
 
 /**

@@ -24,6 +24,7 @@
  */
 
 import { z } from "zod";
+import { logger } from "@/lib/logger";
 import { ERROR_CODES, zodErrorToCode } from "./error-messages";
 
 /**
@@ -58,7 +59,7 @@ export function setZodErrorMap(
     } catch (error) {
       // Only log in development to avoid sensitive data exposure
       if (process.env.NODE_ENV === "development") {
-        console.warn("setZodErrorMap fallback", { code, error });
+        logger.warn("[ZodI18n] setZodErrorMap fallback", { code, error });
         // Avoid logging the full issue object which may contain user input
       }
       // Fallback to Zod default message
@@ -99,7 +100,7 @@ export async function getZodErrorMapServer(locale: string) {
     } catch (error) {
       // Only log in development to avoid sensitive data exposure
       if (process.env.NODE_ENV === "development") {
-        console.warn("getZodErrorMapServer fallback", { locale, code, error });
+        logger.warn("[ZodI18n] getZodErrorMapServer fallback", { locale, code, error });
         // Avoid logging the full issue object which may contain user input
       }
       return { message: _ctx.defaultError };

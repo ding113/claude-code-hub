@@ -13,6 +13,26 @@ import type {
 } from "./types";
 import { McpAuthError, McpRequestError } from "./types";
 
+type GlmErrorResponse = {
+  error?: {
+    code?: string | number;
+    message?: string;
+  };
+};
+
+function normalizeGlmErrorCode(code: string | number | undefined): number | undefined {
+  if (typeof code === "number" && Number.isFinite(code)) return code;
+  if (typeof code === "string" && code.trim() !== "") {
+    const parsed = Number(code);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function isGlmAuthError(httpStatus: number, code: number | undefined): boolean {
+  return httpStatus === 401 || (code !== undefined && code >= 1000 && code < 1100);
+}
+
 /**
  * GLM MCP 客户端
  * 提供图片和视频分析功能
@@ -140,17 +160,47 @@ export class GlmMcpClient {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        const traceId = response.headers.get("Trace-Id") ?? undefined;
+        let errorPayload: GlmErrorResponse | null = null;
+
+        try {
+          errorPayload = (await response.json()) as GlmErrorResponse;
+        } catch {
+          errorPayload = null;
+        }
+
+        const errorCode = normalizeGlmErrorCode(errorPayload?.error?.code);
+        const errorMessage = errorPayload?.error?.message?.trim();
+
+        if (isGlmAuthError(response.status, errorCode)) {
+          throw new McpAuthError(
+            errorMessage
+              ? `API Error: ${errorMessage}${traceId ? ` Trace-Id: ${traceId}` : ""}`
+              : `HTTP ${response.status}: ${response.statusText}${traceId ? ` Trace-Id: ${traceId}` : ""}`,
+            traceId
+          );
+        }
+
+        if (errorMessage || errorCode !== undefined) {
+          throw new McpRequestError(
+            `API Error: ${
+              errorCode !== undefined
+                ? `${errorCode}${errorMessage ? `-${errorMessage}` : ""}`
+                : errorMessage
+            }${traceId ? ` Trace-Id: ${traceId}` : ""}`,
+            errorCode ?? response.status,
+            traceId
+          );
+        }
+
         throw new McpRequestError(
           `HTTP ${response.status}: ${response.statusText}`,
           response.status,
-          response.headers.get("Trace-Id") ?? undefined
+          traceId
         );
       }
 
       const data = (await response.json()) as T;
-
-      // TODO: Implement GLM-specific error handling based on API docs
-      // For now, log response for debugging
       logger.debug("[GlmMcpClient] API response", { endpoint, data });
 
       return data;

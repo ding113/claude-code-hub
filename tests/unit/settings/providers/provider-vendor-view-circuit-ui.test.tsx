@@ -335,7 +335,9 @@ describe("ProviderVendorView endpoints table", () => {
 
     const switchEl = endpointRow?.querySelector<HTMLElement>("[data-slot='switch']");
     expect(switchEl).not.toBeNull();
-    switchEl?.click();
+    await act(async () => {
+      switchEl?.click();
+    });
 
     await flushTicks(2);
 
