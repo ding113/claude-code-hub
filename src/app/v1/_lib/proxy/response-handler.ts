@@ -112,6 +112,69 @@ function discardBeforeResponseBodySnapshot(session: ProxySession): void {
   });
 }
 
+function toAbortError(reason: unknown): Error {
+  const message =
+    reason instanceof Error
+      ? (reason.message ?? "This operation was aborted")
+      : typeof reason === "string" && reason
+        ? reason
+        : "This operation was aborted";
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+async function readWithAbort<T>(
+  reader: ReadableStreamDefaultReader<T>,
+  signal?: AbortSignal | null
+): Promise<ReadableStreamReadResult<T>> {
+  if (!signal) {
+    return await reader.read();
+  }
+
+  if (signal.aborted) {
+    reader.cancel(signal.reason).catch(() => {
+      // ignore
+    });
+    throw toAbortError(signal.reason);
+  }
+
+  return await new Promise<ReadableStreamReadResult<T>>((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      // Fire-and-forget: waiting on cancel can hang on tee'd streams.
+      reader.cancel(signal.reason).catch(() => {
+        // ignore
+      });
+      reject(toAbortError(signal.reason));
+    };
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    reader.read().then(
+      (result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      }
+    );
+  });
+}
+
 export type UsageMetrics = {
   input_tokens?: number;
   output_tokens?: number;
@@ -2770,7 +2833,7 @@ export class ProxyResponseHandler {
             break; // 提前终止
           }
 
-          const { value, done } = await reader.read();
+          const { value, done } = await readWithAbort(reader, abortController.signal);
           if (done) {
             streamEndedNormally = true;
             break;

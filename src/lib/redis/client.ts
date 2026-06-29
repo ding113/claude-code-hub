@@ -3,6 +3,19 @@ import { logger } from "@/lib/logger";
 
 let redisClient: Redis | null = null;
 
+type LoggerMethod = "error" | "warn" | "info";
+
+function safeLog(method: LoggerMethod, message: string, ...args: unknown[]) {
+  const candidate = (logger as Partial<Record<LoggerMethod, unknown>>)[method];
+  if (typeof candidate === "function") {
+    candidate(message, ...args);
+    return;
+  }
+
+  const fallback = method === "error" ? console.error : method === "warn" ? console.warn : console.info;
+  fallback(message, ...args);
+}
+
 function maskRedisUrl(redisUrl: string) {
   try {
     const parsed = new URL(redisUrl);
@@ -61,11 +74,11 @@ export function buildRedisOptionsForUrl(redisUrl: string): {
     maxRetriesPerRequest: 3,
     retryStrategy(times: number) {
       if (times > 5) {
-        logger.error("[Redis] Max retries reached, giving up");
+        safeLog("error", "[Redis] Max retries reached, giving up");
         return null; // 停止重试，降级
       }
       const delay = Math.min(times * 200, 2000);
-      logger.warn(`[Redis] Retry ${times}/5 after ${delay}ms`);
+      safeLog("warn", `[Redis] Retry ${times}/5 after ${delay}ms`);
       return delay;
     },
   };
@@ -89,7 +102,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
   const allowWhenRateLimitDisabled = input?.allowWhenRateLimitDisabled === true;
 
   if ((!isEnabled && !allowWhenRateLimitDisabled) || !redisUrl) {
-    logger.warn("[Redis] Rate limiting disabled or REDIS_URL not configured");
+    safeLog("warn", "[Redis] Rate limiting disabled or REDIS_URL not configured");
     return null;
   }
 
@@ -107,7 +120,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
     const { isTLS: useTls, options: redisOptions } = buildRedisOptionsForUrl(redisUrl);
 
     if (useTls) {
-      logger.info("[Redis] Using TLS connection (rediss://)", { redisUrl: safeRedisUrl });
+      safeLog("info", "[Redis] Using TLS connection (rediss://)", { redisUrl: safeRedisUrl });
     }
 
     // 3. 使用组合后的配置创建客户端
@@ -117,7 +130,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
     // 4. 保持原始的事件监听器
     client.on("connect", () => {
       if (redisClient !== client) return;
-      logger.info("[Redis] Connected successfully", {
+      safeLog("info", "[Redis] Connected successfully", {
         protocol: useTls ? "rediss" : "redis",
         tlsEnabled: useTls,
         redisUrl: safeRedisUrl,
@@ -126,7 +139,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
 
     client.on("error", (error) => {
       if (redisClient !== client) return;
-      logger.error("[Redis] Connection error", {
+      safeLog("error", "[Redis] Connection error", {
         error: error instanceof Error ? error.message : String(error),
         protocol: useTls ? "rediss" : "redis",
         tlsEnabled: useTls,
@@ -136,19 +149,19 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
 
     client.on("close", () => {
       if (redisClient !== client) return;
-      logger.warn("[Redis] Connection closed", { redisUrl: safeRedisUrl });
+      safeLog("warn", "[Redis] Connection closed", { redisUrl: safeRedisUrl });
     });
 
     client.on("end", () => {
       if (redisClient !== client) return;
-      logger.warn("[Redis] Connection ended, resetting client", { redisUrl: safeRedisUrl });
+      safeLog("warn", "[Redis] Connection ended, resetting client", { redisUrl: safeRedisUrl });
       redisClient = null;
     });
 
     // 5. 返回客户端实例
     return client;
   } catch (error) {
-    logger.error("[Redis] Failed to initialize:", error, { redisUrl: safeRedisUrl });
+    safeLog("error", "[Redis] Failed to initialize:", error, { redisUrl: safeRedisUrl });
     return null;
   }
 }
@@ -162,7 +175,7 @@ export async function closeRedis(): Promise<void> {
       await client.quit();
     }
   } catch (error) {
-    logger.warn("[Redis] Error during quit, forcing disconnect", {
+    safeLog("warn", "[Redis] Error during quit, forcing disconnect", {
       error: error instanceof Error ? error.message : String(error),
     });
     client.disconnect();

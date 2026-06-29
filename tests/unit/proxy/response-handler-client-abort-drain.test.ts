@@ -231,6 +231,7 @@ function createSession(
     getCurrentModel: () => model,
     getEndpoint: () => endpoint,
     getEndpointPolicy: () => resolveEndpointPolicy(endpoint),
+    getCodexPriorityBillingSource: async () => "requested",
     getGroupCostMultiplier: () => 1,
     getOriginalModel: () => model,
     getProviderChain: () => session.providerChain,

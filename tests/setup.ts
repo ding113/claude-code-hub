@@ -15,6 +15,23 @@ config({ path: ".env.test", quiet: true });
 // 降级加载 .env
 config({ path: ".env", quiet: true });
 
+// ==================== 环境变量默认值 ====================
+
+function isUnsetOrPlaceholder(value: string | undefined): boolean {
+  return !value || /^change-me(?:$|[-_])/i.test(value);
+}
+
+// 设置测试环境默认值（如果未配置或仍是占位符）
+process.env.NODE_ENV = process.env.NODE_ENV || "test";
+process.env.API_BASE_URL = process.env.API_BASE_URL || "http://localhost:13500/api/actions";
+// 便于 API 测试复用 ADMIN_TOKEN（validateKey 支持该 token 直通管理员会话）
+if (isUnsetOrPlaceholder(process.env.ADMIN_TOKEN)) {
+  process.env.ADMIN_TOKEN = "admin-token";
+}
+if (isUnsetOrPlaceholder(process.env.TEST_ADMIN_TOKEN)) {
+  process.env.TEST_ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+}
+
 // ==================== 全局前置钩子 ====================
 
 beforeAll(async () => {
@@ -350,15 +367,6 @@ global.console.error = (...args: unknown[]) => {
     originalConsoleError(...args);
   }
 };
-
-// ==================== 环境变量默认值 ====================
-
-// 设置测试环境默认值（如果未配置）
-process.env.NODE_ENV = process.env.NODE_ENV || "test";
-process.env.API_BASE_URL = process.env.API_BASE_URL || "http://localhost:13500/api/actions";
-// 便于 API 测试复用 ADMIN_TOKEN（validateKey 支持该 token 直通管理员会话）
-process.env.ADMIN_TOKEN = process.env.ADMIN_TOKEN || "admin-token";
-process.env.TEST_ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
 
 // ==================== React act 环境标记 ====================
 // React 18+ 在测试环境中会检查该标记，避免出现 “not configured to support act(...)” 的噪声警告。
