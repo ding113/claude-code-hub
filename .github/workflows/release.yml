@@ -5,23 +5,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      version_type:
-        description: 'Release type'
-        required: true
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-          - beta
-          - rc
-          - release
-      prerelease_number:
-        description: 'Beta/RC number (only for beta/rc types)'
-        required: false
-        default: '1'
 
 permissions:
   contents: write
@@ -42,7 +25,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check if version bump is needed
+      - name: Check if release is needed
         id: check
         run: |
           # 检测是否是合并提交
@@ -89,213 +72,125 @@ jobs:
             fi
           done <<< "$CHANGED_FILES"
 
-          if [ "$SIGNIFICANT_CHANGES" = true ]; then
-            echo "Significant changes detected, version bump needed"
-            echo "needs_bump=true" >> $GITHUB_OUTPUT
+          if [ "$SIGNIFICANT_CHANGES" = true ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Release needed"
+            echo "needs_release=true" >> $GITHUB_OUTPUT
           else
-            echo "No significant changes, skipping version bump"
-            echo "needs_bump=false" >> $GITHUB_OUTPUT
+            echo "No significant changes, skipping release"
+            echo "needs_release=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Get current version
-        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
+      - name: Read version from source
+        if: steps.check.outputs.needs_release == 'true'
         id: get_version
         run: |
-          # 获取最新的tag版本
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Latest tag: $LATEST_TAG"
-          TAG_VERSION=${LATEST_TAG#v}
-
-          # 获取VERSION文件中的版本
+          # 直接从 VERSION 文件读取版本（源码即真理，不变更版本号）
           FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
           echo "VERSION file: $FILE_VERSION"
-          # 提取干净的 semver 核心（去除 +build 元数据，如 +cch.1）
-          FILE_VERSION_CLEAN=$(echo "$FILE_VERSION" | sed 's/[+].*$//')
-          echo "VERSION file (clean): $FILE_VERSION_CLEAN"
 
-          # 比较tag版本和文件版本,取较大值
-          function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
+          # 提取干净的 semver 核心用于 tag 和镜像（去掉 +cch.X 等 build metadata）
+          CLEAN_VERSION=$(echo "$FILE_VERSION" | sed 's/[+].*$//')
+          echo "Clean version: $CLEAN_VERSION"
 
-          # 注意：相同版本时优先选择 FILE_VERSION，以保留 +cch.X 等 build metadata 后缀
-          if version_gt "$FILE_VERSION_CLEAN" "$TAG_VERSION" || [ "$FILE_VERSION_CLEAN" = "$TAG_VERSION" ]; then
-            VERSION="$FILE_VERSION"
-            echo "Using VERSION file: $VERSION"
+          echo "new_tag=v${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+          echo "new_version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+          echo "full_version=${FILE_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check if tag already exists
+        if: steps.check.outputs.needs_release == 'true'
+        id: check_tag
+        run: |
+          TAG="${{ steps.get_version.outputs.new_tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping release"
+            echo "skip_release=true" >> $GITHUB_OUTPUT
           else
-            VERSION="$TAG_VERSION"
-            echo "Using tag version: $VERSION (newer than file)"
+            echo "Tag $TAG does not exist, proceeding"
+            echo "skip_release=false" >> $GITHUB_OUTPUT
           fi
 
-          echo "Current version: $VERSION"
-          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
-
-          # 提取 build metadata 后缀（如 +cch.1），供写回 VERSION 文件时使用
-          CUSTOM_SUFFIX=$(echo "$VERSION" | grep -o '[+].*$' || echo "")
-          echo "custom_suffix=${CUSTOM_SUFFIX}" >> $GITHUB_OUTPUT
-
-      - name: Calculate next version
-        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
-        id: next_version
-        env:
-          VERSION_TYPE: ${{ github.event.inputs.version_type || 'patch' }}
-          PRERELEASE_NUM: ${{ github.event.inputs.prerelease_number || '1' }}
-        run: |
-          VERSION="${{ steps.get_version.outputs.current_version }}"
-
-          # 移除 prerelease 和 build metadata 后缀以获取基础版本（如 0.8.8+cch.1 → 0.8.8）
-          BASE_VERSION=$(echo "$VERSION" | sed 's/[-+].*$//')
-
-          # 记录原始 build metadata 后缀（如 +cch.1），写回时保留
-          CUSTOM_SUFFIX=$(echo "$VERSION" | grep -o '[+].*$' || echo "")
-          echo "Custom suffix: ${CUSTOM_SUFFIX:-(none)}"
-
-          # 分割版本号
-          IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
-          MAJOR="${version_parts[0]:-0}"
-          MINOR="${version_parts[1]:-0}"
-          PATCH="${version_parts[2]:-0}"
-
-          echo "Base version: $MAJOR.$MINOR.$PATCH"
-          echo "Version type: $VERSION_TYPE"
-
-          case "$VERSION_TYPE" in
-            major)
-              NEW_VERSION="$((MAJOR + 1)).0.0"
-              IS_PRERELEASE=false
-              ;;
-            minor)
-              NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
-              IS_PRERELEASE=false
-              ;;
-            patch)
-              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-              IS_PRERELEASE=false
-              ;;
-            beta)
-              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-beta.${PRERELEASE_NUM}"
-              IS_PRERELEASE=true
-              ;;
-            rc)
-              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-rc.${PRERELEASE_NUM}"
-              IS_PRERELEASE=true
-              ;;
-            release)
-              # Convert prerelease to stable release (e.g., 0.4.1-rc.1 -> 0.4.1)
-              NEW_VERSION="${BASE_VERSION}"
-              IS_PRERELEASE=false
-              ;;
-            *)
-              # 默认 patch
-              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-              IS_PRERELEASE=false
-              ;;
-          esac
-
-          echo "New version: $NEW_VERSION"
-          echo "Is prerelease: $IS_PRERELEASE"
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "new_tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
-
-      - name: Update VERSION file
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true'
-        run: |
-          # 保留自定义 build metadata 后缀（如 +cch.1）
-          NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
-          SUFFIX="${{ steps.get_version.outputs.custom_suffix }}"
-          echo "${NEW_VERSION}${SUFFIX}" > VERSION
-          echo "VERSION updated to: ${NEW_VERSION}${SUFFIX}"
-
       - name: Setup Node.js for formatting
-        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         uses: actions/setup-node@v6
         with:
           node-version: "20"
 
       - name: Setup Bun
-        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
 
       - name: Cache Bun package cache
-        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
-          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
           key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 
       - name: Install dependencies, type check, and format code
-        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         timeout-minutes: 15
         run: |
-          # No lockfile is committed in this repository, so use a non-frozen install.
           bun install
           bun run typecheck
           bun run format
 
-      - name: Commit VERSION and formatted code
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
+      - name: Commit formatted code
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         run: |
-          # 配置git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 添加所有更改（VERSION文件 + 格式化后的代码）
           git add -A
-
-          # 排除 .github/ 目录的更改（workflow 文件不需要自动提交，且需要特殊权限）
           git restore --staged .github/ 2>/dev/null || true
 
-          # 检查是否有更改需要提交
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            # 提交所有更改 - 添加 [skip ci] 以避免再次触发
-            git commit -m "chore: sync VERSION file with release ${{ steps.next_version.outputs.new_tag }} [skip ci]"
+            git commit -m "chore: format code [skip ci]"
           fi
 
       - name: Create and push tag
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         run: |
-          NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
+          NEW_TAG="${{ steps.get_version.outputs.new_tag }}"
           git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
           git push origin HEAD:main "$NEW_TAG"
 
       - name: Prepare image names
         id: image_names
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         run: |
           GHCR_IMAGE=$(echo "ghcr.io/${{ github.repository_owner }}/claude-code-hub" | tr '[:upper:]' '[:lower:]')
-
           echo "ghcr_image=${GHCR_IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.next_version.outputs.new_tag }}
-          name: Release ${{ steps.next_version.outputs.new_version }}
+          tag_name: ${{ steps.get_version.outputs.new_tag }}
+          name: Release ${{ steps.get_version.outputs.new_version }}
           body: |
             ## Docker
 
             ```bash
-            docker pull ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_tag }}
-            ${{ steps.next_version.outputs.is_prerelease != 'true' && format('docker pull {0}:latest', steps.image_names.outputs.ghcr_image) || '' }}
+            docker pull ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.get_version.outputs.new_tag }}
+            docker pull ${{ steps.image_names.outputs.ghcr_image }}:latest
             ```
 
             ---
 
             Release notes will be auto-generated...
           draft: false
-          prerelease: ${{ steps.next_version.outputs.is_prerelease == 'true' }}
+          prerelease: false
           generate_release_notes: false
 
-      # 自清理旧的tags和releases(保持最近50个) - 仅清理正式版本
+      # 自清理旧的tags和releases(保持最近50个)
       - name: Cleanup old tags and releases
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true' && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         continue-on-error: true
         env:
           TAGS_TO_KEEP: 50
@@ -303,11 +198,9 @@ jobs:
         run: |
           echo "🧹 自动清理旧版本,保持最近 $TAGS_TO_KEEP 个tag..."
 
-          # 获取所有版本tag并按版本号排序(从旧到新)
           echo "正在获取所有tags..."
           ALL_TAGS=$(git ls-remote --tags origin | grep -E 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' | awk '{print $2}' | sed 's|refs/tags/||' | sort -V)
 
-          # 检查是否获取到tags
           if [ -z "$ALL_TAGS" ]; then
             echo "⚠️ 未找到任何版本tag"
             exit 0
@@ -323,10 +216,8 @@ jobs:
             DELETE_COUNT=$((TOTAL_COUNT - TAGS_TO_KEEP))
             echo "- 将要删除: $DELETE_COUNT 个最旧的tag"
 
-            # 获取要删除的tags(最老的)
             TAGS_TO_DELETE=$(echo "$ALL_TAGS" | head -n "$DELETE_COUNT")
 
-            # 显示将要删除的版本范围
             OLDEST_TO_DELETE=$(echo "$TAGS_TO_DELETE" | head -1)
             NEWEST_TO_DELETE=$(echo "$TAGS_TO_DELETE" | tail -1)
             echo ""
@@ -342,9 +233,7 @@ jobs:
             for tag in $TAGS_TO_DELETE; do
               echo -n "  删除 $tag ... "
 
-              # 先检查release是否存在
               if gh release view "$tag" >/dev/null 2>&1; then
-                # Release存在,删除release会同时删除tag
                 if gh release delete "$tag" --yes --cleanup-tag 2>/dev/null; then
                   echo "(release+tag)"
                   SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
@@ -353,7 +242,6 @@ jobs:
                   FAIL_COUNT=$((FAIL_COUNT + 1))
                 fi
               else
-                # Release不存在,只删除tag
                 if git push origin --delete "$tag" 2>/dev/null; then
                   echo "(仅tag)"
                   SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
@@ -369,7 +257,6 @@ jobs:
             echo "- 成功删除: $SUCCESS_COUNT"
             echo "- 失败/跳过: $FAIL_COUNT"
 
-            # 重新获取并显示保留的版本范围
             echo ""
             echo "正在验证清理结果..."
             REMAINING_TAGS=$(git ls-remote --tags origin | grep -E 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' | awk '{print $2}' | sed 's|refs/tags/||' | sort -V)
@@ -384,7 +271,6 @@ jobs:
             echo "- 最新版本: $NEWEST"
             echo "- 版本总数: $REMAINING_COUNT"
 
-            # 验证是否达到预期
             if [ "$REMAINING_COUNT" -le "$TAGS_TO_KEEP" ]; then
               echo "- 状态: 符合预期(≤$TAGS_TO_KEEP)"
             else
@@ -396,15 +282,15 @@ jobs:
 
       # Docker构建步骤
       - name: Set up QEMU
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -412,7 +298,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -420,21 +306,21 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            APP_VERSION=${{ steps.next_version.outputs.new_version }}
+            APP_VERSION=${{ steps.get_version.outputs.new_version }}
           tags: |
-            ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_tag }}
-            ${{ steps.next_version.outputs.is_prerelease != 'true' && format('{0}:latest', steps.image_names.outputs.ghcr_image) || '' }}
-            ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_version }}
+            ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.get_version.outputs.new_tag }}
+            ${{ steps.image_names.outputs.ghcr_image }}:latest
+            ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.get_version.outputs.new_version }}
           labels: |
-            org.opencontainers.image.version=${{ steps.next_version.outputs.new_version }}
+            org.opencontainers.image.version=${{ steps.get_version.outputs.new_version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 同步 main 分支到 dev 分支 (rebase dev onto main) - 仅正式版本触发
+      # 同步 main 分支到 dev 分支 (rebase dev onto main)
       - name: Sync main to dev branch
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true' && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false'
         id: sync_dev
         continue-on-error: true
         env:
@@ -446,16 +332,13 @@ jobs:
           echo "Starting dev branch sync after release..."
           echo "=========================================="
 
-          # 配置 git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 确保在 main 分支的最新状态
           git fetch origin main
           git checkout main
           git reset --hard origin/main
 
-          # 获取 dev 分支
           echo "Fetching dev branch..."
           if ! git fetch origin dev:dev 2>/dev/null; then
             echo "::warning::dev branch not found, skipping sync"
@@ -464,7 +347,6 @@ jobs:
             exit 0
           fi
 
-          # 检查 dev 是否有领先于 main 的 commit
           git checkout dev
 
           AHEAD_COUNT=$(git rev-list --count main..dev)
@@ -474,7 +356,6 @@ jobs:
           echo "  - Ahead of main: $AHEAD_COUNT commits"
           echo "  - Behind main: $BEHIND_COUNT commits"
 
-          # 如果 dev 没有落后于 main，跳过同步
           if [ "$BEHIND_COUNT" -eq 0 ]; then
             echo "::notice::dev branch is already up to date with main"
             echo "sync_status=skipped" >> $GITHUB_OUTPUT
@@ -484,13 +365,9 @@ jobs:
 
           echo ""
           echo "Attempting to rebase dev onto main..."
-          echo "This will preserve $AHEAD_COUNT commits from dev"
 
-          # 尝试 rebase
           if git rebase main; then
             echo "Rebase successful!"
-
-            # 使用 --force-with-lease 安全推送
             echo "Pushing rebased dev branch..."
             if git push origin dev --force-with-lease; then
               echo "::notice::Successfully synced main to dev branch (rebased $AHEAD_COUNT commits)"
@@ -510,20 +387,18 @@ jobs:
             exit 1
           fi
 
-      # 如果同步失败(冲突)，触发 autofix workflow
       - name: Trigger autofix for sync conflicts
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.sync_dev.outputs.sync_status == 'conflict' && success()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false' && steps.sync_dev.outputs.sync_status == 'conflict'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           echo "Triggering Claude CI Auto-Fix workflow for dev sync..."
 
-          # 使用 workflow 文件名而非名称，避免重命名后触发失败
           if gh workflow run claude-ci-autofix.yml \
               --field task_type=sync-dev \
               --field target_branch=dev \
               --field source_branch=main \
-              --field release_tag=${{ steps.next_version.outputs.new_tag }}; then
+              --field release_tag=${{ steps.get_version.outputs.new_tag }}; then
             echo "::notice::Autofix workflow triggered to resolve conflicts"
           else
             echo "::error::Failed to trigger autofix workflow. Manual intervention required."
@@ -531,9 +406,8 @@ jobs:
             exit 1
           fi
 
-      # 同步结果汇总 - 仅正式版本显示
       - name: Sync summary
-        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true' && always()
+        if: steps.check.outputs.needs_release == 'true' && steps.check_tag.outputs.skip_release == 'false' && always()
         run: |
           echo "=========================================="
           echo "Dev Branch Sync Summary"
@@ -555,7 +429,6 @@ jobs:
             "conflict")
               echo "Status: CONFLICT - Autofix triggered"
               echo "Reason: $SYNC_REASON"
-              echo "The Claude CI Auto-Fix workflow has been triggered to resolve conflicts"
               ;;
             "push_failed")
               echo "Status: PUSH FAILED"
