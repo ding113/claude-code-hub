@@ -24,6 +24,7 @@ export interface ActiveSessionInfo {
   // 使用量（总量聚合）
   inputTokens?: number; // 总输入 Token
   outputTokens?: number; // 总输出 Token
+  reasoningOutputTokens?: number; // 总推理/思考 Token（已包含在输出 Token 中）
   cacheCreationInputTokens?: number; // 总缓存创建 Token
   cacheReadInputTokens?: number; // 总缓存读取 Token
   totalTokens?: number; // 总 Token 数
@@ -58,6 +59,7 @@ export interface SessionStoreInfo {
 export interface SessionUsageUpdate {
   inputTokens?: number;
   outputTokens?: number;
+  reasoningOutputTokens?: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
   costUsd?: string;

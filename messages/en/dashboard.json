@@ -150,6 +150,8 @@
       "cacheTokens": "Cached Tokens",
       "input": "Input",
       "output": "Output",
+      "reasoning": "Reasoning",
+      "includedInOutput": "Included in output tokens",
       "write": "Write",
       "read": "Read",
       "loading": "Loading..."
@@ -297,6 +299,8 @@
         "title": "Billing Details",
         "input": "Input",
         "output": "Output",
+        "reasoningTokens": "Reasoning Tokens",
+        "includedInOutput": "Already included in output tokens",
         "cacheWrite5m": "Cache Write (5m)",
         "cacheWrite1h": "Cache Write (1h)",
         "cacheRead": "Cache Read",
@@ -426,6 +430,8 @@
     "billingDetails": {
       "input": "Input",
       "output": "Output",
+      "reasoningTokens": "Reasoning Tokens",
+      "includedInOutput": "Already included in output tokens",
       "cacheWrite5m": "Cache Write (5m)",
       "cacheWrite1h": "Cache Write (1h)",
       "cacheRead": "Cache Read",

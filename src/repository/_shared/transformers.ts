@@ -176,6 +176,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
       const formatted = formatCostForStorage(dbMessage?.costUsd);
       return formatted ?? undefined;
     })(),
+    reasoningOutputTokens: dbMessage?.reasoningOutputTokens ?? undefined,
     cacheCreation5mInputTokens: dbMessage?.cacheCreation5mInputTokens ?? undefined,
     cacheCreation1hInputTokens: dbMessage?.cacheCreation1hInputTokens ?? undefined,
     cacheTtlApplied: dbMessage?.cacheTtlApplied ?? null,

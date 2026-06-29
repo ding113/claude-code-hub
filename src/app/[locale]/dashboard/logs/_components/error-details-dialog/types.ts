@@ -43,6 +43,8 @@ export interface TabSharedProps {
   inputTokens?: number | null;
   /** Output tokens */
   outputTokens?: number | null;
+  /** Reasoning/thinking output tokens (included in output tokens) */
+  reasoningOutputTokens?: number | null;
   /** Cache creation input tokens (total) */
   cacheCreationInputTokens?: number | null;
   /** Cache creation 5m input tokens */

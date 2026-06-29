@@ -314,6 +314,13 @@ export function UsageLogsTable({
                               {t("logs.billingDetails.output")}:{" "}
                               {formatTokenAmount(log.outputTokens)}
                             </div>
+                            <div>
+                              {t("logs.billingDetails.reasoningTokens")}:{" "}
+                              {formatTokenAmount(log.reasoningOutputTokens)}
+                            </div>
+                            <div className="text-muted-foreground">
+                              {t("logs.billingDetails.includedInOutput")}
+                            </div>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -454,6 +461,13 @@ export function UsageLogsTable({
                               <div>
                                 {t("logs.billingDetails.output")}:{" "}
                                 {formatTokenAmount(log.outputTokens)} tokens
+                              </div>
+                              <div>
+                                {t("logs.billingDetails.reasoningTokens")}:{" "}
+                                {formatTokenAmount(log.reasoningOutputTokens)} tokens
+                              </div>
+                              <div className="text-muted-foreground">
+                                {t("logs.billingDetails.includedInOutput")}
                               </div>
                               {(log.cacheCreation5mInputTokens ?? 0) > 0 && (
                                 <div>
@@ -628,6 +642,7 @@ export function UsageLogsTable({
                         specialSettings={log.specialSettings}
                         inputTokens={log.inputTokens}
                         outputTokens={log.outputTokens}
+                        reasoningOutputTokens={log.reasoningOutputTokens}
                         cacheCreationInputTokens={log.cacheCreationInputTokens}
                         cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
                         cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}

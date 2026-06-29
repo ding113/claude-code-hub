@@ -501,6 +501,19 @@ export function VirtualizedLogsTable({
               <span className="text-xs font-semibold text-background">{title}</span>
               {headerChip}
             </div>
+            <div className="space-y-1 border-t border-background/20 pt-2 text-[11px] text-background/70">
+              <div className="flex items-center justify-between gap-3">
+                <span>{t("logs.billingDetails.output")}</span>
+                <span className={amountClassName}>{formatTokenAmount(log.outputTokens)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>{t("logs.billingDetails.reasoningTokens")}</span>
+                <span className={amountClassName}>
+                  {formatTokenAmount(log.reasoningOutputTokens)}
+                </span>
+              </div>
+              <div>{t("logs.billingDetails.includedInOutput")}</div>
+            </div>
             <div className="border-t border-background/20 pt-2">
               {renderSummaryRow({
                 label: totalCostLabel,
@@ -518,6 +531,13 @@ export function VirtualizedLogsTable({
     const costRows = [
       createCostRow(t("logs.billingDetails.input"), log.costBreakdown.input, log.inputTokens),
       createCostRow(t("logs.billingDetails.output"), log.costBreakdown.output, log.outputTokens),
+      {
+        key: "reasoning",
+        label: t("logs.billingDetails.reasoningTokens"),
+        ttl: undefined,
+        amount: formatTokenAmount(log.reasoningOutputTokens),
+        unitPrice: t("logs.billingDetails.includedInOutput"),
+      },
       ...cacheCreationRows.map((row) =>
         createCostRow(t("logs.columns.cacheWrite"), row.amount, row.tokens, row.ttl)
       ),
@@ -1012,6 +1032,13 @@ export function VirtualizedLogsTable({
                                 {t("logs.billingDetails.output")}:{" "}
                                 {formatTokenAmount(log.outputTokens)}
                               </div>
+                              <div>
+                                {t("logs.billingDetails.reasoningTokens")}:{" "}
+                                {formatTokenAmount(log.reasoningOutputTokens)}
+                              </div>
+                              <div className="text-muted-foreground">
+                                {t("logs.billingDetails.includedInOutput")}
+                              </div>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -1209,6 +1236,7 @@ export function VirtualizedLogsTable({
                           specialSettings={log.specialSettings}
                           inputTokens={log.inputTokens}
                           outputTokens={log.outputTokens}
+                          reasoningOutputTokens={log.reasoningOutputTokens}
                           cacheCreationInputTokens={log.cacheCreationInputTokens}
                           cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
                           cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}

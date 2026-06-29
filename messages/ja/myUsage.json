@@ -88,6 +88,8 @@
     "cacheTokens": "キャッシュトークン",
     "input": "入力",
     "output": "出力",
+    "reasoning": "思考",
+    "includedInOutput": "出力トークンに含まれます",
     "write": "書込",
     "read": "読取",
     "modelBreakdown": "モデル別",

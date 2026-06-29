@@ -18,6 +18,7 @@ function makeLog(overrides: Partial<UsageLogRow> = {}): UsageLogRow {
     statusCode: 200,
     inputTokens: 10,
     outputTokens: 20,
+    reasoningOutputTokens: 8,
     cacheCreationInputTokens: 0,
     cacheReadInputTokens: 5,
     cacheCreation5mInputTokens: 1,
@@ -63,6 +64,7 @@ describe("buildUsageLogsSummary", () => {
     expect(summary.total.requests).toBe(3);
     expect(summary.total.cost).toBeCloseTo(2, 10);
     expect(summary.total.inputTokens).toBe(30);
+    expect(summary.total.reasoningOutputTokens).toBe(24);
     expect(summary.total.totalTokens).toBe(114);
   });
 

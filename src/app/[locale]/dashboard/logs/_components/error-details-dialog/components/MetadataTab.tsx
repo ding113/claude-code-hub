@@ -34,6 +34,7 @@ export function MetadataTab({
   specialSettings,
   inputTokens,
   outputTokens,
+  reasoningOutputTokens,
   cacheCreationInputTokens,
   cacheCreation5mInputTokens,
   cacheCreation1hInputTokens,
@@ -161,11 +162,26 @@ export function MetadataTab({
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("billingDetails.input")}:</span>
-                <span className="font-mono">{formatTokenAmount(inputTokens)} tokens</span>
+                <span className="font-mono">
+                  {formatTokenAmount(inputTokens)} {t("billingDetails.unit.tokens")}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t("billingDetails.output")}:</span>
-                <span className="font-mono">{formatTokenAmount(outputTokens)} tokens</span>
+                <span className="font-mono">
+                  {formatTokenAmount(outputTokens)} {t("billingDetails.unit.tokens")}
+                </span>
+              </div>
+              <div className="flex justify-between col-span-2">
+                <span className="text-muted-foreground">
+                  {t("billingDetails.reasoningTokens")}:
+                </span>
+                <span className="font-mono">
+                  {formatTokenAmount(reasoningOutputTokens)} {t("billingDetails.unit.tokens")}
+                </span>
+              </div>
+              <div className="col-span-2 text-[11px] text-muted-foreground">
+                {t("billingDetails.includedInOutput")}
               </div>
 
               {/* Cache Write 5m */}

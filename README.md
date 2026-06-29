@@ -105,6 +105,7 @@ AIGoCode 为 CCH 的用户提供了特别福利，通过此链接注册的用户
 - 🛡️ **限流与并发控制**：RPM、金额（5 小时/周/月）、并发 Session 多维限制，Redis Lua 脚本确保原子性与 Fail-Open 降级。
 - 📘 **自动化 OpenAPI 文档**：39 个 REST 端点由 Server Actions 自动生成 OpenAPI 3.1.0，Swagger + Scalar UI 双界面即刻试用。
 - 📊 **实时监控与统计**：仪表盘、活跃 Session、消耗排行榜、决策链记录、代理状态追踪，秒级掌控运行态势。
+- 🧠 **Reasoning Token 审计**：日志页、统计面板与导出文件可单独查看 reasoning/thinking token；该数值仅作为输出 token 的细分展示，不会重复计入总 token。
 - 💰 **价格表管理**：分页查询 + SQL 优化，支持搜索防抖、LiteLLM 同步，千级模型也能快速检索。
 - 🔁 **Session 管理**：5 分钟上下文缓存，记录决策链，避免频繁切换供应商并保留全链路审计。
 - 🔄 **OpenAI 兼容端点**：支持 `/v1/chat/completions`（OpenAI 兼容格式），工具调用与 reasoning 字段透传，严格同格式路由，无跨格式转换。
@@ -227,8 +228,10 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 | ---------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
 | 仪表盘     | ![Dashboard](public/readme/首页.png)                 | 汇总调用量、成本、活跃 Session 与时间分布，实时洞察整体使用情况。                 |
 | 供应商管理 | ![Provider Management](public/readme/供应商管理.png) | 为每个供应商配置权重、成本系数、并发限制、代理及模型重定向，实现精细调度。        |
-| 日志与审计 | ![Logs](public/readme/日志.png)                      | 统一查询请求日志，支持时间/用户/供应商/模型筛选，查看 Token、成本与缓冲命中情况。 |
+| 日志与审计 | ![Logs](public/readme/日志.png)                      | 统一查询请求日志，支持时间/用户/供应商/模型筛选，查看 Token、reasoning/thinking token、成本与缓冲命中情况，并可在导出文件中单列审计。 |
 | 排行榜     | ![Leaderboard](public/readme/排行榜.png)             | 按用户统计请求数、Token 与成本，用于费用分摊与用量治理。                          |
+
+> 日志页中的 reasoning/thinking token 属于输出 token 的细分项，用于审计模型思考开销；统计与计费不会对该数值重复累计。
 
 ## 🏗️ 架构说明 Architecture
 

@@ -105,6 +105,7 @@ Register now via <a href="https://pateway.ai/?ch=1ycdoum&aff=T8FV5H42">this link
 - 🛡️ **Rate limiting & concurrency control**: Enforce RPM, monetary quotas (5-hour / weekly / monthly), and session concurrency via Redis Lua scripts with atomic counters and fail-open degradation.
 - 📘 **Automated OpenAPI docs**: 39 REST endpoints exported from Server Actions into OpenAPI 3.1.0, instantly browsable in Swagger and Scalar UI.
 - 📊 **Real-time monitoring & analytics**: Dashboards, active sessions, consumption leaderboards, decision-chain tracing, and proxy health tracking provide second-level visibility.
+- 🧠 **Reasoning token auditability**: The logs page, stats panel, and exports can show reasoning/thinking tokens separately. This value is a breakdown of output tokens and is not added to total tokens again.
 - 💰 **Price sheet management**: Paginated SQL queries with debounce search and LiteLLM sync keep thousands of model prices searchable in milliseconds.
 - 🔁 **Session management**: Five-minute context cache preserves decision trails, reduces vendor switches, and maintains full auditability.
 - 🔄 **OpenAI-compatible endpoint**: Supports `/v1/chat/completions` (OpenAI-compatible format), passes through tool calls and reasoning fields, enforces strict same-format routing with no cross-format conversion.
@@ -222,8 +223,10 @@ Once started:
 | ------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Dashboard           | ![Dashboard](public/readme/首页.png)                 | Aggregates request volume, spending, active sessions, and time-series distribution for instant situational awareness. |
 | Provider management | ![Provider Management](public/readme/供应商管理.png) | Configure weight, cost multiplier, concurrency caps, proxies, and model redirection per vendor for precise routing.   |
-| Logs & audit        | ![Logs](public/readme/日志.png)                      | Unified request log with filters for time/user/provider/model plus token, cost, and cache-hit details.                |
+| Logs & audit        | ![Logs](public/readme/日志.png)                      | Unified request log with filters for time/user/provider/model plus token, reasoning/thinking token, cost, and cache-hit details, with a dedicated export column for auditing. |
 | Leaderboard         | ![Leaderboard](public/readme/排行榜.png)             | Ranks users by requests, tokens, and spending to support chargeback and usage governance.                             |
+
+> Reasoning/thinking tokens on the logs page are a sub-metric of output tokens for audit visibility. They do not change total-token or billing semantics.
 
 ## 🏗️ Architecture
 

@@ -340,6 +340,7 @@ describe("extractUsageMetrics", () => {
 
       // output_tokens = candidatesTokenCount + thoughtsTokenCount
       expect(result.usageMetrics?.output_tokens).toBe(600);
+      expect(result.usageMetrics?.reasoning_output_tokens).toBe(100);
     });
 
     it("应从 candidatesTokensDetails 提取 IMAGE modality tokens", () => {
@@ -530,6 +531,24 @@ describe("extractUsageMetrics", () => {
   });
 
   describe("OpenAI Response API 格式", () => {
+    it("应提取 output_tokens_details.reasoning_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 100,
+          output_tokens: 80,
+          output_tokens_details: {
+            reasoning_tokens: 30,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics?.input_tokens).toBe(100);
+      expect(result.usageMetrics?.output_tokens).toBe(80);
+      expect(result.usageMetrics?.reasoning_output_tokens).toBe(30);
+    });
+
     it("应从 input_tokens_details.cached_tokens 提取缓存读取", () => {
       const response = JSON.stringify({
         usage: {
@@ -820,6 +839,41 @@ describe("extractUsageMetrics", () => {
       expect(result.usageMetrics).not.toBeNull();
       expect(result.usageMetrics?.input_tokens).toBe(66);
       expect(result.usageMetrics?.output_tokens).toBe(57);
+    });
+
+    it("should extract positive OpenAI completion_tokens_details.reasoning_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          prompt_tokens: 66,
+          completion_tokens: 57,
+          total_tokens: 123,
+          completion_tokens_details: {
+            reasoning_tokens: 19,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(66);
+      expect(result.usageMetrics?.output_tokens).toBe(57);
+      expect(result.usageMetrics?.reasoning_output_tokens).toBe(19);
+    });
+
+    it("should not double count Gemini thoughtsTokenCount when output_tokens is already present", () => {
+      const response = JSON.stringify({
+        usage: {
+          output_tokens: 500,
+          thoughtsTokenCount: 100,
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.output_tokens).toBe(500);
+      expect(result.usageMetrics?.reasoning_output_tokens).toBe(100);
     });
   });
 

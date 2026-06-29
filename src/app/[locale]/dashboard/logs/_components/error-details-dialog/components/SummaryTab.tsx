@@ -54,6 +54,7 @@ export function SummaryTab({
   billingModelSource = "original",
   inputTokens,
   outputTokens,
+  reasoningOutputTokens,
   cacheCreationInputTokens,
   cacheCreation5mInputTokens,
   cacheCreation1hInputTokens,
@@ -424,6 +425,15 @@ export function SummaryTab({
                     </span>
                   ) : null}
                 </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("billingDetails.reasoningTokens")}:</span>
+                <span className="font-mono">
+                  {formatTokenAmount(reasoningOutputTokens)} {t("billingDetails.unit.tokens")}
+                </span>
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {t("billingDetails.includedInOutput")}
               </div>
 
               {/* Cache Write 5m */}

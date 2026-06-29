@@ -188,6 +188,7 @@ function summaryRowCells(row: SummaryRow, rowNumber: number, periodStyle: number
     row.requests,
     row.inputTokens,
     row.outputTokens,
+    row.reasoningOutputTokens,
     row.cacheWrite5m,
     row.cacheWrite1h,
     row.cacheRead,
@@ -201,7 +202,7 @@ function summaryRowCells(row: SummaryRow, rowNumber: number, periodStyle: number
   });
   cells.push(
     numberCell(
-      `${SUMMARY_COLUMN_REFS[8]}${rowNumber}`,
+      `${SUMMARY_COLUMN_REFS[9]}${rowNumber}`,
       normalizeDecimalForSpreadsheet(row.cost),
       STYLE.cost
     )

@@ -88,6 +88,8 @@
     "cacheTokens": "缓存Token",
     "input": "输入",
     "output": "输出",
+    "reasoning": "思考",
+    "includedInOutput": "已包含在输出 Token 中",
     "write": "写入",
     "read": "读取",
     "modelBreakdown": "按模型",

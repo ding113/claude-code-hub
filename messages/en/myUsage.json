@@ -88,6 +88,8 @@
     "cacheTokens": "Cache Tokens",
     "input": "Input",
     "output": "Output",
+    "reasoning": "Reasoning",
+    "includedInOutput": "Included in output tokens",
     "write": "Write",
     "read": "Read",
     "modelBreakdown": "Model Breakdown",

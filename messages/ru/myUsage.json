@@ -88,6 +88,8 @@
     "cacheTokens": "Токены кэша",
     "input": "Вход",
     "output": "Выход",
+    "reasoning": "Размышления",
+    "includedInOutput": "Уже включено в выходные токены",
     "write": "Запись",
     "read": "Чтение",
     "modelBreakdown": "По моделям",

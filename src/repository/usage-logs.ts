@@ -57,6 +57,7 @@ export interface UsageLogRow {
   statusCode: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  reasoningOutputTokens?: number | null;
   cacheCreationInputTokens: number | null;
   cacheReadInputTokens: number | null;
   cacheCreation5mInputTokens: number | null;
@@ -90,6 +91,7 @@ export interface UsageLogSummary {
   totalTokens: number;
   totalInputTokens: number;
   totalOutputTokens: number;
+  totalReasoningOutputTokens?: number;
   totalCacheCreationTokens: number;
   totalCacheReadTokens: number;
   totalCacheCreation5mTokens: number;
@@ -102,6 +104,7 @@ const EMPTY_USAGE_LOG_SUMMARY: UsageLogSummary = {
   totalTokens: 0,
   totalInputTokens: 0,
   totalOutputTokens: 0,
+  totalReasoningOutputTokens: 0,
   totalCacheCreationTokens: 0,
   totalCacheReadTokens: 0,
   totalCacheCreation5mTokens: 0,
@@ -194,6 +197,7 @@ export async function findUsageLogsBatch(
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
       outputTokens: messageRequest.outputTokens,
+      reasoningOutputTokens: messageRequest.reasoningOutputTokens,
       cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
       cacheReadInputTokens: messageRequest.cacheReadInputTokens,
       cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
@@ -365,6 +369,7 @@ export async function findUsageLogsBatch(
       statusCode: usageLedger.statusCode,
       inputTokens: usageLedger.inputTokens,
       outputTokens: usageLedger.outputTokens,
+      reasoningOutputTokens: usageLedger.reasoningOutputTokens,
       cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
       cacheReadInputTokens: usageLedger.cacheReadInputTokens,
       cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
@@ -418,6 +423,7 @@ export async function findUsageLogsBatch(
       statusCode: row.statusCode,
       inputTokens: row.inputTokens,
       outputTokens: row.outputTokens,
+      reasoningOutputTokens: row.reasoningOutputTokens,
       cacheCreationInputTokens: row.cacheCreationInputTokens,
       cacheReadInputTokens: row.cacheReadInputTokens,
       cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
@@ -479,6 +485,7 @@ interface UsageLogSlimRow {
   statusCode: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  reasoningOutputTokens: number | null;
   costUsd: string | null;
   durationMs: number | null;
   cacheCreationInputTokens: number | null;
@@ -611,6 +618,7 @@ function mapUsageLogSlimRow(row: {
   statusCode: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  reasoningOutputTokens: number | null;
   costUsd: string | null | { toString(): string };
   durationMs: number | null;
   cacheCreationInputTokens: number | null;
@@ -775,6 +783,7 @@ async function selectKeyScopedMessageSlimRows(
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
       outputTokens: messageRequest.outputTokens,
+      reasoningOutputTokens: messageRequest.reasoningOutputTokens,
       costUsd: messageRequest.costUsd,
       durationMs: messageRequest.durationMs,
       cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
@@ -819,6 +828,7 @@ async function selectKeyScopedLedgerSlimRows(
       statusCode: usageLedger.statusCode,
       inputTokens: usageLedger.inputTokens,
       outputTokens: usageLedger.outputTokens,
+      reasoningOutputTokens: usageLedger.reasoningOutputTokens,
       costUsd: usageLedger.costUsd,
       durationMs: usageLedger.durationMs,
       cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
@@ -844,6 +854,7 @@ async function selectKeyScopedLedgerSlimRows(
     statusCode: row.statusCode,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    reasoningOutputTokens: row.reasoningOutputTokens,
     costUsd: row.costUsd?.toString() ?? null,
     durationMs: row.durationMs,
     cacheCreationInputTokens: row.cacheCreationInputTokens,
@@ -950,6 +961,7 @@ function mapUsageLogRowFromMessageResult(row: {
   statusCode: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  reasoningOutputTokens: number | null;
   cacheCreationInputTokens: number | null;
   cacheReadInputTokens: number | null;
   cacheCreation5mInputTokens: number | null;
@@ -1020,6 +1032,7 @@ function mapUsageLogRowFromLedgerResult(row: {
   statusCode: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  reasoningOutputTokens: number | null;
   cacheCreationInputTokens: number | null;
   cacheReadInputTokens: number | null;
   cacheCreation5mInputTokens: number | null;
@@ -1055,6 +1068,7 @@ function mapUsageLogRowFromLedgerResult(row: {
     statusCode: row.statusCode,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    reasoningOutputTokens: row.reasoningOutputTokens,
     cacheCreationInputTokens: row.cacheCreationInputTokens,
     cacheReadInputTokens: row.cacheReadInputTokens,
     cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
@@ -1111,6 +1125,7 @@ export async function findReadonlyUsageLogsBatchForKey(
         statusCode: messageRequest.statusCode,
         inputTokens: messageRequest.inputTokens,
         outputTokens: messageRequest.outputTokens,
+        reasoningOutputTokens: messageRequest.reasoningOutputTokens,
         cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
         cacheReadInputTokens: messageRequest.cacheReadInputTokens,
         cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
@@ -1160,6 +1175,7 @@ export async function findReadonlyUsageLogsBatchForKey(
             statusCode: usageLedger.statusCode,
             inputTokens: usageLedger.inputTokens,
             outputTokens: usageLedger.outputTokens,
+            reasoningOutputTokens: usageLedger.reasoningOutputTokens,
             cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
             cacheReadInputTokens: usageLedger.cacheReadInputTokens,
             cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
@@ -1320,6 +1336,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
             totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
             totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
             totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalReasoningOutputTokens: sql<number>`COALESCE(sum(${messageRequest.reasoningOutputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
             totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
             totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
             totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
@@ -1336,6 +1353,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
             totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
             totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
             totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalReasoningOutputTokens: sql<number>`COALESCE(sum(${messageRequest.reasoningOutputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
             totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
             totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
             totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
@@ -1362,6 +1380,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
       outputTokens: messageRequest.outputTokens,
+      reasoningOutputTokens: messageRequest.reasoningOutputTokens,
       cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
       cacheReadInputTokens: messageRequest.cacheReadInputTokens,
       cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
@@ -1454,6 +1473,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       totalTokens,
       totalInputTokens: summaryResult?.totalInputTokens ?? 0,
       totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
+      totalReasoningOutputTokens: summaryResult?.totalReasoningOutputTokens ?? 0,
       totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
       totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
       totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
@@ -1602,6 +1622,7 @@ export async function findUsageLogsStats(
         totalCost: sql<string>`0`,
         totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
         totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
+        totalReasoningOutputTokens: sql<number>`COALESCE(sum(${messageRequest.reasoningOutputTokens})::double precision, 0::double precision)`,
         totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
         totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
         totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
@@ -1633,6 +1654,7 @@ export async function findUsageLogsStats(
       totalTokens,
       totalInputTokens: summaryResult?.totalInputTokens ?? 0,
       totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
+      totalReasoningOutputTokens: summaryResult?.totalReasoningOutputTokens ?? 0,
       totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
       totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
       totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
@@ -1705,6 +1727,7 @@ export async function findUsageLogsStats(
       totalCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
       totalInputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens})::double precision, 0::double precision)`,
       totalOutputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens})::double precision, 0::double precision)`,
+      totalReasoningOutputTokens: sql<number>`COALESCE(sum(${usageLedger.reasoningOutputTokens})::double precision, 0::double precision)`,
       totalCacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens})::double precision, 0::double precision)`,
       totalCacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens})::double precision, 0::double precision)`,
       totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
@@ -1738,6 +1761,7 @@ export async function findUsageLogsStats(
     totalTokens,
     totalInputTokens: summaryResult?.totalInputTokens ?? 0,
     totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
+    totalReasoningOutputTokens: summaryResult?.totalReasoningOutputTokens ?? 0,
     totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
     totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
     totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,

@@ -953,6 +953,7 @@ export interface ModelBreakdownItem {
   cost: number;
   inputTokens: number;
   outputTokens: number;
+  reasoningOutputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
   cacheCreation5mTokens: number;
@@ -1001,6 +1002,7 @@ export async function getMyStatsSummary(
         userCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
         userInputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}), 0)::double precision`,
         userOutputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}), 0)::double precision`,
+        userReasoningOutputTokens: sql<number>`COALESCE(sum(${usageLedger.reasoningOutputTokens}), 0)::double precision`,
         userCacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}), 0)::double precision`,
         userCacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}), 0)::double precision`,
         userCacheCreation5mTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation5mInputTokens}), 0)::double precision`,
@@ -1010,6 +1012,7 @@ export async function getMyStatsSummary(
         keyCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)`,
         keyInputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
         keyOutputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
+        keyReasoningOutputTokens: sql<number>`COALESCE(sum(${usageLedger.reasoningOutputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
         keyCacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
         keyCacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
         keyCacheCreation5mTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreation5mInputTokens}) FILTER (WHERE ${usageLedger.key} = ${keyString}), 0)::double precision`,
@@ -1036,6 +1039,7 @@ export async function getMyStatsSummary(
         acc.totalCost += Number.isFinite(cost) ? cost : 0;
         acc.totalInputTokens += row.keyInputTokens ?? 0;
         acc.totalOutputTokens += row.keyOutputTokens ?? 0;
+        acc.totalReasoningOutputTokens += row.keyReasoningOutputTokens ?? 0;
         acc.totalCacheCreationTokens += row.keyCacheCreationTokens ?? 0;
         acc.totalCacheReadTokens += row.keyCacheReadTokens ?? 0;
         acc.totalCacheCreation5mTokens += row.keyCacheCreation5mTokens ?? 0;
@@ -1047,6 +1051,7 @@ export async function getMyStatsSummary(
         totalCost: 0,
         totalInputTokens: 0,
         totalOutputTokens: 0,
+        totalReasoningOutputTokens: 0,
         totalCacheCreationTokens: 0,
         totalCacheReadTokens: 0,
         totalCacheCreation5mTokens: 0,
@@ -1066,6 +1071,7 @@ export async function getMyStatsSummary(
       totalTokens,
       totalInputTokens: summaryAcc.totalInputTokens,
       totalOutputTokens: summaryAcc.totalOutputTokens,
+      totalReasoningOutputTokens: summaryAcc.totalReasoningOutputTokens ?? 0,
       totalCacheCreationTokens: summaryAcc.totalCacheCreationTokens,
       totalCacheReadTokens: summaryAcc.totalCacheReadTokens,
       totalCacheCreation5mTokens: summaryAcc.totalCacheCreation5mTokens,
@@ -1081,6 +1087,7 @@ export async function getMyStatsSummary(
           cost: Number(row.keyCost ?? 0),
           inputTokens: row.keyInputTokens,
           outputTokens: row.keyOutputTokens,
+          reasoningOutputTokens: row.keyReasoningOutputTokens,
           cacheCreationTokens: row.keyCacheCreationTokens,
           cacheReadTokens: row.keyCacheReadTokens,
           cacheCreation5mTokens: row.keyCacheCreation5mTokens,
@@ -1093,6 +1100,7 @@ export async function getMyStatsSummary(
         cost: Number(row.userCost ?? 0),
         inputTokens: row.userInputTokens,
         outputTokens: row.userOutputTokens,
+        reasoningOutputTokens: row.userReasoningOutputTokens,
         cacheCreationTokens: row.userCacheCreationTokens,
         cacheReadTokens: row.userCacheReadTokens,
         cacheCreation5mTokens: row.userCacheCreation5mTokens,

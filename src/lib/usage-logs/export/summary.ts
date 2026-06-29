@@ -20,6 +20,7 @@ export interface SummaryRow {
   requests: number;
   inputTokens: number;
   outputTokens: number;
+  reasoningOutputTokens: number;
   cacheWrite5m: number;
   cacheWrite1h: number;
   cacheRead: number;
@@ -38,6 +39,7 @@ export const SUMMARY_HEADERS = [
   "Requests",
   "Input Tokens",
   "Output Tokens",
+  "Reasoning Tokens",
   "Cache Write 5m",
   "Cache Write 1h",
   "Cache Read",
@@ -53,6 +55,7 @@ function emptyRow(period: string): SummaryRow {
     requests: 0,
     inputTokens: 0,
     outputTokens: 0,
+    reasoningOutputTokens: 0,
     cacheWrite5m: 0,
     cacheWrite1h: 0,
     cacheRead: 0,
@@ -65,6 +68,7 @@ function accumulate(row: SummaryRow, log: UsageLogRow): void {
   row.requests += 1;
   row.inputTokens += log.inputTokens ?? 0;
   row.outputTokens += log.outputTokens ?? 0;
+  row.reasoningOutputTokens += log.reasoningOutputTokens ?? 0;
   row.cacheWrite5m += log.cacheCreation5mInputTokens ?? 0;
   row.cacheWrite1h += log.cacheCreation1hInputTokens ?? 0;
   row.cacheRead += log.cacheReadInputTokens ?? 0;
@@ -76,6 +80,7 @@ function merge(target: SummaryRow, source: SummaryRow): void {
   target.requests += source.requests;
   target.inputTokens += source.inputTokens;
   target.outputTokens += source.outputTokens;
+  target.reasoningOutputTokens += source.reasoningOutputTokens;
   target.cacheWrite5m += source.cacheWrite5m;
   target.cacheWrite1h += source.cacheWrite1h;
   target.cacheRead += source.cacheRead;

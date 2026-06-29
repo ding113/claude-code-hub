@@ -131,6 +131,7 @@ async function createMessage(params: {
   costUsd?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  reasoningOutputTokens?: number | null;
   clientIp?: string | null;
   createdAt: Date;
 }) {
@@ -147,6 +148,7 @@ async function createMessage(params: {
       costUsd: params.costUsd ?? "0.000000000000000",
       inputTokens: params.inputTokens ?? 0,
       outputTokens: params.outputTokens ?? 0,
+      reasoningOutputTokens: params.reasoningOutputTokens ?? null,
       clientIp: params.clientIp ?? null,
       createdAt: params.createdAt,
       updatedAt: params.createdAt,
@@ -170,6 +172,7 @@ async function insertLedgerOnlyRow(params: {
   costUsd: string;
   inputTokens: number;
   outputTokens: number;
+  reasoningOutputTokens?: number | null;
   createdAt: Date;
   clientIp?: string | null;
   sessionId?: string | null;
@@ -194,6 +197,7 @@ async function insertLedgerOnlyRow(params: {
     costUsd: params.costUsd,
     inputTokens: params.inputTokens,
     outputTokens: params.outputTokens,
+    reasoningOutputTokens: params.reasoningOutputTokens ?? null,
     clientIp: params.clientIp ?? null,
     createdAt: params.createdAt,
   });
@@ -279,6 +283,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "1.250000000000000",
       inputTokens: 120,
       outputTokens: 30,
+      reasoningOutputTokens: 10,
       createdAt: new Date(now),
       clientIp: visibleIp,
     });
@@ -290,6 +295,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "0.750000000000000",
       inputTokens: 80,
       outputTokens: 40,
+      reasoningOutputTokens: 15,
       createdAt: new Date(now),
     });
     await insertLedgerOnlyRow({
@@ -300,6 +306,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "0.500000000000000",
       inputTokens: 60,
       outputTokens: 20,
+      reasoningOutputTokens: 5,
       createdAt: new Date(now),
     });
 
@@ -336,10 +343,13 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
     expect(summary.ok).toBe(true);
     expect(summary.ok && summary.data.totalRequests).toBe(2);
     expect(summary.ok && summary.data.totalCost).toBeCloseTo(2.0, 10);
+    expect(summary.ok && summary.data.totalReasoningOutputTokens).toBe(25);
     expect(summary.ok && summary.data.keyModelBreakdown.map((row) => row.model)).toEqual([
       "ledger-model-a",
       "ledger-model-b",
     ]);
+    expect(summary.ok && summary.data.keyModelBreakdown[0]?.reasoningOutputTokens).toBe(10);
+    expect(summary.ok && summary.data.keyModelBreakdown[1]?.reasoningOutputTokens).toBe(15);
     expect(summary.ok && summary.data.userModelBreakdown.map((row) => row.model)).toEqual([
       "ledger-model-a",
       "ledger-model-b",
@@ -380,6 +390,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "1.100000000000000",
       inputTokens: 110,
       outputTokens: 55,
+      reasoningOutputTokens: 21,
       createdAt: new Date(now),
     });
 
@@ -391,6 +402,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
       costUsd: "0.900000000000000",
       inputTokens: 90,
       outputTokens: 45,
+      reasoningOutputTokens: 9,
       createdAt: new Date(now),
     });
 
@@ -414,6 +426,7 @@ describe.skipIf(!process.env.DSN)("my-usage imported ledger recovery", () => {
     expect(summary.ok).toBe(true);
     expect(summary.ok && summary.data.totalRequests).toBe(2);
     expect(summary.ok && summary.data.totalCost).toBeCloseTo(2.0, 10);
+    expect(summary.ok && summary.data.totalReasoningOutputTokens).toBe(30);
     expect(summary.ok && summary.data.keyModelBreakdown.map((row) => row.model)).toEqual([
       "imported-only-model",
       "live-model",

@@ -19,6 +19,7 @@ function makeLog(overrides: Partial<UsageLogRow> = {}): UsageLogRow {
     statusCode: 200,
     inputTokens: 10,
     outputTokens: 20,
+    reasoningOutputTokens: 8,
     cacheCreationInputTokens: 0,
     cacheReadInputTokens: 5,
     cacheCreation5mInputTokens: 1,
@@ -61,12 +62,17 @@ function cell(sheetXml: string, ref: string): string | null {
   return match[0];
 }
 
-const COST_COL = columnRef(14); // O
+const COST_COL = columnRef(15); // P
 const TIME_COL = columnRef(0); // A
 const MODEL_COL = columnRef(4); // E
 const STATUS_COL = columnRef(7); // H
 
 describe("buildUsageLogsXlsx", () => {
+  test("includes reasoning tokens in the detail header", async () => {
+    const files = unzip(await buildUsageLogsXlsx([makeLog()], "UTC"));
+    expect(files["xl/worksheets/sheet1.xml"]).toContain("Reasoning Tokens");
+  });
+
   test("produces a valid two-sheet workbook package", async () => {
     const files = unzip(await buildUsageLogsXlsx([makeLog()], "UTC"));
     expect(Object.keys(files)).toEqual(
@@ -149,8 +155,9 @@ describe("buildUsageLogsXlsx", () => {
     const summary = files["xl/worksheets/sheet2.xml"];
     expect(summary).toContain("Period");
     expect(summary).toContain("2026-06-03 12:00");
+    expect(summary).toContain("Reasoning Tokens");
+    expect(summary).toContain("<v>16</v>");
     expect(summary).toContain("Total");
-    // total cost cell at column I (index 8), last data row + total row
   });
 
   test("multi-day data yields a daily summary sheet", async () => {

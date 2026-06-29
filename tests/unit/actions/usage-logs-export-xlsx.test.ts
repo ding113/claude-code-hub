@@ -60,6 +60,7 @@ function summary(totalRequests = 0) {
     totalTokens: 0,
     totalInputTokens: 0,
     totalOutputTokens: 0,
+    totalReasoningOutputTokens: 0,
     totalCacheCreationTokens: 0,
     totalCacheReadTokens: 0,
     totalCacheCreation5mTokens: 0,

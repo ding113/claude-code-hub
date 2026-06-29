@@ -19,6 +19,7 @@ function makeLog(overrides: Partial<UsageLogRow> = {}): UsageLogRow {
     statusCode: 200,
     inputTokens: 10,
     outputTokens: 20,
+    reasoningOutputTokens: 8,
     cacheCreationInputTokens: 0,
     cacheReadInputTokens: 5,
     cacheCreation5mInputTokens: 1,
@@ -50,6 +51,7 @@ const TIME_IDX = 0;
 const STATUS_IDX = HEADER.indexOf("Status Code");
 const COST_IDX = HEADER.indexOf("Cost (USD)");
 const DURATION_IDX = HEADER.indexOf("Duration (ms)");
+const REASONING_IDX = HEADER.indexOf("Reasoning Tokens");
 
 describe("buildCsvHeaderLine", () => {
   test("annotates the time column with the timezone", () => {
@@ -113,6 +115,11 @@ describe("buildCsvRows", () => {
       "UTC"
     );
     expect(row.split(",")[retryIdx]).toBe("1");
+  });
+
+  test("includes reasoning tokens as a separate exported column", () => {
+    const [row] = buildCsvRows([makeLog({ reasoningOutputTokens: 12 })], "UTC");
+    expect(row.split(",")[REASONING_IDX]).toBe("12");
   });
 });
 

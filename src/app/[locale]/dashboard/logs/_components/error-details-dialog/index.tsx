@@ -34,6 +34,7 @@ interface ErrorDetailsDialogProps {
   specialSettings?: SpecialSetting[] | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  reasoningOutputTokens?: number | null;
   cacheCreationInputTokens?: number | null;
   cacheCreation5mInputTokens?: number | null;
   cacheCreation1hInputTokens?: number | null;
@@ -78,6 +79,7 @@ export function ErrorDetailsDialog({
   specialSettings,
   inputTokens,
   outputTokens,
+  reasoningOutputTokens,
   cacheCreationInputTokens,
   cacheCreation5mInputTokens,
   cacheCreation1hInputTokens,
@@ -227,6 +229,7 @@ export function ErrorDetailsDialog({
     specialSettings,
     inputTokens,
     outputTokens,
+    reasoningOutputTokens,
     cacheCreationInputTokens,
     cacheCreation5mInputTokens,
     cacheCreation1hInputTokens,

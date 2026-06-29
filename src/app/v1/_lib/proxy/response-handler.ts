@@ -115,6 +115,7 @@ function discardBeforeResponseBodySnapshot(session: ProxySession): void {
 export type UsageMetrics = {
   input_tokens?: number;
   output_tokens?: number;
+  reasoning_output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_creation_5m_input_tokens?: number;
   cache_creation_1h_input_tokens?: number;
@@ -1518,6 +1519,7 @@ export class ProxyResponseHandler {
           void SessionManager.updateSessionUsage(session.sessionId, {
             inputTokens: usageMetrics?.input_tokens,
             outputTokens: usageMetrics?.output_tokens,
+            reasoningOutputTokens: usageMetrics?.reasoning_output_tokens,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             costUsd: costUsdStr,
@@ -1564,6 +1566,7 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
             inputTokens: usageMetrics?.input_tokens,
             outputTokens: usageMetrics?.output_tokens,
+            reasoningOutputTokens: usageMetrics?.reasoning_output_tokens,
             ttfbMs: session.ttfbMs ?? duration,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
@@ -2675,6 +2678,7 @@ export class ProxyResponseHandler {
           if (usageForCost) {
             payload.inputTokens = usageForCost.input_tokens;
             payload.outputTokens = usageForCost.output_tokens;
+            payload.reasoningOutputTokens = usageForCost.reasoning_output_tokens;
             payload.cacheCreationInputTokens = usageForCost.cache_creation_input_tokens;
             payload.cacheReadInputTokens = usageForCost.cache_read_input_tokens;
           }
@@ -2721,6 +2725,7 @@ export class ProxyResponseHandler {
           statusCode: effectiveStatusCode,
           inputTokens: usageForCost?.input_tokens,
           outputTokens: usageForCost?.output_tokens,
+          reasoningOutputTokens: usageForCost?.reasoning_output_tokens,
           ttfbMs: session.ttfbMs,
           cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
           cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
@@ -3213,12 +3218,33 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
+  const outputTokensDetails = usage.output_tokens_details as Record<string, unknown> | undefined;
+  const completionTokensDetails = usage.completion_tokens_details as
+    | Record<string, unknown>
+    | undefined;
+  const reasoningTokens =
+    typeof outputTokensDetails?.reasoning_tokens === "number"
+      ? outputTokensDetails.reasoning_tokens
+      : typeof completionTokensDetails?.reasoning_tokens === "number"
+        ? completionTokensDetails.reasoning_tokens
+        : undefined;
+  if (typeof reasoningTokens === "number" && reasoningTokens > 0) {
+    result.reasoning_output_tokens = reasoningTokens;
+    hasAny = true;
+  }
+
   // Gemini 思考/推理 token：直接累加到 output_tokens（思考价格与输出价格相同）
   // 注意：放在 output_tokens 赋值之后，避免被覆盖
   // output_tokens 是转换的时候才存在的，gemini原生接口的没有该值
   // 通常存在 output_tokens的时候，thoughtsTokenCount=0
   if (typeof usage.thoughtsTokenCount === "number" && usage.thoughtsTokenCount > 0) {
-    result.output_tokens = (result.output_tokens ?? 0) + usage.thoughtsTokenCount;
+    // Some relays may already fold thoughts into output_tokens. Avoid double counting
+    // when an explicit output_tokens field is present; only Gemini-native derived
+    // output_tokens should add thoughts back in here.
+    if (typeof usage.output_tokens !== "number") {
+      result.output_tokens = (result.output_tokens ?? 0) + usage.thoughtsTokenCount;
+    }
+    result.reasoning_output_tokens = usage.thoughtsTokenCount;
     hasAny = true;
   }
 
@@ -3439,6 +3465,7 @@ export function parseUsageFromResponseText(
       return {
         input_tokens: patch.input_tokens ?? base.input_tokens,
         output_tokens: patch.output_tokens ?? base.output_tokens,
+        reasoning_output_tokens: patch.reasoning_output_tokens ?? base.reasoning_output_tokens,
         cache_creation_input_tokens:
           patch.cache_creation_input_tokens ?? base.cache_creation_input_tokens,
         cache_creation_5m_input_tokens:
@@ -4213,6 +4240,7 @@ export async function finalizeRequestStats(
       void SessionManager.updateSessionUsage(session.sessionId, {
         inputTokens: normalizedUsage.input_tokens,
         outputTokens: normalizedUsage.output_tokens,
+        reasoningOutputTokens: normalizedUsage.reasoning_output_tokens,
         cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
         cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,
         costUsd: costUsdStr,
@@ -4230,6 +4258,7 @@ export async function finalizeRequestStats(
     statusCode: statusCode,
     inputTokens: normalizedUsage.input_tokens,
     outputTokens: normalizedUsage.output_tokens,
+    reasoningOutputTokens: normalizedUsage.reasoning_output_tokens,
     ttfbMs: session.ttfbMs ?? duration,
     cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
     cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,

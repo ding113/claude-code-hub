@@ -139,6 +139,7 @@ async function createMessage(params: {
   costUsd?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  reasoningOutputTokens?: number | null;
   blockedBy?: string | null;
   clientIp?: string | null;
   createdAt: Date;
@@ -155,6 +156,7 @@ async function createMessage(params: {
       costUsd: params.costUsd ?? "0",
       inputTokens: params.inputTokens ?? 0,
       outputTokens: params.outputTokens ?? 0,
+      reasoningOutputTokens: params.reasoningOutputTokens ?? null,
       blockedBy: params.blockedBy ?? null,
       clientIp: params.clientIp ?? null,
       createdAt: params.createdAt,
@@ -686,6 +688,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       costUsd: "0.1000",
       inputTokens: 500,
       outputTokens: 200,
+      reasoningOutputTokens: 80,
       createdAt: t0,
     });
     const a2 = await createMessage({
@@ -696,6 +699,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       costUsd: "0.0500",
       inputTokens: 300,
       outputTokens: 100,
+      reasoningOutputTokens: 20,
       createdAt: t0,
     });
 
@@ -708,6 +712,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       costUsd: "0.9999",
       inputTokens: 9999,
       outputTokens: 9999,
+      reasoningOutputTokens: 999,
       blockedBy: "warmup",
       createdAt: t0,
     });
@@ -721,6 +726,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       costUsd: "0.0800",
       inputTokens: 400,
       outputTokens: 150,
+      reasoningOutputTokens: 50,
       createdAt: t0,
     });
 
@@ -733,6 +739,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       costUsd: "0.5000",
       inputTokens: 2000,
       outputTokens: 1000,
+      reasoningOutputTokens: 400,
       createdAt: t0,
     });
 
@@ -756,12 +763,14 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
       totalCost: number;
       totalInputTokens: number;
       totalOutputTokens: number;
+      totalReasoningOutputTokens: number;
       keyModelBreakdown: Array<{
         model: string | null;
         requests: number;
         cost: number;
         inputTokens: number;
         outputTokens: number;
+        reasoningOutputTokens: number;
       }>;
       userModelBreakdown: Array<{
         model: string | null;
@@ -769,6 +778,7 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
         cost: number;
         inputTokens: number;
         outputTokens: number;
+        reasoningOutputTokens: number;
       }>;
       currencyCode: string;
     };
@@ -777,14 +787,17 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
     expect(data.totalRequests).toBe(2); // a1, a2
     expect(data.totalInputTokens).toBe(800); // 500 + 300
     expect(data.totalOutputTokens).toBe(300); // 200 + 100
+    expect(data.totalReasoningOutputTokens).toBe(100); // 80 + 20
     expect(data.totalCost).toBeCloseTo(0.15, 4); // 0.1 + 0.05
 
     // 验证 keyModelBreakdown（仅当前 key A 的数据）
     const keyBreakdownMap = new Map(data.keyModelBreakdown.map((r) => [r.model, r]));
     expect(keyBreakdownMap.get("claude-3-opus")?.requests).toBe(1);
     expect(keyBreakdownMap.get("claude-3-opus")?.cost).toBeCloseTo(0.1, 4);
+    expect(keyBreakdownMap.get("claude-3-opus")?.reasoningOutputTokens).toBe(80);
     expect(keyBreakdownMap.get("claude-3-sonnet")?.requests).toBe(1);
     expect(keyBreakdownMap.get("claude-3-sonnet")?.cost).toBeCloseTo(0.05, 4);
+    expect(keyBreakdownMap.get("claude-3-sonnet")?.reasoningOutputTokens).toBe(20);
     // warmup 不应出现（blockedBy = 'warmup'）
     // 其他用户的模型不应出现
     expect(keyBreakdownMap.has("gpt-4")).toBe(false);
@@ -794,8 +807,10 @@ describe.skipIf(!process.env.DSN)("my-usage API：只读 Key 自助查询", () =
     // claude-3-opus: a1 (0.1) + a2_1 (0.08) = 0.18, requests = 2
     expect(userBreakdownMap.get("claude-3-opus")?.requests).toBe(2);
     expect(userBreakdownMap.get("claude-3-opus")?.cost).toBeCloseTo(0.18, 4);
+    expect(userBreakdownMap.get("claude-3-opus")?.reasoningOutputTokens).toBe(130);
     // claude-3-sonnet: a2 only
     expect(userBreakdownMap.get("claude-3-sonnet")?.requests).toBe(1);
+    expect(userBreakdownMap.get("claude-3-sonnet")?.reasoningOutputTokens).toBe(20);
     // 其他用户的模型不应出现
     expect(userBreakdownMap.has("gpt-4")).toBe(false);
 

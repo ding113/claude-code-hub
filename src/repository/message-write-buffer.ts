@@ -14,6 +14,7 @@ export type MessageRequestUpdatePatch = {
   statusCode?: number;
   inputTokens?: number;
   outputTokens?: number;
+  reasoningOutputTokens?: number;
   ttfbMs?: number | null;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
@@ -55,6 +56,7 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   statusCode: "status_code",
   inputTokens: "input_tokens",
   outputTokens: "output_tokens",
+  reasoningOutputTokens: "reasoning_output_tokens",
   ttfbMs: "ttfb_ms",
   cacheCreationInputTokens: "cache_creation_input_tokens",
   cacheReadInputTokens: "cache_read_input_tokens",

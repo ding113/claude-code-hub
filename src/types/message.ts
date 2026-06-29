@@ -284,6 +284,7 @@ export interface MessageRequest {
   // Token 使用信息
   inputTokens?: number;
   outputTokens?: number;
+  reasoningOutputTokens?: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
   cacheCreation5mInputTokens?: number;
@@ -360,6 +361,7 @@ export interface CreateMessageRequestData {
   // Token 使用信息
   input_tokens?: number;
   output_tokens?: number;
+  reasoning_output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
   cache_creation_5m_input_tokens?: number;

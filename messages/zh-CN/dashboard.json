@@ -150,6 +150,8 @@
       "cacheTokens": "缓存 Token",
       "input": "输入",
       "output": "输出",
+      "reasoning": "思考",
+      "includedInOutput": "已包含在输出 Token 中",
       "write": "写入",
       "read": "读取",
       "loading": "加载中..."
@@ -297,6 +299,8 @@
         "title": "计费详情",
         "input": "输入",
         "output": "输出",
+        "reasoningTokens": "思考 Token",
+        "includedInOutput": "已包含在输出 Token 中",
         "cacheWrite5m": "缓存写入 (5m)",
         "cacheWrite1h": "缓存写入 (1h)",
         "cacheRead": "缓存读取",
@@ -426,6 +430,8 @@
     "billingDetails": {
       "input": "输入",
       "output": "输出",
+      "reasoningTokens": "思考 Token",
+      "includedInOutput": "已包含在输出 Token 中",
       "cacheWrite5m": "缓存写入 (5m)",
       "cacheWrite1h": "缓存写入 (1h)",
       "cacheRead": "缓存读取",

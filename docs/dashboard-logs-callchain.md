@@ -52,6 +52,14 @@
 - Repo：`src/repository/usage-logs.ts#findUsageLogsWithDetails`
 - CSV 生成：`src/actions/usage-logs.ts#generateCsv`
 
+### 导出 XLSX（异步任务）
+
+- Action：`src/actions/usage-logs.ts#startUsageLogsExport`
+- 状态查询：`src/actions/usage-logs.ts#getUsageLogsExportStatus`
+- 文件下载：`src/actions/usage-logs.ts#downloadUsageLogsExport`
+- Repo：`src/repository/usage-logs.ts#findUsageLogsBatch`
+- XLSX 生成：`src/lib/usage-logs/export/xlsx.ts`
+
 ### Session ID 联想（候选查询）
 
 - Action：`src/actions/usage-logs.ts#getUsageLogSessionIdSuggestions`
@@ -84,6 +92,29 @@
 
 ## 5) 本需求相关影响面（文件/符号清单）
 
+### reasoning / thinking token 展示口径（2026-06-29 更新）
+
+- 日志页统计面板会展示 `reasoningOutputTokens` 汇总：
+  - 组件：`src/app/[locale]/dashboard/logs/_components/usage-logs-stats-panel.tsx`
+- 虚拟列表与备用非虚拟表格会在 token / cost 明细中展示 reasoning token：
+  - `src/app/[locale]/dashboard/logs/_components/virtualized-logs-table.tsx`
+  - `src/app/[locale]/dashboard/logs/_components/usage-logs-table.tsx`
+- 明细弹窗会展示 reasoning token，并明确标注“已包含在 output tokens 中”：
+  - `src/app/[locale]/dashboard/logs/_components/error-details-dialog/components/SummaryTab.tsx`
+  - `src/app/[locale]/dashboard/logs/_components/error-details-dialog/components/MetadataTab.tsx`
+- 导出文件会单独输出 `Reasoning Tokens` 列：
+  - `src/lib/usage-logs/export/columns.ts`
+  - `src/lib/usage-logs/export/summary.ts`
+  - `src/lib/usage-logs/export/xlsx.ts`
+- 数据来源优先复用上游 usage 字段中的 reasoning/thinking 明细，当前已覆盖：
+  - OpenAI Responses 风格：`usage.output_tokens_details.reasoning_tokens`
+  - OpenAI Chat Completions 风格：`usage.completion_tokens_details.reasoning_tokens`
+  - Gemini 风格：`thoughtsTokenCount`
+- 口径约束：
+  - `reasoningOutputTokens` 是 `outputTokens` 的子集，只做审计展示
+  - `totalTokens` / 费用汇总不得再次累加 reasoning token，避免重复计数
+  - 历史数据可能为空，前端需按 `0` 或空值兼容展示
+
 **前端（logs 页面内聚）**：
 
 - URL/过滤器：`src/app/[locale]/dashboard/logs/_utils/logs-query.ts`
@@ -96,7 +127,7 @@
 **后端（Actions/Repo）**：
 
 - Actions：`src/actions/usage-logs.ts`
-  - `getUsageLogsBatch/getUsageLogsStats/exportUsageLogs/getUsageLogSessionIdSuggestions`
+  - `getUsageLogsBatch/getUsageLogsStats/exportUsageLogs/startUsageLogsExport/getUsageLogsExportStatus/downloadUsageLogsExport/getUsageLogSessionIdSuggestions`
 - Repo：`src/repository/usage-logs.ts`
   - `findUsageLogsBatch/findUsageLogsWithDetails/findUsageLogsStats/findUsageLogSessionIdSuggestions`
 
@@ -111,6 +142,7 @@
 - `sessionId` 精确筛选 + URL 回填 + UI 展示（列/复制/tooltip）
 - 秒级时间输入与 `endExclusive` 语义对齐（`< endTime`）
 - Session ID 联想（最小成本：minLen + debounce + limit）
+- reasoning/thinking token 的展示、汇总与导出审计
 
 不在范围内（需另开 issue/评审确认后再做）：
 

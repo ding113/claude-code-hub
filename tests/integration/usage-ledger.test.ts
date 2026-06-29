@@ -57,6 +57,7 @@ type InsertRequestInput = {
   costMultiplier?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  reasoningOutputTokens?: number | null;
   providerChain?: Array<{ id: number; name: string }> | null;
   createdAt?: Date;
 };
@@ -79,6 +80,7 @@ async function insertMessageRequestRow(input: InsertRequestInput) {
       costMultiplier: input.costMultiplier,
       inputTokens: input.inputTokens,
       outputTokens: input.outputTokens,
+      reasoningOutputTokens: input.reasoningOutputTokens,
       providerChain: input.providerChain,
       createdAt: input.createdAt,
     })
@@ -112,6 +114,7 @@ async function selectLedgerRowByRequestId(requestId: number) {
       costMultiplier: usageLedger.costMultiplier,
       inputTokens: usageLedger.inputTokens,
       outputTokens: usageLedger.outputTokens,
+      reasoningOutputTokens: usageLedger.reasoningOutputTokens,
       createdAt: usageLedger.createdAt,
     })
     .from(usageLedger)
@@ -156,6 +159,7 @@ run("usage ledger integration", () => {
         costMultiplier: "1.1000",
         inputTokens: 12,
         outputTokens: 34,
+        reasoningOutputTokens: 5,
         createdAt,
       });
 
@@ -176,6 +180,7 @@ run("usage ledger integration", () => {
       expect(toNumber(ledgerRow?.costUsd)).toBeCloseTo(1.25, 10);
       expect(ledgerRow?.inputTokens).toBe(12);
       expect(ledgerRow?.outputTokens).toBe(34);
+      expect(ledgerRow?.reasoningOutputTokens).toBe(5);
       expect(ledgerRow?.createdAt).toEqual(createdAt);
     });
 
@@ -199,6 +204,7 @@ run("usage ledger integration", () => {
           costUsd: "3.500000000000000",
           inputTokens: 101,
           outputTokens: 202,
+          reasoningOutputTokens: 66,
           statusCode: 201,
         })
         .where(eq(messageRequest.id, requestId));
@@ -210,6 +216,7 @@ run("usage ledger integration", () => {
           costUsd: usageLedger.costUsd,
           inputTokens: usageLedger.inputTokens,
           outputTokens: usageLedger.outputTokens,
+          reasoningOutputTokens: usageLedger.reasoningOutputTokens,
           statusCode: usageLedger.statusCode,
         })
         .from(usageLedger)
@@ -220,6 +227,7 @@ run("usage ledger integration", () => {
       expect(toNumber(rows[0]?.costUsd)).toBeCloseTo(3.5, 10);
       expect(rows[0]?.inputTokens).toBe(101);
       expect(rows[0]?.outputTokens).toBe(202);
+      expect(rows[0]?.reasoningOutputTokens).toBe(66);
       expect(rows[0]?.statusCode).toBe(201);
     });
 

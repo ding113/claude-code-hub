@@ -55,6 +55,13 @@ export const DETAIL_COLUMNS: DetailColumn[] = [
     get: (log) => log.outputTokens,
   },
   {
+    header: "Reasoning Tokens",
+    kind: "number",
+    numFmt: INT_NUM_FMT,
+    zeroWhenNull: true,
+    get: (log) => log.reasoningOutputTokens ?? null,
+  },
+  {
     header: "Cache Write 5m",
     kind: "number",
     numFmt: INT_NUM_FMT,

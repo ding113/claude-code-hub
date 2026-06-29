@@ -1092,6 +1092,9 @@ export class SessionManager {
       if (usage.outputTokens !== undefined) {
         usageData.outputTokens = usage.outputTokens.toString();
       }
+      if (usage.reasoningOutputTokens !== undefined) {
+        usageData.reasoningOutputTokens = usage.reasoningOutputTokens.toString();
+      }
       if (usage.cacheCreationInputTokens !== undefined) {
         usageData.cacheCreationInputTokens = usage.cacheCreationInputTokens.toString();
       }
@@ -1204,6 +1207,9 @@ export class SessionManager {
     if (usage && Object.keys(usage).length > 0) {
       if (usage.inputTokens) session.inputTokens = parseInt(usage.inputTokens, 10);
       if (usage.outputTokens) session.outputTokens = parseInt(usage.outputTokens, 10);
+      if (usage.reasoningOutputTokens) {
+        session.reasoningOutputTokens = parseInt(usage.reasoningOutputTokens, 10);
+      }
       if (usage.cacheCreationInputTokens)
         session.cacheCreationInputTokens = parseInt(usage.cacheCreationInputTokens, 10);
       if (usage.cacheReadInputTokens)

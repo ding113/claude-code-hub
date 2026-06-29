@@ -230,6 +230,7 @@ export async function createMessageRequest(
     cacheCreation5mInputTokens: data.cache_creation_5m_input_tokens,
     cacheCreation1hInputTokens: data.cache_creation_1h_input_tokens,
     cacheReadInputTokens: data.cache_read_input_tokens,
+    reasoningOutputTokens: data.reasoning_output_tokens,
   };
 
   const [result] = await db.insert(messageRequest).values(dbData).returning({
@@ -253,6 +254,7 @@ export async function createMessageRequest(
     cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
     cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
     cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+    reasoningOutputTokens: messageRequest.reasoningOutputTokens,
     specialSettings: messageRequest.specialSettings,
     createdAt: messageRequest.createdAt,
     updatedAt: messageRequest.updatedAt,
@@ -467,6 +469,7 @@ export async function updateMessageRequestDetails(
     statusCode?: number;
     inputTokens?: number;
     outputTokens?: number;
+    reasoningOutputTokens?: number;
     ttfbMs?: number | null;
     cacheCreationInputTokens?: number;
     cacheReadInputTokens?: number;
@@ -508,6 +511,9 @@ export async function updateMessageRequestDetails(
   }
   if (details.outputTokens !== undefined) {
     updateData.outputTokens = details.outputTokens;
+  }
+  if (details.reasoningOutputTokens !== undefined) {
+    updateData.reasoningOutputTokens = details.reasoningOutputTokens;
   }
   if (details.ttfbMs !== undefined) {
     updateData.ttfbMs = details.ttfbMs;

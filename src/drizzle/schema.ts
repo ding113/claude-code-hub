@@ -502,6 +502,7 @@ export const messageRequest = pgTable('message_request', {
   // Token 使用信息
   inputTokens: bigint('input_tokens', { mode: 'number' }),
   outputTokens: bigint('output_tokens', { mode: 'number' }),
+  reasoningOutputTokens: bigint('reasoning_output_tokens', { mode: 'number' }),
   ttfbMs: integer('ttfb_ms'),
   cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
   cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
@@ -1017,6 +1018,7 @@ export const usageLedger = pgTable('usage_ledger', {
   groupCostMultiplier: numeric('group_cost_multiplier', { precision: 10, scale: 4 }),
   inputTokens: bigint('input_tokens', { mode: 'number' }),
   outputTokens: bigint('output_tokens', { mode: 'number' }),
+  reasoningOutputTokens: bigint('reasoning_output_tokens', { mode: 'number' }),
   cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
   cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
   cacheCreation5mInputTokens: bigint('cache_creation_5m_input_tokens', { mode: 'number' }),
