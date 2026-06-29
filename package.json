@@ -9,7 +9,7 @@
     "dev": "tsgo -p tsconfig.json --noEmit && next dev --port 13500",
     "dev:server": "NODE_ENV=development node server.js",
     "build": "tsgo -p tsconfig.json --noEmit && next build && (node scripts/copy-version-to-standalone.cjs || bun scripts/copy-version-to-standalone.cjs) && (node scripts/copy-custom-server-to-standalone.cjs || bun scripts/copy-custom-server-to-standalone.cjs)",
-    "start": "node server.js",
+    "start": "NODE_ENV=production node server.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsgo -p tsconfig.json --noEmit",
