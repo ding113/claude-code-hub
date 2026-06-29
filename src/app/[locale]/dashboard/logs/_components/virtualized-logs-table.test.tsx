@@ -184,6 +184,25 @@ function renderCostTooltipWithLog(overrides: Partial<UsageLogRow>) {
   return tooltip;
 }
 
+function renderTableContainerWithLog(overrides: Partial<UsageLogRow>) {
+  const html = renderTableWithLog(overrides);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  return container;
+}
+
+function renderTokenTooltipWithLog(overrides: Partial<UsageLogRow>) {
+  const container = renderTableContainerWithLog(overrides);
+  const tooltips = [...container.querySelectorAll('[data-slot="tooltip-content"]')];
+  const tooltip = tooltips.find((node) => node.textContent?.includes("logs.billingDetails.input:"));
+
+  if (!(tooltip instanceof HTMLDivElement)) {
+    throw new Error("Token tooltip content not found");
+  }
+
+  return tooltip;
+}
+
 describe("virtualized-logs-table multiplier badge", () => {
   test("does not cap cached pages so deep scroll can return to the latest rows", () => {
     mockIsLoading = false;
@@ -226,6 +245,76 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(
       renderToStaticMarkup(<VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />)
     ).toContain("logs.table.noData");
+  });
+
+  test("renders inline reasoning tokens after output tokens when present", () => {
+    const container = renderTableContainerWithLog({
+      inputTokens: 1090,
+      outputTokens: 426,
+      reasoningOutputTokens: 312,
+    });
+
+    expect(container.textContent).toContain("1.09K");
+    const outputLine = container.querySelector(
+      '[data-slot="logs-token-output-line"]'
+    ) as HTMLDivElement | null;
+    const reasoningInline = container.querySelector(
+      '[data-slot="logs-token-reasoning-inline"]'
+    ) as HTMLSpanElement | null;
+    const outputInline = container.querySelector(
+      '[data-slot="logs-token-output-inline"]'
+    ) as HTMLSpanElement | null;
+
+    expect(outputLine).not.toBeNull();
+    expect(reasoningInline?.textContent).toBe("312");
+    expect(outputInline?.textContent).toBe("426");
+    expect(outputLine?.textContent).toBe("312426");
+  });
+
+  test("does not render inline reasoning suffix when reasoning tokens are zero", () => {
+    const container = renderTableContainerWithLog({
+      outputTokens: 426,
+      reasoningOutputTokens: 0,
+    });
+
+    const reasoningInline = container.querySelector('[data-slot="logs-token-reasoning-inline"]');
+    const outputInline = container.querySelector('[data-slot="logs-token-output-inline"]');
+
+    expect(outputInline?.textContent).toBe("426");
+    expect(reasoningInline).toBeNull();
+  });
+
+  test("does not render inline reasoning suffix when reasoning tokens are missing", () => {
+    const container = renderTableContainerWithLog({
+      outputTokens: 426,
+      reasoningOutputTokens: null,
+    });
+
+    const reasoningInline = container.querySelector('[data-slot="logs-token-reasoning-inline"]');
+    const outputInline = container.querySelector('[data-slot="logs-token-output-inline"]');
+
+    expect(outputInline?.textContent).toBe("426");
+    expect(reasoningInline).toBeNull();
+  });
+
+  test("renders token tooltip with indented reasoning section and short included text", () => {
+    const tooltip = renderTokenTooltipWithLog({
+      inputTokens: 1030,
+      outputTokens: 859,
+      reasoningOutputTokens: 516,
+    });
+
+    expect(tooltip.textContent).toContain("logs.billingDetails.input: 1.03K");
+    expect(tooltip.textContent).toContain("logs.billingDetails.output: 859");
+    expect(tooltip.textContent).toContain("logs.billingDetails.reasoningShort: 516");
+    expect(tooltip.textContent).toContain("logs.billingDetails.includedInOutputShort");
+    expect(tooltip.textContent).not.toContain(
+      "logs.billingDetails.includedInOutputAlready included in output tokens"
+    );
+
+    const indentedBlock = tooltip.querySelector(".pl-3");
+    expect(indentedBlock).not.toBeNull();
+    expect(indentedBlock?.textContent).toContain("logs.billingDetails.reasoningShort: 516");
   });
 
   test("does not render cost multiplier badge for null/undefined/empty/NaN/Infinity", () => {

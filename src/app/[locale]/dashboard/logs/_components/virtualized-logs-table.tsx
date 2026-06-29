@@ -94,6 +94,10 @@ function StatusBadgeOnly({ statusCode }: { statusCode: number | null }) {
   );
 }
 
+function hasPositiveReasoningTokens(value: number | null | undefined): value is number {
+  return value != null && value > 0;
+}
+
 interface VirtualizedLogsTableProps {
   filters: VirtualizedLogsTableFilters;
   currencyCode?: CurrencyCode;
@@ -713,7 +717,7 @@ export function VirtualizedLogsTable({
               </div>
               {hideTokensColumn ? null : (
                 <div
-                  className="flex-[0.7] min-w-[70px] text-right px-1.5 truncate"
+                  className="flex-[0.7] min-w-[96px] text-right px-1.5 truncate"
                   title={t("logs.columns.tokens")}
                 >
                   {t("logs.columns.tokens")}
@@ -1012,15 +1016,34 @@ export function VirtualizedLogsTable({
 
                     {/* Tokens */}
                     {hideTokensColumn ? null : (
-                      <div className="flex-[0.7] min-w-[70px] text-right font-mono text-xs px-1.5">
+                      <div className="flex-[0.7] min-w-[96px] text-right font-mono text-xs px-1.5">
                         <TooltipProvider>
                           <Tooltip delayDuration={250}>
                             <TooltipTrigger asChild>
-                              <div className="cursor-help flex flex-col items-end leading-tight tabular-nums">
+                              <div
+                                className="cursor-help flex flex-col items-end leading-tight tabular-nums"
+                                data-slot="logs-token-cell"
+                              >
                                 <span>{formatTokenAmount(log.inputTokens)}</span>
-                                <span className="text-muted-foreground">
-                                  {formatTokenAmount(log.outputTokens)}
-                                </span>
+                                <div
+                                  className="flex items-baseline justify-end gap-1.5 whitespace-nowrap"
+                                  data-slot="logs-token-output-line"
+                                >
+                                  {hasPositiveReasoningTokens(log.reasoningOutputTokens) ? (
+                                    <span
+                                      className="text-[9px] text-muted-foreground/70"
+                                      data-slot="logs-token-reasoning-inline"
+                                    >
+                                      {formatTokenAmount(log.reasoningOutputTokens)}
+                                    </span>
+                                  ) : null}
+                                  <span
+                                    className="text-muted-foreground"
+                                    data-slot="logs-token-output-inline"
+                                  >
+                                    {formatTokenAmount(log.outputTokens)}
+                                  </span>
+                                </div>
                               </div>
                             </TooltipTrigger>
                             <TooltipContent align="end" className="text-xs space-y-1">
@@ -1032,13 +1055,17 @@ export function VirtualizedLogsTable({
                                 {t("logs.billingDetails.output")}:{" "}
                                 {formatTokenAmount(log.outputTokens)}
                               </div>
-                              <div>
-                                {t("logs.billingDetails.reasoningTokens")}:{" "}
-                                {formatTokenAmount(log.reasoningOutputTokens)}
-                              </div>
-                              <div className="text-muted-foreground">
-                                {t("logs.billingDetails.includedInOutput")}
-                              </div>
+                              {hasPositiveReasoningTokens(log.reasoningOutputTokens) ? (
+                                <div className="pl-3 text-muted-foreground space-y-0.5">
+                                  <div>
+                                    {t("logs.billingDetails.reasoningShort")}:{" "}
+                                    {formatTokenAmount(log.reasoningOutputTokens)}
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground/90">
+                                    {t("logs.billingDetails.includedInOutputShort")}
+                                  </div>
+                                </div>
+                              ) : null}
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
