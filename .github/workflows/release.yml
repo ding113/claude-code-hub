@@ -116,12 +116,13 @@ jobs:
           # 比较tag版本和文件版本,取较大值
           function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 
-          if version_gt "$FILE_VERSION_CLEAN" "$TAG_VERSION"; then
+          # 注意：相同版本时优先选择 FILE_VERSION，以保留 +cch.X 等 build metadata 后缀
+          if version_gt "$FILE_VERSION_CLEAN" "$TAG_VERSION" || [ "$FILE_VERSION_CLEAN" = "$TAG_VERSION" ]; then
             VERSION="$FILE_VERSION"
-            echo "Using VERSION file: $VERSION (newer than tag)"
+            echo "Using VERSION file: $VERSION"
           else
             VERSION="$TAG_VERSION"
-            echo "Using tag version: $VERSION (newer or equal to file)"
+            echo "Using tag version: $VERSION (newer than file)"
           fi
 
           echo "Current version: $VERSION"
