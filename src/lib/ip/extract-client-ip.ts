@@ -1,10 +1,10 @@
-import { isIP } from "node:net";
 import {
   DEFAULT_IP_EXTRACTION_CONFIG,
   type IpExtractionConfig,
   type IpHeaderRule,
   type XffPick,
 } from "@/types/ip-extraction";
+import { getIpVersion, isValidIp } from "./ip-parse";
 
 export type HeadersLike = Headers | Record<string, string | string[] | undefined>;
 
@@ -31,16 +31,16 @@ function normalizeIp(raw: string): string | null {
   const bracketMatch = /^\[([^\]]+)](?::\d+)?$/.exec(trimmed);
   if (bracketMatch) {
     const inner = bracketMatch[1];
-    return isIP(inner) ? inner : null;
+    return isValidIp(inner) ? inner : null;
   }
 
   // IPv4 with port ("1.2.3.4:5678"): strip port
   // (IPv6 unbracketed can contain colons, so only strip when exactly one colon)
-  if (trimmed.split(":").length === 2 && isIP(trimmed.split(":")[0]) === 4) {
+  if (trimmed.split(":").length === 2 && getIpVersion(trimmed.split(":")[0]) === 4) {
     return trimmed.split(":")[0];
   }
 
-  return isIP(trimmed) ? trimmed : null;
+  return isValidIp(trimmed) ? trimmed : null;
 }
 
 function pickFromChain(entries: string[], pick: XffPick | undefined): string | null {

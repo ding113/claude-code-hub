@@ -1,4 +1,4 @@
-import { isIP } from "node:net";
+import { getIpVersion } from "./ip-parse";
 
 function ipv4ToInt(ip: string): number | null {
   const parts = ip.split(".");
@@ -56,7 +56,7 @@ function isPrivateIpv6(ip: string): boolean {
  * Invalid input returns false (callers decide what to do with "unknown").
  */
 export function isPrivateIp(ip: string): boolean {
-  const version = isIP(ip);
+  const version = getIpVersion(ip);
   if (version === 4) return isPrivateIpv4(ip);
   if (version === 6) return isPrivateIpv6(ip);
   return false;
