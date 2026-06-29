@@ -63,7 +63,6 @@ jobs:
             if [[ ! "$file" =~ \.(md|txt)$ ]] &&
                [[ ! "$file" =~ ^docs/ ]] &&
                [[ ! "$file" =~ ^\.github/workflows/ ]] &&
-               [[ "$file" != "VERSION" ]] &&
                [[ "$file" != ".gitignore" ]] &&
                [[ "$file" != "LICENSE" ]]; then
               echo "Found significant change in: $file"
@@ -84,17 +83,12 @@ jobs:
         if: steps.check.outputs.needs_release == 'true'
         id: get_version
         run: |
-          # 直接从 VERSION 文件读取版本（源码即真理，不变更版本号）
-          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
-          echo "VERSION file: $FILE_VERSION"
+          FULL_VERSION=$(cat VERSION | tr -d '[:space:]')
+          echo "VERSION file: $FULL_VERSION"
 
-          # 提取干净的 semver 核心用于 tag 和镜像（去掉 +cch.X 等 build metadata）
-          CLEAN_VERSION=$(echo "$FILE_VERSION" | sed 's/[+].*$//')
-          echo "Clean version: $CLEAN_VERSION"
-
-          echo "new_tag=v${CLEAN_VERSION}" >> $GITHUB_OUTPUT
-          echo "new_version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
-          echo "full_version=${FILE_VERSION}" >> $GITHUB_OUTPUT
+          echo "new_tag=v${FULL_VERSION}" >> $GITHUB_OUTPUT
+          echo "new_version=${FULL_VERSION}" >> $GITHUB_OUTPUT
+          echo "full_version=${FULL_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Check if tag already exists
         if: steps.check.outputs.needs_release == 'true'
