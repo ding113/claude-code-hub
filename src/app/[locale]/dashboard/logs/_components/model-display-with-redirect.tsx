@@ -50,10 +50,15 @@ export function ModelDisplayWithRedirect({
   const effortInfo = extractReasoningEffortInfo(specialSettings);
   const requestModel = audit.effectiveRequestModel;
   const responseModel = audit.secondaryActualModel;
-  const inlineEffortLabel = effortInfo?.hasRequestEffort
+  const desktopEffortLabel = effortInfo?.hasRequestEffort
     ? tTable("reasoningEffort", { effort: effortInfo.originalEffort })
     : effortInfo
       ? tTable("reasoningEffortApplied", { effort: effortInfo.originalEffort })
+      : null;
+  const mobileEffortLabel = effortInfo?.hasRequestEffort
+    ? tTable("reasoningEffortShort", { effort: effortInfo.originalEffort })
+    : effortInfo
+      ? tTable("reasoningEffortAppliedShort", { effort: effortInfo.originalEffort })
       : null;
 
   const handleCopyModel = useCallback(
@@ -70,7 +75,7 @@ export function ModelDisplayWithRedirect({
   const secondaryLine =
     audit.hasActualMismatch && audit.secondaryActualModel ? (
       <div
-        className="flex items-center gap-1 text-xs text-muted-foreground truncate"
+        className="hidden items-center gap-1 text-xs text-muted-foreground truncate md:flex"
         aria-label={tAudit("secondaryLineAriaLabel", {
           model: audit.secondaryActualModel,
         })}
@@ -172,39 +177,57 @@ export function ModelDisplayWithRedirect({
     </div>
   );
 
+  const redirectBadge = isRedirected ? (
+    <Badge
+      variant="outline"
+      className="cursor-pointer text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300 px-1 shrink-0"
+      onClick={(e) => {
+        e.stopPropagation();
+        onRedirectClick?.();
+      }}
+    >
+      <ArrowRight className="h-3 w-3" />
+    </Badge>
+  ) : null;
+
+  const hasMobileMetaRow = Boolean((effortInfo && mobileEffortLabel) || isRedirected);
+
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex w-fit max-w-full flex-col min-w-0 gap-0.5 cursor-help">
-            <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex w-full max-w-full min-w-0 flex-col gap-0.5 cursor-help">
+            <div className="flex w-full min-w-0 items-center gap-1.5">
               {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
               <span
-                className="truncate max-w-full cursor-pointer hover:underline"
+                className="min-w-0 flex-1 truncate cursor-pointer hover:underline"
                 onClick={handleCopyModel}
               >
                 {billingModel || "-"}
               </span>
-              {effortInfo && inlineEffortLabel ? (
+              {effortInfo && desktopEffortLabel ? (
                 <AnthropicEffortBadge
                   effort={effortInfo.originalEffort}
-                  label={inlineEffortLabel}
-                  className="shrink-0"
+                  label={desktopEffortLabel}
+                  className="hidden shrink-0 md:inline-flex"
                 />
               ) : null}
-              {isRedirected ? (
-                <Badge
-                  variant="outline"
-                  className="cursor-pointer text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300 px-1 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRedirectClick?.();
-                  }}
-                >
-                  <ArrowRight className="h-3 w-3" />
-                </Badge>
+              {redirectBadge ? (
+                <span className="hidden md:inline-flex">{redirectBadge}</span>
               ) : null}
             </div>
+            {hasMobileMetaRow ? (
+              <div className="flex min-w-0 items-center gap-1 md:hidden">
+                {effortInfo && mobileEffortLabel ? (
+                  <AnthropicEffortBadge
+                    effort={effortInfo.originalEffort}
+                    label={mobileEffortLabel}
+                    className="max-w-full shrink-0"
+                  />
+                ) : null}
+                {redirectBadge}
+              </div>
+            ) : null}
             {secondaryLine}
           </div>
         </TooltipTrigger>

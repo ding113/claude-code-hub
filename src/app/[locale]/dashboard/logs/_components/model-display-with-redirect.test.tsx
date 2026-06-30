@@ -7,8 +7,14 @@ vi.mock("next-intl", () => ({
     if (namespace === "dashboard.logs.table" && key === "reasoningEffort") {
       return `Effort: ${values?.effort ?? ""}`;
     }
+    if (namespace === "dashboard.logs.table" && key === "reasoningEffortShort") {
+      return `${values?.effort ?? ""}`;
+    }
     if (namespace === "dashboard.logs.table" && key === "reasoningEffortApplied") {
       return `Applied: ${values?.effort ?? ""}`;
+    }
+    if (namespace === "dashboard.logs.table" && key === "reasoningEffortAppliedShort") {
+      return `${values?.effort ?? ""}`;
     }
     return namespace ? `${namespace}.${key}` : key;
   },
@@ -79,6 +85,7 @@ describe("ModelDisplayWithRedirect", () => {
     );
 
     expect(html).toContain("Effort: medium");
+    expect(html).toContain(">medium<");
     expect(html).toContain("dashboard.logs.details.modelRedirect.billingModel");
     expect(html).toContain("dashboard.logs.details.modelAudit.responseModelLabel");
     expect(html).toContain("dashboard.logs.details.effort.tooltip");
@@ -115,6 +122,7 @@ describe("ModelDisplayWithRedirect", () => {
     );
 
     expect(html).toContain("Applied: high");
+    expect(html).toContain(">high<");
     expect(html).toContain("dashboard.logs.details.effort.appliedTooltip");
     expect(html).toContain("dashboard.logs.details.effort.injectedByProvider");
   });

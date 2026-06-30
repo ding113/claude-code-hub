@@ -47,7 +47,7 @@ import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
 
 const BATCH_SIZE = 50;
-const ROW_HEIGHT = 52; // Estimated row height in pixels
+const ROW_HEIGHT = 64; // Estimated row height in pixels
 
 export type LogsFetchFn = (
   params: VirtualizedLogsTableFilters & {
@@ -773,7 +773,7 @@ export function VirtualizedLogsTable({
                 </div>
               )}
               <div
-                className="flex-[1.3] min-w-[100px] px-1.5 truncate"
+                className="flex-[1.6] min-w-[128px] px-1.5 truncate md:flex-[1.3] md:min-w-[100px]"
                 title={t("logs.columns.model")}
               >
                 {t("logs.columns.model")}
@@ -947,7 +947,7 @@ export function VirtualizedLogsTable({
 
                     {/* Provider */}
                     {hideProviderColumn ? null : (
-                      <div className="flex-[1.5] min-w-[100px] px-1.5">
+                      <div className="flex-[1.2] min-w-[84px] px-1.5 md:flex-[1.5] md:min-w-[100px]">
                         {log.blockedBy ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                             <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
@@ -1056,8 +1056,8 @@ export function VirtualizedLogsTable({
                     )}
 
                     {/* Model */}
-                    <div className="flex-[1.3] min-w-[100px] font-mono text-xs px-1.5">
-                      <div className="flex items-center gap-1 min-w-0 truncate">
+                    <div className="flex-[1.6] min-w-[128px] font-mono text-xs px-1.5 md:flex-[1.3] md:min-w-[100px]">
+                      <div className="flex min-w-0 items-start gap-1">
                         <ModelDisplayWithRedirect
                           originalModel={log.originalModel}
                           currentModel={log.model}
