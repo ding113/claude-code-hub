@@ -105,6 +105,7 @@ vi.mock("./usage-logs-filters", () => ({
             endTime: 2000,
             statusCode: 500,
             model: "claude-sonnet",
+            actualResponseModelMismatch: true,
             endpoint: "/v1/messages",
             minRetryCount: 1,
           })
@@ -185,7 +186,7 @@ describe("UsageLogsViewVirtualized filter navigation", () => {
     clickButton(container, "apply all filters");
 
     expect(routerMocks.pushedHref).toBe(
-      "/zh-CN/dashboard/logs?userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&endpoint=%2Fv1%2Fmessages&minRetry=1"
+      "/zh-CN/dashboard/logs?userId=2&keyId=3&providerId=4&sessionId=session-abc&startTime=1000&endTime=2000&statusCode=500&model=claude-sonnet&actualResponseModelMismatch=true&endpoint=%2Fv1%2Fmessages&minRetry=1"
     );
 
     unmount();

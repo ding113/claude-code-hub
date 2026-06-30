@@ -18,6 +18,9 @@ export const MeUsageLogsQuerySchema = z.object({
   endTime: NumberQuerySchema.describe("End timestamp in milliseconds."),
   sessionId: z.string().optional().describe("Session id filter."),
   model: z.string().optional().describe("Model filter."),
+  actualResponseModelMismatch: BooleanQuerySchema.describe(
+    "Only include records whose requested model differs from the actual response model."
+  ),
   statusCode: z.coerce.number().int().optional().describe("HTTP status code filter."),
   excludeStatusCode200: BooleanQuerySchema.describe("Exclude successful responses."),
   endpoint: z.string().optional().describe("Endpoint filter."),

@@ -42,6 +42,7 @@ const VALID_FILTER_KEYS: (keyof UsageLogFilters)[] = [
   "statusCode",
   "excludeStatusCode200",
   "model",
+  "actualResponseModelMismatch",
   "endpoint",
   "minRetryCount",
 ];
@@ -131,6 +132,7 @@ export function UsageLogsFilters({
     let count = 0;
     if (isAdmin && localFilters.providerId !== undefined) count++;
     if (localFilters.model) count++;
+    if (localFilters.actualResponseModelMismatch) count++;
     if (localFilters.endpoint) count++;
     if (localFilters.sessionId) count++;
     return count;
@@ -138,6 +140,7 @@ export function UsageLogsFilters({
     isAdmin,
     localFilters.providerId,
     localFilters.model,
+    localFilters.actualResponseModelMismatch,
     localFilters.endpoint,
     localFilters.sessionId,
   ]);

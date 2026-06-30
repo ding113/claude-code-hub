@@ -8,6 +8,7 @@ export interface LogsUrlFilters {
   statusCode?: number;
   excludeStatusCode200?: boolean;
   model?: string;
+  actualResponseModelMismatch?: boolean;
   endpoint?: string;
   minRetryCount?: number;
   page?: number;
@@ -43,6 +44,9 @@ export function parseLogsUrlFilters(searchParams: {
       ? Number.parseInt(statusCodeParam, 10)
       : undefined;
 
+  const actualResponseModelMismatch =
+    parseStringParam(searchParams.actualResponseModelMismatch) === "true" ? true : undefined;
+
   return {
     userId: parseIntParam(searchParams.userId),
     keyId: parseIntParam(searchParams.keyId),
@@ -53,6 +57,7 @@ export function parseLogsUrlFilters(searchParams: {
     statusCode: Number.isFinite(statusCode) ? statusCode : undefined,
     excludeStatusCode200: statusCodeParam === "!200",
     model: parseStringParam(searchParams.model),
+    actualResponseModelMismatch,
     endpoint: parseStringParam(searchParams.endpoint),
     minRetryCount: parseIntParam(searchParams.minRetry),
     page,
@@ -79,6 +84,7 @@ export function buildLogsUrlQuery(filters: LogsUrlFilters): URLSearchParams {
   }
 
   if (filters.model) query.set("model", filters.model);
+  if (filters.actualResponseModelMismatch) query.set("actualResponseModelMismatch", "true");
   if (filters.endpoint) query.set("endpoint", filters.endpoint);
 
   if (filters.minRetryCount !== undefined) {
