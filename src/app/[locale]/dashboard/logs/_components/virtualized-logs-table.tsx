@@ -511,7 +511,7 @@ export function VirtualizedLogsTable({
                 <span className={amountClassName}>{formatTokenAmount(log.outputTokens)}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span>{t("logs.billingDetails.reasoningTokens")}</span>
+                <span>{t("logs.billingDetails.reasoningShort")}</span>
                 <span className={amountClassName}>
                   {formatTokenAmount(log.reasoningOutputTokens)}
                 </span>
@@ -537,7 +537,7 @@ export function VirtualizedLogsTable({
       createCostRow(t("logs.billingDetails.output"), log.costBreakdown.output, log.outputTokens),
       {
         key: "reasoning",
-        label: t("logs.billingDetails.reasoningTokens"),
+        label: t("logs.billingDetails.reasoningShort"),
         ttl: undefined,
         amount: formatTokenAmount(log.reasoningOutputTokens),
         unitPrice: t("logs.billingDetails.includedInOutput"),

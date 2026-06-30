@@ -315,7 +315,7 @@ export function UsageLogsTable({
                               {formatTokenAmount(log.outputTokens)}
                             </div>
                             <div>
-                              {t("logs.billingDetails.reasoningTokens")}:{" "}
+                              {t("logs.billingDetails.reasoningShort")}: {" "}
                               {formatTokenAmount(log.reasoningOutputTokens)}
                             </div>
                             <div className="text-muted-foreground">
@@ -463,7 +463,7 @@ export function UsageLogsTable({
                                 {formatTokenAmount(log.outputTokens)} tokens
                               </div>
                               <div>
-                                {t("logs.billingDetails.reasoningTokens")}:{" "}
+                                {t("logs.billingDetails.reasoningShort")}: {" "}
                                 {formatTokenAmount(log.reasoningOutputTokens)} tokens
                               </div>
                               <div className="text-muted-foreground">
