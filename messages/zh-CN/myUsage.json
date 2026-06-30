@@ -5,18 +5,7 @@
     "documentation": "使用文档",
     "logout": "退出登录",
     "keyLabel": "密钥",
-    "userLabel": "用户",
-    "providerGroup": "供应商分组",
-    "noProviderGroup": "默认",
-    "inherited": "（继承）"
-  },
-  "quotaDialog": {
-    "trigger": "查看配额",
-    "title": "配额使用详情",
-    "refresh": "刷新",
-    "lastUpdated": "更新于 {time}",
-    "loadFailed": "配额加载失败",
-    "close": "关闭"
+    "userLabel": "用户"
   },
   "quota": {
     "5h": "5小时额度",
@@ -32,7 +21,6 @@
   },
   "logs": {
     "title": "使用日志",
-    "autoRefresh": "每 {seconds} 秒自动刷新",
     "filters": {
       "startDate": "开始日期",
       "endDate": "结束日期",
@@ -42,25 +30,7 @@
       "allStatus": "全部状态",
       "apply": "应用",
       "reset": "重置"
-    },
-    "loadFailed": "日志加载失败",
-    "table": {
-      "time": "时间",
-      "model": "模型",
-      "tokens": "Tokens (入/出)",
-      "cacheWrite": "缓存写入",
-      "cacheRead": "缓存读取",
-      "cost": "消耗",
-      "status": "状态",
-      "endpoint": "API 端点"
-    },
-    "pagination": "显示 {from}-{to} / {total}",
-    "prev": "上一页",
-    "next": "下一页",
-    "noLogs": "暂无日志",
-    "unknownModel": "未知模型",
-    "billingModel": "计费：{model}",
-    "anthropicEffort": "Effort: {effort}"
+    }
   },
   "expiration": {
     "title": "过期时间",
@@ -127,11 +97,5 @@
     "daily": "日",
     "monthly": "月",
     "total": "总计"
-  },
-  "logsCollapsible": {
-    "title": "使用日志",
-    "lastStatus": "最近: {code} ({time})",
-    "successRate": "{rate}%",
-    "noData": "无数据"
   }
 }

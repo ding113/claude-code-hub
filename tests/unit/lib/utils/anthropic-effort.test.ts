@@ -256,9 +256,7 @@ describe("extractReasoningEffortInfo", () => {
           providerType: "codex",
           hit: true,
           changed: true,
-          changes: [
-            { path: "reasoning.effort", before: "low", after: "xhigh", changed: true },
-          ],
+          changes: [{ path: "reasoning.effort", before: "low", after: "xhigh", changed: true }],
         },
       ])
     ).toEqual({

@@ -5,18 +5,7 @@
     "documentation": "Документация",
     "logout": "Выйти",
     "keyLabel": "Ключ",
-    "userLabel": "Пользователь",
-    "providerGroup": "Группа провайдеров",
-    "noProviderGroup": "По умолчанию",
-    "inherited": "(наследовано)"
-  },
-  "quotaDialog": {
-    "trigger": "Лимиты",
-    "title": "Детали лимитов",
-    "refresh": "Обновить",
-    "lastUpdated": "Обновлено в {time}",
-    "loadFailed": "Не удалось загрузить лимиты",
-    "close": "Закрыть"
+    "userLabel": "Пользователь"
   },
   "quota": {
     "5h": "Лимит 5 часов",
@@ -32,7 +21,6 @@
   },
   "logs": {
     "title": "Журнал использования",
-    "autoRefresh": "Автообновление каждые {seconds}с",
     "filters": {
       "startDate": "Дата начала",
       "endDate": "Дата окончания",
@@ -42,25 +30,7 @@
       "allStatus": "Все статусы",
       "apply": "Применить",
       "reset": "Сбросить"
-    },
-    "loadFailed": "Не удалось загрузить логи",
-    "table": {
-      "time": "Время",
-      "model": "Модель",
-      "tokens": "Токены (вх/вых)",
-      "cacheWrite": "Запись кэш",
-      "cacheRead": "Чтение кэш",
-      "cost": "Цена",
-      "status": "Статус",
-      "endpoint": "API Endpoint"
-    },
-    "pagination": "Показано {from}-{to} из {total}",
-    "prev": "Назад",
-    "next": "Вперед",
-    "noLogs": "Нет записей",
-    "unknownModel": "Неизвестная модель",
-    "billingModel": "Биллинг: {model}",
-    "anthropicEffort": "Effort: {effort}"
+    }
   },
   "expiration": {
     "title": "Срок действия",
@@ -127,11 +97,5 @@
     "daily": "День",
     "monthly": "Месяц",
     "total": "Всего"
-  },
-  "logsCollapsible": {
-    "title": "Журнал запросов",
-    "lastStatus": "Посл.: {code} ({time})",
-    "successRate": "{rate}%",
-    "noData": "Нет данных"
   }
 }

@@ -18,7 +18,6 @@ import {
 export type {
   MyStatsSummary,
   MyTodayStats,
-  MyUsageLogEntry,
   MyUsageLogsBatchResult,
   MyUsageMetadata,
   MyUsageQuota,

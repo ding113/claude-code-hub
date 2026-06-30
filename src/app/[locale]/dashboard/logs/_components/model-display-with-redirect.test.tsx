@@ -70,9 +70,7 @@ describe("ModelDisplayWithRedirect", () => {
             providerType: "codex",
             hit: true,
             changed: true,
-            changes: [
-              { path: "reasoning.effort", before: "medium", after: "high", changed: true },
-            ],
+            changes: [{ path: "reasoning.effort", before: "medium", after: "high", changed: true }],
           },
         ]}
       />
@@ -105,9 +103,7 @@ describe("ModelDisplayWithRedirect", () => {
             providerType: "codex",
             hit: true,
             changed: true,
-            changes: [
-              { path: "reasoning.effort", before: null, after: "high", changed: true },
-            ],
+            changes: [{ path: "reasoning.effort", before: null, after: "high", changed: true }],
           },
         ]}
       />

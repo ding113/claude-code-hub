@@ -5,7 +5,7 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
-import { extractAnthropicEffortFromSpecialSettings, extractReasoningEffortInfo, type ReasoningEffortInfo } from "@/lib/utils/anthropic-effort";
+import { extractReasoningEffortInfo, type ReasoningEffortInfo } from "@/lib/utils/anthropic-effort";
 import { isNonBillingEndpoint } from "@/lib/utils/performance-formatter";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { HedgeLoserBilling, StoredCostBreakdown } from "@/types/cost-breakdown";
@@ -83,7 +83,6 @@ export interface UsageLogRow {
   specialSettings: SpecialSetting[] | null; // 特殊设置（审计/展示）
   _liveChain?: { chain: ProviderChainItem[]; phase: string; updatedAt: number } | null;
   reasoningEffort?: ReasoningEffortInfo | null;
-  anthropicEffort?: string | null;
 }
 
 export interface UsageLogSummary {
@@ -258,7 +257,6 @@ export async function findUsageLogsBatch(
       context1mApplied: row.context1mApplied,
     });
     const reasoningEffort = extractReasoningEffortInfo(unifiedSpecialSettings);
-    const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
 
     return {
       ...row,
@@ -275,7 +273,6 @@ export async function findUsageLogsBatch(
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
       reasoningEffort,
-      anthropicEffort,
     };
   });
 
@@ -497,7 +494,6 @@ interface UsageLogSlimRow {
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
   reasoningEffort?: ReasoningEffortInfo | null;
-  anthropicEffort?: string | null;
 }
 
 export interface UsageLogSlimBatchResult {
@@ -642,13 +638,11 @@ function mapUsageLogSlimRow(row: {
     context1mApplied: null,
   });
   const reasoningEffort = extractReasoningEffortInfo(unifiedSpecialSettings);
-  const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
 
   return {
     ...rest,
     costUsd: rest.costUsd?.toString() ?? null,
     reasoningEffort,
-    anthropicEffort,
   };
 }
 
@@ -869,7 +863,6 @@ async function selectKeyScopedLedgerSlimRows(
     cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
     cacheTtlApplied: row.cacheTtlApplied,
     reasoningEffort: null,
-    anthropicEffort: null,
   }));
 }
 
@@ -1007,7 +1000,6 @@ function mapUsageLogRowFromMessageResult(row: {
     context1mApplied: row.context1mApplied,
   });
   const reasoningEffort = extractReasoningEffortInfo(unifiedSpecialSettings);
-  const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
 
   return {
     ...row,
@@ -1021,7 +1013,6 @@ function mapUsageLogRowFromMessageResult(row: {
     providerChain: row.providerChain ?? null,
     specialSettings: unifiedSpecialSettings,
     reasoningEffort,
-    anthropicEffort,
   } satisfies UsageLogRow;
 }
 
@@ -1101,7 +1092,6 @@ function mapUsageLogRowFromLedgerResult(row: {
     swapCacheTtlApplied: row.swapCacheTtlApplied ?? null,
     specialSettings: null,
     reasoningEffort: null,
-    anthropicEffort: null,
     // usage_ledger 没有 hedge_losers 列（竞速明细仅存于 message_request）
     hedgeLosers: null,
   } satisfies UsageLogRow;
@@ -1455,7 +1445,6 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       context1mApplied: row.context1mApplied,
     });
     const reasoningEffort = extractReasoningEffortInfo(unifiedSpecialSettings);
-    const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
 
     return {
       ...row,
@@ -1472,7 +1461,6 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
       reasoningEffort,
-      anthropicEffort,
     };
   });
 

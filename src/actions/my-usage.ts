@@ -17,6 +17,7 @@ import {
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
+import type { ReasoningEffortInfo } from "@/lib/utils/anthropic-effort";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
@@ -238,7 +239,7 @@ export interface MyUsageLogEntry {
   createdAt: Date | null;
   model: string | null;
   billingModel: string | null;
-  anthropicEffort?: string | null;
+  reasoningEffort?: ReasoningEffortInfo | null;
   modelRedirect: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -641,7 +642,7 @@ function mapMyUsageLogEntries(
       createdAt: log.createdAt,
       model: log.model,
       billingModel,
-      anthropicEffort: log.anthropicEffort ?? null,
+      reasoningEffort: log.reasoningEffort ?? null,
       modelRedirect,
       inputTokens: log.inputTokens ?? 0,
       outputTokens: log.outputTokens ?? 0,

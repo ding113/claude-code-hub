@@ -5,18 +5,7 @@
     "documentation": "利用ドキュメント",
     "logout": "ログアウト",
     "keyLabel": "キー",
-    "userLabel": "ユーザー",
-    "providerGroup": "プロバイダーグループ",
-    "noProviderGroup": "デフォルト",
-    "inherited": "（継承）"
-  },
-  "quotaDialog": {
-    "trigger": "クォータを表示",
-    "title": "クォータ詳細",
-    "refresh": "更新",
-    "lastUpdated": "更新: {time}",
-    "loadFailed": "クォータの読み込みに失敗しました",
-    "close": "閉じる"
+    "userLabel": "ユーザー"
   },
   "quota": {
     "5h": "5時間クォータ",
@@ -32,7 +21,6 @@
   },
   "logs": {
     "title": "利用ログ",
-    "autoRefresh": "{seconds}秒ごとに自動更新",
     "filters": {
       "startDate": "開始日",
       "endDate": "終了日",
@@ -42,25 +30,7 @@
       "allStatus": "すべてのステータス",
       "apply": "適用",
       "reset": "リセット"
-    },
-    "loadFailed": "ログの取得に失敗しました",
-    "table": {
-      "time": "時間",
-      "model": "モデル",
-      "tokens": "トークン (入/出)",
-      "cacheWrite": "キャッシュ書込",
-      "cacheRead": "キャッシュ読取",
-      "cost": "コスト",
-      "status": "ステータス",
-      "endpoint": "エンドポイント"
-    },
-    "pagination": "{from}-{to}/{total} を表示",
-    "prev": "前へ",
-    "next": "次へ",
-    "noLogs": "ログがありません",
-    "unknownModel": "不明なモデル",
-    "billingModel": "課金: {model}",
-    "anthropicEffort": "Effort: {effort}"
+    }
   },
   "expiration": {
     "title": "有効期限",
@@ -127,11 +97,5 @@
     "daily": "日次",
     "monthly": "月次",
     "total": "合計"
-  },
-  "logsCollapsible": {
-    "title": "使用ログ",
-    "lastStatus": "最終: {code} ({time})",
-    "successRate": "{rate}%",
-    "noData": "データなし"
   }
 }

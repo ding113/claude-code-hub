@@ -9,8 +9,8 @@ import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatTokenAmount } from "@/lib/utils";
-import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import { extractReasoningEffortInfo } from "@/lib/utils/anthropic-effort";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import { resolveModelAuditDisplay } from "@/lib/utils/model-audit-display";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
@@ -50,12 +50,11 @@ export function ModelDisplayWithRedirect({
   const effortInfo = extractReasoningEffortInfo(specialSettings);
   const requestModel = audit.effectiveRequestModel;
   const responseModel = audit.secondaryActualModel;
-  const inlineEffortLabel =
-    effortInfo && effortInfo.hasRequestEffort
-      ? tTable("reasoningEffort", { effort: effortInfo.originalEffort })
-      : effortInfo
-        ? tTable("reasoningEffortApplied", { effort: effortInfo.originalEffort })
-        : null;
+  const inlineEffortLabel = effortInfo?.hasRequestEffort
+    ? tTable("reasoningEffort", { effort: effortInfo.originalEffort })
+    : effortInfo
+      ? tTable("reasoningEffortApplied", { effort: effortInfo.originalEffort })
+      : null;
 
   const handleCopyModel = useCallback(
     (e: MouseEvent) => {
@@ -100,13 +99,14 @@ export function ModelDisplayWithRedirect({
       : null,
   ].filter((row): row is { label: string; value: string } => row !== null);
 
-  const showOverrideTransition =
-    Boolean(
-      effortInfo?.isOverridden &&
-        effortInfo?.overriddenEffort &&
-        effortInfo.hasRequestEffort &&
-        effortInfo.overriddenEffort !== effortInfo.originalEffort
-    );
+  const overriddenEffortForDisplay =
+    effortInfo?.isOverridden &&
+    effortInfo.hasRequestEffort &&
+    effortInfo.overriddenEffort &&
+    effortInfo.overriddenEffort !== effortInfo.originalEffort
+      ? effortInfo.overriddenEffort
+      : null;
+  const showOverrideTransition = overriddenEffortForDisplay !== null;
 
   const tooltipContent = (
     <div className="space-y-2 text-xs max-w-xs">
@@ -128,8 +128,8 @@ export function ModelDisplayWithRedirect({
               <>
                 <ArrowRight className="h-3 w-3 text-muted-foreground" />
                 <AnthropicEffortBadge
-                  effort={effortInfo.overriddenEffort}
-                  label={effortInfo.overriddenEffort}
+                  effort={overriddenEffortForDisplay}
+                  label={overriddenEffortForDisplay}
                 />
               </>
             ) : null}

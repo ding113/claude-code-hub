@@ -117,9 +117,12 @@ function findOverrideChange(
   changed: boolean;
 } | null {
   const candidatePaths: ReasoningEffortPath[] = preferredPath
-    ? [preferredPath, ...(preferredPath === "output_config.effort"
-        ? (["reasoning.effort"] as const)
-        : (["output_config.effort"] as const))]
+    ? [
+        preferredPath,
+        ...(preferredPath === "output_config.effort"
+          ? (["reasoning.effort"] as const)
+          : (["output_config.effort"] as const)),
+      ]
     : ["output_config.effort", "reasoning.effort"];
 
   for (const candidatePath of candidatePaths) {
@@ -163,13 +166,13 @@ export function extractReasoningEffortInfo(
 
   const genericSetting = extractReasoningEffortSettingFromSpecialSettings(specialSettings);
   const legacyAnthropicEffort = extractAnthropicEffortFromSpecialSettings(specialSettings);
-  const originalPath = genericSetting?.path ?? (legacyAnthropicEffort ? "output_config.effort" : null);
+  const originalPath =
+    genericSetting?.path ?? (legacyAnthropicEffort ? "output_config.effort" : null);
   const originalEffort = genericSetting?.effort ?? legacyAnthropicEffort;
   const overrideChange = findOverrideChange(specialSettings, originalPath);
 
   if (overrideChange?.changed) {
-    const effectiveOriginalEffort =
-      originalEffort ?? overrideChange.before ?? overrideChange.after;
+    const effectiveOriginalEffort = originalEffort ?? overrideChange.before ?? overrideChange.after;
     if (!effectiveOriginalEffort) {
       return null;
     }
