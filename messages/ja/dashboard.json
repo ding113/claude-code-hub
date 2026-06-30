@@ -174,7 +174,18 @@
       "scrollToTop": "トップへ戻る",
       "hideProviderColumn": "プロバイダー列を非表示",
       "showProviderColumn": "プロバイダー列を表示",
-      "columnVisibility": "列の表示/非表示"
+      "columnVisibility": "列の表示/非表示",
+      "emptyValue": "—",
+      "metricLabels": {
+        "input": "入力",
+        "output": "出力",
+        "reasoning": "思考T",
+        "cacheWrite": "書込",
+        "cacheRead": "読取",
+        "duration": "時間",
+        "ttfb": "TTFB",
+        "rate": "速度"
+      }
     },
     "actions": {
       "refresh": "更新",

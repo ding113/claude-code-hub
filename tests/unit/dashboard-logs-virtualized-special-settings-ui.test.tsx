@@ -161,8 +161,8 @@ describe("VirtualizedLogsTable - specialSettings display", () => {
   });
 });
 
-describe("VirtualizedLogsTable - cache badge alignment", () => {
-  test("badge renders left while numbers stay right", async () => {
+describe("VirtualizedLogsTable - cache metric labels", () => {
+  test("badge renders with labeled cache write/read rows", async () => {
     const { container, unmount } = renderWithIntl(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
@@ -170,8 +170,11 @@ describe("VirtualizedLogsTable - cache badge alignment", () => {
     await flushMicrotasks();
     await waitForText(container, "Loaded 1 records");
 
-    expect(container.innerHTML).toContain("1h");
-    expect(container.innerHTML).toContain("ml-auto");
+    expect(container.textContent).toContain("1h");
+    expect(container.textContent).toContain("Write");
+    expect(container.textContent).toContain("Read");
+    expect(container.innerHTML).toContain("logs-metric-row-cache-write");
+    expect(container.innerHTML).toContain("logs-metric-row-cache-read");
 
     unmount();
   });

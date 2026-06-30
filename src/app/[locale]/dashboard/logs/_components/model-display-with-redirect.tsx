@@ -147,12 +147,14 @@ export function ModelDisplayWithRedirect({
             </span>
           ) : null}
           <span className="text-muted-foreground">
-            {tDetails("billingDetails.reasoningShort")}: {formatTokenAmount(reasoningOutputTokens)}
+            {tDetails("billingDetails.reasoningTokens")}: {formatTokenAmount(reasoningOutputTokens)}
           </span>
         </div>
       ) : reasoningOutputTokens != null ? (
         <div className="flex flex-col gap-0.5">
-          <span className="text-muted-foreground">{tDetails("billingDetails.reasoningShort")}</span>
+          <span className="text-muted-foreground">
+            {tDetails("billingDetails.reasoningTokens")}
+          </span>
           <span>{formatTokenAmount(reasoningOutputTokens)}</span>
         </div>
       ) : null}
@@ -174,7 +176,7 @@ export function ModelDisplayWithRedirect({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex flex-col min-w-0 gap-0.5 cursor-help">
+          <div className="flex w-fit max-w-full flex-col min-w-0 gap-0.5 cursor-help">
             <div className="flex items-center gap-1.5 min-w-0">
               {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
               <span
@@ -187,7 +189,7 @@ export function ModelDisplayWithRedirect({
                 <AnthropicEffortBadge
                   effort={effortInfo.originalEffort}
                   label={inlineEffortLabel}
-                  className="px-1 text-[9px] h-4 shrink-0"
+                  className="shrink-0"
                 />
               ) : null}
               {isRedirected ? (
@@ -206,7 +208,7 @@ export function ModelDisplayWithRedirect({
             {secondaryLine}
           </div>
         </TooltipTrigger>
-        <TooltipContent>{tooltipContent}</TooltipContent>
+        <TooltipContent variant="popover">{tooltipContent}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );

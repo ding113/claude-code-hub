@@ -72,8 +72,12 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TooltipContent: ({ children, className }: ComponentProps<"div">) => (
-    <div data-slot="tooltip-content" className={className}>
+  TooltipContent: ({
+    children,
+    className,
+    variant,
+  }: ComponentProps<"div"> & { variant?: string }) => (
+    <div data-slot="tooltip-content" data-variant={variant} className={className}>
       {children}
     </div>
   ),
@@ -284,17 +288,17 @@ describe("virtualized-logs-table multiplier badge", () => {
     ]);
   });
 
-  test("renders inline reasoning tokens after output tokens when present", () => {
+  test("renders labeled token metrics with reasoning tokens when present", () => {
     const container = renderTableContainerWithLog({
       inputTokens: 1090,
       outputTokens: 426,
       reasoningOutputTokens: 312,
     });
 
+    expect(container.textContent).toContain("logs.table.metricLabels.input");
     expect(container.textContent).toContain("1.09K");
-    const outputLine = container.querySelector(
-      '[data-slot="logs-token-output-line"]'
-    ) as HTMLDivElement | null;
+    expect(container.textContent).toContain("logs.table.metricLabels.output");
+    expect(container.textContent).toContain("logs.table.metricLabels.reasoning");
     const reasoningInline = container.querySelector(
       '[data-slot="logs-token-reasoning-inline"]'
     ) as HTMLSpanElement | null;
@@ -302,13 +306,11 @@ describe("virtualized-logs-table multiplier badge", () => {
       '[data-slot="logs-token-output-inline"]'
     ) as HTMLSpanElement | null;
 
-    expect(outputLine).not.toBeNull();
     expect(reasoningInline?.textContent).toBe("312");
     expect(outputInline?.textContent).toBe("426");
-    expect(outputLine?.textContent).toBe("312426");
   });
 
-  test("does not render inline reasoning suffix when reasoning tokens are zero", () => {
+  test("does not render reasoning token row when reasoning tokens are zero", () => {
     const container = renderTableContainerWithLog({
       outputTokens: 426,
       reasoningOutputTokens: 0,
@@ -321,7 +323,7 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(reasoningInline).toBeNull();
   });
 
-  test("does not render inline reasoning suffix when reasoning tokens are missing", () => {
+  test("does not render reasoning token row when reasoning tokens are missing", () => {
     const container = renderTableContainerWithLog({
       outputTokens: 426,
       reasoningOutputTokens: null,
@@ -334,24 +336,37 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(reasoningInline).toBeNull();
   });
 
-  test("renders token tooltip with indented reasoning section and short included text", () => {
+  test("renders token tooltip with indented reasoning token section and popover variant", () => {
     const tooltip = renderTokenTooltipWithLog({
       inputTokens: 1030,
       outputTokens: 859,
       reasoningOutputTokens: 516,
     });
 
+    expect(tooltip.dataset.variant).toBe("popover");
     expect(tooltip.textContent).toContain("logs.billingDetails.input: 1.03K");
     expect(tooltip.textContent).toContain("logs.billingDetails.output: 859");
-    expect(tooltip.textContent).toContain("logs.billingDetails.reasoningShort: 516");
+    expect(tooltip.textContent).toContain("logs.billingDetails.reasoningTokens: 516");
     expect(tooltip.textContent).toContain("logs.billingDetails.includedInOutputShort");
-    expect(tooltip.textContent).not.toContain(
-      "logs.billingDetails.includedInOutputAlready included in output tokens"
-    );
+    expect(tooltip.textContent).not.toContain("logs.billingDetails.reasoningShort: 516");
 
     const indentedBlock = tooltip.querySelector(".pl-3");
     expect(indentedBlock).not.toBeNull();
-    expect(indentedBlock?.textContent).toContain("logs.billingDetails.reasoningShort: 516");
+    expect(indentedBlock?.textContent).toContain("logs.billingDetails.reasoningTokens: 516");
+  });
+
+  test("renders a single metric empty state when token values are missing", () => {
+    const container = renderTableContainerWithLog({
+      inputTokens: null,
+      outputTokens: null,
+      reasoningOutputTokens: null,
+    });
+
+    const tokenCell = container.querySelector('[data-slot="logs-token-cell"]');
+    const emptyState = tokenCell?.querySelector('[data-slot="logs-metric-empty"]');
+
+    expect(emptyState?.textContent).toBe("logs.table.emptyValue");
+    expect(tokenCell?.querySelectorAll('[data-slot="logs-metric-empty"]')).toHaveLength(1);
   });
 
   test("does not render cost multiplier badge for null/undefined/empty/NaN/Infinity", () => {
@@ -510,8 +525,8 @@ describe("virtualized-logs-table multiplier badge", () => {
 
     // tok/s should NOT appear
     expect(html).not.toContain("tok/s");
-    // TTFB should still appear
-    expect(html).toContain("TTFB");
+    // TTFB row should still appear
+    expect(html).toContain("logs.table.metricLabels.ttfb");
   });
 
   test("shows tok/s when conditions are normal", () => {
@@ -530,8 +545,8 @@ describe("virtualized-logs-table multiplier badge", () => {
 
     // tok/s should appear
     expect(html).toContain("tok/s");
-    // TTFB should also appear
-    expect(html).toContain("TTFB");
+    // TTFB row should also appear
+    expect(html).toContain("logs.table.metricLabels.ttfb");
   });
 
   test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {

@@ -22,8 +22,10 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TooltipContent: ({ children }: { children?: ReactNode }) => (
-    <div data-slot="tooltip-content">{children}</div>
+  TooltipContent: ({ children, variant }: { children?: ReactNode; variant?: string }) => (
+    <div data-slot="tooltip-content" data-variant={variant}>
+      {children}
+    </div>
   ),
 }));
 
@@ -81,9 +83,12 @@ describe("ModelDisplayWithRedirect", () => {
     expect(html).toContain("dashboard.logs.details.modelAudit.responseModelLabel");
     expect(html).toContain("dashboard.logs.details.effort.tooltip");
     expect(html).toContain("dashboard.logs.details.effort.overridden");
+    expect(html).toContain("dashboard.logs.details.billingDetails.reasoningTokens");
     expect(html).toContain("321");
     expect(html).toContain("o3-mini-2026-01");
     expect(html).toContain("high");
+    expect(html).toContain('data-variant="popover"');
+    expect(html).not.toContain("dashboard.logs.details.billingDetails.reasoningShort");
     expect(html).not.toContain("Applied: medium");
   });
 

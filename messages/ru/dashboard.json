@@ -174,7 +174,18 @@
       "scrollToTop": "Наверх",
       "hideProviderColumn": "Скрыть столбец провайдера",
       "showProviderColumn": "Показать столбец провайдера",
-      "columnVisibility": "Видимость столбцов"
+      "columnVisibility": "Видимость столбцов",
+      "emptyValue": "—",
+      "metricLabels": {
+        "input": "Ввод",
+        "output": "Вывод",
+        "reasoning": "Reason",
+        "cacheWrite": "Зап.",
+        "cacheRead": "Чт.",
+        "duration": "Длит.",
+        "ttfb": "TTFB",
+        "rate": "Скор."
+      }
     },
     "actions": {
       "refresh": "Обновить",

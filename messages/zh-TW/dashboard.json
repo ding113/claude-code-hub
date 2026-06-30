@@ -174,7 +174,18 @@
       "scrollToTop": "回到頂端",
       "hideProviderColumn": "隱藏供應商欄",
       "showProviderColumn": "顯示供應商欄",
-      "columnVisibility": "顯示/隱藏欄位"
+      "columnVisibility": "顯示/隱藏欄位",
+      "emptyValue": "—",
+      "metricLabels": {
+        "input": "輸入",
+        "output": "輸出",
+        "reasoning": "思考T",
+        "cacheWrite": "寫入",
+        "cacheRead": "讀取",
+        "duration": "耗時",
+        "ttfb": "TTFB",
+        "rate": "速率"
+      }
     },
     "actions": {
       "refresh": "重新整理",

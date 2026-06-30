@@ -98,6 +98,65 @@ function hasPositiveReasoningTokens(value: number | null | undefined): value is 
   return value != null && value > 0;
 }
 
+function hasTokenValue(value: number | null | undefined): value is number {
+  return value != null;
+}
+
+interface CompactMetricRow {
+  key: string;
+  label: string;
+  value: ReactNode;
+  tone?: "default" | "muted";
+  labelExtra?: ReactNode;
+  valueSlot?: string;
+}
+
+function compactMetricRows(rows: Array<CompactMetricRow | null>): CompactMetricRow[] {
+  const compactedRows: CompactMetricRow[] = [];
+
+  for (const row of rows) {
+    if (row) compactedRows.push(row);
+  }
+
+  return compactedRows;
+}
+
+function CompactMetricRows({ rows, emptyLabel }: { rows: CompactMetricRow[]; emptyLabel: string }) {
+  if (rows.length === 0) {
+    return (
+      <span data-slot="logs-metric-empty" className="text-muted-foreground">
+        {emptyLabel}
+      </span>
+    );
+  }
+
+  return (
+    <div className="grid gap-0.5 leading-tight tabular-nums" data-slot="logs-metric-rows">
+      {rows.map((row) => (
+        <div
+          key={row.key}
+          className="grid grid-cols-[minmax(2.5rem,auto)_minmax(0,1fr)] items-baseline gap-x-1.5"
+          data-slot={`logs-metric-row-${row.key}`}
+        >
+          <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground/75">
+            <span className="truncate">{row.label}</span>
+            {row.labelExtra}
+          </span>
+          <span
+            className={cn(
+              "min-w-0 text-right font-mono",
+              row.tone === "muted" ? "text-muted-foreground" : "text-foreground"
+            )}
+            data-slot={row.valueSlot}
+          >
+            {row.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface VirtualizedLogsTableProps {
   filters: VirtualizedLogsTableFilters;
   currencyCode?: CurrencyCode;
@@ -385,7 +444,7 @@ export function VirtualizedLogsTable({
     const renderTtlChip = (ttl: "5m" | "1h") => (
       <Badge
         variant="outline"
-        className="px-1 text-[10px] leading-tight text-background/80 border-background/30"
+        className="px-1 text-[10px] leading-tight text-muted-foreground border-border/60"
       >
         {ttl}
       </Badge>
@@ -404,11 +463,15 @@ export function VirtualizedLogsTable({
     }) => (
       <div className={cn("flex flex-col items-end", amountClassName)}>
         {secondary ? (
-          <span className={cn("text-[11px] text-background/70", secondaryClassName)}>
+          <span className={cn("text-[11px] text-muted-foreground", secondaryClassName)}>
             {secondary}
           </span>
         ) : null}
-        <span className={cn(emphasize ? "text-sm font-semibold text-emerald-300" : "")}>
+        <span
+          className={cn(
+            emphasize ? "text-sm font-semibold text-emerald-600 dark:text-emerald-300" : ""
+          )}
+        >
           {primary}
         </span>
       </div>
@@ -430,7 +493,7 @@ export function VirtualizedLogsTable({
       secondaryClassName?: string;
     }) => (
       <div className={cn("flex items-start justify-between gap-3", className)}>
-        <span className="text-[11px] font-medium text-background/70">{label}</span>
+        <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
         {renderValueBlock({ primary, secondary, emphasize, secondaryClassName })}
       </div>
     );
@@ -445,12 +508,12 @@ export function VirtualizedLogsTable({
       cacheReadInputTokens: log.cacheReadInputTokens,
     });
     const hedgeSection = hedgeTable ? (
-      <div className="space-y-2 border-t border-background/20 pt-2">
+      <div className="space-y-2 border-t border-border/60 pt-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-semibold text-background/80">
+          <span className="text-[11px] font-semibold text-foreground">
             {t("logs.billingDetails.hedgeRacing")}
           </span>
-          <span className="rounded-full bg-background/15 px-1.5 py-0.5 text-[10px] text-background/80">
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
             {t("logs.billingDetails.hedgeMergedCount", { count: hedgeTable.count })}
           </span>
         </div>
@@ -466,16 +529,16 @@ export function VirtualizedLogsTable({
                 key={`${loser.providerId}-${loser.attemptNumber}`}
                 className="flex items-start justify-between gap-3"
               >
-                <span className="text-[11px] text-rose-300/80 truncate">
+                <span className="text-[11px] text-rose-600 dark:text-rose-300 truncate">
                   {loser.providerName ?? t("logs.billingDetails.hedgeLoserShort")}
                 </span>
-                <span className={cn(amountClassName, "text-rose-300/80")}>
+                <span className={cn(amountClassName, "text-rose-600 dark:text-rose-300")}>
                   {formatCurrency(loser.costUsd, currencyCode, 6)}
                 </span>
               </div>
             ))}
         </div>
-        <div className="flex items-center justify-between gap-3 border-t border-background/20 pt-2 text-[11px] text-background/70">
+        <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
           <span>{t("logs.billingDetails.hedgeTokenTotal")}</span>
           <span className="font-mono">
             {[
@@ -499,26 +562,26 @@ export function VirtualizedLogsTable({
 
     if (!log.costBreakdown) {
       return (
-        <TooltipContent align="end" className="max-w-[320px] p-3">
+        <TooltipContent align="end" variant="popover" className="max-w-[320px] p-3">
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-background">{title}</span>
+              <span className="text-xs font-semibold text-foreground">{title}</span>
               {headerChip}
             </div>
-            <div className="space-y-1 border-t border-background/20 pt-2 text-[11px] text-background/70">
+            <div className="space-y-1 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
               <div className="flex items-center justify-between gap-3">
                 <span>{t("logs.billingDetails.output")}</span>
                 <span className={amountClassName}>{formatTokenAmount(log.outputTokens)}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span>{t("logs.billingDetails.reasoningShort")}</span>
+                <span>{t("logs.billingDetails.reasoningTokens")}</span>
                 <span className={amountClassName}>
                   {formatTokenAmount(log.reasoningOutputTokens)}
                 </span>
               </div>
               <div>{t("logs.billingDetails.includedInOutput")}</div>
             </div>
-            <div className="border-t border-background/20 pt-2">
+            <div className="border-t border-border/60 pt-2">
               {renderSummaryRow({
                 label: totalCostLabel,
                 primary: formatCurrency(log.costUsd, currencyCode, 6),
@@ -537,7 +600,7 @@ export function VirtualizedLogsTable({
       createCostRow(t("logs.billingDetails.output"), log.costBreakdown.output, log.outputTokens),
       {
         key: "reasoning",
-        label: t("logs.billingDetails.reasoningShort"),
+        label: t("logs.billingDetails.reasoningTokens"),
         ttl: undefined,
         amount: formatTokenAmount(log.reasoningOutputTokens),
         unitPrice: t("logs.billingDetails.includedInOutput"),
@@ -582,10 +645,10 @@ export function VirtualizedLogsTable({
     );
 
     return (
-      <TooltipContent align="end" className="max-w-[320px] p-3">
+      <TooltipContent align="end" variant="popover" className="max-w-[320px] p-3">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-background">{title}</span>
+            <span className="text-xs font-semibold text-foreground">{title}</span>
             {headerChip}
           </div>
 
@@ -593,7 +656,7 @@ export function VirtualizedLogsTable({
             <div className="space-y-2">
               {costRows.map((row) => (
                 <div key={row.key} className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-background/70">
+                  <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-muted-foreground">
                     <span>{row.label}</span>
                     {row.ttl ? renderTtlChip(row.ttl) : null}
                   </div>
@@ -608,13 +671,13 @@ export function VirtualizedLogsTable({
               {renderSummaryRow({
                 label: t("logs.billingDetails.baseTotal"),
                 primary: baseTotal,
-                className: costRows.length > 0 ? "border-t border-background/20 pt-2" : undefined,
+                className: costRows.length > 0 ? "border-t border-border/60 pt-2" : undefined,
               })}
 
-              <div className="space-y-2 rounded-md border border-background/20 bg-background/10 p-2">
+              <div className="space-y-2 rounded-md border border-border/60 bg-muted/40 p-2">
                 {activeMultiplierRows.map((row) => (
                   <div key={row.key} className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-background/70">{row.label}</span>
+                    <span className="text-[11px] text-muted-foreground">{row.label}</span>
                     <span className={cn(amountClassName, "text-[11px]")}>{row.value}</span>
                   </div>
                 ))}
@@ -626,7 +689,7 @@ export function VirtualizedLogsTable({
                 secondary: baseTotal,
                 secondaryClassName: "line-through",
                 emphasize: true,
-                className: "border-t border-background/20 pt-2",
+                className: "border-t border-border/60 pt-2",
               })}
             </>
           ) : (
@@ -634,7 +697,7 @@ export function VirtualizedLogsTable({
               label: totalCostLabel,
               primary: finalTotal,
               emphasize: true,
-              className: costRows.length > 0 ? "border-t border-background/20 pt-2" : undefined,
+              className: costRows.length > 0 ? "border-t border-border/60 pt-2" : undefined,
             })
           )}
 
@@ -851,7 +914,12 @@ export function VirtualizedLogsTable({
                                   {log.sessionId}
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent side="bottom" align="start" className="max-w-[500px]">
+                              <TooltipContent
+                                side="bottom"
+                                align="start"
+                                variant="popover"
+                                className="max-w-[500px]"
+                              >
                                 <p className="text-xs whitespace-normal break-words font-mono">
                                   {log.sessionId}
                                 </p>
@@ -1008,127 +1076,169 @@ export function VirtualizedLogsTable({
 
                     {/* Tokens */}
                     {hideTokensColumn ? null : (
-                      <div className="flex-[0.7] min-w-[96px] text-right font-mono text-xs px-1.5">
-                        <TooltipProvider>
-                          <Tooltip delayDuration={250}>
-                            <TooltipTrigger asChild>
-                              <div
-                                className="cursor-help flex flex-col items-end leading-tight tabular-nums"
-                                data-slot="logs-token-cell"
-                              >
-                                <span>{formatTokenAmount(log.inputTokens)}</span>
-                                <div
-                                  className="flex items-baseline justify-end gap-1.5 whitespace-nowrap"
-                                  data-slot="logs-token-output-line"
+                      <div className="flex-[0.7] min-w-[112px] text-right text-xs px-1.5">
+                        {(() => {
+                          const tokenRows = compactMetricRows([
+                            hasTokenValue(log.inputTokens)
+                              ? {
+                                  key: "input",
+                                  label: t("logs.table.metricLabels.input"),
+                                  value: formatTokenAmount(log.inputTokens),
+                                }
+                              : null,
+                            hasTokenValue(log.outputTokens)
+                              ? {
+                                  key: "output",
+                                  label: t("logs.table.metricLabels.output"),
+                                  value: formatTokenAmount(log.outputTokens),
+                                  tone: "muted",
+                                  valueSlot: "logs-token-output-inline",
+                                }
+                              : null,
+                            hasPositiveReasoningTokens(log.reasoningOutputTokens)
+                              ? {
+                                  key: "reasoning",
+                                  label: t("logs.table.metricLabels.reasoning"),
+                                  value: formatTokenAmount(log.reasoningOutputTokens),
+                                  tone: "muted",
+                                  valueSlot: "logs-token-reasoning-inline",
+                                }
+                              : null,
+                          ]);
+
+                          return (
+                            <TooltipProvider>
+                              <Tooltip delayDuration={250}>
+                                <TooltipTrigger asChild>
+                                  <div className="cursor-help" data-slot="logs-token-cell">
+                                    <CompactMetricRows
+                                      rows={tokenRows}
+                                      emptyLabel={t("logs.table.emptyValue")}
+                                    />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  align="end"
+                                  variant="popover"
+                                  className="text-xs space-y-1"
                                 >
-                                  {hasPositiveReasoningTokens(log.reasoningOutputTokens) ? (
-                                    <span
-                                      className="text-[9px] text-muted-foreground/70"
-                                      data-slot="logs-token-reasoning-inline"
-                                    >
-                                      {formatTokenAmount(log.reasoningOutputTokens)}
-                                    </span>
-                                  ) : null}
-                                  <span
-                                    className="text-muted-foreground"
-                                    data-slot="logs-token-output-inline"
-                                  >
-                                    {formatTokenAmount(log.outputTokens)}
-                                  </span>
-                                </div>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent align="end" className="text-xs space-y-1">
-                              <div>
-                                {t("logs.billingDetails.input")}:{" "}
-                                {formatTokenAmount(log.inputTokens)}
-                              </div>
-                              <div>
-                                {t("logs.billingDetails.output")}:{" "}
-                                {formatTokenAmount(log.outputTokens)}
-                              </div>
-                              {hasPositiveReasoningTokens(log.reasoningOutputTokens) ? (
-                                <div className="pl-3 text-muted-foreground space-y-0.5">
                                   <div>
-                                    {t("logs.billingDetails.reasoningShort")}:{" "}
-                                    {formatTokenAmount(log.reasoningOutputTokens)}
+                                    {t("logs.billingDetails.input")}:{" "}
+                                    {formatTokenAmount(log.inputTokens)}
                                   </div>
-                                  <div className="text-[11px] text-muted-foreground/90">
-                                    {t("logs.billingDetails.includedInOutputShort")}
+                                  <div>
+                                    {t("logs.billingDetails.output")}:{" "}
+                                    {formatTokenAmount(log.outputTokens)}
                                   </div>
-                                </div>
-                              ) : null}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                                  {hasPositiveReasoningTokens(log.reasoningOutputTokens) ? (
+                                    <div className="pl-3 text-muted-foreground space-y-0.5">
+                                      <div>
+                                        {t("logs.billingDetails.reasoningTokens")}:{" "}
+                                        {formatTokenAmount(log.reasoningOutputTokens)}
+                                      </div>
+                                      <div className="text-[11px] text-muted-foreground/90">
+                                        {t("logs.billingDetails.includedInOutputShort")}
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
                       </div>
                     )}
 
                     {/* Cache */}
                     {hideCacheColumn ? null : (
-                      <div className="flex-[0.8] min-w-[70px] text-right font-mono text-xs px-1.5">
-                        <TooltipProvider>
-                          <Tooltip delayDuration={250}>
-                            <TooltipTrigger asChild>
-                              <div className="cursor-help flex flex-col w-full leading-tight tabular-nums">
-                                <div className="flex items-center gap-1 w-full">
-                                  {log.cacheTtlApplied ? (
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "text-[10px] leading-tight px-1",
-                                        log.swapCacheTtlApplied
-                                          ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
-                                          : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
-                                      )}
-                                      title={
-                                        log.swapCacheTtlApplied
-                                          ? t("logs.billingDetails.cacheTtlSwapped")
-                                          : undefined
-                                      }
-                                    >
-                                      {log.cacheTtlApplied}
-                                      {log.swapCacheTtlApplied ? " ~" : ""}
-                                    </Badge>
-                                  ) : null}
-                                  <span className="ml-auto text-right">
-                                    {formatTokenAmount(log.cacheCreationInputTokens)}
-                                  </span>
-                                </div>
-                                <span className="text-muted-foreground text-right">
-                                  {formatTokenAmount(log.cacheReadInputTokens)}
-                                </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent align="end" className="text-xs space-y-1">
-                              <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
-                              <div className="pl-2">
-                                5m:{" "}
-                                {formatTokenAmount(
-                                  (log.cacheCreation5mInputTokens ?? 0) > 0
-                                    ? log.cacheCreation5mInputTokens
-                                    : log.cacheTtlApplied !== "1h"
-                                      ? log.cacheCreationInputTokens
-                                      : 0
-                                )}
-                              </div>
-                              <div className="pl-2">
-                                1h:{" "}
-                                {formatTokenAmount(
-                                  (log.cacheCreation1hInputTokens ?? 0) > 0
-                                    ? log.cacheCreation1hInputTokens
-                                    : log.cacheTtlApplied === "1h"
-                                      ? log.cacheCreationInputTokens
-                                      : 0
-                                )}
-                              </div>
-                              <div className="font-medium mt-1">{t("logs.columns.cacheRead")}</div>
-                              <div className="pl-2">
-                                {formatTokenAmount(log.cacheReadInputTokens)}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                      <div className="flex-[0.8] min-w-[112px] text-right text-xs px-1.5">
+                        {(() => {
+                          const ttlBadge = log.cacheTtlApplied ? (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] leading-tight px-1",
+                                log.swapCacheTtlApplied
+                                  ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                                  : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+                              )}
+                              title={
+                                log.swapCacheTtlApplied
+                                  ? t("logs.billingDetails.cacheTtlSwapped")
+                                  : undefined
+                              }
+                            >
+                              {log.cacheTtlApplied}
+                              {log.swapCacheTtlApplied ? " ~" : ""}
+                            </Badge>
+                          ) : null;
+                          const cacheRows = compactMetricRows([
+                            hasTokenValue(log.cacheCreationInputTokens)
+                              ? {
+                                  key: "cache-write",
+                                  label: t("logs.table.metricLabels.cacheWrite"),
+                                  labelExtra: ttlBadge,
+                                  value: formatTokenAmount(log.cacheCreationInputTokens),
+                                }
+                              : null,
+                            hasTokenValue(log.cacheReadInputTokens)
+                              ? {
+                                  key: "cache-read",
+                                  label: t("logs.table.metricLabels.cacheRead"),
+                                  value: formatTokenAmount(log.cacheReadInputTokens),
+                                  tone: "muted",
+                                }
+                              : null,
+                          ]);
+
+                          return (
+                            <TooltipProvider>
+                              <Tooltip delayDuration={250}>
+                                <TooltipTrigger asChild>
+                                  <div className="cursor-help">
+                                    <CompactMetricRows
+                                      rows={cacheRows}
+                                      emptyLabel={t("logs.table.emptyValue")}
+                                    />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  align="end"
+                                  variant="popover"
+                                  className="text-xs space-y-1"
+                                >
+                                  <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
+                                  <div className="pl-2">
+                                    5m:{" "}
+                                    {formatTokenAmount(
+                                      (log.cacheCreation5mInputTokens ?? 0) > 0
+                                        ? log.cacheCreation5mInputTokens
+                                        : log.cacheTtlApplied !== "1h"
+                                          ? log.cacheCreationInputTokens
+                                          : 0
+                                    )}
+                                  </div>
+                                  <div className="pl-2">
+                                    1h:{" "}
+                                    {formatTokenAmount(
+                                      (log.cacheCreation1hInputTokens ?? 0) > 0
+                                        ? log.cacheCreation1hInputTokens
+                                        : log.cacheTtlApplied === "1h"
+                                          ? log.cacheCreationInputTokens
+                                          : 0
+                                    )}
+                                  </div>
+                                  <div className="font-medium mt-1">
+                                    {t("logs.columns.cacheRead")}
+                                  </div>
+                                  <div className="pl-2">
+                                    {formatTokenAmount(log.cacheReadInputTokens)}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
                       </div>
                     )}
 
@@ -1173,7 +1283,7 @@ export function VirtualizedLogsTable({
 
                     {/* Performance */}
                     {hidePerformanceColumn ? null : (
-                      <div className="flex-[0.8] min-w-[80px] text-right font-mono text-xs px-1.5">
+                      <div className="flex-[0.8] min-w-[112px] text-right text-xs px-1.5">
                         {(() => {
                           const rate = calculateOutputRate(
                             log.outputTokens,
@@ -1181,32 +1291,48 @@ export function VirtualizedLogsTable({
                             log.ttfbMs
                           );
                           const hideRate = shouldHideOutputRate(rate, log.durationMs, log.ttfbMs);
-                          const ttfbLine =
+                          const performanceRows = compactMetricRows([
+                            log.durationMs != null
+                              ? {
+                                  key: "duration",
+                                  label: t("logs.table.metricLabels.duration"),
+                                  value: formatDuration(log.durationMs),
+                                }
+                              : null,
                             log.ttfbMs != null && log.ttfbMs > 0
-                              ? `TTFB ${formatDuration(log.ttfbMs)}`
-                              : null;
-                          const rateLine =
-                            rate !== null && !hideRate ? `${rate.toFixed(0)} tok/s` : null;
+                              ? {
+                                  key: "ttfb",
+                                  label: t("logs.table.metricLabels.ttfb"),
+                                  value: formatDuration(log.ttfbMs),
+                                  tone: "muted",
+                                }
+                              : null,
+                            rate !== null && !hideRate
+                              ? {
+                                  key: "rate",
+                                  label: t("logs.table.metricLabels.rate"),
+                                  value: `${rate.toFixed(0)} tok/s`,
+                                  tone: "muted",
+                                }
+                              : null,
+                          ]);
 
                           return (
                             <TooltipProvider>
                               <Tooltip delayDuration={250}>
                                 <TooltipTrigger asChild>
-                                  <div className="flex flex-col items-end cursor-help">
-                                    <span>{formatDuration(log.durationMs)}</span>
-                                    {ttfbLine && (
-                                      <span className="text-muted-foreground text-[10px]">
-                                        {ttfbLine}
-                                      </span>
-                                    )}
-                                    {rateLine && (
-                                      <span className="text-muted-foreground text-[10px]">
-                                        {rateLine}
-                                      </span>
-                                    )}
+                                  <div className="cursor-help">
+                                    <CompactMetricRows
+                                      rows={performanceRows}
+                                      emptyLabel={t("logs.table.emptyValue")}
+                                    />
                                   </div>
                                 </TooltipTrigger>
-                                <TooltipContent align="end" className="text-xs space-y-1">
+                                <TooltipContent
+                                  align="end"
+                                  variant="popover"
+                                  className="text-xs space-y-1"
+                                >
                                   <div>
                                     {t("logs.details.performance.duration")}:{" "}
                                     {formatDuration(log.durationMs)}

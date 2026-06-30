@@ -174,7 +174,18 @@
       "scrollToTop": "回到顶部",
       "hideProviderColumn": "隐藏供应商列",
       "showProviderColumn": "显示供应商列",
-      "columnVisibility": "显示/隐藏列"
+      "columnVisibility": "显示/隐藏列",
+      "emptyValue": "—",
+      "metricLabels": {
+        "input": "输入",
+        "output": "输出",
+        "reasoning": "思考T",
+        "cacheWrite": "写入",
+        "cacheRead": "读取",
+        "duration": "耗时",
+        "ttfb": "TTFB",
+        "rate": "速率"
+      }
     },
     "actions": {
       "refresh": "刷新",

@@ -31,7 +31,7 @@ export function AnthropicEffortBadge({ effort, label, className }: AnthropicEffo
     <Badge
       variant="outline"
       className={cn(
-        "w-fit px-1 text-[10px] leading-tight whitespace-nowrap",
+        "min-h-5 w-fit rounded-full px-1.5 py-0.5 text-[10px] leading-none whitespace-nowrap",
         getAnthropicEffortBadgeClassName(effort),
         className
       )}
