@@ -22,6 +22,9 @@ export const UsageLogsQuerySchema = z.object({
   keyId: NumberQuerySchema.describe("Key id filter."),
   providerId: NumberQuerySchema.describe("Provider id filter."),
   model: z.string().optional().describe("Model filter."),
+  actualResponseModelMismatch: BooleanQuerySchema.describe(
+    "Only include records whose requested model differs from the actual response model."
+  ),
   statusCode: z.coerce.number().int().optional().describe("HTTP status code filter."),
   excludeStatusCode200: BooleanQuerySchema.describe("Exclude successful responses."),
   endpoint: z.string().optional().describe("Endpoint filter."),

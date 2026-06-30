@@ -16,6 +16,7 @@ export interface UsageLogFilters {
   statusCode?: number;
   excludeStatusCode200?: boolean;
   model?: string;
+  actualResponseModelMismatch?: boolean;
   endpoint?: string;
   minRetryCount?: number;
 }

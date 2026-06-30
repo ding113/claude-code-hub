@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { getUsageLogSessionIdSuggestions } from "@/lib/api-client/v1/actions/usage-logs";
 import { SESSION_ID_SUGGESTION_MIN_LEN } from "@/lib/constants/usage-logs.constants";
 import { useDebounce } from "@/lib/hooks/use-debounce";
@@ -301,6 +302,23 @@ export function RequestFilters({
             )}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2">
+        <Label htmlFor="actual-response-model-mismatch-filter" className="text-sm font-normal">
+          {t("logs.filters.actualResponseModelMismatch")}
+        </Label>
+        <Switch
+          id="actual-response-model-mismatch-filter"
+          checked={Boolean(filters.actualResponseModelMismatch)}
+          onCheckedChange={(checked) =>
+            onFiltersChange({
+              ...filters,
+              actualResponseModelMismatch: checked ? true : undefined,
+            })
+          }
+          aria-label={t("logs.filters.actualResponseModelMismatch")}
+        />
       </div>
 
       {/* Session ID with suggestions */}

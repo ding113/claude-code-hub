@@ -222,6 +222,46 @@ describe("v1 usage log endpoints", () => {
     });
   });
 
+  test("passes actual response model mismatch filter through usage-log request params", async () => {
+    const list = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs?limit=15&actualResponseModelMismatch=true",
+      headers,
+    });
+    expect(list.response.status).toBe(200);
+    expect(getUsageLogsBatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 15,
+        actualResponseModelMismatch: true,
+      })
+    );
+
+    const stats = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/usage-logs/stats?actualResponseModelMismatch=true",
+      headers,
+    });
+    expect(stats.response.status).toBe(200);
+    expect(getUsageLogsStatsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 20,
+        actualResponseModelMismatch: true,
+      })
+    );
+
+    const asyncExport = await callV1Route({
+      method: "POST",
+      pathname: "/api/v1/usage-logs/exports",
+      headers: { ...headers, Prefer: "respond-async" },
+      body: { actualResponseModelMismatch: true },
+    });
+    expect(asyncExport.response.status).toBe(202);
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({
+      actualResponseModelMismatch: true,
+      format: "csv",
+    });
+  });
+
   test("keeps global usage-log metadata admin-only", async () => {
     validateAuthTokenMock.mockResolvedValue(userSession);
 

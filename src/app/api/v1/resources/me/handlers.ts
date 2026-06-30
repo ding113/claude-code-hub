@@ -109,6 +109,7 @@ function parseMeUsageLogsQuery(c: Context): MeUsageLogsActionQueryInput | Respon
     endTime: c.req.query("endTime"),
     sessionId: c.req.query("sessionId"),
     model: c.req.query("model"),
+    actualResponseModelMismatch: c.req.query("actualResponseModelMismatch"),
     statusCode: c.req.query("statusCode"),
     excludeStatusCode200: c.req.query("excludeStatusCode200"),
     endpoint: c.req.query("endpoint"),

@@ -10,6 +10,7 @@ export interface UsageLogFilterParams {
   statusCode?: number;
   excludeStatusCode200?: boolean;
   model?: string;
+  actualResponseModelMismatch?: boolean;
   endpoint?: string;
   minRetryCount?: number;
 }
@@ -60,6 +61,23 @@ export function buildDefaultHiddenUsageLogEndpointCondition(
         sql`, `
       )}
     )
+  )`;
+}
+
+export function buildActualResponseModelMismatchCondition(
+  modelColumn: SQLWrapper,
+  actualResponseModelColumn: SQLWrapper,
+  fallbackModelColumn?: SQLWrapper
+): SQL {
+  const effectiveRequestModel = fallbackModelColumn
+    ? sql`COALESCE(NULLIF(btrim(${modelColumn}), ''), NULLIF(btrim(${fallbackModelColumn}), ''))`
+    : sql`NULLIF(btrim(${modelColumn}), '')`;
+  const actualResponseModel = sql`NULLIF(btrim(${actualResponseModelColumn}), '')`;
+
+  return sql`(
+    ${effectiveRequestModel} IS NOT NULL
+    AND ${actualResponseModel} IS NOT NULL
+    AND ${effectiveRequestModel} <> ${actualResponseModel}
   )`;
 }
 
@@ -143,6 +161,16 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
 
   if (filters.model) {
     conditions.push(eq(messageRequest.model, filters.model));
+  }
+
+  if (filters.actualResponseModelMismatch) {
+    conditions.push(
+      buildActualResponseModelMismatchCondition(
+        messageRequest.model,
+        messageRequest.actualResponseModel,
+        messageRequest.originalModel
+      )
+    );
   }
 
   const hiddenEndpointCondition = buildDefaultHiddenUsageLogEndpointCondition(

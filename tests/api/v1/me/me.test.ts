@@ -171,6 +171,34 @@ describe("v1 me endpoints", () => {
     expect(getMyUsageLogsBatchFullMock).toHaveBeenCalledWith({ limit: 20, model: "claude" });
   });
 
+  test("passes actual response model mismatch filter through self usage-log request params", async () => {
+    const list = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/me/usage-logs?limit=15&actualResponseModelMismatch=true",
+      headers,
+    });
+    expect(list.response.status).toBe(200);
+    expect(getMyUsageLogsBatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 15,
+        actualResponseModelMismatch: true,
+      })
+    );
+
+    const full = await callV1Route({
+      method: "GET",
+      pathname: "/api/v1/me/usage-logs/full?actualResponseModelMismatch=true",
+      headers,
+    });
+    expect(full.response.status).toBe(200);
+    expect(getMyUsageLogsBatchFullMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 20,
+        actualResponseModelMismatch: true,
+      })
+    );
+  });
+
   test("reads filter options stats summary and scoped ip geo", async () => {
     const models = await callV1Route({
       method: "GET",
