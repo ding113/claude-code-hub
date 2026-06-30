@@ -175,12 +175,9 @@ jobs:
             docker pull ${{ steps.image_names.outputs.ghcr_image }}:latest
             ```
 
-            ---
-
-            Release notes will be auto-generated...
           draft: false
           prerelease: false
-          generate_release_notes: false
+          generate_release_notes: true
 
       # 自清理旧的tags和releases(保持最近50个)
       - name: Cleanup old tags and releases
