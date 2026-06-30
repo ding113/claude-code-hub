@@ -427,9 +427,7 @@ export function SummaryTab({
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">
-                  {t("billingDetails.reasoningShort")}:
-                </span>
+                <span className="text-muted-foreground">{t("billingDetails.reasoningShort")}:</span>
                 <span className="font-mono">
                   {formatTokenAmount(reasoningOutputTokens)} {t("billingDetails.unit.tokens")}
                 </span>
