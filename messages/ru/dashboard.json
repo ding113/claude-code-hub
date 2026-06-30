@@ -139,7 +139,10 @@
       "cost": "Стоимость",
       "duration": "Продолжительность",
       "performance": "Perf",
-      "status": "Статус"
+      "status": "Статус",
+      "inputOutputTokens": "Ввод / вывод",
+      "reasoningTokens": "Reasoning",
+      "latency": "Задержка"
     },
     "stats": {
       "title": "Сводка статистики",

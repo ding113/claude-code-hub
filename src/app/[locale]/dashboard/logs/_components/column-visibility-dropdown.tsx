@@ -34,6 +34,7 @@ const COLUMN_LABEL_KEYS: Record<LogsTableColumn, string> = {
   ip: "logs.columns.ip",
   provider: "logs.columns.provider",
   tokens: "logs.columns.tokens",
+  reasoning: "logs.columns.reasoningTokens",
   cost: "logs.columns.cost",
   cache: "logs.columns.cache",
   performance: "logs.columns.performance",

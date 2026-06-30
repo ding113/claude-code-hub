@@ -139,7 +139,10 @@
       "cost": "費用",
       "duration": "耗時",
       "performance": "效能",
-      "status": "狀態"
+      "status": "狀態",
+      "inputOutputTokens": "輸入 / 輸出",
+      "reasoningTokens": "思考",
+      "latency": "延遲"
     },
     "stats": {
       "title": "統計匯總",

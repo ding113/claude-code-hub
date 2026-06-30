@@ -17,6 +17,7 @@ export type LogsTableColumn =
   | "ip"
   | "provider"
   | "tokens"
+  | "reasoning"
   | "cache"
   | "performance"
   | "cost";
@@ -31,6 +32,7 @@ export const DEFAULT_VISIBLE_COLUMNS: LogsTableColumn[] = [
   "ip",
   "provider",
   "tokens",
+  "reasoning",
   "cache",
   "performance",
   "cost",

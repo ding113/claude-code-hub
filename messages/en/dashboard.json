@@ -139,7 +139,10 @@
       "cost": "Cost",
       "duration": "Duration",
       "performance": "Perf",
-      "status": "Status"
+      "status": "Status",
+      "inputOutputTokens": "Input / Output",
+      "reasoningTokens": "Reasoning",
+      "latency": "Latency"
     },
     "stats": {
       "title": "Statistics Summary",

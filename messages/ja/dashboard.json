@@ -139,7 +139,10 @@
       "cost": "コスト",
       "duration": "所要時間",
       "performance": "Perf",
-      "status": "ステータス"
+      "status": "ステータス",
+      "inputOutputTokens": "入力 / 出力",
+      "reasoningTokens": "推論",
+      "latency": "レイテンシ"
     },
     "stats": {
       "title": "統計サマリー",

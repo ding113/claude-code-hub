@@ -387,6 +387,8 @@ function UsageLogsViewContent({
             autoRefreshEnabled={!isFullscreenOpen && isAutoRefresh}
             autoRefreshIntervalMs={logsRefreshIntervalMs ?? 5000}
             hiddenColumns={hiddenColumns}
+            serverTimeZone={serverTimeZone}
+            layoutVariant="default"
           />
         </div>
       </div>
@@ -475,8 +477,14 @@ function UsageLogsViewContent({
               autoRefreshIntervalMs={3000}
               hideStatusBar={true}
               hideScrollToTop={true}
-              hiddenColumns={hideProviderColumn ? ["provider"] : undefined}
+              hiddenColumns={
+                hideProviderColumn
+                  ? Array.from(new Set([...hiddenColumns, "provider" as const]))
+                  : hiddenColumns
+              }
               bodyClassName="h-[calc(var(--cch-viewport-height,100vh)_-_56px_-_32px_-_40px)]"
+              serverTimeZone={serverTimeZone}
+              layoutVariant="fullscreen"
             />
           </div>
         </div>

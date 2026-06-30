@@ -173,7 +173,6 @@ describe("VirtualizedLogsTable - cache metric labels", () => {
     expect(container.textContent).toContain("1h");
     expect(container.textContent).toContain("Write");
     expect(container.textContent).toContain("Read");
-    expect(container.innerHTML).toContain("logs-metric-row-cache-write");
     expect(container.innerHTML).toContain("logs-metric-row-cache-read");
 
     unmount();

@@ -76,6 +76,7 @@ vi.mock("../../src/app/[locale]/dashboard/logs/_components/virtualized-logs-tabl
       data-testid="virtualized-logs-table"
       data-overlay={props.hideStatusBar ? "1" : "0"}
       data-hidden={(props.hiddenColumns ?? []).join(",")}
+      data-layout={props.layoutVariant ?? "default"}
     />
   ),
 }));
@@ -155,7 +156,8 @@ describe("UsageLogsViewVirtualized fullscreen overlay", () => {
     const overlayTable = container.querySelector(
       '[data-testid="virtualized-logs-table"][data-overlay="1"]'
     ) as HTMLElement | null;
-    expect(overlayTable?.getAttribute("data-hidden")).toBe("provider");
+    expect(overlayTable?.getAttribute("data-hidden")).toBe("ip,provider");
+    expect(overlayTable?.getAttribute("data-layout")).toBe("fullscreen");
 
     await click(findButtonByText(container, "logs.actions.exitFullscreen") ?? null);
     expect(fullscreenMocks.exit).toHaveBeenCalled();

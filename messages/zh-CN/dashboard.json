@@ -139,7 +139,10 @@
       "cost": "成本",
       "duration": "耗时",
       "performance": "性能",
-      "status": "状态"
+      "status": "状态",
+      "inputOutputTokens": "输入 / 输出",
+      "reasoningTokens": "思考",
+      "latency": "延迟"
     },
     "stats": {
       "title": "统计汇总",

@@ -295,10 +295,7 @@ describe("virtualized-logs-table multiplier badge", () => {
       reasoningOutputTokens: 312,
     });
 
-    expect(container.textContent).toContain("logs.table.metricLabels.input");
     expect(container.textContent).toContain("1.09K");
-    expect(container.textContent).toContain("logs.table.metricLabels.output");
-    expect(container.textContent).toContain("logs.table.metricLabels.reasoning");
     const reasoningInline = container.querySelector(
       '[data-slot="logs-token-reasoning-inline"]'
     ) as HTMLSpanElement | null;
@@ -321,6 +318,7 @@ describe("virtualized-logs-table multiplier badge", () => {
 
     expect(outputInline?.textContent).toBe("426");
     expect(reasoningInline).toBeNull();
+    expect(container.textContent).toContain("logs.table.emptyValue");
   });
 
   test("does not render reasoning token row when reasoning tokens are missing", () => {
@@ -334,6 +332,7 @@ describe("virtualized-logs-table multiplier badge", () => {
 
     expect(outputInline?.textContent).toBe("426");
     expect(reasoningInline).toBeNull();
+    expect(container.textContent).toContain("logs.table.emptyValue");
   });
 
   test("renders token tooltip with indented reasoning token section and popover variant", () => {
@@ -473,15 +472,15 @@ describe("virtualized-logs-table multiplier badge", () => {
 
     mockLogs = [makeLog({ id: 1, providerName: "provider" })];
 
-    const htmlWithProvider = renderToStaticMarkup(
-      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
-    );
-    expect(htmlWithProvider).toContain("logs.columns.provider");
+    const withProvider = renderTableContainerWithLog({ providerName: "provider" });
+    expect(withProvider.querySelector('[data-slot="logs-provider-subline"]')).not.toBeNull();
 
     const htmlHidden = renderToStaticMarkup(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} hiddenColumns={["provider"]} />
     );
-    expect(htmlHidden).not.toContain("logs.columns.provider");
+    const hiddenContainer = document.createElement("div");
+    hiddenContainer.innerHTML = htmlHidden;
+    expect(hiddenContainer.querySelector('[data-slot="logs-provider-subline"]')).toBeNull();
   });
 
   test("renders provider chain and fetching state when enabled", () => {

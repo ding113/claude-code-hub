@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ArrowUp, GitBranch, Loader2 } from "lucide-react";
+import { ArrowUp, Copy, GitBranch, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   type MouseEvent,
@@ -47,7 +47,14 @@ import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
 
 const BATCH_SIZE = 50;
-const ROW_HEIGHT = 64; // Estimated row height in pixels
+type LogsTableLayoutVariant = "default" | "fullscreen";
+
+const DEFAULT_ROW_HEIGHT = 64;
+const FULLSCREEN_ROW_HEIGHT = 44;
+
+function getRowHeight(layoutVariant: LogsTableLayoutVariant) {
+  return layoutVariant === "fullscreen" ? FULLSCREEN_ROW_HEIGHT : DEFAULT_ROW_HEIGHT;
+}
 
 export type LogsFetchFn = (
   params: VirtualizedLogsTableFilters & {
@@ -86,12 +93,40 @@ function getStatusBadgeClassName(statusCode: number | null): string {
   return STATUS_BADGE_FALLBACK;
 }
 
-function StatusBadgeOnly({ statusCode }: { statusCode: number | null }) {
+function StatusBadgeOnly({
+  statusCode,
+  compact = false,
+}: {
+  statusCode: number | null;
+  compact?: boolean;
+}) {
   return (
-    <Badge variant="outline" className={getStatusBadgeClassName(statusCode)}>
+    <Badge
+      variant="outline"
+      className={cn(
+        getStatusBadgeClassName(statusCode),
+        compact ? "px-1.5 py-0 text-[10px] leading-4" : ""
+      )}
+    >
       {statusCode ?? "-"}
     </Badge>
   );
+}
+
+function isErrorStatus(statusCode: number | null): boolean {
+  return statusCode != null && statusCode >= 400;
+}
+
+function formatAbsoluteTime(date: Date | string | null, timeZone?: string) {
+  if (!date) return "-";
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone,
+  }).format(new Date(date));
 }
 
 function hasPositiveReasoningTokens(value: number | null | undefined): value is number {
@@ -121,12 +156,45 @@ function compactMetricRows(rows: Array<CompactMetricRow | null>): CompactMetricR
   return compactedRows;
 }
 
-function CompactMetricRows({ rows, emptyLabel }: { rows: CompactMetricRow[]; emptyLabel: string }) {
+function CompactMetricRows({
+  rows,
+  emptyLabel,
+  variant = "stacked",
+}: {
+  rows: CompactMetricRow[];
+  emptyLabel: string;
+  variant?: "stacked" | "inline";
+}) {
   if (rows.length === 0) {
     return (
       <span data-slot="logs-metric-empty" className="text-muted-foreground">
         {emptyLabel}
       </span>
+    );
+  }
+
+  if (variant === "inline") {
+    return (
+      <div
+        className="flex min-w-0 items-center justify-end gap-1.5 leading-tight tabular-nums"
+        data-slot="logs-metric-rows"
+      >
+        {rows.map((row, index) => (
+          <span
+            key={row.key}
+            className={cn(
+              "inline-flex min-w-0 items-center gap-1",
+              row.tone === "muted" ? "text-muted-foreground" : "text-foreground"
+            )}
+            data-slot={`logs-metric-row-${row.key}`}
+          >
+            {index > 0 ? <span className="text-muted-foreground/40">/</span> : null}
+            <span className="font-mono" data-slot={row.valueSlot}>
+              {row.value}
+            </span>
+          </span>
+        ))}
+      </div>
     );
   }
 
@@ -176,6 +244,8 @@ interface VirtualizedLogsTableProps {
   disableDetailDialog?: boolean;
   /** Select which IP lookup authorization model the detail dialog should use */
   ipLookupMode?: IpGeoLookupMode;
+  /** Layout density variant: default A' or fullscreen B-like */
+  layoutVariant?: LogsTableLayoutVariant;
 }
 
 export function VirtualizedLogsTable({
@@ -188,23 +258,27 @@ export function VirtualizedLogsTable({
   hideScrollToTop = false,
   hiddenColumns,
   bodyClassName,
-  serverTimeZone: _serverTimeZone,
+  serverTimeZone,
   fetchFn,
   queryKeyPrefix = "usage-logs-batch",
   disableDetailDialog = false,
   ipLookupMode = "default",
+  layoutVariant = "default",
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
   const [isHistoryBrowsing, setIsHistoryBrowsing] = useState(false);
   const shouldPoll = autoRefreshEnabled && !isHistoryBrowsing;
 
+  const isFullscreenLayout = layoutVariant === "fullscreen";
+  const rowHeight = getRowHeight(layoutVariant);
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
   const hideKeyColumn = hiddenColumns?.includes("key") ?? false;
   const hideSessionIdColumn = hiddenColumns?.includes("sessionId") ?? false;
   const hideIpColumn = hiddenColumns?.includes("ip") ?? false;
   const hideTokensColumn = hiddenColumns?.includes("tokens") ?? false;
+  const hideReasoningColumn = hiddenColumns?.includes("reasoning") ?? false;
   const hideCacheColumn = hiddenColumns?.includes("cache") ?? false;
   const hideCostColumn = hiddenColumns?.includes("cost") ?? false;
   const hidePerformanceColumn = hiddenColumns?.includes("performance") ?? false;
@@ -283,7 +357,7 @@ export function VirtualizedLogsTable({
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: 10,
     getItemKey,
   });
@@ -322,6 +396,59 @@ export function VirtualizedLogsTable({
   if (allLogs.length === 0) {
     return <div className="text-center py-8 text-muted-foreground">{t("logs.table.noData")}</div>;
   }
+
+  const renderStatusCell = (log: UsageLogRow) => {
+    if (disableDetailDialog) {
+      return <StatusBadgeOnly statusCode={log.statusCode} compact={isFullscreenLayout} />;
+    }
+
+    return (
+      <ErrorDetailsDialog
+        statusCode={log.statusCode}
+        errorMessage={log.errorMessage}
+        providerChain={log.providerChain}
+        sessionId={log.sessionId}
+        requestSequence={log.requestSequence}
+        blockedBy={log.blockedBy}
+        blockedReason={log.blockedReason}
+        originalModel={log.originalModel}
+        currentModel={log.model}
+        actualResponseModel={log.actualResponseModel}
+        userAgent={log.userAgent}
+        clientIp={log.clientIp}
+        messagesCount={log.messagesCount}
+        endpoint={log.endpoint}
+        billingModelSource={billingModelSource}
+        specialSettings={log.specialSettings}
+        inputTokens={log.inputTokens}
+        outputTokens={log.outputTokens}
+        reasoningOutputTokens={log.reasoningOutputTokens}
+        cacheCreationInputTokens={log.cacheCreationInputTokens}
+        cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
+        cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
+        cacheReadInputTokens={log.cacheReadInputTokens}
+        cacheTtlApplied={log.cacheTtlApplied}
+        swapCacheTtlApplied={log.swapCacheTtlApplied}
+        costUsd={log.costUsd}
+        costMultiplier={log.costMultiplier}
+        groupCostMultiplier={log.groupCostMultiplier}
+        costBreakdown={log.costBreakdown}
+        hedgeLosers={log.hedgeLosers}
+        context1mApplied={log.context1mApplied}
+        durationMs={log.durationMs}
+        ttfbMs={log.ttfbMs}
+        externalOpen={dialogState.logId === log.id ? true : undefined}
+        onExternalOpenChange={(open) => {
+          if (!open) setDialogState({ logId: null, scrollToRedirect: false });
+        }}
+        scrollToRedirect={dialogState.logId === log.id && dialogState.scrollToRedirect}
+        initialTab={dialogState.logId === log.id ? dialogState.targetTab : undefined}
+        initialExpandedChainIndex={
+          dialogState.logId === log.id ? dialogState.expandedChainIndex : undefined
+        }
+      />
+    );
+  };
 
   const renderCostTooltip = (log: UsageLogRow) => {
     const title = t("logs.details.billingDetails.title");
@@ -707,6 +834,449 @@ export function VirtualizedLogsTable({
     );
   };
 
+  const renderProviderCell = (log: UsageLogRow) => {
+    if (log.blockedBy) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
+          {t("logs.table.blocked")}
+        </span>
+      );
+    }
+
+    if (!isProviderFinalized(log)) {
+      if (log._liveChain) {
+        return (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-blue-500" />
+            <span className="truncate text-xs text-muted-foreground">
+              {log._liveChain.chain.length > 0
+                ? log._liveChain.chain[log._liveChain.chain.length - 1].name
+                : t("logs.details.inProgress")}
+            </span>
+            {log._liveChain.phase === "retrying" ? (
+              <Badge
+                variant="outline"
+                className="shrink-0 px-1 py-0 text-[10px] text-amber-500 border-amber-300"
+              >
+                {t("logs.details.retrying")}
+              </Badge>
+            ) : null}
+            {log._liveChain.phase === "hedge_racing" ? (
+              <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />
+            ) : null}
+          </div>
+        );
+      }
+
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {t("logs.details.inProgress")}
+        </span>
+      );
+    }
+
+    const successfulProvider =
+      log.providerChain && log.providerChain.length > 0
+        ? [...log.providerChain]
+            .reverse()
+            .find(
+              (item) =>
+                item.reason === "request_success" ||
+                item.reason === "retry_success" ||
+                item.reason === "hedge_winner"
+            )
+        : null;
+    const actualCostMultiplier = successfulProvider?.costMultiplier ?? log.costMultiplier;
+    const multiplier =
+      actualCostMultiplier === "" || actualCostMultiplier == null
+        ? null
+        : Number(actualCostMultiplier);
+    const hasCostBadge =
+      actualCostMultiplier !== "" &&
+      actualCostMultiplier != null &&
+      Number.isFinite(multiplier) &&
+      multiplier !== 1;
+    const showBadgeInTable = shouldShowCostBadgeInCell(log.providerChain, multiplier);
+
+    return (
+      <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <ProviderChainPopover
+            chain={log.providerChain ?? []}
+            finalProvider={
+              getFinalProviderName(log.providerChain ?? []) ||
+              log.providerName ||
+              tChain("circuit.unknown")
+            }
+            hasCostBadge={hasCostBadge}
+            onChainItemClick={(chainIndex) => {
+              setDialogState({
+                logId: log.id,
+                scrollToRedirect: false,
+                targetTab: "logic-trace",
+                expandedChainIndex: chainIndex,
+              });
+            }}
+          />
+        </div>
+        {showBadgeInTable ? (
+          <Badge
+            variant="outline"
+            className={
+              multiplier! > 1
+                ? "shrink-0 px-1 py-0 text-[10px] bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                : "shrink-0 px-1 py-0 text-[10px] bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800"
+            }
+          >
+            x{multiplier!.toFixed(2)}
+          </Badge>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderModelCell = (log: UsageLogRow) => (
+    <div
+      className={cn(
+        "flex min-w-0 font-mono text-xs",
+        isFullscreenLayout ? "items-center gap-2" : "flex-col gap-1"
+      )}
+      data-slot="logs-model-provider-cell"
+    >
+      <div className="flex min-w-0 items-start gap-1">
+        <ModelDisplayWithRedirect
+          originalModel={log.originalModel}
+          currentModel={log.model}
+          actualResponseModel={log.actualResponseModel}
+          billingModelSource={billingModelSource}
+          specialSettings={log.specialSettings}
+          reasoningOutputTokens={log.reasoningOutputTokens}
+          onRedirectClick={
+            disableDetailDialog
+              ? undefined
+              : () => setDialogState({ logId: log.id, scrollToRedirect: true })
+          }
+        />
+      </div>
+      {!hideProviderColumn && !isFullscreenLayout ? (
+        <div
+          className="min-w-0 text-[11px] text-muted-foreground"
+          data-slot="logs-provider-subline"
+        >
+          {renderProviderCell(log)}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const renderIdentityCell = (log: UsageLogRow) => {
+    const rows = [
+      !hideUserColumn ? { key: "user", value: log.userName, className: "text-foreground" } : null,
+      !hideKeyColumn
+        ? { key: "key", value: log.keyName, className: "font-mono text-muted-foreground" }
+        : null,
+    ].filter((row): row is { key: string; value: string; className: string } => row !== null);
+
+    if (rows.length === 0) return null;
+
+    return (
+      <div className="min-w-0 leading-tight" data-slot="logs-identity-cell">
+        {rows.map((row) => (
+          <div key={row.key} className={cn("truncate text-xs", row.className)} title={row.value}>
+            {row.value}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderSessionCell = (log: UsageLogRow) => {
+    if (!log.sessionId) {
+      return <span className="font-mono text-xs text-muted-foreground">-</span>;
+    }
+
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full min-w-0 items-center gap-1 text-left font-mono text-xs hover:underline"
+              data-session-id={log.sessionId}
+              onClick={handleCopySessionIdClick}
+              aria-label={t("actions.copy")}
+            >
+              <span className="min-w-0 flex-1 truncate">{log.sessionId}</span>
+              <Copy className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="start" variant="popover" className="max-w-[500px]">
+            <p className="whitespace-normal break-words font-mono text-xs">{log.sessionId}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  const renderTokensCell = (log: UsageLogRow) => {
+    const tokenRows = compactMetricRows([
+      hasTokenValue(log.inputTokens)
+        ? {
+            key: "input",
+            label: t("logs.table.metricLabels.input"),
+            value: formatTokenAmount(log.inputTokens),
+          }
+        : null,
+      hasTokenValue(log.outputTokens)
+        ? {
+            key: "output",
+            label: t("logs.table.metricLabels.output"),
+            value: formatTokenAmount(log.outputTokens),
+            tone: "muted",
+            valueSlot: "logs-token-output-inline",
+          }
+        : null,
+    ]);
+
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={250}>
+          <TooltipTrigger asChild>
+            <div className="cursor-help" data-slot="logs-token-cell">
+              <CompactMetricRows
+                rows={tokenRows}
+                emptyLabel={t("logs.table.emptyValue")}
+                variant="inline"
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent align="end" variant="popover" className="text-xs space-y-1">
+            <div>
+              {t("logs.billingDetails.input")}: {formatTokenAmount(log.inputTokens)}
+            </div>
+            <div>
+              {t("logs.billingDetails.output")}: {formatTokenAmount(log.outputTokens)}
+            </div>
+            {hasPositiveReasoningTokens(log.reasoningOutputTokens) ? (
+              <div className="pl-3 text-muted-foreground space-y-0.5">
+                <div>
+                  {t("logs.billingDetails.reasoningTokens")}:{" "}
+                  {formatTokenAmount(log.reasoningOutputTokens)}
+                </div>
+                <div className="text-[11px] text-muted-foreground/90">
+                  {t("logs.billingDetails.includedInOutputShort")}
+                </div>
+              </div>
+            ) : null}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  const renderReasoningCell = (log: UsageLogRow) => (
+    <span
+      className="font-mono tabular-nums"
+      data-slot={
+        hasPositiveReasoningTokens(log.reasoningOutputTokens)
+          ? "logs-token-reasoning-inline"
+          : undefined
+      }
+    >
+      {hasPositiveReasoningTokens(log.reasoningOutputTokens)
+        ? formatTokenAmount(log.reasoningOutputTokens)
+        : t("logs.table.emptyValue")}
+    </span>
+  );
+
+  const renderCacheCell = (log: UsageLogRow) => {
+    const ttlBadge = log.cacheTtlApplied ? (
+      <Badge
+        variant="outline"
+        className={cn(
+          "text-[10px] leading-tight px-1",
+          log.swapCacheTtlApplied
+            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+            : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+        )}
+        title={log.swapCacheTtlApplied ? t("logs.billingDetails.cacheTtlSwapped") : undefined}
+      >
+        {log.cacheTtlApplied}
+        {log.swapCacheTtlApplied ? " ~" : ""}
+      </Badge>
+    ) : null;
+    const cacheRows = compactMetricRows([
+      hasTokenValue(log.cacheReadInputTokens)
+        ? {
+            key: "cache-read",
+            label: t("logs.table.metricLabels.cacheRead"),
+            value: formatTokenAmount(log.cacheReadInputTokens),
+          }
+        : null,
+      !isFullscreenLayout && hasTokenValue(log.cacheCreationInputTokens)
+        ? {
+            key: "cache-write",
+            label: t("logs.table.metricLabels.cacheWrite"),
+            labelExtra: ttlBadge,
+            value: formatTokenAmount(log.cacheCreationInputTokens),
+            tone: "muted",
+          }
+        : null,
+    ]);
+
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={250}>
+          <TooltipTrigger asChild>
+            <div className="cursor-help">
+              <CompactMetricRows
+                rows={cacheRows}
+                emptyLabel={t("logs.table.emptyValue")}
+                variant={isFullscreenLayout ? "inline" : "stacked"}
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent align="end" variant="popover" className="text-xs space-y-1">
+            <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
+            <div className="pl-2">
+              5m:{" "}
+              {formatTokenAmount(
+                (log.cacheCreation5mInputTokens ?? 0) > 0
+                  ? log.cacheCreation5mInputTokens
+                  : log.cacheTtlApplied !== "1h"
+                    ? log.cacheCreationInputTokens
+                    : 0
+              )}
+            </div>
+            <div className="pl-2">
+              1h:{" "}
+              {formatTokenAmount(
+                (log.cacheCreation1hInputTokens ?? 0) > 0
+                  ? log.cacheCreation1hInputTokens
+                  : log.cacheTtlApplied === "1h"
+                    ? log.cacheCreationInputTokens
+                    : 0
+              )}
+            </div>
+            <div className="font-medium mt-1">{t("logs.columns.cacheRead")}</div>
+            <div className="pl-2">{formatTokenAmount(log.cacheReadInputTokens)}</div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  const renderCostCell = (log: UsageLogRow, isNonBilling: boolean) => {
+    if (isNonBilling) return "-";
+    if (log.costUsd == null) return "-";
+
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={250}>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-help items-center gap-1">
+              {formatCurrency(log.costUsd, currencyCode, 6)}
+              {hasPriorityServiceTierSpecialSetting(log.specialSettings) ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                  title={t("logs.billingDetails.fastPriority")}
+                >
+                  {t("logs.billingDetails.fast")}
+                </Badge>
+              ) : null}
+              {log.context1mApplied ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+                >
+                  1M
+                </Badge>
+              ) : null}
+            </span>
+          </TooltipTrigger>
+          {renderCostTooltip(log)}
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  const renderPerformanceCell = (log: UsageLogRow) => {
+    const rate = calculateOutputRate(log.outputTokens, log.durationMs, log.ttfbMs);
+    const hideRate = shouldHideOutputRate(rate, log.durationMs, log.ttfbMs);
+    const duration = log.durationMs != null ? formatDuration(log.durationMs) : null;
+    const ttfb = log.ttfbMs != null && log.ttfbMs > 0 ? formatDuration(log.ttfbMs) : null;
+    const rateLabel =
+      rate !== null && !hideRate ? `${rate.toFixed(isFullscreenLayout ? 0 : 1)} tok/s` : null;
+
+    if (!duration && !ttfb && !rateLabel) {
+      return <span className="text-muted-foreground">{t("logs.table.emptyValue")}</span>;
+    }
+
+    const content = isFullscreenLayout ? (
+      <CompactMetricRows
+        rows={compactMetricRows([
+          duration
+            ? { key: "duration", label: t("logs.table.metricLabels.duration"), value: duration }
+            : null,
+          ttfb
+            ? { key: "ttfb", label: t("logs.table.metricLabels.ttfb"), value: ttfb, tone: "muted" }
+            : null,
+          rateLabel
+            ? {
+                key: "rate",
+                label: t("logs.table.metricLabels.rate"),
+                value: rateLabel,
+                tone: "muted",
+              }
+            : null,
+        ])}
+        emptyLabel={t("logs.table.emptyValue")}
+        variant="inline"
+      />
+    ) : (
+      <div className="grid gap-0.5 leading-tight tabular-nums">
+        <div className="font-mono text-foreground">
+          {duration}
+          {ttfb ? (
+            <span className="text-muted-foreground">
+              {" "}
+              ({t("logs.table.metricLabels.ttfb")}: {ttfb})
+            </span>
+          ) : null}
+        </div>
+        {rateLabel ? <div className="font-mono text-muted-foreground">{rateLabel}</div> : null}
+      </div>
+    );
+
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={250}>
+          <TooltipTrigger asChild>
+            <div className="cursor-help">{content}</div>
+          </TooltipTrigger>
+          <TooltipContent align="end" variant="popover" className="text-xs space-y-1">
+            <div>
+              {t("logs.details.performance.duration")}: {formatDuration(log.durationMs)}
+            </div>
+            {log.ttfbMs != null ? (
+              <div>
+                {t("logs.details.performance.ttfb")}: {formatDuration(log.ttfbMs)}
+              </div>
+            ) : null}
+            {rate !== null && !hideRate ? (
+              <div>
+                {t("logs.details.performance.outputRate")}: {rate.toFixed(1)} tok/s
+              </div>
+            ) : null}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Status bar */}
@@ -725,32 +1295,52 @@ export function VirtualizedLogsTable({
 
       {/* Table with virtual scrolling */}
       <div className="overflow-x-auto">
-        <div className="min-w-[800px]">
+        <div className={cn(isFullscreenLayout ? "min-w-[1180px]" : "min-w-[1040px]")}>
           {/* Fixed header */}
           <div className="bg-muted/30 border-b sticky top-0 z-10">
             <div className="flex items-center h-8 text-[11px] font-medium text-muted-foreground/80 tracking-wide">
-              <div className="flex-[0.6] min-w-[56px] pl-3 truncate" title={t("logs.columns.time")}>
+              <div
+                className="flex-[0.45] min-w-[58px] pl-3 truncate"
+                title={t("logs.columns.status")}
+              >
+                {t("logs.columns.status")}
+              </div>
+              <div
+                className="flex-[0.75] min-w-[96px] px-1.5 truncate"
+                title={t("logs.columns.time")}
+              >
                 {t("logs.columns.time")}
               </div>
-              {hideUserColumn ? null : (
+              <div
+                className={cn(
+                  "px-1.5 truncate",
+                  isFullscreenLayout ? "flex-[1.25] min-w-[140px]" : "flex-[1.8] min-w-[180px]"
+                )}
+                title={t("logs.columns.model")}
+              >
+                {isFullscreenLayout
+                  ? t("logs.columns.model")
+                  : `${t("logs.columns.model")} / ${t("logs.columns.provider")}`}
+              </div>
+              {isFullscreenLayout && !hideProviderColumn ? (
                 <div
-                  className="flex-[0.8] min-w-[50px] px-1.5 truncate"
-                  title={t("logs.columns.user")}
+                  className="flex-[1] min-w-[110px] px-1.5 truncate"
+                  title={t("logs.columns.provider")}
                 >
-                  {t("logs.columns.user")}
+                  {t("logs.columns.provider")}
                 </div>
-              )}
-              {hideKeyColumn ? null : (
+              ) : null}
+              {hideUserColumn && hideKeyColumn ? null : (
                 <div
-                  className="flex-[0.6] min-w-[50px] px-1.5 truncate"
-                  title={t("logs.columns.key")}
+                  className="flex-[0.8] min-w-[90px] px-1.5 truncate"
+                  title={`${t("logs.columns.user")} / ${t("logs.columns.key")}`}
                 >
-                  {t("logs.columns.key")}
+                  {t("logs.columns.user")} / {t("logs.columns.key")}
                 </div>
               )}
               {hideSessionIdColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[80px] px-1.5 truncate"
+                  className="flex-[0.9] min-w-[110px] px-1.5 truncate"
                   title={t("logs.columns.sessionId")}
                 >
                   {t("logs.columns.sessionId")}
@@ -758,45 +1348,39 @@ export function VirtualizedLogsTable({
               )}
               {hideIpColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[90px] px-1.5 truncate"
+                  className="flex-[0.75] min-w-[90px] px-1.5 truncate"
                   title={t("logs.columns.ip")}
                 >
                   {t("logs.columns.ip")}
                 </div>
               )}
-              {hideProviderColumn ? null : (
-                <div
-                  className="flex-[1.5] min-w-[100px] px-1.5 truncate"
-                  title={t("logs.columns.provider")}
-                >
-                  {t("logs.columns.provider")}
-                </div>
-              )}
-              <div
-                className="flex-[1.6] min-w-[128px] px-1.5 truncate md:flex-[1.3] md:min-w-[100px]"
-                title={t("logs.columns.model")}
-              >
-                {t("logs.columns.model")}
-              </div>
               {hideTokensColumn ? null : (
                 <div
                   className="flex-[0.7] min-w-[96px] text-right px-1.5 truncate"
                   title={t("logs.columns.tokens")}
                 >
-                  {t("logs.columns.tokens")}
+                  {t("logs.columns.inputOutputTokens")}
+                </div>
+              )}
+              {hideReasoningColumn ? null : (
+                <div
+                  className="flex-[0.55] min-w-[72px] text-right px-1.5 truncate"
+                  title={t("logs.columns.reasoningTokens")}
+                >
+                  {t("logs.columns.reasoningTokens")}
                 </div>
               )}
               {hideCacheColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[70px] text-right px-1.5 truncate"
-                  title={t("logs.columns.cache")}
+                  className="flex-[0.65] min-w-[82px] text-right px-1.5 truncate"
+                  title={t("logs.columns.cacheRead")}
                 >
-                  {t("logs.columns.cache")}
+                  {t("logs.columns.cacheRead")}
                 </div>
               )}
               {hideCostColumn ? null : (
                 <div
-                  className="flex-[0.6] min-w-[50px] text-right px-1.5 truncate"
+                  className="flex-[0.75] min-w-[90px] text-right px-1.5 truncate"
                   title={t("logs.columns.cost")}
                 >
                   {t("logs.columns.cost")}
@@ -804,18 +1388,12 @@ export function VirtualizedLogsTable({
               )}
               {hidePerformanceColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[80px] text-right px-1.5 truncate"
+                  className="flex-[0.95] min-w-[118px] text-right pr-3 truncate"
                   title={t("logs.columns.performance")}
                 >
-                  {t("logs.columns.performance")}
+                  {t("logs.columns.latency")}
                 </div>
               )}
-              <div
-                className="flex-[0.7] min-w-[70px] pr-3 truncate"
-                title={t("logs.columns.status")}
-              >
-                {t("logs.columns.status")}
-              </div>
             </div>
           </div>
 
@@ -856,7 +1434,9 @@ export function VirtualizedLogsTable({
                 }
 
                 const isNonBilling = isNonBillingEndpoint(log.endpoint);
-                const _isWarmupSkipped = log.blockedBy === "warmup";
+                const absoluteTime = formatAbsoluteTime(log.createdAt, serverTimeZone);
+                const errorStatus = isErrorStatus(log.statusCode);
+
                 return (
                   <div
                     key={log.id}
@@ -870,71 +1450,60 @@ export function VirtualizedLogsTable({
                     }}
                     className={cn(
                       "flex items-center text-sm border-b border-border/40 transition-colors hover:bg-accent/50",
-                      isNonBilling ? "bg-muted/30 text-muted-foreground dark:bg-muted/15" : ""
+                      isFullscreenLayout ? "text-xs" : "",
+                      isNonBilling ? "bg-muted/30 text-muted-foreground dark:bg-muted/15" : "",
+                      errorStatus && log.statusCode != null && log.statusCode >= 500
+                        ? "bg-red-50/50 dark:bg-red-950/15"
+                        : "",
+                      errorStatus && log.statusCode != null && log.statusCode < 500
+                        ? "bg-yellow-50/50 dark:bg-yellow-950/15"
+                        : ""
                     )}
                   >
-                    {/* Time */}
-                    <div className="flex-[0.6] min-w-[56px] font-mono text-xs truncate pl-3">
-                      <RelativeTime date={log.createdAt} fallback="-" format="short" />
+                    <div className="flex-[0.45] min-w-[58px] pl-3">{renderStatusCell(log)}</div>
+
+                    <div className="flex-[0.75] min-w-[96px] px-1.5 font-mono text-xs leading-tight">
+                      <div className="truncate tabular-nums" title={absoluteTime}>
+                        {absoluteTime}
+                      </div>
+                      {isFullscreenLayout ? null : (
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          <RelativeTime date={log.createdAt} fallback="-" format="short" />
+                        </div>
+                      )}
                     </div>
 
-                    {/* User */}
-                    {hideUserColumn ? null : (
-                      <div
-                        className="flex-[0.8] min-w-[50px] text-sm truncate px-1.5"
-                        title={log.userName}
-                      >
-                        {log.userName}
+                    <div
+                      className={cn(
+                        "px-1.5",
+                        isFullscreenLayout
+                          ? "flex-[1.25] min-w-[140px]"
+                          : "flex-[1.8] min-w-[180px]"
+                      )}
+                    >
+                      {renderModelCell(log)}
+                    </div>
+
+                    {isFullscreenLayout && !hideProviderColumn ? (
+                      <div className="flex-[1] min-w-[110px] px-1.5 text-xs">
+                        {renderProviderCell(log)}
+                      </div>
+                    ) : null}
+
+                    {hideUserColumn && hideKeyColumn ? null : (
+                      <div className="flex-[0.8] min-w-[90px] px-1.5">
+                        {renderIdentityCell(log)}
                       </div>
                     )}
 
-                    {/* Key */}
-                    {hideKeyColumn ? null : (
-                      <div
-                        className="flex-[0.6] min-w-[50px] font-mono text-xs truncate px-1.5"
-                        title={log.keyName}
-                      >
-                        {log.keyName}
-                      </div>
-                    )}
-
-                    {/* Session ID */}
                     {hideSessionIdColumn ? null : (
-                      <div className="flex-[0.8] min-w-[80px] px-1.5">
-                        {log.sessionId ? (
-                          <TooltipProvider>
-                            <Tooltip delayDuration={300}>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="w-full text-left font-mono text-xs truncate cursor-pointer hover:underline"
-                                  data-session-id={log.sessionId}
-                                  onClick={handleCopySessionIdClick}
-                                >
-                                  {log.sessionId}
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="bottom"
-                                align="start"
-                                variant="popover"
-                                className="max-w-[500px]"
-                              >
-                                <p className="text-xs whitespace-normal break-words font-mono">
-                                  {log.sessionId}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <span className="font-mono text-xs text-muted-foreground">-</span>
-                        )}
+                      <div className="flex-[0.9] min-w-[110px] px-1.5">
+                        {renderSessionCell(log)}
                       </div>
                     )}
 
-                    {/* IP */}
                     {hideIpColumn ? null : (
-                      <div className="flex-[0.8] min-w-[90px] px-1.5 overflow-hidden">
+                      <div className="flex-[0.75] min-w-[90px] px-1.5 overflow-hidden">
                         <IpDisplayTrigger
                           ip={log.clientIp}
                           onClick={() => {
@@ -945,475 +1514,35 @@ export function VirtualizedLogsTable({
                       </div>
                     )}
 
-                    {/* Provider */}
-                    {hideProviderColumn ? null : (
-                      <div className="flex-[1.2] min-w-[84px] px-1.5 md:flex-[1.5] md:min-w-[100px]">
-                        {log.blockedBy ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
-                            <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
-                            {t("logs.table.blocked")}
-                          </span>
-                        ) : !isProviderFinalized(log) ? (
-                          log._liveChain ? (
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <Loader2 className="h-3 w-3 animate-spin text-blue-500 shrink-0" />
-                              <span className="text-xs text-muted-foreground truncate">
-                                {log._liveChain.chain.length > 0
-                                  ? log._liveChain.chain[log._liveChain.chain.length - 1].name
-                                  : t("logs.details.inProgress")}
-                              </span>
-                              {log._liveChain.phase === "retrying" && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] px-1 py-0 shrink-0 text-amber-500 border-amber-300"
-                                >
-                                  {t("logs.details.retrying")}
-                                </Badge>
-                              )}
-                              {log._liveChain.phase === "hedge_racing" && (
-                                <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />
-                              )}
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              {t("logs.details.inProgress")}
-                            </span>
-                          )
-                        ) : (
-                          <div className="flex flex-col items-start gap-0.5 min-w-0">
-                            <div className="flex items-center gap-1 min-w-0 w-full overflow-hidden">
-                              {(() => {
-                                // 计算倍率，用于判断是否显示 Badge
-                                const successfulProvider =
-                                  log.providerChain && log.providerChain.length > 0
-                                    ? [...log.providerChain]
-                                        .reverse()
-                                        .find(
-                                          (item) =>
-                                            item.reason === "request_success" ||
-                                            item.reason === "retry_success" ||
-                                            item.reason === "hedge_winner"
-                                        )
-                                    : null;
-                                const actualCostMultiplier =
-                                  successfulProvider?.costMultiplier ?? log.costMultiplier;
-                                const multiplier =
-                                  actualCostMultiplier === "" || actualCostMultiplier == null
-                                    ? null
-                                    : Number(actualCostMultiplier);
-                                const hasCostBadge =
-                                  actualCostMultiplier !== "" &&
-                                  actualCostMultiplier != null &&
-                                  Number.isFinite(multiplier) &&
-                                  multiplier !== 1;
-                                const showBadgeInTable = shouldShowCostBadgeInCell(
-                                  log.providerChain,
-                                  multiplier
-                                );
-
-                                return (
-                                  <>
-                                    <div className="flex-1 min-w-0 overflow-hidden">
-                                      <ProviderChainPopover
-                                        chain={log.providerChain ?? []}
-                                        finalProvider={
-                                          getFinalProviderName(log.providerChain ?? []) ||
-                                          log.providerName ||
-                                          tChain("circuit.unknown")
-                                        }
-                                        hasCostBadge={hasCostBadge}
-                                        onChainItemClick={(chainIndex) => {
-                                          setDialogState({
-                                            logId: log.id,
-                                            scrollToRedirect: false,
-                                            targetTab: "logic-trace",
-                                            expandedChainIndex: chainIndex,
-                                          });
-                                        }}
-                                      />
-                                    </div>
-                                    {/* Cost multiplier badge - only show when no retry */}
-                                    {showBadgeInTable && (
-                                      <Badge
-                                        variant="outline"
-                                        className={
-                                          multiplier! > 1
-                                            ? "text-[10px] px-1 py-0 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
-                                            : "text-[10px] px-1 py-0 bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
-                                        }
-                                      >
-                                        x{multiplier!.toFixed(2)}
-                                      </Badge>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Model */}
-                    <div className="flex-[1.6] min-w-[128px] font-mono text-xs px-1.5 md:flex-[1.3] md:min-w-[100px]">
-                      <div className="flex min-w-0 items-start gap-1">
-                        <ModelDisplayWithRedirect
-                          originalModel={log.originalModel}
-                          currentModel={log.model}
-                          actualResponseModel={log.actualResponseModel}
-                          billingModelSource={billingModelSource}
-                          specialSettings={log.specialSettings}
-                          reasoningOutputTokens={log.reasoningOutputTokens}
-                          onRedirectClick={
-                            disableDetailDialog
-                              ? undefined
-                              : () => setDialogState({ logId: log.id, scrollToRedirect: true })
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tokens */}
                     {hideTokensColumn ? null : (
-                      <div className="flex-[0.7] min-w-[112px] text-right text-xs px-1.5">
-                        {(() => {
-                          const tokenRows = compactMetricRows([
-                            hasTokenValue(log.inputTokens)
-                              ? {
-                                  key: "input",
-                                  label: t("logs.table.metricLabels.input"),
-                                  value: formatTokenAmount(log.inputTokens),
-                                }
-                              : null,
-                            hasTokenValue(log.outputTokens)
-                              ? {
-                                  key: "output",
-                                  label: t("logs.table.metricLabels.output"),
-                                  value: formatTokenAmount(log.outputTokens),
-                                  tone: "muted",
-                                  valueSlot: "logs-token-output-inline",
-                                }
-                              : null,
-                            hasPositiveReasoningTokens(log.reasoningOutputTokens)
-                              ? {
-                                  key: "reasoning",
-                                  label: t("logs.table.metricLabels.reasoning"),
-                                  value: formatTokenAmount(log.reasoningOutputTokens),
-                                  tone: "muted",
-                                  valueSlot: "logs-token-reasoning-inline",
-                                }
-                              : null,
-                          ]);
-
-                          return (
-                            <TooltipProvider>
-                              <Tooltip delayDuration={250}>
-                                <TooltipTrigger asChild>
-                                  <div className="cursor-help" data-slot="logs-token-cell">
-                                    <CompactMetricRows
-                                      rows={tokenRows}
-                                      emptyLabel={t("logs.table.emptyValue")}
-                                    />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  align="end"
-                                  variant="popover"
-                                  className="text-xs space-y-1"
-                                >
-                                  <div>
-                                    {t("logs.billingDetails.input")}:{" "}
-                                    {formatTokenAmount(log.inputTokens)}
-                                  </div>
-                                  <div>
-                                    {t("logs.billingDetails.output")}:{" "}
-                                    {formatTokenAmount(log.outputTokens)}
-                                  </div>
-                                  {hasPositiveReasoningTokens(log.reasoningOutputTokens) ? (
-                                    <div className="pl-3 text-muted-foreground space-y-0.5">
-                                      <div>
-                                        {t("logs.billingDetails.reasoningTokens")}:{" "}
-                                        {formatTokenAmount(log.reasoningOutputTokens)}
-                                      </div>
-                                      <div className="text-[11px] text-muted-foreground/90">
-                                        {t("logs.billingDetails.includedInOutputShort")}
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          );
-                        })()}
+                      <div className="flex-[0.7] min-w-[96px] px-1.5 text-right text-xs">
+                        {renderTokensCell(log)}
                       </div>
                     )}
 
-                    {/* Cache */}
+                    {hideReasoningColumn ? null : (
+                      <div className="flex-[0.55] min-w-[72px] px-1.5 text-right text-xs">
+                        {renderReasoningCell(log)}
+                      </div>
+                    )}
+
                     {hideCacheColumn ? null : (
-                      <div className="flex-[0.8] min-w-[112px] text-right text-xs px-1.5">
-                        {(() => {
-                          const ttlBadge = log.cacheTtlApplied ? (
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] leading-tight px-1",
-                                log.swapCacheTtlApplied
-                                  ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
-                                  : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
-                              )}
-                              title={
-                                log.swapCacheTtlApplied
-                                  ? t("logs.billingDetails.cacheTtlSwapped")
-                                  : undefined
-                              }
-                            >
-                              {log.cacheTtlApplied}
-                              {log.swapCacheTtlApplied ? " ~" : ""}
-                            </Badge>
-                          ) : null;
-                          const cacheRows = compactMetricRows([
-                            hasTokenValue(log.cacheCreationInputTokens)
-                              ? {
-                                  key: "cache-write",
-                                  label: t("logs.table.metricLabels.cacheWrite"),
-                                  labelExtra: ttlBadge,
-                                  value: formatTokenAmount(log.cacheCreationInputTokens),
-                                }
-                              : null,
-                            hasTokenValue(log.cacheReadInputTokens)
-                              ? {
-                                  key: "cache-read",
-                                  label: t("logs.table.metricLabels.cacheRead"),
-                                  value: formatTokenAmount(log.cacheReadInputTokens),
-                                  tone: "muted",
-                                }
-                              : null,
-                          ]);
-
-                          return (
-                            <TooltipProvider>
-                              <Tooltip delayDuration={250}>
-                                <TooltipTrigger asChild>
-                                  <div className="cursor-help">
-                                    <CompactMetricRows
-                                      rows={cacheRows}
-                                      emptyLabel={t("logs.table.emptyValue")}
-                                    />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  align="end"
-                                  variant="popover"
-                                  className="text-xs space-y-1"
-                                >
-                                  <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
-                                  <div className="pl-2">
-                                    5m:{" "}
-                                    {formatTokenAmount(
-                                      (log.cacheCreation5mInputTokens ?? 0) > 0
-                                        ? log.cacheCreation5mInputTokens
-                                        : log.cacheTtlApplied !== "1h"
-                                          ? log.cacheCreationInputTokens
-                                          : 0
-                                    )}
-                                  </div>
-                                  <div className="pl-2">
-                                    1h:{" "}
-                                    {formatTokenAmount(
-                                      (log.cacheCreation1hInputTokens ?? 0) > 0
-                                        ? log.cacheCreation1hInputTokens
-                                        : log.cacheTtlApplied === "1h"
-                                          ? log.cacheCreationInputTokens
-                                          : 0
-                                    )}
-                                  </div>
-                                  <div className="font-medium mt-1">
-                                    {t("logs.columns.cacheRead")}
-                                  </div>
-                                  <div className="pl-2">
-                                    {formatTokenAmount(log.cacheReadInputTokens)}
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          );
-                        })()}
+                      <div className="flex-[0.65] min-w-[82px] px-1.5 text-right text-xs">
+                        {renderCacheCell(log)}
                       </div>
                     )}
 
-                    {/* Cost */}
                     {hideCostColumn ? null : (
-                      <div className="flex-[0.6] min-w-[50px] text-right font-mono text-xs px-1.5">
-                        {isNonBilling ? (
-                          "-"
-                        ) : log.costUsd != null ? (
-                          <TooltipProvider>
-                            <Tooltip delayDuration={250}>
-                              <TooltipTrigger asChild>
-                                <span className="cursor-help inline-flex items-center gap-1">
-                                  {formatCurrency(log.costUsd, currencyCode, 6)}
-                                  {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
-                                      title={t("logs.billingDetails.fastPriority")}
-                                    >
-                                      {t("logs.billingDetails.fast")}
-                                    </Badge>
-                                  )}
-                                  {log.context1mApplied && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
-                                    >
-                                      1M
-                                    </Badge>
-                                  )}
-                                </span>
-                              </TooltipTrigger>
-                              {renderCostTooltip(log)}
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          "-"
-                        )}
+                      <div className="flex-[0.75] min-w-[90px] px-1.5 text-right font-mono text-xs">
+                        {renderCostCell(log, isNonBilling)}
                       </div>
                     )}
 
-                    {/* Performance */}
                     {hidePerformanceColumn ? null : (
-                      <div className="flex-[0.8] min-w-[112px] text-right text-xs px-1.5">
-                        {(() => {
-                          const rate = calculateOutputRate(
-                            log.outputTokens,
-                            log.durationMs,
-                            log.ttfbMs
-                          );
-                          const hideRate = shouldHideOutputRate(rate, log.durationMs, log.ttfbMs);
-                          const performanceRows = compactMetricRows([
-                            log.durationMs != null
-                              ? {
-                                  key: "duration",
-                                  label: t("logs.table.metricLabels.duration"),
-                                  value: formatDuration(log.durationMs),
-                                }
-                              : null,
-                            log.ttfbMs != null && log.ttfbMs > 0
-                              ? {
-                                  key: "ttfb",
-                                  label: t("logs.table.metricLabels.ttfb"),
-                                  value: formatDuration(log.ttfbMs),
-                                  tone: "muted",
-                                }
-                              : null,
-                            rate !== null && !hideRate
-                              ? {
-                                  key: "rate",
-                                  label: t("logs.table.metricLabels.rate"),
-                                  value: `${rate.toFixed(0)} tok/s`,
-                                  tone: "muted",
-                                }
-                              : null,
-                          ]);
-
-                          return (
-                            <TooltipProvider>
-                              <Tooltip delayDuration={250}>
-                                <TooltipTrigger asChild>
-                                  <div className="cursor-help">
-                                    <CompactMetricRows
-                                      rows={performanceRows}
-                                      emptyLabel={t("logs.table.emptyValue")}
-                                    />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  align="end"
-                                  variant="popover"
-                                  className="text-xs space-y-1"
-                                >
-                                  <div>
-                                    {t("logs.details.performance.duration")}:{" "}
-                                    {formatDuration(log.durationMs)}
-                                  </div>
-                                  {log.ttfbMs != null && (
-                                    <div>
-                                      {t("logs.details.performance.ttfb")}:{" "}
-                                      {formatDuration(log.ttfbMs)}
-                                    </div>
-                                  )}
-                                  {rate !== null && !hideRate && (
-                                    <div>
-                                      {t("logs.details.performance.outputRate")}: {rate.toFixed(1)}{" "}
-                                      tok/s
-                                    </div>
-                                  )}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          );
-                        })()}
+                      <div className="flex-[0.95] min-w-[118px] pr-3 text-right text-xs">
+                        {renderPerformanceCell(log)}
                       </div>
                     )}
-
-                    {/* Status */}
-                    <div className="flex-[0.7] min-w-[70px] pr-3">
-                      {disableDetailDialog ? (
-                        <StatusBadgeOnly statusCode={log.statusCode} />
-                      ) : (
-                        <ErrorDetailsDialog
-                          statusCode={log.statusCode}
-                          errorMessage={log.errorMessage}
-                          providerChain={log.providerChain}
-                          sessionId={log.sessionId}
-                          requestSequence={log.requestSequence}
-                          blockedBy={log.blockedBy}
-                          blockedReason={log.blockedReason}
-                          originalModel={log.originalModel}
-                          currentModel={log.model}
-                          actualResponseModel={log.actualResponseModel}
-                          userAgent={log.userAgent}
-                          clientIp={log.clientIp}
-                          messagesCount={log.messagesCount}
-                          endpoint={log.endpoint}
-                          billingModelSource={billingModelSource}
-                          specialSettings={log.specialSettings}
-                          inputTokens={log.inputTokens}
-                          outputTokens={log.outputTokens}
-                          reasoningOutputTokens={log.reasoningOutputTokens}
-                          cacheCreationInputTokens={log.cacheCreationInputTokens}
-                          cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
-                          cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
-                          cacheReadInputTokens={log.cacheReadInputTokens}
-                          cacheTtlApplied={log.cacheTtlApplied}
-                          swapCacheTtlApplied={log.swapCacheTtlApplied}
-                          costUsd={log.costUsd}
-                          costMultiplier={log.costMultiplier}
-                          groupCostMultiplier={log.groupCostMultiplier}
-                          costBreakdown={log.costBreakdown}
-                          hedgeLosers={log.hedgeLosers}
-                          context1mApplied={log.context1mApplied}
-                          durationMs={log.durationMs}
-                          ttfbMs={log.ttfbMs}
-                          externalOpen={dialogState.logId === log.id ? true : undefined}
-                          onExternalOpenChange={(open) => {
-                            if (!open) setDialogState({ logId: null, scrollToRedirect: false });
-                          }}
-                          scrollToRedirect={
-                            dialogState.logId === log.id && dialogState.scrollToRedirect
-                          }
-                          initialTab={
-                            dialogState.logId === log.id ? dialogState.targetTab : undefined
-                          }
-                          initialExpandedChainIndex={
-                            dialogState.logId === log.id
-                              ? dialogState.expandedChainIndex
-                              : undefined
-                          }
-                        />
-                      )}
-                    </div>
                   </div>
                 );
               })}
