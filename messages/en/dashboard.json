@@ -165,7 +165,8 @@
       "nonBilling": "Non-Billing",
       "skipped": "Skipped",
       "specialSettings": "Special",
-      "anthropicEffort": "Effort: {effort}",
+      "reasoningEffort": "Effort: {effort}",
+      "reasoningEffortApplied": "Applied: {effort}",
       "times": "times",
       "loadedCount": "Loaded {count} records",
       "loadingMore": "Loading more...",
@@ -381,7 +382,9 @@
       "effort": {
         "label": "Effort",
         "overridden": "Overridden by provider",
-        "tooltip": "Thinking effort requested by the client (output_config.effort), shown verbatim. The proxy does not rename or convert levels."
+        "injectedByProvider": "Applied by provider override",
+        "tooltip": "Reasoning effort requested by the client, shown verbatim. The proxy does not rename or convert levels.",
+        "appliedTooltip": "Reasoning effort was applied by provider override audit. No original client effort was recorded for this request."
       },
       "logicTrace": {
         "title": "Decision Chain",

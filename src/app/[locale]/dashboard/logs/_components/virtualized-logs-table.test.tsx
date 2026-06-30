@@ -97,10 +97,17 @@ vi.mock("@/components/ui/relative-time", () => ({
   RelativeTime: ({ fallback }: { fallback: string }) => <span>{fallback}</span>,
 }));
 
+const modelDisplayMock = vi.hoisted(() => vi.fn());
+
 vi.mock("./model-display-with-redirect", () => ({
-  ModelDisplayWithRedirect: ({ currentModel }: { currentModel: string | null }) => (
-    <span>{currentModel ?? "-"}</span>
-  ),
+  ModelDisplayWithRedirect: (props: {
+    currentModel: string | null;
+    specialSettings?: unknown;
+    reasoningOutputTokens?: number | null;
+  }) => {
+    modelDisplayMock(props);
+    return <span>{props.currentModel ?? "-"}</span>;
+  },
 }));
 
 vi.mock("./error-details-dialog", () => ({
@@ -245,6 +252,36 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(
       renderToStaticMarkup(<VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />)
     ).toContain("logs.table.noData");
+  });
+
+  test("forwards special settings into model display", () => {
+    modelDisplayMock.mockClear();
+    renderTableContainerWithLog({
+      specialSettings: [
+        {
+          type: "reasoning_effort",
+          scope: "request",
+          hit: true,
+          path: "reasoning.effort",
+          effort: "medium",
+        },
+      ],
+      reasoningOutputTokens: 12,
+    });
+
+    expect(modelDisplayMock).toHaveBeenCalled();
+    expect(modelDisplayMock.mock.calls[0]?.[0]).toMatchObject({
+      reasoningOutputTokens: 12,
+    });
+    expect(modelDisplayMock.mock.calls[0]?.[0]?.specialSettings).toEqual([
+      {
+        type: "reasoning_effort",
+        scope: "request",
+        hit: true,
+        path: "reasoning.effort",
+        effort: "medium",
+      },
+    ]);
   });
 
   test("renders inline reasoning tokens after output tokens when present", () => {

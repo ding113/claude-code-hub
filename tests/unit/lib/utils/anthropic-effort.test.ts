@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { SpecialSetting } from "@/types/special-settings";
 import {
   extractAnthropicEffortInfo,
+  extractReasoningEffortInfo,
   type AnthropicEffortOverrideInfo,
 } from "@/lib/utils/anthropic-effort";
 
@@ -54,6 +55,8 @@ describe("extractAnthropicEffortInfo", () => {
         originalEffort: "medium",
         overriddenEffort: null,
         isOverridden: false,
+        path: "output_config.effort",
+        hasRequestEffort: true,
       },
     },
     {
@@ -83,6 +86,8 @@ describe("extractAnthropicEffortInfo", () => {
         originalEffort: "medium",
         overriddenEffort: "high",
         isOverridden: true,
+        path: "output_config.effort",
+        hasRequestEffort: true,
       },
     },
     {
@@ -111,6 +116,8 @@ describe("extractAnthropicEffortInfo", () => {
         originalEffort: "high",
         overriddenEffort: null,
         isOverridden: false,
+        path: "output_config.effort",
+        hasRequestEffort: true,
       },
     },
     {
@@ -131,6 +138,8 @@ describe("extractAnthropicEffortInfo", () => {
         originalEffort: "low",
         overriddenEffort: "max",
         isOverridden: true,
+        path: "output_config.effort",
+        hasRequestEffort: true,
       },
     },
     {
@@ -157,6 +166,8 @@ describe("extractAnthropicEffortInfo", () => {
         originalEffort: "auto",
         overriddenEffort: null,
         isOverridden: false,
+        path: "output_config.effort",
+        hasRequestEffort: true,
       },
     },
     {
@@ -171,22 +182,6 @@ describe("extractAnthropicEffortInfo", () => {
       ],
       expected: null,
     },
-    {
-      name: "override changed:true but both originalEffort and overrideBefore are null returns null",
-      input: [
-        {
-          type: "provider_parameter_override",
-          scope: "provider",
-          providerId: 1,
-          providerName: "test",
-          providerType: "claude",
-          hit: true,
-          changed: true,
-          changes: [{ path: "output_config.effort", before: null, after: "high", changed: true }],
-        },
-      ],
-      expected: null,
-    },
   ];
 
   for (const { name, input, expected } of cases) {
@@ -194,4 +189,133 @@ describe("extractAnthropicEffortInfo", () => {
       expect(extractAnthropicEffortInfo(input)).toEqual(expected);
     });
   }
+});
+
+describe("extractReasoningEffortInfo", () => {
+  test("reads generic request audit for codex reasoning.effort", () => {
+    expect(
+      extractReasoningEffortInfo([
+        {
+          type: "reasoning_effort",
+          scope: "request",
+          hit: true,
+          path: "reasoning.effort",
+          effort: "high",
+        },
+      ])
+    ).toEqual({
+      originalEffort: "high",
+      overriddenEffort: null,
+      isOverridden: false,
+      path: "reasoning.effort",
+      hasRequestEffort: true,
+    });
+  });
+
+  test("uses reasoning.effort override audit path when provider changed codex effort", () => {
+    expect(
+      extractReasoningEffortInfo([
+        {
+          type: "reasoning_effort",
+          scope: "request",
+          hit: true,
+          path: "reasoning.effort",
+          effort: "medium",
+        },
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 2,
+          providerName: "codex provider",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [
+            { path: "reasoning.summary", before: "auto", after: "detailed", changed: true },
+            { path: "reasoning.effort", before: "medium", after: "high", changed: true },
+          ],
+        },
+      ])
+    ).toEqual({
+      originalEffort: "medium",
+      overriddenEffort: "high",
+      isOverridden: true,
+      path: "reasoning.effort",
+      hasRequestEffort: true,
+    });
+  });
+
+  test("falls back to override-only reasoning.effort audit", () => {
+    expect(
+      extractReasoningEffortInfo([
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 2,
+          providerName: "codex provider",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [
+            { path: "reasoning.effort", before: "low", after: "xhigh", changed: true },
+          ],
+        },
+      ])
+    ).toEqual({
+      originalEffort: "low",
+      overriddenEffort: "xhigh",
+      isOverridden: true,
+      path: "reasoning.effort",
+      hasRequestEffort: true,
+    });
+  });
+
+  test("uses applied effort when provider override added effort without request value", () => {
+    expect(
+      extractReasoningEffortInfo([
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 2,
+          providerName: "codex provider",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [{ path: "reasoning.effort", before: null, after: "high", changed: true }],
+        },
+      ])
+    ).toEqual({
+      originalEffort: "high",
+      overriddenEffort: "high",
+      isOverridden: true,
+      path: "reasoning.effort",
+      hasRequestEffort: false,
+    });
+  });
+
+  test("prefers generic request audit over legacy anthropic setting when both exist", () => {
+    expect(
+      extractReasoningEffortInfo([
+        {
+          type: "anthropic_effort",
+          scope: "request",
+          hit: true,
+          effort: "medium",
+        },
+        {
+          type: "reasoning_effort",
+          scope: "request",
+          hit: true,
+          path: "reasoning.effort",
+          effort: "high",
+        },
+      ])
+    ).toEqual({
+      originalEffort: "high",
+      overriddenEffort: null,
+      isOverridden: false,
+      path: "reasoning.effort",
+      hasRequestEffort: true,
+    });
+  });
 });

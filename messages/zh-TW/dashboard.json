@@ -165,7 +165,8 @@
       "nonBilling": "非計費",
       "skipped": "已跳過",
       "specialSettings": "特殊設定",
-      "anthropicEffort": "Effort: {effort}",
+      "reasoningEffort": "思考: {effort}",
+      "reasoningEffortApplied": "生效: {effort}",
       "times": "次數",
       "loadedCount": "已載入 {count} 筆記錄",
       "loadingMore": "載入更多中...",
@@ -379,9 +380,11 @@
         "copyTimeline": "複製時間軸"
       },
       "effort": {
-        "label": "Effort",
+        "label": "思考等級",
         "overridden": "已被供應商覆寫",
-        "tooltip": "用戶端在請求體中宣告的思考強度（output_config.effort），按原值顯示，代理不會重新命名或轉換等級。"
+        "injectedByProvider": "由供應商覆寫注入",
+        "tooltip": "用戶端在請求體中宣告的思考強度，按原值顯示，代理不會重新命名或轉換等級。",
+        "appliedTooltip": "此思考強度來自供應商覆寫審計，本次請求未記錄用戶端原始思考等級。"
       },
       "logicTrace": {
         "title": "決策鏈",

@@ -1,6 +1,8 @@
 import type { SpecialSetting } from "@/types/special-settings";
 
-function normalizeAnthropicEffort(value: unknown): string | null {
+export type ReasoningEffortPath = "output_config.effort" | "reasoning.effort";
+
+function normalizeReasoningEffort(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
@@ -19,7 +21,35 @@ export function extractAnthropicEffortFromRequestBody(requestBody: unknown): str
     return null;
   }
 
-  return normalizeAnthropicEffort((outputConfig as Record<string, unknown>).effort);
+  return normalizeReasoningEffort((outputConfig as Record<string, unknown>).effort);
+}
+
+export function extractReasoningEffortSettingFromRequestBody(requestBody: unknown): {
+  path: ReasoningEffortPath;
+  effort: string;
+} | null {
+  if (!requestBody || typeof requestBody !== "object" || Array.isArray(requestBody)) {
+    return null;
+  }
+
+  const record = requestBody as Record<string, unknown>;
+  const outputConfig = record.output_config;
+  if (outputConfig && typeof outputConfig === "object" && !Array.isArray(outputConfig)) {
+    const effort = normalizeReasoningEffort((outputConfig as Record<string, unknown>).effort);
+    if (effort) {
+      return { path: "output_config.effort", effort };
+    }
+  }
+
+  const reasoning = record.reasoning;
+  if (reasoning && typeof reasoning === "object" && !Array.isArray(reasoning)) {
+    const effort = normalizeReasoningEffort((reasoning as Record<string, unknown>).effort);
+    if (effort) {
+      return { path: "reasoning.effort", effort };
+    }
+  }
+
+  return null;
 }
 
 export function extractAnthropicEffortFromSpecialSettings(
@@ -34,7 +64,7 @@ export function extractAnthropicEffortFromSpecialSettings(
       continue;
     }
 
-    const normalized = normalizeAnthropicEffort(setting.effort);
+    const normalized = normalizeReasoningEffort(setting.effort);
     if (normalized) {
       return normalized;
     }
@@ -43,64 +73,131 @@ export function extractAnthropicEffortFromSpecialSettings(
   return null;
 }
 
-export interface AnthropicEffortOverrideInfo {
+function extractReasoningEffortSettingFromSpecialSettings(
+  specialSettings: SpecialSetting[] | null | undefined
+): { path: ReasoningEffortPath; effort: string } | null {
+  if (!Array.isArray(specialSettings)) {
+    return null;
+  }
+
+  for (const setting of specialSettings) {
+    if (setting.type !== "reasoning_effort") {
+      continue;
+    }
+
+    const effort = normalizeReasoningEffort(setting.effort);
+    if (effort) {
+      return {
+        path: setting.path,
+        effort,
+      };
+    }
+  }
+
+  return null;
+}
+
+export interface ReasoningEffortInfo {
   originalEffort: string;
   overriddenEffort: string | null;
   isOverridden: boolean;
+  path: ReasoningEffortPath;
+  hasRequestEffort: boolean;
+}
+
+export type AnthropicEffortOverrideInfo = ReasoningEffortInfo;
+
+function findOverrideChange(
+  specialSettings: SpecialSetting[],
+  preferredPath: ReasoningEffortPath | null
+): {
+  path: ReasoningEffortPath;
+  before: string | null;
+  after: string | null;
+  changed: boolean;
+} | null {
+  const candidatePaths: ReasoningEffortPath[] = preferredPath
+    ? [preferredPath, ...(preferredPath === "output_config.effort"
+        ? (["reasoning.effort"] as const)
+        : (["output_config.effort"] as const))]
+    : ["output_config.effort", "reasoning.effort"];
+
+  for (const candidatePath of candidatePaths) {
+    for (const setting of specialSettings) {
+      if (setting.type !== "provider_parameter_override") {
+        continue;
+      }
+
+      for (const change of setting.changes) {
+        if (change.path !== candidatePath || !change.changed) {
+          continue;
+        }
+
+        return {
+          path: candidatePath,
+          before: normalizeReasoningEffort(change.before),
+          after: normalizeReasoningEffort(change.after),
+          changed: true,
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
- * Extract anthropic effort info with override detection from special settings.
+ * Extract request reasoning effort with provider-override detection from special settings.
  *
- * Combines `anthropic_effort` (original client request) with
- * `provider_parameter_override` changes on `output_config.effort`
- * to determine whether effort was overridden by a provider.
+ * Resolution order:
+ * 1. Generic `reasoning_effort` request audit entries.
+ * 2. Legacy `anthropic_effort` request audit entries.
+ * 3. Provider override audit changes on `output_config.effort` / `reasoning.effort`.
  */
-export function extractAnthropicEffortInfo(
+export function extractReasoningEffortInfo(
   specialSettings: SpecialSetting[] | null | undefined
-): AnthropicEffortOverrideInfo | null {
+): ReasoningEffortInfo | null {
   if (!Array.isArray(specialSettings) || specialSettings.length === 0) {
     return null;
   }
 
-  const originalEffort = extractAnthropicEffortFromSpecialSettings(specialSettings);
+  const genericSetting = extractReasoningEffortSettingFromSpecialSettings(specialSettings);
+  const legacyAnthropicEffort = extractAnthropicEffortFromSpecialSettings(specialSettings);
+  const originalPath = genericSetting?.path ?? (legacyAnthropicEffort ? "output_config.effort" : null);
+  const originalEffort = genericSetting?.effort ?? legacyAnthropicEffort;
+  const overrideChange = findOverrideChange(specialSettings, originalPath);
 
-  let overrideBefore: string | null = null;
-  let overrideAfter: string | null = null;
-  let overrideChanged = false;
-
-  for (const setting of specialSettings) {
-    if (setting.type !== "provider_parameter_override") {
-      continue;
+  if (overrideChange?.changed) {
+    const effectiveOriginalEffort =
+      originalEffort ?? overrideChange.before ?? overrideChange.after;
+    if (!effectiveOriginalEffort) {
+      return null;
     }
-    for (const change of setting.changes) {
-      if (change.path === "output_config.effort") {
-        overrideBefore = normalizeAnthropicEffort(change.before);
-        overrideAfter = normalizeAnthropicEffort(change.after);
-        overrideChanged = change.changed;
-        break;
-      }
-    }
-    if (overrideChanged) break;
-  }
 
-  if (overrideChanged) {
-    const effective = originalEffort ?? overrideBefore;
-    if (!effective) return null;
     return {
-      originalEffort: effective,
-      overriddenEffort: overrideAfter,
+      originalEffort: effectiveOriginalEffort,
+      overriddenEffort: overrideChange.after,
       isOverridden: true,
+      path: originalPath ?? overrideChange.path,
+      hasRequestEffort: Boolean(originalEffort ?? overrideChange.before),
     };
   }
 
-  if (originalEffort) {
-    return {
-      originalEffort,
-      overriddenEffort: null,
-      isOverridden: false,
-    };
+  if (!originalEffort || !originalPath) {
+    return null;
   }
 
-  return null;
+  return {
+    originalEffort,
+    overriddenEffort: null,
+    isOverridden: false,
+    path: originalPath,
+    hasRequestEffort: true,
+  };
+}
+
+export function extractAnthropicEffortInfo(
+  specialSettings: SpecialSetting[] | null | undefined
+): AnthropicEffortOverrideInfo | null {
+  return extractReasoningEffortInfo(specialSettings);
 }

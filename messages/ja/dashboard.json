@@ -165,7 +165,8 @@
       "nonBilling": "非課金",
       "skipped": "スキップ",
       "specialSettings": "特殊設定",
-      "anthropicEffort": "Effort: {effort}",
+      "reasoningEffort": "思考: {effort}",
+      "reasoningEffortApplied": "適用: {effort}",
       "times": "回",
       "loadedCount": "{count} 件のレコードを読み込みました",
       "loadingMore": "読み込み中...",
@@ -379,9 +380,11 @@
         "copyTimeline": "タイムラインをコピー"
       },
       "effort": {
-        "label": "Effort",
+        "label": "思考レベル",
         "overridden": "プロバイダーにより上書き",
-        "tooltip": "クライアントがリクエストボディで指定した思考強度 (output_config.effort)。プロキシは値をそのまま表示し、レベル名を変換しません。"
+        "injectedByProvider": "プロバイダー上書きで適用",
+        "tooltip": "クライアントがリクエストボディで指定した思考強度をそのまま表示します。プロキシはレベル名を変換しません。",
+        "appliedTooltip": "この思考強度はプロバイダー上書き監査から取得したもので、このリクエストにはクライアントの元の思考強度が記録されていません。"
       },
       "logicTrace": {
         "title": "決定チェーン",

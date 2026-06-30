@@ -276,26 +276,19 @@ export function UsageLogsTable({
                       )}
                     </TableCell>
                     <TableCell className="font-mono text-xs w-[220px] max-w-[220px]">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="min-w-0 cursor-help">
-                              <ModelDisplayWithRedirect
-                                originalModel={log.originalModel}
-                                currentModel={log.model}
-                                actualResponseModel={log.actualResponseModel}
-                                billingModelSource={billingModelSource}
-                                onRedirectClick={() =>
-                                  setDialogState({ logId: log.id, scrollToRedirect: true })
-                                }
-                              />
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs">{log.originalModel || log.model || "-"}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <div className="min-w-0">
+                        <ModelDisplayWithRedirect
+                          originalModel={log.originalModel}
+                          currentModel={log.model}
+                          actualResponseModel={log.actualResponseModel}
+                          billingModelSource={billingModelSource}
+                          specialSettings={log.specialSettings}
+                          reasoningOutputTokens={log.reasoningOutputTokens}
+                          onRedirectClick={() =>
+                            setDialogState({ logId: log.id, scrollToRedirect: true })
+                          }
+                        />
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
                       <TooltipProvider>

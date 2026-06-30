@@ -989,29 +989,21 @@ export function VirtualizedLogsTable({
 
                     {/* Model */}
                     <div className="flex-[1.3] min-w-[100px] font-mono text-xs px-1.5">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex items-center gap-1 min-w-0 cursor-help truncate">
-                              <ModelDisplayWithRedirect
-                                originalModel={log.originalModel}
-                                currentModel={log.model}
-                                actualResponseModel={log.actualResponseModel}
-                                billingModelSource={billingModelSource}
-                                onRedirectClick={
-                                  disableDetailDialog
-                                    ? undefined
-                                    : () =>
-                                        setDialogState({ logId: log.id, scrollToRedirect: true })
-                                }
-                              />
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs">{log.originalModel || log.model || "-"}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <div className="flex items-center gap-1 min-w-0 truncate">
+                        <ModelDisplayWithRedirect
+                          originalModel={log.originalModel}
+                          currentModel={log.model}
+                          actualResponseModel={log.actualResponseModel}
+                          billingModelSource={billingModelSource}
+                          specialSettings={log.specialSettings}
+                          reasoningOutputTokens={log.reasoningOutputTokens}
+                          onRedirectClick={
+                            disableDetailDialog
+                              ? undefined
+                              : () => setDialogState({ logId: log.id, scrollToRedirect: true })
+                          }
+                        />
+                      </div>
                     </div>
 
                     {/* Tokens */}

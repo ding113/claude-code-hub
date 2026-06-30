@@ -1,4 +1,4 @@
-import { extractAnthropicEffortFromRequestBody } from "@/lib/utils/anthropic-effort";
+import { extractAnthropicEffortFromRequestBody, extractReasoningEffortSettingFromRequestBody } from "@/lib/utils/anthropic-effort";
 import { createMessageRequest } from "@/repository/message";
 import type { ProxySession } from "./session";
 
@@ -33,9 +33,25 @@ export class ProxyMessageService {
 
     const isAnthropicProvider =
       provider.providerType === "claude" || provider.providerType === "claude-auth";
+    const hasReasoningEffortAudit = session
+      .getSpecialSettings()
+      ?.some((setting) => setting.type === "reasoning_effort");
     const hasAnthropicEffortAudit = session
       .getSpecialSettings()
       ?.some((setting) => setting.type === "anthropic_effort");
+
+    if (!hasReasoningEffortAudit) {
+      const reasoningEffort = extractReasoningEffortSettingFromRequestBody(session.request.message);
+      if (reasoningEffort) {
+        session.addSpecialSetting({
+          type: "reasoning_effort",
+          scope: "request",
+          hit: true,
+          path: reasoningEffort.path,
+          effort: reasoningEffort.effort,
+        });
+      }
+    }
 
     if (isAnthropicProvider && !hasAnthropicEffortAudit) {
       const anthropicEffort = extractAnthropicEffortFromRequestBody(session.request.message);

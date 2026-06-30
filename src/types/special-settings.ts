@@ -15,6 +15,7 @@ export type SpecialSetting =
   | BillingHeaderRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
   | ClaudeMetadataUserIdInjectionSpecialSetting
+  | ReasoningEffortSpecialSetting
   | AnthropicEffortSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting
@@ -73,6 +74,20 @@ export type GuardInterceptSpecialSetting = {
    * 原始原因（通常为 JSON 字符串），保持原样以便前端与日志一致展示。
    */
   reason: string | null;
+};
+
+/**
+ * 通用 reasoning effort 请求参数审计
+ *
+ * 用于记录原始请求体中的 reasoning effort，兼容 `output_config.effort`
+ * 与 `reasoning.effort` 两条载体路径，便于统一展示与审计。
+ */
+export type ReasoningEffortSpecialSetting = {
+  type: "reasoning_effort";
+  scope: "request";
+  hit: boolean;
+  path: "output_config.effort" | "reasoning.effort";
+  effort: string;
 };
 
 /**

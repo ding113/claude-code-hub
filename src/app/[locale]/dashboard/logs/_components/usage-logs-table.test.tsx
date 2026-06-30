@@ -30,18 +30,22 @@ vi.mock("@/components/ui/relative-time", () => ({
   RelativeTime: ({ fallback }: { fallback: string }) => <span>{fallback}</span>,
 }));
 
+const modelDisplayMock = vi.hoisted(() => vi.fn());
+
 vi.mock("./model-display-with-redirect", () => ({
-  ModelDisplayWithRedirect: ({
-    currentModel,
-    onRedirectClick,
-  }: {
+  ModelDisplayWithRedirect: (props: {
     currentModel: string | null;
+    specialSettings?: unknown;
+    reasoningOutputTokens?: number | null;
     onRedirectClick?: () => void;
-  }) => (
-    <button type="button" data-slot="model-redirect" onClick={onRedirectClick}>
-      {currentModel ?? "-"}
-    </button>
-  ),
+  }) => {
+    modelDisplayMock(props);
+    return (
+      <button type="button" data-slot="model-redirect" onClick={props.onRedirectClick}>
+        {props.currentModel ?? "-"}
+      </button>
+    );
+  },
 }));
 
 vi.mock("./error-details-dialog", () => ({
@@ -197,6 +201,36 @@ describe("usage-logs-table multiplier badge", () => {
       />
     );
     expect(htmlBlocked).toContain("logs.table.blocked");
+  });
+
+  test("forwards special settings into model display", () => {
+    modelDisplayMock.mockClear();
+    const specialSettings = [
+      {
+        type: "reasoning_effort" as const,
+        scope: "request" as const,
+        hit: true,
+        path: "reasoning.effort" as const,
+        effort: "high",
+      },
+    ];
+
+    renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[makeLog({ id: 1, specialSettings, reasoningOutputTokens: 42 })]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(modelDisplayMock).toHaveBeenCalled();
+    expect(modelDisplayMock.mock.calls[0]?.[0]).toMatchObject({
+      specialSettings,
+      reasoningOutputTokens: 42,
+    });
   });
 
   test("invokes model redirect and pagination callbacks", async () => {
