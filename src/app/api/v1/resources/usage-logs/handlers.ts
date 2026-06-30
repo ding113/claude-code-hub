@@ -163,6 +163,7 @@ function parseUsageLogsQuery(c: Context): UsageLogsActionQueryInput | Response {
     keyId: c.req.query("keyId"),
     providerId: c.req.query("providerId"),
     model: c.req.query("model"),
+    actualResponseModelMismatch: c.req.query("actualResponseModelMismatch"),
     statusCode: c.req.query("statusCode"),
     excludeStatusCode200: c.req.query("excludeStatusCode200"),
     endpoint: c.req.query("endpoint"),

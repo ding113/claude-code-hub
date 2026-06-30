@@ -99,6 +99,14 @@ export function ActiveFiltersDisplay({
       });
     }
 
+    if (filters.actualResponseModelMismatch) {
+      result.push({
+        key: "actualResponseModelMismatch",
+        label: t("actualResponseModelMismatch"),
+        value: t("enabled"),
+      });
+    }
+
     // Endpoint filter
     if (filters.endpoint) {
       result.push({
