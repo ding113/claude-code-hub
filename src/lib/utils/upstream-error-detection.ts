@@ -74,6 +74,7 @@ const FAKE_200_CODES = {
   JSON_ERROR_NON_EMPTY: "FAKE_200_JSON_ERROR_NON_EMPTY",
   JSON_ERROR_MESSAGE_NON_EMPTY: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY",
   JSON_MESSAGE_KEYWORD_MATCH: "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH",
+  OPENAI_RESPONSE_FAILED: "FAKE_200_OPENAI_RESPONSE_FAILED",
 } as const;
 
 // SSE 快速过滤：仅当文本里“看起来存在 JSON key”时才进入 parseSSEData（避免无谓解析）。
@@ -236,6 +237,47 @@ function hasNonEmptyValue(value: unknown): boolean {
   return true;
 }
 
+function extractOpenAIResponsesFailedDetail(obj: Record<string, unknown>): string | null {
+  const eventType = typeof obj.type === "string" ? obj.type.trim() : "";
+  const response = isPlainRecord(obj.response) ? obj.response : obj;
+  const responseStatus = typeof response.status === "string" ? response.status.trim() : "";
+  const responseObject = typeof response.object === "string" ? response.object.trim() : "";
+  const responseId = typeof response.id === "string" ? response.id.trim() : "";
+
+  const looksLikeOpenAIResponse =
+    eventType.startsWith("response.") ||
+    responseObject === "response" ||
+    responseId.startsWith("resp_");
+  const isFailedResponse = eventType === "response.failed" || responseStatus === "failed";
+  if (!looksLikeOpenAIResponse || !isFailedResponse || !hasNonEmptyValue(response.error)) {
+    return null;
+  }
+
+  const responseError = response.error;
+  if (typeof responseError === "string" && responseError.trim()) {
+    return truncateForDetail(responseError);
+  }
+
+  if (isPlainRecord(responseError)) {
+    const message = typeof responseError.message === "string" ? responseError.message : "";
+    if (message.trim()) {
+      return truncateForDetail(message);
+    }
+
+    const code = typeof responseError.code === "string" ? responseError.code : "";
+    if (code.trim()) {
+      return truncateForDetail(code);
+    }
+  }
+
+  const topLevelMessage = typeof obj.message === "string" ? obj.message : "";
+  if (topLevelMessage.trim()) {
+    return truncateForDetail(topLevelMessage);
+  }
+
+  return null;
+}
+
 export function sanitizeErrorTextForDetail(text: string): string {
   // 注意：这里的目的不是“完美脱敏”，而是尽量降低上游错误信息中意外夹带敏感内容的风险。
   // 若后续发现更多敏感模式，可在不改变检测语义的前提下补充。
@@ -280,6 +322,15 @@ function detectFromJsonObject(
   rawJsonChars: number,
   options: Required<Pick<DetectionOptions, "maxJsonCharsForMessageCheck" | "messageKeyword">>
 ): UpstreamErrorDetectionResult {
+  const openAIResponsesFailedDetail = extractOpenAIResponsesFailedDetail(obj);
+  if (openAIResponsesFailedDetail !== null) {
+    return {
+      isError: true,
+      code: FAKE_200_CODES.OPENAI_RESPONSE_FAILED,
+      detail: openAIResponsesFailedDetail,
+    };
+  }
+
   // 判定优先级：
   // 1) `error` 非空：直接判定为错误（强信号）
   // 2) 小体积 JSON 下，`message` 命中关键字：判定为错误（弱信号，但能覆盖部分“错误只写在 message”场景）
