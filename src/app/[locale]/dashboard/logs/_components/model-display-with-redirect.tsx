@@ -51,7 +51,7 @@ export function ModelDisplayWithRedirect({
   const requestModel = audit.effectiveRequestModel;
   const responseModel = audit.secondaryActualModel;
   const desktopEffortLabel = effortInfo?.hasRequestEffort
-    ? tTable("reasoningEffort", { effort: effortInfo.originalEffort })
+    ? tTable("reasoningEffortShort", { effort: effortInfo.originalEffort })
     : effortInfo
       ? tTable("reasoningEffortApplied", { effort: effortInfo.originalEffort })
       : null;

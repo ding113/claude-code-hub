@@ -84,7 +84,7 @@ describe("ModelDisplayWithRedirect", () => {
       />
     );
 
-    expect(html).toContain("Effort: medium");
+    expect(html).not.toContain("Effort: medium");
     expect(html).toContain(">medium<");
     expect(html).toContain("dashboard.logs.details.modelRedirect.billingModel");
     expect(html).toContain("dashboard.logs.details.modelAudit.responseModelLabel");
@@ -145,7 +145,8 @@ describe("ModelDisplayWithRedirect", () => {
       />
     );
 
-    expect(html).toContain("Effort: low");
+    expect(html).toContain(">low<");
+    expect(html).not.toContain("Effort: low");
     expect(html).not.toContain("dashboard.logs.details.modelAudit.responseModelLabel");
   });
 });
