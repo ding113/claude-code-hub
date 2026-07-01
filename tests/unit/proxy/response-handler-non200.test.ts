@@ -274,6 +274,38 @@ describe("Non-200 Status Code Handling", () => {
       }
     });
 
+    it("should detect OpenAI Responses failure when only the SSE event name says response.failed", () => {
+      const sse = [
+        "event: response.failed",
+        'data: {"response":{"error":{"message":"Concurrency limit exceeded for user, please retry later"}}}',
+        "",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBe("Concurrency limit exceeded for user, please retry later");
+      }
+    });
+
+    it("should detect OpenAI Responses failure when SSE event name is response.failed but data type is generic", () => {
+      const sse = [
+        "event: response.failed",
+        'data: {"type":"response","response":{"error":{"message":"Concurrency limit exceeded for user, please retry later"}}}',
+        "",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBe("Concurrency limit exceeded for user, please retry later");
+      }
+    });
+
     it("should detect wrapped OpenAI Responses failed JSON object", () => {
       const body = JSON.stringify({
         type: "response.failed",
@@ -313,6 +345,62 @@ describe("Non-200 Status Code Handling", () => {
       if (result.isError) {
         expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
         expect(result.detail).toBe("Too many concurrent requests");
+      }
+    });
+
+    it("should detect OpenAI Responses failed event when error detail is not extractable", () => {
+      const body = JSON.stringify({
+        type: "response.failed",
+        response: {
+          id: "resp_numeric_code",
+          status: "failed",
+          error: {
+            code: 429,
+            type: "rate_limit_error",
+          },
+        },
+      });
+
+      const result = detectUpstreamErrorFromSseOrJsonText(body);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBeUndefined();
+      }
+    });
+
+    it("should detect OpenAI Responses failed event without error payload", () => {
+      const body = JSON.stringify({
+        type: "response.failed",
+        response: {
+          id: "resp_missing_error",
+          status: "failed",
+        },
+      });
+
+      const result = detectUpstreamErrorFromSseOrJsonText(body);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBeUndefined();
+      }
+    });
+
+    it("should detect OpenAI Responses failed SSE event without error payload", () => {
+      const sse = [
+        "event: response.failed",
+        'data: {"type":"response.failed","response":{"id":"resp_sse_missing_error","status":"failed"}}',
+        "",
+      ].join("\n");
+
+      const result = detectUpstreamErrorFromSseOrJsonText(sse);
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.code).toBe("FAKE_200_OPENAI_RESPONSE_FAILED");
+        expect(result.detail).toBeUndefined();
       }
     });
 
