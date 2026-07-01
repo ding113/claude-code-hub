@@ -109,6 +109,13 @@ export function SummaryTab({
   const showNoSignatureBadge =
     thinkingSignatureDetection?.source === "fallback_no_signature_with_thinking";
   const effortInfo = extractAnthropicEffortInfo(specialSettings);
+  const overriddenEffortForDisplay =
+    effortInfo?.isOverridden &&
+    effortInfo.hasRequestEffort &&
+    effortInfo.overriddenEffort &&
+    effortInfo.overriddenEffort !== effortInfo.originalEffort
+      ? effortInfo.overriddenEffort
+      : null;
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
   const fake200Code =
@@ -281,74 +288,38 @@ export function SummaryTab({
       )}
 
       {/* Session Info */}
-      {(sessionId || effortInfo) && (
+      {sessionId && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold">{t("metadata.sessionInfo")}</h4>
-          <div className="rounded-lg border bg-card divide-y">
-            {sessionId && (
-              <div className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <code className="text-xs font-mono break-all">{sessionId}</code>
-                      {requestSequence && (
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          #{requestSequence}
-                        </Badge>
-                      )}
-                    </div>
+          <div className="rounded-lg border bg-card">
+            <div className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs font-mono break-all">{sessionId}</code>
+                    {requestSequence && (
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        #{requestSequence}
+                      </Badge>
+                    )}
                   </div>
-                  {hasMessages && !checkingMessages && (
-                    <Link
-                      href={
-                        requestSequence
-                          ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
-                          : `/dashboard/sessions/${sessionId}/messages`
-                      }
-                    >
-                      <Button variant="outline" size="sm">
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        {t("viewDetails")}
-                      </Button>
-                    </Link>
-                  )}
                 </div>
-              </div>
-            )}
-            {effortInfo && (
-              <div className="p-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-muted-foreground">{t("effort.label")}:</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <AnthropicEffortBadge
-                            effort={effortInfo.originalEffort}
-                            label={effortInfo.originalEffort}
-                          />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs max-w-xs">{t("effort.tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  {effortInfo.isOverridden && effortInfo.overriddenEffort && (
-                    <>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      <AnthropicEffortBadge
-                        effort={effortInfo.overriddenEffort}
-                        label={effortInfo.overriddenEffort}
-                      />
-                    </>
-                  )}
-                </div>
-                {effortInfo.isOverridden && (
-                  <p className="text-[11px] text-muted-foreground mt-1">{t("effort.overridden")}</p>
+                {hasMessages && !checkingMessages && (
+                  <Link
+                    href={
+                      requestSequence
+                        ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
+                        : `/dashboard/sessions/${sessionId}/messages`
+                    }
+                  >
+                    <Button variant="outline" size="sm">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      {t("viewDetails")}
+                    </Button>
+                  </Link>
                 )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -800,7 +771,7 @@ export function SummaryTab({
       )}
 
       {/* Request / Actual Response Model (audit) */}
-      {(hasAnyModel || showNoSignatureBadge) && (
+      {(hasAnyModel || showNoSignatureBadge || effortInfo) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold flex items-center gap-2 flex-wrap">
             <Settings2 className="h-4 w-4 text-slate-600" />
@@ -849,6 +820,52 @@ export function SummaryTab({
                     {modelAudit.effectiveRequestModel}
                   </code>
                 </div>
+                {effortInfo ? (
+                  <div className="flex items-start gap-2">
+                    <span className="text-xs text-muted-foreground min-w-[6rem] pt-0.5">
+                      {t("effort.label")}
+                    </span>
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <AnthropicEffortBadge
+                                  effort={effortInfo.originalEffort}
+                                  label={effortInfo.originalEffort}
+                                />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs max-w-xs">
+                                {effortInfo.hasRequestEffort
+                                  ? t("effort.tooltip")
+                                  : t("effort.appliedTooltip")}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {overriddenEffortForDisplay ? (
+                          <>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            <AnthropicEffortBadge
+                              effort={overriddenEffortForDisplay}
+                              label={overriddenEffortForDisplay}
+                            />
+                          </>
+                        ) : null}
+                      </div>
+                      {effortInfo.isOverridden ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          {effortInfo.hasRequestEffort
+                            ? t("effort.overridden")
+                            : t("effort.injectedByProvider")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="flex items-baseline gap-2">
                   <span className="text-xs text-muted-foreground min-w-[6rem]">
                     {t("modelAudit.responseModelLabel")}
@@ -859,10 +876,58 @@ export function SummaryTab({
                 </div>
               </div>
             ) : (
-              <div className="flex items-baseline gap-2 text-sm">
-                <code className="px-1.5 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
-                  {modelAudit.effectiveRequestModel ?? "-"}
-                </code>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-baseline gap-2">
+                  <code className="px-1.5 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800">
+                    {modelAudit.effectiveRequestModel ?? "-"}
+                  </code>
+                </div>
+                {effortInfo ? (
+                  <div className="flex items-start gap-2">
+                    <span className="text-xs text-muted-foreground pt-0.5">
+                      {t("effort.label")}
+                    </span>
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <AnthropicEffortBadge
+                                  effort={effortInfo.originalEffort}
+                                  label={effortInfo.originalEffort}
+                                />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs max-w-xs">
+                                {effortInfo.hasRequestEffort
+                                  ? t("effort.tooltip")
+                                  : t("effort.appliedTooltip")}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {overriddenEffortForDisplay ? (
+                          <>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            <AnthropicEffortBadge
+                              effort={overriddenEffortForDisplay}
+                              label={overriddenEffortForDisplay}
+                            />
+                          </>
+                        ) : null}
+                      </div>
+                      {effortInfo.isOverridden ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          {effortInfo.hasRequestEffort
+                            ? t("effort.overridden")
+                            : t("effort.injectedByProvider")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

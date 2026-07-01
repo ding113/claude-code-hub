@@ -245,6 +245,21 @@ const messages = {
           billingOriginal: "Billing original",
           billingRedirected: "Billing redirected",
         },
+        modelAudit: {
+          unifiedLabel: "Model",
+          requestModelLabel: "Request Model",
+          responseModelLabel: "Response Model",
+          mismatchTooltip: "Model mismatch",
+          noSignatureBadge: "No signature",
+          noSignatureTooltip: "No signature tooltip",
+        },
+        effort: {
+          label: "Effort",
+          tooltip: "Original request effort",
+          appliedTooltip: "Applied by provider",
+          overridden: "Overridden by provider",
+          injectedByProvider: "Applied by provider override",
+        },
         specialSettings: {
           title: "Special settings",
         },
@@ -344,6 +359,9 @@ const messages = {
           title: "Billing details",
           input: "Input",
           output: "Output",
+          reasoningTokens: "Reasoning tokens",
+          reasoningShort: "Reasoning",
+          includedInOutput: "Included in output tokens",
           cacheWrite5m: "Cache write 5m",
           cacheWrite1h: "Cache write 1h",
           cacheRead: "Cache read",
@@ -1166,6 +1184,40 @@ describe("error-details-dialog tabs", () => {
     expect(html).toContain("Session Info");
     expect(html).toContain("test-session-123");
     expect(html).toContain("#5");
+  });
+
+  test("renders effort under model audit instead of session info", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={"test-session-456"}
+        currentModel={"claude-sonnet-4"}
+        actualResponseModel={"claude-opus-4"}
+        specialSettings={
+          [
+            {
+              type: "reasoning_effort",
+              path: "reasoning.effort",
+              effort: "high",
+            },
+          ] as any
+        }
+      />
+    );
+
+    expect(html).toContain("Session Info");
+    expect(html).toContain("Request Model");
+    expect(html).toContain("Effort");
+
+    const sessionIndex = html.indexOf("Session Info");
+    const requestModelIndex = html.indexOf("Request Model");
+    const effortIndex = html.indexOf("Effort");
+
+    expect(requestModelIndex).toBeGreaterThan(sessionIndex);
+    expect(effortIndex).toBeGreaterThan(requestModelIndex);
   });
 });
 

@@ -127,6 +127,31 @@ describe("ModelDisplayWithRedirect", () => {
     expect(html).toContain("dashboard.logs.details.effort.injectedByProvider");
   });
 
+  test("keeps the desktop effort badge adjacent to the billing model text", () => {
+    const html = renderToStaticMarkup(
+      <ModelDisplayWithRedirect
+        originalModel="gpt-5.4"
+        currentModel="gpt-5.4"
+        actualResponseModel="gpt-5.4"
+        billingModelSource="original"
+        specialSettings={[
+          {
+            type: "anthropic_effort",
+            scope: "request",
+            hit: true,
+            effort: "high",
+          },
+        ]}
+      />
+    );
+
+    expect(html).toContain('data-slot="logs-billing-model-effort"');
+    expect(html).toMatch(
+      /data-slot="logs-billing-model-text"[^>]*class="[^"]*block min-w-0 truncate[^"]*"/
+    );
+    expect(html).not.toMatch(/data-slot="logs-billing-model-text"[^>]*class="[^"]*flex-1[^"]*"/);
+  });
+
   test("stays single-line when there is no response-model mismatch", () => {
     const html = renderToStaticMarkup(
       <ModelDisplayWithRedirect

@@ -200,17 +200,23 @@ export function ModelDisplayWithRedirect({
             <div className="flex w-full min-w-0 items-center gap-1.5">
               {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
               <span
-                className="min-w-0 flex-1 truncate cursor-pointer hover:underline"
+                data-slot="logs-billing-model-text"
+                className="block min-w-0 truncate cursor-pointer hover:underline"
                 onClick={handleCopyModel}
               >
                 {billingModel || "-"}
               </span>
               {effortInfo && desktopEffortLabel ? (
-                <AnthropicEffortBadge
-                  effort={effortInfo.originalEffort}
-                  label={desktopEffortLabel}
+                <span
+                  data-slot="logs-billing-model-effort"
                   className="hidden shrink-0 md:inline-flex"
-                />
+                >
+                  <AnthropicEffortBadge
+                    effort={effortInfo.originalEffort}
+                    label={desktopEffortLabel}
+                    className="shrink-0"
+                  />
+                </span>
               ) : null}
               {redirectBadge ? (
                 <span className="hidden md:inline-flex">{redirectBadge}</span>
