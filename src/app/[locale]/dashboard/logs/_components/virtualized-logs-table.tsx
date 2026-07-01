@@ -139,7 +139,7 @@ function hasTokenValue(value: number | null | undefined): value is number {
 
 interface CompactMetricRow {
   key: string;
-  label: string;
+  label?: string;
   value: ReactNode;
   tone?: "default" | "muted";
   labelExtra?: ReactNode;
@@ -203,13 +203,20 @@ function CompactMetricRows({
       {rows.map((row) => (
         <div
           key={row.key}
-          className="grid grid-cols-[minmax(2.5rem,auto)_minmax(0,1fr)] items-baseline gap-x-1.5"
+          className={cn(
+            "grid items-baseline",
+            row.label == null
+              ? "grid-cols-[minmax(0,1fr)]"
+              : "grid-cols-[minmax(2.5rem,auto)_minmax(0,1fr)] gap-x-1.5"
+          )}
           data-slot={`logs-metric-row-${row.key}`}
         >
-          <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground/75">
-            <span className="truncate">{row.label}</span>
-            {row.labelExtra}
-          </span>
+          {row.label == null ? null : (
+            <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground/75">
+              <span className="truncate">{row.label}</span>
+              {row.labelExtra}
+            </span>
+          )}
           <span
             className={cn(
               "min-w-0 text-right font-mono",
@@ -1111,7 +1118,6 @@ export function VirtualizedLogsTable({
       hasTokenValue(log.cacheReadInputTokens)
         ? {
             key: "cache-read",
-            label: t("logs.table.metricLabels.cacheRead"),
             value: formatTokenAmount(log.cacheReadInputTokens),
           }
         : null,

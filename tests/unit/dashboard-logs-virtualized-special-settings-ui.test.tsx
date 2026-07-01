@@ -162,7 +162,7 @@ describe("VirtualizedLogsTable - specialSettings display", () => {
 });
 
 describe("VirtualizedLogsTable - cache metric labels", () => {
-  test("badge renders with labeled cache write/read rows", async () => {
+  test("renders cache read as value-only and cache write with label", async () => {
     const { container, unmount } = renderWithIntl(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
@@ -170,10 +170,12 @@ describe("VirtualizedLogsTable - cache metric labels", () => {
     await flushMicrotasks();
     await waitForText(container, "Loaded 1 records");
 
+    const cacheReadRow = container.querySelector('[data-slot="logs-metric-row-cache-read"]');
+
     expect(container.textContent).toContain("1h");
     expect(container.textContent).toContain("Write");
-    expect(container.textContent).toContain("Read");
-    expect(container.innerHTML).toContain("logs-metric-row-cache-read");
+    expect(cacheReadRow).not.toBeNull();
+    expect(cacheReadRow?.textContent).toBe("5");
 
     unmount();
   });
