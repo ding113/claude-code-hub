@@ -1,10 +1,30 @@
 import { emitFinalNonStream, emitFinalStream, emitStreamError } from "./emitters";
-import { type AttemptPerformer, orchestrateFakeStreamingAttempts } from "./orchestrator";
+import {
+  type AttemptPerformer,
+  type OrchestrateResult,
+  orchestrateFakeStreamingAttempts,
+} from "./orchestrator";
 import type { ProtocolFamily } from "./response-validator";
 
 export type { AttemptPerformer } from "./orchestrator";
 
 const HEARTBEAT_FRAME = ": ping\n\n";
+
+/**
+ * Optional lifecycle hook fired ONCE per fake-streaming run, regardless of
+ * outcome (success / all-failed / client_abort / runner error). Wired by
+ * `tryFakeStreamingPath` so it can persist the terminal status_code,
+ * provider_chain, tokens, and tracker.endRequest that the normal
+ * ProxyResponseHandler / ProxyErrorHandler path would have written — since
+ * fake streaming bypasses both handlers.
+ *
+ * The callback MUST NOT throw; runner swallows any errors from it to avoid
+ * leaking into the SSE stream or breaking the non-stream response.
+ */
+export type FakeStreamingCompletionHook = (outcome: {
+  result: OrchestrateResult;
+  errorFromRunner?: unknown;
+}) => void | Promise<void>;
 
 export interface FakeStreamingRunInput {
   family: ProtocolFamily;
@@ -13,6 +33,7 @@ export interface FakeStreamingRunInput {
   abortSignal: AbortSignal;
   maxAttempts: number;
   heartbeatIntervalMs: number;
+  onCompletion?: FakeStreamingCompletionHook;
 }
 
 /**
@@ -74,6 +95,18 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
       };
       input.abortSignal.addEventListener("abort", onAbort, { once: true });
 
+      const invokeCompletion = async (
+        result: OrchestrateResult,
+        errorFromRunner?: unknown
+      ): Promise<void> => {
+        if (!input.onCompletion) return;
+        try {
+          await input.onCompletion({ result, errorFromRunner });
+        } catch {
+          // Lifecycle persistence errors must not leak into the SSE stream.
+        }
+      };
+
       void orchestrateFakeStreamingAttempts({
         family: input.family,
         performAttempt: input.performAttempt,
@@ -81,11 +114,12 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
         maxAttempts: input.maxAttempts,
         isStream: false,
       })
-        .then((result) => {
+        .then(async (result) => {
           cleanupHeartbeat();
           input.abortSignal.removeEventListener("abort", onAbort);
           if (input.abortSignal.aborted) {
             safeClose();
+            await invokeCompletion(result);
             return;
           }
           if (result.ok && typeof result.finalBody === "string") {
@@ -112,8 +146,9 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
             );
           }
           safeClose();
+          await invokeCompletion(result);
         })
-        .catch((error: unknown) => {
+        .catch(async (error: unknown) => {
           cleanupHeartbeat();
           input.abortSignal.removeEventListener("abort", onAbort);
           if (!input.abortSignal.aborted) {
@@ -127,6 +162,15 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
             );
           }
           safeClose();
+          await invokeCompletion(
+            {
+              ok: false,
+              attempts: [],
+              errorCode: "upstream_all_attempts_failed",
+              errorMessage: error instanceof Error ? error.message : "fake streaming runner failed",
+            },
+            error
+          );
         });
     },
   });
@@ -149,6 +193,18 @@ function buildStreamResponse(input: FakeStreamingRunInput): Response {
 export async function buildFakeStreamingNonStreamResponse(
   input: Omit<FakeStreamingRunInput, "isStream" | "heartbeatIntervalMs">
 ): Promise<Response> {
+  const invokeCompletion = async (
+    result: OrchestrateResult,
+    errorFromRunner?: unknown
+  ): Promise<void> => {
+    if (!input.onCompletion) return;
+    try {
+      await input.onCompletion({ result, errorFromRunner });
+    } catch {
+      // Lifecycle persistence errors must not affect the HTTP response.
+    }
+  };
+
   let result: Awaited<ReturnType<typeof orchestrateFakeStreamingAttempts>>;
   try {
     result = await orchestrateFakeStreamingAttempts({
@@ -162,6 +218,15 @@ export async function buildFakeStreamingNonStreamResponse(
     // failures). Surface a structured 502 here so non-stream clients get the
     // same JSON contract they would for "all attempts failed", instead of the
     // outer ProxyErrorHandler turning this into a different shape.
+    await invokeCompletion(
+      {
+        ok: false,
+        attempts: [],
+        errorCode: "upstream_all_attempts_failed",
+        errorMessage: error instanceof Error ? error.message : "fake streaming runner failed",
+      },
+      error
+    );
     return new Response(
       JSON.stringify({
         error: {
@@ -175,6 +240,8 @@ export async function buildFakeStreamingNonStreamResponse(
       }
     );
   }
+
+  await invokeCompletion(result);
 
   if (result.ok && typeof result.finalBody === "string") {
     return new Response(emitFinalNonStream({ family: input.family, finalBody: result.finalBody }), {

@@ -258,3 +258,207 @@ describe("buildFakeStreamingNonStreamResponse — non-stream path", () => {
     expect(body.error.code).toBe("upstream_all_attempts_failed");
   });
 });
+
+describe("onCompletion lifecycle hook", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("stream: fires once with ok=true after successful attempt", async () => {
+    const performAttempt: AttemptPerformer = async () => ({
+      status: 200,
+      body: validBody,
+      providerId: "p1",
+    });
+    const onCompletion = vi.fn(async () => undefined);
+
+    const response = buildFakeStreamingResponse({
+      family: "anthropic",
+      isStream: true,
+      performAttempt,
+      abortSignal: new AbortController().signal,
+      maxAttempts: 1,
+      heartbeatIntervalMs: 5000,
+      onCompletion,
+    });
+
+    await vi.runAllTimersAsync();
+    await consumeStream(response.body);
+    // Give the microtask queue a chance to drain (onCompletion runs after
+    // the terminator emission has been enqueued to the stream).
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onCompletion).toHaveBeenCalledTimes(1);
+    const arg = onCompletion.mock.calls[0][0];
+    expect(arg.result.ok).toBe(true);
+    expect(arg.result.finalBody).toBe(validBody);
+    expect(arg.errorFromRunner).toBeUndefined();
+  });
+
+  test("stream: fires once with ok=false + errorCode on terminal failure", async () => {
+    const performAttempt: AttemptPerformer = async () => ({
+      status: 200,
+      body: emptyBody,
+      providerId: "p1",
+    });
+    const onCompletion = vi.fn(async () => undefined);
+
+    const response = buildFakeStreamingResponse({
+      family: "anthropic",
+      isStream: true,
+      performAttempt,
+      abortSignal: new AbortController().signal,
+      maxAttempts: 1,
+      heartbeatIntervalMs: 5000,
+      onCompletion,
+    });
+
+    await vi.runAllTimersAsync();
+    await consumeStream(response.body);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onCompletion).toHaveBeenCalledTimes(1);
+    const arg = onCompletion.mock.calls[0][0];
+    expect(arg.result.ok).toBe(false);
+    expect(arg.result.errorCode).toBeDefined();
+  });
+
+  test("stream: fires with client_abort when signal aborts before completion", async () => {
+    const abortController = new AbortController();
+    const performAttempt: AttemptPerformer = async (_index, signal) => {
+      return new Promise<never>((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        });
+      });
+    };
+    const onCompletion = vi.fn(async () => undefined);
+
+    const response = buildFakeStreamingResponse({
+      family: "anthropic",
+      isStream: true,
+      performAttempt,
+      abortSignal: abortController.signal,
+      maxAttempts: 1,
+      heartbeatIntervalMs: 5000,
+      onCompletion,
+    });
+
+    const { reader } = await readUntilFirstChunk(response.body);
+    abortController.abort();
+    await vi.runAllTimersAsync();
+    // Drain any remaining bytes so the underlying promise chain settles.
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onCompletion).toHaveBeenCalledTimes(1);
+    const arg = onCompletion.mock.calls[0][0];
+    expect(arg.result.ok).toBe(false);
+    expect(arg.result.errorCode).toBe("client_abort");
+  });
+
+  test("stream: onCompletion throw does not leak into SSE stream", async () => {
+    const performAttempt: AttemptPerformer = async () => ({
+      status: 200,
+      body: validBody,
+      providerId: "p1",
+    });
+    const onCompletion = vi.fn(async () => {
+      throw new Error("persistence blew up");
+    });
+
+    const response = buildFakeStreamingResponse({
+      family: "anthropic",
+      isStream: true,
+      performAttempt,
+      abortSignal: new AbortController().signal,
+      maxAttempts: 1,
+      heartbeatIntervalMs: 5000,
+      onCompletion,
+    });
+
+    await vi.runAllTimersAsync();
+    // Must not throw; must not surface the persistence error in the stream.
+    const body = await consumeStream(response.body);
+    expect(body).toContain("event: message_stop");
+    expect(body).not.toContain("persistence blew up");
+  });
+
+  test("non-stream: fires once with ok=true and the final body", async () => {
+    const performAttempt: AttemptPerformer = async () => ({
+      status: 200,
+      body: validBody,
+      providerId: "p1",
+    });
+    const onCompletion = vi.fn(async () => undefined);
+
+    await buildFakeStreamingNonStreamResponse({
+      family: "anthropic",
+      performAttempt,
+      abortSignal: new AbortController().signal,
+      maxAttempts: 1,
+      onCompletion,
+    });
+
+    expect(onCompletion).toHaveBeenCalledTimes(1);
+    const arg = onCompletion.mock.calls[0][0];
+    expect(arg.result.ok).toBe(true);
+    expect(arg.result.finalBody).toBe(validBody);
+  });
+
+  test("non-stream: fires once on all-failed with errorCode surfaced", async () => {
+    const performAttempt: AttemptPerformer = async () => ({
+      status: 200,
+      body: emptyBody,
+      providerId: "p1",
+    });
+    const onCompletion = vi.fn(async () => undefined);
+
+    const response = await buildFakeStreamingNonStreamResponse({
+      family: "anthropic",
+      performAttempt,
+      abortSignal: new AbortController().signal,
+      maxAttempts: 1,
+      onCompletion,
+    });
+
+    expect(response.status).toBe(502);
+    expect(onCompletion).toHaveBeenCalledTimes(1);
+    const arg = onCompletion.mock.calls[0][0];
+    expect(arg.result.ok).toBe(false);
+    expect(arg.result.errorCode).toBeDefined();
+  });
+
+  test("non-stream: onCompletion throw does not affect the HTTP response", async () => {
+    const performAttempt: AttemptPerformer = async () => ({
+      status: 200,
+      body: validBody,
+      providerId: "p1",
+    });
+    const onCompletion = vi.fn(async () => {
+      throw new Error("persistence blew up");
+    });
+
+    const response = await buildFakeStreamingNonStreamResponse({
+      family: "anthropic",
+      performAttempt,
+      abortSignal: new AbortController().signal,
+      maxAttempts: 1,
+      onCompletion,
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toBe(validBody);
+  });
+});

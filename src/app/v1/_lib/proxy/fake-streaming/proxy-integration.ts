@@ -1,14 +1,21 @@
 import { logger } from "@/lib/logger";
+import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
+import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
+import type { ProviderType } from "@/types/provider";
 import type { SystemSettings } from "@/types/system-config";
+import { extractActualResponseModelForProvider } from "../actual-response-model";
 import type { ClientFormat } from "../format-mapper";
 import { ProxyForwarder } from "../forwarder";
+import { parseUsageFromResponseText } from "../response-handler";
 import type { ProxySession } from "../session";
 import { isFakeStreamingEligible } from "./eligibility";
+import type { OrchestrateResult } from "./orchestrator";
 import type { ProtocolFamily } from "./response-validator";
 import {
   type AttemptPerformer,
   buildFakeStreamingNonStreamResponse,
   buildFakeStreamingResponse,
+  type FakeStreamingCompletionHook,
 } from "./runner";
 import { cloneRequestForInternalNonStreamAttempt, detectClientStreamIntent } from "./stream-intent";
 
@@ -80,6 +87,7 @@ export async function tryFakeStreamingPath(
     });
   }
   const abortSignal = session.clientAbortSignal ?? new AbortController().signal;
+  const onCompletion = buildCompletionHook(session);
 
   if (isStream) {
     logger.debug("[FakeStreaming] taking stream path", {
@@ -94,6 +102,7 @@ export async function tryFakeStreamingPath(
       abortSignal,
       maxAttempts: MAX_ATTEMPTS,
       heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
+      onCompletion,
     });
   }
 
@@ -107,7 +116,146 @@ export async function tryFakeStreamingPath(
     performAttempt,
     abortSignal,
     maxAttempts: MAX_ATTEMPTS,
+    onCompletion,
   });
+}
+
+/**
+ * Build the lifecycle-completion hook that persists the terminal state of a
+ * fake-streaming request. Fake streaming bypasses both ProxyResponseHandler
+ * and ProxyErrorHandler, so without this hook the message_request row stays
+ * with status_code=NULL / provider_chain=NULL forever and the proxy-status
+ * tracker keeps the request in "in progress" state (see #1310).
+ *
+ * Mirrors the write set of ProxyResponseHandler success + ProxyErrorHandler
+ * failure paths so the usage-log UI and the tracker converge to the same
+ * terminal shape as the non-fake-streaming path.
+ */
+function buildCompletionHook(session: ProxySession): FakeStreamingCompletionHook {
+  return async ({ result }) => {
+    const messageContext = session.messageContext;
+    if (!messageContext) return;
+
+    const durationMs = Date.now() - session.startTime;
+    const providerChain = session.getProviderChain();
+    const currentModel = session.getCurrentModel() ?? undefined;
+    const specialSettings = session.getSpecialSettings() ?? undefined;
+    const provider = session.provider ?? null;
+    const providerType = provider?.providerType;
+
+    const { statusCode, errorMessage, usageDetails } = resolveTerminalOutcome({
+      result,
+      providerType,
+    });
+
+    try {
+      await updateMessageRequestDuration(messageContext.id, durationMs);
+    } catch (err) {
+      logger.error("[FakeStreaming] Failed to persist request duration", {
+        error: err,
+        messageRequestId: messageContext.id,
+      });
+    }
+
+    try {
+      await updateMessageRequestDetails(messageContext.id, {
+        statusCode,
+        errorMessage: errorMessage ?? undefined,
+        providerChain,
+        model: currentModel,
+        providerId: provider?.id,
+        context1mApplied: session.getContext1mApplied(),
+        swapCacheTtlApplied: provider?.swapCacheTtlBilling ?? false,
+        specialSettings,
+        ttfbMs: session.ttfbMs ?? durationMs,
+        inputTokens: usageDetails?.inputTokens,
+        outputTokens: usageDetails?.outputTokens,
+        cacheCreationInputTokens: usageDetails?.cacheCreationInputTokens,
+        cacheReadInputTokens: usageDetails?.cacheReadInputTokens,
+        cacheCreation5mInputTokens: usageDetails?.cacheCreation5mInputTokens,
+        cacheCreation1hInputTokens: usageDetails?.cacheCreation1hInputTokens,
+        cacheTtlApplied: usageDetails?.cacheTtl ?? null,
+        actualResponseModel: usageDetails?.actualResponseModel ?? undefined,
+      });
+    } catch (err) {
+      logger.error("[FakeStreaming] Failed to persist terminal request details", {
+        error: err,
+        messageRequestId: messageContext.id,
+      });
+    }
+
+    try {
+      const tracker = ProxyStatusTracker.getInstance();
+      tracker.endRequest(messageContext.user.id, messageContext.id);
+    } catch (err) {
+      logger.error("[FakeStreaming] Failed to end tracker request", {
+        error: err,
+        messageRequestId: messageContext.id,
+      });
+    }
+  };
+}
+
+interface TerminalUsageDetails {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreation5mInputTokens?: number;
+  cacheCreation1hInputTokens?: number;
+  cacheTtl?: string | null;
+  actualResponseModel?: string | null;
+}
+
+interface TerminalOutcome {
+  statusCode: number;
+  errorMessage: string | null;
+  usageDetails: TerminalUsageDetails | null;
+}
+
+function resolveTerminalOutcome(input: {
+  result: OrchestrateResult;
+  providerType: ProviderType | undefined;
+}): TerminalOutcome {
+  const { result, providerType } = input;
+
+  if (result.ok && typeof result.finalBody === "string") {
+    let usageDetails: TerminalUsageDetails | null = null;
+    try {
+      const parsed = parseUsageFromResponseText(result.finalBody, providerType);
+      const metrics = parsed.usageMetrics ?? null;
+      const actualResponseModel = providerType
+        ? extractActualResponseModelForProvider(providerType, false, result.finalBody)
+        : null;
+      usageDetails = {
+        inputTokens: metrics?.input_tokens,
+        outputTokens: metrics?.output_tokens,
+        cacheCreationInputTokens: metrics?.cache_creation_input_tokens,
+        cacheReadInputTokens: metrics?.cache_read_input_tokens,
+        cacheCreation5mInputTokens: metrics?.cache_creation_5m_input_tokens,
+        cacheCreation1hInputTokens: metrics?.cache_creation_1h_input_tokens,
+        cacheTtl: metrics?.cache_ttl ?? null,
+        actualResponseModel,
+      };
+    } catch (err) {
+      logger.warn("[FakeStreaming] Failed to parse usage from final body", { error: err });
+    }
+    return { statusCode: 200, errorMessage: null, usageDetails };
+  }
+
+  if (result.errorCode === "client_abort") {
+    return {
+      statusCode: 499,
+      errorMessage: result.errorMessage ?? "client disconnected",
+      usageDetails: null,
+    };
+  }
+
+  return {
+    statusCode: 502,
+    errorMessage: result.errorMessage ?? "all upstream attempts failed",
+    usageDetails: null,
+  };
 }
 
 function applyNonStreamMutation(session: ProxySession): void {
